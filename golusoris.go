@@ -22,6 +22,8 @@ import (
 	"github.com/golusoris/golusoris/httpx/router"
 	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/id"
+	k8sclient "github.com/golusoris/golusoris/k8s/client"
+	"github.com/golusoris/golusoris/k8s/podinfo"
 	"github.com/golusoris/golusoris/log"
 	"github.com/golusoris/golusoris/validate"
 )
@@ -60,4 +62,17 @@ var DB = fx.Module("golusoris.db",
 var HTTP = fx.Module("golusoris.http",
 	router.Module,
 	server.Module,
+)
+
+// K8s bundles the Kubernetes runtime modules: podinfo (downward-API env
+// → typed PodInfo) + client (rest.Config + clientset, in-cluster or
+// kubeconfig).
+//
+// Health (k8s/health), metrics (k8s/metrics/prom), and leader
+// (k8s/leader) are not in this umbrella because they have arguments
+// (Registry, Callbacks) that don't fit a generic provider — apps wire
+// them with their own fx.Invoke.
+var K8s = fx.Module("golusoris.k8s",
+	podinfo.Module,
+	k8sclient.Module,
 )

@@ -37,7 +37,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 3 — HTTP base**: `httpx/server/` `httpx/router/` `httpx/middleware/` `httpx/client/` `ogenkit/` `apidocs/` (Scalar + MCP-from-OpenAPI)
 - **Step 4 — HTTP extras**: `httpx/form/` `httpx/htmx/` `httpx/vite/` `httpx/static/` `httpx/static/hashfs/` `httpx/cors/` `httpx/csrf/` `httpx/ratelimit/` `httpx/geofence/` `httpx/ws/` `httpx/autotls/` (autocert + certmagic)
 - **Step 5 — OTel + observability**: `otel/` (tracer + meter + logs + OTLP) `observability/sentry/` `observability/profiling/` (Pyroscope) `observability/pprof/` `observability/statuspage/`
-- **Step 6 (in progress) — K8s runtime**: `k8s/podinfo/` `k8s/health/` (`/livez` `/readyz` `/startupz`) `k8s/metrics/prom/` (`/metrics` + check-status gauges) `k8s/leader/` (Lease election) — `k8s/client/` to follow
+- **Step 6 — K8s runtime**: `k8s/podinfo/` `k8s/health/` (`/livez` `/readyz` `/startupz`) `k8s/metrics/prom/` (`/metrics` + check-status gauges) `k8s/leader/` (Lease election) `k8s/client/` (in-cluster + kubeconfig + transparent GKE/EKS/Azure workload identity)
 
 ## Modules (high level)
 

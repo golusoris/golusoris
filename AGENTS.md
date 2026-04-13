@@ -33,7 +33,8 @@ golusoris/
 ├── ogenkit/  apidocs/                                                 # ogen + docs  [landed]
 ├── otel/  observability/                                              # obs          [landed]
 │   ├── observability/sentry/  profiling/  pprof/  statuspage/
-├── k8s/                                                               # k8s          [next]
+├── k8s/                                                               # k8s          [landed]
+│   ├── podinfo/  health/  metrics/prom/  leader/  client/
 ├── auth/  authz/  jobs/  outbox/  cache/                              # capabilities [planned]
 ├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS         [planned]
 ├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
