@@ -240,6 +240,33 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `outbox/cdc/` | CDC drain of outbox to Kafka/NATS/webhooks | custom |
 | `ebpf/` | cilium/ebpf wrapper for apps loading custom eBPF programs | cilium/ebpf |
+| `net/dnsserver/` | authoritative + recursive DNS server | miekg/dns |
+| `net/smtpserver/` | SMTP server (inbound email beyond parsing) | emersion/go-smtp |
+| `net/wol/` | Wake-on-LAN magic-packet sender | linde12/gowol or custom (~30 lines) |
+| `docs/docx/` | DOCX write | unidoc/unioffice or nguyenthenguyen/docx |
+| `docs/xlsx/` | XLSX read + write | xuri/excelize |
+| `docs/epub/` | ePub generator | bmaupin/go-epub |
+| `deploy/crossplane/` | Crossplane XRD + Composition example manifests (Go-free, YAML only) | — |
+
+### 3.16b Heavy / native-dep specialty (separate sub-modules in-repo — own go.mod)
+
+These live under `golusoris/<area>/` with their own `go.mod` so the main framework's dep graph stays lean. Apps import them directly: `github.com/golusoris/golusoris/<area>/<name>`.
+
+| Path | Purpose | Key dep | Why separate |
+|---|---|---|---|
+| `science/numerical/` | gonum-based linear algebra, stats, optimization | gonum/gonum | Large test-data deps |
+| `science/plot/` | plotting + charts | gonum/plot + go-echarts | Pulls fonts, image libs |
+| `science/bio/` | bioinformatics (sequences, FASTA/FASTQ, BAM) | biogo/biogo | Specialty, rare need |
+| `web3/evm/` | Ethereum + EVM chains | ethereum/go-ethereum | ~500MB dep graph |
+| `web3/solana/` | Solana | gagliardetto/solana-go | Specialty |
+| `media/game/` | 2D game engine | hajimehoshi/ebiten/v2 | CGO + audio/video drivers |
+| `media/3d/` | 3D engine | g3n/engine | CGO + OpenGL |
+| `hw/gpio/` | GPIO, SPI, I²C | periph.io/x/conn/v3 | Linux CGO |
+| `hw/robotics/` | robotics platforms (drones, arduinos, ...) | hybridgroup/gobot | CGO adapters |
+| `hw/udev/` | Linux device events | jochenvg/go-udev | Linux CGO only |
+| `hw/fssnap/` | ZFS / btrfs snapshot helpers | wraps CLI | Linux-specific |
+| `testutil/prop/` | property-based testing | leanovate/gopter | Specialty |
+| `testutil/pact/` | Pact contract testing | pact-foundation/pact-go | Heavy runner + ruby embedded |
 
 ### 3.17 Misc utilities
 
