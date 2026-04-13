@@ -1,7 +1,7 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-13.
+> Last update: 2026-04-13 (Step 2 — DB landed).
 
 ## Naming conventions (Option B)
 
@@ -56,15 +56,30 @@
 
 (Org has no central control on free plan — apply per-repo as new repos are created.)
 
-## Local repo state — `c:\Users\ms\dev\golusoris\`
+## Local repo state
 
-- Git initialized on `main` branch, no commits yet.
-- All Step 1 files written + tested locally (`go test ./...` clean).
-- Modules implemented: config, log, errors, clock, id, validate, i18n, crypto + top-level `golusoris.go`.
-- Tools configs in `tools/`: Makefile.shared, golangci.yml, mockery.yaml, air.toml, Dockerfile.template, Dockerfile.media.template, docker-compose.dev/prod.yml, .goreleaser.yml, .pre-commit-config.yaml, spectral.yaml.
-- Foundation docs: README.md (with badges), LICENSE (MIT), CONTRIBUTING.md, SECURITY.md, AGENTS.md, CLAUDE.md, doc.go (top-level overview).
-- Test files: every module has at least one *_test.go + Example* tests.
-- **Not yet pushed** to `golusoris/golusoris` — awaiting user "go" on commit/push.
+- Branch: `main`, in sync with `origin/main`.
+- **Step 1 (Skeleton + Core)** ✓ committed + pushed (commit f2bdd15).
+- **Step 2 (DB)** ✓ implemented locally; not yet pushed.
+  - `db/pgx/` — `*pgxpool.Pool` fx module, retry-on-start (exp backoff), slow-query tracer, koanf-driven config.
+  - `db/migrate/` — golang-migrate v4 runner with pgx/v5 driver, optional auto-up on fx Start, supports file:// and embed.FS sources.
+  - `db/sqlc/` — `WithTx` helper + `MapError` (pgx errors → golusoris error codes).
+  - `testutil/pg/` — testcontainers-go Postgres helper (`Start` returns pool, `DSN` returns connection string). Docker required.
+  - `tools/sqlc.yaml.fragment` — shared sqlc v2 config template.
+  - `golusoris.DB` umbrella module added.
+  - `config.Unmarshal` extended with mapstructure decode hooks (time.Duration + comma-sep slices). Backwards compatible.
+  - CI workflow tweaked: `docker info` precheck + 10m test timeout for testcontainers cold starts.
+- Local sweep clean: `go test -race ./...` ✓ · `golangci-lint` 0 issues · `gosec` clean · `govulncheck` clean.
+
+### Decisions made during Step 2
+
+| Topic | Choice | Why |
+|---|---|---|
+| Step 2 scope | pgx + migrate + sqlc + testutil/pg (db/bun deferred) | Cleanest increment per §10. db/bun adds surface w/o demand. |
+| testutil/pg fallback | Hard-fail (no t.Skip) when Docker missing | "CI without Docker is a CI bug" — matches user instruction. |
+| Connect retry | Exp backoff, 10 attempts × 50ms→5s, koanf-tunable | Matches typical k8s init-container pattern. |
+| Slow-query threshold | 200ms default, koanf-tunable, 0 disables | Reasonable OLTP sweet spot. |
+| sqlc.yaml | Shared fragment in tools/, not generated code | sqlc is a tool; framework provides config + runtime helpers only. |
 
 ## Pending action items
 
@@ -88,6 +103,7 @@
 - 2026-04-13: initial scaffold pushed, CI green, branch protection applied, apps moved to `golusoris/app-*`, Ko-fi button added to framework README + org profile.
 - Go toolchain bumped to 1.26.2 across go.mod + CI.
 - Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §3.16 / §3.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.
+- 2026-04-13: **Step 2 — DB** landed locally. db/pgx + db/migrate + db/sqlc + testutil/pg + golusoris.DB umbrella + tools/sqlc.yaml.fragment. config.Unmarshal extended with mapstructure decode hooks. CI test job added Docker precheck + 10m timeout.
 
 ## How to use this file
 

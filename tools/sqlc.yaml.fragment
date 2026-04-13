@@ -1,0 +1,19 @@
+# Shared sqlc.yaml fragment for golusoris-based apps. Copy into the app's
+# sqlc.yaml and adjust paths. sqlc v2 schema; see https://docs.sqlc.dev.
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "internal/db/queries"
+    schema: "migrations"
+    gen:
+      go:
+        package: "dbq"
+        out: "internal/db/gen"
+        sql_package: "pgx/v5"
+        emit_interface: true
+        emit_exact_table_names: false
+        emit_empty_slices: true
+        emit_prepared_queries: false
+        emit_pointers_for_null_types: true
+        emit_json_tags: true
+        json_tags_case_style: "snake"

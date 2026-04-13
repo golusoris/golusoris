@@ -19,6 +19,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/parsers/yaml"
 	"github.com/knadh/koanf/providers/env"
@@ -79,9 +80,22 @@ func (c *Config) Exists(path string) bool { return c.k.Exists(path) }
 // All returns a flat map of all configured keys.
 func (c *Config) All() map[string]any { return c.k.All() }
 
-// Unmarshal decodes a key (or "" for root) into a struct.
+// Unmarshal decodes a key (or "" for root) into a struct. String values like
+// "5s" decode into [time.Duration]; comma-separated strings decode into
+// []string. Struct tags use the `koanf` key (e.g. `koanf:"dsn"`).
 func (c *Config) Unmarshal(path string, into any) error {
-	if err := c.k.Unmarshal(path, into); err != nil {
+	conf := koanf.UnmarshalConf{
+		Tag: "koanf",
+		DecoderConfig: &mapstructure.DecoderConfig{
+			Result:           into,
+			WeaklyTypedInput: true,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(
+				mapstructure.StringToTimeDurationHookFunc(),
+				mapstructure.StringToSliceHookFunc(","),
+			),
+		},
+	}
+	if err := c.k.UnmarshalWithConf(path, into, conf); err != nil {
 		return fmt.Errorf("config: unmarshal %q: %w", path, err)
 	}
 	return nil

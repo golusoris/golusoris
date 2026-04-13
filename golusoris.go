@@ -17,6 +17,8 @@ import (
 	"github.com/golusoris/golusoris/clock"
 	"github.com/golusoris/golusoris/config"
 	"github.com/golusoris/golusoris/crypto"
+	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	"github.com/golusoris/golusoris/id"
 	"github.com/golusoris/golusoris/log"
 	"github.com/golusoris/golusoris/validate"
@@ -34,4 +36,14 @@ var Core = fx.Module("golusoris.core",
 	id.Module,
 	validate.Module,
 	crypto.Module,
+)
+
+// DB bundles the database modules: pgx pool + golang-migrate runner.
+// Requires [Core] in the same fx graph for config, log, and clock.
+//
+// db/sqlc helpers are stateless (no fx wiring), so they're available via
+// direct import without inclusion here.
+var DB = fx.Module("golusoris.db",
+	dbpgx.Module,
+	dbmigrate.Module,
 )
