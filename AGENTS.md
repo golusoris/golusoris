@@ -22,18 +22,27 @@
 ```
 golusoris/
 ├── golusoris.go              # top-level fx.Module re-exports (Core, DB, HTTP, ...)
-├── config/  log/  errors/  crypto/  clock/  id/  validate/  i18n/   # core
-├── db/  httpx/  ogenkit/  apidocs/                                    # I/O
-├── otel/  observability/  k8s/                                        # ops
-├── auth/  authz/  jobs/  outbox/  cache/                              # capabilities
-├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS
-├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data
-├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more
-├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations
-├── clikit/  selfupdate/  plugin/  ebpf/                               # misc
-├── testutil/                                                          # test helpers
-├── cmd/golusoris/  cmd/golusoris-mcp/                                 # binaries
-├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy artifacts
+├── config/  log/  errors/  crypto/  clock/  id/  validate/  i18n/   # core         [landed]
+├── db/                                                                # db layer     [landed]
+│   ├── pgx/  migrate/  sqlc/
+├── httpx/                                                             # HTTP stack   [landed]
+│   ├── server/  router/  middleware/  client/
+│   ├── form/  htmx/  vite/  static/  static/hashfs/
+│   ├── cors/  csrf/  ratelimit/  geofence/
+│   ├── ws/  autotls/  autotls/autocert/  autotls/certmagic/
+├── ogenkit/  apidocs/                                                 # ogen + docs  [landed]
+├── otel/  observability/                                              # obs          [landed]
+│   ├── observability/sentry/  profiling/  pprof/  statuspage/
+├── k8s/                                                               # k8s          [next]
+├── auth/  authz/  jobs/  outbox/  cache/                              # capabilities [planned]
+├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS         [planned]
+├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
+├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]
+├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
+├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
+├── testutil/                                                          # test helpers [partial: pg/]
+├── cmd/golusoris/  cmd/golusoris-mcp/                                 # binaries     [planned]
+├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy       [planned]
 ├── tools/                                                             # shared configs
 ├── template/.github/  template/.devcontainer/                         # repo template
 ├── docs/upstream/  docs/migrations/                                   # cached docs + migration guides

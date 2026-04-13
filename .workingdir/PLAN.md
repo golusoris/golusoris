@@ -15,7 +15,145 @@ Tertiary goal: bake a **dependency-update + meaningful-changelog system** so we 
 
 ---
 
-## 2. Architecture
+## 2. Principles & standards
+
+**This section is the framework's foundational contract.** It lives above the module catalog because every package below — and every app built on top — is expected to follow these rules. Deviations require a PR comment justifying the exception.
+
+### 2.1 Coding rules — Power of 10, Go-adapted
+
+NASA/JPL's _The Power of 10: Rules for Developing Safety-Critical Code_ (Gerard J. Holzmann) adapted to Go. Framework-level rules; apps can override per-package with documented rationale.
+
+| # | Original rule | Go adaptation |
+|---|---|---|
+| 1 | Restrict to simple control flow; no `goto`, `setjmp`, `longjmp`, recursion. | No `goto`. No hand-written recursion where a loop suffices (tree walks + parsers are the allowed exception — document the bound). Panic/recover only at trust boundaries (fx lifecycle, http.Handler.Recover, ogenkit.RecoverMiddleware). |
+| 2 | All loops must have a fixed upper bound, statically provable. | Every `for` that isn't `for range` over a bounded collection must have a bound visible in the loop head (counter, max attempts, ctx deadline). Long-running loops select on `ctx.Done()`. |
+| 3 | No dynamic memory allocation after initialization. | Soft: hot paths preallocate (`make([]T, 0, cap)`), reuse `sync.Pool` where profiles show churn. Startup-phase allocation is free; steady-state is watched. |
+| 4 | No function longer than ~60 lines (single printed page). | `funlen` 120 lines / 60 statements + `gocognit` ≤ 30. Refactor when flagged; don't silence the linter. |
+| 5 | ≥2 assertions per function on average; side-effect-free. | Go analog: table-driven tests + contract checks at API boundaries (validator, ogen decoders, `gerr.Wrap`). Target ≥2 assertions per test per function. `require`/`assert` via testify; no `panic(msg)` in non-test code. |
+| 6 | Declare data at smallest possible scope. | Prefer block-scoped `:=`. Struct fields unexported unless explicitly part of the API. Package-level `var` only for singletons + sentinels. |
+| 7 | Check every return value; check every parameter. | `errcheck` + `wrapcheck` + `nilerr` on. Errors wrapped with context via `gerr.Wrap` or `fmt.Errorf("pkg: op: %w", err)`. Exported funcs validate inputs at the boundary. |
+| 8 | Preprocessor limited to simple macros. | N/A in Go. Analog: `go generate` directives stay simple + declarative. No build tags for behaviour switches in production paths. |
+| 9 | Pointers restricted; one dereference per expression; no function pointers. | Soft: no multi-hop `*foo.bar.baz` chains. Small interfaces (≤5 methods) only, defined where consumed. No `unsafe` outside explicitly-reviewed performance code. |
+| 10 | Compile at most pedantic warning level. | `golangci.yml` is the gate. Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green**. `//nolint` requires a justification comment + PR review. |
+
+Hard gates: rules 1, 2, 4, 7, 10. Guidance (cite in review): 3, 5, 6, 9. Rule 8 is N/A in Go.
+
+### 2.2 Secure coding — SEI CERT for Go
+
+The Go port of SEI CERT C. Concrete rules covering crypto, error handling, input validation, concurrency, memory, and I/O. `gosec` and `staticcheck` already enforce the majority; the catalog is maintained at <https://wiki.sei.cmu.edu/confluence/display/go/>. Reviewers cite rule IDs (e.g. MEM30-Go) on deviations.
+
+### 2.3 Go style — Google Go Style Guide (canonical)
+
+<https://google.github.io/styleguide/go/> is the primary reference. Effective Go + Go Code Review Comments are secondary. Specific commitments:
+
+- **Naming**: per Google style (short, idiomatic, receiver-name conventions).
+- **Comments**: doc comments as full sentences, package-level comments on every package.
+- **Decisions log**: when the style guide has multiple valid options, the framework picks one in `docs/adr/` (see §2.4) and sticks to it.
+
+### 2.4 Architecture decisions — C4 + ADRs
+
+- **C4 model** (Simon Brown) for architecture diagrams: Context → Container → Component → Code. Kept in `docs/architecture/`.
+- **Architecture Decision Records** (Michael Nygard's format) in `docs/adr/`. One ADR per significant decision — pinned dependencies, interface choices, cross-cutting conventions. Supersedes rather than edits: old ADRs stay, a new one overrides with a `Supersedes: ADR-0004` header.
+
+### 2.5 Security + supply-chain standards
+
+Adopted in tiers — framework ships the scaffolding, apps assert compliance in their own SECURITY.md.
+
+| Standard | Jurisdiction | Purpose | Enforcement |
+|---|---|---|---|
+| **SLSA Level 3** | OpenSSF (global) | Supply-chain provenance, immutable builds, SBOM, signed artifacts | `.github/workflows/release-go.yml` (cosign + syft + slsa-framework) |
+| **OWASP ASVS Level 2** | OWASP (global) | App verification checklist (auth, session, crypto, API, config) | SECURITY.md declares compliance; CI runs OWASP ZAP against example apps |
+| **NIST SSDF (SP 800-218)** | US | Secure Software Development Framework | OpenSSF Scorecard covers most items; CI publishes Scorecard badge |
+| **EU Cyber Resilience Act (CRA)** | EU (regulation) | SBOM + vuln reporting + secure-by-default for products with digital elements | SBOM generated per release; `SECURITY.md` documents vuln reporting (SECURITY-coordinated disclosure). |
+| **NIS2 Directive** | EU (directive) | Incident handling + risk management for essential/important entities | Apps in NIS2 scope inherit the framework's logging + audit trail; docs/compliance/nis2.md checklist. |
+| **BSI IT-Grundschutz** | Germany (BSI) | Baseline security controls | Framework provides the controls (crypto, auth lockout, audit log, secrets); apps map to BSI module numbers in their SECURITY.md. |
+| **BSI C5** | Germany (BSI) | Cloud service criteria catalog | Relevant for apps deployed on German government / regulated cloud. Framework's deploy/ manifests are C5-compatible (NetworkPolicy, PodSecurityStandards, audit logs). |
+| **UK NCSC Secure Development & Deployment** | UK | Developer-facing secure-dev guidance | Framework maps to NCSC's 8 principles (secure design, secure development, build, deploy, operate) — documented in docs/compliance/ncsc.md. |
+| **ENISA Good Practices** | EU (ENISA) | Sectoral security guidance | Cited in relevant module docs (e.g. IoT, AI) rather than blanket. |
+| **GDPR (Data Protection)** | EU (regulation) | PII handling, right to erasure | Framework's `log/` redacts documented PII fields; `audit/` + `tenancy/` support per-subject-data queries. |
+| **EU AI Act** | EU (regulation) | High-risk AI transparency + risk mgmt | Applies to apps using `ai/llm/` + `ai/vector/` for regulated decisions. Framework provides the scaffolding (audit log of prompts/outputs, human-override hook); compliance is per-app. |
+
+Rule of thumb: frameworks can't claim compliance — apps can, built on compliant scaffolding. Every `docs/compliance/*.md` file is a machine-readable checklist keyed by control ID so auditors + AI agents can verify.
+
+### 2.6 Wire protocols + API standards
+
+| Standard | Status | Where it's enforced |
+|---|---|---|
+| **RFC 9457 Problem Details for HTTP** | Adopted | ogenkit error handler emits `application/problem+json` with `type`/`title`/`status`/`detail`/`instance`. Replaces the ad-hoc `{code, message}` body. |
+| **RFC 9110 HTTP Semantics** | Adopted | chi router + httpx/middleware follow status-code semantics (4xx client-fault, 5xx server-fault, 3xx redirects, 1xx expected-continue). |
+| **OpenAPI 3.1** | Pinned | ogen generates from 3.1 specs. Apps' `openapi.yaml` lints via spectral (tools/spectral.yaml). |
+| **JSON Schema 2020-12** | Pinned | santhosh-tekuri/jsonschema for external-schema validation. ogen-generated types use matching semantics. |
+| **OpenTelemetry Semantic Conventions v1.26** | Pinned | `go.opentelemetry.io/otel/semconv/v1.26.0` for span/metric attribute names (service.*, http.*, db.*, messaging.*). |
+| **RFC 7519 JWT** | Adopted | `auth/jwt/` uses `golang-jwt/jwt/v5`. |
+| **RFC 6749/6750 OAuth 2.0 + Bearer** | Adopted | `auth/oidc/`, `auth/oauth2server/`. |
+| **RFC 7636 PKCE** | Adopted | Default in `auth/oidc/` client flows. |
+| **WebAuthn Level 3** | Adopted | `auth/passkeys/` via go-webauthn. |
+| **RFC 8058 One-click Unsubscribe** | Adopted | `notify/unsub/`. |
+| **RFC 6238 TOTP** | Adopted | `auth/passkeys/` (MFA). |
+
+### 2.7 Tooling + formatting
+
+| Standard | Enforcement |
+|---|---|
+| **EditorConfig** | `.editorconfig` at repo root. Tabs/spaces/line endings consistent across editors. |
+| **gofumpt** | Stricter gofmt — configured in `tools/golangci.yml`. |
+| **gci** | Grouped imports (standard / default / `prefix(github.com/golusoris/golusoris)`). |
+| **golines** | Line-length cap at 120 chars; long lines broken at safe points. |
+| **Conventional Commits 1.0** | CI PR-title check; release-please reads commit history. |
+| **Semantic Versioning 2.0** | Tags via release-please. Breaking changes force major bump via `!` / `BREAKING CHANGE:`. |
+| **Keep a Changelog 1.1** | `CHANGELOG.md` format (auto-generated by release-please). |
+| **Trunk-Based Development** | Single `main` branch; no long-lived release branches. release-please opens PRs tagging next version. |
+
+### 2.8 Testing standards
+
+| Practice | When it applies |
+|---|---|
+| **Table-driven tests** | Any function with ≥2 distinct input/output pairs. |
+| **`go test -race -count=1`** | Every CI run. |
+| **Integration over mocks at system boundaries** | DB tests use `testutil/pg` (real Postgres via testcontainers). HTTP tests use `httptest`. Mock only *non-infrastructure* dependencies. |
+| **Fuzz tests** | Parsers + decoders — stdlib fuzz, corpora in `testutil/fuzz/`. |
+| **Property-based tests** | Opt-in via `testutil/prop/` (gopter). Useful for algebraic code: serialization round-trips, sort order, set ops. |
+| **Golden files + snapshots** | `testutil/snapshot/` via go-snaps. Use for generated output (migration diffs, Scalar HTML, ogen stubs). |
+| **Coverage target** | 70% framework-wide, 85% on security-critical packages (crypto, auth, errors). |
+
+### 2.9 Deployment + configuration
+
+| Standard | Application |
+|---|---|
+| **Twelve-Factor App** | Config from env, logs to stdout, stateless processes, declared dependencies (go.mod), port binding (httpx/server), disposability (fx shutdown hooks). |
+| **CNCF Cloud Native Principles** | K8s-native manifests (deploy/helm/) with downward API, PodDisruptionBudget, NetworkPolicy, CiliumNetworkPolicy. |
+| **OCI Image Spec** | Multi-arch via buildx (amd64+arm64). Chainguard base. |
+| **Rootless + read-only filesystem** | Enforced in Dockerfile.template (USER 65532, `readOnlyRootFilesystem: true`). |
+
+### 2.10 Reference links (machine-resolvable for AI agents)
+
+- Power of 10: <https://spinroot.com/gerard/pdf/P10.pdf>
+- SEI CERT for Go: <https://wiki.sei.cmu.edu/confluence/display/go/>
+- Google Go Style Guide: <https://google.github.io/styleguide/go/>
+- C4 model: <https://c4model.com/>
+- ADR template (Nygard): <https://github.com/joelparkerhenderson/architecture-decision-record>
+- SLSA: <https://slsa.dev/>
+- OWASP ASVS: <https://owasp.org/www-project-application-security-verification-standard/>
+- NIST SSDF: <https://csrc.nist.gov/Projects/ssdf>
+- EU Cyber Resilience Act: <https://digital-strategy.ec.europa.eu/en/policies/cyber-resilience-act>
+- NIS2: <https://eur-lex.europa.eu/eli/dir/2022/2555>
+- BSI IT-Grundschutz: <https://www.bsi.bund.de/EN/Topics/ITGrundschutz>
+- BSI C5: <https://www.bsi.bund.de/EN/Topics/CloudComputing/ComplianceControlsCatalogue>
+- UK NCSC: <https://www.ncsc.gov.uk/collection/developers-collection>
+- ENISA: <https://www.enisa.europa.eu/>
+- GDPR: <https://gdpr-info.eu/>
+- EU AI Act: <https://artificialintelligenceact.eu/>
+- RFC 9457: <https://www.rfc-editor.org/rfc/rfc9457>
+- OTel SemConv: <https://opentelemetry.io/docs/specs/semconv/>
+- Twelve-Factor: <https://12factor.net/>
+- Keep a Changelog: <https://keepachangelog.com/>
+- Conventional Commits: <https://www.conventionalcommits.org/>
+- SemVer: <https://semver.org/>
+- EditorConfig: <https://editorconfig.org/>
+
+---
+
+## 3. Architecture
 
 **Single Go module, opt-in fx subpackages.** Apps import `github.com/golusoris/golusoris` and compose only the modules they need.
 
@@ -39,9 +177,9 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 
 ---
 
-## 3. Module catalog (organized)
+## 4. Module catalog (organized)
 
-### 3.1 Core
+### 4.1 Core
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -54,7 +192,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `validate/` | go-playground/validator wrapper | go-playground/validator/v10 |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n + x/text |
 
-### 3.2 Database & data
+### 4.2 Database & data
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -64,7 +202,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `db/bun/` | optional ORM module (alternative to sqlc) | uptrace/bun |
 | `outbox/` | transactional outbox: write events in same tx, drained to jobs | custom on pgx |
 
-### 3.3 HTTP / API
+### 4.3 HTTP / API
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -88,7 +226,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `ogenkit/` | ogen server adapter, error mapper, middleware glue | ogen-go/ogen |
 | `apidocs/` | Scalar UI handler (`/docs`) + MCP-from-OpenAPI exposer (`/mcp`) | Scalar (JS, embedded) |
 
-### 3.4 Auth & identity
+### 4.4 Auth & identity
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -108,14 +246,14 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `auth/captcha/` | Cloudflare Turnstile + hCaptcha verify middleware | custom |
 | `authz/` | RBAC/ABAC policy enforcement | casbin/casbin/v2 |
 
-### 3.5 Background work
+### 4.5 Background work
 
 | Path | Purpose | Key dep |
 |---|---|---|
 | `jobs/` | river client + worker registry, periodic helpers, river-ui mount | riverqueue/river |
 | `jobs/cron/` | cron expression parser/validator | robfig/cron/v3 |
 
-### 3.6 Caching
+### 4.6 Caching
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -123,7 +261,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `cache/redis/` | rueidis fx module, distributed locks | redis/rueidis |
 | `cache/singleflight/` | de-dupe concurrent identical reads | golang.org/x/sync/singleflight |
 
-### 3.7 Observability
+### 4.7 Observability
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -135,7 +273,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `k8s/health/` | /livez /readyz /startupz + check registry | alexliesenfeld/health (base) |
 | `k8s/metrics/prom/` | Prometheus /metrics endpoint | prometheus/client_golang |
 
-### 3.8 Kubernetes runtime
+### 4.8 Kubernetes runtime
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -143,7 +281,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `k8s/leader/` | k8s Lease leader election | k8s.io/client-go |
 | `k8s/client/` | client-go wrapper, in-cluster + kubeconfig + workload identity | k8s.io/client-go |
 
-### 3.9 Notifications & realtime
+### 4.9 Notifications & realtime
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -156,14 +294,14 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `realtime/pubsub/` | pub/sub abstraction: pg LISTEN/NOTIFY, redis pubsub, NATS | custom + nats-io/nats.go |
 | `realtime/webrtc/` | optional: peer streaming for low-latency media | pion/webrtc |
 
-### 3.10 Webhooks
+### 4.10 Webhooks
 
 | Path | Purpose | Key dep |
 |---|---|---|
 | `webhooks/out/` | outbound delivery: register + sign + retry + dead-letter + replay | custom |
 | `webhooks/in/` | inbound verification middleware: Stripe, GitHub, Resend, Slack, etc. | stdlib hmac |
 
-### 3.11 SaaS primitives
+### 4.11 SaaS primitives
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -173,7 +311,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `audit/` | append-only audit events (actor/action/target/diff) | custom on pgx |
 | `page/` | typed cursor + offset pagination for sqlc/ogen | custom |
 
-### 3.12 Files / storage / media
+### 4.12 Files / storage / media
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -199,7 +337,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `httpx/rangeserve/` | HTTP range/streaming server (video playback) | stdlib |
 | `torrent/` | torrent client abstraction: interface with backends for rtorrent / qbittorrent / transmission | autobrr/go-rtorrent + custom backends |
 
-### 3.13 Search & AI
+### 4.13 Search & AI
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -207,7 +345,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `ai/llm/` | unified Chat/Stream/Embed interface (Anthropic + OpenAI + Ollama) | anthropics/anthropic-sdk-go + others |
 | `ai/vector/` | pgvector schema + embeddings + similarity + hybrid search | pgvector/pgvector-go |
 
-### 3.14 Commerce
+### 4.14 Commerce
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -217,7 +355,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `payments/invoice/` | PDF invoicing w/ sequential numbering | uses pdf/ + storage/ |
 | `money/` | currency-aware money type | govalues/decimal + Rhymond/go-money |
 
-### 3.15 Integrations
+### 4.15 Integrations
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -225,7 +363,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `geoip/` | maxmind GeoLite2 lookups | oschwald/maxminddb-golang |
 | `secrets/` | Secret iface + backends: env, file, Vault, AWS SM, GCP SM, k8s ExternalSecrets | hashicorp/vault/api + cloud SDKs |
 
-### 3.16 Big alternative stacks (opt-in, heavier surface)
+### 4.16 Big alternative stacks (opt-in, heavier surface)
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -248,7 +386,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `docs/epub/` | ePub generator | bmaupin/go-epub |
 | `deploy/crossplane/` | Crossplane XRD + Composition example manifests (Go-free, YAML only) | — |
 
-### 3.16b Heavy / native-dep specialty (separate sub-modules in-repo — own go.mod)
+### 4.16b Heavy / native-dep specialty (separate sub-modules in-repo — own go.mod)
 
 These live under `golusoris/<area>/` with their own `go.mod` so the main framework's dep graph stays lean. Apps import them directly: `github.com/golusoris/golusoris/<area>/<name>`.
 
@@ -268,7 +406,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `testutil/prop/` | property-based testing | leanovate/gopter | Specialty |
 | `testutil/pact/` | Pact contract testing | pact-foundation/pact-go | Heavy runner + ruby embedded |
 
-### 3.17 Misc utilities
+### 4.17 Misc utilities
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -277,7 +415,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `selfupdate/` | binary self-update from GitHub releases | minio/selfupdate |
 | `plugin/` | extension-point system for apps | custom (Go plugin / wasm / RPC) |
 
-### 3.18 Testing
+### 4.18 Testing
 
 | Path | Purpose | Key dep |
 |---|---|---|
@@ -291,14 +429,14 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `testutil/load/` | vegeta-driven load test helpers | tsenart/vegeta |
 | `testutil/mutation/` | mutation testing helper | avito-tech/go-mutesting |
 
-### 3.19 CLI binaries
+### 4.19 CLI binaries
 
 | Path | Purpose |
 |---|---|
 | `cmd/golusoris/` | scaffolder CLI: `init`, `add`, `bump` (codemods) |
 | `cmd/golusoris-mcp/` | MCP server exposing framework as tools to MCP clients |
 
-### 3.20 Deploy artifacts
+### 4.20 Deploy artifacts
 
 | Path | Purpose |
 |---|---|
@@ -311,7 +449,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `deploy/flux/` + `deploy/argocd/` | GitOps example manifests |
 | `deploy/multiregion/` | docs + example manifests for active-passive multi-region deployments (GeoDNS, failover, DB follower routing) |
 
-### 3.21 Tools (Makefile / linter / hot-reload / templates)
+### 4.21 Tools (Makefile / linter / hot-reload / templates)
 
 | Path | Purpose |
 |---|---|
@@ -327,7 +465,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `tools/spectral.yaml` | OpenAPI lint config (or vacuum) |
 | `tools/.pre-commit-config.yaml` | gofumpt + golangci + gitleaks + commitlint hooks |
 
-### 3.22 GitHub repo template (reusable workflows + scaffold)
+### 4.22 GitHub repo template (reusable workflows + scaffold)
 
 | Path | Purpose |
 |---|---|
@@ -339,7 +477,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | `template/.github/` | per-app stub: thin wrappers calling the reusable workflows above + dependabot.yml + renovate.json + ISSUE_TEMPLATE/ + PULL_REQUEST_TEMPLATE.md + CODEOWNERS + FUNDING.yml (kofi) + SECURITY.md + CONTRIBUTING.md |
 | `template/.devcontainer/` | postgres + redis + Go + air + golangci preinstalled |
 
-### 3.23 AI / agent layer
+### 4.23 AI / agent layer
 
 | Path | Purpose |
 |---|---|
@@ -352,15 +490,15 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 
 ---
 
-## 4. Pinned versions (initial v0.1.0)
+## 5. Pinned versions (initial v0.1.0)
 
-(see §3 for the per-module dep). Toolchain: **Go 1.26.2**. Versions tracked + bumped via Renovate; framework's CHANGELOG includes "Dependencies bumped" section per release.
+(see §4 for the per-module dep). Toolchain: **Go 1.26.2**. Versions tracked + bumped via Renovate; framework's CHANGELOG includes "Dependencies bumped" section per release.
 
 ---
 
-## 5. Linting / security baseline
+## 6. Linting / security baseline
 
-`tools/golangci.yml` enables the full set listed in §3.21. Standard make targets (`lint`, `vuln`, `gosec`, `sec`, `test`, `ci`, `gen`, `migrate`, `dev`, `mocks`).
+`tools/golangci.yml` enables the full set listed in §4.21. Standard make targets (`lint`, `vuln`, `gosec`, `sec`, `test`, `ci`, `gen`, `migrate`, `dev`, `mocks`).
 
 Pre-commit hooks: gofumpt + golangci-lint + gitleaks (secret scan) + conventional-commit check.
 
@@ -373,11 +511,13 @@ CI gates (in reusable `ci-go.yml`):
 - **OpenAPI spec lint** (spectral / vacuum) for ogen specs
 - **PR title check** (conventional commits enforcement)
 
+See §2 for project principles, including the Power of 10 coding rules, SEI CERT Secure Coding, Google Go Style Guide, and the wider security/supply-chain standard set (SLSA / ASVS / NIST SSDF / EU CRA / NIS2 / BSI / UK NCSC / GDPR / EU AI Act).
+
 ---
 
-## 6. AI / tooling layer (the part that compounds across all apps)
+## 7. AI / tooling layer (the part that compounds across all apps)
 
-See §3.23 for files. Key behaviors:
+See §4.23 for files. Key behaviors:
 
 - **`golusoris bump <version>` codemods**: each breaking change in framework can ship a codemod (Go AST rewriter via `golang.org/x/tools/go/analysis`). The CLI reads target version's migration notes, applies codemods, runs tests, opens a PR with mechanical changes + a checklist of manual ones.
 - **MCP server `cmd/golusoris-mcp/`**: exposes `lookup_package`, `scaffold(kind, args)`, `list_modules`, `list_migrations(app)` to Claude/Cursor.
@@ -385,7 +525,7 @@ See §3.23 for files. Key behaviors:
 
 ---
 
-## 7. GitHub repo template — **reusable workflows + scaffolder**
+## 8. GitHub repo template — **reusable workflows + scaffolder**
 
 Apps' `.github/workflows/ci.yml` is ~20 lines:
 
@@ -412,7 +552,7 @@ jobs:
 
 ---
 
-## 8. Container layer
+## 9. Container layer
 
 - **Base image**: **Chainguard** (chainguard/static for binary apps, chainguard/wolfi for media-heavy variants needing tesseract/libav/libvips/opencv). Daily upstream rebuilds.
 - **Multi-stage Dockerfile.template** + media variant.
@@ -431,7 +571,7 @@ jobs:
 
 ---
 
-## 9. Versioning + dependency-update + changelog system
+## 10. Versioning + dependency-update + changelog system
 
 - **Branching**: trunk-based, single `main`.
 - **Releases**: release-please bot generates release PRs from conventional commits; merging tags `vX.Y.Z`.
@@ -448,7 +588,7 @@ jobs:
 
 ---
 
-## 10. Build order (suggested)
+## 11. Build order (suggested)
 
 Each step a tagged `v0.x.0`. Framework usable from step 3.
 
@@ -479,7 +619,7 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 
 ---
 
-## 11. Decisions log (one-line each, comprehensive)
+## 12. Decisions log (one-line each, comprehensive)
 
 **Architecture**: single Go module + opt-in fx subpackages; lurkarr migration out of scope.
 
@@ -535,16 +675,16 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 
 ---
 
-## 12. Out of scope (explicit non-goals)
+## 13. Out of scope (explicit non-goals)
 
 - Frontend (separate framework later)
 - Service mesh data plane (Cilium/Istio control) — apps deploy under a mesh, the framework doesn't implement one
 
-_(Items previously listed here — Bioinformatics, robotics, GPIO/IoT, blockchain/web3, SMTP server, property/pact testing, DOCX/XLSX writing, ePub, game engines, 3D, scientific computing, plotting, ZFS/btrfs/WOL/udev, DNS server, Crossplane — are now in scope as opt-in modules; heavy/CGO ones live as in-repo sub-modules. See §3.16 and §3.16b.)_
+_(Items previously listed here — Bioinformatics, robotics, GPIO/IoT, blockchain/web3, SMTP server, property/pact testing, DOCX/XLSX writing, ePub, game engines, 3D, scientific computing, plotting, ZFS/btrfs/WOL/udev, DNS server, Crossplane — are now in scope as opt-in modules; heavy/CGO ones live as in-repo sub-modules. See §4.16 and §4.16b.)_
 
 ---
 
-## 13. Resolved settings
+## 14. Resolved settings
 
 - **Module path**: `github.com/golusoris/golusoris` (new GitHub org `golusoris` — confirmed available 2026-04-13). Import package name is `golusoris` (no rename needed). User to register the org before `go mod init`.
 - **Org structure (revised 2026-04-13 — Option B)**: All golusoris-family code lives under the `golusoris/` org. Naming convention:

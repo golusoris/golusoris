@@ -28,11 +28,19 @@ fx.New(
 
 ## Status
 
-Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) (when published) for the full scope and roadmap.
+Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.md](.workingdir/STATE.md) for scope + progress.
+
+### Landed so far
+
+- **Step 1 — Core**: `config/` `log/` `errors/` `clock/` `id/` `validate/` `i18n/` `crypto/`
+- **Step 2 — DB**: `db/pgx/` `db/migrate/` `db/sqlc/` `testutil/pg/`
+- **Step 3 — HTTP base**: `httpx/server/` `httpx/router/` `httpx/middleware/` `httpx/client/` `ogenkit/` `apidocs/` (Scalar + MCP-from-OpenAPI)
+- **Step 4 — HTTP extras**: `httpx/form/` `httpx/htmx/` `httpx/vite/` `httpx/static/` `httpx/static/hashfs/` `httpx/cors/` `httpx/csrf/` `httpx/ratelimit/` `httpx/geofence/` `httpx/ws/` `httpx/autotls/` (autocert + certmagic)
+- **Step 5 — OTel + observability**: `otel/` (tracer + meter + logs + OTLP) `observability/sentry/` `observability/profiling/` (Pyroscope) `observability/pprof/` `observability/statuspage/`
 
 ## Modules (high level)
 
-Core • DB • HTTP/API (ogen + Scalar) • Auth (OIDC + Passkeys + Casbin) • Jobs (river) • Cache (otter + rueidis) • OTel/Sentry/Pyroscope • K8s runtime (probes, leader, podinfo) • Notifications • Realtime (SSE/PubSub) • Webhooks • SaaS primitives (tenancy, idempotency, audit, flags) • Storage/Media (S3, FFmpeg, libvips, OCR, archive) • Search & AI (typesense, pgvector, LLM) • Commerce (Stripe) • Integrations (goenvoy adapter, geoip, secrets) • CLI/MCP scaffolders.
+Core • DB • HTTP/API (ogen + Scalar + MCP) • Auth (OIDC + Passkeys + Casbin) • Jobs (river) • Cache (otter + rueidis) • OTel/Sentry/Pyroscope • K8s runtime (probes, leader, podinfo) • Notifications • Realtime (SSE/PubSub) • Webhooks • SaaS primitives (tenancy, idempotency, audit, flags) • Storage/Media (S3, FFmpeg, libvips, OCR, archive) • Search & AI (typesense, pgvector, LLM) • Commerce (Stripe) • Integrations (goenvoy adapter, geoip, secrets) • CLI/MCP scaffolders.
 
 ## Tooling
 

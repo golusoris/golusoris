@@ -1,7 +1,7 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-13 (Step 2 — DB landed).
+> Last update: 2026-04-13 (Step 5 — OTel + observability landed).
 
 ## Naming conventions (Option B)
 
@@ -75,7 +75,7 @@
 
 | Topic | Choice | Why |
 |---|---|---|
-| Step 2 scope | pgx + migrate + sqlc + testutil/pg (db/bun deferred) | Cleanest increment per §10. db/bun adds surface w/o demand. |
+| Step 2 scope | pgx + migrate + sqlc + testutil/pg (db/bun deferred) | Cleanest increment per §11. db/bun adds surface w/o demand. |
 | testutil/pg fallback | Hard-fail (no t.Skip) when Docker missing | "CI without Docker is a CI bug" — matches user instruction. |
 | Connect retry | Exp backoff, 10 attempts × 50ms→5s, koanf-tunable | Matches typical k8s init-container pattern. |
 | Slow-query threshold | 200ms default, koanf-tunable, 0 disables | Reasonable OLTP sweet spot. |
@@ -102,7 +102,7 @@
 
 - 2026-04-13: initial scaffold pushed, CI green, branch protection applied, apps moved to `golusoris/app-*`, Ko-fi button added to framework README + org profile.
 - Go toolchain bumped to 1.26.2 across go.mod + CI.
-- Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §3.16 / §3.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.
+- Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §4.16 / §4.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.
 - 2026-04-13: **Step 2 — DB** landed locally. db/pgx + db/migrate + db/sqlc + testutil/pg + golusoris.DB umbrella + tools/sqlc.yaml.fragment. config.Unmarshal extended with mapstructure decode hooks. CI test job added Docker precheck + 10m timeout.
 - 2026-04-13: **Step 3 — HTTPX base** landed in 3 commits:
   - 3a (`feat(httpx)`): httpx/server (slow-loris + body limits + graceful shutdown), httpx/router (chi v5), httpx/middleware (RequestID, Recover, Logger, OTel, SecureHeaders, TrustProxy, Compress, ETag, Chain). golusoris.HTTP umbrella.
@@ -112,6 +112,20 @@
   - 4a (`feat(httpx)` tiny wrappers): form (go-playground/form/v4, gerr.CodeBadRequest on decode fail), htmx (HX-* header constants + helpers), vite (manifest.json → hashed URLs + transitive CSS), static (embed fs.FS + ETag + cache-control), static/hashfs (benbjohnson/hashfs).
   - 4b (`feat(httpx)` security middleware): cors (rs/cors, deny-default), csrf (gorilla/csrf double-submit, no-secret=no-op), ratelimit (ulule/limiter/v3 memory store + X-RateLimit-* headers), geofence (maxminddb, app-supplied mmdb, allow/deny ISO-3166-1).
   - 4c (`feat(httpx)` ws + autotls): ws (coder/websocket thin wrapper with same-origin Accept + in-process Broadcaster[T]), autotls (pluggable Provider interface + autocert + certmagic sub-modules). httpx/server now picks up optional *tls.Config via fx and wraps the listener when present.
+- 2026-04-13: **PLAN §2 Principles & standards promoted to top-level** — Power of 10 (Go-adapted) + SEI CERT for Go + Google Go Style Guide + C4 + ADRs + SLSA L3 + OWASP ASVS L2 + NIST SSDF + EU CRA + NIS2 + BSI IT-Grundschutz + BSI C5 + UK NCSC + ENISA + GDPR + EU AI Act + RFC 9457 Problem Details + OTel SemConv v1.26 + Conventional Commits + Keep a Changelog + SemVer 2.0 + Trunk-Based Dev + EditorConfig + gofumpt/gci/golines + Twelve-Factor + CNCF cloud-native + OCI Image Spec + testing standards. Sections §2-§14 renumbered (old §2-§13). CLAUDE.md gained a Power-of-10 quick-reference section + "keep docs in sync" rule.
+- 2026-04-13: **Step 5 — OTel + observability** landing in 2 commits:
+  - 5a (`feat(otel)`): full SDK — tracer (OTLP batch + parent/TraceIDRatio sampler), meter (OTLP 15s periodic), logger (OTLP batch), W3C TraceContext+Baggage propagator, resource attrs from service.{name,version,namespace} + process + k8s downward-API pod metadata. `otel.ModuleWithSlogBridge` fans slog to the OTel logger provider alongside the local handler. `otel.enabled=false` = no-op.
+  - 5b (`feat(observability)`): sentry (slog bridge: Error→event, Warn→breadcrumb; fx-Stop flush), profiling (Pyroscope in-process, off by default; eBPF mode deferred to deploy/ manifests per §4.7), pprof (auth-gated /debug/pprof with constant-time basic-auth), statuspage (HTML + JSON /status page backed by a shared check Registry used by k8s/health later). `observability/AGENTS.md` parent guide.
+
+### Decisions made during Step 5
+
+| Topic | Choice | Why |
+|---|---|---|
+| Commit shape | 2 commits (5a otel / 5b extras) | otel is foundational; extras build on it. |
+| otel scope | Full SDK (tracer + meter + logs + OTLP + slog bridge add-on) | Matches PLAN §4.7; podinfo resource attrs from env vars until k8s/podinfo lands in Step 6. |
+| Sentry bridge severity | Error→event, Warn→breadcrumb | Sentry is for errors, not info/debug noise. |
+| Pyroscope mode | In-process in Go package, eBPF as deploy manifests | eBPF is a daemonset concern, not Go code. |
+| statuspage | Shared Registry drives /status + /livez + /readyz (Step 6) | Single source of truth for "is this app healthy". |
 
 ### Decisions made during Step 3
 
