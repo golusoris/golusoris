@@ -92,16 +92,31 @@ func Wrap(err error, code Code, msg string) *Error {
 	return &Error{Code: code, Message: msg, Cause: err}
 }
 
-// Convenience constructors. Each takes a message and returns *Error.
+// Convenience constructors — each builds a coded *Error from a single message.
 
-func NotFound(msg string) *Error     { return New(CodeNotFound, msg) }
-func BadRequest(msg string) *Error   { return New(CodeBadRequest, msg) }
+// NotFound is sugar for [New]([CodeNotFound], msg).
+func NotFound(msg string) *Error { return New(CodeNotFound, msg) }
+
+// BadRequest is sugar for [New]([CodeBadRequest], msg).
+func BadRequest(msg string) *Error { return New(CodeBadRequest, msg) }
+
+// Unauthorized is sugar for [New]([CodeUnauthorized], msg).
 func Unauthorized(msg string) *Error { return New(CodeUnauthorized, msg) }
-func Forbidden(msg string) *Error    { return New(CodeForbidden, msg) }
-func Conflict(msg string) *Error     { return New(CodeConflict, msg) }
-func Validation(msg string) *Error   { return New(CodeValidation, msg) }
-func Internal(msg string) *Error     { return New(CodeInternal, msg) }
-func RateLimited(msg string) *Error  { return New(CodeRateLimited, msg) }
+
+// Forbidden is sugar for [New]([CodeForbidden], msg).
+func Forbidden(msg string) *Error { return New(CodeForbidden, msg) }
+
+// Conflict is sugar for [New]([CodeConflict], msg).
+func Conflict(msg string) *Error { return New(CodeConflict, msg) }
+
+// Validation is sugar for [New]([CodeValidation], msg).
+func Validation(msg string) *Error { return New(CodeValidation, msg) }
+
+// Internal is sugar for [New]([CodeInternal], msg).
+func Internal(msg string) *Error { return New(CodeInternal, msg) }
+
+// RateLimited is sugar for [New]([CodeRateLimited], msg).
+func RateLimited(msg string) *Error { return New(CodeRateLimited, msg) }
 
 // Re-exports of go-faster/errors helpers so callers don't need two error pkgs.
 var (

@@ -1,8 +1,8 @@
 package errors_test
 
 import (
-	"net/http"
 	stderrors "errors"
+	"net/http"
 	"testing"
 
 	"github.com/golusoris/golusoris/errors"

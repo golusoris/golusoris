@@ -10,9 +10,8 @@
 package clock
 
 import (
-	"go.uber.org/fx"
-
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/fx"
 )
 
 // Clock is the dependency apps inject. It's a re-export of clockwork.Clock so
@@ -22,7 +21,7 @@ type Clock = clockwork.Clock
 // Module provides a real wall clock. Tests can override with
 // fx.Replace(clock.NewFake()).
 var Module = fx.Module("golusoris.clock",
-	fx.Provide(func() Clock { return clockwork.NewRealClock() }),
+	fx.Provide(func() Clock { return clockwork.NewRealClock() }), //nolint:gocritic // explicit return type aids fx
 )
 
 // NewFake returns a controllable fake clock for tests. Sugar over clockwork.

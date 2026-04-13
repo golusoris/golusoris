@@ -23,10 +23,13 @@ import (
 // Format selects the handler.
 type Format string
 
+// Format values.
 const (
 	// FormatAuto picks tint when stdout is a TTY, JSON otherwise.
 	FormatAuto Format = "auto"
+	// FormatTint forces the colored tint handler.
 	FormatTint Format = "tint"
+	// FormatJSON forces the JSON handler (production-friendly).
 	FormatJSON Format = "json"
 )
 

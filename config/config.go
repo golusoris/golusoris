@@ -55,16 +55,29 @@ type Config struct {
 // Get returns the value for path or "" if absent.
 func (c *Config) Get(path string) string { return c.k.String(path) }
 
-// Bool / Int / String / Strings / etc. — pass-through to koanf for the most
-// common types so callers don't import koanf directly for one lookup.
-func (c *Config) Bool(path string) bool        { return c.k.Bool(path) }
-func (c *Config) Int(path string) int          { return c.k.Int(path) }
-func (c *Config) Int64(path string) int64      { return c.k.Int64(path) }
-func (c *Config) Float(path string) float64    { return c.k.Float64(path) }
-func (c *Config) String(path string) string    { return c.k.String(path) }
-func (c *Config) Strings(p string) []string    { return c.k.Strings(p) }
-func (c *Config) Exists(path string) bool      { return c.k.Exists(path) }
-func (c *Config) All() map[string]any          { return c.k.All() }
+// Bool returns the bool at path (false if absent or not parseable).
+func (c *Config) Bool(path string) bool { return c.k.Bool(path) }
+
+// Int returns the int at path (0 if absent or not parseable).
+func (c *Config) Int(path string) int { return c.k.Int(path) }
+
+// Int64 returns the int64 at path (0 if absent or not parseable).
+func (c *Config) Int64(path string) int64 { return c.k.Int64(path) }
+
+// Float returns the float64 at path (0 if absent or not parseable).
+func (c *Config) Float(path string) float64 { return c.k.Float64(path) }
+
+// String returns the string at path ("" if absent).
+func (c *Config) String(path string) string { return c.k.String(path) }
+
+// Strings returns the []string at path (nil if absent).
+func (c *Config) Strings(p string) []string { return c.k.Strings(p) }
+
+// Exists reports whether path is set.
+func (c *Config) Exists(path string) bool { return c.k.Exists(path) }
+
+// All returns a flat map of all configured keys.
+func (c *Config) All() map[string]any { return c.k.All() }
 
 // Unmarshal decodes a key (or "" for root) into a struct.
 func (c *Config) Unmarshal(path string, into any) error {
@@ -141,7 +154,6 @@ func (c *Config) startWatch(ctx context.Context) func() {
 				continue
 			}
 			fp := file.Provider(path)
-			path := path
 			_ = fp.Watch(func(_ any, err error) {
 				if err != nil {
 					return

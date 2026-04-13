@@ -1,6 +1,7 @@
 package i18n_test
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -20,7 +21,7 @@ func TestNewBundle(t *testing.T) {
 func TestLocalizerFromRequest(t *testing.T) {
 	t.Parallel()
 	b := i18n.New(language.English)
-	r := httptest.NewRequest("GET", "/", nil)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Header.Set("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
 	if loc := b.LocalizerFromRequest(r); loc == nil {
 		t.Error("LocalizerFromRequest returned nil")

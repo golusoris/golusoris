@@ -68,14 +68,19 @@
 
 ## Pending action items
 
-- [ ] Transfer + rename 4 apps: `lusoris/{Lurkarr,subdo,revenge,arca}` → `golusoris/app-{lurkarr,subdo,revenge,arca}` (lower-case the name in transfers — `Lurkarr` → `app-lurkarr`).
-- [ ] After transfers: apply PR merge settings + verify security defaults on each.
-- [ ] Pin `golusoris/golusoris` and `golusoris/goenvoy` on org page (UI-only — https://github.com/orgs/golusoris ).
-- [ ] Upload org avatar (UI-only — https://github.com/organizations/golusoris/settings/profile ).
-- [ ] Upload Ko-fi handle is set; `github_sponsors` not configured (would need GitHub Sponsors enrollment if desired).
-- [ ] Org-wide ruleset for branch protection: needs Team plan ($4/mo). Use per-repo classic branch protection (free for public repos) instead, applied after first push.
-- [ ] First commit + push of `golusoris/golusoris` framework code (awaiting user "go").
-- [ ] Update `golusoris/.github/profile/README.md` to list app-* repos once transfers done.
+- [x] Transfer + rename 4 apps to `golusoris/app-*` ✓ 2026-04-13
+- [x] Apply PR merge settings + security defaults to each app ✓ 2026-04-13
+- [x] First commit + push of `golusoris/golusoris` framework code ✓ 2026-04-13
+- [x] Apply per-repo branch protection on `golusoris/golusoris` main ✓ 2026-04-13
+- [x] Update `golusoris/.github/profile/README.md` to proper org overview ✓ 2026-04-13
+- [x] Add CI workflow (lint + test + vuln + build) to `golusoris/golusoris` ✓ 2026-04-13
+- [ ] Pin `golusoris/golusoris` and `golusoris/goenvoy` on org page — UI-only: <https://github.com/orgs/golusoris>
+- [ ] Upload org avatar — UI-only: <https://github.com/organizations/golusoris/settings/profile>
+- [ ] Apply branch protection to the other repos (`goenvoy`, `app-*`) once each has an active `main` branch with current CI
+- [ ] Add `.github/workflows/labels.yml` in each repo to sync labels from `golusoris/.github/labels.yml`
+- [ ] Optional: auto-assign new issues/PRs (would tick the "Get started" checklist box, minor value for solo dev)
+- [ ] GitHub Sponsors enrollment (if desired; Ko-fi already set)
+- [ ] Org-wide ruleset would require Team plan ($4/mo) — currently using per-repo classic branch protection (free, applied after first push)
 
 ## How to use this file
 
