@@ -1,7 +1,7 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-13 (Step 5 — OTel + observability landed).
+> Last update: 2026-04-13 (Step 6a — k8s/podinfo + k8s/health landing).
 
 ## Naming conventions (Option B)
 
@@ -113,6 +113,7 @@
   - 4b (`feat(httpx)` security middleware): cors (rs/cors, deny-default), csrf (gorilla/csrf double-submit, no-secret=no-op), ratelimit (ulule/limiter/v3 memory store + X-RateLimit-* headers), geofence (maxminddb, app-supplied mmdb, allow/deny ISO-3166-1).
   - 4c (`feat(httpx)` ws + autotls): ws (coder/websocket thin wrapper with same-origin Accept + in-process Broadcaster[T]), autotls (pluggable Provider interface + autocert + certmagic sub-modules). httpx/server now picks up optional *tls.Config via fx and wraps the listener when present.
 - 2026-04-13: **PLAN §2 Principles & standards promoted to top-level** — Power of 10 (Go-adapted) + SEI CERT for Go + Google Go Style Guide + C4 + ADRs + SLSA L3 + OWASP ASVS L2 + NIST SSDF + EU CRA + NIS2 + BSI IT-Grundschutz + BSI C5 + UK NCSC + ENISA + GDPR + EU AI Act + RFC 9457 Problem Details + OTel SemConv v1.26 + Conventional Commits + Keep a Changelog + SemVer 2.0 + Trunk-Based Dev + EditorConfig + gofumpt/gci/golines + Twelve-Factor + CNCF cloud-native + OCI Image Spec + testing standards. Sections §2-§14 renumbered (old §2-§13). CLAUDE.md gained a Power-of-10 quick-reference section + "keep docs in sync" rule.
+- 2026-04-13: **Step 6a — k8s/podinfo + k8s/health** landed: extended `statuspage.Check` with `Tags []string` + `RunTagged(ctx, tag)` so a single Registry powers `/livez` `/readyz` `/startupz` `/status`. `k8s/podinfo` reads downward-API env vars (POD_NAME/NAMESPACE/IP/NODE_NAME/SERVICE_ACCOUNT/CONTAINER_NAME/CONTAINER_IMAGE) + IsInCluster() helper. `k8s/health` ships TagLiveness/Readiness/Startup constants + per-tag handlers; default response is `ok\n` / `not ok\n`, `?verbose=1` returns JSON.
 - 2026-04-13: **Step 5 — OTel + observability** landing in 2 commits:
   - 5a (`feat(otel)`): full SDK — tracer (OTLP batch + parent/TraceIDRatio sampler), meter (OTLP 15s periodic), logger (OTLP batch), W3C TraceContext+Baggage propagator, resource attrs from service.{name,version,namespace} + process + k8s downward-API pod metadata. `otel.ModuleWithSlogBridge` fans slog to the OTel logger provider alongside the local handler. `otel.enabled=false` = no-op.
   - 5b (`feat(observability)`): sentry (slog bridge: Error→event, Warn→breadcrumb; fx-Stop flush), profiling (Pyroscope in-process, off by default; eBPF mode deferred to deploy/ manifests per §4.7), pprof (auth-gated /debug/pprof with constant-time basic-auth), statuspage (HTML + JSON /status page backed by a shared check Registry used by k8s/health later). `observability/AGENTS.md` parent guide.

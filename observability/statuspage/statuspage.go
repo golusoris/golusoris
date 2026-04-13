@@ -40,7 +40,23 @@ type CheckFunc func(ctx context.Context) error
 // Check describes a single registered check.
 type Check struct {
 	Name string
+	// Tags categorize the check. k8s/health filters by tag to surface
+	// liveness vs readiness vs startup checks on separate endpoints.
+	// Untagged checks are visible on /status (full registry view) but
+	// excluded from the k8s probe endpoints. Common tag values:
+	// "liveness", "readiness", "startup" (defined in k8s/health).
+	Tags []string
 	Fn   CheckFunc
+}
+
+// HasTag reports whether the check carries the given tag.
+func (c Check) HasTag(tag string) bool {
+	for _, t := range c.Tags {
+		if t == tag {
+			return true
+		}
+	}
+	return false
 }
 
 // Result is the latest state of a check.
@@ -83,8 +99,23 @@ func (r *Registry) Register(c Check) {
 // Run evaluates every check serially, refreshing the cached results.
 // Returns the fresh result set. ctx cancellation interrupts in-flight checks.
 func (r *Registry) Run(ctx context.Context) []Result {
+	return r.run(ctx, "")
+}
+
+// RunTagged evaluates only checks carrying tag, refreshing the cached
+// results for that subset. Empty tag is equivalent to [Run].
+func (r *Registry) RunTagged(ctx context.Context, tag string) []Result {
+	return r.run(ctx, tag)
+}
+
+func (r *Registry) run(ctx context.Context, tag string) []Result {
 	r.mu.RLock()
-	checks := append([]Check(nil), r.checks...)
+	checks := make([]Check, 0, len(r.checks))
+	for _, c := range r.checks {
+		if tag == "" || c.HasTag(tag) {
+			checks = append(checks, c)
+		}
+	}
 	r.mu.RUnlock()
 
 	out := make([]Result, 0, len(checks))
