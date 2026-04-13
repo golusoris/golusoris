@@ -83,7 +83,9 @@ golusoris/
 │   ├── fxtest/                                                        #   fx lifecycle test helper [landed]
 │   ├── factory/                                                       #   gofakeit deterministic factory [landed]
 │   └── snapshot/                                                      #   go-snaps snapshot testing [landed]
-├── cmd/golusoris/  cmd/golusoris-mcp/                                 # binaries     [planned]
+├── cmd/                                                               # binaries     [landed]
+│   ├── golusoris/                                                     #   scaffolder CLI (init/add/bump) [landed]
+│   └── golusoris-mcp/                                                 #   MCP server for framework tools [landed]
 ├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy       [planned]
 ├── tools/                                                             # shared configs
 ├── template/.github/  template/.devcontainer/                         # repo template

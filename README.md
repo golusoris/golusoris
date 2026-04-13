@@ -51,6 +51,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 16 — Integrations** (partial): `geoip/` (MaxMind GeoLite2 mmdb lookups: country, city, location, ASN) · `secrets/` (pluggable Secret interface: env, file, static backends)
 - **Step 17 — Big stacks** (partial): `pubsub/kafka/` (franz-go Kafka producer/consumer, fx module) · `pubsub/nats/` (NATS JetStream, fx module) · `db/clickhouse/` (ClickHouse OLAP client, fx module) · `db/geo/` (PostGIS Point/BBox, EWKB scanner, Haversine) · `db/timescale/` (TimescaleDB hypertable + retention + compression helpers)
 - **Step 19 — Testing extras** (partial): `testutil/fxtest/` (fx lifecycle helper for tests) · `testutil/factory/` (deterministic gofakeit faker) · `testutil/snapshot/` (go-snaps snapshot + JSON snapshot)
+- **Step 20 — CLI + MCP**: `cmd/golusoris/` (scaffolder: init/add/bump) · `cmd/golusoris-mcp/` (MCP JSON-RPC server exposing framework tools)
 - **Step 18 — Misc**: `clikit/` (cobra + fx-aware CLI builder) · `clikit/tui/` (bubbletea Run/RunInline helpers) · `selfupdate/` (GitHub release self-update with SHA-256 checksum verification)
 
 ## Modules (high level)
