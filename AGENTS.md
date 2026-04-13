@@ -78,7 +78,11 @@ golusoris/
 │   ├── kafka/                                                         #   franz-go Kafka [landed]
 │   └── nats/                                                          #   NATS JetStream [landed]
 ├── plugin/  ebpf/                                                     # misc          [planned]
-├── testutil/                                                          # test helpers [partial: pg/]
+├── testutil/                                                          # test helpers [partial]
+│   ├── pg/  redis/  river/                                            #   containers + river harness [landed]
+│   ├── fxtest/                                                        #   fx lifecycle test helper [landed]
+│   ├── factory/                                                       #   gofakeit deterministic factory [landed]
+│   └── snapshot/                                                      #   go-snaps snapshot testing [landed]
 ├── cmd/golusoris/  cmd/golusoris-mcp/                                 # binaries     [planned]
 ├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy       [planned]
 ├── tools/                                                             # shared configs

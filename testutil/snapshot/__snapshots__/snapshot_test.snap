@@ -1,0 +1,11 @@
+
+[TestMatch_string - 1]
+hello world
+---
+
+[TestMatchJSON_struct - 1]
+{
+ "age": 30,
+ "name": "Alice"
+}
+---
