@@ -119,6 +119,16 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-13: **Step 13 — Files/storage** landed (partial — CGO media/ocr/pdf deferred to separate go.mod submodules):
+  - `storage/` — `Bucket` interface (Put/Get/Delete/Exists/List/URL). `LocalBucket` backend: path-traversal protected, 0o750 dirs, 0o640 files. Cloud backends (S3/GCS) are planned sub-packages.
+  - `hash/` — `SHA256`, `BLAKE3`, `XX64`, `ETag` helpers. `*Reader` variants for streaming. Picks: cespare/xxhash v2 (fastest 64-bit Go hash, used by Prometheus), zeebo/blake3 (pure-Go, 3× faster than SHA-256).
+  - `markdown/` — goldmark v1.8.2 with GFM extensions (tables, strikethrough, task lists, linkify), footnotes, typographer, auto-heading IDs. `Render`, `RenderString`, `RenderTo`.
+  - `archive/` — mholt/archives v0.1.5. `Extract(ctx, src, destDir)` + `Create(ctx, dest, srcs)`. Zip-slip protected (library strips `../`). Supported: zip/tar/gz/bz2/xz/zst/7z/rar.
+  - `httpx/rangeserve/` — stdlib `http.ServeContent` wrapper. `Handler(opener, keyFn)` + `ServeFile` + `ServeReader`. Pluggable `Opener` interface for storage backends.
+  - `fs/watch/` — fsnotify-based debounced directory watcher. `Watcher.Add/Remove/Events/Close`. Configurable debounce + buffer. Drops events when channel full (non-blocking).
+  - New deps: cespare/xxhash/v2, zeebo/blake3, yuin/goldmark v1.8.2 (was already present, bumped), mholt/archives v0.1.5, fsnotify/fsnotify.
+  - All packages: `AGENTS.md` + tests. 0 lint issues.
+  - **Deferred** (CGO, need separate go.mod): `media/av` (go-astiav/FFmpeg), `media/img` (govips/libvips), `media/cv` (gocv/OpenCV), `ocr/` (gosseract/Tesseract), `pdf/` (chromedp).
 - 2026-04-13: **Step 12 — SaaS primitives** landed:
   - `page/` — Typed cursor-based (`NewCursorPage`, `EncodeCursor/DecodeCursor`) and offset-based (`NewOffsetPage`, `HasPrev/HasNext`) pagination. Pure utility, no fx.
   - `audit/` — Append-only structured audit log. `Event{Actor, Action, Target, TenantID, Diff, Metadata}`. `Diff` = `map[string]FieldChange{Before, After}`. `Logger` auto-assigns ID + CreatedAt via injected `clock.Clock`. `MemoryStore` for tests. `Filter` supports Actor/Action/Target/TenantID/time bounds/Limit.

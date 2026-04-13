@@ -55,8 +55,11 @@ golusoris/
 ├── webhooks/                                                          # webhooks      [landed]
 │   ├── in/   out/
 ├── tenancy/  idempotency/  flags/  audit/  page/                      # SaaS          [landed]
-├── storage/  archive/  media/  ocr/  pdf/  hash/                      # files/data   [planned]
-├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]
+├── storage/                                                           # object store  [landed]
+├── hash/  markdown/  archive/                                         # files/data   [landed]
+│   ├── httpx/rangeserve/   fs/watch/
+├── media/  ocr/  pdf/  htmltmpl/  jsonschema/                        # files/data   [planned]
+├── search/  ai/  payments/                                            # more         [planned]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
 ├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
 ├── testutil/                                                          # test helpers [partial: pg/]

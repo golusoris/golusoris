@@ -45,6 +45,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 10 — Notify + Realtime** (partial): `notify/` (Sender interface + SMTP via go-mail) · `notify/unsub/` (RFC 8058 one-click) · `realtime/sse/` (SSE hub) · `realtime/pubsub/` (in-process + Bus interface)
 - **Step 11 — Webhooks**: `webhooks/in/` (inbound signature verification: Stripe, GitHub, Slack, generic HMAC) · `webhooks/out/` (outbound delivery: HMAC-SHA256 signing, exponential-backoff retry, dead-letter queue, replay)
 - **Step 12 — SaaS primitives**: `page/` (typed cursor+offset pagination) · `audit/` (append-only event log with Diff) · `tenancy/` (tenant context middleware, header+subdomain extractors) · `idempotency/` (Idempotency-Key middleware, pluggable store) · `flags/` (typed feature flags, OpenFeature-compatible provider interface)
+- **Step 13 — Files/storage** (partial — CGO media/ocr/pdf deferred): `storage/` (Bucket interface + local FS backend) · `hash/` (SHA-256, BLAKE3, xxhash-64, ETag helpers) · `markdown/` (goldmark GFM renderer) · `archive/` (zip/tar/gz/bz2/xz/zst/7z/rar via mholt/archives) · `httpx/rangeserve/` (HTTP range-request serving) · `fs/watch/` (debounced directory watcher)
 
 ## Modules (high level)
 
