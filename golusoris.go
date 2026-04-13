@@ -14,6 +14,8 @@ package golusoris
 import (
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/auth/oidc"
+	"github.com/golusoris/golusoris/authz"
 	cachemem "github.com/golusoris/golusoris/cache/memory"
 	cacheredis "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/clock"
@@ -123,4 +125,22 @@ var CacheMemory = fx.Module("golusoris.cache.memory",
 // Requires [Core] for config + log. Redis must be reachable at start.
 var CacheRedis = fx.Module("golusoris.cache.redis",
 	cacheredis.Module,
+)
+
+// AuthOIDC bundles the OIDC + OAuth2 PKCE client. Provides
+// *oidc.Provider to the fx graph after running OIDC discovery against
+// the configured issuer.
+//
+// Requires [Core] for config + log. Config key prefix: auth.oidc.*
+var AuthOIDC = fx.Module("golusoris.auth.oidc",
+	oidc.Module,
+)
+
+// Authz bundles the Casbin policy enforcer. Provides *authz.Enforcer.
+// Apps must supply authz.Options (model + adapter) via fx.Supply or
+// fx.Provide before including this module.
+//
+// Requires [Core] for log.
+var Authz = fx.Module("golusoris.authz",
+	authz.Module,
 )

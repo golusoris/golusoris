@@ -45,7 +45,9 @@ golusoris/
 ├── outbox/                                                            # tx outbox    [landed]
 ├── cache/                                                             # caching      [landed]
 │   ├── memory/  redis/  singleflight/
-├── auth/  authz/                                                      # auth         [planned]
+├── auth/                                                              # auth         [partial: jwt/apikey/oidc/session landed]
+│   ├── jwt/  apikey/  oidc/  session/
+├── authz/                                                             # authorization [landed]
 ├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS         [planned]
 ├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
 ├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]

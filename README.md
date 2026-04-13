@@ -41,6 +41,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 6.5 — Runtime-agnostic + Docker/systemd**: `container/runtime/` (unified k8s/docker/podman/systemd/bare detection) · `leader/` (pluggable: `leader/k8s` Lease, `leader/pg` advisory lock) · `systemd/` (sd_notify + watchdog) · Docker Compose + Prometheus scrape-config examples in `tools/`
 - **Step 7 — Jobs + outbox**: `jobs/` (river client + workers registry) · `jobs/cron/` (periodic helpers) · `jobs/ui/` (admin dashboard) · `outbox/` (transactional outbox → river dispatcher, leader-gated) · `testutil/river/` (test harness with real Postgres + river migrations)
 - **Step 8 — Cache**: `cache/memory/` (otter v2, typed L1) · `cache/redis/` (rueidis, standalone + cluster) · `cache/singleflight/` (typed dedup wrapper) · `testutil/redis/` (real Redis container)
+- **Step 9 — Auth + Authz** (partial): `auth/jwt/` · `auth/apikey/` (HMAC-SHA256, pluggable store) · `auth/oidc/` (PKCE, go-oidc/v3) · `auth/session/` (server-side, pluggable store) · `authz/` (Casbin RBAC/ABAC)
 
 ## Modules (high level)
 
