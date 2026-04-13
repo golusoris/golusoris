@@ -120,6 +120,11 @@ linters:
         linters:
           - wrapcheck
           - gosec
+      # apidocs marshals MCP (JSON-RPC) protocol fields, which are camelCase
+      # by spec. tagliatelle's snake-case rule doesn't apply.
+      - path: apidocs/
+        linters:
+          - tagliatelle
 
 formatters:
   enable:

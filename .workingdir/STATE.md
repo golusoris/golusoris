@@ -104,6 +104,20 @@
 - Go toolchain bumped to 1.26.2 across go.mod + CI.
 - Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §3.16 / §3.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.
 - 2026-04-13: **Step 2 — DB** landed locally. db/pgx + db/migrate + db/sqlc + testutil/pg + golusoris.DB umbrella + tools/sqlc.yaml.fragment. config.Unmarshal extended with mapstructure decode hooks. CI test job added Docker precheck + 10m timeout.
+- 2026-04-13: **Step 3 — HTTPX base** landed in 3 commits:
+  - 3a (`feat(httpx)`): httpx/server (slow-loris + body limits + graceful shutdown), httpx/router (chi v5), httpx/middleware (RequestID, Recover, Logger, OTel, SecureHeaders, TrustProxy, Compress, ETag, Chain). golusoris.HTTP umbrella.
+  - 3b (`feat(httpx/client)`): outbound client — breaker(outer) → retry → otelhttp → stdlib.
+  - 3c (`feat(ogenkit, apidocs)`): ogenkit (ErrorHandler, SlogMiddleware, RecoverMiddleware for ogen), apidocs (Scalar UI at /docs with embedded bundle, MCP JSON-RPC at /mcp with tools/list + tools/call from OpenAPI, openapi.yaml|json). tagliatelle exempt for apidocs/ (MCP protocol fields are camelCase by spec).
+
+### Decisions made during Step 3
+
+| Topic | Choice | Why |
+|---|---|---|
+| Commit shape | 3 commits (3a/3b/3c) | Per user; eases review + reverts. |
+| OTel middleware | accept trace.TracerProvider, fall back to otel global no-op | Decouples httpx from a future otel/ package. |
+| apidocs scope | Scalar + MCP both now | Per user; MCP coverage is a pragmatic subset (initialize, tools/list, tools/call — stateless HTTP). |
+| Scalar delivery | embed @scalar/api-reference@1.25.52 bundle via go:embed | Airgap-safe; pinned = reproducible. Refresh via `make scalar-update`. |
+| koanf env transform | live with single-underscore limit; nest struct fields to single words | Avoided breaking the env-provider contract by grouping multi-word concepts under sub-structs (e.g. `http.timeouts.read`). |
 
 ## How to use this file
 

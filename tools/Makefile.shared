@@ -83,3 +83,13 @@ spec-lint: ## OpenAPI lint (spectral)
 .PHONY: clean
 clean: ## remove build artifacts
 	rm -rf bin/ dist/ coverage.out coverage.html
+
+.PHONY: scalar-update
+scalar-update: ## refresh apidocs/embed/scalar.js (set VERSION=1.x.y to pin)
+	@if [ -z "$(VERSION)" ]; then \
+	  VERSION=$$(cat apidocs/embed/SCALAR_VERSION); \
+	fi; \
+	echo "Fetching @scalar/api-reference@$$VERSION"; \
+	curl -sSfL "https://cdn.jsdelivr.net/npm/@scalar/api-reference@$$VERSION/dist/browser/standalone.js" \
+	  -o apidocs/embed/scalar.js; \
+	echo "$$VERSION" > apidocs/embed/SCALAR_VERSION
