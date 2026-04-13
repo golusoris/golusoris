@@ -39,6 +39,8 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 5 — OTel + observability**: `otel/` (tracer + meter + logs + OTLP) `observability/sentry/` `observability/profiling/` (Pyroscope) `observability/pprof/` `observability/statuspage/`
 - **Step 6 — K8s runtime**: `k8s/podinfo/` `k8s/health/` (`/livez` `/readyz` `/startupz`) `k8s/metrics/prom/` (`/metrics` + check-status gauges) `k8s/client/` (in-cluster + kubeconfig + transparent GKE/EKS/Azure workload identity)
 - **Step 6.5 — Runtime-agnostic + Docker/systemd**: `container/runtime/` (unified k8s/docker/podman/systemd/bare detection) · `leader/` (pluggable: `leader/k8s` Lease, `leader/pg` advisory lock) · `systemd/` (sd_notify + watchdog) · Docker Compose + Prometheus scrape-config examples in `tools/`
+- **Step 7 — Jobs + outbox**: `jobs/` (river client + workers registry) · `jobs/cron/` (periodic helpers) · `jobs/ui/` (admin dashboard) · `outbox/` (transactional outbox → river dispatcher, leader-gated) · `testutil/river/` (test harness with real Postgres + river migrations)
+- **Step 8 — Cache**: `cache/memory/` (otter v2, typed L1) · `cache/redis/` (rueidis, standalone + cluster) · `cache/singleflight/` (typed dedup wrapper) · `testutil/redis/` (real Redis container)
 
 ## Modules (high level)
 

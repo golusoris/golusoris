@@ -14,6 +14,8 @@ package golusoris
 import (
 	"go.uber.org/fx"
 
+	cachemem "github.com/golusoris/golusoris/cache/memory"
+	cacheredis "github.com/golusoris/golusoris/cache/redis"
 	"github.com/golusoris/golusoris/clock"
 	"github.com/golusoris/golusoris/config"
 	"github.com/golusoris/golusoris/crypto"
@@ -105,4 +107,20 @@ var Jobs = fx.Module("golusoris.jobs",
 // migrations directory.
 var Outbox = fx.Module("golusoris.outbox",
 	outbox.Module,
+)
+
+// CacheMemory bundles the in-process L1 cache (otter). Provides
+// *memory.Cache to the fx graph. Standalone — does not require DB.
+//
+// Requires [Core] for config + log.
+var CacheMemory = fx.Module("golusoris.cache.memory",
+	cachemem.Module,
+)
+
+// CacheRedis bundles the Redis client (rueidis). Provides
+// rueidis.Client to the fx graph. Auto-detects standalone vs cluster.
+//
+// Requires [Core] for config + log. Redis must be reachable at start.
+var CacheRedis = fx.Module("golusoris.cache.redis",
+	cacheredis.Module,
 )

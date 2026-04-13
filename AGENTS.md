@@ -40,7 +40,12 @@ golusoris/
 ├── systemd/                                                           # sd_notify    [landed]
 ├── k8s/                                                               # k8s          [landed]
 │   ├── podinfo/  health/  metrics/prom/  client/
-├── auth/  authz/  jobs/  outbox/  cache/                              # capabilities [planned]
+├── jobs/                                                              # background   [landed]
+│   ├── cron/  ui/
+├── outbox/                                                            # tx outbox    [landed]
+├── cache/                                                             # caching      [landed]
+│   ├── memory/  redis/  singleflight/
+├── auth/  authz/                                                      # auth         [planned]
 ├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS         [planned]
 ├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
 ├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]

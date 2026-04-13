@@ -119,6 +119,13 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-14: **Step 8 — Cache** landed:
+  - `cache/memory/` — otter v2 in-process L1 cache. `memory.Module` provides `*memory.Cache`. `memory.Typed[K,V](c, prefix)` gives a type-safe namespaced view. `NewForTest` for test use. Config: `cache.memory.{max_size,ttl}`.
+  - `cache/redis/` — rueidis fx module. Auto-detects standalone vs cluster from `InitAddress`. Config: `cache.redis.{addr,user,pass,db,tls}`.
+  - `cache/singleflight/` — typed wrapper over `golang.org/x/sync/singleflight`. No fx wiring needed — construct directly with `singleflight.New[K,V]()`.
+  - `testutil/redis/` — testcontainers-go Redis harness. `redistest.Start(t)` returns a `rueidis.Client` + tears down via `t.Cleanup`.
+  - `golusoris.CacheMemory` + `golusoris.CacheRedis` umbrella vars added to `golusoris.go`.
+  - All packages have `AGENTS.md`.
 - 2026-04-14: **Docs + community scaffolding** landed:
   - `docs/adr/` — Nygard template (`0000-template.md`), index README with backfill policy (linked to [joelparkerhenderson/architecture-decision-record](https://github.com/joelparkerhenderson/architecture-decision-record)), 7 backfilled ADRs (ADR-0001 through ADR-0007) covering fx, koanf, slog, ogen, river, pluggable-leader, RFC 9457.
   - `docs/architecture/` — C4-PlantUML README, L1 context diagram (`context.puml`), L2 container diagram (`container.puml`). L4 intentionally omitted.
