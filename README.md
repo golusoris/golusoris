@@ -42,6 +42,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 7 — Jobs + outbox**: `jobs/` (river client + workers registry) · `jobs/cron/` (periodic helpers) · `jobs/ui/` (admin dashboard) · `outbox/` (transactional outbox → river dispatcher, leader-gated) · `testutil/river/` (test harness with real Postgres + river migrations)
 - **Step 8 — Cache**: `cache/memory/` (otter v2, typed L1) · `cache/redis/` (rueidis, standalone + cluster) · `cache/singleflight/` (typed dedup wrapper) · `testutil/redis/` (real Redis container)
 - **Step 9 — Auth + Authz** (partial): `auth/jwt/` · `auth/apikey/` (HMAC-SHA256, pluggable store) · `auth/oidc/` (PKCE, go-oidc/v3) · `auth/session/` (server-side, pluggable store) · `authz/` (Casbin RBAC/ABAC)
+- **Step 10 — Notify + Realtime** (partial): `notify/` (Sender interface + SMTP via go-mail) · `notify/unsub/` (RFC 8058 one-click) · `realtime/sse/` (SSE hub) · `realtime/pubsub/` (in-process + Bus interface)
 
 ## Modules (high level)
 

@@ -119,6 +119,12 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-14: **Step 10 — Notify + Realtime** landed (partial — Resend/Postmark/Slack senders + inbound/tracking/bounce deferred):
+  - `notify/` — unified `Notifier` (first-success + multi fan-out). `Sender` interface. `SMTPSender` via wneessen/go-mail (TLS/STARTTLS/NoTLS). `WithSender` option.
+  - `notify/unsub/` — RFC 8058 one-click unsubscribe. HMAC-signed URLs, POST+GET handler, pluggable `Store` (Add/IsSuppressed/Remove). `IsSuppressed` check for pre-send gating.
+  - `realtime/sse/` — SSE hub. `Hub.Handler()` upgrades HTTP connection; `Hub.Publish` broadcasts to all clients. Per-client buffered channel; slow clients drop events non-blocking.
+  - `realtime/pubsub/` — In-process `LocalBus` implementing `Bus` interface (Publish/Subscribe). Unsubscribe via cancel func. Cross-replica backends implement same interface.
+  - All packages have `AGENTS.md` + tests.
 - 2026-04-14: **Step 9 — Auth + Authz** landed (partial — passkeys/magiclink/lockout/oauth2server deferred):
   - `auth/jwt/` — HMAC signer (HS256/384/512) wrapping golang-jwt/v5. `NewHMACSigner`, `Sign`, `Parse`, `ErrExpired`, `ErrInvalid`. Pure utility, no fx.
   - `auth/apikey/` — HMAC-SHA256 API key issuance + verification. `Service.Issue/Verify/Revoke/ListByOwner`. Pluggable `Store` interface. Keys stored as hash; raw shown once.

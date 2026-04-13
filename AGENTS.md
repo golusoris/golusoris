@@ -48,7 +48,11 @@ golusoris/
 ├── auth/                                                              # auth         [partial: jwt/apikey/oidc/session landed]
 │   ├── jwt/  apikey/  oidc/  session/
 ├── authz/                                                             # authorization [landed]
-├── notify/  realtime/  webhooks/  tenancy/  idempotency/  flags/      # SaaS         [planned]
+├── notify/                                                            # notifications [partial: smtp/unsub landed]
+│   └── unsub/
+├── realtime/                                                          # realtime      [partial: sse/pubsub landed]
+│   ├── sse/  pubsub/
+├── webhooks/  tenancy/  idempotency/  flags/                         # SaaS          [planned]
 ├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
 ├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
