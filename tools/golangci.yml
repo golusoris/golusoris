@@ -125,6 +125,10 @@ linters:
       - path: apidocs/
         linters:
           - tagliatelle
+      # Vite's manifest.json schema is camelCase (isEntry, dynamicImports, …).
+      - path: httpx/vite/
+        linters:
+          - tagliatelle
 
 formatters:
   enable:
