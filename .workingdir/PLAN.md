@@ -538,17 +538,9 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 ## 12. Out of scope (explicit non-goals)
 
 - Frontend (separate framework later)
-- Bioinformatics, robotics, hardware GPIO/IoT, blockchain/web3
-- Email server (receiving SMTP server itself; we *parse* inbound but don't run the server)
-- Service mesh data plane (Cilium/Istio control)
-- Property-based testing (gopter), Pact contract testing
-- DOCX/XLSX writing, ePub generation
-- Game engines / 3D
-- Scientific computing (gonum) — apps add directly if they need it
-- Plotting/charts
-- ZFS/btrfs snapshots, wake-on-LAN, udev
-- DNS server (miekg/dns) — apps add directly if needed
-- Crossplane
+- Service mesh data plane (Cilium/Istio control) — apps deploy under a mesh, the framework doesn't implement one
+
+_(Items previously listed here — Bioinformatics, robotics, GPIO/IoT, blockchain/web3, SMTP server, property/pact testing, DOCX/XLSX writing, ePub, game engines, 3D, scientific computing, plotting, ZFS/btrfs/WOL/udev, DNS server, Crossplane — are now in scope as opt-in modules; heavy/CGO ones live as in-repo sub-modules. See §3.16 and §3.16b.)_
 
 ---
 

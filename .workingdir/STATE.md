@@ -83,6 +83,12 @@
 - [ ] GitHub Sponsors enrollment (if desired; Ko-fi already set)
 - [ ] Org-wide ruleset would require Team plan ($4/mo) — currently using per-repo classic branch protection (free, applied after first push)
 
+## Session log (recent)
+
+- 2026-04-13: initial scaffold pushed, CI green, branch protection applied, apps moved to `golusoris/app-*`, Ko-fi button added to framework README + org profile.
+- Go toolchain bumped to 1.26.2 across go.mod + CI.
+- Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §3.16 / §3.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.
+
 ## How to use this file
 
 - `.workingdir/PLAN.md` is the architectural source of truth (decisions log + module catalog).
