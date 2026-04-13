@@ -25,6 +25,9 @@ golusoris/
 ├── config/  log/  errors/  crypto/  clock/  id/  validate/  i18n/   # core         [landed]
 ├── db/                                                                # db layer     [landed]
 │   ├── pgx/  migrate/  sqlc/
+│   ├── geo/                                                           #   PostGIS point helpers [landed]
+│   ├── timescale/                                                     #   TimescaleDB helpers   [landed]
+│   └── clickhouse/                                                    #   ClickHouse OLAP client [landed]
 ├── httpx/                                                             # HTTP stack   [landed]
 │   ├── server/  router/  middleware/  client/
 │   ├── form/  htmx/  vite/  static/  static/hashfs/
