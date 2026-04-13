@@ -22,9 +22,11 @@ import (
 	"github.com/golusoris/golusoris/httpx/router"
 	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/id"
+	"github.com/golusoris/golusoris/jobs"
 	k8sclient "github.com/golusoris/golusoris/k8s/client"
 	"github.com/golusoris/golusoris/k8s/podinfo"
 	"github.com/golusoris/golusoris/log"
+	"github.com/golusoris/golusoris/outbox"
 	"github.com/golusoris/golusoris/validate"
 )
 
@@ -79,4 +81,28 @@ var HTTP = fx.Module("golusoris.http",
 var K8s = fx.Module("golusoris.k8s",
 	podinfo.Module,
 	k8sclient.Module,
+)
+
+// Jobs bundles the background-job modules: the river client + a
+// Workers registry. Apps register workers via fx.Invoke(func(w
+// *jobs.Workers) { jobs.Register(w, &MyWorker{}) }).
+//
+// Requires [Core] + [DB] in the same fx graph (river needs a pg pool).
+//
+// jobs/cron (periodic helpers) and jobs/ui (admin dashboard) are not
+// in this umbrella — apps wire them explicitly against the Client.
+var Jobs = fx.Module("golusoris.jobs",
+	jobs.Module,
+)
+
+// Outbox bundles the transactional-outbox drainer. Apps must supply a
+// Dispatcher via fx.Supply or fx.Provide and run under a leader
+// (leader/k8s or leader/pg) so only one replica drains.
+//
+// Requires [Core] + [DB] + [Jobs] in the same fx graph. The outbox
+// schema lives in outbox/migrations/ — wire via dbmigrate.Options{}.
+// WithFS(outbox.MigrationsFS) or copy the SQL into the app's own
+// migrations directory.
+var Outbox = fx.Module("golusoris.outbox",
+	outbox.Module,
 )

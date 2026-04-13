@@ -52,8 +52,13 @@ The Go port of SEI CERT C. Concrete rules covering crypto, error handling, input
 
 ### 2.4 Architecture decisions — C4 + ADRs
 
-- **C4 model** (Simon Brown) for architecture diagrams: Context → Container → Component → Code. Kept in `docs/architecture/`.
-- **Architecture Decision Records** (Michael Nygard's format) in `docs/adr/`. One ADR per significant decision — pinned dependencies, interface choices, cross-cutting conventions. Supersedes rather than edits: old ADRs stay, a new one overrides with a `Supersedes: ADR-0004` header.
+- **C4 model** (Simon Brown) for architecture diagrams: Context → Container → Component → Code. Kept in `docs/architecture/` as PlantUML `.puml` files using [C4-PlantUML](https://github.com/plantuml-stdlib/C4-PlantUML) macros. L4 (code-level) is intentionally omitted — godoc + per-package `AGENTS.md` cover it.
+- **Architecture Decision Records** (Michael Nygard's format) in `docs/adr/`. One ADR per significant decision — pinned dependencies, interface choices, cross-cutting conventions. Supersedes rather than edits: old ADRs stay, a new one overrides with a `Supersedes: ADR-NNNN` header.
+  - ADR template: `docs/adr/0000-template.md`.
+  - Index + backfill policy: `docs/adr/README.md`.
+  - ADRs ≤ 0099 are retroactive backfills; new decisions start at ADR-0100.
+  - Canonical ADR reference: [joelparkerhenderson/architecture-decision-record](https://github.com/joelparkerhenderson/architecture-decision-record).
+- **Backfilled ADRs** (all `Accepted`): ADR-0001 (fx/wire), ADR-0002 (koanf/viper), ADR-0003 (slog), ADR-0004 (ogen/oapi-codegen), ADR-0005 (river/asynq), ADR-0006 (pluggable leader), ADR-0007 (RFC 9457).
 
 ### 2.5 Security + supply-chain standards
 

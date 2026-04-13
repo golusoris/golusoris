@@ -66,7 +66,7 @@ func DefaultOptions() Options {
 func keyFor(name string) int64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(name))
-	return int64(h.Sum64()) //nolint:gosec // intentional bit-reuse for pg int8
+	return int64(h.Sum64()) // #nosec G115 -- intentional bit-reuse for pg int8 advisory key
 }
 
 // Run blocks until ctx is canceled, running the pg-advisory-lock
