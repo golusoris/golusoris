@@ -52,7 +52,9 @@ golusoris/
 │   └── unsub/
 ├── realtime/                                                          # realtime      [partial: sse/pubsub landed]
 │   ├── sse/  pubsub/
-├── webhooks/  tenancy/  idempotency/  flags/                         # SaaS          [planned]
+├── webhooks/                                                          # webhooks      [landed]
+│   ├── in/   out/
+├── tenancy/  idempotency/  flags/                                    # SaaS          [planned]
 ├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
 ├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]

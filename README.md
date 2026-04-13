@@ -43,6 +43,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 8 — Cache**: `cache/memory/` (otter v2, typed L1) · `cache/redis/` (rueidis, standalone + cluster) · `cache/singleflight/` (typed dedup wrapper) · `testutil/redis/` (real Redis container)
 - **Step 9 — Auth + Authz** (partial): `auth/jwt/` · `auth/apikey/` (HMAC-SHA256, pluggable store) · `auth/oidc/` (PKCE, go-oidc/v3) · `auth/session/` (server-side, pluggable store) · `authz/` (Casbin RBAC/ABAC)
 - **Step 10 — Notify + Realtime** (partial): `notify/` (Sender interface + SMTP via go-mail) · `notify/unsub/` (RFC 8058 one-click) · `realtime/sse/` (SSE hub) · `realtime/pubsub/` (in-process + Bus interface)
+- **Step 11 — Webhooks**: `webhooks/in/` (inbound signature verification: Stripe, GitHub, Slack, generic HMAC) · `webhooks/out/` (outbound delivery: HMAC-SHA256 signing, exponential-backoff retry, dead-letter queue, replay)
 
 ## Modules (high level)
 
