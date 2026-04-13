@@ -65,7 +65,9 @@ golusoris/
 ├── payments/                                                          # commerce      [partial]
 │   ├── stripe/
 ├── money/                                                             # money type    [landed]
-├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
+├── geoip/                                                             # geoip         [landed]
+├── secrets/                                                           # secrets        [landed]
+├── integrations/  torrent/                                            # integrations  [planned]
 ├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
 ├── testutil/                                                          # test helpers [partial: pg/]
 ├── cmd/golusoris/  cmd/golusoris-mcp/                                 # binaries     [planned]

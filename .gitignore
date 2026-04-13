@@ -30,7 +30,7 @@ Thumbs.db
 !.env.example
 *.pem
 *.key
-secrets/
+/secrets/
 
 # Tooling caches
 .golangci-lint-cache/
