@@ -1,0 +1,54 @@
+# Variant for media-heavy apps needing system libs (libav, libvips, opencv, tesseract).
+# Uses Chainguard wolfi-base which lets us apk add system packages.
+
+# ---- Build stage ----
+FROM cgr.dev/chainguard/wolfi-base:latest AS builder
+
+RUN apk add --no-cache \
+    go \
+    build-base \
+    pkgconf \
+    ffmpeg-dev \
+    vips-dev \
+    opencv-dev \
+    tesseract-ocr-dev
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+
+RUN CGO_ENABLED=1 go build \
+    -trimpath \
+    -ldflags="-s -w \
+        -X main.version=${VERSION} \
+        -X main.commit=${COMMIT} \
+        -X main.date=${DATE}" \
+    -o /out/app ./cmd/app
+
+# ---- Runtime stage ----
+FROM cgr.dev/chainguard/wolfi-base:latest
+
+RUN apk add --no-cache \
+    ffmpeg \
+    vips \
+    opencv \
+    tesseract-ocr \
+    tesseract-ocr-data-eng \
+    && adduser -D -u 65532 nonroot
+
+WORKDIR /
+COPY --from=builder /out/app /app
+
+USER nonroot
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/app", "healthcheck"]
+
+ENTRYPOINT ["/app"]

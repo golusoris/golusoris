@@ -1,0 +1,85 @@
+# Shared Makefile fragment. Apps (and the framework itself) include this:
+#   include $(GOLUSORIS)/tools/Makefile.shared
+# or copy targets verbatim.
+
+GO          ?= go
+GOLANGCI    ?= golangci-lint
+GOVULNCHECK ?= govulncheck
+GOSEC       ?= gosec
+MOCKERY     ?= mockery
+AIR         ?= air
+SQLC        ?= sqlc
+OGEN        ?= ogen
+MIGRATE     ?= migrate
+SPECTRAL    ?= spectral
+
+PKG ?= ./...
+
+.PHONY: help
+help: ## Show this help
+	@awk 'BEGIN{FS=":.*?## "} /^[a-zA-Z_-]+:.*?## /{printf "  \033[36m%-12s\033[0m %s\n",$$1,$$2}' $(MAKEFILE_LIST)
+
+.PHONY: lint
+lint: ## golangci-lint run
+	$(GOLANGCI) run --config $(or $(GOLANGCI_CONFIG),tools/golangci.yml) $(PKG)
+
+.PHONY: vuln
+vuln: ## govulncheck
+	$(GOVULNCHECK) $(PKG)
+
+.PHONY: gosec
+gosec: ## gosec scan
+	$(GOSEC) -quiet $(PKG)
+
+.PHONY: sec
+sec: vuln gosec ## All security checks
+
+.PHONY: test
+test: ## go test -race
+	$(GO) test -race -count=1 -timeout=120s $(PKG)
+
+.PHONY: cover
+cover: ## go test with coverage
+	$(GO) test -race -count=1 -coverprofile=coverage.out -covermode=atomic $(PKG)
+	$(GO) tool cover -html=coverage.out -o coverage.html
+
+.PHONY: ci
+ci: lint sec test ## Full CI: lint + sec + test
+
+.PHONY: gen
+gen: ## sqlc + ogen + mockery
+	-$(SQLC) generate
+	-$(OGEN) -package api -target internal/api -clean openapi.yaml || true
+	$(MOCKERY)
+
+.PHONY: mocks
+mocks: ## mockery (.mockery.yaml)
+	$(MOCKERY)
+
+.PHONY: migrate-up
+migrate-up: ## golang-migrate up
+	$(MIGRATE) -path ./migrations -database "$$DATABASE_URL" up
+
+.PHONY: migrate-down
+migrate-down: ## golang-migrate down 1
+	$(MIGRATE) -path ./migrations -database "$$DATABASE_URL" down 1
+
+.PHONY: dev
+dev: ## air hot reload
+	$(AIR) -c $(or $(AIR_CONFIG),tools/air.toml)
+
+.PHONY: build
+build: ## go build all binaries
+	$(GO) build -trimpath -ldflags='-s -w' -o bin/ ./cmd/...
+
+.PHONY: tidy
+tidy: ## go mod tidy
+	$(GO) mod tidy
+
+.PHONY: spec-lint
+spec-lint: ## OpenAPI lint (spectral)
+	$(SPECTRAL) lint --ruleset tools/spectral.yaml openapi.yaml
+
+.PHONY: clean
+clean: ## remove build artifacts
+	rm -rf bin/ dist/ coverage.out coverage.html

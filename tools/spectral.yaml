@@ -1,0 +1,22 @@
+# Spectral OpenAPI lint ruleset. Apps `make spec-lint` runs this.
+extends: ["spectral:oas"]
+
+rules:
+  # Strict: every operation must have summary, description, operationId, tags
+  operation-summary: error
+  operation-description: error
+  operation-operationId: error
+  operation-tags: error
+
+  # Required for ogen quality
+  operation-operationId-unique: error
+  path-params: error
+  no-$ref-siblings: error
+
+  # Disallow empty arrays / objects in examples
+  oas3-valid-media-example: error
+
+  # Servers + info hygiene
+  info-contact: warn
+  info-license: warn
+  info-description: warn

@@ -1,0 +1,147 @@
+# goreleaser template — multi-arch + cosign + syft + SLSA.
+# Apps copy + adjust binary names, dockers, and brews.
+version: 2
+
+project_name: golusoris
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: golusoris
+    main: ./cmd/golusoris
+    binary: golusoris
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+  - id: golusoris-mcp
+    main: ./cmd/golusoris-mcp
+    binary: golusoris-mcp
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .Binary }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: "^.*feat(\\(.+\\))?!?:"
+      order: 0
+    - title: Bug fixes
+      regexp: "^.*fix(\\(.+\\))?!?:"
+      order: 1
+    - title: Performance
+      regexp: "^.*perf(\\(.+\\))?:"
+      order: 2
+    - title: Breaking changes
+      regexp: "^.*!:"
+      order: 3
+    - title: Other
+      order: 999
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/golusoris/golusoris:{{ .Version }}-amd64"
+      - "ghcr.io/golusoris/golusoris:latest-amd64"
+    use: buildx
+    dockerfile: tools/Dockerfile.template
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --build-arg=VERSION={{ .Version }}
+      - --build-arg=COMMIT={{ .Commit }}
+      - --build-arg=DATE={{ .Date }}
+
+  - image_templates:
+      - "ghcr.io/golusoris/golusoris:{{ .Version }}-arm64"
+      - "ghcr.io/golusoris/golusoris:latest-arm64"
+    use: buildx
+    dockerfile: tools/Dockerfile.template
+    goos: linux
+    goarch: arm64
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --build-arg=VERSION={{ .Version }}
+
+docker_manifests:
+  - name_template: "ghcr.io/golusoris/golusoris:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/golusoris/golusoris:{{ .Version }}-amd64"
+      - "ghcr.io/golusoris/golusoris:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/golusoris/golusoris:latest"
+    image_templates:
+      - "ghcr.io/golusoris/golusoris:latest-amd64"
+      - "ghcr.io/golusoris/golusoris:latest-arm64"
+
+sboms:
+  - artifacts: archive
+  - id: docker
+    artifacts: package
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - --oidc-issuer=https://token.actions.githubusercontent.com
+      - --output-certificate=${certificate}
+      - --output-signature=${signature}
+      - ${artifact}
+      - --yes
+    artifacts: checksum
+    output: true
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - sign
+      - --oidc-issuer=https://token.actions.githubusercontent.com
+      - "${artifact}@${digest}"
+      - --yes
+    artifacts: manifests
+    output: true
+
+release:
+  github:
+    owner: golusoris
+    name: golusoris
+  draft: false
+  prerelease: auto
+  mode: replace

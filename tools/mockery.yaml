@@ -1,0 +1,16 @@
+# mockery v3 config template.
+# Apps copy + adjust packages section.
+all: false
+dir: "{{.InterfaceDir}}/mocks"
+filename: "mock_{{.InterfaceName | snakecase}}.go"
+mockname: "Mock{{.InterfaceName}}"
+outpkg: "mocks"
+with-expecter: true
+boilerplate-file: "tools/mockery_boilerplate.txt"
+
+packages:
+  # Example — apps populate this:
+  # github.com/myorg/myapp/internal/store:
+  #   interfaces:
+  #     UserRepository:
+  #     SessionRepository:

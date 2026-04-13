@@ -1,0 +1,139 @@
+# golangci-lint v2 config — shared baseline for golusoris and downstream apps.
+# Override per-app via `--config`.
+version: "2"
+
+run:
+  timeout: 5m
+  go: "1.26"
+  tests: true
+  allow-parallel-runners: true
+
+linters:
+  default: none
+  enable:
+    # correctness
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gocritic
+    - revive
+    - bodyclose
+    - rowserrcheck
+    - sqlclosecheck
+    - errorlint
+    - wrapcheck
+    - nilerr
+    - exhaustive
+    - copyloopvar
+    - intrange
+    # security
+    - gosec
+    # complexity
+    - gocyclo
+    - funlen
+    - gocognit
+    - cyclop
+    # style / hygiene
+    - misspell
+    - godot
+    - whitespace
+    - unconvert
+    - unparam
+    - tagliatelle
+    - usestdlibvars
+
+  settings:
+    gocyclo:
+      min-complexity: 18
+    funlen:
+      lines: 120
+      statements: 60
+    gocognit:
+      min-complexity: 30
+    cyclop:
+      max-complexity: 18
+    gosec:
+      excludes:
+        - G104  # errors handled via wrapcheck/errcheck instead
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    staticcheck:
+      checks: ["all", "-ST1000"]
+    revive:
+      rules:
+        - name: var-naming
+        - name: package-comments
+        - name: exported
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: if-return
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
+    wrapcheck:
+      ignoreSigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Wrap(
+        - errors.Wrapf(
+        - errors.WithStack(
+        - errors.WithMessage(
+        - errors.WithMessagef(
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+          yaml: snake
+          xml: camel
+          bson: camel
+          avro: snake
+          mapstructure: kebab
+
+  exclusions:
+    presets:
+      - common-false-positives
+      - legacy
+    rules:
+      - path: _test\.go$
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+          - cyclop
+          - wrapcheck
+          - gosec
+          - errcheck
+      - path: testutil/
+        linters:
+          - wrapcheck
+          - gosec
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/golusoris/golusoris)
+      custom-order: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

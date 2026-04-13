@@ -1,0 +1,39 @@
+# .workingdir/ is INTENTIONALLY checked in — it persists session state
+# (PLAN.md, STATE.md, decisions log) across workstations and AI sessions.
+
+# Audit clones — temporary, only used during the initial cross-repo audit.
+_audit/
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Tooling caches
+.golangci-lint-cache/
+.mockery-cache/
+tmp/
+.tmp/

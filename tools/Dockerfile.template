@@ -1,0 +1,41 @@
+# Multi-stage build for golusoris-based apps (no media deps).
+# Apps copy + adjust the `cmd` path. For media-heavy apps see Dockerfile.media.template.
+
+# ---- Build stage ----
+FROM cgr.dev/chainguard/go:latest AS builder
+
+WORKDIR /src
+
+# Cache go module deps
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+
+RUN CGO_ENABLED=0 go build \
+    -trimpath \
+    -ldflags="-s -w \
+        -X main.version=${VERSION} \
+        -X main.commit=${COMMIT} \
+        -X main.date=${DATE}" \
+    -o /out/app ./cmd/app
+
+# ---- Runtime stage ----
+FROM cgr.dev/chainguard/static:latest
+
+WORKDIR /
+COPY --from=builder /out/app /app
+
+USER nonroot:nonroot
+
+EXPOSE 8080
+
+# Healthcheck hits the framework's /livez endpoint.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["/app", "healthcheck"]
+
+ENTRYPOINT ["/app"]
