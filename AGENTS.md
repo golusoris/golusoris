@@ -51,7 +51,11 @@ golusoris/
 ├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy       [planned]
 ├── tools/                                                             # shared configs
 ├── template/.github/  template/.devcontainer/                         # repo template
-├── docs/upstream/  docs/migrations/                                   # cached docs + migration guides
+├── docs/
+│   ├── adr/                                                           # ADRs (Nygard) [0001-0007 backfilled]
+│   ├── architecture/                                                  # C4 PlantUML L1+L2 diagrams
+│   ├── upstream/                                                      # pinned upstream docs
+│   └── migrations/                                                    # per-version migration guides
 └── AGENTS.md  CLAUDE.md                                               # this file + Claude-specific
 ```
 

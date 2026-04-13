@@ -1,0 +1,53 @@
+name: Feature request
+description: Propose a new module, capability, or improvement.
+labels: ["type: enhancement", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Check [PLAN.md](../.workingdir/PLAN.md) first — the feature may already be scheduled.
+        New modules follow the [wire-fx-module skill](../.claude/skills/wire-fx-module/).
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of change
+      options:
+        - New module / package
+        - Enhancement to existing module
+        - New dependency
+        - Breaking change / API redesign
+        - Documentation / AGENTS.md
+        - Tooling / CI / DX
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What are you trying to do that golusoris doesn't support today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Sketch the public API surface — ideally a short Go snippet showing the fx.Module + the usage pattern.
+      render: go
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other libraries / approaches did you evaluate? Why this one?
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and the PLAN.md module catalog.
+          required: true
+        - label: The proposed dependency has been weighed against awesome-go alternatives.

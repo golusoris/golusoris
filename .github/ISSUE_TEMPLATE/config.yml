@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/golusoris/golusoris/security/advisories/new
+    about: Please report security issues via a private advisory, not a public issue.
+  - name: Question / discussion
+    url: https://github.com/golusoris/golusoris/discussions
+    about: Use Discussions for questions, ideas, and general help.

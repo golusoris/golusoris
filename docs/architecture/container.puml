@@ -1,0 +1,45 @@
+@startuml golusoris-container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 L2 — Container: golusoris module composition (typical app)
+
+Person(end_user, "End user")
+Person(operator, "Operator")
+
+System_Boundary(app, "golusoris-based app") {
+    Container(http, "httpx/server + router", "chi v5 + middleware", "Inbound HTTP — slow-loris guards, body limits, graceful shutdown")
+    Container(ogen, "ogenkit + apidocs", "ogen-generated handlers", "API layer — RFC 9457 errors, Scalar UI, MCP JSON-RPC")
+    Container(jobs, "jobs (river)", "PG-backed queue", "Background workers, periodic jobs (jobs/cron)")
+    Container(outbox, "outbox", "Drainer + dispatcher", "Transactional outbox → river enqueue (leader-gated)")
+    Container(leader, "leader/k8s OR leader/pg", "Lease or pg_advisory_lock", "Single-leader election")
+    Container(otel, "otel + observability", "OTLP SDK + slog bridge", "Traces + metrics + logs + Sentry")
+    Container(health, "k8s/health + statuspage", "Tagged checks", "/livez /readyz /startupz /status /metrics")
+    Container(runtime, "container/runtime + systemd", "Runtime detect + sd_notify", "k8s / docker / podman / systemd / bare identity")
+    Container(config, "config + log + clock + id + crypto + validate", "Core fx modules", "Cross-cutting primitives")
+    ContainerDb(db, "db/pgx + db/migrate + db/sqlc", "pgx pool + migrate + sqlc helpers", "Connection pool, migrations, tx helpers")
+}
+
+ContainerDb_Ext(postgres, "PostgreSQL", "Single Postgres for app data + jobs + outbox + leader-pg")
+Container_Ext(otelcol, "OTel collector", "OTLP receiver")
+Container_Ext(sentry_ext, "Sentry", "Error sink")
+
+Rel(end_user, http, "HTTPS")
+Rel(operator, health, "Scrapes / probes")
+Rel(http, ogen, "Routes to handlers")
+Rel(ogen, db, "Reads + writes", "via sqlc")
+Rel(ogen, outbox, "outbox.Add(tx, ...)", "in same pgx.Tx")
+Rel(outbox, jobs, "Dispatcher → river.Insert")
+Rel(outbox, leader, "Drains only when leader")
+Rel(jobs, db, "river queue tables")
+Rel(leader, db, "leader/pg variant only")
+Rel(db, postgres, "TCP", "pgx")
+Rel(otel, otelcol, "OTLP gRPC")
+Rel(otel, sentry_ext, "Errors via slog bridge")
+Rel(runtime, leader, "Provides identity")
+Rel(config, http, "wires")
+Rel(config, jobs, "wires")
+Rel(config, otel, "wires")
+
+@enduml

@@ -1,0 +1,98 @@
+name: Bug report
+description: Something isn't working as expected.
+labels: ["type: bug", "status: triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: search open issues, check the relevant `AGENTS.md` / per-package docs, and confirm you're on the latest version.
+
+  - type: input
+    id: version
+    attributes:
+      label: golusoris version
+      placeholder: "e.g. v0.3.1 or git SHA"
+    validations:
+      required: true
+
+  - type: input
+    id: go_version
+    attributes:
+      label: Go version
+      placeholder: "go version output"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Affected package
+      multiple: true
+      options:
+        - config
+        - log
+        - clock
+        - id
+        - crypto
+        - validate
+        - errors
+        - db/pgx
+        - db/migrate
+        - db/sqlc
+        - httpx/server
+        - httpx/router
+        - httpx/middleware
+        - httpx/client
+        - httpx/cors
+        - httpx/csrf
+        - httpx/ratelimit
+        - httpx/geofence
+        - httpx/ws
+        - httpx/autotls
+        - ogenkit
+        - apidocs
+        - otel
+        - observability
+        - container/runtime
+        - leader/k8s
+        - leader/pg
+        - k8s/podinfo
+        - k8s/health
+        - k8s/metrics/prom
+        - k8s/client
+        - systemd
+        - jobs
+        - outbox
+        - other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Include the error message, unexpected behaviour, or panic output.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The shortest Go code or config that triggers the bug.
+      render: go
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Deployment target (k8s / docker-compose / systemd / bare), OS, anything relevant.

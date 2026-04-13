@@ -1,0 +1,8 @@
+* @lusoris
+
+SECURITY.md @lusoris
+.github/workflows/ @lusoris
+go.mod @lusoris
+go.sum @lusoris
+docs/adr/ @lusoris
+docs/architecture/ @lusoris

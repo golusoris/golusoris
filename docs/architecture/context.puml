@@ -1,0 +1,32 @@
+@startuml golusoris-context
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+LAYOUT_WITH_LEGEND()
+
+title C4 L1 — Context: a typical golusoris-based application
+
+Person(end_user, "End user", "Web / mobile / API client")
+Person(operator, "Operator", "Deploys + monitors the app")
+Person(developer, "Developer", "Writes app code on top of golusoris")
+
+System(app, "golusoris-based app", "Go service composed from opt-in fx modules")
+
+System_Ext(postgres, "PostgreSQL", "Application data + jobs (river) + outbox + leader-pg")
+System_Ext(otel_collector, "OpenTelemetry collector", "Receives traces, metrics, logs (OTLP)")
+System_Ext(idp, "OIDC IdP", "Auth (auth/oidc, future)")
+System_Ext(object_store, "Object storage", "S3-compatible (storage/, future)")
+System_Ext(sentry, "Sentry", "Error aggregation (observability/sentry slog bridge)")
+System_Ext(k8s, "Kubernetes / Docker / systemd", "Runtime — election + lifecycle hooks adapt per backend")
+
+Rel(end_user, app, "Uses", "HTTPS")
+Rel(operator, app, "Observes", "/metrics, /livez, /readyz, /status, /debug/pprof")
+Rel(developer, app, "Builds + ships", "Go module dep")
+
+Rel(app, postgres, "Reads + writes", "pgx/v5 + sqlc")
+Rel(app, otel_collector, "Exports", "OTLP gRPC")
+Rel(app, idp, "Delegates auth", "OIDC + PKCE")
+Rel(app, object_store, "Stores blobs", "S3 API")
+Rel(app, sentry, "Reports errors", "Sentry SDK via slog bridge")
+Rel(app, k8s, "Runs under", "in-cluster / docker / systemd / bare")
+
+@enduml
