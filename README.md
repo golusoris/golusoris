@@ -49,6 +49,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 14 — Search + AI**: `search/` (Indexer/Searcher interface + MemorySearcher) · `ai/llm/` (Chat/Stream/Embed interface + OpenAI-compatible HTTP client) · `ai/vector/` (pgvector helpers: From, SimilaritySearch, RegisterTypes)
 - **Step 15 — Commerce** (partial): `money/` (currency-aware minor-unit Money type, ISO 4217, zero-decimal support) · `payments/stripe/` (Checkout sessions, Customer Portal, Payment Intents via stripe-go/v82)
 - **Step 16 — Integrations** (partial): `geoip/` (MaxMind GeoLite2 mmdb lookups: country, city, location, ASN) · `secrets/` (pluggable Secret interface: env, file, static backends)
+- **Step 17 — Big stacks** (partial): `pubsub/kafka/` (franz-go Kafka producer/consumer, fx module) · `pubsub/nats/` (NATS JetStream, fx module)
 - **Step 18 — Misc**: `clikit/` (cobra + fx-aware CLI builder) · `clikit/tui/` (bubbletea Run/RunInline helpers) · `selfupdate/` (GitHub release self-update with SHA-256 checksum verification)
 
 ## Modules (high level)
