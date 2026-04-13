@@ -59,7 +59,10 @@ golusoris/
 ├── hash/  markdown/  archive/                                         # files/data   [landed]
 │   ├── httpx/rangeserve/   fs/watch/
 ├── media/  ocr/  pdf/  htmltmpl/  jsonschema/                        # files/data   [planned]
-├── search/  ai/  payments/                                            # more         [planned]
+├── search/                                                            # search        [landed]
+├── ai/                                                                # AI            [landed]
+│   ├── llm/   vector/
+├── payments/                                                          # commerce      [planned]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
 ├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
 ├── testutil/                                                          # test helpers [partial: pg/]
