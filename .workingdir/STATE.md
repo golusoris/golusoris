@@ -108,6 +108,10 @@
   - 3a (`feat(httpx)`): httpx/server (slow-loris + body limits + graceful shutdown), httpx/router (chi v5), httpx/middleware (RequestID, Recover, Logger, OTel, SecureHeaders, TrustProxy, Compress, ETag, Chain). golusoris.HTTP umbrella.
   - 3b (`feat(httpx/client)`): outbound client — breaker(outer) → retry → otelhttp → stdlib.
   - 3c (`feat(ogenkit, apidocs)`): ogenkit (ErrorHandler, SlogMiddleware, RecoverMiddleware for ogen), apidocs (Scalar UI at /docs with embedded bundle, MCP JSON-RPC at /mcp with tools/list + tools/call from OpenAPI, openapi.yaml|json). tagliatelle exempt for apidocs/ (MCP protocol fields are camelCase by spec).
+- 2026-04-13: **Step 4 — HTTPX extras** landed in 3 commits:
+  - 4a (`feat(httpx)` tiny wrappers): form (go-playground/form/v4, gerr.CodeBadRequest on decode fail), htmx (HX-* header constants + helpers), vite (manifest.json → hashed URLs + transitive CSS), static (embed fs.FS + ETag + cache-control), static/hashfs (benbjohnson/hashfs).
+  - 4b (`feat(httpx)` security middleware): cors (rs/cors, deny-default), csrf (gorilla/csrf double-submit, no-secret=no-op), ratelimit (ulule/limiter/v3 memory store + X-RateLimit-* headers), geofence (maxminddb, app-supplied mmdb, allow/deny ISO-3166-1).
+  - 4c (`feat(httpx)` ws + autotls): ws (coder/websocket thin wrapper with same-origin Accept + in-process Broadcaster[T]), autotls (pluggable Provider interface + autocert + certmagic sub-modules). httpx/server now picks up optional *tls.Config via fx and wraps the listener when present.
 
 ### Decisions made during Step 3
 

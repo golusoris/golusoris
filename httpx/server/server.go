@@ -24,6 +24,7 @@ package server
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -139,36 +140,61 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts.withDefaults(), nil
 }
 
+// serverParams lets fx supply an optional *tls.Config. If present, the
+// listener is wrapped with TLS. Apps wire this by including one of the
+// httpx/autotls/* sub-modules.
+type serverParams struct {
+	fx.In
+
+	Lifecycle fx.Lifecycle
+	Opts      Options
+	Handler   http.Handler
+	Logger    *slog.Logger
+	TLSConfig *tls.Config `optional:"true"`
+}
+
 // Module provides a *http.Server that listens during fx Start and is
 // gracefully shut down during fx Stop. Requires a [http.Handler] in the
-// graph (see [httpx/router.Module]).
+// graph (see [httpx/router.Module]). If a *tls.Config is provided
+// (optionally, via one of the httpx/autotls sub-modules), the server
+// listens over TLS.
 var Module = fx.Module("golusoris.httpx.server",
 	fx.Provide(loadOptions),
-	fx.Provide(func(lc fx.Lifecycle, opts Options, handler http.Handler, logger *slog.Logger) *http.Server {
-		srv := New(handler, opts)
+	fx.Provide(func(p serverParams) *http.Server {
+		srv := New(p.Handler, p.Opts)
+		srv.TLSConfig = p.TLSConfig
 
-		lc.Append(fx.Hook{
+		p.Lifecycle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				ln, err := net.Listen("tcp", srv.Addr)
+				rawLn, err := net.Listen("tcp", srv.Addr)
 				if err != nil {
 					return fmt.Errorf("httpx/server: listen %s: %w", srv.Addr, err)
 				}
-				logger.Info("httpx/server: listening", slog.String("addr", ln.Addr().String()))
+				ln := rawLn
+				scheme := "http"
+				if p.TLSConfig != nil {
+					ln = tls.NewListener(rawLn, p.TLSConfig)
+					scheme = "https"
+				}
+				p.Logger.Info("httpx/server: listening",
+					slog.String("addr", ln.Addr().String()),
+					slog.String("scheme", scheme),
+				)
 				go func() {
 					if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-						logger.Error("httpx/server: serve failed", slog.String("error", serveErr.Error()))
+						p.Logger.Error("httpx/server: serve failed", slog.String("error", serveErr.Error()))
 					}
 				}()
 				_ = ctx // Start ctx is advisory — we don't block on it.
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
-				shutdownCtx, cancel := context.WithTimeout(ctx, opts.Timeouts.Shutdown)
+				shutdownCtx, cancel := context.WithTimeout(ctx, p.Opts.Timeouts.Shutdown)
 				defer cancel()
 				if err := srv.Shutdown(shutdownCtx); err != nil {
 					return fmt.Errorf("httpx/server: shutdown: %w", err)
 				}
-				logger.Info("httpx/server: shutdown complete")
+				p.Logger.Info("httpx/server: shutdown complete")
 				return nil
 			},
 		})
