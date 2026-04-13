@@ -39,12 +39,35 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://app:dev@postgres:5432/app?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
+      # db/pgx
+      APP_DB_DSN: postgres://app:dev@postgres:5432/app?sslmode=disable
+      # cache/redis (Step 8)
+      APP_REDIS_URL: redis://redis:6379/0
+      # log/
       LOG_LEVEL: debug
       LOG_FORMAT: tint
+      # otel/ — point at a collector if you run one
+      # APP_OTEL_SERVICE_NAME: myapp
+      # APP_OTEL_ENDPOINT: otel-collector:4317
     ports:
       - "8080:8080"
+    healthcheck:
+      # k8s/health's /livez is HTTP-ok when the process is alive; Docker
+      # Compose polls this for the service_healthy gate.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/livez"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Prometheus scraping the app. Uncomment + mount
+  # tools/prometheus/prometheus.yml to collect metrics locally.
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+  #   ports:
+  #     - "9090:9090"
 
 volumes:
   pg_data:

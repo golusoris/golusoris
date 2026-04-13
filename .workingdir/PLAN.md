@@ -277,9 +277,21 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 
 | Path | Purpose | Key dep |
 |---|---|---|
-| `k8s/podinfo/` | downward-API env → fx-provided PodInfo | stdlib |
-| `k8s/leader/` | k8s Lease leader election | k8s.io/client-go |
+| `k8s/podinfo/` | downward-API env → fx-provided PodInfo (k8s-only view) | stdlib |
+| `k8s/health/` | /livez /readyz /startupz driven by tagged statuspage registry | stdlib |
+| `k8s/metrics/prom/` | Prometheus /metrics + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go wrapper, in-cluster + kubeconfig + workload identity | k8s.io/client-go |
+
+### 4.8a Runtime-agnostic + Docker/systemd
+
+| Path | Purpose | Key dep |
+|---|---|---|
+| `container/runtime/` | detect runtime (k8s/docker/podman/systemd/bare) + unified Info | stdlib |
+| `leader/` | pluggable leader-election interface + Callbacks | — |
+| `leader/k8s/` | k8s-Lease backend | k8s.io/client-go |
+| `leader/pg/` | Postgres advisory-lock backend | jackc/pgx/v5 |
+| `systemd/` | sd_notify + watchdog (no-op when NOTIFY_SOCKET unset) | stdlib |
+| `tools/prometheus/prometheus.yml` | example scrape config for Docker Compose / Swarm | — |
 
 ### 4.9 Notifications & realtime
 
@@ -597,7 +609,8 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 3. **HTTPX (base)** — httpx/server, middleware, router (chi), client; ogenkit + apidocs (Scalar).
 4. **HTTPX (extras)** — cors, csrf, ratelimit, ws, form, static, hashfs, vite, htmx, geofence, autotls.
 5. **OTel + observability** — otel/, sentry/, profiling/, pprof/, statuspage/.
-6. **K8s runtime** — k8s/health (alexliesenfeld base), podinfo, metrics/prom, leader, client (with workload identity).
+6. **K8s runtime** — k8s/podinfo, k8s/health, k8s/metrics/prom, k8s/client (with workload identity).
+6.5 **Runtime-agnostic + Docker/systemd** — container/runtime (unified identity); leader/ promoted to top-level with k8s-Lease + pg-advisory-lock backends; systemd/ (sd_notify + watchdog); Docker Compose + Prometheus example configs in tools/.
 7. **Jobs + outbox** — jobs/, jobs/cron, outbox/, testutil/river.
 8. **Cache** — cache/memory, cache/redis, cache/singleflight, testutil/redis.
 9. **Auth + authz** — oidc, passkeys, jwt, apikey, magiclink, linking, impersonate, session, recovery, policy, lockout, captcha, authz.

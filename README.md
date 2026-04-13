@@ -37,7 +37,8 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 3 — HTTP base**: `httpx/server/` `httpx/router/` `httpx/middleware/` `httpx/client/` `ogenkit/` `apidocs/` (Scalar + MCP-from-OpenAPI)
 - **Step 4 — HTTP extras**: `httpx/form/` `httpx/htmx/` `httpx/vite/` `httpx/static/` `httpx/static/hashfs/` `httpx/cors/` `httpx/csrf/` `httpx/ratelimit/` `httpx/geofence/` `httpx/ws/` `httpx/autotls/` (autocert + certmagic)
 - **Step 5 — OTel + observability**: `otel/` (tracer + meter + logs + OTLP) `observability/sentry/` `observability/profiling/` (Pyroscope) `observability/pprof/` `observability/statuspage/`
-- **Step 6 — K8s runtime**: `k8s/podinfo/` `k8s/health/` (`/livez` `/readyz` `/startupz`) `k8s/metrics/prom/` (`/metrics` + check-status gauges) `k8s/leader/` (Lease election) `k8s/client/` (in-cluster + kubeconfig + transparent GKE/EKS/Azure workload identity)
+- **Step 6 — K8s runtime**: `k8s/podinfo/` `k8s/health/` (`/livez` `/readyz` `/startupz`) `k8s/metrics/prom/` (`/metrics` + check-status gauges) `k8s/client/` (in-cluster + kubeconfig + transparent GKE/EKS/Azure workload identity)
+- **Step 6.5 — Runtime-agnostic + Docker/systemd**: `container/runtime/` (unified k8s/docker/podman/systemd/bare detection) · `leader/` (pluggable: `leader/k8s` Lease, `leader/pg` advisory lock) · `systemd/` (sd_notify + watchdog) · Docker Compose + Prometheus scrape-config examples in `tools/`
 
 ## Modules (high level)
 

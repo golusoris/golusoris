@@ -1,0 +1,20 @@
+# Example Prometheus scrape config for a golusoris app.
+# Copy into your prometheus deployment + point the app service at :8080.
+#
+# Apps with k8s/metrics/prom mounted expose Go runtime + process collectors
+# plus per-check status gauges (app_check_status, app_check_latency_seconds).
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: golusoris-app
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - app:8080        # Docker Compose / Swarm hostname
+        labels:
+          service: myapp
+          env: dev
