@@ -19,6 +19,8 @@ import (
 	"github.com/golusoris/golusoris/crypto"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
+	"github.com/golusoris/golusoris/httpx/router"
+	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/id"
 	"github.com/golusoris/golusoris/log"
 	"github.com/golusoris/golusoris/validate"
@@ -46,4 +48,16 @@ var Core = fx.Module("golusoris.core",
 var DB = fx.Module("golusoris.db",
 	dbpgx.Module,
 	dbmigrate.Module,
+)
+
+// HTTP bundles the base HTTP stack: chi router + *http.Server with
+// slow-loris guards, body limits, and graceful shutdown. Apps add
+// middleware via fx.Invoke against the provided chi.Router.
+//
+// Individual httpx/middleware functions are not in fx (they're plain
+// net/http middleware); apps compose the stack they want and register it
+// via router.Use.
+var HTTP = fx.Module("golusoris.http",
+	router.Module,
+	server.Module,
 )
