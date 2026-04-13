@@ -68,11 +68,17 @@ type Result struct {
 	At      time.Time `json:"at"`
 }
 
+// RunHook is invoked after every Run / RunTagged with the freshly-evaluated
+// results. Subscribers can mirror results into Prometheus gauges, an OTel
+// meter, etc. Hooks run synchronously — keep them quick.
+type RunHook func(ctx context.Context, results []Result)
+
 // Registry holds the checks + caches the last result. Thread-safe.
 type Registry struct {
 	mu      sync.RWMutex
 	checks  []Check
 	results map[string]Result
+	hooks   []RunHook
 	started time.Time
 	clk     clock.Clock
 	timeout time.Duration
@@ -94,6 +100,15 @@ func (r *Registry) Register(c Check) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.checks = append(r.checks, c)
+}
+
+// OnRun subscribes fn to every Run / RunTagged invocation. Multiple hooks
+// run in registration order. Used by k8s/metrics/prom to mirror check
+// status into Prometheus gauges.
+func (r *Registry) OnRun(fn RunHook) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.hooks = append(r.hooks, fn)
 }
 
 // Run evaluates every check serially, refreshing the cached results.
@@ -126,7 +141,11 @@ func (r *Registry) run(ctx context.Context, tag string) []Result {
 	for _, res := range out {
 		r.results[res.Name] = res
 	}
+	hooks := append([]RunHook(nil), r.hooks...)
 	r.mu.Unlock()
+	for _, fn := range hooks {
+		fn(ctx, out)
+	}
 	return out
 }
 
