@@ -68,10 +68,14 @@ var HTTP = fx.Module("golusoris.http",
 // → typed PodInfo) + client (rest.Config + clientset, in-cluster or
 // kubeconfig).
 //
-// Health (k8s/health), metrics (k8s/metrics/prom), and leader
-// (k8s/leader) are not in this umbrella because they have arguments
-// (Registry, Callbacks) that don't fit a generic provider — apps wire
-// them with their own fx.Invoke.
+// Health (k8s/health) and metrics (k8s/metrics/prom) aren't in this
+// umbrella because they take a Registry argument that doesn't fit a
+// generic provider — apps wire them with their own fx.Invoke.
+//
+// Leader election lives under top-level [leader/] (k8s-Lease or
+// Postgres advisory lock) so non-k8s apps can elect too. Runtime-
+// agnostic identity lives under [container/runtime] — prefer it in
+// new code.
 var K8s = fx.Module("golusoris.k8s",
 	podinfo.Module,
 	k8sclient.Module,

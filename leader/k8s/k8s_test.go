@@ -1,4 +1,4 @@
-package leader_test
+package k8s_test
 
 import (
 	"context"
@@ -8,12 +8,13 @@ import (
 
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/golusoris/golusoris/k8s/leader"
+	"github.com/golusoris/golusoris/leader"
+	leaderk8s "github.com/golusoris/golusoris/leader/k8s"
 )
 
 func TestRunRequiresName(t *testing.T) {
 	t.Parallel()
-	err := leader.Run(context.Background(), fake.NewClientset(), leader.Options{Enabled: true}, leader.Callbacks{})
+	err := leaderk8s.Run(context.Background(), fake.NewClientset(), leaderk8s.Options{Enabled: true}, leader.Callbacks{})
 	if err == nil {
 		t.Fatal("expected error for missing Name")
 	}
@@ -24,7 +25,7 @@ func TestRunRequiresName(t *testing.T) {
 
 func TestDefaults(t *testing.T) {
 	t.Parallel()
-	o := leader.DefaultOptions()
+	o := leaderk8s.DefaultOptions()
 	if o.Namespace != "default" {
 		t.Errorf("Namespace = %q", o.Namespace)
 	}
