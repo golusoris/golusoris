@@ -54,8 +54,8 @@ golusoris/
 │   ├── sse/  pubsub/
 ├── webhooks/                                                          # webhooks      [landed]
 │   ├── in/   out/
-├── tenancy/  idempotency/  flags/                                    # SaaS          [planned]
-├── audit/  page/  storage/  archive/  media/  ocr/  pdf/  hash/       # files/data   [planned]
+├── tenancy/  idempotency/  flags/  audit/  page/                      # SaaS          [landed]
+├── storage/  archive/  media/  ocr/  pdf/  hash/                      # files/data   [planned]
 ├── markdown/  htmltmpl/  jsonschema/  fs/  search/  ai/  payments/    # more         [planned]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
 ├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
