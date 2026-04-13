@@ -62,7 +62,9 @@ golusoris/
 ├── search/                                                            # search        [landed]
 ├── ai/                                                                # AI            [landed]
 │   ├── llm/   vector/
-├── payments/                                                          # commerce      [planned]
+├── payments/                                                          # commerce      [partial]
+│   ├── stripe/
+├── money/                                                             # money type    [landed]
 ├── money/  integrations/  geoip/  secrets/  torrent/                  # integrations [planned]
 ├── clikit/  selfupdate/  plugin/  ebpf/                               # misc         [planned]
 ├── testutil/                                                          # test helpers [partial: pg/]
