@@ -1,0 +1,70 @@
+# PrometheusRule for golusoris applications.
+# Apply to the namespace where Prometheus Operator is watching.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: golusoris-app
+  labels:
+    app.kubernetes.io/part-of: kube-prometheus-stack
+spec:
+  groups:
+    - name: golusoris.http
+      interval: 30s
+      rules:
+        - alert: HighErrorRate
+          expr: |
+            sum(rate(http_server_request_duration_seconds_count{status=~"5.."}[5m]))
+            /
+            sum(rate(http_server_request_duration_seconds_count[5m])) > 0.05
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High HTTP error rate ({{ $value | humanizePercentage }})"
+            description: "More than 5% of requests are returning 5xx errors."
+
+        - alert: HighLatencyP99
+          expr: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(http_server_request_duration_seconds_bucket[5m]))
+            ) > 1.0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "P99 latency above 1s"
+            description: "99th percentile HTTP latency is {{ $value | humanizeDuration }}."
+
+    - name: golusoris.runtime
+      interval: 60s
+      rules:
+        - alert: HighMemoryUsage
+          expr: |
+            go_memstats_heap_inuse_bytes / go_memstats_heap_sys_bytes > 0.90
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High heap usage"
+            description: "Heap usage is above 90%."
+
+        - alert: GoroutineLeak
+          expr: go_goroutines > 10000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Potential goroutine leak"
+            description: "Goroutine count is {{ $value }}."
+
+    - name: golusoris.checks
+      interval: 30s
+      rules:
+        - alert: HealthCheckFailing
+          expr: app_check_status == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Health check {{ $labels.check }} is failing"
+            description: "The health check {{ $labels.check }} has been failing for 2 minutes."

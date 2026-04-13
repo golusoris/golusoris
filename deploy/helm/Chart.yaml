@@ -1,0 +1,16 @@
+apiVersion: v2
+name: golusoris-app
+description: Base Helm chart for golusoris applications
+type: application
+version: 0.1.0
+appVersion: "0.0.0"
+keywords:
+  - golusoris
+  - go
+  - backend
+home: https://github.com/golusoris/golusoris
+sources:
+  - https://github.com/golusoris/golusoris
+maintainers:
+  - name: lusoris
+    url: https://github.com/lusoris

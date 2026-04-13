@@ -86,7 +86,9 @@ golusoris/
 ├── cmd/                                                               # binaries     [landed]
 │   ├── golusoris/                                                     #   scaffolder CLI (init/add/bump) [landed]
 │   └── golusoris-mcp/                                                 #   MCP server for framework tools [landed]
-├── deploy/helm/  deploy/observability/  deploy/logging/  ...          # deploy       [planned]
+├── deploy/                                                            # deploy       [partial]
+│   ├── helm/                                                          #   base Helm chart [landed]
+│   └── observability/                                                 #   PrometheusRule + Grafana dashboard [landed]
 ├── tools/                                                             # shared configs
 ├── template/.github/  template/.devcontainer/                         # repo template
 ├── docs/
