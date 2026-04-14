@@ -7,31 +7,33 @@ package htmx
 
 import "net/http"
 
-// Request header names HTMX sets on its XHRs.
+// Request header names HTMX sets on its XHRs. Values use Go's
+// canonical MIME form (`Hx-*`) — HTTP headers are case-insensitive on
+// the wire so this is interop-equivalent to HTMX's `HX-*`.
 const (
-	HeaderRequest        = "HX-Request"
-	HeaderTrigger        = "HX-Trigger"
-	HeaderTriggerName    = "HX-Trigger-Name"
-	HeaderTarget         = "HX-Target"
-	HeaderCurrentURL     = "HX-Current-URL"
-	HeaderPrompt         = "HX-Prompt"
-	HeaderBoosted        = "HX-Boosted"
-	HeaderHistoryRestore = "HX-History-Restore-Request"
+	HeaderRequest        = "Hx-Request"
+	HeaderTrigger        = "Hx-Trigger"
+	HeaderTriggerName    = "Hx-Trigger-Name"
+	HeaderTarget         = "Hx-Target"
+	HeaderCurrentURL     = "Hx-Current-Url"
+	HeaderPrompt         = "Hx-Prompt"
+	HeaderBoosted        = "Hx-Boosted"
+	HeaderHistoryRestore = "Hx-History-Restore-Request"
 )
 
 // Response header names HTMX reads from server replies.
 const (
-	ResponseLocation           = "HX-Location"
-	ResponsePushURL            = "HX-Push-Url"
-	ResponseRedirect           = "HX-Redirect"
-	ResponseRefresh            = "HX-Refresh"
-	ResponseReplaceURL         = "HX-Replace-Url"
-	ResponseReswap             = "HX-Reswap"
-	ResponseRetarget           = "HX-Retarget"
-	ResponseReselect           = "HX-Reselect"
-	ResponseTrigger            = "HX-Trigger"
-	ResponseTriggerAfterSwap   = "HX-Trigger-After-Swap"
-	ResponseTriggerAfterSettle = "HX-Trigger-After-Settle"
+	ResponseLocation           = "Hx-Location"
+	ResponsePushURL            = "Hx-Push-Url"
+	ResponseRedirect           = "Hx-Redirect"
+	ResponseRefresh            = "Hx-Refresh"
+	ResponseReplaceURL         = "Hx-Replace-Url"
+	ResponseReswap             = "Hx-Reswap"
+	ResponseRetarget           = "Hx-Retarget"
+	ResponseReselect           = "Hx-Reselect"
+	ResponseTrigger            = "Hx-Trigger"
+	ResponseTriggerAfterSwap   = "Hx-Trigger-After-Swap"
+	ResponseTriggerAfterSettle = "Hx-Trigger-After-Settle"
 )
 
 // IsRequest reports whether r was issued by HTMX (HX-Request: true).
