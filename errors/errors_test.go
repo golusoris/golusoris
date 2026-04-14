@@ -58,3 +58,40 @@ func TestConstructors(t *testing.T) {
 		t.Errorf("Validation status = %d", e.Status())
 	}
 }
+
+func TestAllConstructors(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		err  *errors.Error
+		code errors.Code
+		want int
+	}{
+		{"BadRequest", errors.BadRequest("bad"), errors.CodeBadRequest, http.StatusBadRequest},
+		{"Unauthorized", errors.Unauthorized("unauth"), errors.CodeUnauthorized, http.StatusUnauthorized},
+		{"Forbidden", errors.Forbidden("forb"), errors.CodeForbidden, http.StatusForbidden},
+		{"Conflict", errors.Conflict("conf"), errors.CodeConflict, http.StatusConflict},
+		{"Internal", errors.Internal("int"), errors.CodeInternal, http.StatusInternalServerError},
+		{"RateLimited", errors.RateLimited("rl"), errors.CodeRateLimited, http.StatusTooManyRequests},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if tc.err.Code != tc.code {
+				t.Errorf("Code = %v, want %v", tc.err.Code, tc.code)
+			}
+			if tc.err.Status() != tc.want {
+				t.Errorf("Status = %d, want %d", tc.err.Status(), tc.want)
+			}
+		})
+	}
+}
+
+func TestErrorString(t *testing.T) {
+	t.Parallel()
+	e := errors.New(errors.CodeNotFound, "thing not found")
+	s := e.Error()
+	if s == "" {
+		t.Error("Error() returned empty string")
+	}
+}

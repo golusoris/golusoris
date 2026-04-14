@@ -44,6 +44,27 @@ func TestPodInfoAttrs(t *testing.T) {
 	}
 }
 
+func TestLevelFromString_unknown(t *testing.T) {
+	t.Parallel()
+	got, ok := log.LevelFromString("trace")
+	if ok {
+		t.Error("expected ok=false for unknown level")
+	}
+	if got != slog.LevelInfo {
+		t.Errorf("expected LevelInfo fallback, got %v", got)
+	}
+}
+
+func TestNewTintFormat(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	l := log.New(log.Options{Format: log.FormatTint, Output: &buf})
+	l.Info("hello tint")
+	if buf.Len() == 0 {
+		t.Error("tint format produced no output")
+	}
+}
+
 func TestLevelFromString(t *testing.T) {
 	t.Parallel()
 	cases := map[string]slog.Level{

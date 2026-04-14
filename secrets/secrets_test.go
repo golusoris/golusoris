@@ -70,6 +70,17 @@ func TestFile_pathTraversal(t *testing.T) {
 	}
 }
 
+func TestErrNotFoundMessage(t *testing.T) {
+	t.Parallel()
+	e := secrets.ErrNotFound{Key: "my-key"}
+	if e.Error() == "" {
+		t.Error("Error() returned empty string")
+	}
+	if !errors.As(e, &secrets.ErrNotFound{}) {
+		t.Error("expected ErrNotFound to satisfy errors.As")
+	}
+}
+
 func TestStatic(t *testing.T) {
 	t.Parallel()
 	s := secrets.Static(map[string]string{"api_key": "abc"})

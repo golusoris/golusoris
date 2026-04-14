@@ -2,6 +2,7 @@ package sentry_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/observability/sentry"
 )
@@ -19,6 +20,12 @@ func TestBadDSNErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for malformed DSN")
 	}
+}
+
+func TestFlush(t *testing.T) {
+	t.Parallel()
+	// Sentry not initialized — Flush should return without panic.
+	_ = sentry.Flush(10 * time.Millisecond)
 }
 
 func TestDefaults(t *testing.T) {

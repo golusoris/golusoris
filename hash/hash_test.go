@@ -1,6 +1,7 @@
 package hash_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -70,5 +71,46 @@ func TestDifferentInputsDifferentHashes(t *testing.T) {
 	}
 	if hash.BLAKE3([]byte("a")) == hash.BLAKE3([]byte("b")) {
 		t.Fatal("BLAKE3 collision")
+	}
+}
+
+func TestSHA256File(t *testing.T) {
+	t.Parallel()
+	f, err := os.CreateTemp(t.TempDir(), "hash-*.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("hello")
+	_ = f.Close()
+
+	got, err := hash.SHA256File(f.Name())
+	if err != nil {
+		t.Fatalf("SHA256File: %v", err)
+	}
+	want := hash.SHA256([]byte("hello"))
+	if got != want {
+		t.Fatalf("SHA256File = %q, want %q", got, want)
+	}
+}
+
+func TestBLAKE3Reader(t *testing.T) {
+	t.Parallel()
+	got, err := hash.BLAKE3Reader(strings.NewReader("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != hash.BLAKE3([]byte("hello")) {
+		t.Fatalf("BLAKE3Reader mismatch: %q", got)
+	}
+}
+
+func TestXX64Reader(t *testing.T) {
+	t.Parallel()
+	got, err := hash.XX64Reader(strings.NewReader("hello"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != hash.XX64([]byte("hello")) {
+		t.Fatalf("XX64Reader mismatch: %q", got)
 	}
 }

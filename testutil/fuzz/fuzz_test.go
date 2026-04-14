@@ -43,11 +43,27 @@ func TestSeedFiles_missingDir(t *testing.T) {
 
 func TestCorpusFiles_emptyDir(t *testing.T) {
 	t.Parallel()
-	// CorpusFiles on an empty dir returns an empty (non-nil) slice.
-	// We use t.TempDir as CWD via os.Chdir only in subtests with their
-	// own dir, so instead just verify the helper doesn't panic.
 	paths := fuzz.SeedFiles(t, "DoesNotExist__fuzz_test")
 	if paths != nil {
 		t.Fatalf("SeedFiles with absent dir should return nil; got %v", paths)
+	}
+}
+
+func TestCorpusDir(t *testing.T) {
+	t.Chdir(t.TempDir())
+	dir := fuzz.CorpusDir(t, "MyFuzz")
+	if dir == "" {
+		t.Error("CorpusDir returned empty string")
+	}
+}
+
+func TestCorpusFiles_empty(t *testing.T) {
+	t.Chdir(t.TempDir())
+	paths := fuzz.CorpusFiles(t, "MyFuzz")
+	if paths == nil {
+		t.Error("CorpusFiles should return non-nil slice for empty dir")
+	}
+	if len(paths) != 0 {
+		t.Errorf("expected 0 files, got %d", len(paths))
 	}
 }

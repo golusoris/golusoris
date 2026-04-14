@@ -1,6 +1,7 @@
 package markdown_test
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -46,5 +47,16 @@ func TestRenderString(t *testing.T) {
 	got := markdown.RenderString("**bold**")
 	if !strings.Contains(got, "<strong>") {
 		t.Fatalf("expected strong tag, got: %s", got)
+	}
+}
+
+func TestRenderTo(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	if err := markdown.RenderTo(&buf, []byte("# Title")); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "<h1") {
+		t.Fatalf("expected h1 tag, got: %s", buf.String())
 	}
 }

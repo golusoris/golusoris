@@ -22,6 +22,25 @@ func TestValidateOK(t *testing.T) {
 	}
 }
 
+func TestValidateVar(t *testing.T) {
+	t.Parallel()
+	v := validate.New()
+	if err := v.Var("user@example.com", "email"); err != nil {
+		t.Errorf("valid email: %v", err)
+	}
+	if err := v.Var("not-an-email", "email"); err == nil {
+		t.Error("expected error for invalid email")
+	}
+}
+
+func TestValidateRaw(t *testing.T) {
+	t.Parallel()
+	v := validate.New()
+	if v.Raw() == nil {
+		t.Error("Raw() returned nil")
+	}
+}
+
 func TestValidateFails(t *testing.T) {
 	t.Parallel()
 	v := validate.New()

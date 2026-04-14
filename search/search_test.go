@@ -108,3 +108,19 @@ func TestMemorySearcher_matchAll(t *testing.T) {
 		t.Fatalf("wildcard should match all, got %d", len(r.Hits))
 	}
 }
+
+func TestMemorySearcher_deleteCollection(t *testing.T) {
+	t.Parallel()
+	s := search.NewMemorySearcher()
+	ctx := context.Background()
+	_ = s.CreateCollection(ctx, search.Schema{Name: "col"})
+	_ = s.Index(ctx, "col", []search.Document{{"id": "1"}})
+	if err := s.DeleteCollection(ctx, "col"); err != nil {
+		t.Fatalf("DeleteCollection: %v", err)
+	}
+	// After deletion the collection is gone; search returns empty.
+	r, _ := s.Search(ctx, "col", search.Query{Q: "*"})
+	if len(r.Hits) != 0 {
+		t.Fatalf("expected 0 hits after collection delete, got %d", len(r.Hits))
+	}
+}

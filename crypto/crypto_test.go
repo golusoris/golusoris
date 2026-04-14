@@ -67,3 +67,18 @@ func TestOpenShortInput(t *testing.T) {
 		t.Error("expected error for short ciphertext")
 	}
 }
+
+func TestHashPasswordWith(t *testing.T) {
+	t.Parallel()
+	h, err := crypto.HashPasswordWith("secret", crypto.DefaultPasswordParams)
+	if err != nil {
+		t.Fatalf("HashPasswordWith: %v", err)
+	}
+	ok, _, err := crypto.VerifyPassword("secret", h)
+	if err != nil {
+		t.Fatalf("VerifyPassword: %v", err)
+	}
+	if !ok {
+		t.Error("expected match=true")
+	}
+}

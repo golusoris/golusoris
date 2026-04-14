@@ -75,3 +75,52 @@ func TestConstantRate(t *testing.T) {
 		t.Fatalf("expected Freq=100, got %d", r.Freq)
 	}
 }
+
+func TestPOST(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	metrics := load.Attack(t, load.Options{
+		Targeter: load.POST(srv.URL+"/", "application/json", []byte(`{}`)),
+		Rate:     vegeta.Rate{Freq: 5, Per: time.Second},
+		Duration: 200 * time.Millisecond,
+	})
+	load.Assert(t, metrics, load.MaxErrorRate(0.05))
+}
+
+func TestMaxMean(t *testing.T) {
+	t.Parallel()
+	m := &vegeta.Metrics{}
+	m.Add(&vegeta.Result{Code: http.StatusOK, Latency: 1 * time.Millisecond})
+	m.Close()
+	check := load.MaxMean(100 * time.Millisecond)
+	if msg := check(m); msg != "" {
+		t.Fatalf("expected pass, got: %s", msg)
+	}
+	checkTight := load.MaxMean(0)
+	if msg := checkTight(m); msg == "" {
+		t.Fatal("expected failure with 0 limit")
+	}
+}
+
+func TestMinThroughput(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	metrics := load.Attack(t, load.Options{
+		Targeter: load.GET(srv.URL + "/"),
+		Rate:     vegeta.Rate{Freq: 10, Per: time.Second},
+		Duration: 200 * time.Millisecond,
+	})
+	load.Assert(t, metrics, load.MinThroughput(0.1))
+}

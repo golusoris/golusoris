@@ -77,6 +77,27 @@ func TestNoopProvider(t *testing.T) {
 	}
 }
 
+func TestProviderMetadata(t *testing.T) {
+	t.Parallel()
+	if m := flags.NewMemoryProvider().Metadata(); m.Name != "memory" {
+		t.Errorf("MemoryProvider.Metadata().Name = %q", m.Name)
+	}
+	if m := (flags.NoopProvider{}).Metadata(); m.Name != "noop" {
+		t.Errorf("NoopProvider.Metadata().Name = %q", m.Name)
+	}
+}
+
+func TestErrUnknownFlag(t *testing.T) {
+	t.Parallel()
+	err := flags.ErrUnknownFlag("my-flag")
+	if err == nil {
+		t.Fatal("expected non-nil error")
+	}
+	if err.Error() == "" {
+		t.Error("expected non-empty error message")
+	}
+}
+
 func TestTypeMismatch_returnsDefault(t *testing.T) {
 	t.Parallel()
 	p := flags.NewMemoryProvider()
