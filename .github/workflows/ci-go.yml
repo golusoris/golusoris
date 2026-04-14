@@ -82,7 +82,7 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -97,7 +97,7 @@ jobs:
     name: Security (gosec)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -119,7 +119,7 @@ jobs:
     name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -134,7 +134,7 @@ jobs:
     name: Test (race + coverage)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -162,7 +162,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -175,7 +175,7 @@ jobs:
     if: ${{ inputs.openapi-spec != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install spectral
         run: npm install -g @stoplight/spectral-cli
       - name: Lint OpenAPI spec
@@ -187,7 +187,7 @@ jobs:
     if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v6
