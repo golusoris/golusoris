@@ -84,7 +84,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Attest SBOM
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ inputs.image-name }}
           subject-digest: ${{ steps.goreleaser.outputs.digest }}
