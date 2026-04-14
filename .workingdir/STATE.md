@@ -100,6 +100,28 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **security hardening + ai/tiny/serve/ollama** landed.
+  - `httpx/csrf` migrated to `filippo.io/csrf/gorilla` — drop-in
+    replacement for gorilla/csrf that enforces same-origin via Fetch
+    metadata (Go 1.25's net/http.CrossOriginProtection approach),
+    closes GHSA-82ff-hg59-8x73 (TrustedOrigins scheme confusion) with
+    no available upstream patch.
+  - `ai/tiny/{runner,gemma,litert}` got inline `#nosec G204/G304`
+    annotations with justifications — host-controlled dockerPath /
+    tmpdir-owned artifact paths. Expanded DockerRunner tests with
+    /bin/true + /bin/false to cover arg composition + exec failure
+    branches without requiring Docker.
+  - `ai/tiny/serve/ollama/` — thin HTTP client implementing
+    `tiny.Predictor`. Load validates + `/api/show`s the tag,
+    Predict posts to `/api/generate` (non-streaming). 86.7% coverage.
+    Serving complement to `ai/tiny/gemma`.
+  - CI workflows pinned `gosec@latest` → `gosec@v2.25.0` (OpenSSF
+    Scorecard PinnedDependenciesID).
+  - Specialty module deps bumped for Dependabot: `testutil/pact` grpc,
+    `web3/solana` edwards25519, `science/plot` + `pdf` x/image +
+    x/crypto.
+  - AGENTS.md reflow for markdownlint (gemma, litert).
+
 - 2026-04-14: **ai/tiny/litert** landed — MediaPipe Model Maker
   trainer producing LiteRT (`.tflite`) artifacts. Mirrors gemma's
   shape (stage tmpdir → Runner.Run → drain logs → read+upload).
