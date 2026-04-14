@@ -1,6 +1,7 @@
 package client
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -77,8 +78,11 @@ func TestRoundTrip_injectsAuth(t *testing.T) {
 		bearerToken: "tok",
 		apiKey:      "key123",
 	}
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil) //nolint:noctx
-	_, _ = tr.RoundTrip(req)
+	req, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	resp, _ := tr.RoundTrip(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if gotAuth != "Bearer tok" {
 		t.Errorf("Authorization = %q", gotAuth)
 	}

@@ -38,7 +38,27 @@
       "Bash(govulncheck ./...)",
       "Bash(govulncheck -show verbose ./...)",
       "Bash(go list:*)",
-      "Bash(gci write:*)"
+      "Bash(gci write:*)",
+      "Bash(gosec -exclude-generated ./...)",
+      "Bash(gosec --help)",
+      "Bash(gosec -exclude-generated archive/archive.go)",
+      "Bash(gosec -exclude-generated hash/hash.go)",
+      "Bash(gosec -exclude-generated ./archive/... ./hash/...)",
+      "Bash(gosec -exclude-generated -verbose github.com/golusoris/golusoris/archive)",
+      "Bash(git reset:*)",
+      "Bash(python3 -c \"import sys,json; [print\\(r['name'],r['status'],r.get\\('conclusion',''\\),r['headSha'][:8]\\) for r in json.load\\(sys.stdin\\)]\")",
+      "Bash(echo \"exit: $?\")",
+      "Bash(bash)",
+      "Bash(xargs ls:*)",
+      "Bash(awk '-F\\\\t' '$NF != \"100.0%\" { split\\($NF, a, \".\"\\); if \\(a[1]+0 < 60\\) print }')",
+      "Bash(awk '$NF != \"100.0%\"')",
+      "Bash(sed -n '30,40p' c:/Users/ms/dev/golusoris/secrets/secrets.go)",
+      "Bash(sed -n '130,145p' c:/Users/ms/dev/golusoris/search/search.go)",
+      "Bash(sed -n '108,120p' c:/Users/ms/dev/golusoris/webhooks/out/out.go)",
+      "Bash(go test:*)",
+      "Bash(git add:*)",
+      "Bash(git push:*)",
+      "Bash(golangci-lint run:*)"
     ]
   }
 }
