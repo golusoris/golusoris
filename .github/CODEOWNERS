@@ -1,8 +1,21 @@
 * @lusoris
 
-SECURITY.md @lusoris
-.github/workflows/ @lusoris
-go.mod @lusoris
-go.sum @lusoris
-docs/adr/ @lusoris
-docs/architecture/ @lusoris
+# Security-critical packages — extra attention required
+
+/auth/          @lusoris
+/authz/         @lusoris
+/crypto/        @lusoris
+/errors/        @lusoris
+
+# CI / release / dependency pipeline
+
+/.github/       @lusoris
+/tools/         @lusoris
+/go.mod         @lusoris
+/go.sum         @lusoris
+
+# Architecture decisions and compliance docs
+
+/docs/adr/          @lusoris
+/docs/architecture/ @lusoris
+/SECURITY.md        @lusoris

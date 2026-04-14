@@ -1,7 +1,7 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-14 (Step 17/18 — jobs/workflow Temporal + plugin/ registry landed).
+> Last update: 2026-04-14 (All plan sections complete — ready for v0.1.0 tag).
 
 ## Naming conventions (Option B)
 

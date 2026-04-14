@@ -1,0 +1,138 @@
+version: 2
+updates:
+  # ── GitHub Actions ──────────────────────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 10
+    labels: ["dependencies", "github-actions"]
+    groups:
+      actions-minor:
+        update-types: ["minor", "patch"]
+
+  # ── Main Go module ──────────────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "07:00"
+    open-pull-requests-limit: 15
+    labels: ["dependencies", "go"]
+    groups:
+      golusoris-internal:
+        patterns: ["github.com/golusoris/*"]
+      otel:
+        patterns: ["go.opentelemetry.io/*"]
+      k8s:
+        patterns: ["k8s.io/*", "sigs.k8s.io/*"]
+      aws:
+        patterns: ["github.com/aws/*"]
+      uber-fx:
+        patterns: ["go.uber.org/fx*"]
+
+  # ── Sub-modules (own go.mod) ────────────────────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /hw/fssnap
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "hw"]
+
+  - package-ecosystem: gomod
+    directory: /hw/gpio
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "hw"]
+
+  - package-ecosystem: gomod
+    directory: /hw/robotics
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "hw"]
+
+  - package-ecosystem: gomod
+    directory: /hw/udev
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "hw"]
+
+  - package-ecosystem: gomod
+    directory: /media/3d
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "media"]
+
+  - package-ecosystem: gomod
+    directory: /media/av
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "media"]
+
+  - package-ecosystem: gomod
+    directory: /media/cv
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "media"]
+
+  - package-ecosystem: gomod
+    directory: /media/game
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "media"]
+
+  - package-ecosystem: gomod
+    directory: /media/img
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "media"]
+
+  - package-ecosystem: gomod
+    directory: /ocr
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go"]
+
+  - package-ecosystem: gomod
+    directory: /pdf
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go"]
+
+  - package-ecosystem: gomod
+    directory: /science/bio
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "science"]
+
+  - package-ecosystem: gomod
+    directory: /science/numerical
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "science"]
+
+  - package-ecosystem: gomod
+    directory: /science/plot
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "science"]
+
+  - package-ecosystem: gomod
+    directory: /testutil/pact
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "testing"]
+
+  - package-ecosystem: gomod
+    directory: /web3/evm
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "web3"]
+
+  - package-ecosystem: gomod
+    directory: /web3/solana
+    schedule:
+      interval: weekly
+    labels: ["dependencies", "go", "web3"]
