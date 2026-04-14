@@ -86,6 +86,9 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) error {
 		"-v", spec.OutputDir+":/work/output:rw",
 		spec.Image,
 	)
+	// #nosec G204 -- dockerPath is a constructor-configured binary path
+	// and args are composed from validated Options (Image / Pull / Network)
+	// + host-controlled InputDir/OutputDir, not untrusted input.
 	cmd := exec.CommandContext(ctx, dockerPath, args...)
 	cmd.Stdout = spec.Logger
 	cmd.Stderr = spec.Logger

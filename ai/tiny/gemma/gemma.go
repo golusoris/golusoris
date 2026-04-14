@@ -156,11 +156,13 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 	}
 
 	artifactPath := filepath.Join(outputDir, ArtifactName)
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; ArtifactName is a const.
 	artifactBytes, readErr := os.ReadFile(artifactPath)
 	if readErr != nil {
 		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: read artifact: %w", readErr)
 	}
 	metrics := map[string]float64{}
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
 	if metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName)); mErr == nil {
 		if jerr := json.Unmarshal(metricsBytes, &metrics); jerr != nil {
 			t.opts.Logger.WarnContext(ctx, "ai/tiny/gemma: parse metrics", slog.String("error", jerr.Error()))

@@ -154,12 +154,14 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: runner: %w", runErr)
 	}
 
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; ArtifactName is a const.
 	artifactBytes, readErr := os.ReadFile(filepath.Join(outputDir, ArtifactName))
 	if readErr != nil {
 		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: read artifact: %w", readErr)
 	}
 	metrics := map[string]float64{}
 	labels := []string{}
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
 	if metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName)); mErr == nil {
 		// Metrics file may carry both scalar metrics and a "labels"
 		// array — decode into a loose map and sort them out.
