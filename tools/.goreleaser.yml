@@ -1,5 +1,12 @@
-# goreleaser template — multi-arch + cosign + syft + SLSA.
-# Apps copy + adjust binary names, dockers, and brews.
+# goreleaser config for the framework's own release.
+#
+# The framework ships as a Go library + two CLIs (`golusoris`,
+# `golusoris-mcp`) — no Docker images. Downstream apps that want to
+# publish OCI images use their own goreleaser config alongside the
+# reusable .github/workflows/release-go.yml (which wires buildx +
+# cosign + SBOM on the image). Keeping the framework release
+# binary-only avoids the Dockerfile-context dance (goreleaser's docker
+# build only sees dist/, not the source tree).
 version: 2
 
 project_name: golusoris
@@ -74,45 +81,8 @@ changelog:
       - "^chore:"
       - "^ci:"
 
-dockers:
-  - image_templates:
-      - "ghcr.io/golusoris/golusoris:{{ .Version }}-amd64"
-      - "ghcr.io/golusoris/golusoris:latest-amd64"
-    use: buildx
-    dockerfile: tools/Dockerfile.template
-    goos: linux
-    goarch: amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-      - --build-arg=VERSION={{ .Version }}
-      - --build-arg=COMMIT={{ .Commit }}
-      - --build-arg=DATE={{ .Date }}
-
-  - image_templates:
-      - "ghcr.io/golusoris/golusoris:{{ .Version }}-arm64"
-      - "ghcr.io/golusoris/golusoris:latest-arm64"
-    use: buildx
-    dockerfile: tools/Dockerfile.template
-    goos: linux
-    goarch: arm64
-    build_flag_templates:
-      - --platform=linux/arm64
-      - --build-arg=VERSION={{ .Version }}
-
-docker_manifests:
-  - name_template: "ghcr.io/golusoris/golusoris:{{ .Version }}"
-    image_templates:
-      - "ghcr.io/golusoris/golusoris:{{ .Version }}-amd64"
-      - "ghcr.io/golusoris/golusoris:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/golusoris/golusoris:latest"
-    image_templates:
-      - "ghcr.io/golusoris/golusoris:latest-amd64"
-      - "ghcr.io/golusoris/golusoris:latest-arm64"
-
 sboms:
   - artifacts: archive
-  - id: docker
-    artifacts: package
 
 signs:
   - cmd: cosign
@@ -126,16 +96,6 @@ signs:
       - ${artifact}
       - --yes
     artifacts: checksum
-    output: true
-
-docker_signs:
-  - cmd: cosign
-    args:
-      - sign
-      - --oidc-issuer=https://token.actions.githubusercontent.com
-      - "${artifact}@${digest}"
-      - --yes
-    artifacts: manifests
     output: true
 
 release:

@@ -1,8 +1,14 @@
-# Framework release — triggers on version tag push, invokes the reusable
-# release-go.yml pipeline (goreleaser + cosign + SBOM + SLSA).
+# Framework release — triggers on v*.*.* tag push.
 #
-# Apps use release-go.yml directly via `uses:`. This wrapper is only for
-# the framework repo's own release.
+# The framework ships Go library + two CLIs (no Docker image), so this
+# workflow runs goreleaser directly instead of calling the reusable
+# release-go.yml (which is aimed at app repos that DO build images).
+#
+# Produces:
+#   - Multi-arch tarballs (+ zip on windows) for cmd/golusoris and cmd/golusoris-mcp
+#   - checksums.txt, checksums.txt.sig + .pem (cosign keyless)
+#   - SPDX SBOMs on the archives (syft)
+#   - SLSA-L3 provenance on all release artifacts (actions/attest-build-provenance)
 name: release
 
 on:
@@ -14,17 +20,40 @@ permissions:
   contents: read
 
 jobs:
-  release:
-    # The reusable release-go.yml needs these at the job level — when one
-    # workflow calls another, the caller's job permissions cap what the
-    # callee can request. Workflow-level stays `contents: read` for the
-    # Scorecard Token-Permissions check; writes are scoped to this one job.
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
     permissions:
-      contents: write       # goreleaser creates the GitHub Release
-      packages: write       # pushes the OCI image to GHCR
-      id-token: write       # cosign keyless + SLSA OIDC
+      contents: write       # create the GitHub Release + upload artifacts
+      id-token: write       # cosign keyless OIDC + SLSA
       attestations: write   # actions/attest-build-provenance
-    uses: ./.github/workflows/release-go.yml
-    with:
-      image-name: ghcr.io/golusoris/golusoris
-    secrets: inherit
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
+
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
+        with:
+          distribution: goreleaser
+          version: '~> v2'
+          args: release --config=tools/.goreleaser.yml --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Attest release archives
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
+        with:
+          subject-path: 'dist/*.tar.gz,dist/*.zip,dist/checksums.txt'
