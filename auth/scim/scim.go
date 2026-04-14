@@ -11,7 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -53,11 +52,11 @@ type Email struct {
 
 // Group is the SCIM 2.0 Group resource.
 type Group struct {
-	Schemas     []string  `json:"schemas"`
-	ID          string    `json:"id"`
-	DisplayName string    `json:"displayName"`
-	Members     []Member  `json:"members,omitempty"`
-	ExternalID  string    `json:"externalId,omitempty"`
+	Schemas     []string `json:"schemas"`
+	ID          string   `json:"id"`
+	DisplayName string   `json:"displayName"`
+	Members     []Member `json:"members,omitempty"`
+	ExternalID  string   `json:"externalId,omitempty"`
 }
 
 // Member is one entry in Group.members.
@@ -347,7 +346,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 func writeErr(w http.ResponseWriter, status int, detail, scimType string) {
 	writeJSON(w, status, Error{
 		Schemas: []string{SchemaError},
-		Status:  fmt.Sprintf("%d", status),
+		Status:  strconv.Itoa(status),
 		Detail:  detail,
 		ScimErr: scimType,
 	})

@@ -135,14 +135,14 @@ func (h *Hub) Handler() http.Handler {
 
 // Publish sends ev to all currently connected clients. Slow clients
 // that can't keep up (full buffer) are skipped non-blocking.
-func (h *Hub) Publish(_ context.Context, ev Event) {
+func (h *Hub) Publish(ctx context.Context, ev Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for c := range h.clients {
 		select {
 		case c.ch <- ev:
 		default:
-			h.logger.Debug("sse: client buffer full, dropping event")
+			h.logger.DebugContext(ctx, "sse: client buffer full, dropping event")
 		}
 	}
 }

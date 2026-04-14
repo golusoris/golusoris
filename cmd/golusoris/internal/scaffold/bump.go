@@ -13,17 +13,18 @@ import (
 // BumpCmd returns the `golusoris bump <version>` command.
 func BumpCmd() *cobra.Command {
 	return clikit.Command("bump", "Bump golusoris to a specific version in the current module",
-		clikit.WithRunE(func(_ *cobra.Command, args []string) error {
+		clikit.WithRunE(func(cmd *cobra.Command, args []string) error {
 			version := "latest"
 			if len(args) > 0 {
 				version = args[0]
 			}
-			return bumpGolusoris(version)
+			return bumpGolusoris(cmd, version)
 		}),
 	)
 }
 
-func bumpGolusoris(version string) error {
+func bumpGolusoris(cmd *cobra.Command, version string) error {
+	ctx := cmd.Context()
 	pkg := "github.com/golusoris/golusoris"
 	if version != "latest" && !strings.HasPrefix(version, "v") {
 		version = "v" + version
@@ -31,15 +32,15 @@ func bumpGolusoris(version string) error {
 	target := pkg + "@" + version
 
 	fmt.Printf("Running: go get %s\n", target)
-	cmd := exec.Command("go", "get", target) //nolint:gosec // target is constructed from validated version string
-	cmd.Stdout = nil
-	out, err := cmd.CombinedOutput()
+	c := exec.CommandContext(ctx, "go", "get", target)
+	c.Stdout = nil
+	out, err := c.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("go get %s: %w\n%s", target, err, out)
 	}
 
 	fmt.Printf("Running: go mod tidy\n")
-	tidy := exec.Command("go", "mod", "tidy") //nolint:gosec // no user input in args
+	tidy := exec.CommandContext(ctx, "go", "mod", "tidy")
 	out, err = tidy.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("go mod tidy: %w\n%s", err, out)

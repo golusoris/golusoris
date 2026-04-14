@@ -22,8 +22,8 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	sess.Set("uid", "user-42")
 
 	w := httptest.NewRecorder()
-	if err := mgr.Save(w, sess); err != nil {
-		t.Fatalf("Save: %v", err)
+	if saveErr := mgr.Save(w, sess); saveErr != nil {
+		t.Fatalf("Save: %v", saveErr)
 	}
 
 	// Second request: cookie set → load existing session.

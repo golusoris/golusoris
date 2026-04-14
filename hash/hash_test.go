@@ -8,6 +8,7 @@ import (
 )
 
 func TestSHA256(t *testing.T) {
+	t.Parallel()
 	got := hash.SHA256([]byte("hello"))
 	// known SHA-256 of "hello"
 	want := "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
@@ -17,6 +18,7 @@ func TestSHA256(t *testing.T) {
 }
 
 func TestSHA256Reader(t *testing.T) {
+	t.Parallel()
 	got, err := hash.SHA256Reader(strings.NewReader("hello"))
 	if err != nil {
 		t.Fatal(err)
@@ -28,6 +30,7 @@ func TestSHA256Reader(t *testing.T) {
 }
 
 func TestBLAKE3(t *testing.T) {
+	t.Parallel()
 	got := hash.BLAKE3([]byte("hello"))
 	if len(got) != 64 { // 32 bytes = 64 hex chars
 		t.Fatalf("BLAKE3: unexpected length %d", len(got))
@@ -39,6 +42,7 @@ func TestBLAKE3(t *testing.T) {
 }
 
 func TestXX64(t *testing.T) {
+	t.Parallel()
 	got := hash.XX64([]byte("hello"))
 	if len(got) != 16 {
 		t.Fatalf("XX64: unexpected length %d", len(got))
@@ -49,6 +53,7 @@ func TestXX64(t *testing.T) {
 }
 
 func TestETag(t *testing.T) {
+	t.Parallel()
 	etag := hash.ETag([]byte("hello"))
 	if len(etag) < 3 || etag[0] != '"' || etag[len(etag)-1] != '"' {
 		t.Fatalf("ETag not quoted: %q", etag)
@@ -56,6 +61,7 @@ func TestETag(t *testing.T) {
 }
 
 func TestDifferentInputsDifferentHashes(t *testing.T) {
+	t.Parallel()
 	if hash.SHA256([]byte("a")) == hash.SHA256([]byte("b")) {
 		t.Fatal("SHA256 collision")
 	}

@@ -31,7 +31,7 @@ func TestNewReadsEnv(t *testing.T) {
 	}
 }
 
-func TestNewMissingEnvIsEmpty(t *testing.T) {
+func TestNewMissingEnvIsEmpty(t *testing.T) { //nolint:paralleltest // mutates global state
 	// Make sure no leak from prior tests.
 	for _, k := range []string{"POD_NAME", "POD_NAMESPACE", "POD_IP", "NODE_NAME", "SERVICE_ACCOUNT", "CONTAINER_NAME", "CONTAINER_IMAGE"} {
 		t.Setenv(k, "")

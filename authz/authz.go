@@ -22,6 +22,7 @@
 package authz
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -126,7 +127,7 @@ func newEnforcer(opts Options, logger *slog.Logger) (*Enforcer, error) {
 		opts.Model = ModelRBAC
 	}
 	if opts.Adapter == nil {
-		return nil, fmt.Errorf("authz: Options.Adapter is required")
+		return nil, errors.New("authz: Options.Adapter is required")
 	}
 	m, err := model.NewModelFromString(opts.Model)
 	if err != nil {
@@ -160,4 +161,3 @@ func NewEnforcerForTest(policyPath string, logger *slog.Logger) (*Enforcer, erro
 		Adapter: NewFileAdapter(policyPath),
 	}, logger)
 }
-

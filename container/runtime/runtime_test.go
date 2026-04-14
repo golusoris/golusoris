@@ -15,6 +15,7 @@ func TestDetectPopulatesHostname(t *testing.T) {
 }
 
 func TestDetectIsNilSafe(t *testing.T) {
+	t.Parallel()
 	// Detect must never panic even on an unusual host.
 	defer func() {
 		if r := recover(); r != nil {
@@ -58,6 +59,7 @@ func TestSystemdDetection(t *testing.T) {
 }
 
 func TestRuntimeFallbackIsBare(t *testing.T) {
+	t.Parallel()
 	// On most dev hosts nothing matches k8s / docker / podman / systemd.
 	// We can't fully isolate here, so just assert the result is one of
 	// the known values.

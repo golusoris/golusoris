@@ -18,7 +18,7 @@ type etagRecorder struct {
 
 func (e *etagRecorder) WriteHeader(code int) { e.status = code }
 func (e *etagRecorder) Write(b []byte) (int, error) {
-	return e.buf.Write(b) //nolint:wrapcheck // in-memory buffer, no meaningful error context to add
+	return e.buf.Write(b)
 }
 
 // ETag computes a weak-ETag (sha256 of body) for GET responses with 200 OK

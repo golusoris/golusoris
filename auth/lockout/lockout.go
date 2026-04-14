@@ -132,6 +132,7 @@ func (s *Service) Reset(ctx context.Context, key string) error {
 type MemoryStore struct {
 	mu   sync.Mutex
 	data map[string]memEntry
+	clk  clockwork.Clock
 }
 
 type memEntry struct {
@@ -139,9 +140,14 @@ type memEntry struct {
 	expires time.Time
 }
 
-// NewMemoryStore returns an initialised in-memory store.
+// NewMemoryStore returns an initialised in-memory store using the real clock.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{data: make(map[string]memEntry)}
+	return NewMemoryStoreWithClock(clockwork.NewRealClock())
+}
+
+// NewMemoryStoreWithClock returns an initialised in-memory store with an injected clock.
+func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
+	return &MemoryStore{data: make(map[string]memEntry), clk: clk}
 }
 
 // Get returns the state or gerr.CodeNotFound.
@@ -152,7 +158,7 @@ func (m *MemoryStore) Get(_ context.Context, key string) (State, error) {
 	if !ok {
 		return State{}, gerr.NotFound("lockout: not found")
 	}
-	if !e.expires.IsZero() && time.Now().After(e.expires) {
+	if !e.expires.IsZero() && m.clk.Now().After(e.expires) {
 		delete(m.data, key)
 		return State{}, gerr.NotFound("lockout: expired")
 	}
@@ -163,7 +169,7 @@ func (m *MemoryStore) Get(_ context.Context, key string) (State, error) {
 func (m *MemoryStore) Set(_ context.Context, key string, s State, ttl time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.data[key] = memEntry{state: s, expires: time.Now().Add(ttl)}
+	m.data[key] = memEntry{state: s, expires: m.clk.Now().Add(ttl)}
 	return nil
 }
 

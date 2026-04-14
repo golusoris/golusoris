@@ -58,7 +58,7 @@ func (d *DB) SetRetention(ctx context.Context, table string, duration time.Durat
 // EnableCompression enables TimescaleDB columnar compression on the hypertable.
 func (d *DB) EnableCompression(ctx context.Context, table string) error {
 	_, err := d.pool.Exec(ctx,
-		fmt.Sprintf("ALTER TABLE %s SET (timescaledb.compress)", table), //nolint:gosec // table name is caller-supplied; not user input
+		fmt.Sprintf("ALTER TABLE %s SET (timescaledb.compress)", table),
 	)
 	if err != nil {
 		return fmt.Errorf("timescale: enable compression %s: %w", table, err)

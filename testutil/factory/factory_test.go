@@ -7,6 +7,7 @@ import (
 )
 
 func TestNew_deterministic(t *testing.T) {
+	t.Parallel()
 	f1 := factory.New(t)
 	f2 := factory.New(t)
 	// Same test name → same seed → same sequence.
@@ -16,6 +17,7 @@ func TestNew_deterministic(t *testing.T) {
 }
 
 func TestNew_producesValues(t *testing.T) {
+	t.Parallel()
 	f := factory.New(t)
 	if f.Email() == "" {
 		t.Fatal("Email() returned empty string")
@@ -29,6 +31,7 @@ func TestNew_producesValues(t *testing.T) {
 }
 
 func TestRandom_notNil(t *testing.T) {
+	t.Parallel()
 	f := factory.Random()
 	if f == nil {
 		t.Fatal("Random() returned nil")

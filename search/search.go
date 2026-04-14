@@ -27,6 +27,7 @@ type Document map[string]any
 // FieldType describes the type of a schema field.
 type FieldType string
 
+// Schema field type constants.
 const (
 	FieldTypeString  FieldType = "string"
 	FieldTypeInt     FieldType = "int32"
@@ -74,16 +75,16 @@ type Query struct {
 // Hit is a single search result.
 type Hit struct {
 	Document  Document
-	Score     float64 // relevance score; semantics are backend-dependent
+	Score     float64           // relevance score; semantics are backend-dependent
 	Highlight map[string]string // field → highlighted snippet
 }
 
 // Results is the response from a search query.
 type Results struct {
-	Hits    []Hit
-	Total   int64
-	Page    int
-	Took    int // milliseconds (may be 0 for backends that don't report it)
+	Hits  []Hit
+	Total int64
+	Page  int
+	Took  int // milliseconds (may be 0 for backends that don't report it)
 }
 
 // Indexer manages collections and documents.
@@ -122,6 +123,7 @@ func NewMemorySearcher() *MemorySearcher {
 	return &MemorySearcher{collections: map[string][]Document{}}
 }
 
+// CreateCollection implements [Searcher].
 func (m *MemorySearcher) CreateCollection(_ context.Context, schema Schema) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,6 +133,7 @@ func (m *MemorySearcher) CreateCollection(_ context.Context, schema Schema) erro
 	return nil
 }
 
+// DeleteCollection implements [Searcher].
 func (m *MemorySearcher) DeleteCollection(_ context.Context, name string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -138,6 +141,7 @@ func (m *MemorySearcher) DeleteCollection(_ context.Context, name string) error 
 	return nil
 }
 
+// Index implements [Searcher].
 func (m *MemorySearcher) Index(_ context.Context, collection string, docs []Document) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -145,6 +149,7 @@ func (m *MemorySearcher) Index(_ context.Context, collection string, docs []Docu
 	return nil
 }
 
+// Delete implements [Searcher].
 func (m *MemorySearcher) Delete(_ context.Context, collection string, ids []string) error {
 	idSet := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
@@ -166,6 +171,7 @@ func (m *MemorySearcher) Delete(_ context.Context, collection string, ids []stri
 	return nil
 }
 
+// Search implements [Searcher].
 func (m *MemorySearcher) Search(_ context.Context, collection string, q Query) (Results, error) {
 	m.mu.RLock()
 	docs := m.collections[collection]

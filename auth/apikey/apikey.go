@@ -28,11 +28,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	gerr "github.com/golusoris/golusoris/errors"
 )
 
 const (
-	rawBytes  = 24  // 24 random bytes → 32-char base64url
+	rawBytes  = 24 // 24 random bytes → 32-char base64url
 	separator = "_"
 )
 
@@ -69,11 +71,16 @@ type Options struct {
 	// Required. Rotate by re-hashing all existing hashes with the new
 	// secret (provide a migration path).
 	HMACSecret []byte
+	// Clock is the time source; defaults to clockwork.NewRealClock.
+	Clock clockwork.Clock
 }
 
 func (o Options) withDefaults() Options {
 	if o.Prefix == "" {
 		o.Prefix = "key"
+	}
+	if o.Clock == nil {
+		o.Clock = clockwork.NewRealClock()
 	}
 	return o
 }
@@ -112,7 +119,7 @@ func (s *Service) Issue(ctx context.Context, ownerID string, scopes []string) (r
 		OwnerID:   ownerID,
 		Scopes:    scopes,
 		Hash:      hash,
-		CreatedAt: time.Now(),
+		CreatedAt: s.opts.Clock.Now(),
 	}
 	if err = s.store.Save(ctx, key); err != nil {
 		return "", Key{}, fmt.Errorf("apikey: save: %w", err)
@@ -132,7 +139,7 @@ func (s *Service) Verify(ctx context.Context, raw string) (Key, error) {
 	if key.RevokedAt != nil {
 		return Key{}, gerr.Unauthorized("api key revoked")
 	}
-	if key.ExpiresAt != nil && time.Now().After(*key.ExpiresAt) {
+	if key.ExpiresAt != nil && s.opts.Clock.Now().After(*key.ExpiresAt) {
 		return Key{}, gerr.Unauthorized("api key expired")
 	}
 	if !hmac.Equal(s.hash([]byte(raw)), key.Hash) {

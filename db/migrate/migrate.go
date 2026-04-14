@@ -116,7 +116,7 @@ func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, e
 		dsn = pgxOpts.DSN
 	}
 	if dsn == "" {
-		return nil, fmt.Errorf("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
+		return nil, errors.New("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
 	}
 	dbURL, err := pgxToMigrateURL(dsn)
 	if err != nil {

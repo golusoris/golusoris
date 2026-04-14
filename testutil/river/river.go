@@ -124,7 +124,7 @@ func (h *Harness) WaitForJob(ctx context.Context, kind string) (*river.JobListRe
 		params := river.NewJobListParams().Kinds(kind).First(1)
 		res, err := h.Client.JobList(ctx, params)
 		if err != nil {
-			return nil, err //nolint:wrapcheck // passthrough to caller
+			return nil, err
 		}
 		if len(res.Jobs) > 0 {
 			j := res.Jobs[0]
@@ -134,7 +134,7 @@ func (h *Harness) WaitForJob(ctx context.Context, kind string) (*river.JobListRe
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err() //nolint:wrapcheck // passthrough to caller
+			return nil, ctx.Err()
 		case <-time.After(100 * time.Millisecond):
 		}
 	}

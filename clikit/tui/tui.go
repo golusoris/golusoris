@@ -26,7 +26,8 @@ import (
 // until it exits. It is a thin wrapper around tea.NewProgram that
 // applies sensible defaults (AltScreen, mouse support).
 func Run(m tea.Model, opts ...tea.ProgramOption) error {
-	defaults := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion()}
+	defaults := make([]tea.ProgramOption, 0, 2+len(opts))
+	defaults = append(defaults, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	p := tea.NewProgram(m, append(defaults, opts...)...)
 	_, err := p.Run()
 	return err //nolint:wrapcheck // tea error is already descriptive

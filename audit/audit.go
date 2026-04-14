@@ -107,12 +107,19 @@ func (l *Logger) Log(ctx context.Context, e Event) error {
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = l.clk.Now()
 	}
-	return l.store.Append(ctx, e)
+	if err := l.store.Append(ctx, e); err != nil {
+		return fmt.Errorf("audit: append: %w", err)
+	}
+	return nil
 }
 
 // List returns events matching filter via the underlying store.
 func (l *Logger) List(ctx context.Context, f Filter) ([]Event, error) {
-	return l.store.List(ctx, f)
+	out, err := l.store.List(ctx, f)
+	if err != nil {
+		return nil, fmt.Errorf("audit: list: %w", err)
+	}
+	return out, nil
 }
 
 // MemoryStore is a thread-safe in-memory audit store for tests.
@@ -128,6 +135,7 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{mu: mu}
 }
 
+// Append implements [Store].
 func (s *MemoryStore) Append(_ context.Context, e Event) error {
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
@@ -135,6 +143,7 @@ func (s *MemoryStore) Append(_ context.Context, e Event) error {
 	return nil
 }
 
+// List implements [Store]. Returns events newest-first, filtered by f.
 func (s *MemoryStore) List(_ context.Context, f Filter) ([]Event, error) {
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
@@ -187,4 +196,3 @@ func newID() string {
 	}
 	return hex.EncodeToString(b)
 }
-

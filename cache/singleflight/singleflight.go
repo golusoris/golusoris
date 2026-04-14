@@ -40,7 +40,7 @@ func New[K comparable, V any]() *Group[K, V] {
 func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context) (V, error)) (V, bool, error) {
 	k := keyString(key)
 	v, err, shared := g.g.Do(k, func() (any, error) {
-		return fn(ctx) //nolint:wrapcheck // caller's error; don't re-wrap
+		return fn(ctx)
 	})
 	if err != nil {
 		var zero V

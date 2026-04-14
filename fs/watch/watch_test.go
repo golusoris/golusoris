@@ -10,13 +10,14 @@ import (
 )
 
 func TestWatcher_detects_change(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	w, err := watch.New(watch.Options{Debounce: 50 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.Close() //nolint:errcheck
+	defer w.Close()
 
 	if err := w.Add(dir); err != nil {
 		t.Fatal(err)
@@ -39,13 +40,14 @@ func TestWatcher_detects_change(t *testing.T) {
 }
 
 func TestWatcher_debounce(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 
 	w, err := watch.New(watch.Options{Debounce: 100 * time.Millisecond})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer w.Close() //nolint:errcheck
+	defer w.Close()
 
 	if err := w.Add(dir); err != nil {
 		t.Fatal(err)

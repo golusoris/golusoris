@@ -210,4 +210,3 @@ func fetchAsset(ctx context.Context, client *http.Client, url string) (io.ReadCl
 	}
 	return resp.Body, nil
 }
-

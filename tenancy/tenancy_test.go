@@ -23,6 +23,7 @@ func (s *stubStore) FindByID(_ context.Context, id string) (tenancy.Tenant, erro
 	}
 	return t, nil
 }
+
 func (s *stubStore) FindBySlug(_ context.Context, slug string) (tenancy.Tenant, error) {
 	t, ok := s.bySlug[slug]
 	if !ok {
@@ -44,6 +45,7 @@ func newStore(tenants ...tenancy.Tenant) *stubStore {
 }
 
 func TestMiddleware_header(t *testing.T) {
+	t.Parallel()
 	acme := tenancy.Tenant{ID: "t1", Slug: "acme", Plan: "pro"}
 	store := newStore(acme)
 	extract := tenancy.HeaderExtractor("X-Tenant-ID")
@@ -53,11 +55,11 @@ func TestMiddleware_header(t *testing.T) {
 			http.Error(w, "no tenant", http.StatusInternalServerError)
 			return
 		}
-		w.Write([]byte(ten.Slug)) //nolint:errcheck
+		w.Write([]byte(ten.Slug))
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Tenant-ID", "t1")
+	req.Header.Set("X-Tenant-Id", "t1")
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
 
@@ -70,6 +72,7 @@ func TestMiddleware_header(t *testing.T) {
 }
 
 func TestMiddleware_noTenant(t *testing.T) {
+	t.Parallel()
 	var reached bool
 	handler := tenancy.Middleware(
 		func(_ *http.Request) (string, error) { return "", tenancy.ErrNoTenant },
@@ -89,13 +92,14 @@ func TestMiddleware_noTenant(t *testing.T) {
 }
 
 func TestMiddleware_unknownTenant(t *testing.T) {
+	t.Parallel()
 	extract := tenancy.HeaderExtractor("X-Tenant-ID")
 	handler := tenancy.Middleware(extract, newStore())(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("X-Tenant-ID", "ghost")
+	req.Header.Set("X-Tenant-Id", "ghost")
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
 
@@ -105,6 +109,7 @@ func TestMiddleware_unknownTenant(t *testing.T) {
 }
 
 func TestSubdomainExtractor(t *testing.T) {
+	t.Parallel()
 	ext := tenancy.SubdomainExtractor("example.com")
 
 	cases := []struct {
@@ -131,6 +136,7 @@ func TestSubdomainExtractor(t *testing.T) {
 }
 
 func TestMustFromContext_panics(t *testing.T) {
+	t.Parallel()
 	defer func() {
 		if r := recover(); r == nil {
 			t.Fatal("expected panic")

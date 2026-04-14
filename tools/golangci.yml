@@ -25,11 +25,27 @@ linters:
     - errorlint
     - wrapcheck
     - nilerr
+    - nilnil
+    - nilnesserr
     - exhaustive
     - copyloopvar
     - intrange
+    - predeclared
+    - reassign
+    - recvcheck
+    - nakedret
+    - musttag
+    - contextcheck
+    - fatcontext
+    - containedctx
+    - noctx
+    - loggercheck
+    - sloglint
+    - spancheck
     # security
     - gosec
+    - bidichk
+    - asciicheck
     # complexity
     - gocyclo
     - funlen
@@ -43,6 +59,26 @@ linters:
     - unparam
     - tagliatelle
     - usestdlibvars
+    - dupword
+    - canonicalheader
+    - importas
+    - perfsprint
+    - prealloc
+    - makezero
+    # project discipline
+    - forbidigo
+    - depguard
+    - gochecknoinits
+    - nolintlint
+    # test hygiene
+    - paralleltest
+    - tparallel
+    - thelper
+    - usetesting
+    - testifylint
+    # supply-chain
+    - gomoddirectives
+    - gomodguard
 
   settings:
     gocyclo:
@@ -82,6 +118,8 @@ linters:
         - name: superfluous-else
         - name: unreachable-code
         - name: redefines-builtin-id
+        - name: use-any
+        - name: dot-imports
     wrapcheck:
       extra-ignore-sigs:
         - .Errorf(
@@ -92,6 +130,19 @@ linters:
         - errors.WithStack(
         - errors.WithMessage(
         - errors.WithMessagef(
+        # stdlib leaf-error returns we forward verbatim — wrapping adds noise.
+        - context.Canceled
+        - context.DeadlineExceeded
+        - (*net/http.Client).Do(
+        - net/http.NewRequestWithContext(
+        - io.ReadAll(
+        - io/fs.WalkDir(
+        - os.Remove(
+        - os.Stat(
+        - (*bytes.Buffer).Write(
+        - (*encoding/json.Decoder).Decode(
+        - (context.Context).Err(
+        - (github.com/jackc/pgx/v5.Rows).Err(
     tagliatelle:
       case:
         rules:
@@ -101,6 +152,63 @@ linters:
           bson: camel
           avro: snake
           mapstructure: kebab
+    nakedret:
+      max-func-lines: 15
+    sloglint:
+      no-mixed-args: true
+      kv-only: false
+      attr-only: false
+      no-global: "all"
+      context: "scope"
+      static-msg: false
+      key-naming-case: snake
+    forbidigo:
+      forbid:
+        # time.Now is banned outside clock/ — project rule.
+        - pattern: ^time\.Now$
+          msg: "use clock.Now(ctx) or inject clockwork.Clock (CLAUDE.md: time.Now is banned outside clock/)"
+        # fmt.Print* is banned — use slog.
+        - pattern: ^fmt\.Print(|f|ln)$
+          msg: "use slog — no direct stdout prints"
+        # math/rand is banned — use crypto/rand.
+        - pattern: ^rand\.(Int|Intn|Int31|Int63|Float32|Float64|Read|Seed|New)$
+          pkg: ^math/rand(/v2)?$
+          msg: "math/rand is forbidden — use crypto/rand (security) or expose via testutil/"
+      analyze-types: true
+    depguard:
+      rules:
+        # Force slog usage — deny stdlib `log` package.
+        no-stdlib-log:
+          list-mode: lax
+          deny:
+            - pkg: "log$"
+              desc: "use log/slog via golusoris/log; not stdlib log"
+    importas:
+      no-unaliased: false
+      alias:
+        - pkg: github.com/jackc/pgx/v5
+          alias: pgx
+        - pkg: github.com/jackc/pgx/v5/pgxpool
+          alias: pgxpool
+        - pkg: go.uber.org/fx
+          alias: fx
+        - pkg: go.opentelemetry.io/otel/trace
+          alias: trace
+        - pkg: go.opentelemetry.io/otel/metric
+          alias: metric
+    gomoddirectives:
+      replace-allow-list: []
+      replace-local: true
+      retract-allow-no-explanation: false
+      exclude-forbidden: true
+    gomodguard:
+      blocked:
+        modules:
+          - github.com/pkg/errors:
+              recommendations:
+                - github.com/go-faster/errors
+                - github.com/golusoris/golusoris/errors
+              reason: "use go-faster/errors or golusoris/errors"
 
   exclusions:
     presets:
@@ -116,10 +224,26 @@ linters:
           - wrapcheck
           - gosec
           - errcheck
+          - forbidigo   # tests may use time.Now / fmt.Print* directly
+          - containedctx
+          - noctx
+          - musttag     # ad-hoc test fixture structs don't need json tags
+      - path: example_test\.go$
+        linters:
+          - forbidigo   # godoc examples must use fmt.Println for output comment
       - path: testutil/
         linters:
           - wrapcheck
           - gosec
+          - forbidigo
+      # cmd/ is CLI surface — fmt.Print* is how CLIs output.
+      - path: cmd/
+        linters:
+          - forbidigo
+      # clock/ is the sanctioned owner of time.Now.
+      - path: clock/
+        linters:
+          - forbidigo
       # apidocs marshals MCP (JSON-RPC) protocol fields, which are camelCase
       # by spec. tagliatelle's snake-case rule doesn't apply.
       - path: apidocs/
@@ -129,6 +253,24 @@ linters:
       - path: httpx/vite/
         linters:
           - tagliatelle
+      # SCIM 2.0 (RFC 7643/7644) mandates camelCase wire field names.
+      - path: auth/scim/
+        linters:
+          - tagliatelle
+      # Google reCAPTCHA wire format uses kebab-case `error-codes`.
+      - path: auth/captcha/
+        linters:
+          - tagliatelle
+      # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
+      - path: auth/oauth2server/
+        linters:
+          - gosec   # G117 false-positive on RFC-mandated field name
+      # testifylint go-require false positives: tests use require inside
+      # httptest server handlers — calls happen on the test goroutine, not
+      # via t.Run, so the FailNow restriction doesn't actually bite.
+      - path: _test\.go$
+        linters:
+          - testifylint
 
 formatters:
   enable:

@@ -18,6 +18,8 @@ import (
 	"errors"
 	"net/http"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 // CachedResponse is the stored representation of a completed response.
@@ -139,6 +141,7 @@ func (r *responseRecorder) Write(b []byte) (int, error) { return r.body.Write(b)
 type MemoryStore struct {
 	mu      chan struct{}
 	entries map[string]memEntry
+	clk     clockwork.Clock
 }
 
 type memEntry struct {
@@ -146,33 +149,41 @@ type memEntry struct {
 	expiresAt time.Time
 }
 
-// NewMemoryStore returns an empty MemoryStore.
+// NewMemoryStore returns an empty MemoryStore using the real clock.
 func NewMemoryStore() *MemoryStore {
+	return NewMemoryStoreWithClock(clockwork.NewRealClock())
+}
+
+// NewMemoryStoreWithClock returns an empty MemoryStore with an injected clock.
+func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
 	mu := make(chan struct{}, 1)
 	mu <- struct{}{}
 	return &MemoryStore{
 		mu:      mu,
 		entries: map[string]memEntry{},
+		clk:     clk,
 	}
 }
 
+// Find returns the cached response for key, or (zero, false, nil) when not yet set.
 func (s *MemoryStore) Find(_ context.Context, key string) (CachedResponse, bool, error) {
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
 	e, ok := s.entries[key]
-	if !ok || time.Now().After(e.expiresAt) { //nolint:gocritic // intentional time.Now — MemoryStore is a test helper
+	if !ok || s.clk.Now().After(e.expiresAt) {
 		return CachedResponse{}, false, nil
 	}
 	return e.resp, true, nil
 }
 
+// Save stores resp under key for ttl. A second call with the same key is a no-op.
 func (s *MemoryStore) Save(_ context.Context, key string, resp CachedResponse, ttl time.Duration) error {
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
 	if _, exists := s.entries[key]; exists {
 		return nil // idempotent
 	}
-	s.entries[key] = memEntry{resp: resp, expiresAt: time.Now().Add(ttl)} //nolint:gocritic // intentional time.Now — MemoryStore is a test helper
+	s.entries[key] = memEntry{resp: resp, expiresAt: s.clk.Now().Add(ttl)}
 	return nil
 }
 

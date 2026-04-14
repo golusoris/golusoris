@@ -94,7 +94,7 @@ func newFromConfig(p params) (*DB, error) {
 			return nil
 		},
 		OnStop: func(_ context.Context) error {
-			return conn.Close() //nolint:wrapcheck // driver error is self-descriptive
+			return conn.Close()
 		},
 	})
 

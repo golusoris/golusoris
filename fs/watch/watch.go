@@ -48,13 +48,13 @@ func (o *Options) defaults() {
 
 // Watcher watches one or more directories for changes.
 type Watcher struct {
-	inner    *fsnotify.Watcher
-	events   chan Event
-	opts     Options
-	mu       sync.Mutex
-	pending  map[string]struct{}
-	timer    *time.Timer
-	done     chan struct{}
+	inner   *fsnotify.Watcher
+	events  chan Event
+	opts    Options
+	mu      sync.Mutex
+	pending map[string]struct{}
+	timer   *time.Timer
+	done    chan struct{}
 }
 
 // New creates a Watcher. Call [Watcher.Add] to register directories, then
@@ -87,7 +87,10 @@ func (w *Watcher) Add(path string) error {
 
 // Remove unregisters path.
 func (w *Watcher) Remove(path string) error {
-	return w.inner.Remove(path)
+	if err := w.inner.Remove(path); err != nil {
+		return fmt.Errorf("fs/watch: remove %q: %w", path, err)
+	}
+	return nil
 }
 
 // Events returns the channel of debounced change events.
@@ -97,7 +100,10 @@ func (w *Watcher) Events() <-chan Event { return w.events }
 func (w *Watcher) Close() error {
 	err := w.inner.Close()
 	<-w.done
-	return err
+	if err != nil {
+		return fmt.Errorf("fs/watch: close: %w", err)
+	}
+	return nil
 }
 
 func (w *Watcher) run() {

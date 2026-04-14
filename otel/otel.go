@@ -128,7 +128,7 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	if !opts.Enabled {
 		return &Providers{}, nil
 	}
-	res, err := buildResource(opts)
+	res, err := buildResource(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("otel: resource: %w", err)
 	}
@@ -168,12 +168,13 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	return providers, nil
 }
 
-func buildResource(opts Options) (*resource.Resource, error) {
-	attrs := []attributeKV{
-		{semconv.ServiceNameKey, opts.Service.Name},
-		{semconv.ServiceVersionKey, opts.Service.Version},
-		{semconv.ServiceNamespaceKey, opts.Service.Namespace},
-	}
+func buildResource(ctx context.Context, opts Options) (*resource.Resource, error) {
+	attrs := make([]attributeKV, 0, 3+8)
+	attrs = append(attrs,
+		attributeKV{semconv.ServiceNameKey, opts.Service.Name},
+		attributeKV{semconv.ServiceVersionKey, opts.Service.Version},
+		attributeKV{semconv.ServiceNamespaceKey, opts.Service.Namespace},
+	)
 	// Pull pod metadata from the k8s downward API (matches log package convention).
 	attrs = append(attrs, podInfoAttrs()...)
 
@@ -183,7 +184,7 @@ func buildResource(opts Options) (*resource.Resource, error) {
 		resource.WithTelemetrySDK(),
 		resource.WithAttributes(toKVs(attrs)...),
 	}
-	res, err := resource.New(context.Background(), resOpts...)
+	res, err := resource.New(ctx, resOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("resource.New: %w", err)
 	}

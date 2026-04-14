@@ -15,6 +15,7 @@ package money
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 )
 
@@ -92,7 +93,7 @@ func (m Money) String() string {
 	if minor < 0 {
 		minor = -minor
 	}
-	decimals := len(fmt.Sprintf("%d", divisor)) - 1
+	decimals := len(strconv.Itoa(divisor)) - 1
 	return fmt.Sprintf("%d.%0*d %s", major, decimals, minor, m.Currency)
 }
 

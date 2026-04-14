@@ -131,7 +131,7 @@ var CacheRedis = fx.Module("golusoris.cache.redis",
 // *oidc.Provider to the fx graph after running OIDC discovery against
 // the configured issuer.
 //
-// Requires [Core] for config + log. Config key prefix: auth.oidc.*
+// Requires [Core] for config + log. Config key prefix: auth.oidc.*.
 var AuthOIDC = fx.Module("golusoris.auth.oidc",
 	oidc.Module,
 )

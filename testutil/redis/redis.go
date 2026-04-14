@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	defaultImage   = "redis:7-alpine"
-	startTimeout   = 60 * time.Second
+	defaultImage = "redis:7-alpine"
+	startTimeout = 60 * time.Second
 )
 
 // Start boots a Redis container and returns a connected rueidis.Client.

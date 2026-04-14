@@ -18,6 +18,7 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 
@@ -66,12 +67,12 @@ func (p *Point) Scan(src any) error {
 
 // Value implements driver.Valuer so Point can be used as a query argument
 // (as EWKT for simplicity).
-func (p Point) Value() (driver.Value, error) {
+func (p *Point) Value() (driver.Value, error) {
 	return fmt.Sprintf("SRID=4326;POINT(%f %f)", p.Lon, p.Lat), nil
 }
 
 // String returns a human-readable representation.
-func (p Point) String() string { return fmt.Sprintf("(%f, %f)", p.Lon, p.Lat) }
+func (p *Point) String() string { return fmt.Sprintf("(%f, %f)", p.Lon, p.Lat) }
 
 // decodeEWKB decodes an EWKB byte slice into p.
 // Supports little-endian WKB/EWKB with and without SRID.
@@ -80,7 +81,7 @@ func (p *Point) decodeEWKB(b []byte) error {
 		return fmt.Errorf("geo: EWKB too short (%d bytes)", len(b))
 	}
 	if b[0] != 1 { // little-endian byte order marker
-		return fmt.Errorf("geo: only little-endian EWKB supported")
+		return errors.New("geo: only little-endian EWKB supported")
 	}
 	wkbType := binary.LittleEndian.Uint32(b[1:5])
 
@@ -91,7 +92,7 @@ func (p *Point) decodeEWKB(b []byte) error {
 		offset += 4 // skip 4-byte SRID
 	}
 	if len(b) < offset+16 {
-		return fmt.Errorf("geo: EWKB too short for point coordinates")
+		return errors.New("geo: EWKB too short for point coordinates")
 	}
 	p.Lon = math.Float64frombits(binary.LittleEndian.Uint64(b[offset:]))
 	p.Lat = math.Float64frombits(binary.LittleEndian.Uint64(b[offset+8:]))

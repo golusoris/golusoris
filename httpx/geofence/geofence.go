@@ -17,6 +17,7 @@ package geofence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -60,7 +61,7 @@ func New(opts Options) (middleware.Middleware, Reader, error) {
 		return identity, nil, nil
 	}
 	if opts.MmdbPath == "" {
-		return nil, nil, fmt.Errorf("httpx/geofence: MmdbPath required when Allow/Deny set")
+		return nil, nil, errors.New("httpx/geofence: MmdbPath required when Allow/Deny set")
 	}
 	r, err := maxminddb.Open(opts.MmdbPath)
 	if err != nil {

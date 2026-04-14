@@ -81,7 +81,7 @@ func SlogMiddleware(logger *slog.Logger) ogenmw.Middleware {
 			slog.String("operation_id", req.OperationID),
 			slog.String("operation_name", req.OperationName),
 		)
-		return resp, err //nolint:wrapcheck // passthrough: middleware semantics
+		return resp, err
 	}
 }
 
@@ -100,6 +100,6 @@ func RecoverMiddleware(logger *slog.Logger) ogenmw.Middleware {
 				err = gerr.Internal("internal server error")
 			}
 		}()
-		return next(req) //nolint:wrapcheck // passthrough: middleware semantics
+		return next(req)
 	}
 }

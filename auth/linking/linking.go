@@ -12,6 +12,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	gerr "github.com/golusoris/golusoris/errors"
 )
 
@@ -34,10 +36,18 @@ type Store interface {
 }
 
 // Service manages identity links.
-type Service struct{ store Store }
+type Service struct {
+	store Store
+	clk   clockwork.Clock
+}
 
-// New returns a Service.
-func New(store Store) *Service { return &Service{store: store} }
+// New returns a Service using the real clock.
+func New(store Store) *Service { return NewWithClock(store, clockwork.NewRealClock()) }
+
+// NewWithClock returns a Service with an injected clock.
+func NewWithClock(store Store, clk clockwork.Clock) *Service {
+	return &Service{store: store, clk: clk}
+}
 
 // Link associates (provider,subject) with userID. If the link already
 // exists for a different user, returns gerr.CodeConflict.
@@ -52,7 +62,7 @@ func (s *Service) Link(ctx context.Context, userID, provider, subject, email str
 	if !isNotFound(err) {
 		return fmt.Errorf("linking: find: %w", err)
 	}
-	i := Identity{Provider: provider, Subject: subject, UserID: userID, Email: email, CreatedAt: time.Now()}
+	i := Identity{Provider: provider, Subject: subject, UserID: userID, Email: email, CreatedAt: s.clk.Now()}
 	if saveErr := s.store.Save(ctx, i); saveErr != nil {
 		return fmt.Errorf("linking: save: %w", saveErr)
 	}

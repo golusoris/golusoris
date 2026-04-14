@@ -14,6 +14,7 @@ package csrf
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -78,7 +79,7 @@ func decodeKey(s string) ([]byte, error) {
 	if b, err := base64.URLEncoding.DecodeString(s); err == nil && len(b) == 32 {
 		return b, nil
 	}
-	return nil, fmt.Errorf("secret must decode to 32 bytes (hex or base64)")
+	return nil, errors.New("secret must decode to 32 bytes (hex or base64)")
 }
 
 func loadOptions(cfg *config.Config) (Options, error) {

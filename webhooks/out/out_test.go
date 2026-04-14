@@ -18,7 +18,7 @@ import (
 
 // memStore is a minimal in-memory Store for tests.
 type memStore struct {
-	endpoints map[string]out.Endpoint
+	endpoints  map[string]out.Endpoint
 	deliveries map[string]out.Delivery
 }
 
@@ -33,6 +33,7 @@ func (s *memStore) SaveEndpoint(_ context.Context, e out.Endpoint) error {
 	s.endpoints[e.ID] = e
 	return nil
 }
+
 func (s *memStore) FindEndpoint(_ context.Context, id string) (out.Endpoint, error) {
 	e, ok := s.endpoints[id]
 	if !ok {
@@ -40,6 +41,7 @@ func (s *memStore) FindEndpoint(_ context.Context, id string) (out.Endpoint, err
 	}
 	return e, nil
 }
+
 func (s *memStore) ListEndpoints(_ context.Context, event string) ([]out.Endpoint, error) {
 	var out []out.Endpoint
 	for _, e := range s.endpoints {
@@ -59,14 +61,17 @@ func (s *memStore) ListEndpoints(_ context.Context, event string) ([]out.Endpoin
 	}
 	return out, nil
 }
+
 func (s *memStore) DeleteEndpoint(_ context.Context, id string) error {
 	delete(s.endpoints, id)
 	return nil
 }
+
 func (s *memStore) SaveDelivery(_ context.Context, d out.Delivery) error {
 	s.deliveries[d.ID] = d
 	return nil
 }
+
 func (s *memStore) FindDelivery(_ context.Context, id string) (out.Delivery, error) {
 	d, ok := s.deliveries[id]
 	if !ok {
@@ -74,6 +79,7 @@ func (s *memStore) FindDelivery(_ context.Context, id string) (out.Delivery, err
 	}
 	return d, nil
 }
+
 func (s *memStore) ListDeadLetters(_ context.Context) ([]out.Delivery, error) {
 	var dl []out.Delivery
 	for _, d := range s.deliveries {
@@ -84,19 +90,19 @@ func (s *memStore) ListDeadLetters(_ context.Context) ([]out.Delivery, error) {
 	return dl, nil
 }
 
-func newDispatcher(t *testing.T, store *memStore) (*out.Dispatcher, *clockwork.FakeClock) {
+func newDispatcher(t *testing.T, store *memStore) *out.Dispatcher {
 	t.Helper()
 	clk := clockwork.NewFakeClock()
 	logger := nopLogger(t)
-	d := out.New(store, out.Options{
+	return out.New(store, out.Options{
 		MaxAttempts: 3,
 		Timeout:     5 * time.Second,
 		Backoff:     func(int) time.Duration { return 0 }, // no wait in tests
 	}, logger, clk)
-	return d, clk
 }
 
 func TestDispatch_success(t *testing.T) {
+	t.Parallel()
 	var received atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		received.Add(1)
@@ -113,7 +119,7 @@ func TestDispatch_success(t *testing.T) {
 		Active: true,
 	})
 
-	d, _ := newDispatcher(t, store)
+	d := newDispatcher(t, store)
 	err := d.Dispatch(context.Background(), "order.created", map[string]string{"id": "1"})
 	if err != nil {
 		t.Fatal(err)
@@ -129,6 +135,7 @@ func TestDispatch_success(t *testing.T) {
 }
 
 func TestDispatch_deadLetter(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -142,7 +149,7 @@ func TestDispatch_deadLetter(t *testing.T) {
 		Active: true,
 	})
 
-	d, _ := newDispatcher(t, store)
+	d := newDispatcher(t, store)
 	_ = d.Dispatch(context.Background(), "any", map[string]string{})
 
 	dls, _ := store.ListDeadLetters(context.Background())
@@ -155,6 +162,7 @@ func TestDispatch_deadLetter(t *testing.T) {
 }
 
 func TestDispatch_skipsInactive(t *testing.T) {
+	t.Parallel()
 	var received atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		received.Add(1)
@@ -170,7 +178,7 @@ func TestDispatch_skipsInactive(t *testing.T) {
 		Active: false, // inactive
 	})
 
-	d, _ := newDispatcher(t, store)
+	d := newDispatcher(t, store)
 	_ = d.Dispatch(context.Background(), "any", nil)
 
 	if received.Load() != 0 {
@@ -179,6 +187,7 @@ func TestDispatch_skipsInactive(t *testing.T) {
 }
 
 func TestReplay(t *testing.T) {
+	t.Parallel()
 	var attempts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		n := attempts.Add(1)
@@ -198,7 +207,7 @@ func TestReplay(t *testing.T) {
 		Active: true,
 	})
 
-	d, _ := newDispatcher(t, store)
+	d := newDispatcher(t, store)
 	// First dispatch — all attempts fail → dead letter.
 	_ = d.Dispatch(context.Background(), "any", nil)
 

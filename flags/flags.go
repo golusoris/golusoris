@@ -150,10 +150,12 @@ func (p *MemoryProvider) Delete(key string) {
 	delete(p.flags, key)
 }
 
+// Metadata implements [Provider].
 func (p *MemoryProvider) Metadata() ProviderMetadata {
 	return ProviderMetadata{Name: "memory"}
 }
 
+// Evaluate implements [Provider].
 func (p *MemoryProvider) Evaluate(_ context.Context, key string, defaultValue any, _ EvalContext) (any, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -170,7 +172,10 @@ func (p *MemoryProvider) Evaluate(_ context.Context, key string, defaultValue an
 // in fx graphs where no provider is configured.
 type NoopProvider struct{}
 
+// Metadata implements [Provider].
 func (NoopProvider) Metadata() ProviderMetadata { return ProviderMetadata{Name: "noop"} }
+
+// Evaluate implements [Provider]; always returns defaultValue.
 func (NoopProvider) Evaluate(_ context.Context, _ string, defaultValue any, _ EvalContext) (any, error) {
 	return defaultValue, nil
 }

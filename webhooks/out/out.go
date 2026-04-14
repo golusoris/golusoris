@@ -34,6 +34,7 @@ import (
 // Status is the delivery outcome.
 type Status string
 
+// Delivery status values.
 const (
 	StatusPending   Status = "pending"
 	StatusDelivered Status = "delivered"
@@ -110,9 +111,9 @@ func (o *Options) defaults() {
 
 func exponentialBackoff(attempt int) time.Duration {
 	d := time.Second << attempt // 1s, 2s, 4s, 8s, …
-	const max = 5 * time.Minute
-	if d > max {
-		return max
+	const maxBackoff = 5 * time.Minute
+	if d > maxBackoff {
+		return maxBackoff
 	}
 	return d
 }

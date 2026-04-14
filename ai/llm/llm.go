@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,6 +38,7 @@ import (
 // Role is the speaker role in a conversation.
 type Role string
 
+// Conversation role constants.
 const (
 	RoleSystem    Role = "system"
 	RoleUser      Role = "user"
@@ -269,7 +271,7 @@ func (c *OpenAIClient) Embed(ctx context.Context, text string) ([]float32, error
 		return nil, fmt.Errorf("llm: embed decode: %w", err)
 	}
 	if len(out.Data) == 0 {
-		return nil, fmt.Errorf("llm: embed: empty response")
+		return nil, errors.New("llm: embed: empty response")
 	}
 	return out.Data[0].Embedding, nil
 }

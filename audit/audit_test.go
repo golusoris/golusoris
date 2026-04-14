@@ -10,6 +10,7 @@ import (
 )
 
 func TestLog_basic(t *testing.T) {
+	t.Parallel()
 	store := audit.NewMemoryStore()
 	clk := clockwork.NewFakeClock()
 	lg := audit.New(store, audit.WithClock(clk))
@@ -40,6 +41,7 @@ func TestLog_basic(t *testing.T) {
 }
 
 func TestList_filter(t *testing.T) {
+	t.Parallel()
 	store := audit.NewMemoryStore()
 	lg := audit.New(store)
 
@@ -63,6 +65,7 @@ func TestList_filter(t *testing.T) {
 }
 
 func TestList_limit(t *testing.T) {
+	t.Parallel()
 	store := audit.NewMemoryStore()
 	lg := audit.New(store)
 

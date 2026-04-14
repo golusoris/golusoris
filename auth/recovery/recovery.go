@@ -95,7 +95,7 @@ func (s *Service) IssueCodes(ctx context.Context, userID string, n int) ([]strin
 	}
 	raws := make([]string, n)
 	records := make([]Code, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		raw, err := randomCode()
 		if err != nil {
 			return nil, err

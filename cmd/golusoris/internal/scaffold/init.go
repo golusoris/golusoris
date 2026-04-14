@@ -2,6 +2,7 @@
 package scaffold
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ func InitCmd() *cobra.Command {
 	cmd := clikit.Command("init", "Scaffold a new golusoris application",
 		clikit.WithRunE(func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return fmt.Errorf("usage: golusoris init <app-name>")
+				return errors.New("usage: golusoris init <app-name>")
 			}
 			name := args[0]
 			if err := validateName(name); err != nil {
@@ -71,7 +72,7 @@ func writeTemplate(path, tmplStr string, data any) error {
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
-	f, err := os.Create(path) //nolint:gosec // path constructed from validated name
+	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
@@ -82,7 +83,7 @@ func writeTemplate(path, tmplStr string, data any) error {
 // validateName checks that a name is a valid Go identifier-style string.
 func validateName(name string) error {
 	if name == "" {
-		return fmt.Errorf("name must not be empty")
+		return errors.New("name must not be empty")
 	}
 	if strings.ContainsAny(name, " /\\:*?\"<>|") {
 		return fmt.Errorf("name %q contains invalid characters", name)

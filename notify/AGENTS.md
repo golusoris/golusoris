@@ -21,12 +21,14 @@ err := n.Send(ctx, notify.Message{
 
 ## Senders
 
-| Sender | Constructor | Channel |
-|---|---|---|
-| `SMTPSender` | `notify.NewSMTPSender(opts)` | Email via SMTP (go-mail) |
+| Sender           | Constructor                  | Channel                    |
+| ---------------- | ---------------------------- | -------------------------- |
+| `SMTPSender`     | `notify.NewSMTPSender(opts)` | Email via SMTP (go-mail)   |
+| `slack.Sender`   | `slack.NewSender(opts)`      | Slack incoming webhook     |
+| `discord.Sender` | `discord.NewSender(opts)`    | Discord incoming webhook   |
 
-More senders (Resend, Postmark, Slack, Discord, web-push) are added per
-app by implementing `notify.Sender`. Pull requests welcome.
+More senders (Resend, Postmark, web-push) are added per app by
+implementing `notify.Sender`. Pull requests welcome.
 
 ## Suppression
 

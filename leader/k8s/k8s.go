@@ -15,6 +15,7 @@ package k8s
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -63,7 +64,7 @@ func DefaultOptions() Options {
 func Run(ctx context.Context, k kubernetes.Interface, opts Options, cb leader.Callbacks) error {
 	opts = opts.withDefaults()
 	if opts.Name == "" {
-		return fmt.Errorf("leader/k8s: leader.name is required when enabled")
+		return errors.New("leader/k8s: leader.name is required when enabled")
 	}
 	identity := opts.Identity
 	if identity == "" {

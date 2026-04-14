@@ -29,6 +29,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -58,7 +59,7 @@ type Event struct {
 // json.RawMessage is used verbatim.
 func Add(ctx context.Context, tx pgx.Tx, kind string, payload any) error {
 	if kind == "" {
-		return fmt.Errorf("outbox: kind required")
+		return errors.New("outbox: kind required")
 	}
 	raw, err := marshalPayload(payload)
 	if err != nil {
@@ -111,7 +112,7 @@ func Pending(ctx context.Context, pool *pgxpool.Pool, limit int) ([]Event, error
 		}
 		out = append(out, ev)
 	}
-	return out, rows.Err() //nolint:wrapcheck // passthrough from Scan loop
+	return out, rows.Err()
 }
 
 // MarkDispatched flags a successfully-dispatched event.

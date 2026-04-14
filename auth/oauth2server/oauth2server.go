@@ -18,6 +18,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,6 +30,10 @@ import (
 
 	"github.com/golusoris/golusoris/auth/jwt"
 )
+
+// maxFormBytes caps the size of x-www-form-urlencoded bodies on the
+// /token endpoint. OAuth requests are tiny — 8 KiB is generous.
+const maxFormBytes = 8 << 10
 
 // Client is a registered OAuth client.
 type Client struct {
@@ -72,13 +77,13 @@ type ClientStore interface {
 
 // Options configure the server.
 type Options struct {
-	Issuer       string
-	Clients      ClientStore
-	Codes        CodeStore
-	Signer       *jwt.Signer
-	Clock        clockwork.Clock
-	AccessTTL    time.Duration // default 1h
-	CodeTTL      time.Duration // default 60s
+	Issuer    string
+	Clients   ClientStore
+	Codes     CodeStore
+	Signer    *jwt.Signer
+	Clock     clockwork.Clock
+	AccessTTL time.Duration // default 1h
+	CodeTTL   time.Duration // default 60s
 	// Authenticate must return the userID for the current request,
 	// or empty string when the user is unauthenticated.
 	Authenticate func(r *http.Request) (userID string)
@@ -188,6 +193,7 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
 		writeTokenErr(w, http.StatusBadRequest, "invalid_request", "form parse failed")
 		return
@@ -358,7 +364,7 @@ func (s *MemoryCodeStore) Take(_ context.Context, value string) (Code, error) {
 	defer s.mu.Unlock()
 	c, ok := s.m[value]
 	if !ok {
-		return Code{}, fmt.Errorf("oauth2server: code not found")
+		return Code{}, errors.New("oauth2server: code not found")
 	}
 	delete(s.m, value)
 	return c, nil

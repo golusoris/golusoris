@@ -11,6 +11,7 @@ import (
 )
 
 func TestUpdate_alreadyLatest(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"tag_name": "v1.2.3",
@@ -33,9 +34,9 @@ func TestUpdate_alreadyLatest(t *testing.T) {
 	// the release tag matches — but the current impl always fetches first).
 	// Test the error path instead: invalid owner/repo with injected client.
 	_, err := selfupdate.Update(context.Background(), selfupdate.Options{
-		Owner:      "nobody",
-		Repo:       "doesnotexist",
-		Version:    "v0.0.1",
+		Owner:   "nobody",
+		Repo:    "doesnotexist",
+		Version: "v0.0.1",
 		HTTPClient: &http.Client{Transport: &roundTripFunc{fn: func(r *http.Request) (*http.Response, error) {
 			rec := httptest.NewRecorder()
 			rec.WriteHeader(http.StatusNotFound)
@@ -48,6 +49,7 @@ func TestUpdate_alreadyLatest(t *testing.T) {
 }
 
 func TestUpdate_sameVersion(t *testing.T) {
+	t.Parallel()
 	srv := fakeGitHub(t, "v1.0.0", nil)
 	defer srv.Close()
 
@@ -69,6 +71,7 @@ func TestUpdate_sameVersion(t *testing.T) {
 }
 
 func TestUpdate_noMatchingAsset(t *testing.T) {
+	t.Parallel()
 	srv := fakeGitHub(t, "v2.0.0", nil)
 	defer srv.Close()
 
@@ -106,6 +109,8 @@ func fakeClient(srv *httptest.Server) *http.Client {
 	}}}
 }
 
-type roundTripFunc struct{ fn func(*http.Request) (*http.Response, error) }
+type roundTripFunc struct {
+	fn func(*http.Request) (*http.Response, error)
+}
 
 func (f *roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f.fn(r) }

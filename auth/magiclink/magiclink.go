@@ -121,10 +121,18 @@ func randomToken() (string, error) {
 // MemoryStore is an in-process store for tests.
 type MemoryStore struct {
 	links map[string]*Link
+	clk   clockwork.Clock
 }
 
-// NewMemoryStore returns an initialised in-memory store.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{links: map[string]*Link{}} }
+// NewMemoryStore returns an initialised in-memory store using the real clock.
+func NewMemoryStore() *MemoryStore {
+	return NewMemoryStoreWithClock(clockwork.NewRealClock())
+}
+
+// NewMemoryStoreWithClock returns an initialised in-memory store with an injected clock.
+func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
+	return &MemoryStore{links: map[string]*Link{}, clk: clk}
+}
 
 // Save persists a link.
 func (m *MemoryStore) Save(_ context.Context, l Link) error {
@@ -148,7 +156,7 @@ func (m *MemoryStore) MarkUsed(_ context.Context, hash []byte) error {
 	if !ok {
 		return errors.New("magiclink: not found")
 	}
-	now := time.Now()
+	now := m.clk.Now()
 	l.UsedAt = &now
 	return nil
 }

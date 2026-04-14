@@ -18,6 +18,7 @@ func handler(body string, code int) http.Handler {
 }
 
 func TestMiddleware_caches(t *testing.T) {
+	t.Parallel()
 	var calls atomic.Int32
 	h := idempotency.Middleware(
 		idempotency.NewMemoryStore(),
@@ -51,6 +52,7 @@ func TestMiddleware_caches(t *testing.T) {
 }
 
 func TestMiddleware_noKey_passThrough(t *testing.T) {
+	t.Parallel()
 	var calls atomic.Int32
 	h := idempotency.Middleware(
 		idempotency.NewMemoryStore(),
@@ -71,6 +73,7 @@ func TestMiddleware_noKey_passThrough(t *testing.T) {
 }
 
 func TestMiddleware_required(t *testing.T) {
+	t.Parallel()
 	h := idempotency.Middleware(
 		idempotency.NewMemoryStore(),
 		idempotency.Options{Required: true},
@@ -86,6 +89,7 @@ func TestMiddleware_required(t *testing.T) {
 }
 
 func TestMiddleware_safeMethodSkipped(t *testing.T) {
+	t.Parallel()
 	var calls atomic.Int32
 	h := idempotency.Middleware(
 		idempotency.NewMemoryStore(),
@@ -107,6 +111,7 @@ func TestMiddleware_safeMethodSkipped(t *testing.T) {
 }
 
 func TestMiddleware_5xxNotCached(t *testing.T) {
+	t.Parallel()
 	var calls atomic.Int32
 	h := idempotency.Middleware(
 		idempotency.NewMemoryStore(),

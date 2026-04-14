@@ -10,8 +10,8 @@ package main
 import (
 	"os"
 
-	"github.com/golusoris/golusoris/cmd/golusoris/internal/scaffold"
 	"github.com/golusoris/golusoris/clikit"
+	"github.com/golusoris/golusoris/cmd/golusoris/internal/scaffold"
 )
 
 func main() {

@@ -8,6 +8,7 @@ import (
 )
 
 func TestBool(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("feature-x", true)
 	c := flags.New(p)
@@ -21,6 +22,7 @@ func TestBool(t *testing.T) {
 }
 
 func TestString(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("api-version", "v2")
 	c := flags.New(p)
@@ -34,6 +36,7 @@ func TestString(t *testing.T) {
 }
 
 func TestInt(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("max-retries", int64(5))
 	c := flags.New(p)
@@ -44,6 +47,7 @@ func TestInt(t *testing.T) {
 }
 
 func TestFloat(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("rollout-pct", 0.25)
 	c := flags.New(p)
@@ -54,6 +58,7 @@ func TestFloat(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("temp", true)
 	p.Delete("temp")
@@ -65,6 +70,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestNoopProvider(t *testing.T) {
+	t.Parallel()
 	c := flags.New(flags.NoopProvider{})
 	if c.Bool(context.Background(), "anything", true) != true {
 		t.Fatal("noop should return default")
@@ -72,6 +78,7 @@ func TestNoopProvider(t *testing.T) {
 }
 
 func TestTypeMismatch_returnsDefault(t *testing.T) {
+	t.Parallel()
 	p := flags.NewMemoryProvider()
 	p.Set("flag", "not-a-bool") // string stored, bool requested
 	c := flags.New(p)

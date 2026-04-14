@@ -124,14 +124,21 @@ func ProvisionTOTP(issuer, account string) (*otp.Key, error) {
 	return k, nil
 }
 
-// VerifyTOTP checks a 6-digit code against secret. Accepts ±1 period
-// (30s) of clock skew.
+// VerifyTOTP checks a 6-digit code against secret using the wall clock.
+// Accepts ±1 period (30s) of clock skew. Prefer [VerifyTOTPAt] in
+// non-handler code so the time source is explicit and testable.
 func VerifyTOTP(secret, code string) error {
+	return VerifyTOTPAt(secret, code, time.Now()) //nolint:forbidigo // wall-clock wrapper around VerifyTOTPAt
+}
+
+// VerifyTOTPAt checks a 6-digit code against secret as of at. Accepts
+// ±1 period (30s) of clock skew.
+func VerifyTOTPAt(secret, code string, at time.Time) error {
 	// Validate that secret is base32 (otp expects this).
 	if _, err := base32.StdEncoding.DecodeString(secret); err != nil {
 		return errors.New("passkeys: secret is not base32")
 	}
-	ok, err := totp.ValidateCustom(code, secret, time.Now(), totp.ValidateOpts{
+	ok, err := totp.ValidateCustom(code, secret, at, totp.ValidateOpts{
 		Period:    30,
 		Skew:      1,
 		Digits:    otp.DigitsSix,

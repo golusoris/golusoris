@@ -15,7 +15,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/fx"
@@ -55,7 +54,7 @@ type params struct {
 
 func newFromConfig(p params) (*Client, error) {
 	var cfg Config
-	if err := p.Config.Unmarshal("kafka", &cfg); err != nil { //nolint:wrapcheck // wrapped below
+	if err := p.Config.Unmarshal("kafka", &cfg); err != nil {
 		return nil, fmt.Errorf("kafka: config: %w", err)
 	}
 	if len(cfg.Brokers) == 0 {
@@ -145,12 +144,13 @@ func (w *slogWriter) Write(p []byte) (int, error) {
 // Ensure slogWriter implements the interface kgo.BasicLogger needs.
 var _ interface{ Write([]byte) (int, error) } = (*slogWriter)(nil)
 
-// NewRecord is a convenience constructor for a Kafka record.
+// NewRecord is a convenience constructor for a Kafka record. The
+// broker assigns the timestamp on receipt; callers that need a custom
+// timestamp should set Record.Timestamp directly.
 func NewRecord(topic string, key, value []byte) *Record {
 	return &Record{
-		Topic:     topic,
-		Key:       key,
-		Value:     value,
-		Timestamp: time.Now(),
+		Topic: topic,
+		Key:   key,
+		Value: value,
 	}
 }

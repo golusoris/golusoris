@@ -92,7 +92,7 @@ func Command(use, short string, opts ...Option) *cobra.Command {
 		cmd.RunE = func(c *cobra.Command, args []string) error {
 			app := fx.New(o.fxOpts...)
 			if app.Err() != nil {
-				return app.Err() //nolint:wrapcheck // fx error has full context
+				return app.Err()
 			}
 			if o.runFx != nil {
 				o.runFx(app)

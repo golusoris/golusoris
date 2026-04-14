@@ -8,6 +8,7 @@ import (
 )
 
 func TestMemorySearcher_basic(t *testing.T) {
+	t.Parallel()
 	s := search.NewMemorySearcher()
 	ctx := context.Background()
 
@@ -31,6 +32,7 @@ func TestMemorySearcher_basic(t *testing.T) {
 }
 
 func TestMemorySearcher_filter(t *testing.T) {
+	t.Parallel()
 	s := search.NewMemorySearcher()
 	ctx := context.Background()
 
@@ -52,6 +54,7 @@ func TestMemorySearcher_filter(t *testing.T) {
 }
 
 func TestMemorySearcher_pagination(t *testing.T) {
+	t.Parallel()
 	s := search.NewMemorySearcher()
 	ctx := context.Background()
 
@@ -74,6 +77,7 @@ func TestMemorySearcher_pagination(t *testing.T) {
 }
 
 func TestMemorySearcher_delete(t *testing.T) {
+	t.Parallel()
 	s := search.NewMemorySearcher()
 	ctx := context.Background()
 
@@ -90,6 +94,7 @@ func TestMemorySearcher_delete(t *testing.T) {
 }
 
 func TestMemorySearcher_matchAll(t *testing.T) {
+	t.Parallel()
 	s := search.NewMemorySearcher()
 	ctx := context.Background()
 

@@ -25,6 +25,7 @@ func TestEnvLoad(t *testing.T) {
 }
 
 func TestFileLoad(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cfg.yaml")
 	if err := os.WriteFile(path, []byte("server:\n  port: 9000\n"), 0o600); err != nil {

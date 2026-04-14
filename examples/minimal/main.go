@@ -18,10 +18,10 @@ import (
 
 func main() {
 	fx.New(
-		golusoris.Core,  // config + log + lifecycle + errors + clock + id
-		golusoris.DB,    // pgx pool + migrations + sqlc helpers
-		otel.Module,     // tracer + meter + logs + OTLP
-		golusoris.HTTP,  // server + standard middleware + Scalar docs
-		golusoris.K8s,   // /livez /readyz /startupz + podinfo + prom /metrics
+		golusoris.Core, // config + log + lifecycle + errors + clock + id
+		golusoris.DB,   // pgx pool + migrations + sqlc helpers
+		otel.Module,    // tracer + meter + logs + OTLP
+		golusoris.HTTP, // server + standard middleware + Scalar docs
+		golusoris.K8s,  // /livez /readyz /startupz + podinfo + prom /metrics
 	).Run()
 }

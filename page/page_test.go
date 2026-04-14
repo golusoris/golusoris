@@ -7,6 +7,7 @@ import (
 )
 
 func TestCursorPage_hasMore(t *testing.T) {
+	t.Parallel()
 	items := []int{1, 2, 3, 4, 5, 6} // fetched with limit+1=6, limit=5
 	p := page.NewCursorPage(items, 5, func(v int) string {
 		return string(rune('0' + v))
@@ -23,6 +24,7 @@ func TestCursorPage_hasMore(t *testing.T) {
 }
 
 func TestCursorPage_lastPage(t *testing.T) {
+	t.Parallel()
 	items := []int{1, 2, 3}
 	p := page.NewCursorPage(items, 5, func(v int) string { return "" })
 	if p.HasMore {
@@ -34,6 +36,7 @@ func TestCursorPage_lastPage(t *testing.T) {
 }
 
 func TestEncodeDecode(t *testing.T) {
+	t.Parallel()
 	original := "abc/def=ghi+jkl"
 	encoded := page.EncodeCursor(original)
 	decoded, err := page.DecodeCursor(encoded)
@@ -46,6 +49,7 @@ func TestEncodeDecode(t *testing.T) {
 }
 
 func TestDecodeCursor_invalid(t *testing.T) {
+	t.Parallel()
 	_, err := page.DecodeCursor("!!!not-base64!!!")
 	if err == nil {
 		t.Fatal("expected error for invalid cursor")
@@ -53,6 +57,7 @@ func TestDecodeCursor_invalid(t *testing.T) {
 }
 
 func TestOffsetPage_hasNextPrev(t *testing.T) {
+	t.Parallel()
 	p := page.NewOffsetPage([]int{1, 2, 3}, 10, 3, 3)
 	if !p.HasPrev() {
 		t.Fatal("expected HasPrev=true")

@@ -8,6 +8,7 @@ import (
 )
 
 func TestRender_heading(t *testing.T) {
+	t.Parallel()
 	out, err := markdown.Render([]byte("# Hello"))
 	if err != nil {
 		t.Fatal(err)
@@ -18,6 +19,7 @@ func TestRender_heading(t *testing.T) {
 }
 
 func TestRender_table(t *testing.T) {
+	t.Parallel()
 	src := "| A | B |\n|---|---|\n| 1 | 2 |"
 	out, err := markdown.Render([]byte(src))
 	if err != nil {
@@ -29,6 +31,7 @@ func TestRender_table(t *testing.T) {
 }
 
 func TestRender_strikethrough(t *testing.T) {
+	t.Parallel()
 	out, err := markdown.Render([]byte("~~strike~~"))
 	if err != nil {
 		t.Fatal(err)
@@ -39,6 +42,7 @@ func TestRender_strikethrough(t *testing.T) {
 }
 
 func TestRenderString(t *testing.T) {
+	t.Parallel()
 	got := markdown.RenderString("**bold**")
 	if !strings.Contains(got, "<strong>") {
 		t.Fatalf("expected strong tag, got: %s", got)

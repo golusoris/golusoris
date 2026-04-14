@@ -2,7 +2,7 @@ package policy_test
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // HIBP API uses sha1; test must match.
+	"crypto/sha1"
 	"encoding/hex"
 	"io"
 	"net/http"
@@ -36,7 +36,7 @@ func TestPolicy_HIBPRejectsBreached(t *testing.T) {
 	t.Parallel()
 
 	pw := "Tr0ub4dor&3-purple-monkey" // strong enough for zxcvbn ≥3
-	sum := sha1.Sum([]byte(pw))        //nolint:gosec
+	sum := sha1.Sum([]byte(pw))
 	hash := strings.ToUpper(hex.EncodeToString(sum[:]))
 	suffix := hash[5:]
 
@@ -73,7 +73,7 @@ type cannedTransport struct{ body string }
 
 func (c cannedTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	return &http.Response{
-		StatusCode: 200,
+		StatusCode: http.StatusOK,
 		Body:       io.NopCloser(strings.NewReader(c.body)),
 		Header:     make(http.Header),
 	}, nil

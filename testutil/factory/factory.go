@@ -29,10 +29,9 @@ func New(t *testing.T) *Faker {
 	t.Helper()
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(t.Name()))
-	return gofakeit.New(int64(h.Sum64())) //nolint:gosec // seed is not security-critical
+	return gofakeit.New(int64(h.Sum64()))
 }
 
 // Random returns a Faker with a random seed.
 // Use when determinism is not required.
 func Random() *Faker { return gofakeit.New(0) }
-

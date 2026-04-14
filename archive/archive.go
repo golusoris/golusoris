@@ -106,4 +106,3 @@ func srcsMap(srcs []string) map[string]string {
 	}
 	return m
 }
-

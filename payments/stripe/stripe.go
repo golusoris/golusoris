@@ -18,6 +18,7 @@ package stripe
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -62,7 +63,7 @@ type Client struct {
 // New returns a Client using the provided secret key.
 func New(opts Options, logger *slog.Logger) (*Client, error) {
 	if opts.SecretKey == "" {
-		return nil, fmt.Errorf("stripe: secret key is required")
+		return nil, errors.New("stripe: secret key is required")
 	}
 	sc := sdk.NewClient(opts.SecretKey)
 	return &Client{sc: sc, logger: logger}, nil
@@ -76,7 +77,6 @@ func (c *Client) NewCheckoutSession(ctx context.Context, p CheckoutParams) (stri
 
 	items := make([]*sdk.CheckoutSessionCreateLineItemParams, 0, len(p.LineItems))
 	for priceID, qty := range p.LineItems {
-		qty := qty
 		items = append(items, &sdk.CheckoutSessionCreateLineItemParams{
 			Price:    sdk.String(priceID),
 			Quantity: sdk.Int64(qty),

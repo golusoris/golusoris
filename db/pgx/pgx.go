@@ -185,7 +185,7 @@ func connectWithRetry(
 			err = pool.Ping(attemptCtx)
 			if err == nil {
 				cancel()
-				logger.Info("db/pgx: connected", slog.Int("attempt", attempt))
+				logger.InfoContext(ctx, "db/pgx: connected", slog.Int("attempt", attempt))
 				return pool, nil
 			}
 			pool.Close()
@@ -195,7 +195,7 @@ func connectWithRetry(
 		if attempt == opts.Retry.Attempts {
 			break
 		}
-		logger.Warn("db/pgx: connect failed, will retry",
+		logger.WarnContext(ctx, "db/pgx: connect failed, will retry",
 			slog.Int("attempt", attempt),
 			slog.Int("max_attempts", opts.Retry.Attempts),
 			slog.Duration("next_delay", delay),

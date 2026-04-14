@@ -10,6 +10,7 @@ import (
 )
 
 func TestNew_startsAndStops(t *testing.T) {
+	t.Parallel()
 	started := false
 
 	gfxtest.New(t,
@@ -29,6 +30,7 @@ func TestNew_startsAndStops(t *testing.T) {
 }
 
 func TestPopulate(t *testing.T) {
+	t.Parallel()
 	type Dep struct{ Value string }
 
 	var dep *Dep

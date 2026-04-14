@@ -12,6 +12,7 @@ package autocert
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 
 	"go.uber.org/fx"
@@ -37,7 +38,7 @@ func DefaultOptions() Options {
 // config error — autocert requires HostPolicy.
 func New(opts Options) (*tls.Config, error) {
 	if len(opts.Domains) == 0 {
-		return nil, fmt.Errorf("httpx/autotls/autocert: Domains required")
+		return nil, errors.New("httpx/autotls/autocert: Domains required")
 	}
 	cache := opts.Cache
 	if cache == "" {

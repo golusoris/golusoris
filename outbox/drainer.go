@@ -68,13 +68,13 @@ func NewDrainer(pool *pgxpool.Pool, client *jobs.Client, dispatcher Dispatcher, 
 // immediately on entry so enqueued events clear fast without waiting a
 // full interval.
 func (d *Drainer) Run(ctx context.Context) error {
-	d.logger.Info("outbox/drainer: starting",
+	d.logger.InfoContext(ctx, "outbox/drainer: starting",
 		slog.Duration("interval", d.opts.Interval),
 		slog.Int("batch", d.opts.Batch),
 	)
 	for {
 		if err := d.drain(ctx); err != nil {
-			d.logger.Warn("outbox/drainer: drain failed", slog.String("error", err.Error()))
+			d.logger.WarnContext(ctx, "outbox/drainer: drain failed", slog.String("error", err.Error()))
 			// Continue — transient errors shouldn't kill the drainer.
 		}
 		select {
@@ -92,7 +92,7 @@ func (d *Drainer) drain(ctx context.Context) error {
 	}
 	for _, ev := range events {
 		if dispatchErr := d.dispatchOne(ctx, ev); dispatchErr != nil {
-			d.logger.Warn("outbox/drainer: dispatch failed",
+			d.logger.WarnContext(ctx, "outbox/drainer: dispatch failed",
 				slog.Int64("id", ev.ID),
 				slog.String("kind", ev.Kind),
 				slog.String("error", dispatchErr.Error()),
@@ -101,7 +101,7 @@ func (d *Drainer) drain(ctx context.Context) error {
 			continue
 		}
 		if markErr := MarkDispatched(ctx, d.pool, ev.ID); markErr != nil {
-			d.logger.Warn("outbox/drainer: mark dispatched",
+			d.logger.WarnContext(ctx, "outbox/drainer: mark dispatched",
 				slog.Int64("id", ev.ID),
 				slog.String("error", markErr.Error()),
 			)
@@ -116,7 +116,7 @@ func (d *Drainer) dispatchOne(ctx context.Context, ev Event) error {
 		return fmt.Errorf("outbox: dispatcher %q: %w", ev.Kind, dispatchErr)
 	}
 	if args == nil {
-		// Caller dropped the event (returned nil, nil, nil).
+		// Caller dropped the event (returned nil, nil).
 		return nil
 	}
 	if _, err := d.client.Insert(ctx, args, insertOpts); err != nil {

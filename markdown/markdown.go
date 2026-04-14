@@ -20,8 +20,8 @@ import (
 
 var gm = goldmark.New(
 	goldmark.WithExtensions(
-		extension.GFM,        // tables, strikethrough, task lists, linkify
-		extension.Footnote,   // [^1] footnotes
+		extension.GFM,         // tables, strikethrough, task lists, linkify
+		extension.Footnote,    // [^1] footnotes
 		extension.Typographer, // smart quotes, dashes
 	),
 	goldmark.WithParserOptions(
@@ -56,5 +56,8 @@ func RenderString(src string) string {
 
 // RenderTo writes the HTML representation of src to buf.
 func RenderTo(buf *bytes.Buffer, src []byte) error {
-	return gm.Convert(src, buf)
+	if err := gm.Convert(src, buf); err != nil {
+		return fmt.Errorf("markdown: convert: %w", err)
+	}
+	return nil
 }

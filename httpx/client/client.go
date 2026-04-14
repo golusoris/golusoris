@@ -154,7 +154,7 @@ type breakerTransport struct {
 
 func (t *breakerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	resp, err := t.cb.Execute(func() (*http.Response, error) {
-		r, rtErr := t.next.RoundTrip(req) //nolint:bodyclose // caller closes
+		r, rtErr := t.next.RoundTrip(req)
 		if rtErr != nil {
 			return nil, fmt.Errorf("httpx/client: round trip: %w", rtErr)
 		}

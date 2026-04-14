@@ -10,6 +10,7 @@ import (
 )
 
 func TestCreateAndExtract_zip(t *testing.T) {
+	t.Parallel()
 	srcDir := t.TempDir()
 	// Create some files to archive.
 	if err := os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o640); err != nil {
@@ -46,6 +47,7 @@ func TestCreateAndExtract_zip(t *testing.T) {
 }
 
 func TestExtract_notFound(t *testing.T) {
+	t.Parallel()
 	err := archive.Extract(context.Background(), "/nonexistent/archive.zip", t.TempDir())
 	if err == nil {
 		t.Fatal("expected error for missing archive")

@@ -35,7 +35,7 @@ func TestRateEnforced(t *testing.T) {
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	var statuses []int
+	statuses := make([]int, 0, 4)
 	for range 4 {
 		rr := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/", nil)

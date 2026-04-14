@@ -29,11 +29,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	gerr "github.com/golusoris/golusoris/errors"
 )
 
-const defaultCookieName = "sid"
-const idBytes = 32
+const (
+	defaultCookieName = "sid"
+	idBytes           = 32
+)
 
 // Session holds the session ID and its data map.
 type Session struct {
@@ -106,7 +110,7 @@ func NewManager(store Store, opts Options) *Manager {
 func (m *Manager) Load(r *http.Request) (*Session, error) {
 	cookie, err := r.Cookie(m.opts.CookieName)
 	if err != nil {
-		return newSession(genID()), nil
+		return newSession(genID()), nil //nolint:nilerr // missing cookie is not an error; caller gets a fresh session
 	}
 	data, loadErr := m.store.Load(r.Context(), cookie.Value)
 	if loadErr != nil {
@@ -141,7 +145,7 @@ func (m *Manager) Save(w http.ResponseWriter, s *Session) error {
 func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 	cookie, err := r.Cookie(m.opts.CookieName)
 	if err != nil {
-		return nil // no session to destroy
+		return nil //nolint:nilerr // no cookie = no session to destroy
 	}
 	if delErr := m.store.Delete(context.Background(), cookie.Value); delErr != nil && !isNotFound(delErr) {
 		return fmt.Errorf("session: destroy: %w", delErr)
@@ -160,6 +164,7 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 // multi-replica deployments.
 type MemoryStore struct {
 	data map[string]memEntry
+	clk  clockwork.Clock
 }
 
 type memEntry struct {
@@ -167,14 +172,20 @@ type memEntry struct {
 	expires time.Time
 }
 
-// NewMemoryStore returns an initialised in-memory store.
+// NewMemoryStore returns an initialised in-memory store using the real clock.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{data: make(map[string]memEntry)}
+	return NewMemoryStoreWithClock(clockwork.NewRealClock())
 }
 
+// NewMemoryStoreWithClock returns an initialised in-memory store with an injected clock.
+func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
+	return &MemoryStore{data: make(map[string]memEntry), clk: clk}
+}
+
+// Load implements [Store].
 func (m *MemoryStore) Load(_ context.Context, id string) (map[string]any, error) {
 	e, ok := m.data[id]
-	if !ok || time.Now().After(e.expires) {
+	if !ok || m.clk.Now().After(e.expires) {
 		return nil, gerr.NotFound("session not found")
 	}
 	// Deep-copy via JSON to prevent mutation.
@@ -184,17 +195,19 @@ func (m *MemoryStore) Load(_ context.Context, id string) (map[string]any, error)
 	return out, nil
 }
 
+// Save implements [Store].
 func (m *MemoryStore) Save(_ context.Context, id string, data map[string]any, ttl time.Duration) error {
 	b, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("session/memory: marshal: %w", err)
 	}
-	var copy map[string]any
-	_ = json.Unmarshal(b, &copy)
-	m.data[id] = memEntry{data: copy, expires: time.Now().Add(ttl)}
+	var cp map[string]any
+	_ = json.Unmarshal(b, &cp)
+	m.data[id] = memEntry{data: cp, expires: m.clk.Now().Add(ttl)}
 	return nil
 }
 
+// Delete implements [Store].
 func (m *MemoryStore) Delete(_ context.Context, id string) error {
 	delete(m.data, id)
 	return nil

@@ -26,6 +26,7 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log/slog"
@@ -76,7 +77,7 @@ func keyFor(name string) int64 {
 func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock, cb leader.Callbacks) error {
 	opts = opts.withDefaults()
 	if opts.Name == "" {
-		return fmt.Errorf("leader/pg: leader.name is required when enabled")
+		return errors.New("leader/pg: leader.name is required when enabled")
 	}
 	identity := opts.Identity
 	if identity == "" {

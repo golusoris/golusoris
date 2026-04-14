@@ -111,7 +111,7 @@ var mcpTools = []map[string]any{
 func mcpHandler(logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
-			writeJSON(w, http.StatusOK, map[string]any{
+			writeJSON(w, map[string]any{
 				"jsonrpc": "2.0",
 				"result":  map[string]any{"tools": mcpTools},
 				"id":      nil,
@@ -130,7 +130,7 @@ func mcpHandler(logger *slog.Logger) http.HandlerFunc {
 			Params  json.RawMessage `json:"params"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusOK, jsonrpcError(nil, -32700, "Parse error"))
+			writeJSON(w, jsonrpcError(nil, -32700, "Parse error"))
 			return
 		}
 
@@ -138,7 +138,7 @@ func mcpHandler(logger *slog.Logger) http.HandlerFunc {
 
 		switch req.Method {
 		case "initialize":
-			writeJSON(w, http.StatusOK, map[string]any{
+			writeJSON(w, map[string]any{
 				"jsonrpc": "2.0",
 				"id":      req.ID,
 				"result": map[string]any{
@@ -149,7 +149,7 @@ func mcpHandler(logger *slog.Logger) http.HandlerFunc {
 			})
 
 		case "tools/list":
-			writeJSON(w, http.StatusOK, map[string]any{
+			writeJSON(w, map[string]any{
 				"jsonrpc": "2.0",
 				"id":      req.ID,
 				"result":  map[string]any{"tools": mcpTools},
@@ -161,18 +161,18 @@ func mcpHandler(logger *slog.Logger) http.HandlerFunc {
 				Arguments map[string]any `json:"arguments"`
 			}
 			if err := json.Unmarshal(req.Params, &p); err != nil {
-				writeJSON(w, http.StatusOK, jsonrpcError(req.ID, -32602, "Invalid params"))
+				writeJSON(w, jsonrpcError(req.ID, -32602, "Invalid params"))
 				return
 			}
 			result := dispatchTool(p.Name, p.Arguments)
-			writeJSON(w, http.StatusOK, map[string]any{
+			writeJSON(w, map[string]any{
 				"jsonrpc": "2.0",
 				"id":      req.ID,
 				"result":  map[string]any{"content": []map[string]any{{"type": "text", "text": result}}},
 			})
 
 		default:
-			writeJSON(w, http.StatusOK, jsonrpcError(req.ID, -32601, "Method not found"))
+			writeJSON(w, jsonrpcError(req.ID, -32601, "Method not found"))
 		}
 	}
 }
@@ -189,7 +189,7 @@ func dispatchTool(name string, args map[string]any) string {
 
 	case "golusoris_add":
 		module, _ := args["module"].(string)
-		return fmt.Sprintf("Run:\n  golusoris add %s", module)
+		return "Run:\n  golusoris add " + module
 
 	case "golusoris_bump":
 		version, _ := args["version"].(string)
@@ -202,13 +202,13 @@ func dispatchTool(name string, args map[string]any) string {
 		return fmt.Sprintf("Run:\n  golusoris bump %s\n\nCheck docs/migrations/ for breaking-change notes.", version)
 
 	default:
-		return fmt.Sprintf("unknown tool: %s", name)
+		return "unknown tool: " + name
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
+	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(v)
 }
 

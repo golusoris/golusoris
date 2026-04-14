@@ -70,8 +70,8 @@ type mmdbCityRecord struct {
 
 // mmdbASNRecord mirrors the GeoLite2-ASN record structure.
 type mmdbASNRecord struct {
-	ASNumber           uint   `maxminddb:"autonomous_system_number"`
-	ASOrganization     string `maxminddb:"autonomous_system_organization"`
+	ASNumber       uint   `maxminddb:"autonomous_system_number"`
+	ASOrganization string `maxminddb:"autonomous_system_organization"`
 }
 
 // DB wraps an open MaxMind database.
@@ -89,7 +89,12 @@ func Open(path string) (*DB, error) {
 }
 
 // Close releases the database file handle.
-func (d *DB) Close() error { return d.db.Close() }
+func (d *DB) Close() error {
+	if err := d.db.Close(); err != nil {
+		return fmt.Errorf("geoip: close: %w", err)
+	}
+	return nil
+}
 
 // Lookup returns geographic information for ip. Returns a zero Info and nil
 // error when the IP is not found in the database (e.g. RFC 1918 addresses).

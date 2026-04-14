@@ -9,6 +9,7 @@ import (
 )
 
 func TestLocalBucket(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	b, err := storage.NewLocalBucket(dir)
 	if err != nil {
@@ -37,7 +38,7 @@ func TestLocalBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	defer rc.Close() //nolint:errcheck
+	defer rc.Close()
 	if got.Size != 5 {
 		t.Fatalf("size: expected 5, got %d", got.Size)
 	}
@@ -67,6 +68,7 @@ func TestLocalBucket(t *testing.T) {
 }
 
 func TestLocalBucket_pathTraversal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	b, _ := storage.NewLocalBucket(dir)
 
@@ -77,6 +79,7 @@ func TestLocalBucket_pathTraversal(t *testing.T) {
 }
 
 func TestLocalBucket_notFound(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	b, _ := storage.NewLocalBucket(dir)
 

@@ -27,10 +27,10 @@ var ErrNotFound = errors.New("storage: object not found")
 
 // Object is returned after a successful Put.
 type Object struct {
-	Key         string
-	Size        int64
-	ContentType string
-	ETag        string
+	Key          string
+	Size         int64
+	ContentType  string
+	ETag         string
 	LastModified time.Time
 }
 
@@ -95,13 +95,14 @@ func (b *LocalBucket) abs(key string) (string, error) {
 	return clean, nil
 }
 
+// Put implements [Bucket].
 func (b *LocalBucket) Put(_ context.Context, key string, r io.Reader, _ PutOptions) (Object, error) {
 	path, err := b.abs(key)
 	if err != nil {
 		return Object{}, err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
-		return Object{}, fmt.Errorf("storage: mkdir: %w", err)
+	if mkErr := os.MkdirAll(filepath.Dir(path), 0o750); mkErr != nil {
+		return Object{}, fmt.Errorf("storage: mkdir: %w", mkErr)
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
 	if err != nil {
@@ -118,6 +119,7 @@ func (b *LocalBucket) Put(_ context.Context, key string, r io.Reader, _ PutOptio
 	return Object{Key: key, Size: n, LastModified: info.ModTime()}, nil
 }
 
+// Get implements [Bucket].
 func (b *LocalBucket) Get(_ context.Context, key string) (io.ReadCloser, Object, error) {
 	path, err := b.abs(key)
 	if err != nil {
@@ -135,30 +137,37 @@ func (b *LocalBucket) Get(_ context.Context, key string) (io.ReadCloser, Object,
 	return f, obj, nil
 }
 
+// Delete implements [Bucket].
 func (b *LocalBucket) Delete(_ context.Context, key string) error {
 	path, err := b.abs(key)
 	if err != nil {
 		return err
 	}
-	err = os.Remove(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
+	if rmErr := os.Remove(path); rmErr != nil {
+		if errors.Is(rmErr, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("storage: remove: %w", rmErr)
 	}
-	return err
+	return nil
 }
 
+// Exists implements [Bucket].
 func (b *LocalBucket) Exists(_ context.Context, key string) (bool, error) {
 	path, err := b.abs(key)
 	if err != nil {
 		return false, err
 	}
-	_, err = os.Stat(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
+	if _, statErr := os.Stat(path); statErr != nil {
+		if errors.Is(statErr, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("storage: stat: %w", statErr)
 	}
-	return err == nil, err
+	return true, nil
 }
 
+// List implements [Bucket].
 func (b *LocalBucket) List(_ context.Context, opts ListOptions) ([]Object, error) {
 	var out []Object
 	prefix := filepath.Join(b.base, filepath.FromSlash(opts.Prefix))

@@ -91,20 +91,20 @@ func New(logger *slog.Logger, opts ...Option) *Notifier {
 // last error if all senders fail (or nil if there are no senders).
 func (n *Notifier) Send(ctx context.Context, msg Message) error {
 	if len(n.senders) == 0 {
-		n.logger.Warn("notify: Send called with no senders registered")
+		n.logger.WarnContext(ctx, "notify: Send called with no senders registered")
 		return nil
 	}
 	var last error
 	for _, s := range n.senders {
 		if err := s.Send(ctx, msg); err != nil {
-			n.logger.Warn("notify: sender failed",
+			n.logger.WarnContext(ctx, "notify: sender failed",
 				slog.String("sender", s.Name()),
 				slog.String("error", err.Error()),
 			)
 			last = err
 			continue
 		}
-		n.logger.Debug("notify: sent", slog.String("sender", s.Name()))
+		n.logger.DebugContext(ctx, "notify: sent", slog.String("sender", s.Name()))
 		return nil
 	}
 	return fmt.Errorf("notify: all senders failed: %w", last)
@@ -115,7 +115,7 @@ func (n *Notifier) Multi(ctx context.Context, msg Message) []error {
 	var errs []error
 	for _, s := range n.senders {
 		if err := s.Send(ctx, msg); err != nil {
-			n.logger.Warn("notify: sender failed",
+			n.logger.WarnContext(ctx, "notify: sender failed",
 				slog.String("sender", s.Name()),
 				slog.String("error", err.Error()),
 			)

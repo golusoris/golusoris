@@ -25,10 +25,15 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
 )
+
+// maxUnsubBytes caps form-encoded request bodies on the unsubscribe
+// endpoint. Real requests are well under 1 KiB; 4 KiB is generous.
+const maxUnsubBytes = 4 << 10
 
 // Store persists the suppression list.
 type Store interface {
@@ -65,6 +70,7 @@ func (s *Service) URL(baseURL, email string) string {
 // response is returned.
 func (s *Service) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxUnsubBytes)
 		email := r.FormValue("email")
 		sig := r.FormValue("sig")
 		if email == "" || sig == "" {
@@ -80,8 +86,9 @@ func (s *Service) Handler() http.Handler {
 			return
 		}
 		if r.Method == http.MethodGet {
-			w.Header().Set("Content-Type", "text/plain")
-			_, _ = fmt.Fprintf(w, "You have been unsubscribed from %s.", email)
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			_, _ = fmt.Fprintf(w, "You have been unsubscribed from %s.", html.EscapeString(email))
 			return
 		}
 		w.WriteHeader(http.StatusOK)

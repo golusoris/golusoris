@@ -15,7 +15,7 @@ func fakeOpenAI(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/embeddings") {
-			json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+			json.NewEncoder(w).Encode(map[string]any{
 				"data": []map[string]any{
 					{"embedding": []float32{0.1, 0.2, 0.3}},
 				},
@@ -32,7 +32,7 @@ func fakeOpenAI(t *testing.T) *httptest.Server {
 			_, _ = w.Write([]byte("data: [DONE]\n\n"))
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{ //nolint:errcheck
+		json.NewEncoder(w).Encode(map[string]any{
 			"model": "test-model",
 			"choices": []map[string]any{
 				{"message": map[string]string{"content": "pong"}},
@@ -45,6 +45,7 @@ func fakeOpenAI(t *testing.T) *httptest.Server {
 }
 
 func TestChat(t *testing.T) {
+	t.Parallel()
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
@@ -64,6 +65,7 @@ func TestChat(t *testing.T) {
 }
 
 func TestStream(t *testing.T) {
+	t.Parallel()
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
@@ -85,6 +87,7 @@ func TestStream(t *testing.T) {
 }
 
 func TestEmbed(t *testing.T) {
+	t.Parallel()
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
@@ -99,6 +102,7 @@ func TestEmbed(t *testing.T) {
 }
 
 func TestOptions(t *testing.T) {
+	t.Parallel()
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 

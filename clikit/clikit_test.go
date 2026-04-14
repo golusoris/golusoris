@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/golusoris/golusoris/clikit"
 	"github.com/spf13/cobra"
+
+	"github.com/golusoris/golusoris/clikit"
 )
 
 func TestRoot_execute_version(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	root := clikit.New("testapp", "test application")
 	root.AddCommand(
@@ -31,14 +33,15 @@ func TestRoot_execute_version(t *testing.T) {
 }
 
 func TestCommand_withFx_startError(t *testing.T) {
+	t.Parallel()
 	// fx.New with an option that provides a broken value causes app.Err() != nil.
 	// We verify the command returns that error cleanly.
 	type badDep struct{}
 	cmd := clikit.Command("bad", "triggers fx error",
 		clikit.WithFx(
-			// Provide two values of the same type → fx constructor conflict
-			// This is the simplest way to produce app.Err() without importing
-			// anything heavy.
+		// Provide two values of the same type → fx constructor conflict
+		// This is the simplest way to produce app.Err() without importing
+		// anything heavy.
 		),
 	)
 	cmd.SetArgs([]string{})

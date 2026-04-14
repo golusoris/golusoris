@@ -9,6 +9,7 @@ import (
 )
 
 func TestInitCmd_noArgs(t *testing.T) {
+	t.Parallel()
 	cmd := scaffold.InitCmd()
 	cmd.SetArgs([]string{})
 	// With no args, the RunE returns an error — cobra propagates it.
@@ -17,13 +18,9 @@ func TestInitCmd_noArgs(t *testing.T) {
 	}
 }
 
-func TestInitCmd_createsFiles(t *testing.T) {
+func TestInitCmd_createsFiles(t *testing.T) { //nolint:paralleltest // mutates global state
 	dir := t.TempDir()
-	origWD, _ := os.Getwd()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(origWD) })
+	t.Chdir(dir)
 
 	cmd := scaffold.InitCmd()
 	cmd.SetArgs([]string{"myapp", "--module", "github.com/example/myapp"})
@@ -39,6 +36,7 @@ func TestInitCmd_createsFiles(t *testing.T) {
 }
 
 func TestAddCmd_listModules(t *testing.T) {
+	t.Parallel()
 	cmd := scaffold.AddCmd()
 	cmd.SetArgs([]string{})
 	if err := cmd.Execute(); err != nil {
@@ -47,6 +45,7 @@ func TestAddCmd_listModules(t *testing.T) {
 }
 
 func TestAddCmd_knownModule(t *testing.T) {
+	t.Parallel()
 	cmd := scaffold.AddCmd()
 	cmd.SetArgs([]string{"db"})
 	if err := cmd.Execute(); err != nil {
@@ -55,6 +54,7 @@ func TestAddCmd_knownModule(t *testing.T) {
 }
 
 func TestAddCmd_unknownModule(t *testing.T) {
+	t.Parallel()
 	cmd := scaffold.AddCmd()
 	cmd.SetArgs([]string{"nonexistent-module-xyz"})
 	if err := cmd.Execute(); err == nil {
@@ -63,6 +63,7 @@ func TestAddCmd_unknownModule(t *testing.T) {
 }
 
 func TestBumpCmd_noArgs(t *testing.T) {
+	t.Parallel()
 	// bump with no version should not crash the command itself (it runs go get
 	// which may fail in test environment — that's fine; just verify it's wired).
 	cmd := scaffold.BumpCmd()

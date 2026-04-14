@@ -11,7 +11,7 @@ import (
 func Recover(logger *slog.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			defer func() {
+			defer func() { //nolint:contextcheck // r.Context() is captured from the request closure
 				if rec := recover(); rec != nil {
 					logger.ErrorContext(r.Context(), "httpx: panic recovered",
 						slog.Any("panic", rec),

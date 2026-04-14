@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ func githubSig(secret, body string) string {
 }
 
 func TestGitHub_valid(t *testing.T) {
+	t.Parallel()
 	const secret = "mysecret"
 	body := `{"action":"push"}`
 	handler := in.GitHub(secret)(okHandler())
@@ -44,6 +46,7 @@ func TestGitHub_valid(t *testing.T) {
 }
 
 func TestGitHub_invalid(t *testing.T) {
+	t.Parallel()
 	handler := in.GitHub("secret")(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("body"))
@@ -57,6 +60,7 @@ func TestGitHub_invalid(t *testing.T) {
 }
 
 func TestGitHub_missingHeader(t *testing.T) {
+	t.Parallel()
 	handler := in.GitHub("secret")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("body"))
 	rw := httptest.NewRecorder()
@@ -77,6 +81,7 @@ func stripeSig(secret, body string, ts int64) string {
 }
 
 func TestStripe_valid(t *testing.T) {
+	t.Parallel()
 	const secret = "whsec_test"
 	body := `{"type":"charge.succeeded"}`
 	ts := time.Now().Unix()
@@ -93,6 +98,7 @@ func TestStripe_valid(t *testing.T) {
 }
 
 func TestStripe_oldTimestamp(t *testing.T) {
+	t.Parallel()
 	const secret = "whsec_test"
 	body := `{}`
 	ts := time.Now().Add(-10 * time.Minute).Unix()
@@ -118,13 +124,14 @@ func slackSig(secret, body string, ts int64) string {
 }
 
 func TestSlack_valid(t *testing.T) {
+	t.Parallel()
 	const secret = "slack_secret"
 	body := `payload=test`
 	ts := time.Now().Unix()
 	handler := in.Slack(secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-	req.Header.Set("X-Slack-Request-Timestamp", fmt.Sprintf("%d", ts))
+	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("X-Slack-Signature", slackSig(secret, body, ts))
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
@@ -137,6 +144,7 @@ func TestSlack_valid(t *testing.T) {
 // --- Generic HMAC ---
 
 func TestHMAC_valid(t *testing.T) {
+	t.Parallel()
 	const secret = "genericsecret"
 	body := `{"event":"test"}`
 	h := hmac.New(sha256.New, []byte(secret))

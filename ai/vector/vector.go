@@ -88,7 +88,7 @@ func SimilaritySearch(ctx context.Context, pool *pgxpool.Pool, q SearchQuery) ([
 		args = append(args, q.FilterArgs...)
 	}
 
-	sql := fmt.Sprintf( //nolint:gosec // table/column names are caller-controlled, not user input
+	sql := fmt.Sprintf(
 		"SELECT %s FROM %s%s ORDER BY %s %s $1 LIMIT $2",
 		q.IDColumn, q.Table, where, q.VecColumn, string(q.Metric),
 	)
@@ -119,5 +119,8 @@ func RegisterTypes(ctx context.Context, pool *pgxpool.Pool) error {
 		return fmt.Errorf("vector: acquire conn: %w", err)
 	}
 	defer conn.Release()
-	return pgvecpgx.RegisterTypes(ctx, conn.Conn())
+	if err := pgvecpgx.RegisterTypes(ctx, conn.Conn()); err != nil {
+		return fmt.Errorf("vector: register types: %w", err)
+	}
+	return nil
 }

@@ -159,7 +159,7 @@ func GitHubLegacy(secret string) func(http.Handler) http.Handler {
 				reject(w, ErrInvalidSignature)
 				return
 			}
-			want := hmacRaw(sha1.New, []byte(secret), body) //nolint:gosec // SHA-1 per GitHub spec
+			want := hmacRaw(sha1.New, []byte(secret), body)
 			if !hmac.Equal(got, want) {
 				reject(w, ErrInvalidSignature)
 				return
@@ -251,7 +251,7 @@ func parseUnix(s string) (time.Time, error) {
 	var n int64
 	for _, c := range s {
 		if c < '0' || c > '9' {
-			return time.Time{}, fmt.Errorf("invalid unix timestamp")
+			return time.Time{}, errors.New("invalid unix timestamp")
 		}
 		n = n*10 + int64(c-'0')
 	}

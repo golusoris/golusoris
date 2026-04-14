@@ -12,6 +12,7 @@ package certmagic
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 
 	cm "github.com/caddyserver/certmagic"
@@ -31,7 +32,7 @@ type Options struct {
 // config error.
 func New(opts Options) (*tls.Config, error) {
 	if len(opts.Domains) == 0 {
-		return nil, fmt.Errorf("httpx/autotls/certmagic: Domains required")
+		return nil, errors.New("httpx/autotls/certmagic: Domains required")
 	}
 	if opts.Email != "" {
 		cm.DefaultACME.Email = opts.Email

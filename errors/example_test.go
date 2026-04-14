@@ -1,6 +1,7 @@
 package errors_test
 
 import (
+	stderrors "errors"
 	"fmt"
 
 	"github.com/golusoris/golusoris/errors"
@@ -16,7 +17,7 @@ func ExampleNew() {
 // ExampleWrap shows wrapping a lower-level error with a code + message. The
 // original error remains accessible via errors.Is / errors.As.
 func ExampleWrap() {
-	cause := fmt.Errorf("connection refused")
+	cause := stderrors.New("connection refused")
 	err := errors.Wrap(cause, errors.CodeUnavailable, "postgres unreachable")
 	fmt.Println(err.Status())
 	fmt.Println(errors.Is(err, cause))

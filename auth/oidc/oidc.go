@@ -19,6 +19,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -90,7 +91,7 @@ type Provider struct {
 
 func newProvider(opts Options, logger *slog.Logger) (*Provider, error) {
 	if opts.IssuerURL == "" || opts.ClientID == "" || opts.RedirectURL == "" {
-		return nil, fmt.Errorf("auth/oidc: issuer_url, client_id, and redirect_url are required")
+		return nil, errors.New("auth/oidc: issuer_url, client_id, and redirect_url are required")
 	}
 	ctx := context.Background()
 	prov, err := gooidc.NewProvider(ctx, opts.IssuerURL)
@@ -134,7 +135,7 @@ func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSe
 	}
 	rawID, ok := tok.Extra("id_token").(string)
 	if !ok {
-		return TokenSet{}, fmt.Errorf("auth/oidc: no id_token in response")
+		return TokenSet{}, errors.New("auth/oidc: no id_token in response")
 	}
 	if _, verifyErr := p.verifier.Verify(ctx, rawID); verifyErr != nil {
 		return TokenSet{}, fmt.Errorf("%w: auth/oidc: verify id_token: %w", gerr.Unauthorized("invalid id_token"), verifyErr)

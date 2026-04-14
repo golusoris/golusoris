@@ -135,7 +135,7 @@ func runWatchdog(ctx context.Context, clk clock.Clock, logger *slog.Logger) {
 	if interval <= 0 {
 		return
 	}
-	logger.Info("systemd: watchdog enabled", slog.Duration("interval", interval))
+	logger.InfoContext(ctx, "systemd: watchdog enabled", slog.Duration("interval", interval))
 	for {
 		select {
 		case <-ctx.Done():
@@ -145,7 +145,7 @@ func runWatchdog(ctx context.Context, clk clock.Clock, logger *slog.Logger) {
 				// Log at Warn; the next iteration retries. If systemd
 				// actually doesn't hear from us it'll kill the unit —
 				// that's the watchdog's job.
-				logger.Warn("systemd: watchdog pet failed", slog.String("error", err.Error()))
+				logger.WarnContext(ctx, "systemd: watchdog pet failed", slog.String("error", err.Error()))
 			}
 		}
 	}

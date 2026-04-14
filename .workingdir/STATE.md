@@ -100,6 +100,19 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Lint expansion** landed: golangci-lint v2 now enforces 30+ linters across the framework (forbidigo, gosec, contextcheck, wrapcheck, govet enable-all, recvcheck, unparam, usetesting, prealloc, musttag, sloglint, tagliatelle, revive, paralleltest, testifylint, depguard, gomodguard, perfsprint, importas, …). Backlog of 241 issues fixed to 0:
+  - clockwork.Clock injection added to `auth/lockout`, `auth/magiclink`, `idempotency` `MemoryStore`s (via `NewMemoryStoreWithClock`).
+  - `auth/passkeys.VerifyTOTP` split into `VerifyTOTP` (wall-clock, justified `//nolint:forbidigo`) + `VerifyTOTPAt(at time.Time)` for tests.
+  - `auth/oauth2server` + `notify/unsub` add `http.MaxBytesReader` form-body limits + XSS-escaped responses.
+  - `db/geo.Point` migrated to pointer receivers (recvcheck).
+  - `pubsub/kafka.NewRecord` no longer stamps timestamps (broker-assigned).
+  - `cmd/golusoris.bumpGolusoris` uses `exec.CommandContext` (noctx).
+  - sloglint *Context variants applied to `notify`, `db/pgx`, `outbox/drainer`, `realtime/sse`, `systemd`.
+  - tagliatelle path exclusions for RFC-mandated wire formats: SCIM 2.0 (camelCase), reCAPTCHA (kebab-case), OAuth `access_token` (gosec G117).
+  - musttag excluded for `_test.go` (ad-hoc fixtures don't need json tags).
+  - wrapcheck `extra-ignore-sigs` expanded with stdlib leaf returns we forward verbatim.
+  - New senders: `notify/discord` + `notify/slack` (raw HTTP webhook, no SDK).
+  - 0 lint · 0 govulncheck (3 transitive, unreachable) · race-green across `./...`.
 - 2026-04-14: **Step 9 cont. — auth completion** landed (10 packages, undeferred per user direction):
   - `auth/lockout/` — per-identity brute-force lockout with `Service.RegisterFail/Reset/IsLocked`. `Options{MaxFails, Window, Cooldown}`. Pluggable `Store`; `MemoryStore` uses clockwork.Clock. `errors.As` on missing-state lookup.
   - `auth/captcha/` — `Verifier` interface across Cloudflare Turnstile, hCaptcha, Google reCAPTCHA. Same wire shape (POST form `secret/response/remoteip` → JSON `{success}`) — code-share via `httpVerify`. Test uses `rewriteTransport` to point at `httptest.Server`.
