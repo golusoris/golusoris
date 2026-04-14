@@ -1,0 +1,19 @@
+---
+# Example AppStack claim — place this in the app's namespace.
+# The platform team's Composition translates it into cloud resources.
+apiVersion: platform.golusoris.io/v1alpha1
+kind: AppStack
+metadata:
+  name: my-app
+  namespace: my-app
+spec:
+  name: my-app
+  region: eu-central-1
+  environment: prod
+  database:
+    enabled: true
+    instanceClass: db.t3.medium
+    storageGB: 50
+  cache:
+    enabled: true
+    nodeType: cache.t3.small

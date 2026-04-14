@@ -1,0 +1,117 @@
+---
+# Crossplane Composition — wires XAppStack → RDS + ElastiCache (AWS provider).
+# Swap provider-aws with provider-gcp / provider-azure as needed.
+#
+# Requires crossplane-contrib/provider-aws >= v1.0.0
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: appstack-aws
+  labels:
+    provider: aws
+    environment: all
+spec:
+  compositeTypeRef:
+    apiVersion: platform.golusoris.io/v1alpha1
+    kind: XAppStack
+
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+
+          # ----------------------------------------------------------------
+          # RDS PostgreSQL instance
+          # ----------------------------------------------------------------
+          - name: rds-instance
+            base:
+              apiVersion: rds.aws.crossplane.io/v1alpha1
+              kind: DBInstance
+              spec:
+                forProvider:
+                  dbInstanceClass: db.t3.medium
+                  engine: postgres
+                  engineVersion: "16"
+                  masterUsername: appuser
+                  allocatedStorage: 20
+                  storageType: gp3
+                  multiAZ: false
+                  publiclyAccessible: false
+                  skipFinalSnapshot: true
+                  masterUserPasswordSecretRef:
+                    name: rds-master-password
+                    namespace: crossplane-system
+                    key: password
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-rds"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.database.instanceClass
+                toFieldPath: spec.forProvider.dbInstanceClass
+                policy:
+                  fromFieldPath: Optional
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.database.storageGB
+                toFieldPath: spec.forProvider.allocatedStorage
+                policy:
+                  fromFieldPath: Optional
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.endpoint.address
+                toFieldPath: status.dbEndpoint
+                policy:
+                  fromFieldPath: Optional
+
+          # ----------------------------------------------------------------
+          # ElastiCache Redis cluster (only when cache.enabled)
+          # ----------------------------------------------------------------
+          - name: elasticache-cluster
+            base:
+              apiVersion: elasticache.aws.crossplane.io/v1alpha1
+              kind: ReplicationGroup
+              spec:
+                forProvider:
+                  replicationGroupDescription: golusoris cache
+                  cacheNodeType: cache.t3.micro
+                  engineVersion: "7.0"
+                  numCacheClusters: 1
+                  automaticFailoverEnabled: false
+                writeConnectionSecretToRef:
+                  namespace: crossplane-system
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.name
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-cache"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.region
+                toFieldPath: spec.forProvider.region
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.cache.nodeType
+                toFieldPath: spec.forProvider.cacheNodeType
+                policy:
+                  fromFieldPath: Optional
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.configurationEndpoint.address
+                toFieldPath: status.cacheEndpoint
+                policy:
+                  fromFieldPath: Optional
