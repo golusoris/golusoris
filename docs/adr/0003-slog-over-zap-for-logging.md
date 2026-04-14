@@ -13,7 +13,7 @@ Logging is cross-cutting. Choices in the Go ecosystem:
 - **[uber-go/zap](https://github.com/uber-go/zap)** — fast, mature, the default for high-throughput services for ~5 years.
 - **[rs/zerolog](https://github.com/rs/zerolog)** — fastest in benchmarks, JSON-only, idiomatic chained API.
 
-The framework targets [PLAN.md §2.5](../../.workingdir/PLAN.md) compliance (NIS2 + GDPR audit trails) — logs need to be structured, redactable, and correlatable with OTel traces.
+The framework targets [principles.md §2.5](../principles.md) compliance (NIS2 + GDPR audit trails) — logs need to be structured, redactable, and correlatable with OTel traces.
 
 ## Decision
 
@@ -30,7 +30,7 @@ We will use stdlib `log/slog` as the canonical logger. The framework's `log/` pa
 ## Consequences
 
 - **Positive**: Apps depend only on `log/slog` from stdlib — no version coupling to a third-party logger. The slog→OTel bridge means one log call goes to both stderr and the OTel collector. Easier for apps to extend (custom `slog.Handler`).
-- **Negative**: slog is younger; some niche features (sampling, hot-reload of log level) require custom handlers. Allocation is slightly higher than zerolog under load (acceptable for our perf envelope per [PLAN.md §2.1](../../.workingdir/PLAN.md) rule 3 — soft).
+- **Negative**: slog is younger; some niche features (sampling, hot-reload of log level) require custom handlers. Allocation is slightly higher than zerolog under load (acceptable for our perf envelope per [principles.md §2.1](../principles.md) rule 3 — soft).
 - **Follow-ups**: Apps that need <100ns/log allocs can wrap slog with their own zerolog handler — documented escape hatch.
 
 ## References

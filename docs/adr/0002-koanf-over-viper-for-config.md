@@ -12,7 +12,7 @@ Apps need layered config: defaults → file (yaml/toml/json) → env vars → fl
 - **[spf13/viper](https://github.com/spf13/viper)** — the long-standing default. Heavy, monolithic, opinionated, transitive deps include 20+ packages.
 - **[knadh/koanf](https://github.com/knadh/koanf)** — modular: each provider (env, file, vault, …) is a sub-package, only what you import is compiled in.
 
-The framework's [PLAN.md §2.1](../../.workingdir/PLAN.md) requires lean dependency surface (rule 9 spirit — minimise pointer chains and transitive surface).
+The framework's [principles.md §2.1](../principles.md) requires lean dependency surface (rule 9 spirit — minimise pointer chains and transitive surface).
 
 ## Decision
 
@@ -35,4 +35,3 @@ We will use `github.com/knadh/koanf/v2` as the configuration loader, with the en
 ## References
 
 - koanf pinned at v2.3.4 — see [`docs/upstream/koanf/`](../upstream/koanf/).
-- See [STATE.md decision: koanf env transform](../../.workingdir/STATE.md) — Step 3 single-underscore nesting workaround.

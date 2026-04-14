@@ -12,7 +12,7 @@ Every framework module (config, log, db, http, jobs, …) needs to be composable
 - **[google/wire](https://github.com/google/wire)** — compile-time code generation. Static, fast, no runtime overhead.
 - **[uber-go/fx](https://github.com/uber-go/fx)** — runtime DI with explicit lifecycle (`OnStart` / `OnStop`) hooks.
 
-The framework also needs ordered startup/shutdown (DB before HTTP, OTel before everything emitting telemetry, leader election before the outbox drainer). Per [PLAN.md §2.1](../../.workingdir/PLAN.md), no `init()` side effects are allowed — all wiring must be explicit.
+The framework also needs ordered startup/shutdown (DB before HTTP, OTel before everything emitting telemetry, leader election before the outbox drainer). Per [principles.md §2.1](../principles.md), no `init()` side effects are allowed — all wiring must be explicit.
 
 ## Decision
 
@@ -35,4 +35,4 @@ We will use `go.uber.org/fx` as the dependency-injection and lifecycle backbone 
 ## References
 
 - fx pinned at v1.24.0 — see [`docs/upstream/fx/`](../upstream/fx/).
-- [PLAN.md §2.1](../../.workingdir/PLAN.md) — Power of 10 rule on no `init()` side effects.
+- [principles.md §2.1](../principles.md) — Power of 10 rule on no `init()` side effects.

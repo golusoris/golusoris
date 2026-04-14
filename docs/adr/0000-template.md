@@ -7,7 +7,7 @@
 
 ## Context
 
-What problem are we solving? What forces are at play (technical, organizational, regulatory)? Cite constraints from [PLAN.md §2](../../.workingdir/PLAN.md) (Power of 10, SEI CERT, SLSA, etc.) where relevant.
+What problem are we solving? What forces are at play (technical, organizational, regulatory)? Cite constraints from [principles.md §2](../principles.md) (Power of 10, SEI CERT, SLSA, etc.) where relevant.
 
 Keep it short. One or two paragraphs. The reader should understand *why a decision was needed*, not the full history.
 

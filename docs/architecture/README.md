@@ -6,7 +6,7 @@
 
 - **Four levels** (Context → Container → Component → Code) matches how engineers actually think about systems — zoom in only where you need detail.
 - **Plain text source** (PlantUML) means diff-friendly, code-review-friendly, no proprietary editor lock-in.
-- **Adopted in [PLAN.md §2.4](../../.workingdir/PLAN.md)** alongside ADRs as the architecture-documentation standard.
+- **Adopted in [principles.md §2.4](../principles.md)** alongside ADRs as the architecture-documentation standard.
 
 ## Levels we maintain
 

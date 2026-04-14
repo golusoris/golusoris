@@ -7,7 +7,7 @@
 
 ## Context
 
-Several framework features must run on exactly one replica at a time: outbox drainer, cron scheduler, periodic cache refresh. Original implementation (`k8s/leader/`) bound the framework to Kubernetes' Lease resource — fine for k8s but blocks every non-k8s deployment target listed in [PLAN.md §2.9](../../.workingdir/PLAN.md): Docker Compose, Swarm, Nomad, systemd, bare Linux.
+Several framework features must run on exactly one replica at a time: outbox drainer, cron scheduler, periodic cache refresh. Original implementation (`k8s/leader/`) bound the framework to Kubernetes' Lease resource — fine for k8s but blocks every non-k8s deployment target listed in [principles.md §2.9](../principles.md): Docker Compose, Swarm, Nomad, systemd, bare Linux.
 
 Two viable backends emerged:
 
@@ -42,4 +42,3 @@ Both backends share a `leader.Callbacks` struct (`OnNewLeader`, `OnStartedLeadin
 
 - [`leader/pg/pg.go`](../../leader/pg/pg.go) — pg backend.
 - [`leader/k8s/`](../../leader/k8s/) — k8s backend.
-- See [STATE.md Step 6.5](../../.workingdir/STATE.md) — refactor log.

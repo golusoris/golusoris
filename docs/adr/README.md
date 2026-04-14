@@ -28,7 +28,7 @@ This directory captures every architectural decision worth preserving — pinned
 
 ## Backfill policy
 
-ADRs ≤ ADR-0099 are *backfills* — decisions made before the ADR practice was formalised, captured retroactively from commit history and [.workingdir/STATE.md](../../.workingdir/STATE.md). Status reflects the current code, not the original decision date.
+ADRs ≤ ADR-0099 are *backfills* — decisions made before the ADR practice was formalised, captured retroactively from commit history. Status reflects the current code, not the original decision date.
 
 New decisions start at ADR-0100.
 

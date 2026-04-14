@@ -12,7 +12,7 @@ The framework targets API-first development: write `openapi.yaml`, generate type
 - **[ogen-go/ogen](https://github.com/ogen-go/ogen)** — code-generated, typed-everything, zero-reflection, OpenAPI 3.1 native.
 - **[deepmap/oapi-codegen](https://github.com/oapi-codegen/oapi-codegen)** — older, more popular, supports many server adapters (chi, gin, echo, …), but uses `interface{}` in places.
 
-Per [PLAN.md §2.6](../../.workingdir/PLAN.md), OpenAPI 3.1 + JSON Schema 2020-12 are pinned standards.
+Per [principles.md §2.6](../principles.md), OpenAPI 3.1 + JSON Schema 2020-12 are pinned standards.
 
 ## Decision
 
@@ -28,7 +28,7 @@ We will use `github.com/ogen-go/ogen` for generating server stubs, request/respo
 
 ## Consequences
 
-- **Positive**: Generated code is fully typed including `oneOf`/`anyOf`/`allOf` discriminators. ogen's reflectionless decoder is fast and amenable to fuzzing per [PLAN.md §2.8](../../.workingdir/PLAN.md). RFC 9457 Problem Details body emitted by `ogenkit.ErrorHandler` (see [ADR-0007](0007-rfc-9457-problem-details.md)).
+- **Positive**: Generated code is fully typed including `oneOf`/`anyOf`/`allOf` discriminators. ogen's reflectionless decoder is fast and amenable to fuzzing per [principles.md §2.8](../principles.md). RFC 9457 Problem Details body emitted by `ogenkit.ErrorHandler` (see [ADR-0007](0007-rfc-9457-problem-details.md)).
 - **Negative**: Smaller community than oapi-codegen — fewer Stack Overflow answers. ogen lags slightly on newer 3.1 features (e.g. webhook syntax). Codegen takes ~3-5s on large specs.
 - **Follow-ups**: `apidocs/` ships Scalar UI + MCP JSON-RPC for the same `openapi.yaml`, keeping spec → docs → tools in sync.
 

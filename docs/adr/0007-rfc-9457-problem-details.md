@@ -13,7 +13,7 @@ HTTP error bodies in Go services typically take one of three shapes:
 2. Ad-hoc JSON: `{"code": "VALIDATION_ERROR", "message": "..."}`.
 3. [RFC 9457 Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457): `application/problem+json` with `type`, `title`, `status`, `detail`, `instance`, plus extension fields.
 
-Apps in [PLAN.md §2.5](../../.workingdir/PLAN.md) compliance scope (NIS2, GDPR, BSI C5) are increasingly required to emit machine-readable error envelopes for incident analysis and audit logs. Custom envelopes mean every client (web, mobile, partner, internal) must implement parsing per-app.
+Apps in [principles.md §2.5](../principles.md) compliance scope (NIS2, GDPR, BSI C5) are increasingly required to emit machine-readable error envelopes for incident analysis and audit logs. Custom envelopes mean every client (web, mobile, partner, internal) must implement parsing per-app.
 
 ## Decision
 
@@ -39,4 +39,4 @@ The framework's `errors/` package maps `gerr.Code` → `(status, type-URI, title
 
 - [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) — Problem Details for HTTP APIs (supersedes RFC 7807).
 - `ogenkit.ErrorHandler` — implementation.
-- [PLAN.md §2.6](../../.workingdir/PLAN.md) — adopted wire-protocol standards.
+- [principles.md §2.6](../principles.md) — adopted wire-protocol standards.
