@@ -302,7 +302,20 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 
 | Path | Purpose | Key dep |
 |---|---|---|
-| `notify/` | unified Notifier: SMTP, Resend, Postmark, SES, Discord, Slack, webhook, web-push | wneessen/go-mail + provider SDKs |
+| `notify/` | unified `Sender` iface + Notifier (first-success / Multi fan-out) | wneessen/go-mail (SMTP) |
+| `notify/discord/` | Discord incoming-webhook sender | raw HTTP (no SDK) |
+| `notify/slack/` | Slack incoming-webhook sender (mrkdwn) | raw HTTP (no SDK) |
+| `notify/resend/` | Resend transactional email sender | resend/resend-go/v2 |
+| `notify/postmark/` | Postmark transactional email sender | mrz1836/postmark |
+| `notify/sendgrid/` | SendGrid transactional email sender | sendgrid/sendgrid-go |
+| `notify/mailgun/` | Mailgun transactional email sender | mailgun/mailgun-go/v4 |
+| `notify/ses/` | AWS SES sender (also exposes inbound webhook helpers) | aws/aws-sdk-go-v2 |
+| `notify/twilio/` | Twilio SMS / WhatsApp sender | twilio/twilio-go |
+| `notify/fcm/` | Firebase Cloud Messaging push sender | firebase.google.com/go/v4 |
+| `notify/apns2/` | Apple Push Notification service sender | sideshow/apns2 |
+| `notify/webpush/` | RFC 8030 Web Push (browser) sender | SherClockHolmes/webpush-go |
+| `notify/telegram/` | Telegram bot sender | tucnak/telebot/v3 |
+| `notify/teams/` | Microsoft Teams Adaptive Card sender | atc0005/go-teams-notify/v2 |
 | `notify/inbound/` | inbound email parsing (SES inbound, Postmark, SMTP) | custom |
 | `notify/tracking/` | open/click tracking pixels + redirect | custom |
 | `notify/unsub/` | RFC 8058 one-click unsubscribe + suppression list | custom |
@@ -394,6 +407,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `pubsub/kafka/` | Kafka/JetStream streaming | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `outbox/cdc/` | CDC drain of outbox to Kafka/NATS/webhooks | custom |
+| `db/cdc/` | logical replication consumer (wal2json/pgoutput) for CDC into Kafka/NATS | jackc/pglogrepl |
 | `ebpf/` | cilium/ebpf wrapper for apps loading custom eBPF programs | cilium/ebpf |
 | `net/dnsserver/` | authoritative + recursive DNS server | miekg/dns |
 | `net/smtpserver/` | SMTP server (inbound email beyond parsing) | emersion/go-smtp |
@@ -690,6 +704,8 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 **AI layer**: AGENTS.md + CLAUDE.md (root + per-pkg) + .claude/skills/ + .claude/hooks/ + docs/upstream/ cache + docs/migrations/ + `golusoris-mcp` MCP server + Scalar-from-OpenAPI MCP per app.
 
 **Plan persistence**: `.workingdir/PLAN.md` (this file).
+
+**Round-12 picks (Step 10 expansion)**: notify providers broken into per-provider subpackages — Resend (resend-go/v2), Postmark (mrz1836/postmark), SendGrid (sendgrid-go), Mailgun (mailgun-go/v4), AWS SES (aws-sdk-go-v2), Twilio (twilio-go), FCM (firebase.google.com/go/v4), APNs (sideshow/apns2), Web Push (SherClockHolmes/webpush-go), Telegram (tucnak/telebot/v3), Teams (atc0005/go-teams-notify/v2). All implement the same `notify.Sender` iface so the unified `Notifier` (first-success / Multi fan-out) keeps a stable contract across channels. Discord + Slack stay raw-HTTP (no SDK). New `db/cdc/` for logical replication (jackc/pglogrepl) feeds Kafka/NATS — complements `outbox/cdc/`. ConnectRPC (connectrpc/connect-go) + gqlgen already noted in §4.16; storage (gocloud.dev/blob, minio, tusd) and docs (pdfcpu, excelize, unioffice) already listed in §4.12 / §4.16.
 
 ---
 
