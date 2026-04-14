@@ -242,7 +242,7 @@ func (b *Backend) do(ctx context.Context, method, path string, body, dst any) er
 }
 
 func (b *Backend) exec(req *http.Request, dst any) error {
-	resp, err := b.hc.Do(req) //nolint:gosec // G107 SSRF: URL built from caller-supplied collection; caller owns input trust
+	resp, err := b.hc.Do(req) //nolint:gosec // G107 SSRF: URL built from caller-supplied collection; caller owns input trust // #nosec G704
 	if err != nil {
 		return fmt.Errorf("search/typesense: request: %w", err)
 	}

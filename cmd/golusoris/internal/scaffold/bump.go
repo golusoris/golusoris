@@ -32,7 +32,7 @@ func bumpGolusoris(cmd *cobra.Command, version string) error {
 	target := pkg + "@" + version
 
 	fmt.Printf("Running: go get %s\n", target)
-	c := exec.CommandContext(ctx, "go", "get", target) //nolint:gosec // G204: version string comes from CLI arg, not user input
+	c := exec.CommandContext(ctx, "go", "get", target) //nolint:gosec // G204: version string comes from CLI arg, not user input // #nosec G204
 	c.Stdout = nil
 	out, err := c.CombinedOutput()
 	if err != nil {

@@ -129,7 +129,7 @@ func (m *Manager) Save(w http.ResponseWriter, s *Session) error {
 	if err := m.store.Save(context.Background(), s.ID, s.data, m.opts.TTL); err != nil {
 		return fmt.Errorf("session: save: %w", err)
 	}
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
 		Name:     m.opts.CookieName,
 		Value:    s.ID,
 		Path:     m.opts.Path,
@@ -150,7 +150,7 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 	if delErr := m.store.Delete(context.Background(), cookie.Value); delErr != nil && !isNotFound(delErr) {
 		return fmt.Errorf("session: destroy: %w", delErr)
 	}
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
 		Name:     m.opts.CookieName,
 		Value:    "",
 		Path:     m.opts.Path,

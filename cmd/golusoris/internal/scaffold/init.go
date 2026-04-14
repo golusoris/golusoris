@@ -72,7 +72,7 @@ func writeTemplate(path, tmplStr string, data any) error {
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
-	f, err := os.Create(path) //nolint:gosec // G304: scaffold output path is operator-specified
+	f, err := os.Create(path) //nolint:gosec // G304: scaffold output path is operator-specified // #nosec G304
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}

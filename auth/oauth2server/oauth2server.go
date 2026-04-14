@@ -261,7 +261,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(resp) //nolint:gosec // G117: access_token is intentionally marshaled in OAuth response body
+	_ = json.NewEncoder(w).Encode(resp) //nolint:gosec // G117: access_token is intentionally marshaled in OAuth response body // #nosec G117
 }
 
 type tokenResponse struct {

@@ -12,7 +12,7 @@
 package hash
 
 import (
-	"crypto/sha1" //nolint:gosec // SHA-1 for ETag compatibility only
+	"crypto/sha1" //nolint:gosec // SHA-1 for ETag compatibility only // #nosec G505
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -37,7 +37,7 @@ func SHA256Reader(r io.Reader) (string, error) {
 
 // SHA256File opens path and returns its hex-encoded SHA-256 digest.
 func SHA256File(path string) (string, error) {
-	f, err := os.Open(path) //nolint:gosec // G304: path validated by caller
+	f, err := os.Open(path) //nolint:gosec // G304: path validated by caller // #nosec G304
 	if err != nil {
 		return "", fmt.Errorf("hash: open %s: %w", path, err)
 	}
@@ -77,7 +77,7 @@ func XX64Reader(r io.Reader) (string, error) {
 // ETag computes an HTTP ETag value for data using SHA-1 (RFC 7232 §2.3).
 // The returned string includes the enclosing double-quotes.
 func ETag(data []byte) string {
-	h := sha1.New() //nolint:gosec // SHA-1 for ETag, not security-critical
+	h := sha1.New() //nolint:gosec // SHA-1 for ETag, not security-critical // #nosec G401
 	h.Write(data)
 	return `"` + hex.EncodeToString(h.Sum(nil)) + `"`
 }

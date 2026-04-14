@@ -43,7 +43,7 @@ func Run(ctx context.Context, t *testing.T, pkg string) Report {
 		t.Skip("go-mutesting not found in PATH; " +
 			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
 	}
-	cmd := exec.CommandContext(ctx, binPath, pkg) //nolint:gosec // G204: pkg is a package path from trusted test code
+	cmd := exec.CommandContext(ctx, binPath, pkg) //nolint:gosec // G204: pkg is a package path from trusted test code // #nosec G204
 	out, _ := cmd.CombinedOutput()                // non-zero exit expected when mutants survive
 	t.Logf("go-mutesting output:\n%s", out)
 	return parseReport(string(out))
@@ -59,7 +59,7 @@ func RunFiles(ctx context.Context, t *testing.T, files ...string) Report {
 			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
 	}
 	args := append([]string{"--"}, files...)          //nolint:gocritic // appendAssign: not a bug; files not reused
-	cmd := exec.CommandContext(ctx, binPath, args...) //nolint:gosec // G204: files are from trusted test code
+	cmd := exec.CommandContext(ctx, binPath, args...) //nolint:gosec // G204: files are from trusted test code // #nosec G204
 	out, _ := cmd.CombinedOutput()
 	t.Logf("go-mutesting output:\n%s", out)
 	return parseReport(string(out))

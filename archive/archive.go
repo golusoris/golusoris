@@ -49,13 +49,13 @@ func Extract(ctx context.Context, src, destDir string) error {
 			return os.MkdirAll(dest, 0o750)
 		}
 
-		f, openErr := fsys.Open(path) //nolint:gosec // G304: archive extraction path validated by caller
+		f, openErr := fsys.Open(path) //nolint:gosec // G304: archive extraction path validated by caller // #nosec G304
 		if openErr != nil {
 			return fmt.Errorf("archive: open entry %s: %w", path, openErr)
 		}
 		defer f.Close() //nolint:errcheck
 
-		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640) //nolint:gosec // G304: archive extraction path validated by caller
+		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640) //nolint:gosec // G304: archive extraction path validated by caller // #nosec G304,G302
 		if createErr != nil {
 			return fmt.Errorf("archive: create %s: %w", dest, createErr)
 		}
@@ -76,7 +76,7 @@ func Create(ctx context.Context, dest string, srcs []string) error {
 		return fmt.Errorf("archive: collect files: %w", err)
 	}
 
-	out, err := os.Create(dest)
+	out, err := os.Create(dest) // #nosec G304 -- archive path validated by Sanitize above
 	if err != nil {
 		return fmt.Errorf("archive: create %s: %w", dest, err)
 	}

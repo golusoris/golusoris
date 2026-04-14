@@ -61,7 +61,7 @@ func (f fileStore) Get(_ context.Context, key string) (string, error) {
 		return "", fmt.Errorf("secrets: key %q must not contain path separators", key)
 	}
 	path := filepath.Join(f.dir, key)
-	data, err := os.ReadFile(path) //nolint:gosec // G304: secret file path is operator-controlled config
+	data, err := os.ReadFile(path) //nolint:gosec // G304: secret file path is operator-controlled config // #nosec G304
 	if os.IsNotExist(err) {
 		return "", ErrNotFound{Key: key}
 	}

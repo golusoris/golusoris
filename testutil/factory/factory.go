@@ -29,7 +29,7 @@ func New(t *testing.T) *Faker {
 	t.Helper()
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(t.Name()))
-	return gofakeit.New(int64(h.Sum64())) //nolint:gosec // G115: uint64→int64 conversion safe for test seed; overflow is benign
+	return gofakeit.New(int64(h.Sum64())) //nolint:gosec // G115: uint64→int64 conversion safe for test seed; overflow is benign // #nosec G115
 }
 
 // Random returns a Faker with a random seed.
