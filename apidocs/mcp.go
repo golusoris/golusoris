@@ -7,7 +7,15 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 )
+
+// toolPathRE bounds the set of characters that can appear in a tool-call
+// path. buildCall url.PathEscape's every user-supplied arg, so any char
+// outside this set is a bug upstream — fail closed rather than forward
+// the request. This is the static sanitizer CodeQL's request-forgery
+// query recognizes for the s.opts.HTTPClient.Do(...) sink below.
+var toolPathRE = regexp.MustCompile(`^/[A-Za-z0-9/_.~\-%?&=+]*$`)
 
 // MCP JSON-RPC 2.0 surface. Implements the server side of the "streamable
 // HTTP" transport in its stateless form: each POST is an independent
@@ -172,11 +180,15 @@ func (s *mcpServer) handleToolsCall(r *http.Request, w http.ResponseWriter, req 
 		writeRPCError(w, req.ID, errInvalidParams, err.Error())
 		return
 	}
-	// Resolve the (possibly arg-substituted) path against the configured
-	// BaseURL and verify the result stays within the same scheme+host.
-	// url.PathEscape in buildCall already percent-encodes `/`, but we still
-	// pin the authority here so CodeQL's taint tracker is satisfied and a
-	// future change to buildCall can't silently enable SSRF.
+	// Two layers of sanitization on the constructed path+URL:
+	//   1) toolPathRE rejects anything outside a tight URL-safe charset —
+	//      user args are url.PathEscape'd in buildCall so malformed input
+	//      indicates a bug, not a benign edge case.
+	//   2) safeResolveURL pins the result's scheme+host to s.opts.BaseURL.
+	if !toolPathRE.MatchString(path) {
+		writeRPCError(w, req.ID, errInvalidParams, "apidocs: tool path contains disallowed characters")
+		return
+	}
 	callURL, err := safeResolveURL(s.opts.BaseURL, path)
 	if err != nil {
 		writeRPCError(w, req.ID, errInvalidParams, err.Error())
