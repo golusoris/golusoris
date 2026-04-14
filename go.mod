@@ -5,6 +5,7 @@ go 1.26.2
 require (
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
+	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/benbjohnson/hashfs v0.2.2
 	github.com/brianvoe/gofakeit/v6 v6.28.0

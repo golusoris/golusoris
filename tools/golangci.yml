@@ -265,6 +265,10 @@ linters:
       - path: notify/postmark/
         linters:
           - tagliatelle
+      # Teams MessageCard wire format uses @context/@type/themeColor by spec.
+      - path: notify/teams/
+        linters:
+          - tagliatelle
       # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
       - path: auth/oauth2server/
         linters:

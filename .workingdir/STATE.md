@@ -100,6 +100,15 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 10b — notify providers (mailgun + sendgrid + telegram + teams + twilio + webpush)** landed:
+  - `notify/mailgun/` — form-encoded POST to `api.mailgun.net/v3/{domain}/messages` with basic auth `api:<key>`. Metadata → `v:<key>` user-variables. EU region via `Endpoint: mailgun.EURegionEndpoint`.
+  - `notify/sendgrid/` — JSON POST to `api.sendgrid.com/v3/mail/send` with Bearer token. Single personalization bundle (To/CC/BCC), `Content` emitted text/plain before text/html per spec, `Metadata` → `custom_args`.
+  - `notify/telegram/` — JSON POST to `api.telegram.org/bot{token}/sendMessage`. Chat resolution: `msg.To[0]` overrides `Options.ChatID`. `ParseModeNone/HTML/MarkdownV2` constants.
+  - `notify/teams/` — MessageCard JSON POST to Teams incoming webhook (legacy connector or Power Automate Workflow URL). `@context/@type/themeColor` wire fields — added `notify/teams/` to tagliatelle path exclusion.
+  - `notify/twilio/` — form-encoded POST per recipient to `api.twilio.com/2010-04-01/Accounts/{SID}/Messages.json` with basic auth `{SID}:{token}`. Mutually exclusive `From` vs `MessagingServiceSID` validated at construction.
+  - `notify/webpush/` — Web Push Protocol (RFC 8030 + VAPID RFC 8292) via `SherClockHolmes/webpush-go` v1.4.0 (lightweight, only `x/crypto` transitive). Helpers: `NewVAPIDKeys()`, `EncodeSubscription()`. Subscription JSON carried via `msg.Metadata["subscription"]`.
+  - Deferred (separate commit): `notify/fcm/` (Google OAuth2 JWT flow), `notify/apns2/` (Apple ES256 JWT or TLS client cert), `notify/ses/` (AWS SigV4).
+  - 0 lint · race-green across `./notify/...` (10 packages).
 - 2026-04-14: **Step 10a — notify providers (Resend + Postmark)** landed:
   - `notify/resend/` — raw-HTTP sender (no SDK). POSTs JSON to
     `api.resend.com/emails` with `Authorization: Bearer <key>`.
