@@ -84,7 +84,9 @@ func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 		m.AddAlternativeString(mail.TypeTextPlain, msg.Text)
 	}
 	for _, a := range msg.Attachments {
-		m.AttachReader(a.Name, bytes.NewReader(a.Data), mail.WithFileEncoding(mail.EncodingB64))
+		if err := m.AttachReader(a.Name, bytes.NewReader(a.Data), mail.WithFileEncoding(mail.EncodingB64)); err != nil {
+			return fmt.Errorf("notify/smtp: attach %q: %w", a.Name, err)
+		}
 	}
 	if err := s.client.DialAndSend(m); err != nil {
 		return fmt.Errorf("notify/smtp: send: %w", err)

@@ -11,7 +11,7 @@ import (
 // becomes "db.host" with the default delimiter.
 func ExampleNew() {
 	_ = os.Setenv("APP_DB_HOST", "primary.local")
-	defer os.Unsetenv("APP_DB_HOST")
+	defer func() { _ = os.Unsetenv("APP_DB_HOST") }()
 
 	c, err := config.New(config.Options{EnvPrefix: "APP_"})
 	if err != nil {

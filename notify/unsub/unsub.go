@@ -81,7 +81,7 @@ func (s *Service) Handler() http.Handler {
 		}
 		if r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "text/plain")
-			fmt.Fprintf(w, "You have been unsubscribed from %s.", email)
+			_, _ = fmt.Fprintf(w, "You have been unsubscribed from %s.", email)
 			return
 		}
 		w.WriteHeader(http.StatusOK)

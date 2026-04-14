@@ -100,6 +100,19 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 9 cont. — auth completion** landed (10 packages, undeferred per user direction):
+  - `auth/lockout/` — per-identity brute-force lockout with `Service.RegisterFail/Reset/IsLocked`. `Options{MaxFails, Window, Cooldown}`. Pluggable `Store`; `MemoryStore` uses clockwork.Clock. `errors.As` on missing-state lookup.
+  - `auth/captcha/` — `Verifier` interface across Cloudflare Turnstile, hCaptcha, Google reCAPTCHA. Same wire shape (POST form `secret/response/remoteip` → JSON `{success}`) — code-share via `httpVerify`. Test uses `rewriteTransport` to point at `httptest.Server`.
+  - `auth/policy/` — password policy: zxcvbn score (nbutton23/zxcvbn-go) + HIBP k-anonymity check (5-char SHA1 prefix). `gerr.Validation` for failures. `//nolint:gosec` justification on SHA1 (HIBP API contract).
+  - `auth/recovery/` — single-use recovery codes + reset tokens. `Service.IssueCodes/VerifyCode/IssueResetToken/VerifyResetToken`. HMAC-SHA256 hashing; raw revealed only at issuance. `subtle.ConstantTimeCompare`.
+  - `auth/magiclink/` — passwordless email links. `Link{Email, Hash, ExpiresAt, UsedAt}`. Default TTL 15min. `MemoryStore`.
+  - `auth/linking/` — multi-IdP identity linking. `Identity{Provider, Subject, UserID, Email}`. Conflict error when (provider,subject) already bound to a different user. Store keyed by `provider+"|"+subject`.
+  - `auth/impersonate/` — admin-as-user with banner. `X-Impersonating` header, `?exit_impersonation=1` revert, `Principal{Current, Original}` on context. `Begin` rejects nesting (`gerr.Forbidden`). `OnImpersonate/OnExit` audit hooks.
+  - `auth/passkeys/` — WebAuthn (go-webauthn/webauthn) + TOTP (pquerna/otp). `BeginRegistration/FinishRegistration/BeginLogin/FinishLogin/ProvisionTOTP/VerifyTOTP`. Default TOTP: SHA1, 30s, 6 digits, ±1 period skew.
+  - `auth/oauth2server/` — minimal OAuth 2.1 issuer, authorization-code+PKCE only (S256/plain). `Server.Routes()` exposes `/authorize` + `/token`. Issues JWT access tokens via `*jwt.Signer`. Codes single-use, 60s TTL. `MemoryClientStore`+`MemoryCodeStore`. **Decision:** wrote ~350 LOC from scratch instead of pulling `ory/fosite` (heavy transitive deps: jaeger, zipkin, ini, otlptrace exporters).
+  - `auth/scim/` — SCIM 2.0 (RFC 7643/7644) `/Users` `/Groups` CRUD. Schema URIs `urn:ietf:params:scim:schemas:core:2.0:{User,Group}`. PATCH not implemented (PUT replaces). Pluggable `Store`; `ErrNotFound`→404.
+  - All packages: `AGENTS.md` + table-driven tests with `stretchr/testify/require`. `go test -race` green.
+  - Drive-by: fixed pre-existing errcheck issues in `config/example_test.go`, `httpx/client/client_test.go`, `notify/smtp.go`, `notify/unsub/unsub.go`. Repo lint: 0 issues across `./...`.
 - 2026-04-13: initial scaffold pushed, CI green, branch protection applied, apps moved to `golusoris/app-*`, Ko-fi button added to framework README + org profile.
 - Go toolchain bumped to 1.26.2 across go.mod + CI.
 - Specialty modules (web3, gonum, ebiten, GPIO, gopter, pact, DOCX, SMTP server, DNS server, etc.) pulled from "out of scope" into §4.16 / §4.16b of PLAN.md. Heavy/CGO ones will live as in-repo sub-modules with their own go.mod.

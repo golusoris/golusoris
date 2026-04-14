@@ -48,8 +48,10 @@ golusoris/
 ├── outbox/                                                            # tx outbox    [landed]
 ├── cache/                                                             # caching      [landed]
 │   ├── memory/  redis/  singleflight/
-├── auth/                                                              # auth         [partial: jwt/apikey/oidc/session landed]
+├── auth/                                                              # auth         [landed]
 │   ├── jwt/  apikey/  oidc/  session/
+│   ├── lockout/  captcha/  policy/  recovery/  magiclink/
+│   ├── linking/  impersonate/  passkeys/  oauth2server/  scim/
 ├── authz/                                                             # authorization [landed]
 ├── notify/                                                            # notifications [partial: smtp/unsub landed]
 │   └── unsub/
