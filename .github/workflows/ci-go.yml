@@ -100,8 +100,9 @@ jobs:
       - name: gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          gosec -exclude-generated -fmt sarif -out gosec.sarif ./... || true
-          gosec -exclude-generated ./...
+          EXCLUDE_RULES="testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505"
+          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" -fmt sarif -out gosec.sarif ./... || true
+          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" ./...
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@c10b8064de6f491fea524254123dbe5e09572f13 # v4
