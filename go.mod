@@ -96,7 +96,7 @@ require (
 	go.temporal.io/sdk v1.42.0
 	go.uber.org/fx v1.24.0
 	golang.org/x/crypto v0.50.0
-	golang.org/x/net v0.52.0
+	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/text v0.36.0
