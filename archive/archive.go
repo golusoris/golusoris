@@ -59,10 +59,15 @@ func Extract(ctx context.Context, src, destDir string) error {
 		if createErr != nil {
 			return fmt.Errorf("archive: create %s: %w", dest, createErr)
 		}
-		defer out.Close() //nolint:errcheck
 
 		if _, copyErr := io.Copy(out, f); copyErr != nil {
+			_ = out.Close()
 			return fmt.Errorf("archive: extract %s: %w", path, copyErr)
+		}
+		// Check Close error on write path: kernel may buffer writes and a
+		// flush failure would silently truncate the extracted file otherwise.
+		if closeErr := out.Close(); closeErr != nil {
+			return fmt.Errorf("archive: close %s: %w", dest, closeErr)
 		}
 		return nil
 	})

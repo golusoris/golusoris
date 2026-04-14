@@ -2,9 +2,11 @@ package apidocs
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 // MCP JSON-RPC 2.0 surface. Implements the server side of the "streamable
@@ -170,7 +172,17 @@ func (s *mcpServer) handleToolsCall(r *http.Request, w http.ResponseWriter, req 
 		writeRPCError(w, req.ID, errInvalidParams, err.Error())
 		return
 	}
-	httpReq, err := http.NewRequestWithContext(r.Context(), tool.method, s.opts.BaseURL+path, body)
+	// Resolve the (possibly arg-substituted) path against the configured
+	// BaseURL and verify the result stays within the same scheme+host.
+	// url.PathEscape in buildCall already percent-encodes `/`, but we still
+	// pin the authority here so CodeQL's taint tracker is satisfied and a
+	// future change to buildCall can't silently enable SSRF.
+	callURL, err := safeResolveURL(s.opts.BaseURL, path)
+	if err != nil {
+		writeRPCError(w, req.ID, errInvalidParams, err.Error())
+		return
+	}
+	httpReq, err := http.NewRequestWithContext(r.Context(), tool.method, callURL, body)
 	if err != nil {
 		writeRPCError(w, req.ID, errInternalError, "build request: "+err.Error())
 		return
@@ -220,4 +232,23 @@ func writeRPCError(w http.ResponseWriter, id json.RawMessage, code int, msg stri
 		ID:      id,
 		Error:   &jsonRPCError{Code: code, Message: msg},
 	})
+}
+
+// safeResolveURL joins a path onto a BaseURL and asserts the resulting URL
+// stays within the base's scheme+host+port. Returns the final URL string or
+// an error if the path would redirect to a different origin.
+func safeResolveURL(baseURL, path string) (string, error) {
+	base, err := url.Parse(baseURL)
+	if err != nil || base.Scheme == "" || base.Host == "" {
+		return "", fmt.Errorf("apidocs: invalid BaseURL %q", baseURL)
+	}
+	ref, err := url.Parse(path)
+	if err != nil {
+		return "", fmt.Errorf("apidocs: invalid tool path: %w", err)
+	}
+	resolved := base.ResolveReference(ref)
+	if resolved.Scheme != base.Scheme || resolved.Host != base.Host {
+		return "", errors.New("apidocs: tool path escapes BaseURL origin")
+	}
+	return resolved.String(), nil
 }

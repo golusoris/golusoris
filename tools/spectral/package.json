@@ -1,0 +1,9 @@
+{
+  "name": "golusoris-spectral",
+  "description": "Pinned spectral-cli for CI. Install via `npm ci`.",
+  "private": true,
+  "version": "0.0.0",
+  "dependencies": {
+    "@stoplight/spectral-cli": "6.15.1"
+  }
+}

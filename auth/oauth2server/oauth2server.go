@@ -129,8 +129,13 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown client", http.StatusBadRequest)
 		return
 	}
-	redirect := q.Get("redirect_uri")
-	if !contains(client.RedirectURIs, redirect) {
+	// Resolve the user-supplied redirect_uri to an exact entry in the
+	// client's registered list. From here on we only ever use `redirect`,
+	// the trusted value copied out of config — never the raw query param.
+	// This gives CodeQL a clear allow-list sanitizer for the open-redirect
+	// taint flow into http.Redirect below.
+	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri"))
+	if redirect == "" {
 		http.Error(w, "redirect_uri not registered", http.StatusBadRequest)
 		return
 	}
@@ -312,6 +317,18 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// pickRegistered returns the registered entry that exactly matches `candidate`,
+// or "" if no entry matches. Used as an allow-list sanitizer for redirect_uri
+// so the value passed to http.Redirect is always a trusted config string.
+func pickRegistered(registered []string, candidate string) string {
+	for _, s := range registered {
+		if s == candidate {
+			return s
+		}
+	}
+	return ""
 }
 
 // MemoryClientStore is an in-process ClientStore for tests / single-replica use.

@@ -172,10 +172,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-      - name: Install spectral
-        run: npm install -g @stoplight/spectral-cli@6.15.1
+      - name: Install spectral (hash-pinned via lockfile)
+        run: npm ci --prefix tools/spectral --no-audit --no-fund
       - name: Lint OpenAPI spec
-        run: spectral lint ${{ inputs.openapi-spec }} --ruleset tools/spectral.yaml --fail-severity warn
+        run: tools/spectral/node_modules/.bin/spectral lint ${{ inputs.openapi-spec }} --ruleset tools/spectral.yaml --fail-severity warn
 
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
