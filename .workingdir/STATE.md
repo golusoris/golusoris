@@ -100,6 +100,23 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **ai/tiny/gemma** landed — LoRA fine-tune trainer for
+  Google Gemma 3 / Gemma 3n via docker + KerasNLP.
+  - `ai/tiny/runner.go` — `Runner` interface + `DockerRunner`
+    (`docker run --rm [--gpus N] -e K=V -v IN:/work/input:ro
+    -v OUT:/work/output:rw IMAGE`) + `StubRunner` for tests. Pointer
+    receivers on both (recvcheck).
+  - `ai/tiny/gemma/gemma.go` — `NewTrainer(Options)` + `(*Trainer).Train`.
+    Flow: validate → stage tmpdir (`input/config.json` with job spec
+    + hyperparams) → `Runner.Run` → drain stdout/stderr via bytes.Buffer
+    + bufio.Scanner into slog → read `output/lora.keras` + optional
+    `metrics.json` → upload to `<KeyPrefix>/<job.Name>/<job.ID>/lora.keras`.
+    Supported bases: `gemma3:270m|1b|4b`, `gemma3n:e2b|e4b`.
+  - `ai/tiny/gemma/AGENTS.md` — surface + flow + supported bases.
+  - **Pending:** `ai/tiny/litert/` (MediaPipe Model Maker → .tflite),
+    `ai/tiny/serve/` (ollama + tflite inference adapters), Python
+    trainer container image `ghcr.io/golusoris/tiny-gemma-trainer:v1`.
+
 - 2026-04-14: **ai/tiny foundation** landed — new framework capability
   for training and serving small task-specific models. Go orchestrates,
   Python does the heavy lifting.

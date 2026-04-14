@@ -25,8 +25,8 @@ it via a `Predictor`.
 
 ## Layout
 
-- `ai/tiny/` — core interfaces + MemoryRegistry (this package).
-- `ai/tiny/gemma/` — Gemma LoRA fine-tuning (generative) — *pending*.
+- `ai/tiny/` — core interfaces + MemoryRegistry + `Runner` abstraction.
+- `ai/tiny/gemma/` — Gemma LoRA fine-tuning (generative).
 - `ai/tiny/litert/` — MediaPipe Model Maker (classifiers/embed) — *pending*.
 - `ai/tiny/serve/` — inference adapters (ollama for Gemma,
   TFLite for LiteRT) — *pending*.
