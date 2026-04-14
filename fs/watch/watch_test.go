@@ -39,6 +39,40 @@ func TestWatcher_detects_change(t *testing.T) {
 	}
 }
 
+func TestWatcher_remove(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	w, err := watch.New(watch.Options{Debounce: 50 * time.Millisecond})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	if err := w.Add(dir); err != nil {
+		t.Fatal(err)
+	}
+	// Remove the path that was just added — should not error.
+	if err := w.Remove(dir); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+}
+
+func TestWatcher_remove_unregistered(t *testing.T) {
+	t.Parallel()
+	w, err := watch.New(watch.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+
+	// Removing a path that was never added should return a wrapped error.
+	err = w.Remove("/nonexistent/path/that/was/never/added")
+	if err == nil {
+		t.Fatal("expected error when removing unregistered path")
+	}
+}
+
 func TestWatcher_debounce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

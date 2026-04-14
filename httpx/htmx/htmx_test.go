@@ -20,6 +20,27 @@ func TestIsRequest(t *testing.T) {
 	}
 }
 
+func TestIsBoosted(t *testing.T) {
+	t.Parallel()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	if htmx.IsBoosted(r) {
+		t.Error("fresh request should not be boosted")
+	}
+	r.Header.Set(htmx.HeaderBoosted, "true")
+	if !htmx.IsBoosted(r) {
+		t.Error("HX-Boosted: true should be detected as boosted")
+	}
+}
+
+func TestReplaceURL(t *testing.T) {
+	t.Parallel()
+	w := httptest.NewRecorder()
+	htmx.ReplaceURL(w, "/current")
+	if got := w.Header().Get(htmx.ResponseReplaceURL); got != "/current" {
+		t.Errorf("ReplaceURL = %q, want /current", got)
+	}
+}
+
 func TestResponseHelpers(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()

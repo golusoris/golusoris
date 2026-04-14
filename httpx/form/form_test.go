@@ -32,6 +32,15 @@ func TestDecode(t *testing.T) {
 	}
 }
 
+func TestRaw(t *testing.T) {
+	t.Parallel()
+	dec := form.New()
+	raw := dec.Raw()
+	if raw == nil {
+		t.Fatal("Raw() returned nil")
+	}
+}
+
 func TestDecodeInvalidWrapsAsBadRequest(t *testing.T) {
 	t.Parallel()
 	dec := form.New()

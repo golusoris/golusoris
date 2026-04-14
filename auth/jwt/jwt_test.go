@@ -68,3 +68,49 @@ func TestParseWrongSecret(t *testing.T) {
 		t.Fatal("expected error for wrong secret")
 	}
 }
+
+func TestErrInvalid_wrongSignature(t *testing.T) {
+	t.Parallel()
+	signer := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-a"), time.Hour)
+	verifier := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-b"), time.Hour)
+
+	tok, _ := signer.Sign(testClaims{})
+	err := verifier.Parse(tok, &testClaims{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !jwtpkg.ErrInvalid(err) {
+		t.Errorf("ErrInvalid = false, want true for wrong-signature error; err = %v", err)
+	}
+}
+
+func TestErrInvalid_malformed(t *testing.T) {
+	t.Parallel()
+	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	err := s.Parse("not.a.jwt", &testClaims{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !jwtpkg.ErrInvalid(err) {
+		t.Errorf("ErrInvalid = false, want true for malformed token; err = %v", err)
+	}
+}
+
+func TestErrInvalid_validToken(t *testing.T) {
+	t.Parallel()
+	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	claims := testClaims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
+		},
+	}
+	tok, _ := s.Sign(claims)
+	err := s.Parse(tok, &testClaims{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// ErrInvalid must be false when there is no error.
+	if jwtpkg.ErrInvalid(nil) {
+		t.Error("ErrInvalid(nil) = true, want false")
+	}
+}

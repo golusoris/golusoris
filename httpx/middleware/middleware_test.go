@@ -172,6 +172,21 @@ func TestETagReturns304(t *testing.T) {
 	}
 }
 
+func TestOTel_wrapsHandler(t *testing.T) {
+	t.Parallel()
+	// nil TracerProvider falls back to the global no-op provider — no real OTel
+	// setup required for this smoke test.
+	mw := middleware.OTel("test.op", nil)
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != http.StatusTeapot {
+		t.Errorf("status = %d, want 418", rr.Code)
+	}
+}
+
 func TestCompressBuilds(t *testing.T) {
 	t.Parallel()
 	// Compress() only fails on programmer error; the smoke test is that the

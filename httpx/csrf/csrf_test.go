@@ -72,3 +72,21 @@ func TestInvalidSecretErrors(t *testing.T) {
 		t.Fatal("expected error for short secret")
 	}
 }
+
+func TestToken_returnedOnGET(t *testing.T) {
+	t.Parallel()
+	mw, err := csrf.New(csrf.Options{Secret: hexKey(t), Path: "/"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	var captured string
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		captured = csrf.Token(r)
+		w.WriteHeader(http.StatusOK)
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if captured == "" {
+		t.Error("Token() returned empty string inside middleware-wrapped handler")
+	}
+}

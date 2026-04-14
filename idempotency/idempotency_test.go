@@ -110,6 +110,36 @@ func TestMiddleware_safeMethodSkipped(t *testing.T) {
 	}
 }
 
+func TestMiddleware_customHeader(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	h := idempotency.Middleware(
+		idempotency.NewMemoryStore(),
+		idempotency.Options{Header: "X-Request-ID"},
+	)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusAccepted)
+	}))
+
+	send := func() *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		req.Header.Set("X-Request-ID", "custom-key-1")
+		rw := httptest.NewRecorder()
+		h.ServeHTTP(rw, req)
+		return rw
+	}
+
+	r1 := send()
+	r2 := send()
+
+	if calls.Load() != 1 {
+		t.Fatalf("handler should be called once with custom header, got %d", calls.Load())
+	}
+	if r1.Code != http.StatusAccepted || r2.Code != http.StatusAccepted {
+		t.Fatalf("both responses should be 202: %d %d", r1.Code, r2.Code)
+	}
+}
+
 func TestMiddleware_5xxNotCached(t *testing.T) {
 	t.Parallel()
 	var calls atomic.Int32
