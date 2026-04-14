@@ -151,11 +151,14 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 		return fmt.Errorf("session: destroy: %w", delErr)
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:    m.opts.CookieName,
-		Value:   "",
-		Path:    m.opts.Path,
-		MaxAge:  -1,
-		Expires: time.Unix(0, 0),
+		Name:     m.opts.CookieName,
+		Value:    "",
+		Path:     m.opts.Path,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   m.opts.Secure,
+		SameSite: m.opts.SameSite,
 	})
 	return nil
 }

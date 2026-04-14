@@ -45,13 +45,13 @@ var MigrationsFS embed.FS
 
 // Event is a row in the outbox table.
 type Event struct {
-	ID           int64
-	Kind         string
-	Payload      json.RawMessage
-	CreatedAt    time.Time
-	DispatchedAt *time.Time
-	Attempts     int
-	LastError    *string
+	ID           int64           `json:"id"`
+	Kind         string          `json:"kind"`
+	Payload      json.RawMessage `json:"payload,omitempty"`
+	CreatedAt    time.Time       `json:"created_at"`
+	DispatchedAt *time.Time      `json:"dispatched_at,omitempty"`
+	Attempts     int             `json:"attempts"`
+	LastError    *string         `json:"last_error,omitempty"`
 }
 
 // Add writes an event to the outbox within an existing transaction. The

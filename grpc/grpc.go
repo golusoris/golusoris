@@ -30,6 +30,7 @@ package grpc
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -157,6 +158,8 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 		switch lvl {
 		case grpclogging.LevelDebug:
 			logger.Debug(msg, fields...)
+		case grpclogging.LevelInfo:
+			logger.Info(msg, fields...)
 		case grpclogging.LevelWarn:
 			logger.Warn(msg, fields...)
 		case grpclogging.LevelError:
@@ -182,12 +185,13 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			ln, err := net.Listen("tcp", cfg.Listen)
+			lc := &net.ListenConfig{}
+			ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
 			if err != nil {
 				return fmt.Errorf("grpc: listen %s: %w", cfg.Listen, err)
 			}
 			go func() {
-				if err := srv.Serve(ln); err != nil && err != grpc.ErrServerStopped {
+				if err := srv.Serve(ln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 					logger.Error("grpc: serve error", "err", err)
 				}
 			}()

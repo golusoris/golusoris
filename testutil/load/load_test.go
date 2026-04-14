@@ -58,7 +58,7 @@ func TestCheck_maxErrorRate(t *testing.T) {
 		if i%2 == 0 {
 			code = http.StatusInternalServerError
 		}
-		m.Add(&vegeta.Result{Code: uint16(code)}) //nolint:gosec // G115: test code, value bounded
+		m.Add(&vegeta.Result{Code: uint16(code)})
 	}
 	m.Close()
 

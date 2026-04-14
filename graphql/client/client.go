@@ -37,6 +37,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -92,7 +93,7 @@ func loadConfig(cfg *config.Config) (Config, error) {
 
 func newClient(cfg Config) (graphql.Client, error) {
 	if cfg.Endpoint == "" {
-		return nil, fmt.Errorf("graphql/client: endpoint is required")
+		return nil, errors.New("graphql/client: endpoint is required")
 	}
 
 	transport := authTransport{

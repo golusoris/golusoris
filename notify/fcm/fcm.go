@@ -39,7 +39,7 @@ import (
 )
 
 // DefaultTokenURI is Google's OAuth2 token endpoint.
-const DefaultTokenURI = "https://oauth2.googleapis.com/token" //nolint:gosec // G101: this is Google's public OAuth endpoint, not a credential
+const DefaultTokenURI = "https://oauth2.googleapis.com/token" //nolint:gosec // G101: public OAuth2 endpoint URL, not a credential
 
 // DefaultScope is the FCM v1 send scope.
 const DefaultScope = "https://www.googleapis.com/auth/firebase.messaging"

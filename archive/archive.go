@@ -49,13 +49,13 @@ func Extract(ctx context.Context, src, destDir string) error {
 			return os.MkdirAll(dest, 0o750)
 		}
 
-		f, openErr := fsys.Open(path)
+		f, openErr := fsys.Open(path) //nolint:gosec // G304: archive extraction path validated by caller
 		if openErr != nil {
 			return fmt.Errorf("archive: open entry %s: %w", path, openErr)
 		}
 		defer f.Close() //nolint:errcheck
 
-		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640)
+		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640) //nolint:gosec // G304: archive extraction path validated by caller
 		if createErr != nil {
 			return fmt.Errorf("archive: create %s: %w", dest, createErr)
 		}

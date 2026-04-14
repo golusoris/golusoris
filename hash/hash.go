@@ -37,7 +37,7 @@ func SHA256Reader(r io.Reader) (string, error) {
 
 // SHA256File opens path and returns its hex-encoded SHA-256 digest.
 func SHA256File(path string) (string, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // G304: path validated by caller
 	if err != nil {
 		return "", fmt.Errorf("hash: open %s: %w", path, err)
 	}

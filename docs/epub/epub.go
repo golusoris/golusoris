@@ -103,7 +103,8 @@ func (b *Book) WriteToWriter(w io.Writer) error {
 	if err := b.e.Write(name); err != nil {
 		return fmt.Errorf("epub: write temp: %w", err)
 	}
-	data, err := os.ReadFile(name)
+	var data []byte
+	data, err = os.ReadFile(name) //nolint:gosec // G304: temp file path from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("epub: read temp: %w", err)
 	}

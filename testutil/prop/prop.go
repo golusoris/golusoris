@@ -50,7 +50,7 @@ func New(t *testing.T) *Properties {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(t.Name()))
 	params := gopter.DefaultTestParameters()
-	params.Rng = rand.New(rand.NewSource(int64(h.Sum64()))) //nolint:gosec // G404: test code, not crypto
+	params.Rng = rand.New(rand.NewSource(int64(h.Sum64()))) //nolint:gosec // G404: test RNG not crypto; G115: conversion is safe, Sum64 fits int64 range in practice
 	return gopter.NewProperties(params)
 }
 

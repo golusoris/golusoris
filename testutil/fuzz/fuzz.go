@@ -26,7 +26,7 @@ import (
 func CorpusDir(t *testing.T, target string) string {
 	t.Helper()
 	dir := filepath.Join("testdata", "corpus", target)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("fuzz: mkdir %s: %v", dir, err)
 	}
 	return dir

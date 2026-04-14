@@ -30,6 +30,7 @@ package cdc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -53,6 +54,7 @@ const (
 // Op is the WAL operation type.
 type Op string
 
+// Op constants for WAL operation types.
 const (
 	OpInsert   Op = "INSERT"
 	OpUpdate   Op = "UPDATE"
@@ -184,10 +186,21 @@ func (c *Consumer) run(ctx context.Context) {
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
+	startLSN, ok := c.runSetup(ctx, conn)
+	if !ok {
+		return
+	}
+
+	c.runLoop(ctx, conn, startLSN)
+}
+
+// runSetup identifies the system, ensures the slot, and starts replication.
+// Returns the starting LSN and true on success.
+func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl.LSN, bool) {
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
 	if err != nil {
 		c.logger.Error("cdc: identify system", "err", err)
-		return
+		return 0, false
 	}
 	c.logger.Info("cdc: connected",
 		"systemID", sysident.SystemID,
@@ -197,7 +210,7 @@ func (c *Consumer) run(ctx context.Context) {
 
 	if err := c.ensureSlot(ctx, conn, sysident.XLogPos); err != nil {
 		c.logger.Error("cdc: ensure slot", "err", err)
-		return
+		return 0, false
 	}
 
 	opts := pglogrepl.StartReplicationOptions{
@@ -208,13 +221,17 @@ func (c *Consumer) run(ctx context.Context) {
 	}
 	if err := pglogrepl.StartReplication(ctx, conn, c.cfg.Slot, sysident.XLogPos, opts); err != nil {
 		c.logger.Error("cdc: start replication", "err", err)
-		return
+		return 0, false
 	}
+	return sysident.XLogPos, true
+}
 
+// runLoop processes WAL messages until ctx is cancelled or a fatal error occurs.
+func (c *Consumer) runLoop(ctx context.Context, conn *pgconn.PgConn, startLSN pglogrepl.LSN) {
 	relations := map[uint32]*pglogrepl.RelationMessage{}
 	standbyInterval := time.Second / time.Duration(c.cfg.StandbyHz)
 	nextStandby := c.clk.Now().Add(standbyInterval)
-	clientXLogPos := sysident.XLogPos
+	clientXLogPos := startLSN
 
 	for {
 		if c.clk.Now().After(nextStandby) {
@@ -240,39 +257,53 @@ func (c *Consumer) run(ctx context.Context) {
 			return
 		}
 
-		if errMsg, ok := rawMsg.(*pgproto3.ErrorResponse); ok {
-			c.logger.Error("cdc: postgres error", "msg", errMsg.Message, "code", errMsg.Code)
+		if stop := c.handleMessage(ctx, rawMsg, relations, &clientXLogPos, &nextStandby); stop {
 			return
 		}
+	}
+}
 
-		msg, ok := rawMsg.(*pgproto3.CopyData)
-		if !ok {
-			continue
+// handleMessage processes a single raw WAL message. Returns true if the loop should stop.
+func (c *Consumer) handleMessage(
+	ctx context.Context,
+	rawMsg pgproto3.BackendMessage,
+	relations map[uint32]*pglogrepl.RelationMessage,
+	clientXLogPos *pglogrepl.LSN,
+	nextStandby *time.Time,
+) bool {
+	if errMsg, ok := rawMsg.(*pgproto3.ErrorResponse); ok {
+		c.logger.Error("cdc: postgres error", "msg", errMsg.Message, "code", errMsg.Code)
+		return true
+	}
+
+	msg, ok := rawMsg.(*pgproto3.CopyData)
+	if !ok {
+		return false
+	}
+
+	switch msg.Data[0] {
+	case pglogrepl.PrimaryKeepaliveMessageByteID:
+		pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
+		if err != nil {
+			c.logger.Warn("cdc: parse keepalive", "err", err)
+			return false
+		}
+		if pkm.ReplyRequested {
+			*nextStandby = c.clk.Now() // force immediate standby status
 		}
 
-		switch msg.Data[0] {
-		case pglogrepl.PrimaryKeepaliveMessageByteID:
-			pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
-			if err != nil {
-				c.logger.Warn("cdc: parse keepalive", "err", err)
-				continue
-			}
-			if pkm.ReplyRequested {
-				nextStandby = c.clk.Now() // force immediate standby status
-			}
-
-		case pglogrepl.XLogDataByteID:
-			xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
-			if err != nil {
-				c.logger.Warn("cdc: parse xlog", "err", err)
-				continue
-			}
-			if err := c.dispatch(ctx, xld, relations, &clientXLogPos); err != nil {
-				c.logger.Error("cdc: handler returned error", "err", err)
-				return
-			}
+	case pglogrepl.XLogDataByteID:
+		xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
+		if err != nil {
+			c.logger.Warn("cdc: parse xlog", "err", err)
+			return false
+		}
+		if err := c.dispatch(ctx, xld, relations, clientXLogPos); err != nil {
+			c.logger.Error("cdc: handler returned error", "err", err)
+			return true
 		}
 	}
+	return false
 }
 
 // dispatch decodes a single XLogData message and calls the handler for DML ops.
@@ -376,7 +407,8 @@ func (c *Consumer) ensureSlot(ctx context.Context, conn *pgconn.PgConn, startLSN
 	)
 	if err != nil {
 		// "SQLSTATE 42710" means the slot already exists — that's fine.
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == "42710" {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "42710" {
 			return nil
 		}
 		return fmt.Errorf("cdc: create slot: %w", err)

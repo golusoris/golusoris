@@ -245,7 +245,7 @@ func (s *Sender) newDeviceRequest(
 }
 
 func (s *Sender) do(req *http.Request, device string) error {
-	resp, err := s.hc.Do(req) //nolint:gosec // G704 SSRF: device path segment is caller-controlled; callers are trusted (their app's stored tokens)
+	resp, err := s.hc.Do(req) //nolint:gosec // G107 SSRF: device path segment is caller-controlled; callers are trusted (their app's stored tokens)
 	if err != nil {
 		return fmt.Errorf("notify/apns2: post: %w", err)
 	}

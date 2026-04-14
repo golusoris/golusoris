@@ -10,7 +10,7 @@ func TestParseReport_validOutput(t *testing.T) {
 	t.Parallel()
 	// parseReport is unexported; test via the exported surface by calling
 	// AssertMinScore with a manually constructed Report.
-	r := mutation.Report{Killed: 8, Total: 12, Score: 8.0 / 12.0}
+	r := mutation.Report{Total: 12, Score: 8.0 / 12.0}
 	if r.Score < 0.6 || r.Score > 0.7 {
 		t.Fatalf("unexpected score: %v", r.Score)
 	}

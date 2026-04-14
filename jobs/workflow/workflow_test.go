@@ -30,10 +30,8 @@ func TestAPIKeyRequiresTLS(t *testing.T) {
 	// inside newClient. We verify the exported Config type carries the
 	// field correctly.
 	c := workflow.Config{
-		Host:      "ns.tmprl.cloud:7233",
-		Namespace: "ns",
-		APIKey:    "secret",
-		TLS:       true,
+		APIKey: "secret",
+		TLS:    true,
 	}
 	require.True(t, c.TLS)
 	require.NotEmpty(t, c.APIKey)

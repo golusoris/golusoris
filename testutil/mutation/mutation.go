@@ -15,6 +15,7 @@
 package mutation
 
 import (
+	"context"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -35,30 +36,30 @@ type Report struct {
 // The test is skipped when go-mutesting is not found in PATH.
 // A non-zero exit code from go-mutesting (normal when mutants survive) is
 // treated as a soft signal; parse the output regardless.
-func Run(t *testing.T, pkg string) Report {
+func Run(ctx context.Context, t *testing.T, pkg string) Report {
 	t.Helper()
 	binPath, err := exec.LookPath("go-mutesting")
 	if err != nil {
 		t.Skip("go-mutesting not found in PATH; " +
 			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
 	}
-	cmd := exec.Command(binPath, pkg) //nolint:gosec // G204: pkg is a package path from trusted test code
-	out, _ := cmd.CombinedOutput()   // non-zero exit expected when mutants survive
+	cmd := exec.CommandContext(ctx, binPath, pkg) //nolint:gosec // G204: pkg is a package path from trusted test code
+	out, _ := cmd.CombinedOutput()               // non-zero exit expected when mutants survive
 	t.Logf("go-mutesting output:\n%s", out)
 	return parseReport(string(out))
 }
 
 // RunFiles executes go-mutesting on explicit source files instead of a
 // package path. Use when the package is not importable.
-func RunFiles(t *testing.T, files ...string) Report {
+func RunFiles(ctx context.Context, t *testing.T, files ...string) Report {
 	t.Helper()
 	binPath, err := exec.LookPath("go-mutesting")
 	if err != nil {
 		t.Skip("go-mutesting not found in PATH; " +
 			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
 	}
-	args := append([]string{"--"}, files...) //nolint:gocritic // appendAssign: not a bug; files not reused
-	cmd := exec.Command(binPath, args...)    //nolint:gosec // G204: files are from trusted test code
+	args := append([]string{"--"}, files...)          //nolint:gocritic // appendAssign: not a bug; files not reused
+	cmd := exec.CommandContext(ctx, binPath, args...) //nolint:gosec // G204: files are from trusted test code
 	out, _ := cmd.CombinedOutput()
 	t.Logf("go-mutesting output:\n%s", out)
 	return parseReport(string(out))
@@ -79,7 +80,7 @@ func AssertMinScore(t *testing.T, r Report, min float64) {
 }
 
 // scoreRe matches go-mutesting's summary line, e.g.:
-// "The mutation score is 0.666667 (8 of 12 mutations were killed)"
+// "The mutation score is 0.666667 (8 of 12 mutations were killed)".
 var scoreRe = regexp.MustCompile(`The mutation score is ([\d.]+) \((\d+) of (\d+) `)
 
 func parseReport(out string) Report {
