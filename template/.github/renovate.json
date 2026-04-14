@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":automergeMinor"
+  ],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "gomod": {
+    "enabled": true
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "breaking-change"],
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["chainguard/**"],
+      "postUpgradeTasks": {
+        "commands": [
+          "echo 'base image updated — triggering rebuild'"
+        ],
+        "executionMode": "branch"
+      }
+    }
+  ]
+}
