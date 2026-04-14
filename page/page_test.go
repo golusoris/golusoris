@@ -76,3 +76,23 @@ func TestOffsetPage_hasNextPrev(t *testing.T) {
 		t.Fatal("last page should not have next")
 	}
 }
+
+// FuzzCursorRoundTrip: EncodeCursor then DecodeCursor must be identity
+// for any input, and DecodeCursor on arbitrary bytes must never panic.
+func FuzzCursorRoundTrip(f *testing.F) {
+	seeds := []string{"", "a", "abc/def=ghi+jkl", "\x00\x01\x02", "/"}
+	for _, s := range seeds {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		enc := page.EncodeCursor(s)
+		dec, err := page.DecodeCursor(enc)
+		if err != nil {
+			t.Fatalf("round-trip decode failed for %q: %v", s, err)
+		}
+		if dec != s {
+			t.Fatalf("round-trip mismatch: %q -> %q -> %q", s, enc, dec)
+		}
+		_, _ = page.DecodeCursor(s)
+	})
+}

@@ -86,7 +86,7 @@ jobs:
           cache: true
       - name: govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
@@ -150,7 +150,7 @@ jobs:
           fi
       - name: Install spectral
         if: steps.spec-check.outputs.exists == 'true'
-        run: npm install -g @stoplight/spectral-cli
+        run: npm install -g @stoplight/spectral-cli@6.15.1
       - name: Lint spec
         if: steps.spec-check.outputs.exists == 'true'
         run: spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
@@ -171,7 +171,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Install apidiff
-        run: go install golang.org/x/exp/cmd/apidiff@latest
+        run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
       - name: Run apidiff vs previous tag
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
