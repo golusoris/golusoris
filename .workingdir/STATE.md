@@ -100,6 +100,22 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **realtime/webrtc scaffold** landed — closes §4.9 last empty dir:
+  - `realtime/webrtc/` — thin helper around `pion/webrtc/v4`. One-shot
+    SDP offer/answer over HTTP (WHIP-style). `Signaler{api,cfg,onConnect,…}`
+    + `Answer(ctx, offerSDP) (answerSDP, *PeerConnection, error)` waits
+    for full ICE gather before returning. `Handler()` accepts
+    `POST application/sdp` → `201 Created` with SDP answer body. On
+    `Failed/Disconnected/Closed` the handler auto-closes the PC.
+  - 64 KiB body cap (real offers are < 10 KiB).
+  - Opt-in: pion pulls DTLS/SRTP/STUN/SCTP/TURN — don't import from
+    shared framework paths.
+  - Dep adds: `pion/webrtc/v4 v4.2.11` (+ transitive pion tree).
+- 2026-04-14: **httpx/htmx lint fix**:
+  - Renamed constant values from `HX-*` → `Hx-*` (Go canonical MIME
+    form). Wire-equivalent since HTTP headers are case-insensitive.
+    Clears 9× `canonicalheader` findings.
+
 - 2026-04-14: **Step 10 remainders — tracking + bounce + inbound**:
   - `notify/tracking/` — HMAC-SHA256 signed open-pixel + click-redirect.
     `Service{store,secret,clock}` issues signed URLs (`PixelURL`, `ClickURL`)
