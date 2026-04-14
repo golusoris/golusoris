@@ -100,6 +100,25 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 10a — notify providers (Resend + Postmark)** landed:
+  - `notify/resend/` — raw-HTTP sender (no SDK). POSTs JSON to
+    `api.resend.com/emails` with `Authorization: Bearer <key>`.
+    `Options{APIKey, From, ReplyTo, Endpoint, HTTPClient}`. Maps
+    `notify.Message.Metadata` → Resend tags. Endpoint override for EU
+    region (`api.eu.resend.com`) + tests.
+  - `notify/postmark/` — raw-HTTP sender (no SDK). POSTs JSON to
+    `api.postmarkapp.com/email` with `X-Postmark-Server-Token`.
+    `Options{ServerToken, From, ReplyTo, MessageStream, Endpoint, HTTPClient}`.
+    Joins `To/Cc/Bcc` with comma per Postmark wire format.
+  - Both senders implement the same `notify.Sender` iface so the
+    Notifier (first-success / Multi fan-out) keeps a stable contract
+    across SMTP / Discord / Slack / Resend / Postmark.
+  - `tools/golangci.yml`: added `notify/postmark/` to tagliatelle path
+    exclusion (Postmark wire format is PascalCase by spec).
+  - 0 lint · race-green across `./notify/...`.
+- 2026-04-14: **PLAN.md round-12** added per-provider notify subpackage
+  list (twilio/fcm/apns2/mailgun/sendgrid/telegram/teams/webpush) +
+  `db/cdc/` for logical replication via jackc/pglogrepl.
 - 2026-04-14: **Lint expansion** landed: golangci-lint v2 now enforces 30+ linters across the framework (forbidigo, gosec, contextcheck, wrapcheck, govet enable-all, recvcheck, unparam, usetesting, prealloc, musttag, sloglint, tagliatelle, revive, paralleltest, testifylint, depguard, gomodguard, perfsprint, importas, …). Backlog of 241 issues fixed to 0:
   - clockwork.Clock injection added to `auth/lockout`, `auth/magiclink`, `idempotency` `MemoryStore`s (via `NewMemoryStoreWithClock`).
   - `auth/passkeys.VerifyTOTP` split into `VerifyTOTP` (wall-clock, justified `//nolint:forbidigo`) + `VerifyTOTPAt(at time.Time)` for tests.

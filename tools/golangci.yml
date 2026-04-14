@@ -261,6 +261,10 @@ linters:
       - path: auth/captcha/
         linters:
           - tagliatelle
+      # Postmark wire format is PascalCase (From, To, HtmlBody, …) per spec.
+      - path: notify/postmark/
+        linters:
+          - tagliatelle
       # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
       - path: auth/oauth2server/
         linters:

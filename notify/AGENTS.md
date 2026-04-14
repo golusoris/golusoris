@@ -21,14 +21,17 @@ err := n.Send(ctx, notify.Message{
 
 ## Senders
 
-| Sender           | Constructor                  | Channel                    |
-| ---------------- | ---------------------------- | -------------------------- |
-| `SMTPSender`     | `notify.NewSMTPSender(opts)` | Email via SMTP (go-mail)   |
-| `slack.Sender`   | `slack.NewSender(opts)`      | Slack incoming webhook     |
-| `discord.Sender` | `discord.NewSender(opts)`    | Discord incoming webhook   |
+| Sender            | Constructor                  | Channel                              |
+| ----------------- | ---------------------------- | ------------------------------------ |
+| `SMTPSender`      | `notify.NewSMTPSender(opts)` | Email via SMTP (go-mail)             |
+| `resend.Sender`   | `resend.NewSender(opts)`     | Resend transactional email (HTTP)    |
+| `postmark.Sender` | `postmark.NewSender(opts)`   | Postmark transactional email (HTTP)  |
+| `slack.Sender`    | `slack.NewSender(opts)`      | Slack incoming webhook               |
+| `discord.Sender`  | `discord.NewSender(opts)`    | Discord incoming webhook             |
 
-More senders (Resend, Postmark, web-push) are added per app by
-implementing `notify.Sender`. Pull requests welcome.
+More senders (SES, Mailgun, SendGrid, Twilio, FCM, APNs, web-push,
+Telegram, Teams) ship as additional `notify/<provider>` subpackages.
+See PLAN.md §4.9.
 
 ## Suppression
 
