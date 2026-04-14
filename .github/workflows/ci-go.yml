@@ -41,6 +41,10 @@ on:
         description: Skip apidiff check (set true for first release)
         type: boolean
         default: false
+      openapi-spec:
+        description: Path to OpenAPI spec file for spectral lint (empty = skip)
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -164,6 +168,18 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
       - run: go build ./...
+
+  # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
+  spectral:
+    name: OpenAPI lint (spectral)
+    if: ${{ inputs.openapi-spec != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install spectral
+        run: npm install -g @stoplight/spectral-cli
+      - name: Lint OpenAPI spec
+        run: spectral lint ${{ inputs.openapi-spec }} --ruleset tools/spectral.yaml --fail-severity warn
 
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
