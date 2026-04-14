@@ -1,0 +1,51 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+  source:
+    repoURL: oci://ghcr.io/golusoris/charts
+    chart: golusoris-app
+    targetRevision: 0.1.x
+    helm:
+      values: |
+        image:
+          repository: ghcr.io/golusoris/app-myapp
+          tag: "0.1.0"
+        replicaCount: 3
+        ingress:
+          enabled: true
+          hosts:
+            - host: myapp.example.com
+              paths:
+                - path: /
+                  pathType: Prefix
+        serviceMonitor:
+          enabled: true
+        backup:
+          enabled: true
+          schedule: "0 2 * * *"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: apps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: false
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10

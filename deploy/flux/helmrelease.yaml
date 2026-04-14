@@ -1,0 +1,47 @@
+# Flux HelmRelease — deploys golusoris-app into the given namespace.
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: myapp
+  namespace: apps
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: golusoris-app
+      version: "0.1.x"
+      sourceRef:
+        kind: HelmRepository
+        name: golusoris
+        namespace: flux-system
+      interval: 1h
+  install:
+    createNamespace: true
+    remediation:
+      retries: 3
+  upgrade:
+    cleanupOnFail: true
+    remediation:
+      retries: 3
+  values:
+    image:
+      repository: ghcr.io/golusoris/app-myapp
+      tag: "0.1.0"   # overridden by image-automation if enabled
+    replicaCount: 3
+    ingress:
+      enabled: true
+      hosts:
+        - host: myapp.example.com
+          paths:
+            - path: /
+              pathType: Prefix
+    serviceMonitor:
+      enabled: true
+    backup:
+      enabled: true
+      schedule: "0 2 * * *"
+      dbName: myapp
+      s3:
+        bucket: myapp-backups-prod
+        region: us-east-1

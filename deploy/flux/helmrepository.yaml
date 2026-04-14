@@ -1,0 +1,12 @@
+# Flux HelmRepository — points at the golusoris chart source.
+# Adjust `url` if you publish charts to a different registry.
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: golusoris
+  namespace: flux-system
+spec:
+  interval: 10m
+  type: oci
+  url: oci://ghcr.io/golusoris/charts

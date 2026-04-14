@@ -1,0 +1,100 @@
+{{- if .Values.backup.enabled -}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "golusoris-app.fullname" . }}-backup
+  labels:
+    {{- include "golusoris-app.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+spec:
+  schedule: {{ .Values.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.backup.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.backup.failedJobsHistoryLimit | default 3 }}
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: {{ .Values.backup.activeDeadlineSeconds | default 3600 }}
+      template:
+        metadata:
+          labels:
+            {{- include "golusoris-app.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: {{ include "golusoris-app.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: {{ .Values.podSecurityContext.runAsUser | default 65534 }}
+            fsGroup: {{ .Values.podSecurityContext.fsGroup | default 65534 }}
+          containers:
+            - name: backup
+              image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+              imagePullPolicy: {{ .Values.backup.image.pullPolicy | default "IfNotPresent" }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              command: [/bin/sh, -c]
+              args:
+                - |
+                  set -euo pipefail
+                  ts=$(date -u +%Y%m%dT%H%M%SZ)
+                  out="/tmp/{{ .Values.backup.dbName }}-${ts}.sql.gz"
+                  echo "pg_dump → ${out}"
+                  pg_dump --no-owner --no-privileges --format=plain "$DATABASE_URL" | gzip -9 > "${out}"
+                  echo "aws s3 cp ${out} s3://${BUCKET}/"
+                  aws s3 cp "${out}" "s3://${BUCKET}/${BUCKET_PREFIX}/{{ .Values.backup.dbName }}-${ts}.sql.gz" \
+                    {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }}
+                  # Retention: delete backups older than RETENTION_DAYS.
+                  echo "pruning > ${RETENTION_DAYS} days"
+                  aws s3 ls "s3://${BUCKET}/${BUCKET_PREFIX}/" \
+                    {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }} \
+                    | awk -v cutoff="$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d 2>/dev/null || date -u -v -${RETENTION_DAYS}d +%Y-%m-%d)" \
+                        '$1 < cutoff {print $4}' \
+                    | xargs -r -n1 -I{} aws s3 rm "s3://${BUCKET}/${BUCKET_PREFIX}/{}" \
+                        {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }}
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.databaseUrlSecret.name }}
+                      key: {{ .Values.backup.databaseUrlSecret.key }}
+                - name: AWS_ACCESS_KEY_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.s3.credentialsSecret.name }}
+                      key: accessKeyID
+                - name: AWS_SECRET_ACCESS_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.backup.s3.credentialsSecret.name }}
+                      key: secretAccessKey
+                - name: AWS_DEFAULT_REGION
+                  value: {{ .Values.backup.s3.region | default "us-east-1" | quote }}
+                - name: BUCKET
+                  value: {{ .Values.backup.s3.bucket | quote }}
+                - name: BUCKET_PREFIX
+                  value: {{ .Values.backup.s3.prefix | default (printf "%s-backups" (include "golusoris-app.fullname" .)) | quote }}
+                {{- if .Values.backup.s3.endpoint }}
+                - name: S3_ENDPOINT
+                  value: {{ .Values.backup.s3.endpoint | quote }}
+                {{- end }}
+                - name: RETENTION_DAYS
+                  value: {{ .Values.backup.retentionDays | default 14 | quote }}
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tmp
+              emptyDir: {}
+{{- end -}}

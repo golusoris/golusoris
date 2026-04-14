@@ -100,6 +100,15 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 21 cont. — deploy extras** landed: Loki/Promtail + DB backup CronJob + Terraform modules + Flux/ArgoCD manifests.
+  - `deploy/logging/` — demo-grade Loki StatefulSet (v3.3.2) + Promtail DaemonSet. K8s-metadata scrape config tags by namespace/app/pod/container. README points at `grafana/loki-stack` Helm chart for production.
+  - `deploy/helm/templates/backup-cronjob.yaml` — pg_dump → gzip → S3/minio CronJob. Gated by `values.backup.enabled=false`. Retention pruning via `aws s3 ls | awk cutoff | xargs rm`. `helm template` verified both rendered and gated states. DSN + S3 creds via secretKeyRef (no plaintext in values).
+  - `deploy/helm/values.yaml` — new `backup` block (schedule, dbName, retentionDays, image, databaseUrlSecret, s3.{bucket,prefix,region,endpoint,credentialsSecret}).
+  - `deploy/terraform/modules/bucket/` — AWS S3 bucket with versioning + AES-256 + lifecycle + public access block. Provider-agnostic variable/output API so fork-for-GCS/Azure preserves downstream config.
+  - `deploy/terraform/modules/postgres/` — RDS Postgres 17.2 with Multi-AZ, gp3-encrypted storage, 7-day backups, IAM auth, Performance Insights. Outputs `dsn` (sensitive) + SG id for app-SG cross-reference. Redis + network modules deferred.
+  - `deploy/flux/` — HelmRepository (OCI registry) + HelmRelease + Kustomization for GitOps install of the base chart. Image-automation docs in README.
+  - `deploy/argocd/` — AppProject (platform scope) + Application with automated sync, prune, selfHeal, server-side apply.
+  - `helm lint deploy/helm/` → 0 failures (1 INFO icon recommendation only).
 - 2026-04-14: **Step 10b — notify providers (mailgun + sendgrid + telegram + teams + twilio + webpush)** landed:
   - `notify/mailgun/` — form-encoded POST to `api.mailgun.net/v3/{domain}/messages` with basic auth `api:<key>`. Metadata → `v:<key>` user-variables. EU region via `Endpoint: mailgun.EURegionEndpoint`.
   - `notify/sendgrid/` — JSON POST to `api.sendgrid.com/v3/mail/send` with Bearer token. Single personalization bundle (To/CC/BCC), `Content` emitted text/plain before text/html per spec, `Metadata` → `custom_args`.

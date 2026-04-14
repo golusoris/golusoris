@@ -113,3 +113,39 @@ affinity: {}
 # Downward API env vars injected automatically (matches k8s/podinfo expectations)
 downwardAPI:
   enabled: true
+
+# ─────────────────────────────────────────────────────────────────────
+# Scheduled pg_dump → S3/minio backup CronJob.
+# Disabled by default. Enable + fill in s3.bucket + credentials secret.
+# ─────────────────────────────────────────────────────────────────────
+backup:
+  enabled: false
+  schedule: "0 2 * * *"          # 02:00 UTC daily
+  dbName: app
+  retentionDays: 14              # S3 lifecycle-style prune
+  activeDeadlineSeconds: 3600    # job killswitch (1h)
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+
+  # Image with psql + aws CLI + coreutils. Default: amazonlinux-based
+  # runner that bundles both. Swap for any image that has pg_dump and
+  # aws CLI v2 on PATH.
+  image:
+    repository: ghcr.io/golusoris/pg-backup
+    tag: "17.2"
+    pullPolicy: IfNotPresent
+
+  # Secret holding the database DSN. Key is the secret key name inside.
+  databaseUrlSecret:
+    name: myapp-db
+    key: dsn
+
+  # S3 (or any S3-compatible: minio, R2, B2, Wasabi).
+  s3:
+    bucket: ""
+    prefix: ""                   # defaults to <fullname>-backups
+    region: us-east-1
+    # Leave empty for AWS S3. Set for minio (http://minio:9000), R2, etc.
+    endpoint: ""
+    credentialsSecret:
+      name: myapp-backup-s3

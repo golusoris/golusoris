@@ -1,0 +1,31 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: golusoris-family apps
+  sourceRepos:
+    - https://github.com/golusoris/*
+    - https://github.com/lusoris/*
+    - oci://ghcr.io/golusoris/charts
+  destinations:
+    - namespace: "apps"
+      server: https://kubernetes.default.svc
+    - namespace: "platform"
+      server: https://kubernetes.default.svc
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+    - group: ""
+      kind: LimitRange
+  roles:
+    - name: read-only
+      description: Read-only view
+      policies:
+        - p, proj:platform:read-only, applications, get, platform/*, allow
+        - p, proj:platform:read-only, applications, sync, platform/*, deny
