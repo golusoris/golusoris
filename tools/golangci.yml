@@ -273,6 +273,10 @@ linters:
       - path: search/meilisearch/
         linters:
           - tagliatelle
+      # APNs wire format uses kebab-case (thread-id, content-available) per spec.
+      - path: notify/apns2/
+        linters:
+          - tagliatelle
       # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
       - path: auth/oauth2server/
         linters:
