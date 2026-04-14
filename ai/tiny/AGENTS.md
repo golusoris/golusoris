@@ -28,8 +28,9 @@ it via a `Predictor`.
 - `ai/tiny/` — core interfaces + MemoryRegistry + `Runner` abstraction.
 - `ai/tiny/gemma/` — Gemma LoRA fine-tuning (generative).
 - `ai/tiny/litert/` — MediaPipe Model Maker (text/image/audio classify).
-- `ai/tiny/serve/` — inference adapters (ollama for Gemma,
-  TFLite for LiteRT) — *pending*.
+- `ai/tiny/serve/ollama/` — Predictor for Gemma via Ollama HTTP API.
+- `ai/tiny/serve/tflite/` — Predictor for LiteRT — *pending* (Python
+  sidecar).
 
 ## Design notes
 
