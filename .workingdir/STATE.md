@@ -100,6 +100,21 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **ai/tiny foundation** landed — new framework capability
+  for training and serving small task-specific models. Go orchestrates,
+  Python does the heavy lifting.
+  - `ai/tiny/tiny.go` — core types: `Modality`, `TaskKind`, `Format`,
+    `Dataset`, `Job`, `Model`, `Ref`, `Prediction`, `LabelScore`;
+    interfaces: `Trainer`, `Predictor`, `Registry`. `MemoryRegistry`
+    assigns monotonic `Version` per `(TenantID, Name)` — clockwork
+    injected so tests can freeze time.
+  - `ValidateJob(Job) error` — cheap pre-flight so trainer containers
+    don't start just to fail.
+  - **Pending:** `ai/tiny/gemma/` (Gemma LoRA fine-tune via docker +
+    KerasNLP), `ai/tiny/litert/` (MediaPipe Model Maker → .tflite),
+    `ai/tiny/serve/` (ollama + tflite inference adapters). Per-tenant
+    PG-backed registry also pending.
+
 - 2026-04-14: **realtime/webrtc scaffold** landed — closes §4.9 last empty dir:
   - `realtime/webrtc/` — thin helper around `pion/webrtc/v4`. One-shot
     SDP offer/answer over HTTP (WHIP-style). `Signaler{api,cfg,onConnect,…}`
