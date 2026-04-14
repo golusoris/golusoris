@@ -1,7 +1,7 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-13 (Step 6.5 — runtime-agnostic + leader refactor + systemd landed).
+> Last update: 2026-04-14 (Step 17/18 — jobs/workflow Temporal + plugin/ registry landed).
 
 ## Naming conventions (Option B)
 
@@ -201,6 +201,15 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-14: **Step 17/18 — Temporal workflow + plugin registry** landed:
+  - `jobs/workflow/` — Temporal Go SDK fx module. `workflow.Module` provides `client.Client` + `worker.Worker`. Config: host, namespace, task_queue, TLS, api_key, identity. Uses `log.NewStructuredLogger` for slog bridge. Producer-only mode when TaskQueue is empty.
+  - `plugin/` — Generic, thread-safe extension-point registry (`Registry[T]`). `New`, `Register` (panic on dup), `MustRegister` (replace), `Get`, `MustGet`, `Keys`, `All`, `Entries`, `Len`. No external deps. Works on all GOOS.
+- 2026-04-14: **Step 19 — Testing extras** landed (92ce820):
+  - `testutil/fuzz/` — `CorpusDir`, `CorpusFiles`, `SeedFiles`, generic `RoundTrip[T]`.
+  - `testutil/load/` — vegeta-backed `Attack` + `Assert` with `MaxP99`, `MaxErrorRate`, `MaxMean`, `MinThroughput`.
+  - `testutil/mutation/` — go-mutesting subprocess runner, auto-skip, `AssertMinScore`.
+  - `testutil/prop/` — gopter wrapper with deterministic t.Name() seed + `Run(t, setup)`.
+- 2026-04-14: **Step 10c — FCM + APNS2** landed (closes Step 10 notify providers).
 - 2026-04-14: **Step 24 — Polish** landed:
   - `examples/minimal/main.go` — 5-module composition: Core + DB + otel.Module + HTTP + K8s. Compiles clean.
   - `examples/full/main.go` — production-ready composition: Core + DB + OTel + HTTP + K8s + Jobs + CacheMemory + CacheRedis + AuthOIDC + authz.Module + stripe.Module. Compiles clean.
