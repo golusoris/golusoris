@@ -9,9 +9,9 @@ import (
 func TestEtagRecorder_WriteHeader(t *testing.T) {
 	t.Parallel()
 	e := &etagRecorder{ResponseWriter: httptest.NewRecorder()}
-	e.WriteHeader(201)
-	if e.status != 201 {
-		t.Errorf("status = %d, want 201", e.status)
+	e.WriteHeader(http.StatusCreated)
+	if e.status != http.StatusCreated {
+		t.Errorf("status = %d, want %d", e.status, http.StatusCreated)
 	}
 }
 
@@ -32,8 +32,8 @@ func TestStatusOrDefault_nonzero(t *testing.T) {
 func TestStatusRecorder_WriteHeader(t *testing.T) {
 	t.Parallel()
 	s := &statusRecorder{ResponseWriter: httptest.NewRecorder()}
-	s.WriteHeader(201)
-	if s.status != 201 {
-		t.Errorf("status = %d, want 201", s.status)
+	s.WriteHeader(http.StatusCreated)
+	if s.status != http.StatusCreated {
+		t.Errorf("status = %d, want %d", s.status, http.StatusCreated)
 	}
 }

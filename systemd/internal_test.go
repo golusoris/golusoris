@@ -4,7 +4,6 @@ import (
 	"testing"
 )
 
-//nolint:paralleltest // t.Setenv mutates process env
 func TestAvailable_unset(t *testing.T) {
 	t.Setenv("NOTIFY_SOCKET", "")
 	if Available() {
@@ -12,7 +11,6 @@ func TestAvailable_unset(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // t.Setenv mutates process env
 func TestAvailable_set(t *testing.T) {
 	t.Setenv("NOTIFY_SOCKET", "/run/systemd/notify")
 	if !Available() {
@@ -34,7 +32,6 @@ func TestCheckSocketAddrSafe_normal(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // t.Setenv mutates process env
 func TestWatchdogInterval_unset(t *testing.T) {
 	t.Setenv("WATCHDOG_USEC", "")
 	if got := WatchdogInterval(); got != 0 {
