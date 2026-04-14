@@ -37,3 +37,8 @@ Thumbs.db
 .mockery-cache/
 tmp/
 .tmp/
+
+# Claude Code runtime state (personal, machine-local).
+# Team-shared config lives in .claude/settings.json + .claude/hooks/.
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
