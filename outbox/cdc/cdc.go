@@ -17,7 +17,7 @@
 //
 //	fx.New(
 //	    dbcdc.Module,           // db/cdc: sets cdc.dsn + creates slot
-//	    outboxcdc.Module,       // outbox/cdc: wires CDCDrainer into fx
+//	    outboxcdc.Module,       // outbox/cdc: wires Drainer into fx
 //	    fx.Provide(func(k *kafka.Client) outboxcdc.Sink {
 //	        return outboxcdc.NewKafkaSink(k, "outbox-events")
 //	    }),
@@ -53,7 +53,7 @@ const (
 	defaultSchema = "public"
 )
 
-// Sink receives a decoded outbox event forwarded by the CDCDrainer.
+// Sink receives a decoded outbox event forwarded by the Drainer.
 type Sink interface {
 	Send(ctx context.Context, ev outbox.Event) error
 }
@@ -79,14 +79,14 @@ func (c Config) withDefaults() Config {
 	return c
 }
 
-// CDCDrainer wires the db/cdc Consumer to an ordered set of Sinks.
-type CDCDrainer struct {
+// Drainer wires the db/cdc Consumer to an ordered set of Sinks.
+type Drainer struct {
 	cfg    Config
 	sinks  []Sink
 	logger *slog.Logger
 }
 
-// Module provides *CDCDrainer into the fx graph.
+// Module provides *Drainer into the fx graph.
 // Requires *config.Config, *dbcdc.Consumer, []Sink (fx.Group "cdc_sinks"), *slog.Logger.
 var Module = fx.Module("golusoris.outbox.cdc",
 	fx.Provide(loadConfig),
@@ -110,14 +110,14 @@ func loadConfig(cfg *config.Config) (Config, error) {
 	return c.withDefaults(), nil
 }
 
-func newDrainer(p params) *CDCDrainer {
-	d := &CDCDrainer{cfg: p.Cfg, sinks: p.Sinks, logger: p.Logger}
+func newDrainer(p params) *Drainer {
+	d := &Drainer{cfg: p.Cfg, sinks: p.Sinks, logger: p.Logger}
 	p.Consumer.SetHandler(d.handle)
 	return d
 }
 
 // handle is the db/cdc.Handler installed on the Consumer.
-func (d *CDCDrainer) handle(ctx context.Context, ev dbcdc.Event) error {
+func (d *Drainer) handle(ctx context.Context, ev dbcdc.Event) error {
 	if ev.Schema != d.cfg.Schema || ev.Table != d.cfg.Table {
 		return nil // not our table
 	}
@@ -126,7 +126,7 @@ func (d *CDCDrainer) handle(ctx context.Context, ev dbcdc.Event) error {
 	}
 	oe, err := rowToEvent(ev.New)
 	if err != nil {
-		d.logger.Warn("outbox/cdc: decode row", "err", err)
+		d.logger.WarnContext(ctx, "outbox/cdc: decode row", "err", err)
 		return nil // skip malformed rows; they'll be picked up by polling drainer
 	}
 	for _, s := range d.sinks {

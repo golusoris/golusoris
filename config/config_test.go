@@ -89,6 +89,7 @@ func TestUnsupportedExtension(t *testing.T) {
 }
 
 func TestGetters(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cfg.yaml")
 	yaml := "enabled: true\nratio: 1.5\ncount: 42\ntags:\n  - a\n  - b\n  - c\nname: test\n"

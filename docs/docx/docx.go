@@ -45,10 +45,10 @@ func OpenReader(_ context.Context, r io.ReaderAt, size int64) (*Document, error)
 	return &Document{r: rd, d: rd.Editable()}, nil
 }
 
-// Replace substitutes old with new in the document body.
+// Replace substitutes old with newVal in the document body.
 // n controls the number of replacements (-1 for all).
-func (d *Document) Replace(old, new string, n int) error {
-	if err := d.d.Replace(old, new, n); err != nil {
+func (d *Document) Replace(old, newVal string, n int) error {
+	if err := d.d.Replace(old, newVal, n); err != nil {
 		return fmt.Errorf("docx: replace %q: %w", old, err)
 	}
 	return nil
@@ -97,6 +97,8 @@ func (d *Document) Bytes() ([]byte, error) {
 
 // Close releases resources held by the underlying zip reader.
 func (d *Document) Close() error {
-	return d.r.Close()
+	if err := d.r.Close(); err != nil {
+		return fmt.Errorf("docx: close: %w", err)
+	}
+	return nil
 }
-

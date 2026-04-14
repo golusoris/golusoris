@@ -164,4 +164,3 @@ func newWorker(lc fx.Lifecycle, cfg Config, c client.Client) worker.Worker {
 	})
 	return w
 }
-

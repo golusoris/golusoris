@@ -125,5 +125,9 @@ func (t authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if t.apiKey != "" {
 		r.Header.Set("X-Api-Key", t.apiKey)
 	}
-	return t.base.RoundTrip(r)
+	resp, err := t.base.RoundTrip(r)
+	if err != nil {
+		return nil, fmt.Errorf("graphql: transport: %w", err)
+	}
+	return resp, nil
 }

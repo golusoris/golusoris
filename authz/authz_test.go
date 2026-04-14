@@ -86,8 +86,9 @@ func TestAddDeleteRoleForUser(t *testing.T) {
 		t.Error("charlie should have admin access after role assignment")
 	}
 
-	if err := e.DeleteRoleForUser("charlie", "alice"); err != nil {
-		t.Fatalf("DeleteRoleForUser: %v", err)
+	delErr := e.DeleteRoleForUser("charlie", "alice")
+	if delErr != nil {
+		t.Fatalf("DeleteRoleForUser: %v", delErr)
 	}
 	ok, err = e.Enforce("charlie", "/admin", "GET")
 	if err != nil {

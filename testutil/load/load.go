@@ -90,12 +90,12 @@ func Attack(t *testing.T, opts Options) *vegeta.Metrics {
 type Check func(*vegeta.Metrics) string
 
 // MaxErrorRate returns a Check that fails when the non-success fraction
-// exceeds max. max is a fraction in [0,1] (e.g. 0.01 = 1%).
-func MaxErrorRate(max float64) Check {
+// exceeds limit. limit is a fraction in [0,1] (e.g. 0.01 = 1%).
+func MaxErrorRate(limit float64) Check {
 	return func(m *vegeta.Metrics) string {
 		errRate := 1 - m.Success
-		if errRate > max {
-			return fmt.Sprintf("error rate %.2f%% exceeds max %.2f%%", errRate*100, max*100)
+		if errRate > limit {
+			return fmt.Sprintf("error rate %.2f%% exceeds max %.2f%%", errRate*100, limit*100)
 		}
 		return ""
 	}
@@ -123,11 +123,11 @@ func MaxMean(limit time.Duration) Check {
 }
 
 // MinThroughput returns a Check that fails when the achieved throughput
-// (req/s) falls below min.
-func MinThroughput(min float64) Check {
+// (req/s) falls below limit.
+func MinThroughput(limit float64) Check {
 	return func(m *vegeta.Metrics) string {
-		if m.Throughput < min {
-			return fmt.Sprintf("throughput %.2f req/s below min %.2f req/s", m.Throughput, min)
+		if m.Throughput < limit {
+			return fmt.Sprintf("throughput %.2f req/s below min %.2f req/s", m.Throughput, limit)
 		}
 		return ""
 	}

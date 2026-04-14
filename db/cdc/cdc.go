@@ -45,10 +45,10 @@ import (
 )
 
 const (
-	defaultSlot       = "golusoris"
-	defaultPublisher  = "golusoris"
-	defaultStandbyHz  = 10
-	outputPlugin      = "pgoutput"
+	defaultSlot      = "golusoris"
+	defaultPublisher = "golusoris"
+	defaultStandbyHz = 10
+	outputPlugin     = "pgoutput"
 )
 
 // Op is the WAL operation type.
@@ -181,7 +181,7 @@ func newConsumer(p params) *Consumer {
 func (c *Consumer) run(ctx context.Context) {
 	conn, err := c.connect(ctx)
 	if err != nil {
-		c.logger.Error("cdc: connect", "err", err)
+		c.logger.ErrorContext(ctx, "cdc: connect", "err", err)
 		return
 	}
 	defer func() { _ = conn.Close(ctx) }()
@@ -199,17 +199,17 @@ func (c *Consumer) run(ctx context.Context) {
 func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl.LSN, bool) {
 	sysident, err := pglogrepl.IdentifySystem(ctx, conn)
 	if err != nil {
-		c.logger.Error("cdc: identify system", "err", err)
+		c.logger.ErrorContext(ctx, "cdc: identify system", "err", err)
 		return 0, false
 	}
-	c.logger.Info("cdc: connected",
-		"systemID", sysident.SystemID,
+	c.logger.InfoContext(ctx, "cdc: connected",
+		"system_id", sysident.SystemID,
 		"timeline", sysident.Timeline,
 		"xlogpos", sysident.XLogPos,
 	)
 
 	if err := c.ensureSlot(ctx, conn, sysident.XLogPos); err != nil {
-		c.logger.Error("cdc: ensure slot", "err", err)
+		c.logger.ErrorContext(ctx, "cdc: ensure slot", "err", err)
 		return 0, false
 	}
 
@@ -220,7 +220,7 @@ func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl
 		},
 	}
 	if err := pglogrepl.StartReplication(ctx, conn, c.cfg.Slot, sysident.XLogPos, opts); err != nil {
-		c.logger.Error("cdc: start replication", "err", err)
+		c.logger.ErrorContext(ctx, "cdc: start replication", "err", err)
 		return 0, false
 	}
 	return sysident.XLogPos, true
@@ -237,7 +237,7 @@ func (c *Consumer) runLoop(ctx context.Context, conn *pgconn.PgConn, startLSN pg
 		if c.clk.Now().After(nextStandby) {
 			ssu := pglogrepl.StandbyStatusUpdate{WALWritePosition: clientXLogPos}
 			if err := pglogrepl.SendStandbyStatusUpdate(ctx, conn, ssu); err != nil {
-				c.logger.Error("cdc: standby status update", "err", err)
+				c.logger.ErrorContext(ctx, "cdc: standby status update", "err", err)
 				return
 			}
 			nextStandby = c.clk.Now().Add(standbyInterval)
@@ -253,7 +253,7 @@ func (c *Consumer) runLoop(ctx context.Context, conn *pgconn.PgConn, startLSN pg
 			if ctx.Err() != nil {
 				return // graceful shutdown
 			}
-			c.logger.Error("cdc: receive message", "err", err)
+			c.logger.ErrorContext(ctx, "cdc: receive message", "err", err)
 			return
 		}
 
@@ -272,7 +272,7 @@ func (c *Consumer) handleMessage(
 	nextStandby *time.Time,
 ) bool {
 	if errMsg, ok := rawMsg.(*pgproto3.ErrorResponse); ok {
-		c.logger.Error("cdc: postgres error", "msg", errMsg.Message, "code", errMsg.Code)
+		c.logger.ErrorContext(ctx, "cdc: postgres error", "msg", errMsg.Message, "code", errMsg.Code)
 		return true
 	}
 
@@ -285,7 +285,7 @@ func (c *Consumer) handleMessage(
 	case pglogrepl.PrimaryKeepaliveMessageByteID:
 		pkm, err := pglogrepl.ParsePrimaryKeepaliveMessage(msg.Data[1:])
 		if err != nil {
-			c.logger.Warn("cdc: parse keepalive", "err", err)
+			c.logger.WarnContext(ctx, "cdc: parse keepalive", "err", err)
 			return false
 		}
 		if pkm.ReplyRequested {
@@ -295,11 +295,11 @@ func (c *Consumer) handleMessage(
 	case pglogrepl.XLogDataByteID:
 		xld, err := pglogrepl.ParseXLogData(msg.Data[1:])
 		if err != nil {
-			c.logger.Warn("cdc: parse xlog", "err", err)
+			c.logger.WarnContext(ctx, "cdc: parse xlog", "err", err)
 			return false
 		}
 		if err := c.dispatch(ctx, xld, relations, clientXLogPos); err != nil {
-			c.logger.Error("cdc: handler returned error", "err", err)
+			c.logger.ErrorContext(ctx, "cdc: handler returned error", "err", err)
 			return true
 		}
 	}
@@ -315,7 +315,7 @@ func (c *Consumer) dispatch(
 ) error {
 	walMsg, err := pglogrepl.Parse(xld.WALData)
 	if err != nil {
-		c.logger.Warn("cdc: parse wal msg", "err", err)
+		c.logger.WarnContext(ctx, "cdc: parse wal msg", "err", err)
 		return nil
 	}
 
@@ -414,7 +414,7 @@ func (c *Consumer) ensureSlot(ctx context.Context, conn *pgconn.PgConn, startLSN
 		return fmt.Errorf("cdc: create slot: %w", err)
 	}
 	_ = startLSN
-	c.logger.Info("cdc: created replication slot", "slot", c.cfg.Slot)
+	c.logger.InfoContext(ctx, "cdc: created replication slot", "slot", c.cfg.Slot)
 	return nil
 }
 

@@ -11,6 +11,7 @@
 package wol
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"net"
@@ -35,7 +36,7 @@ func WakeTo(mac, addr string) error {
 	if err != nil {
 		return err
 	}
-	conn, err := net.Dial("udp", addr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "udp", addr)
 	if err != nil {
 		return fmt.Errorf("wol: dial %s: %w", addr, err)
 	}
@@ -73,7 +74,7 @@ func parseMACBytes(mac string) ([]byte, error) {
 	}
 	b, err := hex.DecodeString(clean)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("wol: decode hex: %w", err)
 	}
 	return b, nil
 }

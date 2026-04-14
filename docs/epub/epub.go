@@ -100,14 +100,16 @@ func (b *Book) WriteToWriter(w io.Writer) error {
 	_ = f.Close()
 	defer func() { _ = os.Remove(name) }()
 
-	if err := b.e.Write(name); err != nil {
-		return fmt.Errorf("epub: write temp: %w", err)
+	if writeErr := b.e.Write(name); writeErr != nil {
+		return fmt.Errorf("epub: write temp: %w", writeErr)
 	}
 	var data []byte
 	data, err = os.ReadFile(name) //nolint:gosec // G304: temp file path from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("epub: read temp: %w", err)
 	}
-	_, err = w.Write(data)
-	return err
+	if _, err = w.Write(data); err != nil {
+		return fmt.Errorf("epub: write output: %w", err)
+	}
+	return nil
 }

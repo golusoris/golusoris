@@ -54,7 +54,10 @@ func OpenReader(_ context.Context, r io.Reader) (*File, error) {
 
 // Close releases resources.
 func (f *File) Close() error {
-	return f.f.Close()
+	if err := f.f.Close(); err != nil {
+		return fmt.Errorf("xlsx: close: %w", err)
+	}
+	return nil
 }
 
 // SetHeader writes a header row (row 1) on sheet.

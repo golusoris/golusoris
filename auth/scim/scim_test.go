@@ -330,7 +330,7 @@ func TestGroupItem_InvalidPath(t *testing.T) {
 func TestPaging_QueryParams(t *testing.T) {
 	t.Parallel()
 	store := newMemStore()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, _ = store.CreateUser(context.Background(), scim.User{UserName: "u"})
 	}
 

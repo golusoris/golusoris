@@ -215,6 +215,12 @@ linters:
       - common-false-positives
       - legacy
     rules:
+      # gosec and gocritic run as separate CI steps or are suppressed by presets;
+      # //nolint:gosec and //nolint:gocritic directives in the codebase are
+      # intentional documentation — suppress nolintlint's "unused directive" check.
+      - linters:
+          - nolintlint
+        text: "unused for linter \"(gosec|gocritic)\""
       - path: _test\.go$
         linters:
           - funlen

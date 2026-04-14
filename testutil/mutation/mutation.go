@@ -44,7 +44,7 @@ func Run(ctx context.Context, t *testing.T, pkg string) Report {
 			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
 	}
 	cmd := exec.CommandContext(ctx, binPath, pkg) //nolint:gosec // G204: pkg is a package path from trusted test code
-	out, _ := cmd.CombinedOutput()               // non-zero exit expected when mutants survive
+	out, _ := cmd.CombinedOutput()                // non-zero exit expected when mutants survive
 	t.Logf("go-mutesting output:\n%s", out)
 	return parseReport(string(out))
 }
@@ -65,17 +65,17 @@ func RunFiles(ctx context.Context, t *testing.T, files ...string) Report {
 	return parseReport(string(out))
 }
 
-// AssertMinScore fails the test if r.Score is below min (fraction in [0,1]).
+// AssertMinScore fails the test if r.Score is below threshold (fraction in [0,1]).
 // When no mutants were generated the assertion is skipped with a log message.
-func AssertMinScore(t *testing.T, r Report, min float64) {
+func AssertMinScore(t *testing.T, r Report, threshold float64) {
 	t.Helper()
 	if r.Total == 0 {
 		t.Log("mutation: no mutants generated — nothing to assert")
 		return
 	}
-	if r.Score < min {
+	if r.Score < threshold {
 		t.Errorf("mutation score %.1f%% (killed %d/%d) is below minimum %.1f%%",
-			r.Score*100, r.Killed, r.Total, min*100)
+			r.Score*100, r.Killed, r.Total, threshold*100)
 	}
 }
 

@@ -49,12 +49,12 @@ const (
 
 // Config holds SMTP server configuration.
 type Config struct {
-	Addr             string        `koanf:"addr"`
-	Domain           string        `koanf:"domain"`
-	MaxMessageBytes  int64         `koanf:"max_message_bytes"`
-	MaxRecipients    int           `koanf:"max_recipients"`
-	ReadTimeout      time.Duration `koanf:"read_timeout"`
-	WriteTimeout     time.Duration `koanf:"write_timeout"`
+	Addr            string        `koanf:"addr"`
+	Domain          string        `koanf:"domain"`
+	MaxMessageBytes int64         `koanf:"max_message_bytes"`
+	MaxRecipients   int           `koanf:"max_recipients"`
+	ReadTimeout     time.Duration `koanf:"read_timeout"`
+	WriteTimeout    time.Duration `koanf:"write_timeout"`
 }
 
 // DefaultConfig returns a safe default configuration.

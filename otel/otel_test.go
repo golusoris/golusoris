@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 	otelapi "go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/config"
 	golusoris_otel "github.com/golusoris/golusoris/otel"
@@ -158,7 +158,7 @@ func TestNewWithLogs(t *testing.T) {
 	}
 }
 
-func TestModuleWithSlogBridge_coversHandler(t *testing.T) {
+func TestModuleWithSlogBridge_coversHandler(t *testing.T) { //nolint:paralleltest // modifies global slog.Default
 	// Not parallel: modifies global slog default.
 	prev := slog.Default()
 	t.Cleanup(func() { slog.SetDefault(prev) })
@@ -199,10 +199,10 @@ func TestModuleWithSlogBridge_coversHandler(t *testing.T) {
 	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	// Trigger the fanout handler methods.
-	slog.Info("test from fanout", "key", "value")
-	logger := slog.Default().WithGroup("grp").With("a", "b")
-	logger.Debug("debug")
+	// Trigger the fanout handler methods via the default logger (set by the module).
+	l := slog.Default()
+	l.InfoContext(ctx, "test from fanout", "key", "value")
+	l.WithGroup("grp").With("a", "b").DebugContext(ctx, "debug")
 	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}
