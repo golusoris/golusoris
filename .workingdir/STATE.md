@@ -119,6 +119,10 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-14: **Step 24 — Polish** landed:
+  - `examples/minimal/main.go` — 5-module composition: Core + DB + otel.Module + HTTP + K8s. Compiles clean.
+  - `examples/full/main.go` — production-ready composition: Core + DB + OTel + HTTP + K8s + Jobs + CacheMemory + CacheRedis + AuthOIDC + authz.Module + stripe.Module. Compiles clean.
+  - 0 lint issues on examples/.
 - 2026-04-13: **Step 23 — AI layer** landed (docs/upstream snapshots deferred):
   - `.claude/skills/wire-fx-module.md` — full prompt for adding fx modules (config, params, lifecycle, logging, lint rules).
   - `.claude/skills/scaffold-ogen-handler.md` — ogen handler stub from operationId (interface lookup, error mapping, test wiring).

@@ -55,6 +55,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 21 — Deploy** (partial): `deploy/helm/` (base Helm chart: Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, Ingress, downward-API env, /livez probes) · `deploy/observability/` (PrometheusRule alerts + Grafana HTTP dashboard)
 - **Step 22 — GitHub template**: reusable workflows (`ci-go.yml`, `release-go.yml`, `codeql.yml`, `scorecard.yml`) · `template/.github/` (per-app CI + release stubs, dependabot) · `template/.devcontainer/` (Go + Postgres + Redis + NATS devcontainer)
 - **Step 23 — AI layer**: `.claude/skills/` (wire-fx-module, scaffold-ogen-handler, add-river-worker, add-migration, bump-golusoris) · `docs/migrations/v0.1.x.md` (initial stable API migration guide)
+- **Step 24 — Polish**: `examples/minimal/` (Core + DB + OTel + HTTP + K8s) · `examples/full/` (all major modules composed)
 - **Step 18 — Misc**: `clikit/` (cobra + fx-aware CLI builder) · `clikit/tui/` (bubbletea Run/RunInline helpers) · `selfupdate/` (GitHub release self-update with SHA-256 checksum verification)
 
 ## Modules (high level)
