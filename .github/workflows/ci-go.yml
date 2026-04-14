@@ -49,7 +49,6 @@ on:
 permissions:
   contents: read
   security-events: write   # for gosec SARIF upload
-  pull-requests: read       # for PR title check
 
 jobs:
   # ── Conventional-commit PR title ──────────────────────────────────────────
@@ -57,25 +56,19 @@ jobs:
     name: PR title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      pull-requests: read
     steps:
-      - uses: amannn/action-semantic-pull-request@v5
+      - name: Check PR title
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          types: |
-            feat
-            fix
-            docs
-            chore
-            refactor
-            test
-            perf
-            ci
-            build
-            revert
-          requireScope: false
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if ! echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+'; then
+            echo "::error::PR title does not follow Conventional Commits."
+            echo "::error::Got: $PR_TITLE"
+            echo "::error::Expected: <type>(<scope>): <description>"
+            echo "::error::Valid types: feat fix docs chore refactor test perf ci build revert"
+            exit 1
+          fi
+          echo "OK: $PR_TITLE"
 
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
