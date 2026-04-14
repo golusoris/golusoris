@@ -100,6 +100,11 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 15 commerce extras** landed — closes payments:
+  - `payments/subs/` — provider-agnostic subscription state machine. States: incomplete/trialing/active/past_due/paused/canceled. Methods: Start, Activate, Cancel (immediate or scheduled), Resume, Pause, Unpause, MarkPastDue, Renew (gap-free period advance), ChangePlan, ProcessDue (batch scanner for scheduled cancels + expired trials). `Service` injects clockwork.Clock + slog. `Store` interface + `MemoryStore`. `Options.OnChange` callback per transition. UUIDv7 ID gen via `golusoris/id`.
+  - `payments/meter/` — usage metering. `Recorder.Record(Event)` idempotent on `Event.ID`; `Usage(customerID, meter, since, until) float64`; `List(Filter) []Event`. `Store` interface + `MemoryStore` (sorted by `At`). Apps export aggregated rollups to processor metered-billing endpoints (Stripe usage records, Lemon Squeezy, Paddle).
+  - `payments/invoice/` — invoice modelling + sequential numbering + HTML rendering. `Invoice{ID,Number,TenantID,CustomerID,Status,IssueDate,DueDate,LineItems,Subtotal,Tax,Total,Currency,Notes,BillTo,BillFrom,Metadata}`. `Numberer` interface + `MemoryNumberer(prefix, width)` per-tenant counter. `Renderer` interface + `HTMLRenderer` (default minimal-stylable template via html/template). PDF deferred until `pdf/` lands (CGO sub-module per §3.16b) — apps pipe HTML through Gotenberg/weasyprint or store HTML directly for now.
+  - 0 lint · race-green across `./payments/...` (4 packages: stripe, subs, meter, invoice).
 - 2026-04-14: **Step 14 backends** landed — closes most of search/ + ai/llm/:
   - `search/typesense/` — Typesense REST via raw HTTP. `NewBackend(Options{URL,APIKey,HTTPClient})`. JSONL `/documents/import?action=upsert` for idempotent indexing. `Query.Filters` → `filter_by` via `:=` equality; use `RawFilter` for ranges. `CreateCollection` treats 409 as idempotent success. Header `X-Typesense-Api-Key` (canonical form).
   - `search/meilisearch/` — Meilisearch REST via raw HTTP. `NewBackend(Options{URL,APIKey,HTTPClient})`. `CreateCollection` creates index + PUTs filterable/sortable attributes from Schema hints. `Query.Filters` → Meili DSL (`k = "v" AND …`); `RawFilter` for ranges/OR/NOT. `Query.Offset` passes through natively. Added path to tagliatelle exclusion (Meili wire is camelCase).
