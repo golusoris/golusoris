@@ -15,6 +15,15 @@ permissions:
 
 jobs:
   release:
+    # The reusable release-go.yml needs these at the job level — when one
+    # workflow calls another, the caller's job permissions cap what the
+    # callee can request. Workflow-level stays `contents: read` for the
+    # Scorecard Token-Permissions check; writes are scoped to this one job.
+    permissions:
+      contents: write       # goreleaser creates the GitHub Release
+      packages: write       # pushes the OCI image to GHCR
+      id-token: write       # cosign keyless + SLSA OIDC
+      attestations: write   # actions/attest-build-provenance
     uses: ./.github/workflows/release-go.yml
     with:
       image-name: ghcr.io/golusoris/golusoris
