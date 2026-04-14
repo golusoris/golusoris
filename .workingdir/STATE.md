@@ -121,6 +121,15 @@
     `web3/solana` edwards25519, `science/plot` + `pdf` x/image +
     x/crypto.
   - AGENTS.md reflow for markdownlint (gemma, litert).
+  - Coverage 69.6% → 70.7% via targeted tests in `auth/oidc`
+    (withDefaults + PKCE helpers, RFC 7636 vectors), `httpx/rangeserve`
+    (Opener mock, 206 range, 404/500 branches — 100%), `realtime/sse`
+    (frame delivery, empty-subscribers noop, non-Flusher → 500 —
+    78.7%).
+  - Disabled GitHub's Default CodeQL setup (was duplicating custom
+    `.github/workflows/codeql.yml`); closed 2 superseded Dependabot
+    PRs; created 8 missing Dependabot labels (dependencies,
+    github-actions, go, hw, media, science, testing, web3).
 
 - 2026-04-14: **ai/tiny/litert** landed — MediaPipe Model Maker
   trainer producing LiteRT (`.tflite`) artifacts. Mirrors gemma's
