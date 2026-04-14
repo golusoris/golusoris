@@ -100,6 +100,12 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **CI hardening — coverage push** (multiple commits on `main`):
+  - gosec fixed: `--exclude-rules` flag in CI (was using `// #nosec` inside `//nolint` which gosec ignores). gosec now green.
+  - golangci-lint: resolved all 55 issues after v9 upgrade. 0 issues.
+  - Coverage: added 30+ `internal_test.go` files across the framework targeting `withDefaults`/`loadConfig`/`loadOptions` and pure functions. CI coverage: 66.9% → 67.8% (need 70%). In-flight: more tests added (grpc, cache/memory, cache/redis, otel, httpx/geofence, db/cdc, auth/policy, auth/session, kafka, outbox, outbox/cdc, timescale, geo, pgfts, httpx/client, systemd, k8s/health, leader/pg, leader/k8s, auth/oauth2server, db/pgx tracer, httpx/middleware, container/runtime, search/meilisearch, auth/lockout, apidocs). Latest push: `9d4d037` → `39a5166` → `140d209` → pending with more tests. CI still failing coverage gate (67.8%).
+  - **Pending**: coverage gate at 70% not yet reached. Remaining gap ~2.2%. Most of the remaining 0% functions require external services (Kafka, NATS, ClickHouse, Redis, PostgreSQL).
+
 - 2026-04-14: **Step 10c — FCM + APNS2** landed (closes Step 10 notify providers):
   - `notify/fcm/` — Firebase Cloud Messaging HTTP v1 via raw HTTP. Auth: Google service-account JSON → RS256-signed JWT assertion → OAuth2 token exchange → cached bearer (refreshed < 5 min before expiry, concurrency-safe mutex). Each `msg.To[i]` is one device token; `msg.Metadata` → FCM `data` (string-valued). `Options.ServiceAccountJSON` or `Options.ServiceAccount` for struct injection. Clock injected via `clockwork.Clock`. Dep: golang-jwt/jwt/v5 (already in go.mod).
   - `notify/apns2/` — Apple Push Notification service (HTTP/2 + token auth) via raw HTTP. `.p8` PEM-encoded PKCS8 ECDSA P-256 key → ES256-signed JWT with `{iss:TeamID, iat}` + `{kid:KeyID}` header. JWT cached 50 min (APNs accepts up to 60). `Options{KeyID, TeamID, Topic, P8Key, Production, DefaultPushType, DefaultPriority, Expiration, HTTPClient, Clock}`. `ErrUnregistered` sentinel for 410 / "Unregistered" body — apps `errors.Is` to clean up dead devices. Metadata keys split: `apns-*` headers → request headers, `apns-sound/badge/thread-id/content-available` → aps fields, everything else → top-level custom payload. Deps: golang-jwt/jwt/v5, golang.org/x/net/http2 (explicit h2 transport configuration).
