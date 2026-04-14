@@ -53,6 +53,7 @@ Pre-alpha. See [.workingdir/PLAN.md](.workingdir/PLAN.md) + [.workingdir/STATE.m
 - **Step 19 — Testing extras** (partial): `testutil/fxtest/` (fx lifecycle helper for tests) · `testutil/factory/` (deterministic gofakeit faker) · `testutil/snapshot/` (go-snaps snapshot + JSON snapshot)
 - **Step 20 — CLI + MCP**: `cmd/golusoris/` (scaffolder: init/add/bump) · `cmd/golusoris-mcp/` (MCP JSON-RPC server exposing framework tools)
 - **Step 21 — Deploy** (partial): `deploy/helm/` (base Helm chart: Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, Ingress, downward-API env, /livez probes) · `deploy/observability/` (PrometheusRule alerts + Grafana HTTP dashboard)
+- **Step 22 — GitHub template**: reusable workflows (`ci-go.yml`, `release-go.yml`, `codeql.yml`, `scorecard.yml`) · `template/.github/` (per-app CI + release stubs, dependabot) · `template/.devcontainer/` (Go + Postgres + Redis + NATS devcontainer)
 - **Step 18 — Misc**: `clikit/` (cobra + fx-aware CLI builder) · `clikit/tui/` (bubbletea Run/RunInline helpers) · `selfupdate/` (GitHub release self-update with SHA-256 checksum verification)
 
 ## Modules (high level)

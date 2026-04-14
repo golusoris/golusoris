@@ -1,0 +1,14 @@
+# Per-app release — delegates to the reusable workflow in golusoris/golusoris.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    uses: golusoris/golusoris/.github/workflows/release-go.yml@main
+    with:
+      image-name: ghcr.io/${{ github.repository }}
+    secrets: inherit

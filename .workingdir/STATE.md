@@ -119,6 +119,16 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-13: **Step 22 — GitHub template + reusable workflows** landed:
+  - `.github/workflows/ci-go.yml` — reusable: lint (golangci) + test (race, cover) + vuln (govulncheck) + build. Inputs: go-version-file, golangci-version, lint-timeout, test-timeout, coverage-threshold.
+  - `.github/workflows/release-go.yml` — reusable: GoReleaser multi-arch + GHCR push + syft SBOM + cosign keyless + attest-build-provenance. Inputs: image-name, go-version-file, goreleaser-config.
+  - `.github/workflows/codeql.yml` — reusable: CodeQL Go analysis (security-extended + security-and-quality).
+  - `.github/workflows/scorecard.yml` — reusable: OSSF Scorecard with SARIF upload to code-scanning.
+  - `template/.github/workflows/ci.yml` — per-app stub calling ci-go.yml@main.
+  - `template/.github/workflows/release.yml` — per-app stub calling release-go.yml@main.
+  - `template/.github/dependabot.yml` — gomod (weekly, golusoris group) + github-actions (weekly).
+  - `template/.devcontainer/devcontainer.json` — Go 1.24 devcontainer + docker-in-docker + air + golangci + govulncheck + sqlc. VSCode extensions + port forwards (8080/5432/6379/4222).
+  - `template/.devcontainer/docker-compose.yml` — app + postgres 17 + redis 7 + nats 2 with env wiring.
 - 2026-04-13: **Step 21 — Deploy** landed (partial — logging/terraform/pulumi/flux/argocd/multiregion deferred):
   - `deploy/helm/` — base Helm chart (Chart.yaml v0.1.0, values.yaml with full defaults). Templates: Deployment (checksum annotation, downward-API env, /tmp emptyDir, read-only FS, non-root), Service, ServiceAccount, ConfigMap, Secret (stringData), HPA (autoscaling/v2), PDB (policy/v1), NetworkPolicy (Ingress+open-Egress), ServiceMonitor (monitoring.coreos.com/v1), Ingress. All features gated via values flags.
   - `deploy/observability/` — PrometheusRule (5 alerts: HighErrorRate, HighLatencyP99, HighMemoryUsage, GoroutineLeak, HealthCheckFailing on app_check_status). Grafana dashboard JSON (uid: golusoris-http, 3 panels: Request Rate, Error Rate, P99+P50 Latency).

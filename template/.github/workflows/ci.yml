@@ -1,0 +1,20 @@
+# Per-app CI — delegates to the reusable workflow in golusoris/golusoris.
+# Replace @main with a pinned tag (e.g. @v0.3.0) for stability.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
+    with:
+      go-version-file: go.mod
+      coverage-threshold: 70

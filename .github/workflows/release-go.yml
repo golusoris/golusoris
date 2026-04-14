@@ -1,0 +1,91 @@
+# Reusable release workflow for golusoris-based Go applications.
+# Runs on version tags (v*.*.*) and produces:
+#   - Multi-arch OCI image pushed to GHCR
+#   - syft SBOM attached to release
+#   - cosign keyless signature
+#   - SLSA provenance (via slsa-framework/slsa-github-generator)
+#
+# Apps call it with:
+#   jobs:
+#     release:
+#       uses: golusoris/golusoris/.github/workflows/release-go.yml@main
+#       secrets: inherit
+name: release-go (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: OCI image name (e.g. ghcr.io/myorg/myapp)
+        type: string
+        required: true
+      go-version-file:
+        description: Path to go.mod
+        type: string
+        default: go.mod
+      goreleaser-config:
+        description: Path to .goreleaser.yml
+        type: string
+        default: tools/.goreleaser.yml
+    secrets:
+      COSIGN_PASSWORD:
+        required: false
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write   # needed for cosign keyless + SLSA
+  attestations: write
+
+jobs:
+  goreleaser:
+    name: GoReleaser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --config=${{ inputs.goreleaser-config }} --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ inputs.image-name }}:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Attest SBOM
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ inputs.image-name }}
+          subject-digest: ${{ steps.goreleaser.outputs.digest }}
+          push-to-registry: true

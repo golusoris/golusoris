@@ -1,0 +1,103 @@
+# Reusable CI workflow for golusoris-based Go applications.
+#
+# Apps call it with:
+#   jobs:
+#     ci:
+#       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
+#       with:
+#         go-version-file: go.mod
+name: ci-go (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      go-version-file:
+        description: Path to go.mod for Go version resolution
+        type: string
+        default: go.mod
+      golangci-version:
+        description: golangci-lint version
+        type: string
+        default: latest
+      lint-timeout:
+        description: golangci-lint timeout
+        type: string
+        default: 5m
+      test-timeout:
+        description: go test timeout
+        type: string
+        default: 10m
+      coverage-threshold:
+        description: Minimum coverage percentage (0 = skip check)
+        type: number
+        default: 0
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: ${{ inputs.golangci-version }}
+          args: --timeout=${{ inputs.lint-timeout }}
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - name: Run tests
+        run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Check coverage threshold
+        if: ${{ inputs.coverage-threshold > 0 }}
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
+            echo "Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
+            exit 1
+          fi
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  vuln:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - run: go build ./...
