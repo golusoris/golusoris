@@ -18,3 +18,12 @@ jobs:
     with:
       go-version-file: go.mod
       coverage-threshold: 70
+      # Uncomment and set your Go module path to enable apidiff:
+      # module-path: github.com/golusoris/app-CHANGEME
+
+  codeql:
+    uses: golusoris/golusoris/.github/workflows/codeql.yml@main
+
+  scorecard:
+    uses: golusoris/golusoris/.github/workflows/scorecard.yml@main
+    secrets: inherit

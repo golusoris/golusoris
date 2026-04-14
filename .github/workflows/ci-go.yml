@@ -6,6 +6,8 @@
 #       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
 #       with:
 #         go-version-file: go.mod
+#         coverage-threshold: 70
+#         module-path: github.com/myorg/myapp
 name: ci-go (reusable)
 
 on:
@@ -30,12 +32,48 @@ on:
       coverage-threshold:
         description: Minimum coverage percentage (0 = skip check)
         type: number
-        default: 0
+        default: 70
+      module-path:
+        description: Go module path for apidiff (e.g. github.com/myorg/myapp)
+        type: string
+        default: ""
+      skip-apidiff:
+        description: Skip apidiff check (set true for first release)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  security-events: write   # for gosec SARIF upload
+  pull-requests: read       # for PR title check
 
 jobs:
+  # ── Conventional-commit PR title ──────────────────────────────────────────
+  pr-title:
+    name: PR title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            test
+            perf
+            ci
+            build
+            revert
+          requireScope: false
+
+  # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -50,8 +88,9 @@ jobs:
           version: ${{ inputs.golangci-version }}
           args: --timeout=${{ inputs.lint-timeout }}
 
-  test:
-    name: Test
+  # ── Security scan (gosec) ─────────────────────────────────────────────────
+  gosec:
+    name: Security (gosec)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -59,26 +98,21 @@ jobs:
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
-      - name: Run tests
-        run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...
-      - name: Check coverage threshold
-        if: ${{ inputs.coverage-threshold > 0 }}
+      - name: gosec
         run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | tr -d '%')
-          echo "Coverage: ${COVERAGE}%"
-          if (( $(echo "$COVERAGE < ${{ inputs.coverage-threshold }}" | bc -l) )); then
-            echo "Coverage ${COVERAGE}% is below threshold ${{ inputs.coverage-threshold }}%"
-            exit 1
-          fi
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -exclude-generated -fmt sarif -out gosec.sarif ./... || true
+          gosec -exclude-generated ./...
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: coverage
-          path: coverage.out
-          retention-days: 7
+          sarif_file: gosec.sarif
+        continue-on-error: true
 
+  # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:
-    name: Vulnerabilities
+    name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -91,6 +125,35 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+  # ── Tests + coverage ──────────────────────────────────────────────────────
+  test:
+    name: Test (race + coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - name: Run tests
+        run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Check coverage threshold
+        if: ${{ inputs.coverage-threshold > 0 }}
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          if awk "BEGIN { exit !($COVERAGE < ${{ inputs.coverage-threshold }}) }"; then
+            echo "::error::Coverage ${COVERAGE}% is below required ${{ inputs.coverage-threshold }}%"
+            exit 1
+          fi
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  # ── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -101,3 +164,39 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
       - run: go build ./...
+
+  # ── API compatibility (apidiff vs previous tag) ───────────────────────────
+  apidiff:
+    name: API compatibility (apidiff)
+    if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: ${{ inputs.go-version-file }}
+          cache: true
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@latest
+      - name: Run apidiff vs previous tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag — skipping apidiff (first release)"
+            exit 0
+          fi
+          echo "Comparing HEAD against $PREV_TAG"
+          apidiff -m ${{ inputs.module-path }} . > /tmp/current-api.txt 2>/dev/null || true
+          CURRENT_SHA=$(git rev-parse HEAD)
+          git stash --include-untracked --quiet || true
+          git checkout --quiet "$PREV_TAG"
+          apidiff -m ${{ inputs.module-path }} . > /tmp/prev-api.txt 2>/dev/null || true
+          git checkout --quiet "$CURRENT_SHA"
+          git stash pop --quiet || true
+          if ! apidiff /tmp/prev-api.txt /tmp/current-api.txt; then
+            echo "::error::Breaking API changes vs $PREV_TAG — add BREAKING CHANGE: footer or bump major version."
+            exit 1
+          fi
+          echo "API is backwards-compatible with $PREV_TAG."

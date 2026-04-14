@@ -14,6 +14,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ── Conventional-commit PR title ────────────────────────────────────────────
+  pr-title:
+    name: PR title (Conventional Commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            chore
+            refactor
+            test
+            perf
+            ci
+            build
+            revert
+          requireScope: false
+
+  # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -28,30 +54,31 @@ jobs:
           version: latest
           args: --config=tools/golangci.yml --timeout=5m
 
-  test:
-    name: Test
+  # ── Security scan (gosec) ───────────────────────────────────────────────────
+  gosec:
+    name: Security (gosec)
     runs-on: ubuntu-latest
-    # Docker is preinstalled on ubuntu-latest runners and reachable on the
-    # default socket — testutil/pg uses testcontainers-go to spawn Postgres.
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
-      - name: Verify Docker is reachable (testutil/pg requires it)
-        run: docker info
-      - name: Run tests
-        run: go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
-      - name: Upload coverage
-        uses: actions/upload-artifact@v4
+      - name: gosec
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          gosec -exclude-generated -fmt sarif -out gosec.sarif ./... || true
+          gosec -exclude-generated ./...
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          name: coverage
-          path: coverage.out
-          retention-days: 7
+          sarif_file: gosec.sarif
+        continue-on-error: true   # SARIF upload requires Advanced Security (private repos)
 
+  # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
-    name: Vulnerabilities
+    name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -64,6 +91,37 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@latest
           govulncheck ./...
 
+  # ── Tests + coverage ────────────────────────────────────────────────────────
+  test:
+    name: Test (race + coverage)
+    runs-on: ubuntu-latest
+    # Docker is preinstalled on ubuntu-latest runners — testutil/pg needs it.
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify Docker is reachable
+        run: docker info
+      - name: Run tests
+        run: go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Check coverage threshold (70%)
+        run: |
+          COVERAGE=$(go tool cover -func=coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
+          echo "Coverage: ${COVERAGE}%"
+          if awk "BEGIN { exit !($COVERAGE < 70) }"; then
+            echo "::error::Coverage ${COVERAGE}% is below the required 70%"
+            exit 1
+          fi
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -74,3 +132,50 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go build ./...
+
+  # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
+  apidiff:
+    name: API compatibility (apidiff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # need full history for git describe
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install apidiff
+        run: go install golang.org/x/exp/cmd/apidiff@latest
+      - name: Run apidiff vs previous tag
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous tag found — skipping apidiff (first release)"
+            exit 0
+          fi
+          echo "Comparing HEAD against $PREV_TAG"
+
+          # Export current API
+          apidiff -m github.com/golusoris/golusoris . > /tmp/current-api.txt 2>/dev/null || true
+
+          # Save current work and check out the previous tag
+          CURRENT_SHA=$(git rev-parse HEAD)
+          git stash --include-untracked --quiet || true
+          git checkout --quiet "$PREV_TAG"
+
+          # Export previous API
+          apidiff -m github.com/golusoris/golusoris . > /tmp/prev-api.txt 2>/dev/null || true
+
+          # Restore
+          git checkout --quiet "$CURRENT_SHA"
+          git stash pop --quiet || true
+
+          # Diff — non-zero exit if incompatible changes detected
+          if ! apidiff /tmp/prev-api.txt /tmp/current-api.txt; then
+            echo ""
+            echo "::error::Breaking API changes detected vs $PREV_TAG."
+            echo "::error::Add a 'BREAKING CHANGE:' or '!' footer to the commit, or bump the major version."
+            exit 1
+          fi
+          echo "API is backwards-compatible with $PREV_TAG."
