@@ -3,6 +3,7 @@ module github.com/golusoris/golusoris
 go 1.26.2
 
 require (
+	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.89
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
@@ -33,7 +34,6 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/csrf v1.7.3
 	github.com/grafana/pyroscope-go v1.2.8
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
@@ -173,7 +173,6 @@ require (
 	github.com/google/gnostic-models v0.7.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
-	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.9 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.28.0 // indirect

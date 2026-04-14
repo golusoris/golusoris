@@ -1,14 +1,19 @@
-// Package csrf exposes gorilla/csrf as a golusoris middleware. Uses the
-// double-submit cookie pattern — the token is set as a cookie + must be
-// echoed in an X-CSRF-Token header or a `gorilla.csrf.Token` form field on
-// unsafe requests.
+// Package csrf exposes a CSRF middleware as a golusoris module.
+//
+// Uses [filippo.io/csrf/gorilla] — a drop-in replacement for
+// github.com/gorilla/csrf that enforces same-origin requests via
+// Fetch metadata / Origin headers (the approach Go 1.25 adopted in
+// net/http.CrossOriginProtection). This avoids GHSA-82ff-hg59-8x73
+// (TrustedOrigins scheme confusion) entirely and works with
+// reverse-proxies and localhost without per-app configuration.
+//
+// Token-based fields (X-CSRF-Token / gorilla.csrf.Token form field)
+// remain exposed for API compatibility with legacy templates but are
+// ignored — same-origin validation is the authoritative check.
 //
 // Config keys (env: APP_HTTP_CSRF_*):
 //
 //	http.csrf.secret  # 32-byte key (hex or base64); required to enable
-//	http.csrf.secure  # require HTTPS for the cookie (default true)
-//	http.csrf.domain  # cookie domain (default "")
-//	http.csrf.path    # cookie path (default "/")
 package csrf
 
 import (
@@ -18,7 +23,7 @@ import (
 	"fmt"
 	"net/http"
 
-	gcsrf "github.com/gorilla/csrf"
+	gcsrf "filippo.io/csrf/gorilla"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/config"
@@ -26,6 +31,10 @@ import (
 )
 
 // Options tunes the CSRF middleware.
+//
+// Secure/Domain/Path are retained for config compatibility but are
+// ignored — filippo.io/csrf/gorilla enforces same-origin via Fetch
+// metadata, not cookies.
 type Options struct {
 	// Secret is a 32-byte key, hex- or base64-encoded. Required.
 	Secret string `koanf:"secret"`
@@ -50,22 +59,13 @@ func New(opts Options) (middleware.Middleware, error) {
 	if err != nil {
 		return nil, fmt.Errorf("httpx/csrf: decode secret: %w", err)
 	}
-	csrfOpts := []gcsrf.Option{
-		gcsrf.Secure(opts.Secure),
-	}
-	if opts.Domain != "" {
-		csrfOpts = append(csrfOpts, gcsrf.Domain(opts.Domain))
-	}
-	if opts.Path != "" {
-		csrfOpts = append(csrfOpts, gcsrf.Path(opts.Path))
-	}
-	return gcsrf.Protect(key, csrfOpts...), nil
+	return gcsrf.Protect(key), nil
 }
 
 // Token extracts the CSRF token for the current request. Embed in forms as
 // `<input name="gorilla.csrf.Token" value="{{ .CSRFToken }}">` or return in
 // an X-CSRF-Token response header for SPA clients.
-func Token(r *http.Request) string { return gcsrf.Token(r) }
+func Token(r *http.Request) string { return gcsrf.Token(r) } //nolint:staticcheck // retained for template compatibility; token value is not authoritative
 
 func identity(next http.Handler) http.Handler { return next }
 
