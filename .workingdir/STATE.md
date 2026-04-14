@@ -119,6 +119,14 @@
   - 6.5a (`feat(container)`): `container/runtime/` — unified Info across k8s/docker/podman/systemd/bare. Detection order k8s → podman → docker → systemd → bare. Reads SA-token file, `/.dockerenv`, `/run/.containerenv`, `NOTIFY_SOCKET`, `INVOCATION_ID`, `/proc/self/cgroup` for the 64-char container ID. Replaces k8s/podinfo as primary for new code (k8s/podinfo kept as k8s-only view).
   - 6.5b (`refactor(leader)`): promoted `leader/` to top-level with pluggable backends. Moved `k8s/leader` → `leader/k8s` (client-go Lease). Added `leader/pg` using `pg_try_advisory_lock` — session-held, auto-releases on crash, no TTL tuning. Real-pg integration test proves two-replicas-one-leader. `leader.Callbacks` shared across backends.
   - 6.5c (`feat(systemd)` + docker examples): `systemd/` — sd_notify READY=1 on Start, STOPPING=1 on Stop, WATCHDOG=1 at `WATCHDOG_USEC/2` ticker. No-op when NOTIFY_SOCKET unset. Enhanced `tools/docker-compose.dev.yml` with `/livez` healthcheck + env-mapped config. `tools/Dockerfile.template` HEALTHCHECK now hits /livez. New `tools/prometheus/prometheus.yml` scrape-config example.
+- 2026-04-13: **Step 23 — AI layer** landed (docs/upstream snapshots deferred):
+  - `.claude/skills/wire-fx-module.md` — full prompt for adding fx modules (config, params, lifecycle, logging, lint rules).
+  - `.claude/skills/scaffold-ogen-handler.md` — ogen handler stub from operationId (interface lookup, error mapping, test wiring).
+  - `.claude/skills/add-river-worker.md` — river worker (Args struct, Worker, fx registration, rivtest harness).
+  - `.claude/skills/add-migration.md` — timestamped golang-migrate up/down pair (idempotency rules, verify steps).
+  - `.claude/skills/bump-golusoris.md` — bump + migration guide read + codemod application.
+  - `.claude/hooks/post-tool-use.md` — context auto-loading hooks + pre-commit convention summary.
+  - `docs/migrations/v0.1.x.md` — initial stable API migration guide covering config pointer, clock, error wrapping.
 - 2026-04-13: **Step 22 — GitHub template + reusable workflows** landed:
   - `.github/workflows/ci-go.yml` — reusable: lint (golangci) + test (race, cover) + vuln (govulncheck) + build. Inputs: go-version-file, golangci-version, lint-timeout, test-timeout, coverage-threshold.
   - `.github/workflows/release-go.yml` — reusable: GoReleaser multi-arch + GHCR push + syft SBOM + cosign keyless + attest-build-provenance. Inputs: image-name, go-version-file, goreleaser-config.
