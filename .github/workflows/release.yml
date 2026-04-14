@@ -1,0 +1,21 @@
+# Framework release — triggers on version tag push, invokes the reusable
+# release-go.yml pipeline (goreleaser + cosign + SBOM + SLSA).
+#
+# Apps use release-go.yml directly via `uses:`. This wrapper is only for
+# the framework repo's own release.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    uses: ./.github/workflows/release-go.yml
+    with:
+      image-name: ghcr.io/golusoris/golusoris
+    secrets: inherit
