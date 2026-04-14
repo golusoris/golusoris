@@ -100,6 +100,31 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 10 remainders — tracking + bounce + inbound**:
+  - `notify/tracking/` — HMAC-SHA256 signed open-pixel + click-redirect.
+    `Service{store,secret,clock}` issues signed URLs (`PixelURL`, `ClickURL`)
+    and serves them via `PixelHandler()` (1×1 43-byte GIF) + `ClickHandler()`
+    (302 to validated target). `Store` interface + `MemoryStore`. Open-redirect
+    guard: http/https scheme + non-empty host required. Client IP from
+    `X-Forwarded-For` first value or `RemoteAddr`.
+  - `notify/bounce/` — SES (SNS-wrapped) + Postmark bounce/complaint/delivery
+    webhook handlers. Normalizes to `Event{Kind,Email,MessageID,Subtype,
+    Permanent,Reason,Timestamp,Provider}`. `ev.Permanent()` = SES
+    `"Permanent"` bounceType, any complaint, or Postmark `!CanActivate`.
+    `SubscriptionConfirmation` acked with 200. 1 MiB body cap.
+  - `notify/inbound/` — SES + Postmark inbound-email webhooks + `ParseMIME`
+    for raw RFC 5322 (SMTP handoff). `Email{MessageID,From,To,CC,Subject,
+    Text,HTML,RawHeaders,ReceivedAt,Provider}`. SES SNS action parses MIME
+    inline; S3 action fires a bare event (app fetches from S3). Subject
+    decoded via `mime.WordDecoder` (RFC 2047). 25 MiB body cap.
+  - `tools/golangci.yml`: added `notify/bounce/` + `notify/inbound/` to
+    tagliatelle path exclusions (SES wire is camelCase, Postmark is
+    PascalCase — both RFC-mandated). Dropped 3× unused `//nolint:paralleltest`
+    directives in `systemd/internal_test.go` (flagged by nolintlint). Swapped
+    magic `201` for `http.StatusCreated` in `httpx/middleware/internal_test.go`
+    (usestdlibvars).
+  - 0 lint · race-green across `./...`.
+
 - 2026-04-14: **CI hardening — coverage push** (multiple commits on `main`):
   - gosec fixed: `--exclude-rules` flag in CI (was using `// #nosec` inside `//nolint` which gosec ignores). gosec now green.
   - golangci-lint: resolved all 55 issues after v9 upgrade. 0 issues.

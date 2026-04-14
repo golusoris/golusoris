@@ -271,6 +271,16 @@ linters:
       - path: notify/postmark/
         linters:
           - tagliatelle
+      # SES webhook uses camelCase (notificationType, emailAddress) + Postmark
+      # bounce webhook uses PascalCase.
+      - path: notify/bounce/
+        linters:
+          - tagliatelle
+      # SES inbound uses camelCase (messageId) + Postmark inbound uses
+      # PascalCase (FromFull, ToFull, TextBody, HtmlBody).
+      - path: notify/inbound/
+        linters:
+          - tagliatelle
       # Teams MessageCard wire format uses @context/@type/themeColor by spec.
       - path: notify/teams/
         linters:
