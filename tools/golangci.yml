@@ -269,6 +269,10 @@ linters:
       - path: notify/teams/
         linters:
           - tagliatelle
+      # Meilisearch wire format uses camelCase (estimatedTotalHits, processingTimeMs).
+      - path: search/meilisearch/
+        linters:
+          - tagliatelle
       # OAuth 2.0 (RFC 6749) standard wire field name `access_token`.
       - path: auth/oauth2server/
         linters:

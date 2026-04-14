@@ -100,6 +100,15 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **Step 14 backends** landed — closes most of search/ + ai/llm/:
+  - `search/typesense/` — Typesense REST via raw HTTP. `NewBackend(Options{URL,APIKey,HTTPClient})`. JSONL `/documents/import?action=upsert` for idempotent indexing. `Query.Filters` → `filter_by` via `:=` equality; use `RawFilter` for ranges. `CreateCollection` treats 409 as idempotent success. Header `X-Typesense-Api-Key` (canonical form).
+  - `search/meilisearch/` — Meilisearch REST via raw HTTP. `NewBackend(Options{URL,APIKey,HTTPClient})`. `CreateCollection` creates index + PUTs filterable/sortable attributes from Schema hints. `Query.Filters` → Meili DSL (`k = "v" AND …`); `RawFilter` for ranges/OR/NOT. `Query.Offset` passes through natively. Added path to tagliatelle exclusion (Meili wire is camelCase).
+  - `search/pgfts/` — Postgres full-text search via pgxpool. Searcher-only — apps own table DDL + tsvector build. `Options{Table,VectorColumn,Language,Columns,RankColumn}`. Identifier safety: `[A-Za-z0-9_.]` whitelist. Rank column auto-split into `Hit.Score`. `Search` refactored into `buildSQL` + `scanHits` helpers (gocyclo compliance).
+  - `ai/llm/` refactor: `genOptions` exported as `Settings` + new `Resolve(defaults Settings, opts []Option) Settings` helper so sibling backends can honour the same `WithModel/WithMaxTokens/WithTemperature/WithSystem` options. `OpenAIClient` now goes through `Resolve`. **No breaking change** for public callers — `WithXxx` return types unchanged; `Options` signature unchanged.
+  - `ai/llm/anthropic/` — Anthropic Messages API via raw HTTP. `/v1/messages` + `X-Api-Key` + `Anthropic-Version: 2023-06-01` (canonical headers). Chat + SSE streaming via `content_block_delta/text_delta`. `Embed` returns unsupported-error (Anthropic has no embeddings endpoint). MaxTokens default 1024 since Anthropic requires it.
+  - `ai/llm/ollama/` — Ollama native API (`/api/chat` + NDJSON streaming + `/api/embeddings`). Complements the OpenAI-compat `OpenAIClient@localhost:11434/v1` path with Ollama-specific `options.num_predict/num_ctx` + `keep_alive` control. Fires on `float32[]` embeddings from `/api/embeddings`.
+  - `tools/golangci.yml`: added `search/meilisearch/` to tagliatelle path exclusion.
+  - 0 lint · race-green across `./ai/...` + `./search/typesense/...` + `./search/meilisearch/...`. pgfts test requires Postgres (Docker on Linux CI).
 - 2026-04-14: **Step 21 cont. — deploy extras** landed: Loki/Promtail + DB backup CronJob + Terraform modules + Flux/ArgoCD manifests.
   - `deploy/logging/` — demo-grade Loki StatefulSet (v3.3.2) + Promtail DaemonSet. K8s-metadata scrape config tags by namespace/app/pod/container. README points at `grafana/loki-stack` Helm chart for production.
   - `deploy/helm/templates/backup-cronjob.yaml` — pg_dump → gzip → S3/minio CronJob. Gated by `values.backup.enabled=false`. Retention pruning via `aws s3 ls | awk cutoff | xargs rm`. `helm template` verified both rendered and gated states. DSN + S3 creds via secretKeyRef (no plaintext in values).

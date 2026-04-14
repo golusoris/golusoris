@@ -65,27 +65,47 @@ type Chunk struct {
 	Err     error // non-nil signals stream error; final chunk has empty Content + nil Err
 }
 
-// Option tweaks a single generation.
-type Option func(*genOptions)
-
-type genOptions struct {
-	model       string
-	maxTokens   int
-	temperature float64
-	system      string
+// Settings are the per-request generation knobs an [Option] mutates.
+// Backend implementations (OpenAIClient, anthropic, ollama, …) resolve
+// Options into a Settings via [Resolve] and then emit the
+// backend-specific request shape.
+type Settings struct {
+	Model       string
+	MaxTokens   int
+	Temperature float64
+	System      string
 }
 
+// Option tweaks a single generation.
+type Option func(*Settings)
+
 // WithModel overrides the default model for this request.
-func WithModel(model string) Option { return func(o *genOptions) { o.model = model } }
+func WithModel(model string) Option { return func(s *Settings) { s.Model = model } }
 
 // WithMaxTokens sets the maximum output token budget.
-func WithMaxTokens(n int) Option { return func(o *genOptions) { o.maxTokens = n } }
+func WithMaxTokens(n int) Option { return func(s *Settings) { s.MaxTokens = n } }
 
 // WithTemperature sets sampling temperature (0 = deterministic, 1 = creative).
-func WithTemperature(t float64) Option { return func(o *genOptions) { o.temperature = t } }
+func WithTemperature(t float64) Option { return func(s *Settings) { s.Temperature = t } }
 
 // WithSystem sets a system prompt that is prepended to the message list.
-func WithSystem(prompt string) Option { return func(o *genOptions) { o.system = prompt } }
+func WithSystem(prompt string) Option { return func(s *Settings) { s.System = prompt } }
+
+// Resolve collapses a defaults value plus zero or more options into a
+// Settings value. Backend clients call this to translate user-supplied
+// [Option] values into a concrete per-request configuration. Defaults
+// leave Temperature=0 to mean "apply the backend's own default of 1.0
+// if caller didn't set one".
+func Resolve(defaults Settings, opts []Option) Settings {
+	s := defaults
+	if s.Temperature == 0 {
+		s.Temperature = 1.0
+	}
+	for _, o := range opts {
+		o(&s)
+	}
+	return s
+}
 
 // Client is the LLM capability interface.
 type Client interface {
@@ -129,7 +149,7 @@ func NewOpenAIClient(cfg Config) *OpenAIClient {
 // Chat implements [Client].
 func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Option) (Response, error) {
 	o := c.applyOpts(opts)
-	body, err := json.Marshal(chatRequest(o.model, messages, o, false))
+	body, err := json.Marshal(chatRequest(o.Model, messages, o, false))
 	if err != nil {
 		return Response{}, fmt.Errorf("llm: marshal: %w", err)
 	}
@@ -183,7 +203,7 @@ func (c *OpenAIClient) Stream(ctx context.Context, messages []Message, opts ...O
 	o := c.applyOpts(opts)
 	go func() {
 		defer close(ch)
-		body, err := json.Marshal(chatRequest(o.model, messages, o, true))
+		body, err := json.Marshal(chatRequest(o.Model, messages, o, true))
 		if err != nil {
 			ch <- Chunk{Err: fmt.Errorf("llm: marshal: %w", err)}
 			return
@@ -289,21 +309,14 @@ func (c *OpenAIClient) newRequest(ctx context.Context, path string, body []byte)
 	return req, nil
 }
 
-func (c *OpenAIClient) applyOpts(opts []Option) *genOptions {
-	o := &genOptions{
-		model:       c.cfg.Model,
-		temperature: 1.0,
-	}
-	for _, opt := range opts {
-		opt(o)
-	}
-	return o
+func (c *OpenAIClient) applyOpts(opts []Option) Settings {
+	return Resolve(Settings{Model: c.cfg.Model}, opts)
 }
 
-func chatRequest(model string, messages []Message, o *genOptions, stream bool) map[string]any {
+func chatRequest(model string, messages []Message, s Settings, stream bool) map[string]any {
 	msgs := make([]map[string]string, 0, len(messages)+1)
-	if o.system != "" {
-		msgs = append(msgs, map[string]string{"role": "system", "content": o.system})
+	if s.System != "" {
+		msgs = append(msgs, map[string]string{"role": "system", "content": s.System})
 	}
 	for _, m := range messages {
 		msgs = append(msgs, map[string]string{"role": string(m.Role), "content": m.Content})
@@ -311,11 +324,11 @@ func chatRequest(model string, messages []Message, o *genOptions, stream bool) m
 	req := map[string]any{
 		"model":       model,
 		"messages":    msgs,
-		"temperature": o.temperature,
+		"temperature": s.Temperature,
 		"stream":      stream,
 	}
-	if o.maxTokens > 0 {
-		req["max_tokens"] = o.maxTokens
+	if s.MaxTokens > 0 {
+		req["max_tokens"] = s.MaxTokens
 	}
 	return req
 }
