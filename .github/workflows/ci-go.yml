@@ -80,7 +80,7 @@ jobs:
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
-      - uses: golangci/golangci-lint-action@v8
+      - uses: golangci/golangci-lint-action@v9
         with:
           version: ${{ inputs.golangci-version }}
           args: --timeout=${{ inputs.lint-timeout }}
