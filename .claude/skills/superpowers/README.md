@@ -22,6 +22,8 @@ The first-party skills in the sibling directory (`add-migration`, `wire-fx-modul
 | `brainstorming` | Creating a feature, building a component, adding functionality — explores intent before implementation. |
 | `requesting-code-review` | Requesting review on your own changes. |
 | `receiving-code-review` | Processing review feedback you got back. |
+| `using-git-worktrees` | Creating an isolated worktree for a parallel branch of work with safety checks. |
+| `finishing-a-development-branch` | Wrapping up a branch: ship options, PR hand-off, cleanup. |
 
 ## Attribution
 
