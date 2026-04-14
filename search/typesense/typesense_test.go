@@ -98,3 +98,55 @@ var _ search.Backend = (*typesense.Backend)(nil)
 
 // Avoid unused json import when no decode test exercises it.
 var _ = json.Marshal
+
+func TestDeleteCollection(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodDelete, r.Method)
+		require.Equal(t, "/collections/mycol", r.URL.Path)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := typesense.NewBackend(typesense.Options{URL: srv.URL, APIKey: "k"})
+	require.NoError(t, b.DeleteCollection(context.Background(), "mycol"))
+}
+
+func TestDelete_SingleDoc(t *testing.T) {
+	t.Parallel()
+	var gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		require.Equal(t, http.MethodDelete, r.Method)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := typesense.NewBackend(typesense.Options{URL: srv.URL, APIKey: "k"})
+	require.NoError(t, b.Delete(context.Background(), "col", []string{"doc-1"}))
+	require.Equal(t, "/collections/col/documents/doc-1", gotPath)
+}
+
+func TestSearch_WithFilters(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hits":           []any{},
+			"found":          0,
+			"search_time_ms": 1,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := typesense.NewBackend(typesense.Options{URL: srv.URL, APIKey: "k"})
+	results, err := b.Search(context.Background(), "c", search.Query{
+		Q:       "hello",
+		Filters: map[string]any{"active": true},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, results)
+}

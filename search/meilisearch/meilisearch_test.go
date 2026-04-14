@@ -84,3 +84,59 @@ func TestNewBackend_RequiresURL(t *testing.T) {
 }
 
 var _ search.Backend = (*meilisearch.Backend)(nil)
+
+func TestCreateCollection(t *testing.T) {
+	t.Parallel()
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.Method+" "+r.URL.Path)
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{"taskUid": 1})
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL})
+	require.NoError(t, b.CreateCollection(context.Background(), search.Schema{
+		Name: "movies",
+		Fields: []search.Field{
+			{Name: "genre", Facet: true},
+			{Name: "release", Sort: true},
+		},
+	}))
+	require.Contains(t, paths[0], "/indexes")
+}
+
+func TestDeleteCollection(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodDelete, r.Method)
+		require.Equal(t, "/indexes/movies", r.URL.Path)
+		w.WriteHeader(http.StatusAccepted)
+		_ = json.NewEncoder(w).Encode(map[string]any{"taskUid": 2})
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL})
+	require.NoError(t, b.DeleteCollection(context.Background(), "movies"))
+}
+
+func TestSearch_WithFilter(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"hits":             []any{},
+			"totalHits":        0,
+			"processingTimeMs": 1,
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	b, _ := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL})
+	results, err := b.Search(context.Background(), "c", search.Query{
+		Q:       "action",
+		Filters: map[string]any{"genre": "comedy"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, results)
+}

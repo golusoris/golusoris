@@ -2,9 +2,12 @@ package selfupdate_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"testing"
 
 	"github.com/golusoris/golusoris/selfupdate"
@@ -107,6 +110,78 @@ func fakeClient(srv *httptest.Server) *http.Client {
 		r2.URL.Host = srv.Listener.Addr().String()
 		return http.DefaultTransport.RoundTrip(r2)
 	}}}
+}
+
+func TestUpdate_withChecksumAndAsset(t *testing.T) {
+	t.Parallel()
+
+	assetData := []byte("fake-binary-data")
+	h := sha256.New()
+	h.Write(assetData)
+	checksum := hex.EncodeToString(h.Sum(nil))
+	assetName := "app_" + runtime.GOOS + "_" + runtime.GOARCH
+	checksumTxt := checksum + "  " + assetName + "\n"
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test/app/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": "v2.0.0",
+			"assets": []any{
+				map[string]any{"name": assetName, "browser_download_url": "http://placeholder/asset"},
+				map[string]any{"name": "app_checksums.txt", "browser_download_url": "http://placeholder/checksums"},
+			},
+		})
+	})
+	mux.HandleFunc("/checksums", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(checksumTxt))
+	})
+	mux.HandleFunc("/asset", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(assetData)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	result, err := selfupdate.Update(context.Background(), selfupdate.Options{
+		Owner:      "test",
+		Repo:       "app",
+		Version:    "v1.0.0",
+		HTTPClient: fakeClient(srv),
+	})
+	if result.LatestVersion != "v2.0.0" {
+		t.Errorf("LatestVersion = %q, want v2.0.0", result.LatestVersion)
+	}
+	// Apply fails in test (can't replace running binary) — that's expected.
+	_ = err
+}
+
+func TestUpdate_assetDownloadError(t *testing.T) {
+	t.Parallel()
+
+	assetName := "app_" + runtime.GOOS + "_" + runtime.GOARCH
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/test/app/releases/latest", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tag_name": "v2.0.0",
+			"assets":   []any{map[string]any{"name": assetName, "browser_download_url": "http://placeholder/asset"}},
+		})
+	})
+	mux.HandleFunc("/asset", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	_, err := selfupdate.Update(context.Background(), selfupdate.Options{
+		Owner:      "test",
+		Repo:       "app",
+		Version:    "v1.0.0",
+		HTTPClient: fakeClient(srv),
+	})
+	if err == nil {
+		t.Fatal("expected error for 403 asset download")
+	}
 }
 
 type roundTripFunc struct {

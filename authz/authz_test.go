@@ -70,3 +70,53 @@ func TestRoleInheritance(t *testing.T) {
 		t.Error("bob should inherit alice's /admin access")
 	}
 }
+
+func TestAddDeleteRoleForUser(t *testing.T) {
+	t.Parallel()
+	e := newTestEnforcer(t)
+
+	if err := e.AddRoleForUser("charlie", "alice"); err != nil {
+		t.Fatalf("AddRoleForUser: %v", err)
+	}
+	ok, err := e.Enforce("charlie", "/admin", "GET")
+	if err != nil {
+		t.Fatalf("Enforce after add: %v", err)
+	}
+	if !ok {
+		t.Error("charlie should have admin access after role assignment")
+	}
+
+	if err := e.DeleteRoleForUser("charlie", "alice"); err != nil {
+		t.Fatalf("DeleteRoleForUser: %v", err)
+	}
+	ok, err = e.Enforce("charlie", "/admin", "GET")
+	if err != nil {
+		t.Fatalf("Enforce after delete: %v", err)
+	}
+	if ok {
+		t.Error("charlie should lose admin access after role removal")
+	}
+}
+
+func TestGetRolesForUser(t *testing.T) {
+	t.Parallel()
+	e := newTestEnforcer(t)
+
+	roles, err := e.GetRolesForUser("bob")
+	if err != nil {
+		t.Fatalf("GetRolesForUser: %v", err)
+	}
+	// bob has role alice (via g, bob, alice in testPolicy)
+	if len(roles) == 0 {
+		t.Error("expected bob to have at least one role")
+	}
+	found := false
+	for _, r := range roles {
+		if r == "alice" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected role 'alice' in %v", roles)
+	}
+}

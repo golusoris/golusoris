@@ -54,3 +54,26 @@ func TestSender_RejectsMissingURL(t *testing.T) {
 	_, err := teams.NewSender(teams.Options{})
 	require.Error(t, err)
 }
+
+func TestSender_MultilineBodyUsesFirstLine(t *testing.T) {
+	t.Parallel()
+	var gotSummary string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var card map[string]any
+		_ = json.Unmarshal(body, &card)
+		if s, ok := card["summary"].(string); ok {
+			gotSummary = s
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`1`))
+	}))
+	t.Cleanup(srv.Close)
+
+	s, err := teams.NewSender(teams.Options{WebhookURL: srv.URL})
+	require.NoError(t, err)
+	require.NoError(t, s.Send(context.Background(), notify.Message{
+		Body: "first line\nsecond line\nthird line",
+	}))
+	require.Equal(t, "first line", gotSummary)
+}

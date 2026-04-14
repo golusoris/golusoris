@@ -2,6 +2,7 @@ package in_test
 
 import (
 	"crypto/hmac"
+	"crypto/sha1" //nolint:gosec // test helper for GitHubLegacy (SHA-1 by spec)
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -159,5 +160,82 @@ func TestHMAC_valid(t *testing.T) {
 
 	if rw.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rw.Code)
+	}
+}
+
+// --- GitHubLegacy (SHA-1) ---
+
+func githubLegacySig(secret, body string) string {
+	h := hmac.New(sha1.New, []byte(secret))
+	h.Write([]byte(body))
+	return "sha1=" + hex.EncodeToString(h.Sum(nil))
+}
+
+func TestGitHubLegacy_valid(t *testing.T) {
+	t.Parallel()
+	const secret = "legacysecret"
+	body := `{"ref":"refs/heads/main"}`
+	sig := githubLegacySig(secret, body)
+
+	handler := in.GitHubLegacy(secret)(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("X-Hub-Signature", sig)
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rw.Code)
+	}
+}
+
+func TestGitHubLegacy_invalid(t *testing.T) {
+	t.Parallel()
+	handler := in.GitHubLegacy("secret")(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+	req.Header.Set("X-Hub-Signature", "sha1=badhex!!!")
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestGitHubLegacy_missingHeader(t *testing.T) {
+	t.Parallel()
+	handler := in.GitHubLegacy("secret")(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestHMAC_missingHeader(t *testing.T) {
+	t.Parallel()
+	handler := in.HMAC("secret", "X-Sig")(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestSlack_expiredTimestamp(t *testing.T) {
+	t.Parallel()
+	const secret = "slacksecret"
+	body := `payload=test`
+	// Timestamp 10 minutes in the past.
+	ts := time.Now().Add(-10 * time.Minute).Unix()
+	sig := slackSig(secret, body, ts)
+
+	handler := in.Slack(secret)(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-Slack-Signature", sig)
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
 	}
 }

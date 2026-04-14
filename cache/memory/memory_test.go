@@ -1,9 +1,16 @@
 package memory_test
 
 import (
+	"context"
+	"log/slog"
 	"testing"
+	"time"
+
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/config"
 )
 
 func TestTypedCacheSetGet(t *testing.T) {
@@ -70,5 +77,30 @@ func TestPrefixIsolation(t *testing.T) {
 	vb, _ := b.Get("k")
 	if va != 1 || vb != 2 {
 		t.Errorf("prefix isolation broken: a=%d b=%d", va, vb)
+	}
+}
+
+// TestModule_StartsAndStops boots the memory Module via fxtest to cover
+// defaultOptions, loadOptions, and newCache.
+func TestModule_StartsAndStops(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{})
+	if err != nil {
+		t.Fatalf("config.New: %v", err)
+	}
+
+	app := fxtest.New(t,
+		fx.Provide(func() *config.Config { return cfg }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		memory.Module,
+		fx.Invoke(func(*memory.Cache) {}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("Stop: %v", err)
 	}
 }

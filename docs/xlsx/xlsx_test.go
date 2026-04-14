@@ -42,3 +42,46 @@ func TestSheets(t *testing.T) {
 	require.NoError(t, f.SetHeader("Data", []string{"A"}))
 	require.Contains(t, f.Sheets(), "Data")
 }
+
+func TestSetCellGetCell(t *testing.T) {
+	t.Parallel()
+	f := xlsx.New()
+	defer func() { _ = f.Close() }()
+
+	require.NoError(t, f.SetHeader("S", []string{"X"}))
+	require.NoError(t, f.SetCell("S", "B2", "hello"))
+	v, err := f.GetCell("S", "B2")
+	require.NoError(t, err)
+	require.Equal(t, "hello", v)
+}
+
+func TestSaveAsAndOpen(t *testing.T) {
+	t.Parallel()
+	f := xlsx.New()
+	defer func() { _ = f.Close() }()
+	require.NoError(t, f.SetHeader("S", []string{"Col"}))
+	require.NoError(t, f.AppendRow("S", []any{"val"}))
+
+	path := t.TempDir() + "/out.xlsx"
+	require.NoError(t, f.SaveAs(path))
+
+	f2, err := xlsx.Open(context.Background(), path)
+	require.NoError(t, err)
+	defer func() { _ = f2.Close() }()
+	require.NotNil(t, f2.Raw())
+}
+
+func TestReadRowsFunc(t *testing.T) {
+	t.Parallel()
+	f := xlsx.New()
+	defer func() { _ = f.Close() }()
+	require.NoError(t, f.SetHeader("S", []string{"A"}))
+	require.NoError(t, f.AppendRow("S", []any{"row1"}))
+
+	path := t.TempDir() + "/out.xlsx"
+	require.NoError(t, f.SaveAs(path))
+
+	rows, err := xlsx.ReadRows(context.Background(), path, "S")
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+}

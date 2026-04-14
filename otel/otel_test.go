@@ -2,8 +2,12 @@ package otel_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
+	"time"
 
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 	otelapi "go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
@@ -115,5 +119,91 @@ func TestNewRegistersGlobalTracer(t *testing.T) {
 
 	if _, ok := otelapi.GetTracerProvider().(*sdktrace.TracerProvider); !ok {
 		t.Errorf("global tracer provider not set to SDK type: %T", otelapi.GetTracerProvider())
+	}
+}
+
+func TestNewWithMetrics(t *testing.T) {
+	t.Parallel()
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: "127.0.0.1:1",
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Metrics: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = providers.Shutdown(context.Background()) })
+	if providers.Meter == nil {
+		t.Error("expected Meter to be set")
+	}
+}
+
+func TestNewWithLogs(t *testing.T) {
+	t.Parallel()
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: "127.0.0.1:1",
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Logs: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = providers.Shutdown(context.Background()) })
+	if providers.Logger == nil {
+		t.Error("expected Logger to be set")
+	}
+}
+
+func TestModuleWithSlogBridge_coversHandler(t *testing.T) {
+	// Not parallel: modifies global slog default.
+	prev := slog.Default()
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	prevTP := otelapi.GetTracerProvider()
+	t.Cleanup(func() { otelapi.SetTracerProvider(prevTP) })
+
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: "127.0.0.1:1",
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Logs: true},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	t.Cleanup(func() { _ = providers.Shutdown(context.Background()) })
+
+	// Boot ModuleWithSlogBridge via fx to construct the fanoutHandler and
+	// cover Enabled / Handle / WithAttrs / WithGroup.
+	// Use a discard logger to avoid recursive slog→defaultHandler→slog deadlock.
+	app := fxtest.New(t,
+		fx.Provide(func() *golusoris_otel.Providers { return providers }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Provide(func() golusoris_otel.Options {
+			return golusoris_otel.Options{
+				Enabled:  true,
+				Endpoint: "127.0.0.1:1",
+				Service:  golusoris_otel.ServiceOptions{Name: "test"},
+				Export:   golusoris_otel.ExportOptions{Logs: true},
+			}
+		}),
+		golusoris_otel.ModuleWithSlogBridge,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	// Trigger the fanout handler methods.
+	slog.Info("test from fanout", "key", "value")
+	logger := slog.Default().WithGroup("grp").With("a", "b")
+	logger.Debug("debug")
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("Stop: %v", err)
 	}
 }

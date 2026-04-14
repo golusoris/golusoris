@@ -9,6 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
+
 	"github.com/golusoris/golusoris/config"
 	"github.com/golusoris/golusoris/httpx/server"
 )
@@ -103,5 +106,36 @@ func TestLoadOptionsFromConfig(t *testing.T) {
 	}
 	if opts.Limits.Body != 1048576 {
 		t.Errorf("Limits.Body = %d", opts.Limits.Body)
+	}
+}
+
+func TestModule_StartsAndStops(t *testing.T) {
+	// Boot the full server.Module to exercise loadOptions + New via fx.
+	// t.Setenv cannot be combined with t.Parallel.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("get free port: %v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+
+	t.Setenv("APP_HTTP_ADDR", addr)
+	cfg, cfgErr := config.New(config.Options{EnvPrefix: "APP_"})
+	if cfgErr != nil {
+		t.Fatalf("config.New: %v", cfgErr)
+	}
+
+	app := fxtest.New(t,
+		fx.Provide(func() *config.Config { return cfg }),
+		fx.Provide(func() http.Handler { return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}) }),
+		server.Module,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("Stop: %v", err)
 	}
 }
