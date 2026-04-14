@@ -100,6 +100,15 @@
 
 ## Session log (recent)
 
+- 2026-04-14: **ai/tiny/litert** landed — MediaPipe Model Maker
+  trainer producing LiteRT (`.tflite`) artifacts. Mirrors gemma's
+  shape (stage tmpdir → Runner.Run → drain logs → read+upload).
+  Supports text/image/audio classification (MobileBERT /
+  EfficientNet-Lite / YAMNet backbones). Metrics sidecar includes
+  a `labels` array mapped into `tiny.Model.Labels`. Python/Model
+  Maker does the training inside
+  `ghcr.io/golusoris/tiny-litert-trainer:v1`.
+
 - 2026-04-14: **ai/tiny/gemma** landed — LoRA fine-tune trainer for
   Google Gemma 3 / Gemma 3n via docker + KerasNLP.
   - `ai/tiny/runner.go` — `Runner` interface + `DockerRunner`
