@@ -38,7 +38,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/jackc/pglogrepl v0.0.0-20260401131349-e37c41485510
-	github.com/jackc/pgx/v5 v5.9.1
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/parsers/yaml v1.1.0
