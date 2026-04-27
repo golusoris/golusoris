@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	filippo.io/csrf v0.2.1
-	github.com/99designs/gqlgen v0.17.89
+	github.com/99designs/gqlgen v0.17.90
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
 	github.com/Khan/genqlient v0.8.1
@@ -288,7 +288,7 @@ require (
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.12.0 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/vektah/gqlparser/v2 v2.5.32 // indirect
+	github.com/vektah/gqlparser/v2 v2.5.33 // indirect
 	github.com/vincent-petithory/dataurl v0.0.0-20191104211930-d1553a71de50 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/woodsbury/decimal128 v1.3.0 // indirect
