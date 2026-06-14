@@ -18,6 +18,7 @@ require (
 	github.com/benbjohnson/hashfs v0.2.2
 	github.com/bmaupin/go-epub v1.1.0
 	github.com/brianvoe/gofakeit/v6 v6.28.0
+	github.com/brianvoe/gofakeit/v7 v7.15.0
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/cespare/xxhash/v2 v2.3.0
