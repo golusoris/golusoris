@@ -1,1 +1,9 @@
 .github/CODEOWNERS
+# Per-PR changelog fragments are free-form bullets (see changelog.d/README.md);
+# they are concatenated by scripts/changelog/render.sh, not linted as docs.
+changelog.d/added/
+changelog.d/changed/
+changelog.d/deprecated/
+changelog.d/removed/
+changelog.d/fixed/
+changelog.d/security/

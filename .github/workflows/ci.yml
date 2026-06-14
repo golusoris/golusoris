@@ -284,3 +284,19 @@ jobs:
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── Changelog fragments (render --check) ─────────────────────────────────────
+  # Validates the per-PR changelog.d/ fragments and that the rendered body
+  # matches the "## [Unreleased]" block in CHANGELOG.md. Advisory: a drift here
+  # should not block merging a code PR — run scripts/changelog/render.sh --write
+  # locally to resync. See changelog.d/README.md.
+  changelog:
+    name: Changelog fragments (render --check)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Render check
+        run: bash scripts/changelog/render.sh --check
