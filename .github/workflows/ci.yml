@@ -303,3 +303,24 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Render check
         run: bash scripts/changelog/render.sh --check
+
+  # ── Aggregate gate ───────────────────────────────────────────────────────────
+  # Single "green only if every gating job passed" check, so branch protection
+  # can require ONE stable context instead of enumerating each job (whose names
+  # shift when the test matrix changes). CodeQL is a separate workflow and stays
+  # its own required check.
+  ci-success:
+    name: CI success
+    if: always()
+    needs: [lint, gosec, vuln, test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Verify all gating jobs passed
+        run: |
+          results='${{ join(needs.*.result, ',') }}'
+          echo "gating results: $results"
+          case ",$results," in
+            *,failure,*|*,cancelled,*) echo "::error::a gating job did not pass: $results"; exit 1 ;;
+          esac
+          echo "all gating jobs passed"
