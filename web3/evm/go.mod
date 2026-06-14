@@ -2,7 +2,7 @@ module github.com/golusoris/golusoris/web3/evm
 
 go 1.26.2
 
-require github.com/ethereum/go-ethereum v1.17.2
+require github.com/ethereum/go-ethereum v1.17.3
 
 require (
 	github.com/Microsoft/go-winio v0.6.2 // indirect
