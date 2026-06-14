@@ -20,6 +20,7 @@ require (
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/casbin/casbin/v2 v2.135.0
+	github.com/casbin/casbin/v3 v3.10.0
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/cilium/ebpf v0.21.0
