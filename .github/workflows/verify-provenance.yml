@@ -1,0 +1,110 @@
+# Reusable workflow: verify a published OCI artifact's supply-chain provenance.
+#
+# Verifies BOTH:
+#   - the cosign keyless signature on the image (cosign verify), and
+#   - the SLSA build provenance attestation (gh attestation verify), which
+#     release-go.yml / rebuild-on-base.yml push via
+#     actions/attest-build-provenance.
+#
+# Downstream apps call it to gate a deploy on a verified golusoris (or their own)
+# image. Example:
+#   jobs:
+#     verify:
+#       uses: golusoris/golusoris/.github/workflows/verify-provenance.yml@main
+#       with:
+#         image: ghcr.io/myorg/myapp
+#         digest: sha256:abcd...            # the exact pushed digest
+#         repository: myorg/myapp           # repo whose OIDC identity signed it
+name: verify-provenance (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: OCI image name WITHOUT tag/digest (e.g. ghcr.io/myorg/myapp)
+        type: string
+        required: true
+      digest:
+        description: Image digest to verify (e.g. sha256:abc...)
+        type: string
+        required: true
+      repository:
+        description: GitHub owner/repo whose Actions OIDC identity produced the attestation
+        type: string
+        default: ${{ github.repository }}
+      oidc-issuer:
+        description: cosign OIDC issuer to require on the signing certificate
+        type: string
+        default: https://token.actions.githubusercontent.com
+      certificate-identity-regexp:
+        description: Regexp the signing certificate identity (SAN) must match
+        type: string
+        default: ""
+      registry:
+        description: Registry host to log in to (empty = no login, public image)
+        type: string
+        default: ghcr.io
+      verify-signature:
+        description: Verify the cosign keyless signature
+        type: boolean
+        default: true
+      verify-attestation:
+        description: Verify the SLSA build-provenance attestation via gh attestation
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify provenance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read    # pull the image + its attestations from the registry
+      id-token: write   # cosign verification against the transparency log
+    steps:
+      - name: Log in to registry
+        if: ${{ inputs.registry != '' }}
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
+        with:
+          registry: ${{ inputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        if: ${{ inputs.verify-signature }}
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Verify cosign signature (keyless)
+        if: ${{ inputs.verify-signature }}
+        env:
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ inputs.digest }}
+          REPO: ${{ inputs.repository }}
+          OIDC_ISSUER: ${{ inputs.oidc-issuer }}
+          IDENTITY_REGEXP: ${{ inputs.certificate-identity-regexp }}
+        run: |
+          set -euo pipefail
+          # Default identity: any workflow in the producing repo (release-go.yml
+          # or rebuild-on-base.yml). Callers can tighten via the input regexp.
+          IDRE="${IDENTITY_REGEXP:-^https://github.com/${REPO}/.github/workflows/.+@refs/.+$}"
+          cosign verify \
+            --certificate-oidc-issuer "${OIDC_ISSUER}" \
+            --certificate-identity-regexp "${IDRE}" \
+            "${IMAGE}@${DIGEST}"
+
+      - name: Verify SLSA build-provenance attestation
+        if: ${{ inputs.verify-attestation }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ inputs.image }}
+          DIGEST: ${{ inputs.digest }}
+          REPO: ${{ inputs.repository }}
+        run: |
+          set -euo pipefail
+          # gh attestation verify pulls the in-toto attestation pushed by
+          # actions/attest-build-provenance and checks it was produced by REPO.
+          gh attestation verify "oci://${IMAGE}@${DIGEST}" --repo "${REPO}"

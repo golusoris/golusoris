@@ -12,6 +12,7 @@ permissions:
 jobs:
   assign:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       issues: write
       pull-requests: write

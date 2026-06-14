@@ -1,9 +1,11 @@
 # Reusable release workflow for golusoris-based Go applications.
 # Runs on version tags (v*.*.*) and produces:
 #   - Multi-arch OCI image pushed to GHCR
-#   - syft SBOM attached to release
-#   - cosign keyless signature
-#   - SLSA provenance (via slsa-framework/slsa-github-generator)
+#   - syft SBOM (SPDX) uploaded to the GitHub Release + attested
+#   - cosign keyless signature (via goreleaser)
+#   - SLSA build provenance via actions/attest-build-provenance (in-toto
+#     attestation pushed to the registry). NOTE: provenance is emitted by
+#     actions/attest-build-provenance, NOT slsa-framework/slsa-github-generator.
 #
 # Apps call it with:
 #   jobs:
@@ -38,6 +40,7 @@ jobs:
   goreleaser:
     name: GoReleaser
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       packages: write
@@ -70,6 +73,7 @@ jobs:
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
 
       - name: Run GoReleaser
+        id: goreleaser
         uses: goreleaser/goreleaser-action@ec59f474b9834571250b370d4735c50f8e2d1e29 # v7
         with:
           distribution: goreleaser
@@ -78,16 +82,36 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve pushed image digest
+        id: digest
+        run: |
+          set -euo pipefail
+          # goreleaser-action exposes no digest output; resolve it from the
+          # registry for the tag goreleaser just pushed.
+          DIGEST=$(docker buildx imagetools inspect \
+            "${{ inputs.image-name }}:${{ github.ref_name }}" \
+            --format '{{json .Manifest.Digest}}' | tr -d '"')
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+
       - name: Generate SBOM
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:
-          image: ${{ inputs.image-name }}:${{ github.ref_name }}
+          image: ${{ inputs.image-name }}@${{ steps.digest.outputs.digest }}
           format: spdx-json
           output-file: sbom.spdx.json
+
+      - name: Upload SBOM to the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # SBOM is generated above but was never attached — upload it so the
+          # release carries the SPDX SBOM alongside the goreleaser artifacts.
+          gh release upload "${{ github.ref_name }}" sbom.spdx.json --clobber
 
       - name: Attest SBOM
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-name: ${{ inputs.image-name }}
-          subject-digest: ${{ steps.goreleaser.outputs.digest }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true

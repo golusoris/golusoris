@@ -19,6 +19,7 @@ jobs:
     name: PR title (Conventional Commits)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check PR title
         env:
@@ -37,6 +38,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -54,6 +56,7 @@ jobs:
   gosec:
     name: Security (gosec)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
@@ -80,6 +83,7 @@ jobs:
   vuln:
     name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -92,21 +96,58 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
+  # Matrix across OS (ubuntu + macos) and Go (go.mod version + prior minor).
+  # The primary leg (ubuntu + go.mod) owns the coverage gate + artifact upload;
+  # other legs run the suite for portability/forward-compat signal only.
+  # Docker-requiring tests (testutil/pg) run on ubuntu only — macos runners have
+  # no Docker daemon, so testcontainers-backed packages skip there.
   test:
     name: Test (race + coverage)
-    runs-on: ubuntu-latest
-    # Docker is preinstalled on ubuntu-latest runners — testutil/pg needs it.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: [stable, prior]
+        include:
+          # Primary leg: ubuntu + go.mod version. Owns coverage gate + upload.
+          - os: ubuntu-latest
+            go: stable
+            primary: true
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      # Primary/stable legs resolve Go from go.mod; the "prior" leg pins the
+      # previous minor explicitly to catch breakage on the older toolchain.
+      - if: matrix.go == 'stable'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
           cache: true
+      - if: matrix.go == 'prior'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: '1.25.x'
+          cache: true
+      # Docker is preinstalled on ubuntu-latest runners — testutil/pg needs it.
       - name: Verify Docker is reachable
+        if: runner.os == 'Linux'
         run: docker info
-      - name: Run tests
+      # On macOS there is no Docker daemon; skip the testcontainers-backed
+      # packages so the portability leg passes instead of failing on infra.
+      - name: Run tests (Linux — full suite with Docker)
+        if: runner.os == 'Linux'
         run: go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Run tests (macOS — skip Docker-requiring packages)
+        if: runner.os != 'Linux'
+        run: |
+          # testutil/pg and its dependents need a Docker daemon (testcontainers),
+          # which macOS runners lack. Exclude those packages so the leg still
+          # exercises the pure-Go code paths for portability signal.
+          mapfile -t PKGS < <(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
+          go test -race -count=1 -timeout=10m "${PKGS[@]}"
       - name: Check coverage threshold (70%)
+        if: matrix.primary
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
           echo "Coverage: ${COVERAGE}%"
@@ -115,6 +156,7 @@ jobs:
             exit 1
           fi
       - name: Upload coverage artifact
+        if: matrix.primary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
@@ -125,6 +167,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -140,6 +183,7 @@ jobs:
   spectral:
     name: OpenAPI lint (spectral)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Check if example spec exists
@@ -164,6 +208,7 @@ jobs:
   apidiff:
     name: API compatibility (apidiff)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
@@ -201,3 +246,41 @@ jobs:
           # At v1.0, gate on incompatibles:
           #   apidiff -incompatible /tmp/prev-api.txt /tmp/cur-api.txt | tee /tmp/inc
           #   [ -s /tmp/inc ] && { echo "::error::breaking API change"; exit 1; } || true
+
+  # ── Dependency review (PR-only supply-chain gate) ────────────────────────────
+  # Diffs the PR's dependency manifest/lockfile changes and fails on
+  # high/critical advisories or copyleft (GPL/AGPL) licences entering the tree.
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Dependency Review
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high
+          # Block copyleft licences that would impose obligations on adopters.
+          # Lists both the `-or-later` (preferred) and plain SPDX forms so a
+          # dependency declaring either variant is caught.
+          deny-licenses: >-
+            GPL-2.0-only, GPL-2.0-or-later, GPL-3.0-only, GPL-3.0-or-later,
+            AGPL-3.0-only, AGPL-3.0-or-later
+
+  # ── Secret scan (gitleaks) ───────────────────────────────────────────────────
+  # Scans the PR diff (and full history on push) for committed secrets.
+  gitleaks:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0   # full history so gitleaks can scan all commits
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
