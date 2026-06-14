@@ -110,7 +110,8 @@ func (f *ConnFactory) Dial(ctx context.Context, target string, extra ...grpc.Dia
 
 // Module provides *grpc.Server + *ConnFactory into the fx graph.
 // Requires *config.Config and *slog.Logger.
-var Module = fx.Module("golusoris.grpc",
+var Module = fx.Module(
+	"golusoris.grpc",
 	fx.Provide(loadConfig),
 	fx.Provide(newServer),
 	fx.Provide(newConnFactory),
@@ -124,7 +125,28 @@ func loadConfig(cfg *config.Config) (Config, error) {
 	return c.withDefaults(), nil
 }
 
-func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, error) {
+// ProvideServerOption wires an app-supplied [grpc.ServerOption] into the server
+// — including custom interceptors passed as grpc.ChainUnary/StreamInterceptor.
+// Framework interceptors (OTel, logging, recovery) always run; app options are
+// appended after them.
+func ProvideServerOption(opt grpc.ServerOption) fx.Option {
+	return fx.Provide(fx.Annotate(
+		func() grpc.ServerOption { return opt },
+		fx.ResultTags(`group:"grpc.serveropts"`),
+	))
+}
+
+// serverParams are the fx inputs to newServer.
+type serverParams struct {
+	fx.In
+	LC      fx.Lifecycle
+	Config  Config
+	Logger  *slog.Logger
+	Options []grpc.ServerOption `group:"grpc.serveropts"`
+}
+
+func newServer(p serverParams) (*grpc.Server, error) {
+	cfg, logger := p.Config, p.Logger
 	var serverOpts []grpc.ServerOption
 
 	// TLS
@@ -140,7 +162,8 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 	}
 
 	// Message size limits.
-	serverOpts = append(serverOpts,
+	serverOpts = append(
+		serverOpts,
 		grpc.MaxRecvMsgSize(cfg.MaxRecvSize),
 		grpc.MaxSendMsgSize(cfg.MaxSendSize),
 	)
@@ -169,7 +192,8 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 		}
 	})
 
-	serverOpts = append(serverOpts,
+	serverOpts = append(
+		serverOpts,
 		grpc.StatsHandler(otelgrpc.NewServerHandler()),
 		grpc.ChainUnaryInterceptor(
 			grpclogging.UnaryServerInterceptor(logAdapter),
@@ -181,9 +205,12 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 		),
 	)
 
+	// App-supplied options (interceptors, custom server options) run after the
+	// framework's.
+	serverOpts = append(serverOpts, p.Options...)
 	srv := grpc.NewServer(serverOpts...)
 
-	lc.Append(fx.Hook{
+	p.LC.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			lc := &net.ListenConfig{}
 			ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
@@ -199,7 +226,16 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			srv.GracefulStop()
+			// Bound the graceful drain to the stop deadline, then hard-stop so
+			// shutdown can't hang on a stuck in-flight RPC.
+			done := make(chan struct{})
+			go func() { srv.GracefulStop(); close(done) }()
+			select {
+			case <-done:
+			case <-ctx.Done():
+				srv.Stop()
+				<-done
+			}
 			return nil
 		},
 	})
