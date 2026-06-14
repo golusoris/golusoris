@@ -55,7 +55,7 @@ func NewHTTPPact(t *testing.T, consumerName, providerName string) *HTTPPact {
 }
 
 // AddInteraction registers an expected HTTP interaction.
-func (h *HTTPPact) AddInteraction() *consumer.Interaction {
+func (h *HTTPPact) AddInteraction() *consumer.V2UnconfiguredInteraction {
 	return h.p.AddInteraction()
 }
 
@@ -76,7 +76,7 @@ type ProviderOptions struct {
 	// BrokerURL is the Pact Broker URL (optional; used instead of PactURLs).
 	BrokerURL string
 	// ConsumerVersionSelectors selects consumer versions from the broker.
-	ConsumerVersionSelectors []provider.ConsumerVersionSelector
+	ConsumerVersionSelectors []provider.Selector
 }
 
 // VerifyProvider runs provider-side pact verification.
