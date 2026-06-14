@@ -143,7 +143,7 @@ func (s *Service) ClickHandler() http.Handler {
 			UserAgent: r.UserAgent(),
 			IP:        clientIP(r),
 		})
-		http.Redirect(w, r, target, http.StatusFound)
+		http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: target is HMAC-signed + validated above
 	})
 }
 

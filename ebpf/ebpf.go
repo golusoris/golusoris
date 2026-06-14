@@ -92,7 +92,7 @@ func newRegistry() *Registry { return &Registry{} }
 
 func startLoader(p params) {
 	p.LC.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
+		OnStart: func(ctx context.Context) error {
 			data, err := p.Provider()
 			if err != nil {
 				return fmt.Errorf("ebpf: object provider: %w", err)
@@ -110,7 +110,7 @@ func startLoader(p params) {
 					coll.Close()
 					return fmt.Errorf("ebpf: loader %s: %w", l.name, err)
 				}
-				p.Logger.Info("ebpf: program attached", "loader", l.name)
+				p.Logger.InfoContext(ctx, "ebpf: program attached", "loader", l.name)
 			}
 			return nil
 		},

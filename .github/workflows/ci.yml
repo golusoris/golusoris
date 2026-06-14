@@ -47,7 +47,7 @@ jobs:
         with:
           # Pinned for reproducible CI — bumping golangci-lint (and adopting any
           # new linter findings) is a deliberate, reviewed change, not a float.
-          version: v2.11.4
+          version: v2.12.2
           args: --config=tools/golangci.yml --timeout=5m
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────

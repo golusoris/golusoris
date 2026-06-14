@@ -103,22 +103,22 @@ var Module = fx.Module("golusoris.systemd",
 		watchdogCtx, cancel := context.WithCancel(context.Background())
 		done := make(chan struct{})
 		lc.Append(fx.Hook{
-			OnStart: func(_ context.Context) error {
+			OnStart: func(ctx context.Context) error {
 				if err := Ready(); err != nil {
 					return err
 				}
-				logger.Info("systemd: READY=1 sent")
+				logger.InfoContext(ctx, "systemd: READY=1 sent")
 				go func() {
 					defer close(done)
 					runWatchdog(watchdogCtx, clk, logger)
 				}()
 				return nil
 			},
-			OnStop: func(_ context.Context) error {
+			OnStop: func(ctx context.Context) error {
 				cancel()
 				<-done
 				if err := Stopping(); err != nil && !errors.Is(err, os.ErrNotExist) {
-					logger.Warn("systemd: STOPPING=1 failed", slog.String("error", err.Error()))
+					logger.WarnContext(ctx, "systemd: STOPPING=1 failed", slog.String("error", err.Error()))
 				}
 				return nil
 			},
