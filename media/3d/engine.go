@@ -6,7 +6,7 @@
 //
 // # Usage
 //
-//	app, err := threed.NewApp("My Scene", 800, 600)
+//	app, err := threed.NewApp()
 //	scene := threed.NewScene()
 //	// add meshes, lights, cameras to scene
 //	app.Run(scene)
@@ -14,6 +14,7 @@ package threed
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/g3n/engine/app"
 	"github.com/g3n/engine/core"
@@ -26,12 +27,12 @@ type App struct {
 	r *renderer.Renderer
 }
 
-// NewApp creates a new 3D application window.
-func NewApp(title string, width, height int) (*App, error) {
-	a, err := app.Create(width, height, title)
-	if err != nil {
-		return nil, fmt.Errorf("3d: create app: %w", err)
-	}
+// NewApp returns the g3n application singleton wired with default shaders.
+//
+// g3n v0.2 manages a single global window via app.App(); window title and size
+// are owned by g3n and are no longer constructor parameters.
+func NewApp() (*App, error) {
+	a := app.App()
 	r := renderer.NewRenderer(a.Gls())
 	if err := r.AddDefaultShaders(); err != nil {
 		return nil, fmt.Errorf("3d: add shaders: %w", err)
@@ -41,7 +42,7 @@ func NewApp(title string, width, height int) (*App, error) {
 
 // Run starts the render loop with scene as the root node.
 func (a *App) Run(scene *core.Node) {
-	a.a.Run(func(rend *renderer.Renderer, _ interface{}) {
+	a.a.Run(func(rend *renderer.Renderer, _ time.Duration) {
 		_ = rend.Render(scene, nil)
 	})
 }
