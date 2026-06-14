@@ -14,6 +14,8 @@ package golusoris
 import (
 	"go.uber.org/fx"
 
+	aillm "github.com/golusoris/golusoris/ai/llm"
+	aivector "github.com/golusoris/golusoris/ai/vector"
 	"github.com/golusoris/golusoris/audit"
 	"github.com/golusoris/golusoris/auth/oidc"
 	"github.com/golusoris/golusoris/authz"
@@ -215,4 +217,20 @@ var Search = fx.Module("golusoris.search",
 // Requires [Core] for config + log. Config key prefix: notify.*.
 var Notify = fx.Module("golusoris.notify",
 	notify.Module,
+)
+
+// AILLM bundles an OpenAI-compatible LLM client. Provides ai/llm.Client
+// (works with OpenAI, Azure OpenAI, Ollama, Groq, Mistral, LM Studio).
+//
+// Requires [Core] for config. Config key prefix: ai.llm.*.
+var AILLM = fx.Module("golusoris.ai.llm",
+	aillm.Module,
+)
+
+// AIVector registers pgvector types on the pgx pool at startup so vector
+// columns scan/encode correctly. Provides no new type — configures the pool.
+//
+// Requires [DB] (a *pgxpool.Pool) in the same fx graph.
+var AIVector = fx.Module("golusoris.ai.vector",
+	aivector.Module,
 )
