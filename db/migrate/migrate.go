@@ -95,6 +95,19 @@ func (m *Migrator) Version() (uint, bool, error) {
 	return v, dirty, nil
 }
 
+// Force sets the recorded schema version and clears the dirty flag WITHOUT
+// running any migration. Use it to recover from a dirty state (a migration that
+// failed partway): force to the last known-good version, then re-run Up. A
+// negative version resets to "no migrations applied". This changes only the
+// migrate bookkeeping — the caller is responsible for the DB actually matching
+// version.
+func (m *Migrator) Force(version int) error {
+	if err := m.m.Force(version); err != nil {
+		return fmt.Errorf("db/migrate: force %d: %w", version, err)
+	}
+	return nil
+}
+
 // Close releases the migrator's resources. Apps using fx.Module don't call
 // this — the lifecycle hook handles it.
 func (m *Migrator) Close() error {
@@ -179,7 +192,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // Apps embedding migrations should override Options via fx.Replace:
 //
 //	fx.Replace(migrate.Options{Auto: true}.WithFS(myEmbedFS))
-var Module = fx.Module("golusoris.db.migrate",
+var Module = fx.Module(
+	"golusoris.db.migrate",
 	fx.Provide(loadOptions),
 	fx.Provide(func(lc fx.Lifecycle, opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
 		m, err := New(opts, pgxOpts, logger)
