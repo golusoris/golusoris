@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/go-logr/logr"
 	"go.uber.org/fx"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -32,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 // schemeGroup is the fx value group [SchemeAdder]s are collected from.
@@ -51,6 +53,12 @@ type Options struct {
 	LeaderElectionID string `koanf:"leader_election_id"`
 	// GracefulShutdown bounds how long the manager waits for runnables to stop.
 	GracefulShutdown time.Duration `koanf:"graceful_shutdown"`
+	// WebhookPort, when non-zero, serves admission/conversion webhooks on this
+	// port. Leave zero for operators that register no webhooks.
+	WebhookPort int `koanf:"webhook_port"`
+	// WebhookHost is the bind host for the webhook server (empty = all
+	// interfaces). Only used when WebhookPort is non-zero.
+	WebhookHost string `koanf:"webhook_host"`
 }
 
 // SchemeAdder registers a group of API types (typically a CRD's AddToScheme)
@@ -86,7 +94,7 @@ func buildScheme(adders []SchemeAdder) (*runtime.Scheme, error) {
 // managerOptions maps Options + scheme onto controller-runtime's options.
 func (o Options) managerOptions(scheme *runtime.Scheme) manager.Options {
 	timeout := o.GracefulShutdown
-	return manager.Options{
+	opts := manager.Options{
 		Scheme:                  scheme,
 		Metrics:                 metricsserver.Options{BindAddress: o.MetricsAddr},
 		HealthProbeBindAddress:  o.HealthProbeAddr,
@@ -94,6 +102,10 @@ func (o Options) managerOptions(scheme *runtime.Scheme) manager.Options {
 		LeaderElectionID:        o.LeaderElectionID,
 		GracefulShutdownTimeout: &timeout,
 	}
+	if o.WebhookPort > 0 {
+		opts.WebhookServer = webhook.NewServer(webhook.Options{Host: o.WebhookHost, Port: o.WebhookPort})
+	}
+	return opts
 }
 
 // managerParams are the fx inputs to newManager.
@@ -106,7 +118,17 @@ type managerParams struct {
 
 // newManager builds a controller-runtime manager from the resolved rest.Config
 // (in-cluster or kubeconfig) with the assembled scheme + default probes.
+// loggerFromSlog adapts the injected slog logger to controller-runtime's logr
+// sink so cr's own logs route through golusoris logging (and OTel correlation).
+func loggerFromSlog(logger *slog.Logger) logr.Logger {
+	return logr.FromSlogHandler(logger.Handler())
+}
+
 func newManager(p managerParams) (manager.Manager, error) {
+	// Without this, controller-runtime logs through its default global sink,
+	// bypassing the injected *slog.Logger (#227).
+	ctrl.SetLogger(loggerFromSlog(p.Logger))
+
 	scheme, err := buildScheme(p.Adders)
 	if err != nil {
 		return nil, err
@@ -125,7 +147,8 @@ func newManager(p managerParams) (manager.Manager, error) {
 	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
 		return nil, fmt.Errorf("operator: readyz: %w", err)
 	}
-	p.Logger.Debug("operator: manager built",
+	p.Logger.Debug(
+		"operator: manager built",
 		slog.String("metrics_addr", p.Options.MetricsAddr),
 		slog.Bool("leader_election", p.Options.LeaderElection),
 	)
