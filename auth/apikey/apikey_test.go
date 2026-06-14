@@ -95,8 +95,14 @@ func TestVerifyTampered(t *testing.T) {
 	svc := apikey.New(newMemStore(), apikey.Options{HMACSecret: []byte("secret")})
 	raw, _, _ := svc.Issue(context.Background(), "u", nil)
 
-	// Flip last char.
-	tampered := raw[:len(raw)-1] + "X"
+	// Flip the last char to a guaranteed-different one. Replacing it with a
+	// fixed "X" is a no-op ~1/62 of the time (when the random last char is
+	// already 'X'), which made this test flaky.
+	repl := byte('X')
+	if raw[len(raw)-1] == repl {
+		repl = 'Y'
+	}
+	tampered := raw[:len(raw)-1] + string(repl)
 	if _, err := svc.Verify(context.Background(), tampered); err == nil {
 		t.Fatal("expected error for tampered key")
 	}
