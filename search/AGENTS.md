@@ -12,6 +12,8 @@ Provider-agnostic full-text and vector search abstraction.
 | `Query` | `Q`, `Fields`, `Filters`, `RawFilter`, `SortBy`, `Limit`, `Offset` |
 | `Results` | `Hits []Hit`, `Total int64` |
 | `MemorySearcher` | In-memory backend; case-insensitive substring match; for tests |
+| `MultiSearcher` | Federated search: fans a `Query` to N `Searcher`s concurrently, dedupes hits by document `id` (best score wins), sorts by score desc, error-tolerant (`ErrAllBackendsFailed` only when all fail; `WithFailFast` to opt out) |
+| `Disabled` / `Gate` | No-op `Backend` for a configured-off search; `Gate(b, enabled)` passes `b` through or substitutes the no-op |
 
 ## Planned backends (sub-packages)
 

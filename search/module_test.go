@@ -92,6 +92,58 @@ func TestNewBackend_ExternalBackendNotWired(t *testing.T) {
 	}
 }
 
+// TestNewBackend_DisabledIsNoOp confirms that gating search off via config
+// wires the no-op backend regardless of the selected implementation.
+func TestNewBackend_DisabledIsNoOp(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.DiscardHandler)
+	off := false
+	got, err := newBackend(Options{Enabled: &off, Backend: backendMemory}, logger)
+	if err != nil {
+		t.Fatalf("newBackend: %v", err)
+	}
+	if _, ok := got.(*MemorySearcher); ok {
+		t.Fatal("disabled backend should not be a *MemorySearcher")
+	}
+	res, err := got.Search(t.Context(), "c", Query{Q: "*"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(res.Hits) != 0 {
+		t.Errorf("disabled backend should return empty results, got %d", len(res.Hits))
+	}
+}
+
+// TestOptions_EnabledDefault confirms an absent config key leaves search on.
+func TestOptions_EnabledDefault(t *testing.T) {
+	t.Parallel()
+	if !defaultOptions().enabled() {
+		t.Error("search should be enabled by default")
+	}
+	off := false
+	if (Options{Enabled: &off}).enabled() {
+		t.Error("explicit enabled=false should gate search off")
+	}
+}
+
+// TestLoadOptions_ReadsEnabledFalse confirms the gate is read from config.
+func TestLoadOptions_ReadsEnabledFalse(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{
+		Files: []string{writeConfig(t, "search:\n  enabled: false\n")},
+	})
+	if err != nil {
+		t.Fatalf("config.New: %v", err)
+	}
+	opts, err := loadOptions(cfg)
+	if err != nil {
+		t.Fatalf("loadOptions: %v", err)
+	}
+	if opts.enabled() {
+		t.Error("expected enabled=false from config")
+	}
+}
+
 // TestModule_ProvidesMemoryBackend boots the Module against an empty config and
 // confirms it provides a *MemorySearcher as search.Backend.
 func TestModule_ProvidesMemoryBackend(t *testing.T) {
