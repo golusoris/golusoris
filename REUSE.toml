@@ -1,0 +1,13 @@
+# REUSE (https://reuse.software) annotations — makes the repo's licensing
+# machine-readable for SPDX/SBOM accuracy (EU CRA, OpenSSF). The full license
+# text lives under LICENSES/. Run `reuse lint` to verify compliance.
+version = 1
+SPDX-PackageName = "golusoris"
+SPDX-PackageSupplier = "lusoris <lusoris@pm.me>"
+SPDX-PackageDownloadLocation = "https://github.com/golusoris/golusoris"
+
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 lusoris"
+SPDX-License-Identifier = "MIT"

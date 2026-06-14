@@ -25,6 +25,10 @@ on:
         description: golangci-lint version
         type: string
         default: v2.12.2
+      golangci-config:
+        description: Path to a golangci-lint config (empty = golangci-lint auto-discovers the caller's .golangci.yml; apps opt into a shared ruleset by setting this)
+        type: string
+        default: ""
       lint-timeout:
         description: golangci-lint timeout
         type: string
@@ -33,6 +37,10 @@ on:
         description: go test timeout
         type: string
         default: 10m
+      needs-docker:
+        description: Verify the Docker daemon is reachable before tests (testcontainers) — set false for apps with no container-backed tests
+        type: boolean
+        default: true
       coverage-threshold:
         description: Minimum coverage percentage (0 = skip check)
         type: number
@@ -100,7 +108,9 @@ jobs:
       - uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
           version: ${{ inputs.golangci-version }}
-          args: --timeout=${{ inputs.lint-timeout }}
+          # Pass --config only when the caller supplies one; otherwise golangci-lint
+          # auto-discovers the app's own .golangci.yml (issue #197).
+          args: ${{ inputs.golangci-config != '' && format('--config={0} --timeout={1}', inputs.golangci-config, inputs.lint-timeout) || format('--timeout={0}', inputs.lint-timeout) }}
 
   # ── Security scan (gosec) ─────────────────────────────────────────────────
   gosec:
@@ -175,6 +185,11 @@ jobs:
         with:
           go-version: ${{ inputs.prior-go-version }}
           cache: true
+      # Fail fast with a clear signal if testcontainers have no Docker daemon
+      # (matches ci.yml's own preflight — issue #198).
+      - name: Verify Docker is reachable
+        if: ${{ inputs.needs-docker && runner.os == 'Linux' }}
+        run: docker info
       - name: Run tests (Linux — full suite)
         if: runner.os == 'Linux'
         run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...

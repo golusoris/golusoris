@@ -1,0 +1,31 @@
+# Path → label map for actions/labeler (v5 schema). Labels MUST already exist
+# in the repo (the action does not create them). Kept in sync with the topical
+# labels in the issue/PR taxonomy.
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/**', 'tools/**']
+documentation:
+  - changed-files:
+      - any-glob-to-any-file: ['docs/**', '**/*.md']
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          ['auth/**', 'authz/**', 'crypto/**', 'secrets/**', 'hash/**', 'webhooks/**', 'payments/**', 'SECURITY.md']
+k8s:
+  - changed-files:
+      - any-glob-to-any-file: ['k8s/**', 'leader/k8s/**']
+ai:
+  - changed-files:
+      - any-glob-to-any-file: ['ai/**']
+mcp:
+  - changed-files:
+      - any-glob-to-any-file: ['mcp/**', '**/mcp/**']
+observability:
+  - changed-files:
+      - any-glob-to-any-file: ['otel/**']
+testing:
+  - changed-files:
+      - any-glob-to-any-file: ['**/*_test.go', 'testutil/**']
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file: ['go.mod', 'go.sum']
