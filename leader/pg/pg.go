@@ -168,7 +168,7 @@ func Module(cb leader.Callbacks) fx.Option {
 					go func() {
 						defer close(done)
 						if runErr := Run(ctx, pool, opts, clk, cb); runErr != nil {
-							logger.Error("leader/pg: run failed", slog.String("error", runErr.Error()))
+							logger.ErrorContext(ctx, "leader/pg: run failed", slog.String("error", runErr.Error()))
 						}
 					}()
 					return nil

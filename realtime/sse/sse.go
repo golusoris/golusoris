@@ -121,7 +121,7 @@ func (h *Hub) Handler() http.Handler {
 				}
 				b, err := ev.format()
 				if err != nil {
-					h.logger.Warn("sse: format event", slog.String("error", err.Error()))
+					h.logger.WarnContext(r.Context(), "sse: format event", slog.String("error", err.Error()))
 					continue
 				}
 				if _, writeErr := w.Write(b); writeErr != nil {

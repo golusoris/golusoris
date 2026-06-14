@@ -101,12 +101,12 @@ func register(p params) {
 
 			go func() {
 				if err := udp.ListenAndServe(); err != nil {
-					p.Logger.Error("dnsserver: udp serve", "err", err)
+					p.Logger.ErrorContext(ctx, "dnsserver: udp serve", "err", err)
 				}
 			}()
 			go func() {
 				if err := tcp.ListenAndServe(); err != nil {
-					p.Logger.Error("dnsserver: tcp serve", "err", err)
+					p.Logger.ErrorContext(ctx, "dnsserver: tcp serve", "err", err)
 				}
 			}()
 
@@ -120,7 +120,7 @@ func register(p params) {
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-			p.Logger.Info("dnsserver: listening", "addr", p.Cfg.Addr)
+			p.Logger.InfoContext(ctx, "dnsserver: listening", "addr", p.Cfg.Addr)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {

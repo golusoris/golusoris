@@ -20,7 +20,7 @@ on:
       golangci-version:
         description: golangci-lint version
         type: string
-        default: v2.11.4
+        default: v2.12.2
       lint-timeout:
         description: golangci-lint timeout
         type: string

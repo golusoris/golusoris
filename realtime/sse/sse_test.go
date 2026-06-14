@@ -2,7 +2,6 @@ package sse_test
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -16,7 +15,7 @@ import (
 )
 
 func newHub() *sse.Hub {
-	return sse.NewHub(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return sse.NewHub(slog.New(slog.DiscardHandler))
 }
 
 // TestHub_publishReachesConnectedClient: the handler streams events.

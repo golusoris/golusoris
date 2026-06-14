@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -40,7 +39,7 @@ func TestDispatchTool(t *testing.T) {
 func TestServerRoundTrip(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	serverT, clientT := mcp.NewInMemoryTransports()
 	serverSession, err := newServer(logger).Connect(ctx, serverT, nil)

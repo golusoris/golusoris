@@ -176,16 +176,15 @@ var Module = fx.Module("golusoris.httpx.server",
 					ln = tls.NewListener(rawLn, p.TLSConfig)
 					scheme = "https"
 				}
-				p.Logger.Info("httpx/server: listening",
+				p.Logger.InfoContext(ctx, "httpx/server: listening",
 					slog.String("addr", ln.Addr().String()),
 					slog.String("scheme", scheme),
 				)
 				go func() {
 					if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-						p.Logger.Error("httpx/server: serve failed", slog.String("error", serveErr.Error()))
+						p.Logger.ErrorContext(ctx, "httpx/server: serve failed", slog.String("error", serveErr.Error()))
 					}
 				}()
-				_ = ctx // Start ctx is advisory — we don't block on it.
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
@@ -194,7 +193,7 @@ var Module = fx.Module("golusoris.httpx.server",
 				if err := srv.Shutdown(shutdownCtx); err != nil {
 					return fmt.Errorf("httpx/server: shutdown: %w", err)
 				}
-				p.Logger.Info("httpx/server: shutdown complete")
+				p.Logger.InfoContext(ctx, "httpx/server: shutdown complete")
 				return nil
 			},
 		})

@@ -157,15 +157,15 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 	logAdapter := grpclogging.LoggerFunc(func(ctx context.Context, lvl grpclogging.Level, msg string, fields ...any) {
 		switch lvl {
 		case grpclogging.LevelDebug:
-			logger.Debug(msg, fields...)
+			logger.DebugContext(ctx, msg, fields...)
 		case grpclogging.LevelInfo:
-			logger.Info(msg, fields...)
+			logger.InfoContext(ctx, msg, fields...)
 		case grpclogging.LevelWarn:
-			logger.Warn(msg, fields...)
+			logger.WarnContext(ctx, msg, fields...)
 		case grpclogging.LevelError:
-			logger.Error(msg, fields...)
+			logger.ErrorContext(ctx, msg, fields...)
 		default:
-			logger.Info(msg, fields...)
+			logger.InfoContext(ctx, msg, fields...)
 		}
 	})
 
@@ -192,10 +192,10 @@ func newServer(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (*grpc.Server, 
 			}
 			go func() {
 				if err := srv.Serve(ln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
-					logger.Error("grpc: serve error", "err", err)
+					logger.ErrorContext(ctx, "grpc: serve error", "err", err)
 				}
 			}()
-			logger.Info("grpc: serving", "addr", cfg.Listen)
+			logger.InfoContext(ctx, "grpc: serving", "addr", cfg.Listen)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {

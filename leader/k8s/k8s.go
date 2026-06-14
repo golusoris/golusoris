@@ -164,7 +164,7 @@ func Module(cb leader.Callbacks) fx.Option {
 					go func() {
 						defer close(done)
 						if runErr := Run(ctx, k, opts, cb); runErr != nil {
-							logger.Error("leader/k8s: run failed", slog.String("error", runErr.Error()))
+							logger.ErrorContext(ctx, "leader/k8s: run failed", slog.String("error", runErr.Error()))
 						}
 					}()
 					return nil

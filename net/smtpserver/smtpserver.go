@@ -125,13 +125,13 @@ func startServer(p params) {
 	srv.AllowInsecureAuth = true // TLS is opt-in via TLSConfig
 
 	p.LC.Append(fx.Hook{
-		OnStart: func(_ context.Context) error {
+		OnStart: func(ctx context.Context) error {
 			go func() {
 				if err := srv.ListenAndServe(); err != nil {
-					p.Logger.Error("smtpserver: serve", "err", err)
+					p.Logger.ErrorContext(ctx, "smtpserver: serve", "err", err)
 				}
 			}()
-			p.Logger.Info("smtpserver: listening", "addr", p.Cfg.Addr)
+			p.Logger.InfoContext(ctx, "smtpserver: listening", "addr", p.Cfg.Addr)
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {

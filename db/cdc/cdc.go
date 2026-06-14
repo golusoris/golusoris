@@ -167,7 +167,7 @@ func newConsumer(p params) *Consumer {
 	p.LC.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			if c.cfg.DSN == "" {
-				p.Logger.Info("cdc: no DSN configured, consumer disabled")
+				p.Logger.InfoContext(ctx, "cdc: no DSN configured, consumer disabled")
 				return nil
 			}
 			go c.run(ctx)

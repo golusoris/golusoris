@@ -3,7 +3,6 @@ package out_test
 import (
 	"context"
 	"errors"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -223,5 +222,5 @@ func TestReplay(t *testing.T) {
 }
 
 func nopLogger(_ *testing.T) *slog.Logger {
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
+	return slog.New(slog.DiscardHandler)
 }
