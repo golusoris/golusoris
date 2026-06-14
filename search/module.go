@@ -38,10 +38,16 @@ const (
 //
 // Config key prefix: search.*
 //
+//	search.enabled = true       # gate; false wires a no-op backend
 //	search.backend = "memory"   # memory|typesense|meilisearch|pgfts
 //	search.url     = "..."      # typesense/meilisearch base URL (sub-module)
 //	search.api_key = "..."      # typesense/meilisearch API key (sub-module)
 type Options struct {
+	// Enabled gates the backend. When false, the module provides a no-op
+	// [Disabled] backend that returns empty results, so apps can keep
+	// search.Backend in their graph and toggle the real backend off via
+	// config without changing wiring. Defaults to true.
+	Enabled *bool `koanf:"enabled"`
 	// Backend selects the implementation: "memory" (default). The
 	// "typesense", "meilisearch", and "pgfts" values are recognised so apps
 	// can read the same key, but those backends are wired by the app (see
@@ -57,6 +63,12 @@ type Options struct {
 
 func defaultOptions() Options {
 	return Options{Backend: backendMemory}
+}
+
+// enabled reports whether the backend gate is on. Absent config defaults to
+// enabled; only an explicit "search.enabled = false" gates it off.
+func (o Options) enabled() bool {
+	return o.Enabled == nil || *o.Enabled
 }
 
 func loadOptions(cfg *config.Config) (Options, error) {
@@ -75,6 +87,10 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // [Options] doc comment), so selecting them here is an explicit error that
 // tells the operator where to wire them.
 func newBackend(opts Options, logger *slog.Logger) (Backend, error) {
+	if !opts.enabled() {
+		logger.Debug("search: disabled by config; wiring no-op backend")
+		return Disabled(), nil
+	}
 	switch opts.Backend {
 	case backendMemory:
 		logger.Debug("search: started", slog.String("backend", backendMemory))

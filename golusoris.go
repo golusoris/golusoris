@@ -21,6 +21,7 @@ import (
 	"github.com/golusoris/golusoris/authz"
 	cachemem "github.com/golusoris/golusoris/cache/memory"
 	cacheredis "github.com/golusoris/golusoris/cache/redis"
+	cachetwotier "github.com/golusoris/golusoris/cache/twotier"
 	"github.com/golusoris/golusoris/clock"
 	"github.com/golusoris/golusoris/config"
 	"github.com/golusoris/golusoris/crypto"
@@ -135,6 +136,14 @@ var CacheMemory = fx.Module("golusoris.cache.memory",
 // Requires [Core] for config + log. Redis must be reachable at start.
 var CacheRedis = fx.Module("golusoris.cache.redis",
 	cacheredis.Module,
+)
+
+// CacheTwoTier bundles the read-through two-tier cache: L1 in-process (otter)
+// + L2 redis, with single-flight load coalescing. Provides *twotier.TwoTier.
+//
+// Requires [CacheMemory] + [CacheRedis] in the same fx graph.
+var CacheTwoTier = fx.Module("golusoris.cache.twotier",
+	cachetwotier.Module,
 )
 
 // AuthOIDC bundles the OIDC + OAuth2 PKCE client. Provides

@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 
@@ -20,11 +21,13 @@ import (
 //
 // Config keys live under the "storage" prefix.
 type Options struct {
-	// Backend selects the storage backend: "local" (default). S3/GCS are
-	// future backends (see #141).
+	// Backend selects the storage backend: "local" (default) or "s3"
+	// (S3/MinIO-compatible). GCS/Azure are future backends.
 	Backend string `koanf:"backend"`
 	// Local configures the local-filesystem backend.
 	Local LocalOptions `koanf:"local"`
+	// S3 configures the S3-compatible backend (used when backend = "s3").
+	S3 S3Options `koanf:"s3"`
 }
 
 // LocalOptions configures the local-filesystem backend.
@@ -58,6 +61,20 @@ func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
 		logger.Debug("storage: started",
 			slog.String("backend", "local"),
 			slog.String("path", opts.Local.Path),
+		)
+		return b, nil
+	case "s3":
+		// Bounded init: a background context is fine here — the AWS config
+		// load is the only blocking call and fx applies its own start timeout.
+		b, err := NewS3Bucket(context.Background(), opts.S3)
+		if err != nil {
+			return nil, fmt.Errorf("storage: build s3 backend: %w", err)
+		}
+		logger.Debug("storage: started",
+			slog.String("backend", "s3"),
+			slog.String("bucket", opts.S3.Bucket),
+			slog.String("endpoint", opts.S3.Endpoint),
+			slog.Bool("path_style", opts.S3.PathStyle),
 		)
 		return b, nil
 	default:
