@@ -1,6 +1,7 @@
 # Agent guide — clikit/tui/
 
-Thin wrappers over charmbracelet/bubbletea for building terminal UIs.
+Thin wrappers over charmbracelet/bubbletea v2 (`charm.land/bubbletea/v2`) for
+building terminal UIs.
 
 ## Usage
 
@@ -15,16 +16,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
     }
     return m, nil
 }
-func (m model) View() string { return "Press Enter to continue\n" }
+func (m model) View() tea.View {
+    v := tea.NewView("Press Enter to continue\n")
+    v.AltScreen = true // full-screen is opt-in on the view in v2
+    return v
+}
 
-// Full-screen:
 if err := tui.Run(model{}); err != nil { ... }
-
-// Inline (no alt-screen):
-if err := tui.RunInline(model{}); err != nil { ... }
 ```
+
+## bubbletea v2 notes
+
+- `View()` now returns `tea.View` (was `string`). Build it with
+  `tea.NewView(content)`.
+- AltScreen and mouse tracking are no longer program options. The model enables
+  them via `View.AltScreen` / `View.MouseMode`, so `tui.Run` cannot inject them.
+- `tui.Run` and `tui.RunInline` are now equivalent thin wrappers; `RunInline`
+  is kept only for API symmetry.
 
 ## Don't
 
-- Don't call `tea.NewProgram` directly — use `tui.Run` / `tui.RunInline` for
-  consistent defaults (AltScreen, mouse support).
+- Don't call `tea.NewProgram` directly — use `tui.Run` for the standard error
+  handling.

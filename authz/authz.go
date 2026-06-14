@@ -1,5 +1,5 @@
 // Package authz provides RBAC/ABAC policy enforcement via
-// [casbin/casbin/v2]. Exposed as an fx module; apps supply a policy
+// [casbin/casbin/v3]. Exposed as an fx module; apps supply a policy
 // adapter (file, Postgres, etc.) and get an [*Enforcer] back.
 //
 // The default model is a simple RBAC model (role-based access control):
@@ -26,10 +26,10 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/casbin/casbin/v2"
-	"github.com/casbin/casbin/v2/model"
-	"github.com/casbin/casbin/v2/persist"
-	fileadapter "github.com/casbin/casbin/v2/persist/file-adapter"
+	"github.com/casbin/casbin/v3"
+	"github.com/casbin/casbin/v3/model"
+	"github.com/casbin/casbin/v3/persist"
+	fileadapter "github.com/casbin/casbin/v3/persist/file-adapter"
 	"go.uber.org/fx"
 )
 

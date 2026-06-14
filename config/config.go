@@ -22,7 +22,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/parsers/json"
 	"github.com/knadh/koanf/parsers/yaml"
-	"github.com/knadh/koanf/providers/env"
+	"github.com/knadh/koanf/providers/env/v2"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/v2"
 	"go.uber.org/fx"
@@ -147,8 +147,12 @@ func New(opts Options) (*Config, error) {
 	}
 
 	// Env on top: APP_DB_HOST -> db.host
-	envProvider := env.Provider(opts.EnvPrefix, opts.Delimiter, func(s string) string {
-		return strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(s, opts.EnvPrefix)), "_", opts.Delimiter)
+	envProvider := env.Provider(opts.Delimiter, env.Opt{
+		Prefix: opts.EnvPrefix,
+		TransformFunc: func(k, v string) (string, any) {
+			key := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(k, opts.EnvPrefix)), "_", opts.Delimiter)
+			return key, v
+		},
 	})
 	if err := k.Load(envProvider, nil); err != nil {
 		return nil, fmt.Errorf("config: load env: %w", err)

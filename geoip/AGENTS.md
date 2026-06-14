@@ -1,6 +1,7 @@
 # Agent guide — geoip/
 
-Thin wrapper around `oschwald/maxminddb-golang` for MaxMind GeoLite2 / GeoIP2 database lookups.
+Thin wrapper around `oschwald/maxminddb-golang/v2` for MaxMind GeoLite2 / GeoIP2 database lookups.
+The public API still takes `net.IP`; the v2 `netip.Addr` lookup is bridged internally.
 No fx module — caller manages the `*DB` lifecycle (Open/Close).
 
 ## Usage

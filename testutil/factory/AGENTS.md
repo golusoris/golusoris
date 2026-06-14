@@ -1,6 +1,6 @@
 # Agent guide — testutil/factory/
 
-Deterministic test data factory backed by brianvoe/gofakeit v6.
+Deterministic test data factory backed by brianvoe/gofakeit v7.
 
 `factory.New(t)` seeds the faker from `t.Name()` so the same test always
 produces the same data. This makes snapshot tests + golden-file comparisons
@@ -29,7 +29,7 @@ f := factory.Random()
 `CreditCardNumber`, `Password`, `LoremIpsum`, `Number`, `Float64`, `Bool`,
 `Date`, `PhoneFormatted`, `Company`, `JobTitle`, `Username`, `Color`, etc.
 
-Full reference: https://pkg.go.dev/github.com/brianvoe/gofakeit/v6
+Full reference: https://pkg.go.dev/github.com/brianvoe/gofakeit/v7
 
 ## Don't
 
