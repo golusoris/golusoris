@@ -64,6 +64,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ogen-go/ogen v1.20.3
 	github.com/oschwald/maxminddb-golang v1.13.1
+	github.com/oschwald/maxminddb-golang/v2 v2.4.0
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgvector/pgvector-go/pgx v0.4.0
 	github.com/pion/webrtc/v4 v4.2.15
