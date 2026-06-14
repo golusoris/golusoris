@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
+    uses: golusoris/golusoris/.github/workflows/ci-go.yml@b5cc0eefa8a1a373f0deb108f6f3f1aa7d9a629c # main
     with:
       go-version-file: go.mod
       coverage-threshold: 70
@@ -22,8 +22,8 @@ jobs:
       # module-path: github.com/golusoris/app-CHANGEME
 
   codeql:
-    uses: golusoris/golusoris/.github/workflows/codeql.yml@main
+    uses: golusoris/golusoris/.github/workflows/codeql.yml@b5cc0eefa8a1a373f0deb108f6f3f1aa7d9a629c # main
 
   scorecard:
-    uses: golusoris/golusoris/.github/workflows/scorecard.yml@main
+    uses: golusoris/golusoris/.github/workflows/scorecard.yml@b5cc0eefa8a1a373f0deb108f6f3f1aa7d9a629c # main
     secrets: inherit
