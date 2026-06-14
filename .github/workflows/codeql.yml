@@ -2,6 +2,11 @@
 # reusable workflow by downstream apps.
 name: CodeQL
 
+# Cancel a stale run when a newer commit supersedes it (#196).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   # Run on the framework's own pushes/PRs
   push:
