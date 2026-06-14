@@ -4,6 +4,12 @@
 # release.yml → release-go.yml (goreleaser + cosign + SBOM + SLSA).
 name: release-please
 
+# Serialize release-PR maintenance; cancel a stale run when a newer push
+# supersedes it (#196). The actual release runs on tag push in release.yml.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]

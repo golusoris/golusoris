@@ -6,6 +6,11 @@
 #   - security-events: write and id-token: write set at the JOB level only
 name: Scorecard
 
+# Cancel a stale run when a newer commit supersedes it (#196).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
