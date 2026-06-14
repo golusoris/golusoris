@@ -33,6 +33,7 @@ import (
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/i2c"
 	"periph.io/x/conn/v3/i2c/i2creg"
+	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 	"periph.io/x/conn/v3/spi/spireg"
 )
@@ -113,7 +114,12 @@ func (b *I2CBus) Tx(addr uint16, write, read []byte) error {
 }
 
 // Close releases the bus.
-func (b *I2CBus) Close() error { return b.bus.Close() }
+func (b *I2CBus) Close() error {
+	if err := b.bus.Close(); err != nil {
+		return fmt.Errorf("gpio: i2c close: %w", err)
+	}
+	return nil
+}
 
 // SPIPort wraps an spi.PortCloser.
 type SPIPort struct {
@@ -131,7 +137,7 @@ func OpenSPI(portName string) (*SPIPort, error) {
 
 // Connect returns a full-duplex spi.Conn at the given speed and mode.
 func (p *SPIPort) Connect(speedHz int64, mode spi.Mode, bits int) (spi.Conn, error) {
-	conn, err := p.port.Connect(speedHz, mode, bits)
+	conn, err := p.port.Connect(physic.Frequency(speedHz)*physic.Hertz, mode, bits)
 	if err != nil {
 		return nil, fmt.Errorf("gpio: spi connect: %w", err)
 	}
@@ -139,4 +145,9 @@ func (p *SPIPort) Connect(speedHz int64, mode spi.Mode, bits int) (spi.Conn, err
 }
 
 // Close releases the port.
-func (p *SPIPort) Close() error { return p.port.Close() }
+func (p *SPIPort) Close() error {
+	if err := p.port.Close(); err != nil {
+		return fmt.Errorf("gpio: spi close: %w", err)
+	}
+	return nil
+}

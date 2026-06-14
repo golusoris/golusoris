@@ -14,27 +14,39 @@
 package robotics
 
 import (
+	"fmt"
+
 	"gobot.io/x/gobot/v2"
 )
 
-// Master wraps gobot.Master for managing multiple robots.
+// Master wraps gobot.Manager for managing multiple robots.
 type Master struct {
-	m *gobot.Master
+	m *gobot.Manager
 }
 
-// NewMaster creates a new gobot Master.
+// NewMaster creates a new gobot Manager.
 func NewMaster() *Master {
-	return &Master{m: gobot.NewMaster()}
+	return &Master{m: gobot.NewManager()}
 }
 
 // AddRobot registers a robot with the master.
 func (m *Master) AddRobot(r *gobot.Robot) { m.m.AddRobot(r) }
 
 // Start starts the master and all registered robots (blocks until stopped).
-func (m *Master) Start() error { return m.m.Start() }
+func (m *Master) Start() error {
+	if err := m.m.Start(); err != nil {
+		return fmt.Errorf("robotics: start: %w", err)
+	}
+	return nil
+}
 
 // Stop stops the master and all robots.
-func (m *Master) Stop() error { return m.m.Stop() }
+func (m *Master) Stop() error {
+	if err := m.m.Stop(); err != nil {
+		return fmt.Errorf("robotics: stop: %w", err)
+	}
+	return nil
+}
 
 // Robot is a re-export of gobot.Robot.
 type Robot = gobot.Robot

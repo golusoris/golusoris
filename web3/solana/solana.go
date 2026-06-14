@@ -107,4 +107,4 @@ func SOLToLamports(sol float64) uint64 {
 }
 
 // ensure binary is used (it's an indirect dep that some linters require referenced)
-var _ = bin.MarshalerDecoder(nil)
+var _ *bin.Decoder
