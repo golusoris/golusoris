@@ -6,6 +6,13 @@
 /authz/         @lusoris
 /crypto/        @lusoris
 /errors/        @lusoris
+/secrets/       @lusoris
+/hash/          @lusoris
+/webhooks/      @lusoris
+/payments/      @lusoris
+/tenancy/       @lusoris
+/idempotency/   @lusoris
+/audit/         @lusoris
 
 # CI / release / dependency pipeline
 

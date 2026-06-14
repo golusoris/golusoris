@@ -28,6 +28,7 @@ import (
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	"github.com/golusoris/golusoris/flags"
+	extclient "github.com/golusoris/golusoris/httpx/extclient"
 	"github.com/golusoris/golusoris/httpx/router"
 	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/id"
@@ -242,4 +243,13 @@ var AILLM = fx.Module("golusoris.ai.llm",
 // Requires [DB] (a *pgxpool.Pool) in the same fx graph.
 var AIVector = fx.Module("golusoris.ai.vector",
 	aivector.Module,
+)
+
+// ExtClient bundles the typed external-API client factory (per-host retry +
+// breaker + OTel + optional cache, built on httpx/client). Provides the
+// extclient registry; apps resolve named services from config.
+//
+// Requires [Core] for config + log. Config key prefix: httpx.extclient.*.
+var ExtClient = fx.Module("golusoris.httpx.extclient",
+	extclient.Module,
 )

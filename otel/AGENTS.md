@@ -5,7 +5,7 @@ Full OpenTelemetry SDK — tracer, meter, logger — with an OTLP gRPC exporter.
 ## Conventions
 
 - Apps wire `otel.Module`. The SDK registers itself as the OTel global, so `httpx/middleware.OTel`, `httpx/client` (via otelhttp), and any package using `otel.Tracer("...")` get spans automatically.
-- `otel.service.name` is required when enabled. Disable via `otel.enabled=false` to get a no-op install.
+- `otel.service.name` is required when enabled. The module degrades to a silent no-op (empty `Providers`, global OTel stays no-op, no exporter, no network) when `otel.enabled=false`, `OTEL_SDK_DISABLED=true`, or no OTLP endpoint is configured — neither `otel.endpoint` nor any `OTEL_EXPORTER_OTLP_*_ENDPOINT` env var. The last case is the 12-factor default: no collector wired → no-op.
 - Resource attrs include service.{name,version,namespace}, process attrs, and k8s pod metadata from the downward API (POD_NAME, POD_NAMESPACE, POD_IP, NODE_NAME, SERVICE_ACCOUNT) — same set the `log/` package reads.
 - Per-signal toggles: `otel.export.{traces,metrics,logs}`. Useful when the collector rejects one signal type, or when app traffic is noisy along one axis.
 
