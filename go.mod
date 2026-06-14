@@ -63,8 +63,8 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/rueidis v1.0.74
-	github.com/riverqueue/river v0.34.0
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.34.0
+	github.com/riverqueue/river v0.39.0
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.39.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/segmentio/ksuid v1.0.4
@@ -100,7 +100,7 @@ require (
 	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/text v0.36.0
+	golang.org/x/text v0.37.0
 	google.golang.org/grpc v1.80.0
 	k8s.io/client-go v0.35.3
 	riverqueue.com/riverui v0.15.0
@@ -261,9 +261,9 @@ require (
 	github.com/richardlehane/mscfb v1.0.6 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/riverqueue/apiframe v0.0.0-20251229202423-2b52ce1c482e // indirect
-	github.com/riverqueue/river/riverdriver v0.34.0 // indirect
-	github.com/riverqueue/river/rivershared v0.34.0 // indirect
-	github.com/riverqueue/river/rivertype v0.34.0 // indirect
+	github.com/riverqueue/river/riverdriver v0.39.0 // indirect
+	github.com/riverqueue/river/rivershared v0.39.0 // indirect
+	github.com/riverqueue/river/rivertype v0.39.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
@@ -278,7 +278,7 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/tidwall/gjson v1.18.0 // indirect
+	github.com/tidwall/gjson v1.19.0 // indirect
 	github.com/tidwall/match v1.2.0 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	github.com/tidwall/sjson v1.2.5 // indirect
@@ -311,11 +311,11 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org v0.0.0-20230225012048-214862532bf5 // indirect
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
-	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
-	golang.org/x/tools v0.43.0 // indirect
+	golang.org/x/tools v0.44.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260406210006-6f92a3bedf2d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
