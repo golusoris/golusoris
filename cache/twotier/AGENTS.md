@@ -41,6 +41,22 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
 | `Typed.Get(ctx, k, loader)` | Read-through L1 → L2 → loader; back-fills tiers |
 | `Typed.Set(ctx, k, v)` | Write-through to both tiers |
 | `Typed.Delete(ctx, k)` | Removes from both tiers |
+| `Typed.InvalidatePrefix(ctx, prefix)` | Bulk-evicts every key under the view + `prefix` from both tiers (`""` clears the whole view) |
+| `(*TwoTier).InvalidatePrefix(ctx, prefix)` | Same, but takes an already-composed key prefix (no view prefix added) |
+
+## Prefix invalidation
+
+`InvalidatePrefix` composes the prefix exactly like `Get`/`Set`/`Delete`
+(`<view-prefix>:<prefix>`), then evicts from both tiers:
+
+- **L1 (otter)** has no native prefix delete, so it is scanned with `Keys()` and
+  matching entries are `Invalidate`d one by one (and forgotten from
+  singleflight). O(n) over the live L1 set — fine for the bounded in-process
+  cache, not for huge keyspaces.
+- **L2 (redis)** is cleared via the `l2` adapter's `DelPrefix`: cursor-paged
+  `SCAN MATCH "<prefix>*" COUNT 256` + batched `UNLINK` per page. `UNLINK`
+  reclaims memory off the main thread. The adapter refuses an empty composed
+  prefix to avoid scanning the whole keyspace.
 
 ## Values cross tiers as JSON
 
@@ -51,8 +67,8 @@ JSON-round-trippable values only.
 ## Disabled / nil-passthrough mode
 
 A `nil *TwoTier` is a valid no-op cache. A view built from nil (`NewTyped[V](nil,
-…)`) calls the loader on every `Get` and makes `Set`/`Delete` no-ops, so call
-sites never branch on whether caching is configured.
+…)`) calls the loader on every `Get` and makes `Set`/`Delete`/`InvalidatePrefix`
+no-ops, so call sites never branch on whether caching is configured.
 
 ## Config
 

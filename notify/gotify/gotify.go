@@ -66,6 +66,8 @@ func (s *Sender) Name() string { return "gotify" }
 // Send implements [notify.Sender]. The message body is msg.Body, falling
 // back to msg.Text; msg.Subject becomes the Gotify title. The priority is
 // taken from msg.Metadata["priority"] if a valid integer, else Options.Priority.
+// msg.Metadata["click"] sets the notification click-action URL and
+// msg.Metadata["icon"] sets the big-image URL, both via Gotify extras.
 func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	message := msg.Body
 	if message == "" {
@@ -79,6 +81,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 		Title:    msg.Subject,
 		Message:  message,
 		Priority: s.priority(msg),
+		Extras:   extras(msg),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -104,6 +107,23 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	return nil
 }
 
+// extras builds Gotify's extras map from per-message metadata:
+// Metadata["click"] sets the click-action URL and Metadata["icon"] sets the
+// big-image URL. Returns nil when neither is set so the field is omitted.
+func extras(msg notify.Message) map[string]map[string]any {
+	var ex map[string]map[string]any
+	if click := msg.Metadata["click"]; click != "" {
+		ex = map[string]map[string]any{"client::notification.click": {"url": click}}
+	}
+	if icon := msg.Metadata["icon"]; icon != "" {
+		if ex == nil {
+			ex = make(map[string]map[string]any, 1)
+		}
+		ex["client::notification.bigImageUrl"] = map[string]any{"imageUrl": icon}
+	}
+	return ex
+}
+
 // priority resolves the message priority: msg.Metadata["priority"] (if a
 // valid integer) overrides Options.Priority.
 func (s *Sender) priority(msg notify.Message) int {
@@ -117,7 +137,8 @@ func (s *Sender) priority(msg notify.Message) int {
 }
 
 type gotifyPayload struct {
-	Title    string `json:"title,omitempty"`
-	Message  string `json:"message"`
-	Priority int    `json:"priority"`
+	Title    string                    `json:"title,omitempty"`
+	Message  string                    `json:"message"`
+	Priority int                       `json:"priority"`
+	Extras   map[string]map[string]any `json:"extras,omitempty"`
 }

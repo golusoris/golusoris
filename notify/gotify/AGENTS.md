@@ -12,5 +12,6 @@ Gotify (self-hosted push server) sender for `notify.Sender`.
 - POSTs JSON `{title, message, priority}` to `{ServerURL}/message?token={AppToken}`.
 - `notify.Message.Body` becomes `message`, falling back to `Text`. `Subject` becomes `title`.
 - Priority defaults to `Options.Priority`; `Message.Metadata["priority"]` (integer) overrides per-send. Gotify range is 0–10.
+- `Message.Metadata["click"]` sets the notification click-action URL via `extras."client::notification.click".url`; `Message.Metadata["icon"]` sets the big-image URL via `extras."client::notification.bigImageUrl".imageUrl`. `extras` is omitted when neither is set.
 - `ServerURL` and `AppToken` are both required (validated in `NewSender`).
 - No SDK — raw HTTP only.

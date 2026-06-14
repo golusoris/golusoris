@@ -218,6 +218,28 @@ func (b *S3Bucket) Exists(ctx context.Context, key string) (bool, error) {
 	return true, nil
 }
 
+// Stat implements [Bucket] via HeadObject, returning metadata without the
+// body. Maps S3 404 / NotFound to [ErrNotFound].
+func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
+	out, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(b.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		if isNotFound(err) {
+			return Object{}, ErrNotFound
+		}
+		return Object{}, fmt.Errorf("storage/s3: stat %q: %w", key, err)
+	}
+	return Object{
+		Key:          key,
+		Size:         aws.ToInt64(out.ContentLength),
+		ContentType:  aws.ToString(out.ContentType),
+		ETag:         aws.ToString(out.ETag),
+		LastModified: aws.ToTime(out.LastModified),
+	}, nil
+}
+
 // List implements [Bucket].
 func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error) {
 	in := &s3.ListObjectsV2Input{Bucket: aws.String(b.bucket)}

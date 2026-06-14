@@ -23,6 +23,8 @@ func TestSender_Send(t *testing.T) {
 		wantTitle    string
 		wantMessage  string
 		wantPriority float64
+		wantClick    string
+		wantIcon     string
 	}{
 		{
 			name:         "body and subject",
@@ -47,6 +49,15 @@ func TestSender_Send(t *testing.T) {
 			wantMessage:  "urgent",
 			wantPriority: 8,
 		},
+		{
+			name:         "click and icon extras",
+			opts:         gotify.Options{Priority: 3},
+			msg:          notify.Message{Body: "open it", Metadata: map[string]string{"click": "https://app.example/req/7", "icon": "https://img.example/poster.png"}},
+			wantMessage:  "open it",
+			wantPriority: 3,
+			wantClick:    "https://app.example/req/7",
+			wantIcon:     "https://img.example/poster.png",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -67,6 +78,23 @@ func TestSender_Send(t *testing.T) {
 				} else {
 					_, hasTitle := got["title"]
 					require.False(t, hasTitle)
+				}
+				if tt.wantClick != "" || tt.wantIcon != "" {
+					extras, ok := got["extras"].(map[string]any)
+					require.True(t, ok, "extras must be present")
+					if tt.wantClick != "" {
+						click, ok := extras["client::notification.click"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, tt.wantClick, click["url"])
+					}
+					if tt.wantIcon != "" {
+						img, ok := extras["client::notification.bigImageUrl"].(map[string]any)
+						require.True(t, ok)
+						require.Equal(t, tt.wantIcon, img["imageUrl"])
+					}
+				} else {
+					_, hasExtras := got["extras"]
+					require.False(t, hasExtras)
 				}
 				w.WriteHeader(http.StatusOK)
 			}))

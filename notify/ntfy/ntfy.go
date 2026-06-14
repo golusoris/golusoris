@@ -74,6 +74,8 @@ func (s *Sender) Name() string { return "ntfy" }
 // Send implements [notify.Sender]. The message body is msg.Body, falling
 // back to msg.Text; msg.Subject becomes the ntfy Title header. Priority and
 // tags default from Options and may be overridden via msg.Metadata.
+// msg.Metadata["click"] sets the Click header and msg.Metadata["icon"] sets
+// the Icon header.
 func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	message := msg.Body
 	if message == "" {
@@ -102,7 +104,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	return nil
 }
 
-// setHeaders applies the title, priority, tags, and auth headers.
+// setHeaders applies the title, priority, tags, click, icon, and auth headers.
 func (s *Sender) setHeaders(req *http.Request, msg notify.Message) {
 	if msg.Subject != "" {
 		req.Header.Set("Title", msg.Subject)
@@ -112,6 +114,12 @@ func (s *Sender) setHeaders(req *http.Request, msg notify.Message) {
 	}
 	if tags := s.tags(msg); tags != "" {
 		req.Header.Set("Tags", tags)
+	}
+	if click := msg.Metadata["click"]; click != "" {
+		req.Header.Set("Click", click)
+	}
+	if icon := msg.Metadata["icon"]; icon != "" {
+		req.Header.Set("Icon", icon)
 	}
 	switch {
 	case s.opts.Token != "":

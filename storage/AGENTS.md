@@ -11,6 +11,7 @@ type Bucket interface {
     Get(ctx, key) (io.ReadCloser, Object, error)
     Delete(ctx, key) error
     Exists(ctx, key) (bool, error)
+    Stat(ctx, key) (Object, error)
     List(ctx, ListOptions) ([]Object, error)
     URL(ctx, key) (string, error)
 }
@@ -42,7 +43,8 @@ storage.s3.presign_ttl = 15m     # URL() presigned-GET lifetime (default 15m)
 
 `URL` issues a presigned GET (the object need not exist; the URL is signed,
 not validated). `Delete` is idempotent (deleting a missing key is not an
-error). `Get`/`Exists` map S3 404 / `NoSuchKey` to `ErrNotFound` / `false`.
+error). `Get`/`Stat` map S3 404 / `NoSuchKey` to `ErrNotFound`; `Exists` maps it to
+`false`. `Stat`/`Exists` use HeadObject (no body fetched).
 
 ## Don't
 

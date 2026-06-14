@@ -154,6 +154,41 @@ func TestS3Bucket_Exists_NotFound(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestS3Bucket_Stat(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodHead, r.Method)
+		require.Equal(t, "/my-bucket/dir/file.txt", r.URL.Path)
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("ETag", `"e1"`)
+		w.Header().Set("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+		w.Header().Set("Content-Length", "11")
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	b := newTestBucket(t, srv)
+	obj, err := b.Stat(context.Background(), "dir/file.txt")
+	require.NoError(t, err)
+	require.Equal(t, "dir/file.txt", obj.Key)
+	require.Equal(t, int64(11), obj.Size)
+	require.Equal(t, "text/plain", obj.ContentType)
+	require.Equal(t, `"e1"`, obj.ETag)
+	require.False(t, obj.LastModified.IsZero())
+}
+
+func TestS3Bucket_Stat_NotFound(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	b := newTestBucket(t, srv)
+	_, err := b.Stat(context.Background(), "missing")
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestS3Bucket_Delete(t *testing.T) {
 	t.Parallel()
 	var gotMethod, gotPath string

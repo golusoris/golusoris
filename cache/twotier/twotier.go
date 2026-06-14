@@ -10,9 +10,13 @@
 // stores its JSON encoding (Redis is a byte store, and JSON keeps the cache
 // language-agnostic across replicas).
 //
+// Bulk invalidation: InvalidatePrefix evicts every entry under a key prefix
+// from both tiers (otter is scanned via Keys(); Redis via SCAN MATCH + UNLINK).
+//
 // Disabled / nil-passthrough mode: a nil *Cache is a valid no-op cache. Every
-// method is nil-safe — Get falls straight through to the loader, Set/Delete do
-// nothing — so call sites never branch on whether caching is configured.
+// method is nil-safe — Get falls straight through to the loader, Set/Delete and
+// InvalidatePrefix do nothing — so call sites never branch on whether caching
+// is configured.
 //
 // Usage:
 //
@@ -37,6 +41,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/golusoris/golusoris/cache/memory"
@@ -54,6 +59,10 @@ type l2 interface {
 	Set(ctx context.Context, key string, val []byte, ttl time.Duration) error
 	// Del removes key.
 	Del(ctx context.Context, key string) error
+	// DelPrefix removes every key whose name starts with prefix. The redis
+	// adapter implements this with a cursor-paged SCAN MATCH "<prefix>*" +
+	// batched UNLINK; the test stub iterates its map.
+	DelPrefix(ctx context.Context, prefix string) error
 }
 
 // Loader fetches a value from the origin on a full cache miss.
@@ -187,6 +196,44 @@ func (t *Typed[V]) Delete(ctx context.Context, k string) error {
 	t.tt.group.Forget(key)
 	if derr := t.tt.l2.Del(ctx, key); derr != nil {
 		return fmt.Errorf("cache/twotier: L2 delete: %w", derr)
+	}
+	return nil
+}
+
+// InvalidatePrefix evicts every entry under this view whose user key starts
+// with prefix, from both tiers. The view's own key prefix is composed in
+// exactly as Get/Set/Delete do (t.key), so passing "" clears the whole view.
+//
+// L1 has no native prefix delete: otter is scanned via Keys() and matching
+// entries are Invalidated one by one. L2 is cleared by the adapter's prefix
+// delete (SCAN MATCH + UNLINK on Redis). On a disabled cache it is a no-op.
+func (t *Typed[V]) InvalidatePrefix(ctx context.Context, prefix string) error {
+	if t.tt == nil {
+		return nil
+	}
+	return t.tt.InvalidatePrefix(ctx, t.key(prefix))
+}
+
+// InvalidatePrefix evicts every entry whose composed key starts with prefix,
+// from both tiers. It takes already-composed keys (no view prefix is added);
+// the typed [Typed.InvalidatePrefix] is the per-view wrapper. A nil *TwoTier
+// is a no-op.
+//
+// L1 (otter) is scanned via Keys() because it has no native prefix delete;
+// matching keys are Invalidated individually and forgotten from singleflight.
+// L2 prefix eviction is delegated to the [l2] adapter.
+func (t *TwoTier) InvalidatePrefix(ctx context.Context, prefix string) error {
+	if t == nil {
+		return nil
+	}
+	for key := range t.l1.Keys() {
+		if strings.HasPrefix(key, prefix) {
+			t.l1.Invalidate(key)
+			t.group.Forget(key)
+		}
+	}
+	if derr := t.l2.DelPrefix(ctx, prefix); derr != nil {
+		return fmt.Errorf("cache/twotier: L2 invalidate prefix %q: %w", prefix, derr)
 	}
 	return nil
 }
