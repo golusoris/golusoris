@@ -14,6 +14,7 @@ package golusoris
 import (
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/audit"
 	"github.com/golusoris/golusoris/auth/oidc"
 	"github.com/golusoris/golusoris/authz"
 	cachemem "github.com/golusoris/golusoris/cache/memory"
@@ -23,14 +24,21 @@ import (
 	"github.com/golusoris/golusoris/crypto"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
+	"github.com/golusoris/golusoris/flags"
 	"github.com/golusoris/golusoris/httpx/router"
 	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/id"
+	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/jobs"
 	k8sclient "github.com/golusoris/golusoris/k8s/client"
 	"github.com/golusoris/golusoris/k8s/podinfo"
 	"github.com/golusoris/golusoris/log"
+	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/outbox"
+	"github.com/golusoris/golusoris/search"
+	"github.com/golusoris/golusoris/secrets"
+	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/tenancy"
 	"github.com/golusoris/golusoris/validate"
 )
 
@@ -143,4 +151,68 @@ var AuthOIDC = fx.Module("golusoris.auth.oidc",
 // Requires [Core] for log.
 var Authz = fx.Module("golusoris.authz",
 	authz.Module,
+)
+
+// Storage bundles the object-storage Bucket. Provides storage.Bucket
+// (local-filesystem backend by default; S3/GCS via config when added).
+//
+// Requires [Core] for config + log. Config key prefix: storage.*.
+var Storage = fx.Module("golusoris.storage",
+	storage.Module,
+)
+
+// Secrets bundles the secrets provider. Provides secrets.Secret
+// (env backend by default; file backend via config).
+//
+// Requires [Core] for config + log. Config key prefix: secrets.*.
+var Secrets = fx.Module("golusoris.secrets",
+	secrets.Module,
+)
+
+// Flags bundles the feature-flag client. Provides flags.Provider +
+// *flags.Client (noop provider by default; memory via config).
+//
+// Requires [Core] for config + log. Config key prefix: flags.*.
+var Flags = fx.Module("golusoris.flags",
+	flags.Module,
+)
+
+// Audit bundles the append-only audit logger. Provides *audit.Logger
+// backed by a MemoryStore (apps override the Store via fx.Decorate).
+//
+// Requires [Core] for clock + log. Config key prefix: audit.*.
+var Audit = fx.Module("golusoris.audit",
+	audit.Module,
+)
+
+// Tenancy bundles the multi-tenant resolution middleware. Default
+// extractor + MemoryStore from config (apps override the Store).
+//
+// Requires [Core] for config + log. Config key prefix: tenancy.*.
+var Tenancy = fx.Module("golusoris.tenancy",
+	tenancy.Module,
+)
+
+// Idempotency bundles the Idempotency-Key middleware + Store
+// (MemoryStore by default; apps override via fx.Decorate).
+//
+// Requires [Core] for config + clock. Config key prefix: idempotency.*.
+var Idempotency = fx.Module("golusoris.idempotency",
+	idempotency.Module,
+)
+
+// Search bundles the search Backend. Provides search.Backend
+// (in-memory by default; typesense/meilisearch via config).
+//
+// Requires [Core] for config + log. Config key prefix: search.*.
+var Search = fx.Module("golusoris.search",
+	search.Module,
+)
+
+// Notify bundles the Notifier. Provides *notify.Notifier with the SMTP
+// sender by default; additional senders selectable by config.
+//
+// Requires [Core] for config + log. Config key prefix: notify.*.
+var Notify = fx.Module("golusoris.notify",
+	notify.Module,
 )
