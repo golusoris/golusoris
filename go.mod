@@ -25,7 +25,7 @@ require (
 	github.com/getkin/kin-openapi v0.135.0
 	github.com/getsentry/sentry-go v0.45.1
 	github.com/gkampitakis/go-snaps v0.5.21
-	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-faster/errors v0.7.1
 	github.com/go-playground/form/v4 v4.3.0
 	github.com/go-playground/validator/v10 v10.30.2
