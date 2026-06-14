@@ -48,6 +48,12 @@ Located in `.claude/hooks/`:
 
 Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint` needs a justification comment.
 
+## Working agreements (for AI agents)
+
+- **Decisions go through `AskUserQuestion`.** Any clarifying question or multi-option choice uses the popup, never prose options — even binary ones. (#25)
+- **State hygiene — update [.workingdir/STATE.md](.workingdir/STATE.md) immediately** after each bug is fixed, confirmed, or ruled out; don't batch to session end, or the next session re-investigates closed work. (#26)
+- **Deep-dive deliverables.** A research/hardening PR ships the full set — per-module `AGENTS.md`, a decision/benchmark digest, and a STATE.md delta — not a config-only change. (#28)
+
 ## Don't
 
 - Don't use `time.Now()` outside `clock/`. Use `clock.Now(ctx)`.
