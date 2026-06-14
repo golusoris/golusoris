@@ -58,6 +58,9 @@ type Bucket interface {
 	Delete(ctx context.Context, key string) error
 	// Exists reports whether key exists.
 	Exists(ctx context.Context, key string) (bool, error)
+	// Stat returns metadata for key without fetching its body. Returns
+	// [ErrNotFound] when key does not exist.
+	Stat(ctx context.Context, key string) (Object, error)
 	// List returns objects whose keys begin with opts.Prefix.
 	List(ctx context.Context, opts ListOptions) ([]Object, error)
 	// URL returns a publicly accessible URL for key. May return an error
@@ -165,6 +168,22 @@ func (b *LocalBucket) Exists(_ context.Context, key string) (bool, error) {
 		return false, fmt.Errorf("storage: stat: %w", statErr)
 	}
 	return true, nil
+}
+
+// Stat implements [Bucket].
+func (b *LocalBucket) Stat(_ context.Context, key string) (Object, error) {
+	path, err := b.abs(key)
+	if err != nil {
+		return Object{}, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return Object{}, ErrNotFound
+		}
+		return Object{}, fmt.Errorf("storage: stat: %w", err)
+	}
+	return Object{Key: key, Size: info.Size(), LastModified: info.ModTime()}, nil
 }
 
 // List implements [Bucket].

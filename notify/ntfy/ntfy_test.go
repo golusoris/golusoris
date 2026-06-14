@@ -24,6 +24,8 @@ func TestSender_Send(t *testing.T) {
 		wantPriority string
 		wantTags     string
 		wantAuth     string
+		wantClick    string
+		wantIcon     string
 	}{
 		{
 			name:         "body with defaults",
@@ -63,6 +65,14 @@ func TestSender_Send(t *testing.T) {
 			wantBody: "basic",
 			wantAuth: "Basic dXNlcjpwYXNz",
 		},
+		{
+			name:      "click and icon headers",
+			opts:      ntfy.Options{},
+			msg:       notify.Message{Body: "open", Metadata: map[string]string{"click": "https://app.example/req/7", "icon": "https://img.example/poster.png"}},
+			wantBody:  "open",
+			wantClick: "https://app.example/req/7",
+			wantIcon:  "https://img.example/poster.png",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -77,6 +87,8 @@ func TestSender_Send(t *testing.T) {
 				require.Equal(t, tt.wantPriority, r.Header.Get("Priority"))
 				require.Equal(t, tt.wantTags, r.Header.Get("Tags"))
 				require.Equal(t, tt.wantAuth, r.Header.Get("Authorization"))
+				require.Equal(t, tt.wantClick, r.Header.Get("Click"))
+				require.Equal(t, tt.wantIcon, r.Header.Get("Icon"))
 				w.WriteHeader(http.StatusOK)
 			}))
 			t.Cleanup(srv.Close)

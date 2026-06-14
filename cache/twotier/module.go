@@ -2,6 +2,7 @@ package twotier
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -77,6 +78,39 @@ func (r redisL2) Del(ctx context.Context, key string) error {
 		return fmt.Errorf("cache/twotier: redis del: %w", err)
 	}
 	return nil
+}
+
+// scanCount bounds work per SCAN round-trip (a hint, not a hard page size).
+const scanCount = 256
+
+// DelPrefix removes every key matching "<prefix>*" via cursor-paged SCAN, then
+// UNLINKs the matched keys per page (UNLINK reclaims memory off the main
+// thread, unlike DEL). An empty prefix is rejected to avoid scanning the whole
+// keyspace, which is never what a typed view wants.
+func (r redisL2) DelPrefix(ctx context.Context, prefix string) error {
+	if prefix == "" {
+		return errors.New("cache/twotier: refusing to scan-delete an empty prefix")
+	}
+	match := prefix + "*"
+	for cursor := uint64(0); ; {
+		entry, err := r.client.Do(ctx,
+			r.client.B().Scan().Cursor(cursor).Match(match).Count(scanCount).Build(),
+		).AsScanEntry()
+		if err != nil {
+			return fmt.Errorf("cache/twotier: redis scan %q: %w", match, err)
+		}
+		if len(entry.Elements) > 0 {
+			if derr := r.client.Do(ctx,
+				r.client.B().Unlink().Key(entry.Elements...).Build(),
+			).Error(); derr != nil {
+				return fmt.Errorf("cache/twotier: redis unlink: %w", derr)
+			}
+		}
+		cursor = entry.Cursor
+		if cursor == 0 {
+			return nil
+		}
+	}
 }
 
 // newTwoTier wires a [TwoTier] from the L1 cache, the Redis client, and config.
