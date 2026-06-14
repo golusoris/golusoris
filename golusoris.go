@@ -46,6 +46,7 @@ import (
 	"github.com/golusoris/golusoris/storage"
 	"github.com/golusoris/golusoris/tenancy"
 	"github.com/golusoris/golusoris/validate"
+	"github.com/golusoris/golusoris/version"
 )
 
 // Core bundles the foundational modules every app needs:
@@ -53,7 +54,8 @@ import (
 //
 // errors/ and i18n/ are intentionally not in fx — errors is a pure package and
 // i18n is opt-in via [I18n].
-var Core = fx.Module("golusoris.core",
+var Core = fx.Module(
+	"golusoris.core",
 	config.Module,
 	log.Module,
 	clock.Module,
@@ -67,7 +69,8 @@ var Core = fx.Module("golusoris.core",
 //
 // db/sqlc helpers are stateless (no fx wiring), so they're available via
 // direct import without inclusion here.
-var DB = fx.Module("golusoris.db",
+var DB = fx.Module(
+	"golusoris.db",
 	dbpgx.Module,
 	dbmigrate.Module,
 )
@@ -77,7 +80,8 @@ var DB = fx.Module("golusoris.db",
 // bun and sqlc against the same pool.
 //
 // Requires [DB] (the *pgxpool.Pool) + [Core] (config + log) in the same graph.
-var DBBun = fx.Module("golusoris.db.bun",
+var DBBun = fx.Module(
+	"golusoris.db.bun",
 	dbbun.Module,
 )
 
@@ -88,7 +92,8 @@ var DBBun = fx.Module("golusoris.db.bun",
 // Individual httpx/middleware functions are not in fx (they're plain
 // net/http middleware); apps compose the stack they want and register it
 // via router.Use.
-var HTTP = fx.Module("golusoris.http",
+var HTTP = fx.Module(
+	"golusoris.http",
 	router.Module,
 	server.Module,
 )
@@ -105,7 +110,8 @@ var HTTP = fx.Module("golusoris.http",
 // Postgres advisory lock) so non-k8s apps can elect too. Runtime-
 // agnostic identity lives under [container/runtime] — prefer it in
 // new code.
-var K8s = fx.Module("golusoris.k8s",
+var K8s = fx.Module(
+	"golusoris.k8s",
 	podinfo.Module,
 	k8sclient.Module,
 )
@@ -117,7 +123,8 @@ var K8s = fx.Module("golusoris.k8s",
 //
 // Standalone from [K8s] — it resolves its own rest.Config (in-cluster or
 // kubeconfig). Requires [Core] for config + log. Config key prefix: operator.*.
-var K8sOperator = fx.Module("golusoris.k8s.operator",
+var K8sOperator = fx.Module(
+	"golusoris.k8s.operator",
 	operator.Module,
 )
 
@@ -129,7 +136,8 @@ var K8sOperator = fx.Module("golusoris.k8s.operator",
 //
 // jobs/cron (periodic helpers) and jobs/ui (admin dashboard) are not
 // in this umbrella — apps wire them explicitly against the Client.
-var Jobs = fx.Module("golusoris.jobs",
+var Jobs = fx.Module(
+	"golusoris.jobs",
 	jobs.Module,
 )
 
@@ -141,7 +149,8 @@ var Jobs = fx.Module("golusoris.jobs",
 // schema lives in outbox/migrations/ — wire via dbmigrate.Options{}.
 // WithFS(outbox.MigrationsFS) or copy the SQL into the app's own
 // migrations directory.
-var Outbox = fx.Module("golusoris.outbox",
+var Outbox = fx.Module(
+	"golusoris.outbox",
 	outbox.Module,
 )
 
@@ -149,7 +158,8 @@ var Outbox = fx.Module("golusoris.outbox",
 // *memory.Cache to the fx graph. Standalone — does not require DB.
 //
 // Requires [Core] for config + log.
-var CacheMemory = fx.Module("golusoris.cache.memory",
+var CacheMemory = fx.Module(
+	"golusoris.cache.memory",
 	cachemem.Module,
 )
 
@@ -157,7 +167,8 @@ var CacheMemory = fx.Module("golusoris.cache.memory",
 // rueidis.Client to the fx graph. Auto-detects standalone vs cluster.
 //
 // Requires [Core] for config + log. Redis must be reachable at start.
-var CacheRedis = fx.Module("golusoris.cache.redis",
+var CacheRedis = fx.Module(
+	"golusoris.cache.redis",
 	cacheredis.Module,
 )
 
@@ -165,7 +176,8 @@ var CacheRedis = fx.Module("golusoris.cache.redis",
 // + L2 redis, with single-flight load coalescing. Provides *twotier.TwoTier.
 //
 // Requires [CacheMemory] + [CacheRedis] in the same fx graph.
-var CacheTwoTier = fx.Module("golusoris.cache.twotier",
+var CacheTwoTier = fx.Module(
+	"golusoris.cache.twotier",
 	cachetwotier.Module,
 )
 
@@ -174,7 +186,8 @@ var CacheTwoTier = fx.Module("golusoris.cache.twotier",
 // the configured issuer.
 //
 // Requires [Core] for config + log. Config key prefix: auth.oidc.*.
-var AuthOIDC = fx.Module("golusoris.auth.oidc",
+var AuthOIDC = fx.Module(
+	"golusoris.auth.oidc",
 	oidc.Module,
 )
 
@@ -183,7 +196,8 @@ var AuthOIDC = fx.Module("golusoris.auth.oidc",
 // fx.Provide before including this module.
 //
 // Requires [Core] for log.
-var Authz = fx.Module("golusoris.authz",
+var Authz = fx.Module(
+	"golusoris.authz",
 	authz.Module,
 )
 
@@ -191,7 +205,8 @@ var Authz = fx.Module("golusoris.authz",
 // (local-filesystem backend by default; S3/GCS via config when added).
 //
 // Requires [Core] for config + log. Config key prefix: storage.*.
-var Storage = fx.Module("golusoris.storage",
+var Storage = fx.Module(
+	"golusoris.storage",
 	storage.Module,
 )
 
@@ -199,7 +214,8 @@ var Storage = fx.Module("golusoris.storage",
 // (env backend by default; file backend via config).
 //
 // Requires [Core] for config + log. Config key prefix: secrets.*.
-var Secrets = fx.Module("golusoris.secrets",
+var Secrets = fx.Module(
+	"golusoris.secrets",
 	secrets.Module,
 )
 
@@ -207,7 +223,8 @@ var Secrets = fx.Module("golusoris.secrets",
 // *flags.Client (noop provider by default; memory via config).
 //
 // Requires [Core] for config + log. Config key prefix: flags.*.
-var Flags = fx.Module("golusoris.flags",
+var Flags = fx.Module(
+	"golusoris.flags",
 	flags.Module,
 )
 
@@ -215,7 +232,8 @@ var Flags = fx.Module("golusoris.flags",
 // backed by a MemoryStore (apps override the Store via fx.Decorate).
 //
 // Requires [Core] for clock + log. Config key prefix: audit.*.
-var Audit = fx.Module("golusoris.audit",
+var Audit = fx.Module(
+	"golusoris.audit",
 	audit.Module,
 )
 
@@ -223,7 +241,8 @@ var Audit = fx.Module("golusoris.audit",
 // extractor + MemoryStore from config (apps override the Store).
 //
 // Requires [Core] for config + log. Config key prefix: tenancy.*.
-var Tenancy = fx.Module("golusoris.tenancy",
+var Tenancy = fx.Module(
+	"golusoris.tenancy",
 	tenancy.Module,
 )
 
@@ -231,7 +250,8 @@ var Tenancy = fx.Module("golusoris.tenancy",
 // (MemoryStore by default; apps override via fx.Decorate).
 //
 // Requires [Core] for config + clock. Config key prefix: idempotency.*.
-var Idempotency = fx.Module("golusoris.idempotency",
+var Idempotency = fx.Module(
+	"golusoris.idempotency",
 	idempotency.Module,
 )
 
@@ -239,7 +259,8 @@ var Idempotency = fx.Module("golusoris.idempotency",
 // (in-memory by default; typesense/meilisearch via config).
 //
 // Requires [Core] for config + log. Config key prefix: search.*.
-var Search = fx.Module("golusoris.search",
+var Search = fx.Module(
+	"golusoris.search",
 	search.Module,
 )
 
@@ -247,7 +268,8 @@ var Search = fx.Module("golusoris.search",
 // sender by default; additional senders selectable by config.
 //
 // Requires [Core] for config + log. Config key prefix: notify.*.
-var Notify = fx.Module("golusoris.notify",
+var Notify = fx.Module(
+	"golusoris.notify",
 	notify.Module,
 )
 
@@ -255,7 +277,8 @@ var Notify = fx.Module("golusoris.notify",
 // (works with OpenAI, Azure OpenAI, Ollama, Groq, Mistral, LM Studio).
 //
 // Requires [Core] for config. Config key prefix: ai.llm.*.
-var AILLM = fx.Module("golusoris.ai.llm",
+var AILLM = fx.Module(
+	"golusoris.ai.llm",
 	aillm.Module,
 )
 
@@ -263,7 +286,8 @@ var AILLM = fx.Module("golusoris.ai.llm",
 // columns scan/encode correctly. Provides no new type — configures the pool.
 //
 // Requires [DB] (a *pgxpool.Pool) in the same fx graph.
-var AIVector = fx.Module("golusoris.ai.vector",
+var AIVector = fx.Module(
+	"golusoris.ai.vector",
 	aivector.Module,
 )
 
@@ -272,6 +296,17 @@ var AIVector = fx.Module("golusoris.ai.vector",
 // extclient registry; apps resolve named services from config.
 //
 // Requires [Core] for config + log. Config key prefix: httpx.extclient.*.
-var ExtClient = fx.Module("golusoris.httpx.extclient",
+var ExtClient = fx.Module(
+	"golusoris.httpx.extclient",
 	extclient.Module,
+)
+
+// Version provides the binary's typed build metadata (version.Info) — ldflags
+// -X overrides with a runtime/debug build-info fallback. Wire it for /healthz
+// payloads, server-info, and structured-log attributes.
+//
+// Standalone — no dependencies.
+var Version = fx.Module(
+	"golusoris.version",
+	version.Module,
 )
