@@ -39,6 +39,7 @@ golusoris/
 │   ├── pgx/                  # pgx pool fx module + startup retry + slow-query logger
 │   ├── migrate/              # golang-migrate v4 runner + fx hook
 │   ├── sqlc/                 # shared sqlc.yaml fragment + query helpers
+│   ├── bun/                  # uptrace/bun ORM over the db/pgx pool (opt-in)
 │   ├── geo/                  # PostGIS pgx types — Point, BBox, EWKB, Haversine
 │   ├── timescale/            # TimescaleDB hypertable + retention + compression
 │   ├── clickhouse/           # ClickHouse OLAP fx module

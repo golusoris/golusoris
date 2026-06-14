@@ -25,6 +25,7 @@ import (
 	"github.com/golusoris/golusoris/clock"
 	"github.com/golusoris/golusoris/config"
 	"github.com/golusoris/golusoris/crypto"
+	dbbun "github.com/golusoris/golusoris/db/bun"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	"github.com/golusoris/golusoris/flags"
@@ -69,6 +70,15 @@ var Core = fx.Module("golusoris.core",
 var DB = fx.Module("golusoris.db",
 	dbpgx.Module,
 	dbmigrate.Module,
+)
+
+// DBBun bundles the uptrace/bun ORM over the db/pgx pool — an opt-in
+// alternative to hand-written sqlc queries. Provides *bun.DB; an app can mix
+// bun and sqlc against the same pool.
+//
+// Requires [DB] (the *pgxpool.Pool) + [Core] (config + log) in the same graph.
+var DBBun = fx.Module("golusoris.db.bun",
+	dbbun.Module,
 )
 
 // HTTP bundles the base HTTP stack: chi router + *http.Server with
