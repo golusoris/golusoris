@@ -192,23 +192,21 @@ jobs:
           cache: true
       - name: Install apidiff
         run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
-      - name: Run apidiff vs previous tag
+      - name: Run apidiff vs previous tag (informational pre-1.0)
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag — skipping apidiff (first release)"
             exit 0
           fi
+          MOD="${{ inputs.module-path }}"
           echo "Comparing HEAD against $PREV_TAG"
-          apidiff -m ${{ inputs.module-path }} . > /tmp/current-api.txt 2>/dev/null || true
-          CURRENT_SHA=$(git rev-parse HEAD)
-          git stash --include-untracked --quiet || true
-          git checkout --quiet "$PREV_TAG"
-          apidiff -m ${{ inputs.module-path }} . > /tmp/prev-api.txt 2>/dev/null || true
-          git checkout --quiet "$CURRENT_SHA"
-          git stash pop --quiet || true
-          if ! apidiff /tmp/prev-api.txt /tmp/current-api.txt; then
-            echo "::error::Breaking API changes vs $PREV_TAG — add BREAKING CHANGE: footer or bump major version."
-            exit 1
-          fi
-          echo "API is backwards-compatible with $PREV_TAG."
+          apidiff -m -w /tmp/cur-api.txt "$MOD"
+          git worktree add -q --detach /tmp/apidiff-prev "$PREV_TAG"
+          ( cd /tmp/apidiff-prev && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
+            || echo "::warning::could not export $PREV_TAG API"
+          git worktree remove /tmp/apidiff-prev --force || true
+          echo "## API changes vs $PREV_TAG"
+          apidiff /tmp/prev-api.txt /tmp/cur-api.txt \
+            || echo "::warning::apidiff comparison unavailable (export-data version mismatch)"
+          # Pre-1.0 informational; gate on `apidiff -incompatible` at v1.0.

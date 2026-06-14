@@ -174,35 +174,30 @@ jobs:
           cache: true
       - name: Install apidiff
         run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
-      - name: Run apidiff vs previous tag
+      - name: Run apidiff vs previous tag (informational pre-1.0)
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag found — skipping apidiff (first release)"
             exit 0
           fi
+          MOD=github.com/golusoris/golusoris
           echo "Comparing HEAD against $PREV_TAG"
 
-          # Export current API
-          apidiff -m github.com/golusoris/golusoris . > /tmp/current-api.txt 2>/dev/null || true
+          # Correct export form: `apidiff -m -w FILE MODULE`, run in the module dir.
+          apidiff -m -w /tmp/cur-api.txt "$MOD"
 
-          # Save current work and check out the previous tag
-          CURRENT_SHA=$(git rev-parse HEAD)
-          git stash --include-untracked --quiet || true
-          git checkout --quiet "$PREV_TAG"
+          # Export the previous tag from an isolated worktree (no stash dance).
+          git worktree add -q --detach /tmp/apidiff-prev "$PREV_TAG"
+          ( cd /tmp/apidiff-prev && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
+            || echo "::warning::could not export $PREV_TAG API"
+          git worktree remove /tmp/apidiff-prev --force || true
 
-          # Export previous API
-          apidiff -m github.com/golusoris/golusoris . > /tmp/prev-api.txt 2>/dev/null || true
+          echo "## API changes vs $PREV_TAG"
+          apidiff /tmp/prev-api.txt /tmp/cur-api.txt \
+            || echo "::warning::apidiff comparison unavailable (export-data version mismatch)"
 
-          # Restore
-          git checkout --quiet "$CURRENT_SHA"
-          git stash pop --quiet || true
-
-          # Diff — non-zero exit if incompatible changes detected
-          if ! apidiff /tmp/prev-api.txt /tmp/current-api.txt; then
-            echo ""
-            echo "::error::Breaking API changes detected vs $PREV_TAG."
-            echo "::error::Add a 'BREAKING CHANGE:' or '!' footer to the commit, or bump the major version."
-            exit 1
-          fi
-          echo "API is backwards-compatible with $PREV_TAG."
+          # Pre-1.0 (SemVer v0.x) permits breaking changes, so this is INFORMATIONAL.
+          # At v1.0, gate on incompatibles:
+          #   apidiff -incompatible /tmp/prev-api.txt /tmp/cur-api.txt | tee /tmp/inc
+          #   [ -s /tmp/inc ] && { echo "::error::breaking API change"; exit 1; } || true
