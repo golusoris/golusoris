@@ -1,0 +1,16 @@
+# gitleaks config — extends the default ruleset with a TIGHT allowlist for two
+# protocol example values that live in test fixtures (not real credentials):
+#   - dGhlIHNhbXBsZSBub25jZQ==  RFC 6455 "the sample nonce" WebSocket key
+#   - DGv6ra1nlYgDCS1FRnbzlw    Web Push test `auth` value
+# Allowlisting by exact value (not by path) keeps every other high-entropy
+# string — including any real secret in a test file — still detected. Native
+# secret-scanning + push-protection remain the first line of defense.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Protocol example values in tests — not real secrets"
+regexes = [
+  '''dGhlIHNhbXBsZSBub25jZQ==''',
+  '''DGv6ra1nlYgDCS1FRnbzlw''',
+]
