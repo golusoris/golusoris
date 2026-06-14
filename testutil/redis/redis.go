@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/redis/rueidis"
+	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 )
 
@@ -31,6 +32,7 @@ const (
 // The container and client are stopped/closed via t.Cleanup.
 func Start(t *testing.T) rueidis.Client {
 	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()

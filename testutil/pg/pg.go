@@ -68,6 +68,7 @@ func (o Options) withDefaults() Options {
 // failure — Docker is a hard requirement per the testutil/pg contract.
 func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 	o := Options{}
 	if len(opts) > 0 {
 		o = opts[0]
