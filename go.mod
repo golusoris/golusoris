@@ -6,7 +6,7 @@ require (
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.89
 	github.com/CAFxX/httpcompression v0.0.9
-	github.com/ClickHouse/clickhouse-go/v2 v2.45.0
+	github.com/ClickHouse/clickhouse-go/v2 v2.46.0
 	github.com/Khan/genqlient v0.8.1
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/alexedwards/argon2id v1.0.0
