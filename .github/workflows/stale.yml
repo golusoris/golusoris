@@ -1,0 +1,39 @@
+# Mark long-idle issues/PRs stale for triage VISIBILITY only. Non-destructive:
+# days-before-close is -1, so nothing is ever auto-closed — the curated backlog
+# (P0–P3 / milestoned items) stays intact. All priority + security labels and
+# any milestoned issue are exempt, so this effectively only flags untriaged work.
+name: stale
+
+on:
+  schedule:
+    - cron: '37 4 * * 1'   # Mondays 04:37 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    name: Mark stale
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9.1.0
+        with:
+          days-before-stale: 90
+          days-before-close: -1   # never auto-close — mark only
+          stale-issue-label: stale
+          stale-pr-label: stale
+          stale-issue-message: >
+            No activity for 90 days. Marked stale for triage visibility only —
+            this will NOT be auto-closed. Comment to keep it on the active radar.
+          stale-pr-message: >
+            No activity for 90 days. Marked stale — rebase or comment to revive.
+          exempt-issue-labels: 'P0-critical,P1-high,P2-medium,P3-low,security,process,pinned'
+          exempt-pr-labels: 'security,dependencies,pinned'
+          exempt-all-milestones: true
+          operations-per-run: 60
+          ascending: true

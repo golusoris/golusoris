@@ -2,9 +2,15 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
-    "helpers:pinGitHubActionDigests"
+    "helpers:pinGitHubActionDigests",
+    ":dependencyDashboard",
+    ":semanticCommits"
   ],
   "labels": ["dependencies"],
+  "prConcurrentLimit": 5,
+  "gomod": {
+    "enabled": true
+  },
   "packageRules": [
     {
       "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
@@ -21,6 +27,7 @@
     {
       "description": "Major bumps are breaking — never auto-merge; leave for review.",
       "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "breaking-change"],
       "automerge": false
     }
   ]

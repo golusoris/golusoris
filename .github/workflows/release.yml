@@ -57,4 +57,7 @@ jobs:
       - name: Attest release archives
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
-          subject-path: 'dist/*.tar.gz,dist/*.zip,dist/checksums.txt'
+          # Also attest the per-archive SPDX SBOMs goreleaser emits, so the
+          # header's "provenance on all release artifacts" holds directly, not
+          # just transitively via the attested checksums.txt (issue #192).
+          subject-path: 'dist/*.tar.gz,dist/*.zip,dist/checksums.txt,dist/*.sbom.json'
