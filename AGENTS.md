@@ -76,7 +76,8 @@ golusoris/
 │   ├── podinfo/              # downward-API env → PodInfo
 │   ├── health/               # /livez /readyz /startupz
 │   ├── metrics/prom/         # Prometheus /metrics + check-status gauges
-│   └── client/               # client-go + workload identity (GKE/EKS/Azure)
+│   ├── client/               # client-go + workload identity (GKE/EKS/Azure)
+│   └── operator/             # controller-runtime manager + CRD/reconciler scaffold
 │
 ├── container/runtime/        # detect runtime (k8s/docker/podman/systemd/bare)
 ├── leader/                   # pluggable leader-election

@@ -35,6 +35,7 @@ import (
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/jobs"
 	k8sclient "github.com/golusoris/golusoris/k8s/client"
+	"github.com/golusoris/golusoris/k8s/operator"
 	"github.com/golusoris/golusoris/k8s/podinfo"
 	"github.com/golusoris/golusoris/log"
 	"github.com/golusoris/golusoris/notify"
@@ -97,6 +98,17 @@ var HTTP = fx.Module("golusoris.http",
 var K8s = fx.Module("golusoris.k8s",
 	podinfo.Module,
 	k8sclient.Module,
+)
+
+// K8sOperator bundles a controller-runtime manager.Manager and runs it under
+// fx, so apps can ship CRDs + reconcilers. Apps register CRD schemes via
+// [operator.ProvideScheme] and reconcilers via fx.Invoke against the Manager.
+// See the scaffold-operator skill.
+//
+// Standalone from [K8s] — it resolves its own rest.Config (in-cluster or
+// kubeconfig). Requires [Core] for config + log. Config key prefix: operator.*.
+var K8sOperator = fx.Module("golusoris.k8s.operator",
+	operator.Module,
 )
 
 // Jobs bundles the background-job modules: the river client + a
