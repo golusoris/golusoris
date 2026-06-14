@@ -17,6 +17,10 @@ on:
         description: Path to go.mod for Go version resolution
         type: string
         default: go.mod
+      prior-go-version:
+        description: Prior Go minor for the portability matrix leg (e.g. 1.25.x)
+        type: string
+        default: 1.25.x
       golangci-version:
         description: golangci-lint version
         type: string
@@ -45,6 +49,18 @@ on:
         description: Path to OpenAPI spec file for spectral lint (empty = skip)
         type: string
         default: ""
+      spectral-ruleset:
+        description: Path to a Spectral ruleset (empty = spectral's built-in oas ruleset)
+        type: string
+        default: ""
+      spectral-version:
+        description: "@stoplight/spectral-cli version to run via npx"
+        type: string
+        default: 6.15.0
+      spectral-fail-severity:
+        description: Minimum severity that fails the spectral lint (error|warn|info|hint)
+        type: string
+        default: warn
 
 permissions:
   contents: read
@@ -55,6 +71,7 @@ jobs:
     name: PR title
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check PR title
         env:
@@ -73,6 +90,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -88,6 +106,7 @@ jobs:
   gosec:
     name: Security (gosec)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
@@ -114,6 +133,7 @@ jobs:
   vuln:
     name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -126,19 +146,47 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
+  # Matrix across OS (ubuntu + macos) and Go (go.mod version + prior minor).
+  # Only the primary leg (ubuntu + go.mod) gates coverage and uploads the
+  # artifact; the other legs are portability/forward-compat signal. Docker-
+  # requiring tests run on ubuntu only (macos runners have no Docker daemon).
   test:
     name: Test (race + coverage)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        go: [stable, prior]
+        include:
+          - os: ubuntu-latest
+            go: stable
+            primary: true
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - if: matrix.go == 'stable'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
-      - name: Run tests
+      - if: matrix.go == 'prior'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+        with:
+          go-version: ${{ inputs.prior-go-version }}
+          cache: true
+      - name: Run tests (Linux — full suite)
+        if: runner.os == 'Linux'
         run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...
+      - name: Run tests (macOS — skip Docker-requiring packages)
+        if: runner.os != 'Linux'
+        run: |
+          # macOS runners lack a Docker daemon; exclude testcontainers-backed
+          # packages so this portability leg passes instead of failing on infra.
+          mapfile -t PKGS < <(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
+          go test -race -count=1 -timeout=${{ inputs.test-timeout }} "${PKGS[@]}"
       - name: Check coverage threshold
-        if: ${{ inputs.coverage-threshold > 0 }}
+        if: ${{ matrix.primary && inputs.coverage-threshold > 0 }}
         run: |
           COVERAGE=$(go tool cover -func=coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
           echo "Coverage: ${COVERAGE}%"
@@ -147,6 +195,7 @@ jobs:
             exit 1
           fi
       - name: Upload coverage artifact
+        if: matrix.primary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
@@ -157,6 +206,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -166,22 +216,41 @@ jobs:
       - run: go build ./...
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
+  # Caller-driven: lints the spec named by `openapi-spec` from the CALLER's
+  # checkout, using the caller's `spectral-ruleset` (or Spectral's built-in oas
+  # ruleset when none is given). No dependency on the framework's tools/ dir, so
+  # downstream apps can lint their own spec without vendoring tools/spectral.
   spectral:
     name: OpenAPI lint (spectral)
     if: ${{ inputs.openapi-spec != '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - name: Install spectral (hash-pinned via lockfile)
-        run: npm ci --prefix tools/spectral --no-audit --no-fund
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
       - name: Lint OpenAPI spec
-        run: tools/spectral/node_modules/.bin/spectral lint ${{ inputs.openapi-spec }} --ruleset tools/spectral.yaml --fail-severity warn
+        env:
+          SPEC: ${{ inputs.openapi-spec }}
+          RULESET: ${{ inputs.spectral-ruleset }}
+          SPECTRAL_VERSION: ${{ inputs.spectral-version }}
+          FAIL_SEVERITY: ${{ inputs.spectral-fail-severity }}
+        run: |
+          set -euo pipefail
+          ARGS=(lint "$SPEC" --fail-severity "$FAIL_SEVERITY")
+          if [ -n "$RULESET" ]; then
+            ARGS+=(--ruleset "$RULESET")
+          fi
+          # No ruleset → Spectral auto-loads its built-in `spectral:oas` ruleset.
+          npx --yes "@stoplight/spectral-cli@${SPECTRAL_VERSION}" "${ARGS[@]}"
 
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
     name: API compatibility (apidiff)
     if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
