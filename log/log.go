@@ -18,6 +18,8 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/mattn/go-isatty"
 	"go.uber.org/fx"
+
+	"github.com/golusoris/golusoris/config"
 )
 
 // Format selects the handler.
@@ -121,17 +123,24 @@ func LevelFromString(s string) (slog.Level, bool) {
 	return slog.LevelInfo, false
 }
 
-// Module provides a *slog.Logger driven by environment vars LOG_LEVEL and
-// LOG_FORMAT (tint/json/auto). Sets it as the global slog default for any
-// code that hasn't migrated yet.
-var Module = fx.Module("golusoris.log",
-	fx.Provide(func() Options {
-		level, _ := LevelFromString(os.Getenv("LOG_LEVEL"))
-		return Options{
-			Format: Format(strings.ToLower(os.Getenv("LOG_FORMAT"))),
-			Level:  level,
-		}
-	}),
+// loadOptions reads the logger config from the koanf tree (config keys
+// log.level / log.format) so the app's EnvPrefix applies — e.g. with prefix
+// "APP_", APP_LOG_LEVEL drives the level. Reading a bare LOG_LEVEL would bypass
+// the prefix (#234).
+func loadOptions(cfg *config.Config) Options {
+	level, _ := LevelFromString(cfg.String("log.level"))
+	return Options{
+		Format: Format(strings.ToLower(cfg.String("log.format"))),
+		Level:  level,
+	}
+}
+
+// Module provides a *slog.Logger driven by config keys log.level / log.format
+// (honoring the app's EnvPrefix, e.g. <PREFIX>_LOG_LEVEL). Sets it as the global
+// slog default for any code that hasn't migrated yet. Requires config.Module.
+var Module = fx.Module(
+	"golusoris.log",
+	fx.Provide(loadOptions),
 	fx.Provide(func(opts Options) *slog.Logger {
 		l := New(opts)
 		slog.SetDefault(l)
