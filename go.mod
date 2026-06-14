@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.26.2
+go 1.26.4
 
 require (
 	filippo.io/csrf v0.2.1
