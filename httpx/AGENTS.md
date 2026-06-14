@@ -8,6 +8,7 @@ The HTTP stack. Opt-in via `golusoris.HTTP` (or individual modules).
 | `httpx/router` | chi router as `chi.Router` + `http.Handler` |
 | `httpx/middleware` | RequestID, Recover, Logger, OTel, SecureHeaders, TrustProxy, Compress, ETag |
 | `httpx/client` | Retrying OTel-instrumented outbound client (Step 3b) |
+| `httpx/extclient` | Typed external-API client factory over `httpx/client` (per-host config, generic `Get[T]`/`Post[T]`, optional cache) |
 
 ## Conventions
 

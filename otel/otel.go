@@ -21,8 +21,12 @@
 //	otel.export.metrics      # enable metric export (default true)
 //	otel.export.logs         # enable log export (default true)
 //
-// When otel.enabled=false the module installs a no-op tracer/meter/logger
-// so app code using the OTel API costs nothing.
+// The module installs a no-op tracer/meter/logger — so app code using the
+// OTel API costs nothing and never touches the network — when any of these
+// hold: otel.enabled=false (master switch), OTEL_SDK_DISABLED=true (standard
+// OTel kill switch), or no OTLP endpoint is configured (neither otel.endpoint
+// nor any OTEL_EXPORTER_OTLP_*_ENDPOINT env var is set). The last case is the
+// 12-factor default: no collector wired → silently no-op.
 package otel
 
 import (
@@ -124,8 +128,15 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 // New constructs the providers, registers them as OTel globals, installs the
 // W3C TraceContext + Baggage propagator, and returns a Providers handle.
 // Apps usually don't call this directly — use [Module].
+//
+// New degrades to a silent no-op (empty Providers, global OTel stays no-op,
+// no exporter, no network) when any of these hold:
+//   - opts.Enabled is false (master switch),
+//   - OTEL_SDK_DISABLED=true (standard OTel kill switch), or
+//   - no OTLP endpoint is configured via otel.endpoint or the standard
+//     OTEL_EXPORTER_OTLP_*_ENDPOINT env vars (12-factor default).
 func New(ctx context.Context, opts Options) (*Providers, error) {
-	if !opts.Enabled {
+	if !opts.Enabled || sdkDisabled() || !exporterConfigured(opts) {
 		return &Providers{}, nil
 	}
 	res, err := buildResource(ctx, opts)
@@ -262,8 +273,9 @@ var ModuleWithSlogBridge = fx.Module("golusoris.otel.slog_bridge",
 )
 
 // Module provides *Providers and wires lifecycle shutdown. Requires
-// config.Module + log.Module already present. When opts.Enabled=false the
-// module is a no-op (empty Providers, global OTel stays no-op).
+// config.Module + log.Module already present. The module degrades to a no-op
+// (empty Providers, global OTel stays no-op, no network) when otel.enabled is
+// false, OTEL_SDK_DISABLED=true, or no OTLP endpoint is configured — see [New].
 var Module = fx.Module("golusoris.otel",
 	fx.Provide(loadOptions),
 	fx.Provide(func(lc fx.Lifecycle, opts Options, logger *slog.Logger) (*Providers, error) {
@@ -273,6 +285,7 @@ var Module = fx.Module("golusoris.otel",
 		}
 		logger.Info("otel: configured",
 			slog.Bool("enabled", opts.Enabled),
+			slog.Bool("active", providers.Tracer != nil || providers.Meter != nil || providers.Logger != nil),
 			slog.String("endpoint", opts.Endpoint),
 			slog.String("service", opts.Service.Name),
 		)

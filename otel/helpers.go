@@ -51,6 +51,39 @@ func podInfoAttrs() []attributeKV {
 	return out
 }
 
+// otlpEndpointEnvVars are the standard OTel env vars the OTLP gRPC exporters
+// honour at construction time. We mirror them so the module's "is an endpoint
+// configured?" decision matches what the exporter would actually dial.
+var otlpEndpointEnvVars = []string{
+	"OTEL_EXPORTER_OTLP_ENDPOINT",
+	"OTEL_EXPORTER_OTLP_TRACES_ENDPOINT",
+	"OTEL_EXPORTER_OTLP_METRICS_ENDPOINT",
+	"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT",
+}
+
+// exporterConfigured reports whether any OTLP endpoint is set, either via the
+// golusoris config (otel.endpoint) or the standard OTEL_EXPORTER_OTLP_*_ENDPOINT
+// env vars. When false, the module degrades to a silent no-op (12-factor
+// default: no collector configured → no exporter, no network).
+func exporterConfigured(opts Options) bool {
+	if opts.Endpoint != "" {
+		return true
+	}
+	for _, env := range otlpEndpointEnvVars {
+		if os.Getenv(env) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// sdkDisabled honours the OTel-standard OTEL_SDK_DISABLED kill switch. The Go
+// SDK does not act on it itself, so the module enforces it (matches the
+// vmafx 12-factor convention referenced in issue #96).
+func sdkDisabled() bool {
+	return os.Getenv("OTEL_SDK_DISABLED") == "true"
+}
+
 func dialOpts(opts Options) []otlptrace.Option {
 	o := []otlptrace.Option{}
 	if opts.Endpoint != "" {

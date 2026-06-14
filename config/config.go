@@ -42,6 +42,13 @@ type Options struct {
 	Files []string
 	// Watch enables file-watch on Files. Default true. Disable in tests.
 	Watch bool
+	// CompoundKeys opts specific leaf keys out of the env->koanf underscore
+	// split. Each entry is the desired koanf path (e.g. "search.api_key" or
+	// "auth.oidc.issuer_url"). Without it, APP_SEARCH_API_KEY maps to
+	// search.api.key; listing "search.api_key" makes it map to search.api_key
+	// instead. Default behavior (split every underscore) is unchanged when
+	// this is empty.
+	CompoundKeys []string
 }
 
 // Config is the dependency apps inject.
@@ -119,6 +126,38 @@ func (c *Config) fire() {
 	}
 }
 
+// envTransform builds the env.Provider TransformFunc. The default strips the
+// prefix, lowercases, and replaces every underscore with the delimiter
+// (APP_DB_HOST -> db.host). When opts.CompoundKeys is set, env vars matching a
+// declared compound key keep that key's underscores in its leaf segment.
+func envTransform(opts Options) func(string, string) (string, any) {
+	lookup := compoundLookup(opts)
+	return func(k, v string) (string, any) {
+		stripped := strings.TrimPrefix(k, opts.EnvPrefix)
+		if key, ok := lookup[stripped]; ok {
+			return key, v
+		}
+		key := strings.ReplaceAll(strings.ToLower(stripped), "_", opts.Delimiter)
+		return key, v
+	}
+}
+
+// compoundLookup maps the prefix-stripped, uppercased env-name form of each
+// declared compound key to its desired koanf path. For "search.api_key" it
+// maps "SEARCH_API_KEY" -> "search.api_key". Returns nil when none declared so
+// the default path stays allocation-free.
+func compoundLookup(opts Options) map[string]string {
+	if len(opts.CompoundKeys) == 0 {
+		return nil
+	}
+	lookup := make(map[string]string, len(opts.CompoundKeys))
+	for _, key := range opts.CompoundKeys {
+		envName := strings.ToUpper(strings.ReplaceAll(key, opts.Delimiter, "_"))
+		lookup[envName] = key
+	}
+	return lookup
+}
+
 // New loads the configuration with the given options.
 func New(opts Options) (*Config, error) {
 	if opts.Delimiter == "" {
@@ -148,11 +187,8 @@ func New(opts Options) (*Config, error) {
 
 	// Env on top: APP_DB_HOST -> db.host
 	envProvider := env.Provider(opts.Delimiter, env.Opt{
-		Prefix: opts.EnvPrefix,
-		TransformFunc: func(k, v string) (string, any) {
-			key := strings.ReplaceAll(strings.ToLower(strings.TrimPrefix(k, opts.EnvPrefix)), "_", opts.Delimiter)
-			return key, v
-		},
+		Prefix:        opts.EnvPrefix,
+		TransformFunc: envTransform(opts),
 	})
 	if err := k.Load(envProvider, nil); err != nil {
 		return nil, fmt.Errorf("config: load env: %w", err)

@@ -24,6 +24,52 @@ func TestEnvLoad(t *testing.T) {
 	}
 }
 
+// TestEnvCompoundDefault verifies the default (no CompoundKeys) still splits
+// every underscore: APP_SEARCH_API_KEY -> search.api.key.
+func TestEnvCompoundDefault(t *testing.T) {
+	t.Setenv("APP_SEARCH_API_KEY", "secret")
+
+	c, err := config.New(config.Options{EnvPrefix: "APP_"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := c.String("search.api.key"); got != "secret" {
+		t.Errorf("default split: search.api.key = %q, want secret", got)
+	}
+	if c.Exists("search.api_key") {
+		t.Error("default split: search.api_key should not exist")
+	}
+}
+
+// TestEnvCompoundOverride verifies declared compound keys preserve underscores
+// in the leaf segment while non-declared vars keep the default split.
+func TestEnvCompoundOverride(t *testing.T) {
+	t.Setenv("APP_SEARCH_API_KEY", "secret")
+	t.Setenv("APP_AUTH_OIDC_ISSUER_URL", "https://idp.example")
+	t.Setenv("APP_DB_HOST", "localhost")
+
+	c, err := config.New(config.Options{
+		EnvPrefix:    "APP_",
+		CompoundKeys: []string{"search.api_key", "auth.oidc.issuer_url"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if got := c.String("search.api_key"); got != "secret" {
+		t.Errorf("compound: search.api_key = %q, want secret", got)
+	}
+	if got := c.String("auth.oidc.issuer_url"); got != "https://idp.example" {
+		t.Errorf("compound: auth.oidc.issuer_url = %q, want https://idp.example", got)
+	}
+	if c.Exists("search.api.key") {
+		t.Error("compound: search.api.key should not exist when search.api_key declared")
+	}
+	// Non-declared vars keep the default split.
+	if got := c.String("db.host"); got != "localhost" {
+		t.Errorf("compound: db.host = %q, want localhost (default split preserved)", got)
+	}
+}
+
 func TestFileLoad(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
