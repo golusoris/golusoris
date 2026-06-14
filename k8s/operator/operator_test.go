@@ -2,11 +2,31 @@ package operator
 
 import (
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 )
+
+func TestLoggerFromSlogIsWired(t *testing.T) {
+	t.Parallel()
+	l := loggerFromSlog(slog.New(slog.DiscardHandler))
+	if l.GetSink() == nil {
+		t.Fatal("logr sink is nil — controller-runtime logs would be dropped")
+	}
+}
+
+func TestManagerOptionsWebhook(t *testing.T) {
+	t.Parallel()
+	if mo := (Options{}).managerOptions(runtime.NewScheme()); mo.WebhookServer != nil {
+		t.Error("WebhookServer should be nil when WebhookPort is 0")
+	}
+	mo := Options{WebhookPort: 9443, WebhookHost: "0.0.0.0"}.managerOptions(runtime.NewScheme())
+	if mo.WebhookServer == nil {
+		t.Fatal("WebhookServer not configured when WebhookPort is set")
+	}
+}
 
 func TestBuildScheme(t *testing.T) {
 	t.Parallel()
