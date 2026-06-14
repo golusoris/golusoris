@@ -96,11 +96,13 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
-  # Matrix across OS (ubuntu + macos) and Go (go.mod version + prior minor).
-  # The primary leg (ubuntu + go.mod) owns the coverage gate + artifact upload;
-  # other legs run the suite for portability/forward-compat signal only.
+  # Matrix across OS (ubuntu + macos). The primary leg (ubuntu) owns the
+  # coverage gate + artifact upload; the macos leg is portability signal.
   # Docker-requiring tests (testutil/pg) run on ubuntu only — macos runners have
   # no Docker daemon, so testcontainers-backed packages skip there.
+  # NOTE: no "prior Go minor" leg — go.mod requires the latest toolchain, so an
+  # older Go refuses to build the module; the go: [stable] axis is kept solely
+  # to preserve the required-check name "Test (race + coverage) (…, stable)".
   test:
     name: Test (race + coverage)
     runs-on: ${{ matrix.os }}
@@ -109,25 +111,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        go: [stable, prior]
+        go: [stable]
         include:
-          # Primary leg: ubuntu + go.mod version. Owns coverage gate + upload.
+          # Primary leg: ubuntu. Owns coverage gate + upload.
           - os: ubuntu-latest
             go: stable
             primary: true
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      # Primary/stable legs resolve Go from go.mod; the "prior" leg pins the
-      # previous minor explicitly to catch breakage on the older toolchain.
-      - if: matrix.go == 'stable'
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version-file: go.mod
-          cache: true
-      - if: matrix.go == 'prior'
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
-        with:
-          go-version: '1.25.x'
           cache: true
       # Docker is preinstalled on ubuntu-latest runners — testutil/pg needs it.
       - name: Verify Docker is reachable
@@ -144,8 +138,11 @@ jobs:
           # testutil/pg and its dependents need a Docker daemon (testcontainers),
           # which macOS runners lack. Exclude those packages so the leg still
           # exercises the pure-Go code paths for portability signal.
-          mapfile -t PKGS < <(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
-          go test -race -count=1 -timeout=10m "${PKGS[@]}"
+          # macOS ships bash 3.2, which has no `mapfile`; word-splitting is safe
+          # here because Go import paths never contain spaces.
+          PKGS=$(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
+          # shellcheck disable=SC2086
+          go test -race -count=1 -timeout=10m $PKGS
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |
@@ -280,10 +277,16 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           fetch-depth: 0   # full history so gitleaks can scan all commits
+      # The gitleaks-action wrapper requires a paid GITLEAKS_LICENSE for ORG
+      # repos; the gitleaks binary itself is free (MIT). Run it directly with
+      # the repo's .gitleaks.toml. Native secret-scanning + push-protection are
+      # the first line; this adds a full-history custom-regex sweep.
       - name: gitleaks
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION=8.30.1
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /tmp gitleaks
+          /tmp/gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
 
   # ── Changelog fragments (render --check) ─────────────────────────────────────
   # Validates the per-PR changelog.d/ fragments and that the rendered body
