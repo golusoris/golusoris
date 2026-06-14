@@ -30,7 +30,8 @@ Thumbs.db
 !.env.example
 *.pem
 *.key
-/secrets/
+# NOTE: do not ignore /secrets/ — it is the framework's secrets/ Go package.
+# Actual secret files are covered by the .env / *.pem / *.key rules above.
 
 # Tooling caches
 .golangci-lint-cache/
