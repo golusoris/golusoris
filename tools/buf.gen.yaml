@@ -1,0 +1,32 @@
+# Shared buf codegen fragment for golusoris-based apps that expose gRPC.
+# Copy into the app's repo root and adjust paths. buf v2 schema; see
+# https://buf.build/docs/configuration/v2/buf-gen-yaml.
+#
+# Plugins are version-pinned remote plugins on the Buf Schema Registry, kept
+# in lockstep with the runtime deps in golusoris go.mod:
+#   - protocolbuffers/go  → google.golang.org/protobuf (v1.36.x line)
+#   - grpc/go             → google.golang.org/grpc client/server stubs
+# Bump these together when bumping the corresponding go.mod modules.
+#
+# `paths=source_relative` writes generated *.pb.go next to the proto package
+# path under `out`, so import paths match the module layout without a plugin
+# `module=` override.
+#
+# Generate with: `buf generate` (config: tools/buf.gen.yaml + tools/buf.yaml).
+version: v2
+managed:
+  enabled: true
+plugins:
+  # protoc-gen-go — message + enum codegen.
+  - remote: buf.build/protocolbuffers/go:v1.36.11
+    out: gen/go
+    opt:
+      - paths=source_relative
+  # protoc-gen-go-grpc — service client + server stubs.
+  - remote: buf.build/grpc/go:v1.6.2
+    out: gen/go
+    opt:
+      - paths=source_relative
+      # Generate without the embedded UnimplementedXxxServer forward-compat
+      # stub; golusoris services implement the full interface explicitly.
+      - require_unimplemented_servers=false

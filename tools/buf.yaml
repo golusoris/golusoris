@@ -1,0 +1,24 @@
+# Shared buf module + lint/breaking fragment for golusoris-based apps that
+# expose gRPC. Copy into the app's repo root and adjust the module path under
+# `modules:`. buf v2 schema; see https://buf.build/docs/configuration/v2/buf-yaml.
+#
+# Run: `buf lint`  and  `buf breaking --against '.git#branch=main'`.
+version: v2
+modules:
+  # Proto sources live under proto/ by convention. Adjust per app.
+  - path: proto
+lint:
+  # STANDARD is buf's recommended rule set (PACKAGE_DIRECTORY_MATCH,
+  # ENUM/SERVICE naming, etc.); DEFAULT adds the COMMENTS group. STANDARD
+  # without comment-enforcement keeps the gate strict but pragmatic.
+  use:
+    - STANDARD
+  # Enforce a versioned package suffix (foo.v1) so breaking changes get a new
+  # version rather than mutating an existing one.
+  enum_zero_value_suffix: _UNSPECIFIED
+  service_suffix: Service
+breaking:
+  # Wire + JSON compatibility: catches field renumbering, type changes, and
+  # removals that would break existing clients. FILE is buf's strictest set.
+  use:
+    - FILE
