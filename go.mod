@@ -21,7 +21,7 @@ require (
 	github.com/caddyserver/certmagic v0.25.3
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/cespare/xxhash/v2 v2.3.0
-	github.com/charmbracelet/bubbletea v1.3.10
+	github.com/charmbracelet/bubbletea/v2 v2.0.7
 	github.com/cilium/ebpf v0.21.0
 	github.com/coder/websocket v1.8.14
 	github.com/coreos/go-oidc/v3 v3.18.0
