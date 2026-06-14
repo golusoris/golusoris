@@ -31,6 +31,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
@@ -46,6 +48,10 @@ type Options struct {
 	ConnectTimeout time.Duration  `koanf:"connect_timeout"`
 	Retry          RetryOptions   `koanf:"retry"`
 	Tracing        TracingOptions `koanf:"tracing"`
+	// Tracers are app-supplied pgx.QueryTracers (e.g. per-query metrics),
+	// composed alongside the built-in slow-query tracer. Code-supplied only
+	// (via fx.Decorate on Options) — never from config.
+	Tracers []pgx.QueryTracer `koanf:"-"`
 }
 
 // PoolOptions maps to the corresponding fields on [pgxpool.Config].
@@ -136,6 +142,24 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
+// composeTracer combines the optional built-in slow-query tracer with any
+// app-supplied tracers into one pgx.QueryTracer (nil when there are none,
+// the single tracer when there is one, else a multitracer).
+func composeTracer(slow pgx.QueryTracer, custom []pgx.QueryTracer) pgx.QueryTracer {
+	tracers := custom
+	if slow != nil {
+		tracers = append([]pgx.QueryTracer{slow}, custom...)
+	}
+	switch len(tracers) {
+	case 0:
+		return nil
+	case 1:
+		return tracers[0]
+	default:
+		return multitracer.New(tracers...)
+	}
+}
+
 // New constructs a connected [*pgxpool.Pool] honoring the retry policy. The
 // returned pool is ready for use. Callers must Close it. Prefer the fx
 // [Module] in application code.
@@ -155,8 +179,12 @@ func New(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock
 	cfg.MaxConnIdleTime = opts.Pool.Idle
 	cfg.HealthCheckPeriod = opts.Pool.Healthcheck
 
+	var slow pgx.QueryTracer
 	if opts.Tracing.Slow > 0 {
-		cfg.ConnConfig.Tracer = newSlowQueryTracer(logger, opts.Tracing.Slow, clk)
+		slow = newSlowQueryTracer(logger, opts.Tracing.Slow, clk)
+	}
+	if tracer := composeTracer(slow, opts.Tracers); tracer != nil {
+		cfg.ConnConfig.Tracer = tracer
 	}
 
 	pool, err := connectWithRetry(ctx, cfg, opts, logger, clk)
@@ -195,7 +223,8 @@ func connectWithRetry(
 		if attempt == opts.Retry.Attempts {
 			break
 		}
-		logger.WarnContext(ctx, "db/pgx: connect failed, will retry",
+		logger.WarnContext(
+			ctx, "db/pgx: connect failed, will retry",
 			slog.Int("attempt", attempt),
 			slog.Int("max_attempts", opts.Retry.Attempts),
 			slog.Duration("next_delay", delay),
@@ -218,7 +247,8 @@ func connectWithRetry(
 // retry-on-start and lifecycle-managed shutdown. Requires [config.Module],
 // [log.Module], and [clock.Module] in the same fx graph (all included in
 // [golusoris.Core]).
-var Module = fx.Module("golusoris.db.pgx",
+var Module = fx.Module(
+	"golusoris.db.pgx",
 	fx.Provide(loadOptions),
 	fx.Provide(
 		func(lc fx.Lifecycle, opts Options, logger *slog.Logger, clk clock.Clock) (*pgxpool.Pool, error) {
