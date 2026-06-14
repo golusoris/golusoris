@@ -42,3 +42,6 @@ tmp/
 # Team-shared config lives in .claude/settings.json + .claude/hooks/.
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# built MCP binary
+/golusoris-mcp

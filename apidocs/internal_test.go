@@ -1,8 +1,6 @@
 package apidocs
 
 import (
-	"encoding/json"
-	"net/http/httptest"
 	"testing"
 )
 
@@ -15,14 +13,30 @@ func TestSanitizePath(t *testing.T) {
 	}
 }
 
-func TestWriteRPCError(t *testing.T) {
+func TestSafeResolveURL(t *testing.T) {
 	t.Parallel()
-	w := httptest.NewRecorder()
-	writeRPCError(w, json.RawMessage(`1`), -32600, "invalid")
-	if w.Code != 200 {
-		t.Errorf("status = %d, want 200", w.Code)
+	tests := []struct {
+		name    string
+		base    string
+		path    string
+		want    string
+		wantErr bool
+	}{
+		{"simple join", "http://api.test", "/echo/abc", "http://api.test/echo/abc", false},
+		{"query preserved", "https://api.test", "/x?q=1", "https://api.test/x?q=1", false},
+		{"scheme-relative escapes origin", "http://api.test", "//evil.test/x", "", true},
+		{"invalid base", "not-a-url", "/x", "", true},
 	}
-	if w.Body.Len() == 0 {
-		t.Error("expected non-empty response body")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := safeResolveURL(tt.base, tt.path)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("safeResolveURL err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if !tt.wantErr && got != tt.want {
+				t.Errorf("safeResolveURL = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

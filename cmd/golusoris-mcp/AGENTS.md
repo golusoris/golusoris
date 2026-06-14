@@ -1,12 +1,17 @@
 # Agent guide — cmd/golusoris-mcp/
 
 Standalone MCP server that exposes golusoris scaffolding as MCP tools.
-Implements JSON-RPC 2.0 MCP protocol at `POST /mcp`.
+Built on the official MCP Go SDK (`github.com/modelcontextprotocol/go-sdk`).
 
-## Running
+## Transports
+
+- **stdio** (default) — for local IDE clients (Claude Desktop, Cursor) that
+  launch the binary directly.
+- **streamable-HTTP** — `--transport http` serves `/mcp` on `--addr` (`:8899`).
 
 ```sh
-golusoris-mcp --addr :8899
+golusoris-mcp                    # stdio
+golusoris-mcp --transport http   # streamable-HTTP on :8899
 ```
 
 ## Tools exposed
@@ -17,14 +22,15 @@ golusoris-mcp --addr :8899
 | `golusoris_add` | Show how to add a module |
 | `golusoris_bump` | Show how to bump golusoris version |
 
-## MCP client config (Claude Code)
+Tool schemas are kept wire-identical to the pre-SDK implementation.
+
+## MCP client config (Claude Desktop / Cursor — stdio)
 
 ```json
 {
   "mcpServers": {
     "golusoris": {
-      "command": "golusoris-mcp",
-      "args": ["--addr", ":8899"]
+      "command": "golusoris-mcp"
     }
   }
 }
@@ -34,3 +40,5 @@ golusoris-mcp --addr :8899
 
 - Don't add tools that shell out to arbitrary commands — keep tool output
   as instructions to the agent, not side effects.
+- Don't re-introduce hand-rolled JSON-RPC; register tools via the SDK
+  (`server.AddTool`) so transport/protocol negotiation stays correct.
