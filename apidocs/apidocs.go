@@ -23,7 +23,7 @@
 //	GET /docs          → Scalar UI
 //	GET /docs/scalar.js → embedded Scalar bundle
 //	GET /openapi.yaml  → raw OpenAPI spec (or .json — sniffed from Spec)
-//	POST /mcp          → MCP JSON-RPC 2.0 endpoint
+//	/mcp               → MCP server (official go-sdk, streamable-HTTP transport)
 package apidocs
 
 import (
@@ -79,7 +79,7 @@ func Mount(r chi.Router, opts Options) error {
 	if err != nil {
 		return err
 	}
-	r.Post("/mcp", mcpHandler)
+	r.Handle("/mcp", mcpHandler) // streamable-HTTP transport: GET (SSE), POST, DELETE
 	return nil
 }
 

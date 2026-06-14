@@ -1,8 +1,7 @@
 package apidocs_test
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/golusoris/golusoris/apidocs"
 )
@@ -115,113 +115,76 @@ func TestOpenAPISpecServedAtCorrectPath(t *testing.T) {
 	}
 }
 
+// mcpSession mounts the apidocs router behind a real HTTP server and connects
+// an MCP client over the streamable-HTTP transport, returning the live session.
+func mcpSession(t *testing.T, baseURL string) *mcp.ClientSession {
+	t.Helper()
+	srv := httptest.NewServer(mount(t, baseURL))
+	t.Cleanup(srv.Close)
+	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
+	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp"}, nil)
+	if err != nil {
+		t.Fatalf("mcp connect: %v", err)
+	}
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs
+}
+
 func TestMCPInitialize(t *testing.T) {
 	t.Parallel()
-	r := mount(t, "http://example.test")
-
-	req := rpcReq("1", "initialize", nil)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d", rr.Code)
-	}
-	var resp struct {
-		Result struct {
-			ProtocolVersion string            `json:"protocolVersion"`
-			ServerInfo      map[string]string `json:"serverInfo"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Result.ProtocolVersion == "" {
-		t.Error("empty protocolVersion")
-	}
-	if resp.Result.ServerInfo["name"] != "example" {
-		t.Errorf("server name = %q", resp.Result.ServerInfo["name"])
+	cs := mcpSession(t, "http://example.test")
+	info := cs.InitializeResult()
+	if info.ServerInfo == nil || info.ServerInfo.Name != "example" {
+		t.Errorf("server info = %+v, want name %q", info.ServerInfo, "example")
 	}
 }
 
 func TestMCPToolsList(t *testing.T) {
 	t.Parallel()
-	r := mount(t, "http://example.test")
-
-	req := rpcReq("2", "tools/list", nil)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-
-	var resp struct {
-		Result struct {
-			Tools []struct {
-				Name        string `json:"name"`
-				Description string `json:"description"`
-			} `json:"tools"`
-		} `json:"result"`
-	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	cs := mcpSession(t, "http://example.test")
+	res, err := cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("list tools: %v", err)
 	}
 	names := map[string]bool{}
-	for _, tool := range resp.Result.Tools {
+	for _, tool := range res.Tools {
 		names[tool.Name] = true
 	}
 	for _, want := range []string{"getEcho", "createThing"} {
 		if !names[want] {
-			t.Errorf("tools/list missing %q; got %v", want, resp.Result.Tools)
+			t.Errorf("tools/list missing %q; got %v", want, names)
 		}
 	}
 }
 
 // TestMCPToolsCallProxiesRequest proves tools/call builds the right outbound
-// request (path substitution, method, body) and returns the upstream reply.
+// request (path substitution, method) and returns the upstream reply.
 func TestMCPToolsCallProxiesRequest(t *testing.T) {
 	t.Parallel()
 	var hitPath atomic.Value
 	hitPath.Store("")
-
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		hitPath.Store(req.URL.Path)
 		_, _ = io.WriteString(w, `{"echoed":true}`)
 	}))
 	defer upstream.Close()
 
-	r := mount(t, upstream.URL)
-
-	params, _ := json.Marshal(map[string]any{
-		"name":      "getEcho",
-		"arguments": map[string]any{"id": "abc123"},
+	cs := mcpSession(t, upstream.URL)
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "getEcho",
+		Arguments: map[string]any{"id": "abc123"},
 	})
-	req := rpcReq("3", "tools/call", params)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-
-	var resp struct {
-		Result struct {
-			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			} `json:"content"`
-			IsError bool `json:"isError"`
-		} `json:"result"`
-		Error *struct {
-			Code    int    `json:"code"`
-			Message string `json:"message"`
-		} `json:"error"`
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
 	}
-	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v; body=%q", err, rr.Body.String())
-	}
-	if resp.Error != nil {
-		t.Fatalf("rpc error: %+v", resp.Error)
-	}
-	if resp.Result.IsError {
-		t.Errorf("IsError=true: %+v", resp.Result)
+	if res.IsError {
+		t.Errorf("IsError=true: %+v", res.Content)
 	}
 	if p := hitPath.Load().(string); p != "/echo/abc123" {
 		t.Errorf("upstream hit %q, want /echo/abc123", p)
 	}
-	if len(resp.Result.Content) == 0 || !strings.Contains(resp.Result.Content[0].Text, "echoed") {
-		t.Errorf("result content = %+v", resp.Result.Content)
+	if !resultContains(res, "echoed") {
+		t.Errorf("result content = %+v", res.Content)
 	}
 }
 
@@ -238,32 +201,23 @@ func TestMCPToolsCallPostsBody(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	r := mount(t, upstream.URL)
-
-	params, _ := json.Marshal(map[string]any{
-		"name": "createThing",
-		"arguments": map[string]any{
-			"body": map[string]any{"name": "widget"},
-		},
-	})
-	req := rpcReq("4", "tools/call", params)
-	rr := httptest.NewRecorder()
-	r.ServeHTTP(rr, req)
-
+	cs := mcpSession(t, upstream.URL)
+	if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "createThing",
+		Arguments: map[string]any{"body": map[string]any{"name": "widget"}},
+	}); err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
 	if body := gotBody.Load().(string); !strings.Contains(body, `"widget"`) {
 		t.Errorf("upstream body = %q", body)
 	}
 }
 
-func rpcReq(id, method string, params json.RawMessage) *http.Request {
-	payload := map[string]any{
-		"jsonrpc": "2.0",
-		"id":      id,
-		"method":  method,
+func resultContains(res *mcp.CallToolResult, substr string) bool {
+	for _, c := range res.Content {
+		if tc, ok := c.(*mcp.TextContent); ok && strings.Contains(tc.Text, substr) {
+			return true
+		}
 	}
-	if params != nil {
-		payload["params"] = params
-	}
-	b, _ := json.Marshal(payload)
-	return httptest.NewRequest(http.MethodPost, "/mcp", bytes.NewReader(b))
+	return false
 }
