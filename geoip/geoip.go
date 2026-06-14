@@ -14,8 +14,9 @@ package geoip
 import (
 	"fmt"
 	"net"
+	"net/netip"
 
-	"github.com/oschwald/maxminddb-golang"
+	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 )
 
 // Info contains the fields populated from a GeoLite2-City lookup.
@@ -96,11 +97,25 @@ func (d *DB) Close() error {
 	return nil
 }
 
+// toAddr converts a net.IP into the netip.Addr that maxminddb v2 expects,
+// unmapping any IPv4-in-IPv6 form so the lookup picks the IPv4 tree.
+func toAddr(ip net.IP) (netip.Addr, bool) {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return netip.Addr{}, false
+	}
+	return addr.Unmap(), true
+}
+
 // Lookup returns geographic information for ip. Returns a zero Info and nil
 // error when the IP is not found in the database (e.g. RFC 1918 addresses).
 func (d *DB) Lookup(ip net.IP) (Info, error) {
+	addr, ok := toAddr(ip)
+	if !ok {
+		return Info{}, nil
+	}
 	var rec mmdbCityRecord
-	if err := d.db.Lookup(ip, &rec); err != nil {
+	if err := d.db.Lookup(addr).Decode(&rec); err != nil {
 		return Info{}, fmt.Errorf("geoip: lookup %s: %w", ip, err)
 	}
 	return Info{
@@ -119,8 +134,12 @@ func (d *DB) Lookup(ip net.IP) (Info, error) {
 
 // LookupASN returns ASN information for ip. Requires a GeoLite2-ASN database.
 func (d *DB) LookupASN(ip net.IP) (ASN, error) {
+	addr, ok := toAddr(ip)
+	if !ok {
+		return ASN{}, nil
+	}
 	var rec mmdbASNRecord
-	if err := d.db.Lookup(ip, &rec); err != nil {
+	if err := d.db.Lookup(addr).Decode(&rec); err != nil {
 		return ASN{}, fmt.Errorf("geoip: asn lookup %s: %w", ip, err)
 	}
 	return ASN{Number: rec.ASNumber, Organization: rec.ASOrganization}, nil

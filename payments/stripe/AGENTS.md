@@ -1,6 +1,6 @@
 # Agent guide — payments/stripe/
 
-Thin fx-compatible wrapper around stripe-go/v82 (new `stripe.Client` API).
+Thin fx-compatible wrapper around stripe-go/v86 (new `stripe.Client` API).
 Covers Checkout sessions, Customer Portal, and Payment Intents.
 Webhook signature verification lives in `webhooks/in.Stripe`.
 

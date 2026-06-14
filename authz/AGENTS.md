@@ -1,6 +1,6 @@
 # Agent guide — authz/
 
-RBAC/ABAC policy enforcement via [casbin/casbin/v2]. Module provides
+RBAC/ABAC policy enforcement via [casbin/casbin/v3]. Module provides
 `*authz.Enforcer` when `authz.Options` is supplied in the fx graph.
 
 ## Usage

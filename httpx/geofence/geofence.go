@@ -21,9 +21,10 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
-	"github.com/oschwald/maxminddb-golang"
+	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/config"
@@ -39,10 +40,39 @@ type Options struct {
 
 // Reader is the minimum of maxminddb.Reader used by the middleware. Useful
 // for tests + for apps that want to supply a pre-opened reader instead of a
-// path.
+// path. The signature is kept net.IP-based (the maxminddb v2 netip.Addr API
+// is bridged by mmdbReader) so app + test fakes stay simple.
 type Reader interface {
 	Lookup(ip net.IP, result any) error
 	Close() error
+}
+
+// mmdbReader adapts a maxminddb/v2 *Reader (whose Lookup now takes a
+// netip.Addr and returns a Result) to the net.IP-based [Reader] interface.
+type mmdbReader struct {
+	r *maxminddb.Reader
+}
+
+// Lookup converts ip to a netip.Addr, performs the v2 lookup, and decodes the
+// record into result. An invalid IP yields no record and no error, matching
+// the previous "not found leaves result zero" behaviour.
+func (m mmdbReader) Lookup(ip net.IP, result any) error {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return nil
+	}
+	if err := m.r.Lookup(addr.Unmap()).Decode(result); err != nil {
+		return fmt.Errorf("httpx/geofence: lookup %s: %w", ip, err)
+	}
+	return nil
+}
+
+// Close releases the underlying database file handle.
+func (m mmdbReader) Close() error {
+	if err := m.r.Close(); err != nil {
+		return fmt.Errorf("httpx/geofence: close: %w", err)
+	}
+	return nil
 }
 
 // Record is the subset of the GeoLite2-Country schema we need.
@@ -63,10 +93,11 @@ func New(opts Options) (middleware.Middleware, Reader, error) {
 	if opts.MmdbPath == "" {
 		return nil, nil, errors.New("httpx/geofence: MmdbPath required when Allow/Deny set")
 	}
-	r, err := maxminddb.Open(opts.MmdbPath)
+	mr, err := maxminddb.Open(opts.MmdbPath)
 	if err != nil {
 		return nil, nil, fmt.Errorf("httpx/geofence: open %s: %w", opts.MmdbPath, err)
 	}
+	r := mmdbReader{r: mr}
 	return newFromReader(opts, r), r, nil
 }
 
