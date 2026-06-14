@@ -41,10 +41,38 @@ func TestModule_StartsAndStops(t *testing.T) {
 	cfg, err := config.New(config.Options{})
 	require.NoError(t, err)
 
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		ourgrpc.Module,
+		fx.Invoke(func(*grpc.Server) {}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Start(ctx))
+	require.NoError(t, app.Stop(ctx))
+}
+
+// TestModule_AcceptsProvidedServerOption checks an app-supplied ServerOption
+// (here a custom unary interceptor) flows through the fx group into the server,
+// and the module starts + stops (exercising the bounded hard-stop) cleanly.
+func TestModule_AcceptsProvidedServerOption(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{})
+	require.NoError(t, err)
+
+	interceptor := func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, h grpc.UnaryHandler) (any, error) {
+		return h(ctx, req)
+	}
+	app := fxtest.New(
+		t,
+		fx.Provide(func() *config.Config { return cfg }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		ourgrpc.Module,
+		// Ephemeral port so this parallel test doesn't collide on :9090.
+		fx.Decorate(func(c ourgrpc.Config) ourgrpc.Config { c.Listen = ":0"; return c }),
+		ourgrpc.ProvideServerOption(grpc.ChainUnaryInterceptor(interceptor)),
 		fx.Invoke(func(*grpc.Server) {}),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
