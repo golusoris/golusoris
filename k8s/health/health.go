@@ -25,8 +25,11 @@
 package health
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/go-chi/chi/v5"
 
@@ -47,6 +50,14 @@ func Mount(r chi.Router, reg *statuspage.Registry) {
 	r.Get("/startupz", probeHandler(reg, TagStartup))
 }
 
+// MountMux attaches /livez, /readyz, /startupz to a net/http mux — for apps
+// that don't use chi.
+func MountMux(mux *http.ServeMux, reg *statuspage.Registry) {
+	mux.Handle("/livez", LivezHandler(reg))
+	mux.Handle("/readyz", ReadyzHandler(reg))
+	mux.Handle("/startupz", StartupzHandler(reg))
+}
+
 // LivezHandler returns a handler for the liveness probe.
 func LivezHandler(reg *statuspage.Registry) http.HandlerFunc {
 	return probeHandler(reg, TagLiveness)
@@ -65,7 +76,7 @@ func StartupzHandler(reg *statuspage.Registry) http.HandlerFunc {
 func probeHandler(reg *statuspage.Registry, tag string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results := reg.RunTagged(r.Context(), tag)
-		ok := allUp(results)
+		ok := serving(results)
 		status := http.StatusOK
 		body := "ok\n"
 		if !ok {
@@ -80,7 +91,7 @@ func probeHandler(reg *statuspage.Registry, tag string) http.HandlerFunc {
 				Tag    string              `json:"tag"`
 				Checks []statuspage.Result `json:"checks"`
 			}{
-				Status: statusString(ok),
+				Status: overall(results),
 				Tag:    tag,
 				Checks: results,
 			})
@@ -92,18 +103,64 @@ func probeHandler(reg *statuspage.Registry, tag string) http.HandlerFunc {
 	}
 }
 
-func allUp(results []statuspage.Result) bool {
+// serving reports whether the probe should return 200: every check is up or
+// degraded (degraded still serves). Any down or unknown check fails the probe.
+func serving(results []statuspage.Result) bool {
 	for _, r := range results {
-		if r.Status != statuspage.StatusUp {
+		if r.Status != statuspage.StatusUp && r.Status != statuspage.StatusDegraded {
 			return false
 		}
 	}
 	return true
 }
 
-func statusString(ok bool) string {
-	if ok {
-		return "up"
+// overall summarizes the probe results: down if any check is down/unknown;
+// else degraded if any is degraded; else up.
+func overall(results []statuspage.Result) string {
+	degraded := false
+	for _, r := range results {
+		switch r.Status {
+		case statuspage.StatusDown, statuspage.StatusUnknown:
+			return "down"
+		case statuspage.StatusDegraded:
+			degraded = true
+		case statuspage.StatusUp:
+			// healthy — no change
+		}
 	}
-	return "down"
+	if degraded {
+		return "degraded"
+	}
+	return "up"
+}
+
+// StartupGate is a one-shot latch: its [Check] fails until [StartupGate.MarkComplete]
+// is called, then passes forever. Register the Check so /startupz flips to 200
+// once the app signals startup is done (caches warmed, migrations applied, …).
+type StartupGate struct {
+	done atomic.Bool
+}
+
+// NewStartupGate returns a gate that is initially incomplete.
+func NewStartupGate() *StartupGate { return &StartupGate{} }
+
+// MarkComplete latches the gate complete (idempotent).
+func (g *StartupGate) MarkComplete() { g.done.Store(true) }
+
+// Done reports whether the gate has been marked complete.
+func (g *StartupGate) Done() bool { return g.done.Load() }
+
+// Check returns a startup-tagged [statuspage.Check] that is down until
+// [StartupGate.MarkComplete] is called.
+func (g *StartupGate) Check(name string) statuspage.Check {
+	return statuspage.Check{
+		Name: name,
+		Tags: []string{TagStartup},
+		Fn: func(context.Context) error {
+			if g.done.Load() {
+				return nil
+			}
+			return errors.New("startup not complete")
+		},
+	}
 }

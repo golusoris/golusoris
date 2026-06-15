@@ -6,45 +6,57 @@ import (
 	"github.com/golusoris/golusoris/observability/statuspage"
 )
 
-func TestAllUp_empty(t *testing.T) {
+func TestServing_empty(t *testing.T) {
 	t.Parallel()
-	if !allUp(nil) {
+	if !serving(nil) {
 		t.Fatal("want true for nil (empty) results")
 	}
 }
 
-func TestAllUp_allUp(t *testing.T) {
+func TestServing_allUp(t *testing.T) {
 	t.Parallel()
 	results := []statuspage.Result{
 		{Status: statuspage.StatusUp},
 		{Status: statuspage.StatusUp},
 	}
-	if !allUp(results) {
+	if !serving(results) {
 		t.Fatal("want true when all checks are up")
 	}
 }
 
-func TestAllUp_oneDown(t *testing.T) {
+// TestServing_degradedStillServes is the #165 semantic: a degraded check must
+// NOT fail the probe (still serving), but a down one must.
+func TestServing_degradedStillServes(t *testing.T) {
 	t.Parallel()
-	results := []statuspage.Result{
-		{Status: statuspage.StatusUp},
-		{Status: statuspage.StatusDown},
+	if !serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDegraded}}) {
+		t.Error("degraded check must still be serving (probe 200)")
 	}
-	if allUp(results) {
-		t.Fatal("want false when any check is not up")
+	if serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDown}}) {
+		t.Error("a down check must fail the probe")
 	}
-}
-
-func TestStatusString_true(t *testing.T) {
-	t.Parallel()
-	if got := statusString(true); got != "up" {
-		t.Fatalf("want %q, got %q", "up", got)
+	if serving([]statuspage.Result{{Status: statuspage.StatusUnknown}}) {
+		t.Error("an unknown check must fail the probe")
 	}
 }
 
-func TestStatusString_false(t *testing.T) {
+func TestOverall(t *testing.T) {
 	t.Parallel()
-	if got := statusString(false); got != "down" {
-		t.Fatalf("want %q, got %q", "down", got)
+	cases := []struct {
+		name string
+		in   []statuspage.Result
+		want string
+	}{
+		{"all up", []statuspage.Result{{Status: statuspage.StatusUp}}, "up"},
+		{"one degraded", []statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDegraded}}, "degraded"},
+		{"down wins over degraded", []statuspage.Result{{Status: statuspage.StatusDegraded}, {Status: statuspage.StatusDown}}, "down"},
+		{"unknown is down", []statuspage.Result{{Status: statuspage.StatusUnknown}}, "down"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if got := overall(c.in); got != c.want {
+				t.Errorf("overall = %q, want %q", got, c.want)
+			}
+		})
 	}
 }
