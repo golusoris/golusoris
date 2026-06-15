@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -28,14 +29,26 @@ type Status string
 
 // Status values.
 const (
-	StatusUp      Status = "up"
-	StatusDown    Status = "down"
-	StatusUnknown Status = "unknown"
+	StatusUp       Status = "up"
+	StatusDegraded Status = "degraded" // still serving, but an optional dependency is impaired
+	StatusDown     Status = "down"
+	StatusUnknown  Status = "unknown"
 )
 
 // CheckFunc is the user-supplied evaluation. Return nil for "up"; a
-// non-nil error for "down" with the message surfaced.
+// non-nil error for "down" with the message surfaced; or a [Degraded] error
+// for "degraded" (still serving).
 type CheckFunc func(ctx context.Context) error
+
+// degradedError marks a check degraded (still serving) rather than down.
+type degradedError struct{ msg string }
+
+func (e *degradedError) Error() string { return e.msg }
+
+// Degraded returns an error a CheckFunc can return to mark itself
+// [StatusDegraded] instead of down — e.g. an optional dependency is disabled
+// but the service still serves. A degraded check does NOT fail readiness.
+func Degraded(msg string) error { return &degradedError{msg: msg} }
 
 // Check describes a single registered check.
 type Check struct {
@@ -47,6 +60,10 @@ type Check struct {
 	// "liveness", "readiness", "startup" (defined in k8s/health).
 	Tags []string
 	Fn   CheckFunc
+	// Details, if set, returns structured metadata merged into the check's
+	// Result regardless of status (e.g. DB pool stats). Keep it cheap — it
+	// runs on every evaluation.
+	Details func(ctx context.Context) map[string]any
 }
 
 // HasTag reports whether the check carries the given tag.
@@ -61,11 +78,12 @@ func (c Check) HasTag(tag string) bool {
 
 // Result is the latest state of a check.
 type Result struct {
-	Name    string    `json:"name"`
-	Status  Status    `json:"status"`
-	Message string    `json:"message,omitempty"`
-	Latency string    `json:"latency,omitempty"`
-	At      time.Time `json:"at"`
+	Name    string         `json:"name"`
+	Status  Status         `json:"status"`
+	Message string         `json:"message,omitempty"`
+	Latency string         `json:"latency,omitempty"`
+	Details map[string]any `json:"details,omitempty"`
+	At      time.Time      `json:"at"`
 }
 
 // RunHook is invoked after every Run / RunTagged with the freshly-evaluated
@@ -174,21 +192,25 @@ func (r *Registry) runOne(ctx context.Context, c Check) Result {
 	defer cancel()
 	err := c.Fn(cctx)
 	latency := r.clk.Since(start)
-	if err != nil {
-		return Result{
-			Name:    c.Name,
-			Status:  StatusDown,
-			Message: err.Error(),
-			Latency: latency.String(),
-			At:      r.clk.Now(),
-		}
-	}
-	return Result{
+	res := Result{
 		Name:    c.Name,
 		Status:  StatusUp,
 		Latency: latency.String(),
 		At:      r.clk.Now(),
 	}
+	if err != nil {
+		var de *degradedError
+		if errors.As(err, &de) {
+			res.Status = StatusDegraded
+		} else {
+			res.Status = StatusDown
+		}
+		res.Message = err.Error()
+	}
+	if c.Details != nil {
+		res.Details = c.Details(cctx)
+	}
+	return res
 }
 
 // Handler returns an http.Handler that renders HTML or JSON based on the
@@ -249,11 +271,23 @@ func writeHTML(w http.ResponseWriter, results []Result, uptime time.Duration) {
 	_, _ = w.Write(buf.Bytes())
 }
 
+// overallStatus is down if any check is down; else degraded if any is degraded;
+// else up. Only "down" maps to a 503 — degraded still serves.
 func overallStatus(results []Result) string {
+	degraded := false
 	for _, r := range results {
-		if r.Status == StatusDown {
+		switch r.Status {
+		case StatusDown:
 			return string(StatusDown)
+		case StatusDegraded:
+			degraded = true
+		case StatusUp, StatusUnknown:
+			// up, or not-yet-evaluated on this informational view — neither
+			// forces the overall to degraded.
 		}
+	}
+	if degraded {
+		return string(StatusDegraded)
 	}
 	return string(StatusUp)
 }
