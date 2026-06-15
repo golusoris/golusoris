@@ -39,6 +39,7 @@ import (
 	"github.com/golusoris/golusoris/k8s/operator"
 	"github.com/golusoris/golusoris/k8s/podinfo"
 	"github.com/golusoris/golusoris/log"
+	"github.com/golusoris/golusoris/mcp"
 	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/outbox"
 	"github.com/golusoris/golusoris/search"
@@ -309,4 +310,14 @@ var ExtClient = fx.Module(
 var Version = fx.Module(
 	"golusoris.version",
 	version.Module,
+)
+
+// MCP bundles a reusable Model Context Protocol server (official go-sdk) under
+// the fx lifecycle — stdio or streamable-HTTP transport. Apps register tools
+// against the provided *mcp.Server. Provides an AI tool-server surface.
+//
+// Requires [Core] for config + log. Config key prefix: mcp.*.
+var MCP = fx.Module(
+	"golusoris.mcp",
+	mcp.Module,
 )
