@@ -35,26 +35,44 @@ import (
 
 // Options tunes the river client.
 type Options struct {
-	Enabled          bool          `koanf:"enabled"`
-	Queue            QueueOptions  `koanf:"queue"`
-	Job              JobOptions    `koanf:"job"`
-	FetchCooldown    time.Duration `koanf:"fetch_cooldown"`
-	RescueStuckAfter time.Duration `koanf:"rescue_stuck_after"`
+	Enabled       bool          `koanf:"enabled"`
+	Queue         QueueOptions  `koanf:"queue"`
+	Job           JobOptions    `koanf:"job"`
+	FetchCooldown time.Duration `koanf:"fetch_cooldown"`
+	// FetchPollInterval is the backstop poll between LISTEN/NOTIFY fetches
+	// (0 = river default). Pair with FetchCooldown for latency tuning.
+	FetchPollInterval time.Duration `koanf:"fetch_poll_interval"`
+	RescueStuckAfter  time.Duration `koanf:"rescue_stuck_after"`
+	// CompletedJobRetention / DiscardedJobRetention bound how long terminal
+	// jobs stay in the table before river prunes them (0 = river default).
+	CompletedJobRetention time.Duration `koanf:"completed_job_retention"`
+	DiscardedJobRetention time.Duration `koanf:"discarded_job_retention"`
 }
 
 // QueueOptions groups queue-wide settings.
 type QueueOptions struct {
 	Default QueueDefault `koanf:"default"`
+	// Queues registers named queues beyond "default" (e.g. critical/high/low/
+	// bulk). A job inserted into a queue not listed here (or "default") is
+	// never worked. Config: jobs.queue.queues.<name>.max.
+	Queues map[string]QueueConfig `koanf:"queues"`
 }
 
-// QueueDefault groups settings for river's "default" queue. Apps register
-// their own named queues at runtime via fx.Decorate if they need more.
+// QueueDefault groups settings for river's "default" queue.
 type QueueDefault struct {
+	Max int `koanf:"max"`
+}
+
+// QueueConfig configures one named queue.
+type QueueConfig struct {
 	Max int `koanf:"max"`
 }
 
 // JobOptions groups per-job defaults.
 type JobOptions struct {
+	// Timeout caps each job invocation (default 30s). Set to -1 to disable the
+	// global cap and defer to each worker's Timeout() — needed for long-running
+	// workers (scans, transcodes) that legitimately exceed 30s.
 	Timeout     time.Duration `koanf:"timeout"`
 	MaxAttempts int           `koanf:"max_attempts"`
 }
@@ -114,16 +132,27 @@ func (o Options) withDefaults() Options {
 func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger) (*Client, error) {
 	opts = opts.withDefaults()
 	cfg := &river.Config{
-		Logger:               logger,
-		JobTimeout:           opts.Job.Timeout,
-		MaxAttempts:          opts.Job.MaxAttempts,
-		FetchCooldown:        opts.FetchCooldown,
-		RescueStuckJobsAfter: opts.RescueStuckAfter,
+		Logger:                      logger,
+		JobTimeout:                  opts.Job.Timeout,
+		MaxAttempts:                 opts.Job.MaxAttempts,
+		FetchCooldown:               opts.FetchCooldown,
+		FetchPollInterval:           opts.FetchPollInterval,
+		RescueStuckJobsAfter:        opts.RescueStuckAfter,
+		CompletedJobRetentionPeriod: opts.CompletedJobRetention,
+		DiscardedJobRetentionPeriod: opts.DiscardedJobRetention,
 	}
 	if workers != nil {
-		cfg.Queues = map[string]river.QueueConfig{
+		queues := map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: opts.Queue.Default.Max},
 		}
+		for name, qc := range opts.Queue.Queues {
+			maxWorkers := qc.Max
+			if maxWorkers < 1 {
+				maxWorkers = 1
+			}
+			queues[name] = river.QueueConfig{MaxWorkers: maxWorkers}
+		}
+		cfg.Queues = queues
 		cfg.Workers = workers
 	}
 	c, err := river.NewClient(riverpgxv5.New(pool), cfg)
@@ -150,7 +179,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 //	fx.Invoke(func(w *jobs.Workers) {
 //	    jobs.Register(w, &MyWorker{})
 //	})
-var Module = fx.Module("golusoris.jobs",
+var Module = fx.Module(
+	"golusoris.jobs",
 	fx.Provide(loadOptions),
 	fx.Provide(NewWorkers),
 	fx.Provide(func(lc fx.Lifecycle, pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger) (*Client, error) {
