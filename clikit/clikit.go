@@ -27,6 +27,10 @@
 package clikit
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"github.com/spf13/cobra"
 	"go.uber.org/fx"
 )
@@ -50,9 +54,10 @@ func (r *Root) Cobra() *cobra.Command { return r.cmd }
 
 // cmdOptions configures a sub-command.
 type cmdOptions struct {
-	fxOpts []fx.Option
-	runFx  func(*fx.App)
-	runE   func(*cobra.Command, []string) error
+	fxOpts     []fx.Option
+	runFx      func(*fx.App)
+	runE       func(*cobra.Command, []string) error
+	oneShotRun func(ctx context.Context) error
 }
 
 // Option configures a sub-command built with [Command].
@@ -76,6 +81,47 @@ func WithRunE(fn func(cmd *cobra.Command, args []string) error) Option {
 	return func(o *cmdOptions) { o.runE = fn }
 }
 
+// WithFxRun configures a ONE-SHOT command: the fx app is built, started (running
+// all providers + any fx.Invoke/fx.Populate in opts), then run executes, then
+// the app is stopped — WITHOUT calling app.Run()/blocking on a signal. The RunE
+// returns errors.Join(runErr, stopErr) so the process exit code reflects
+// failure. fx's event log is silenced by default (fx.NopLogger); a caller-
+// supplied fx.WithLogger in opts overrides it.
+//
+// Access dependencies by including fx.Populate(&dep) in opts and capturing dep
+// in the run closure (or do the work in an fx.Invoke whose error surfaces via
+// Start). Mutually exclusive with [WithFx]/[WithRunE].
+func WithFxRun(run func(ctx context.Context) error, opts ...fx.Option) Option {
+	return func(o *cmdOptions) {
+		o.fxOpts = append(o.fxOpts, opts...)
+		o.oneShotRun = run
+	}
+}
+
+// oneShotRunE builds the one-shot RunE: start → run → stop, no blocking.
+func oneShotRunE(o *cmdOptions) func(*cobra.Command, []string) error {
+	return func(c *cobra.Command, _ []string) error {
+		ctx := c.Context()
+		app := fx.New(append([]fx.Option{fx.NopLogger}, o.fxOpts...)...)
+		if err := app.Err(); err != nil {
+			return err //nolint:wrapcheck // fx error already carries context
+		}
+		startCtx, cancel := context.WithTimeout(ctx, app.StartTimeout())
+		defer cancel()
+		if err := app.Start(startCtx); err != nil {
+			return fmt.Errorf("clikit: start: %w", err)
+		}
+		runErr := o.oneShotRun(ctx)
+		stopCtx, stopCancel := context.WithTimeout(ctx, app.StopTimeout())
+		defer stopCancel()
+		stopErr := app.Stop(stopCtx)
+		if stopErr != nil {
+			stopErr = fmt.Errorf("clikit: stop: %w", stopErr)
+		}
+		return errors.Join(runErr, stopErr)
+	}
+}
+
 // Command builds a cobra.Command from the given options.
 func Command(use, short string, opts ...Option) *cobra.Command {
 	o := &cmdOptions{}
@@ -88,6 +134,8 @@ func Command(use, short string, opts ...Option) *cobra.Command {
 	switch {
 	case o.runE != nil:
 		cmd.RunE = o.runE
+	case o.oneShotRun != nil:
+		cmd.RunE = oneShotRunE(o)
 	case len(o.fxOpts) > 0:
 		cmd.RunE = func(c *cobra.Command, args []string) error {
 			app := fx.New(o.fxOpts...)
