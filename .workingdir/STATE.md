@@ -100,6 +100,24 @@
 
 ## Session log (recent)
 
+- 2026-06-15: **pkg/sockmap — eBPF SK_MSG sockmap module (#27)** landed.
+  Opt-in fx module for colocated zero-TCP-stack IPC (sveltesentio D200 Tier 3).
+  Ships: (1) systemd socket-activation FD handoff (`ActivationListeners`,
+  LISTEN_PID/FDS/FDNAMES, no go-systemd dep); (2) cgroup v2 attach-point
+  resolution with loud cgroup-v1 failure + `cgroup_path` knob; (3) fx
+  pre-shutdown cleanup hook (removes FDs from the sockhash before close);
+  (4) the `*Sockmap` loader bundling cilium/ebpf — opens/creates+pins the
+  `BPF_MAP_TYPE_SOCKHASH`, attaches SOCK_OPS to the cgroup + SK_MSG to the
+  sockhash, Prometheus counters (`golusoris_sockmap_*`), and a ≥5.10 kernel
+  guard. Linux impl + non-Linux stub via build tags. A real CO-RE BPF object
+  (`bpf/sockmap.bpf.c` → committed `.o`, bpf2go-style, `go generate`) is
+  bundled and attaches end-to-end (privileged `TestFullAttach`). Key model is
+  the connection 4-tuple (`struct sock_key`) so userspace inserts + the SK_MSG
+  redirect agree. Promoted `golang.org/x/sys` to a direct dep. Coverage 78%
+  privileged. **Deferred:** the data-plane redirect proof (zero-`lo`-packet
+  verification) belongs in the privileged Docker `--privileged` CI harness, not
+  the unit suite; userspace `RegisterConn` only accepts established sockets
+  (kernel rejects listen-FD inserts — the SOCK_OPS program populates those).
 - 2026-04-14: **security hardening + ai/tiny/serve/ollama** landed.
   - `httpx/csrf` migrated to `filippo.io/csrf/gorilla` — drop-in
     replacement for gorilla/csrf that enforces same-origin via Fetch
