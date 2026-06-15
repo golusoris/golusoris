@@ -16,6 +16,7 @@ package pg
 
 import (
 	"context"
+	"net/url"
 	"testing"
 	"time"
 
@@ -111,6 +112,125 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 		t.Fatalf("testutil/pg: ping: %v", err)
 	}
 	return pool
+}
+
+// Defaults for the specialised replication + TimescaleDB containers.
+const (
+	defaultTimescaleImage = "timescale/timescaledb:latest-pg17"
+)
+
+// StartReplication boots a Postgres container configured for logical
+// replication (wal_level=logical) and returns a connected pool together with
+// a replication DSN suitable for db/cdc (it appends replication=database).
+// Both the regular pool and the container are torn down via t.Cleanup.
+func StartReplication(t *testing.T, opts ...Options) (*pgxpool.Pool, string) {
+	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
+	o := Options{}
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	o = o.withDefaults()
+	// wal_level=logical is the only server setting db/cdc needs to operate.
+	o.Customizers = append([]testcontainers.ContainerCustomizer{
+		testcontainers.WithCmd("postgres", "-c", "wal_level=logical"),
+	}, o.Customizers...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+	defer cancel()
+
+	container := runContainer(ctx, t, o)
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("testutil/pg: connection string: %v", err)
+	}
+
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("testutil/pg: open pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("testutil/pg: ping: %v", err)
+	}
+	return pool, withReplication(t, dsn)
+}
+
+// withReplication adds replication=database as a query parameter to a URL-form
+// DSN, which db/cdc's pgconn.Connect requires for logical replication.
+func withReplication(t *testing.T, dsn string) string {
+	t.Helper()
+	u, err := url.Parse(dsn)
+	if err != nil {
+		t.Fatalf("testutil/pg: parse dsn: %v", err)
+	}
+	q := u.Query()
+	q.Set("replication", "database")
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
+// StartTimescale boots a TimescaleDB container (timescaledb image, extension
+// auto-loaded) and returns a connected pool. The container + pool are torn
+// down via t.Cleanup. Use Options.Image to pin a different TimescaleDB tag.
+func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
+	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
+	o := Options{}
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if o.Image == "" {
+		o.Image = defaultTimescaleImage
+	}
+	o = o.withDefaults()
+
+	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+	defer cancel()
+
+	container := runContainer(ctx, t, o)
+	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		t.Fatalf("testutil/pg: connection string: %v", err)
+	}
+
+	pool, err := pgxpool.New(ctx, dsn)
+	if err != nil {
+		t.Fatalf("testutil/pg: open pool: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if err := pool.Ping(ctx); err != nil {
+		t.Fatalf("testutil/pg: ping: %v", err)
+	}
+	// The timescaledb image ships the extension; CREATE EXTENSION makes it usable.
+	if _, err := pool.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS timescaledb"); err != nil {
+		t.Fatalf("testutil/pg: create timescaledb extension: %v", err)
+	}
+	return pool
+}
+
+// runContainer launches a Postgres-family container with the standard
+// credentials customizers and registers cleanup. Shared by the Start* helpers.
+func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.PostgresContainer {
+	t.Helper()
+	customizers := append([]testcontainers.ContainerCustomizer{
+		tcpostgres.WithDatabase(o.Database),
+		tcpostgres.WithUsername(o.User),
+		tcpostgres.WithPassword(o.Password),
+		tcpostgres.BasicWaitStrategies(),
+	}, o.Customizers...)
+
+	container, err := tcpostgres.Run(ctx, o.Image, customizers...)
+	if err != nil {
+		t.Fatalf("testutil/pg: start container: %v", err)
+	}
+	// context.Background() not ctx: teardown must outlive the cancelled start ctx.
+	t.Cleanup(func() { //nolint:contextcheck // cleanup intentionally uses a fresh context, not the start ctx
+		if termErr := container.Terminate(context.Background()); termErr != nil {
+			t.Logf("testutil/pg: terminate container: %v", termErr)
+		}
+	})
+	return container
 }
 
 // DSN starts a container and returns its DSN (sslmode=disable). Use this when

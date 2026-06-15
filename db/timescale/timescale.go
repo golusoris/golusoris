@@ -32,7 +32,8 @@ func New(pool *pgxpool.Pool) *DB { return &DB{pool: pool} }
 // partitioned on timeColumn. Idempotent: succeeds if the hypertable already exists.
 func (d *DB) CreateHypertable(ctx context.Context, table, timeColumn string) error {
 	// if_not_exists=true makes this safe to call on every startup.
-	_, err := d.pool.Exec(ctx,
+	_, err := d.pool.Exec(
+		ctx,
 		"SELECT create_hypertable($1, by_range($2), if_not_exists => true)",
 		table, timeColumn,
 	)
@@ -45,8 +46,10 @@ func (d *DB) CreateHypertable(ctx context.Context, table, timeColumn string) err
 // SetRetention configures a data-retention policy that drops chunks older than
 // duration. Call after CreateHypertable.
 func (d *DB) SetRetention(ctx context.Context, table string, duration time.Duration) error {
-	_, err := d.pool.Exec(ctx,
-		"SELECT add_retention_policy($1, INTERVAL $2, if_not_exists => true)",
+	// ($2)::interval — INTERVAL keyword rejects a bound parameter; cast instead.
+	_, err := d.pool.Exec(
+		ctx,
+		"SELECT add_retention_policy($1, ($2)::interval, if_not_exists => true)",
 		table, formatInterval(duration),
 	)
 	if err != nil {
@@ -57,7 +60,8 @@ func (d *DB) SetRetention(ctx context.Context, table string, duration time.Durat
 
 // EnableCompression enables TimescaleDB columnar compression on the hypertable.
 func (d *DB) EnableCompression(ctx context.Context, table string) error {
-	_, err := d.pool.Exec(ctx,
+	_, err := d.pool.Exec(
+		ctx,
 		fmt.Sprintf("ALTER TABLE %s SET (timescaledb.compress)", table),
 	)
 	if err != nil {
@@ -69,8 +73,10 @@ func (d *DB) EnableCompression(ctx context.Context, table string) error {
 // AddCompressionPolicy adds an automatic compression policy that compresses
 // chunks older than olderThan.
 func (d *DB) AddCompressionPolicy(ctx context.Context, table string, olderThan time.Duration) error {
-	_, err := d.pool.Exec(ctx,
-		"SELECT add_compression_policy($1, INTERVAL $2, if_not_exists => true)",
+	// ($2)::interval — INTERVAL keyword rejects a bound parameter; cast instead.
+	_, err := d.pool.Exec(
+		ctx,
+		"SELECT add_compression_policy($1, ($2)::interval, if_not_exists => true)",
 		table, formatInterval(olderThan),
 	)
 	if err != nil {

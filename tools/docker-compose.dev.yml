@@ -1,7 +1,7 @@
 # Local dev stack template. Apps copy + adjust app service.
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_USER: app
       POSTGRES_PASSWORD: dev

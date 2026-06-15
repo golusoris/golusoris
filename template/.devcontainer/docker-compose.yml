@@ -18,7 +18,7 @@ services:
       - nats
 
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: dev
@@ -30,7 +30,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
 
   cache:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     ports:
       - "6379:6379"

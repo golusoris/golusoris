@@ -16,6 +16,10 @@ func TestMyWorker(t *testing.T) {
 
 Container + client are torn down via `t.Cleanup` — no manual cleanup needed.
 
+For tests that drive their own client constructor (e.g. `cache/redis`), use
+`redistest.Addr(t)` to get the container's `host:port` address instead of a
+ready-made client.
+
 ## Don't
 
 - Don't share a container across `t.Parallel` tests — call `Start` per test for isolation.

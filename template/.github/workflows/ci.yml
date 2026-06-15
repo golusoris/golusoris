@@ -1,5 +1,5 @@
 # Per-app CI — delegates to the reusable workflow in golusoris/golusoris.
-# Replace @main with a pinned tag (e.g. @v0.3.0) for stability.
+# Refs are pinned to the v0.4.0 release commit; Renovate bumps them.
 name: CI
 
 on:
@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: golusoris/golusoris/.github/workflows/ci-go.yml@57cafa7dd0332b33a4134ec56f0873a4f36de554 # main
+    uses: golusoris/golusoris/.github/workflows/ci-go.yml@a4b9a56aad13729f4031fb172e0eceb1d19e5b36 # v0.5.0
     with:
       go-version-file: go.mod
       coverage-threshold: 70
@@ -22,8 +22,8 @@ jobs:
       # module-path: github.com/golusoris/app-CHANGEME
 
   codeql:
-    uses: golusoris/golusoris/.github/workflows/codeql.yml@57cafa7dd0332b33a4134ec56f0873a4f36de554 # main
+    uses: golusoris/golusoris/.github/workflows/codeql.yml@a4b9a56aad13729f4031fb172e0eceb1d19e5b36 # v0.5.0
 
   scorecard:
-    uses: golusoris/golusoris/.github/workflows/scorecard.yml@57cafa7dd0332b33a4134ec56f0873a4f36de554 # main
+    uses: golusoris/golusoris/.github/workflows/scorecard.yml@a4b9a56aad13729f4031fb172e0eceb1d19e5b36 # v0.5.0
     secrets: inherit

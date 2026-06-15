@@ -257,7 +257,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
       - name: Dependency Review
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           # Block copyleft licences that would impose obligations on adopters.
@@ -287,6 +287,29 @@ jobs:
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz" \
             | tar -xz -C /tmp gitleaks
           /tmp/gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
+
+  # ── Custom SAST (semgrep) ────────────────────────────────────────────────────
+  # Runs the project-specific .semgrep.yml ruleset (golusoris invariants the
+  # AST-unaware linters can't express). ADVISORY: continue-on-error + absent from
+  # the ci-success gate, so a new rule can land and surface findings without
+  # blocking unrelated PRs. Promote to required once the ruleset has soaked.
+  semgrep:
+    name: Custom SAST (semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      # Pinned for reproducible CI — bumping semgrep (and adopting any new
+      # parser behaviour) is a deliberate, reviewed change, not a float.
+      - name: Run semgrep
+        run: |
+          pipx run semgrep==1.166.0 scan \
+            --config .semgrep.yml \
+            --error \
+            --metrics=off \
+            --disable-version-check \
+            --oss-only
 
   # ── Changelog fragments (render --check) ─────────────────────────────────────
   # Validates the per-PR changelog.d/ fragments and that the rendered body

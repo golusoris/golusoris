@@ -64,7 +64,7 @@
   - `db/pgx/` — `*pgxpool.Pool` fx module, retry-on-start (exp backoff), slow-query tracer, koanf-driven config.
   - `db/migrate/` — golang-migrate v4 runner with pgx/v5 driver, optional auto-up on fx Start, supports file:// and embed.FS sources.
   - `db/sqlc/` — `WithTx` helper + `MapError` (pgx errors → golusoris error codes).
-  - `testutil/pg/` — testcontainers-go Postgres helper (`Start` returns pool, `DSN` returns connection string). Docker required.
+  - `testutil/pg/` — testcontainers-go Postgres helper (`Start` returns pool, `DSN` returns connection string, `StartReplication` returns pool + replication DSN for CDC, `StartTimescale` returns a TimescaleDB-enabled pool). Docker required.
   - `tools/sqlc.yaml.fragment` — shared sqlc v2 config template.
   - `golusoris.DB` umbrella module added.
   - `config.Unmarshal` extended with mapstructure decode hooks (time.Duration + comma-sep slices). Backwards compatible.
@@ -100,24 +100,22 @@
 
 ## Session log (recent)
 
-- 2026-06-15: **pkg/sockmap — eBPF SK_MSG sockmap module (#27)** landed.
-  Opt-in fx module for colocated zero-TCP-stack IPC (sveltesentio D200 Tier 3).
-  Ships: (1) systemd socket-activation FD handoff (`ActivationListeners`,
-  LISTEN_PID/FDS/FDNAMES, no go-systemd dep); (2) cgroup v2 attach-point
-  resolution with loud cgroup-v1 failure + `cgroup_path` knob; (3) fx
-  pre-shutdown cleanup hook (removes FDs from the sockhash before close);
-  (4) the `*Sockmap` loader bundling cilium/ebpf — opens/creates+pins the
-  `BPF_MAP_TYPE_SOCKHASH`, attaches SOCK_OPS to the cgroup + SK_MSG to the
-  sockhash, Prometheus counters (`golusoris_sockmap_*`), and a ≥5.10 kernel
-  guard. Linux impl + non-Linux stub via build tags. A real CO-RE BPF object
-  (`bpf/sockmap.bpf.c` → committed `.o`, bpf2go-style, `go generate`) is
-  bundled and attaches end-to-end (privileged `TestFullAttach`). Key model is
-  the connection 4-tuple (`struct sock_key`) so userspace inserts + the SK_MSG
-  redirect agree. Promoted `golang.org/x/sys` to a direct dep. Coverage 78%
-  privileged. **Deferred:** the data-plane redirect proof (zero-`lo`-packet
-  verification) belongs in the privileged Docker `--privileged` CI harness, not
-  the unit suite; userspace `RegisterConn` only accepts established sockets
-  (kernel rejects listen-FD inserts — the SOCK_OPS program populates those).
+- 2026-06-15: **mcp/ reusable MCP server fx module** landed (#255).
+  - New opt-in `mcp.Module` wraps the official
+    `modelcontextprotocol/go-sdk`: provides a tool-less `*mcp.Server`;
+    apps register tools via `fx.Invoke(func(s *mcp.Server){ s.AddTool(...) })`.
+  - Runs the configured transport under the fx lifecycle: stdio (default,
+    ends the app via `fx.Shutdowner` on client disconnect) or
+    streamable-HTTP (dedicated `*http.Server` at `mcp.http.path`,
+    graceful shutdown on Stop).
+  - Stdout purity in stdio mode: pins the real stdout to the transport and
+    redirects the process-global `os.Stdout` to stderr for the transport's
+    lifetime, so stray `fmt.Println` can't corrupt JSON-RPC framing.
+  - No new dependency (SDK already vendored for `cmd/golusoris-mcp` +
+    `apidocs`). 84.8% coverage, race-clean, 0 lint/gosec/vuln.
+  - Orchestrator wires the umbrella `golusoris.go` + root AGENTS.md tree
+    separately.
+
 - 2026-04-14: **security hardening + ai/tiny/serve/ollama** landed.
   - `httpx/csrf` migrated to `filippo.io/csrf/gorilla` — drop-in
     replacement for gorilla/csrf that enforces same-origin via Fetch
@@ -231,11 +229,21 @@
     (usestdlibvars).
   - 0 lint · race-green across `./...`.
 
+- 2026-06-15: **Integration (testcontainers) coverage for external-service backends** (#151, branch `feat/issue-151`):
+  - New testutil helpers: `pg.StartReplication(t)` (boots `wal_level=logical` Postgres, returns `(pool, replicationDSN)`), `pg.StartTimescale(t)` (boots `timescale/timescaledb` image + `CREATE EXTENSION`), `redistest.Addr(t)` (returns `host:port` for driving a custom client). All guarded by `testcontainers.SkipIfProviderIsNotHealthy` so macOS/no-Docker skips cleanly.
+  - `db/cdc`: end-to-end logical-replication test — INSERT/UPDATE/DELETE through `connect → runSetup → ensureSlot → StartReplication → handleMessage → dispatch → Parse → tupleToMap`. Drives `handleMessage` directly (not `runLoop`) so the read is never interrupted on a sub-second cadence — deterministic under `-race` (20+ consecutive clean runs).
+  - `db/timescale`: full hypertable lifecycle against real TimescaleDB — `CreateHypertable`/`SetRetention`/`EnableCompression`/`AddCompressionPolicy`, asserting policies register in the jobs catalog.
+  - `cache/redis`: `newClient` SET/GET round-trip + whitespace-trim + bad-addr error path against real Redis.
+  - **Two boundary bugs found + fixed** (the integration tests revealed them; "real boundary correctness" per the issue):
+    1. `db/timescale` `SetRetention`/`AddCompressionPolicy` used `INTERVAL $2` — a Postgres syntax error (the `INTERVAL` keyword rejects a bound parameter). Both calls would fail at runtime. Fixed to `($2)::interval`.
+    2. `db/cdc` `runSetup` started replication from `sysident.XLogPos` (current WAL head). On any restart of a persistent slot this silently skips every change between the slot's confirmed position and now — data loss. Fixed to start LSN `0`, which resumes from `confirmed_flush_lsn`.
+  - 0 lint · 0 gosec · race-green across the changed packages. No new dependencies.
+
 - 2026-04-14: **CI hardening — coverage push** (multiple commits on `main`):
   - gosec fixed: `--exclude-rules` flag in CI (was using `// #nosec` inside `//nolint` which gosec ignores). gosec now green.
   - golangci-lint: resolved all 55 issues after v9 upgrade. 0 issues.
   - Coverage: added 30+ `internal_test.go` files across the framework targeting `withDefaults`/`loadConfig`/`loadOptions` and pure functions. CI coverage: 66.9% → 67.8% (need 70%). In-flight: more tests added (grpc, cache/memory, cache/redis, otel, httpx/geofence, db/cdc, auth/policy, auth/session, kafka, outbox, outbox/cdc, timescale, geo, pgfts, httpx/client, systemd, k8s/health, leader/pg, leader/k8s, auth/oauth2server, db/pgx tracer, httpx/middleware, container/runtime, search/meilisearch, auth/lockout, apidocs). Latest push: `9d4d037` → `39a5166` → `140d209` → pending with more tests. CI still failing coverage gate (67.8%).
-  - **Pending**: coverage gate at 70% not yet reached. Remaining gap ~2.2%. Most of the remaining 0% functions require external services (Kafka, NATS, ClickHouse, Redis, PostgreSQL).
+  - **Pending**: coverage gate at 70% not yet reached. Remaining gap ~2.2%. Most of the remaining 0% functions require external services (Kafka, NATS, ClickHouse, Redis, PostgreSQL). [Partly addressed 2026-06-15 by #151 — testcontainers integration tests for `db/cdc`, `db/timescale`, `cache/redis` (redis/pgfts/timescale/cdc); kafka/nats/clickhouse still deferred.]
 
 - 2026-04-14: **Step 10c — FCM + APNS2** landed (closes Step 10 notify providers):
   - `notify/fcm/` — Firebase Cloud Messaging HTTP v1 via raw HTTP. Auth: Google service-account JSON → RS256-signed JWT assertion → OAuth2 token exchange → cached bearer (refreshed < 5 min before expiry, concurrency-safe mutex). Each `msg.To[i]` is one device token; `msg.Metadata` → FCM `data` (string-valued). `Options.ServiceAccountJSON` or `Options.ServiceAccount` for struct injection. Clock injected via `clockwork.Clock`. Dep: golang-jwt/jwt/v5 (already in go.mod).
