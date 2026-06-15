@@ -13,7 +13,9 @@
 //	otel.endpoint            # OTLP gRPC target, e.g. "otel-collector:4317"
 //	otel.insecure            # plaintext gRPC (default true — collectors
 //	                         # usually live in-cluster)
-//	otel.service.name        # service.name resource attr (required)
+//	otel.service.name        # service.name resource attr; defaults to the
+//	                         # binary's build-info path / argv basename when
+//	                         # unset (see loadOptions)
 //	otel.service.version     # service.version
 //	otel.service.namespace   # service.namespace
 //	otel.sample.ratio        # parent-based ratio sampler, 0-1 (default 1.0)
@@ -181,7 +183,8 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 
 func buildResource(ctx context.Context, opts Options) (*resource.Resource, error) {
 	attrs := make([]attributeKV, 0, 3+8)
-	attrs = append(attrs,
+	attrs = append(
+		attrs,
 		attributeKV{semconv.ServiceNameKey, opts.Service.Name},
 		attributeKV{semconv.ServiceVersionKey, opts.Service.Version},
 		attributeKV{semconv.ServiceNamespaceKey, opts.Service.Namespace},
@@ -203,7 +206,8 @@ func buildResource(ctx context.Context, opts Options) (*resource.Resource, error
 }
 
 func buildTracerProvider(ctx context.Context, res *resource.Resource, opts Options) (*sdktrace.TracerProvider, error) {
-	exp, err := otlptrace.New(ctx,
+	exp, err := otlptrace.New(
+		ctx,
 		dialOpts(opts)...,
 	)
 	if err != nil {
@@ -238,15 +242,21 @@ func buildLoggerProvider(ctx context.Context, res *resource.Resource, opts Optio
 	), nil
 }
 
-// loadOptions unmarshals config into Options; Service.Name is required when
-// Enabled=true.
+// loadOptions unmarshals config into Options. When Enabled=true and
+// otel.service.name was not set, it defaults the name from the binary's build
+// info / argv (see [defaultServiceName]) so a shared bootstrap can enable OTel
+// fleet-wide with zero per-binary config (issue #254). It errors only when the
+// name can be neither configured nor derived.
 func loadOptions(cfg *config.Config) (Options, error) {
 	opts := DefaultOptions()
 	if err := cfg.Unmarshal("otel", &opts); err != nil {
 		return Options{}, fmt.Errorf("otel: load options: %w", err)
 	}
 	if opts.Enabled && opts.Service.Name == "" {
-		return Options{}, errors.New("otel: otel.service.name is required when otel is enabled")
+		opts.Service.Name = defaultServiceName()
+	}
+	if opts.Enabled && opts.Service.Name == "" {
+		return Options{}, errors.New("otel: otel.service.name is required when otel is enabled and cannot be derived from build info or argv")
 	}
 	return opts, nil
 }
@@ -257,13 +267,15 @@ func loadOptions(cfg *config.Config) (Options, error) {
 //
 // Kept separate from [Module] because some apps use slog but route logs
 // through Sentry + stdout only, not OTel.
-var ModuleWithSlogBridge = fx.Module("golusoris.otel.slog_bridge",
+var ModuleWithSlogBridge = fx.Module(
+	"golusoris.otel.slog_bridge",
 	fx.Invoke(func(providers *Providers, existing *slog.Logger, opts Options) {
 		if providers == nil || providers.Logger == nil {
 			return
 		}
 		// Fan out to the existing handler + the OTel bridge.
-		otelHandler := otelslog.NewHandler(opts.Service.Name,
+		otelHandler := otelslog.NewHandler(
+			opts.Service.Name,
 			otelslog.WithLoggerProvider(providers.Logger),
 		)
 		slog.SetDefault(slog.New(&fanoutHandler{
@@ -276,14 +288,16 @@ var ModuleWithSlogBridge = fx.Module("golusoris.otel.slog_bridge",
 // config.Module + log.Module already present. The module degrades to a no-op
 // (empty Providers, global OTel stays no-op, no network) when otel.enabled is
 // false, OTEL_SDK_DISABLED=true, or no OTLP endpoint is configured — see [New].
-var Module = fx.Module("golusoris.otel",
+var Module = fx.Module(
+	"golusoris.otel",
 	fx.Provide(loadOptions),
 	fx.Provide(func(lc fx.Lifecycle, opts Options, logger *slog.Logger) (*Providers, error) {
 		providers, err := New(context.Background(), opts)
 		if err != nil {
 			return nil, err
 		}
-		logger.Info("otel: configured",
+		logger.Info(
+			"otel: configured",
 			slog.Bool("enabled", opts.Enabled),
 			slog.Bool("active", providers.Tracer != nil || providers.Meter != nil || providers.Logger != nil),
 			slog.String("endpoint", opts.Endpoint),
