@@ -10,7 +10,12 @@ the unified `tiny.Predictor` interface.
 serve/
   ollama/   # Ollama HTTP API → Gemma / Gemma 3n (text, generate)
   tflite/   # (pending) Python sidecar for LiteRT models (classify)
+  fleet/    # distributed-inference recipe: Predictor over jobs/ + leader/
 ```
+
+The `fleet/` subpackage is not an adapter — it is a recipe that wires
+any `tiny.Predictor` behind a river worker + capability-matched queue so
+apps serve inference across a replica set without a bespoke controller.
 
 ## Contract
 
