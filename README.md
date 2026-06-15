@@ -10,6 +10,8 @@
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and SLSA L3 supply-chain standards.
 
+**Documentation:** the full rendered docs site lives at **[golusoris.github.io/golusoris](https://golusoris.github.io/golusoris/)**.
+
 ---
 
 ## Quick start
