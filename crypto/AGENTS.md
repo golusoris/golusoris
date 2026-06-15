@@ -18,7 +18,11 @@ package functions directly; `crypto.Module` provides nothing (it exists only so
 | `Seal(key, plaintext)` | AES-GCM encrypt → `nonce‖ciphertext` |
 | `Open(key, sealed)` | AES-GCM decrypt |
 | `RandomBytes(n)` | n cryptographically-secure random bytes |
-| `ErrShortCiphertext` | `Open` input too short to hold a nonce |
+| `SecureToken(n)` | hex-encoded random token (2n chars) over `RandomBytes` |
+| `NewPasswordHasher(maxConcurrent)` · `TryHash`/`Hash` | load-shed bounded argon2id; `TryHash` returns `ErrBusy` when saturated |
+| `NewEncryptor(key)` · `Seal`/`Open` | fixed-key encryptor (no per-call key) |
+| `Module` | fx-provides `*PasswordHasher` (`crypto.hasher.max_concurrent`, default GOMAXPROCS) + `*Encryptor` (key: `crypto.key` hex → SHA-256(`auth.jwt.secret`) → insecure dev key, logged) |
+| `ErrBusy` · `ErrShortCiphertext` | hasher saturated · `Open` input too short |
 
 ## Threat model / usage caveats
 

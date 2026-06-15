@@ -2,7 +2,12 @@ package crypto
 
 import "go.uber.org/fx"
 
-// Module exposes nothing constructed (the package is a stateless toolkit) —
-// it exists for symmetry with other golusoris modules and so that golusoris.Core
-// can include it without special-casing.
-var Module = fx.Module("golusoris.crypto")
+// Module provides the config-driven helpers — a *PasswordHasher (load-shed
+// bounded) and an *Encryptor (key resolved from config). Both are lazy: an app
+// that doesn't depend on them constructs neither. The argon2id / AES-GCM
+// functions are stateless and usable without the module.
+var Module = fx.Module(
+	"golusoris.crypto",
+	fx.Provide(newPasswordHasher),
+	fx.Provide(newEncryptor),
+)
