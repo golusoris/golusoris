@@ -108,7 +108,7 @@ func fdName(names []string, i, fd int) string {
 // listenerFromFD wraps a passed FD as a net.Listener. The FD is dup'd by
 // net.FileListener, so the *os.File can be closed immediately after.
 func listenerFromFD(fd int, name string) (net.Listener, error) {
-	f := os.NewFile(uintptr(fd), name) //nolint:gosec // G115: fd is a socket file descriptor — non-negative, no overflow
+	f := os.NewFile(uintptr(fd), name) // #nosec G115 -- fd is a socket file descriptor, non-negative
 	if f == nil {
 		return nil, fmt.Errorf("sockmap: activation: invalid fd %d", fd)
 	}

@@ -293,7 +293,7 @@ func (s *Sockmap) insertLocked(c syscall.Conn) error {
 		return fmt.Errorf("sockmap: conn syscall conn: %w", scErr)
 	}
 	cerr := rc.Control(func(f uintptr) {
-		fd, key, err = sockFDAndKey(int(f)) //nolint:gosec // G115: f is a live socket fd from RawConn.Control — a small non-negative int, no overflow
+		fd, key, err = sockFDAndKey(int(f)) // #nosec G115 -- f is a live socket fd from RawConn.Control, a small non-negative int
 	})
 	if cerr != nil {
 		return fmt.Errorf("sockmap: conn control: %w", cerr)
