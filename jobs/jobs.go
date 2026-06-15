@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivertype"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/config"
@@ -47,6 +48,10 @@ type Options struct {
 	// jobs stay in the table before river prunes them (0 = river default).
 	CompletedJobRetention time.Duration `koanf:"completed_job_retention"`
 	DiscardedJobRetention time.Duration `koanf:"discarded_job_retention"`
+	// Observer, if set, receives job lifecycle signals for metrics (insert
+	// counters + completion/duration). Code-supplied (e.g. fx.Decorate), not
+	// from config.
+	Observer Observer `koanf:"-"`
 }
 
 // QueueOptions groups queue-wide settings.
@@ -141,6 +146,9 @@ func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger
 		CompletedJobRetentionPeriod: opts.CompletedJobRetention,
 		DiscardedJobRetentionPeriod: opts.DiscardedJobRetention,
 	}
+	if opts.Observer != nil {
+		cfg.Middleware = []rivertype.Middleware{&insertObserver{obs: opts.Observer}}
+	}
 	if workers != nil {
 		queues := map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: opts.Queue.Default.Max},
@@ -191,14 +199,21 @@ var Module = fx.Module(
 		if err != nil {
 			return nil, err
 		}
+		var obsCancel func()
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				if err := c.Start(ctx); err != nil {
 					return fmt.Errorf("jobs: start: %w", err)
 				}
+				if opts.Observer != nil {
+					obsCancel = Observe(c, opts.Observer)
+				}
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
+				if obsCancel != nil {
+					obsCancel()
+				}
 				if err := c.Stop(ctx); err != nil {
 					return fmt.Errorf("jobs: stop: %w", err)
 				}

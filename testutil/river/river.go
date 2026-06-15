@@ -46,6 +46,8 @@ type Options struct {
 	// Queues registers named queues beyond "default" so tests can exercise
 	// multi-queue behaviour.
 	Queues map[string]jobs.QueueConfig
+	// Observer, if set, is wired for insert + completion metrics.
+	Observer jobs.Observer
 }
 
 // Harness is returned by [Start]. Fields are set; don't mutate.
@@ -88,9 +90,10 @@ func Start(t *testing.T, opts Options) *Harness {
 
 	logger := slog.New(slog.DiscardHandler)
 	client, err := jobs.New(pool, jobs.Options{
-		Enabled: true,
-		Queue:   jobs.QueueOptions{Default: jobs.QueueDefault{Max: 2}, Queues: opts.Queues},
-		Job:     jobs.JobOptions{Timeout: opts.JobTimeout, MaxAttempts: 3},
+		Enabled:  true,
+		Queue:    jobs.QueueOptions{Default: jobs.QueueDefault{Max: 2}, Queues: opts.Queues},
+		Job:      jobs.JobOptions{Timeout: opts.JobTimeout, MaxAttempts: 3},
+		Observer: opts.Observer,
 	}, workers, logger)
 	if err != nil {
 		t.Fatalf("testutil/river: new client: %v", err)
@@ -104,6 +107,9 @@ func Start(t *testing.T, opts Options) *Harness {
 		if err := client.Start(startCtx); err != nil {
 			startCancel()
 			t.Fatalf("testutil/river: start: %v", err)
+		}
+		if opts.Observer != nil {
+			t.Cleanup(jobs.Observe(client, opts.Observer))
 		}
 		t.Cleanup(func() {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
