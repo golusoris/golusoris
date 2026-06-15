@@ -1,7 +1,35 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-04-14 (All plan sections complete — ready for v0.1.0 tag).
+> Last update: 2026-06-15 (v0.6.0 released + signed; release pipeline hardened).
+
+## Session log — 2026-06-15: v0.6.0 release + release-pipeline hardening
+
+**v0.6.0 released and verified** — first fully-correct release (v0.5.0 lost its
+signed binaries). Resolves Go proxy `@latest`; ships 6-platform archives + per-archive
+SPDX SBOMs + cosign keyless signatures + SLSA build provenance. Verified end-to-end:
+checksum match, `cosign verify-blob` OK, `gh attestation verify` exit 0
+(builder `release.yml@refs/heads/main`, github-hosted). Bundles sockmap (#27),
+tflite serve adapter + PG registry (#156), grpc `ProvideServerOptionFn` (#269) — all closed.
+
+**Four release-pipeline bugs fixed (all permanent on main):**
+
+| Bug | Fix | PR |
+|---|---|---|
+| release-please cut component-prefixed tags (`golusoris-v*`) → not a Go version, missed goreleaser | `include-component-in-tag: false` (dropping `component` in #274 was insufficient — `package-name` still feeds the component) | #279 |
+| Tag cut by release-please's GITHUB_TOKEN doesn't trigger tag-keyed `release.yml` (goreleaser never runs) | `workflow_dispatch` escape hatch on release.yml (checkout `inputs.tag`, `GORELEASER_CURRENT_TAG`) | #281 |
+| goreleaser before-hook `go generate ./...` ran pkg/sockmap's clang eBPF compile → `asm/types.h` not found on runner | dropped `go generate` from before-hooks (the `.o` is committed + embedded; CGO off) | #282 |
+| Dispatched rebuild checks out the immutable tag's tree, which still has the stale before-hooks | `--skip=before` on the goreleaser args when dispatched | #284 |
+
+**Pending (needs org-admin, not autonomously doable):** add a `RELEASE_PLEASE_TOKEN`
+PAT (Contents+PRs+Workflows read/write) as a repo secret and set
+`token: ${{ secrets.RELEASE_PLEASE_TOKEN }}` on the release-please-action step. That
+makes the whole flow hands-off: release-PR CI runs without the close+reopen dance, and
+the tag is cut by a real actor so `release.yml` fires automatically (no manual dispatch).
+
+**Known flake:** `ai/tiny/serve/tflite` `TestPredictor_Predict_*` (parallel httptest)
+flaked once on the full-suite-with-Docker CI job; not reproducible locally (8× `-race`).
+If it recurs, deparallelize those tests — likely runner resource contention, not a bug.
 
 ## Naming conventions (Option B)
 
