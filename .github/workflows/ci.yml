@@ -288,6 +288,29 @@ jobs:
             | tar -xz -C /tmp gitleaks
           /tmp/gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
 
+  # ── Custom SAST (semgrep) ────────────────────────────────────────────────────
+  # Runs the project-specific .semgrep.yml ruleset (golusoris invariants the
+  # AST-unaware linters can't express). ADVISORY: continue-on-error + absent from
+  # the ci-success gate, so a new rule can land and surface findings without
+  # blocking unrelated PRs. Promote to required once the ruleset has soaked.
+  semgrep:
+    name: Custom SAST (semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      # Pinned for reproducible CI — bumping semgrep (and adopting any new
+      # parser behaviour) is a deliberate, reviewed change, not a float.
+      - name: Run semgrep
+        run: |
+          pipx run semgrep==1.166.0 scan \
+            --config .semgrep.yml \
+            --error \
+            --metrics=off \
+            --disable-version-check \
+            --oss-only
+
   # ── Changelog fragments (render --check) ─────────────────────────────────────
   # Validates the per-PR changelog.d/ fragments and that the rendered body
   # matches the "## [Unreleased]" block in CHANGELOG.md. Advisory: a drift here
