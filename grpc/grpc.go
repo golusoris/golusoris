@@ -136,6 +136,23 @@ func ProvideServerOption(opt grpc.ServerOption) fx.Option {
 	))
 }
 
+// ProvideServerOptionFn wires a constructor that builds a [grpc.ServerOption]
+// from other fx-provided dependencies — for interceptors that depend on
+// graph-constructed singletons (an auth middleware, a rate limiter, …) that a
+// concrete [ProvideServerOption] can't reach. The constructor is any
+// fx-compatible func whose parameters are injected from the graph and that
+// returns a grpc.ServerOption (optionally with an error):
+//
+//	grpc.ProvideServerOptionFn(func(m *auth.Middleware) grpc.ServerOption {
+//	    return grpc.ChainUnaryInterceptor(m.UnaryServerInterceptor)
+//	})
+func ProvideServerOptionFn(constructor any) fx.Option {
+	return fx.Provide(fx.Annotate(
+		constructor,
+		fx.ResultTags(`group:"grpc.serveropts"`),
+	))
+}
+
 // serverParams are the fx inputs to newServer.
 type serverParams struct {
 	fx.In
