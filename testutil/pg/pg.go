@@ -118,6 +118,7 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 // is cleaned up via t.Cleanup.
 func DSN(t *testing.T, opts ...Options) string {
 	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 	o := Options{}
 	if len(opts) > 0 {
 		o = opts[0]
