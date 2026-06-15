@@ -14,7 +14,10 @@ project_name: golusoris
 before:
   hooks:
     - go mod tidy
-    - go generate ./...
+    # No `go generate ./...`: the only generate directive is pkg/sockmap's
+    # clang/llvm-strip eBPF compile, whose output (bpf/sockmap.bpf.o) is
+    # committed and embedded. The release runner has no clang/kernel headers,
+    # so regenerating it only breaks the build; releases use committed sources.
 
 builds:
   - id: golusoris
