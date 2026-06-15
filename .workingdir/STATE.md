@@ -64,7 +64,7 @@
   - `db/pgx/` — `*pgxpool.Pool` fx module, retry-on-start (exp backoff), slow-query tracer, koanf-driven config.
   - `db/migrate/` — golang-migrate v4 runner with pgx/v5 driver, optional auto-up on fx Start, supports file:// and embed.FS sources.
   - `db/sqlc/` — `WithTx` helper + `MapError` (pgx errors → golusoris error codes).
-  - `testutil/pg/` — testcontainers-go Postgres helper (`Start` returns pool, `DSN` returns connection string). Docker required.
+  - `testutil/pg/` — testcontainers-go Postgres helper (`Start` returns pool, `DSN` returns connection string, `StartReplication` returns pool + replication DSN for CDC, `StartTimescale` returns a TimescaleDB-enabled pool). Docker required.
   - `tools/sqlc.yaml.fragment` — shared sqlc v2 config template.
   - `golusoris.DB` umbrella module added.
   - `config.Unmarshal` extended with mapstructure decode hooks (time.Duration + comma-sep slices). Backwards compatible.
@@ -213,11 +213,21 @@
     (usestdlibvars).
   - 0 lint · race-green across `./...`.
 
+- 2026-06-15: **Integration (testcontainers) coverage for external-service backends** (#151, branch `feat/issue-151`):
+  - New testutil helpers: `pg.StartReplication(t)` (boots `wal_level=logical` Postgres, returns `(pool, replicationDSN)`), `pg.StartTimescale(t)` (boots `timescale/timescaledb` image + `CREATE EXTENSION`), `redistest.Addr(t)` (returns `host:port` for driving a custom client). All guarded by `testcontainers.SkipIfProviderIsNotHealthy` so macOS/no-Docker skips cleanly.
+  - `db/cdc`: end-to-end logical-replication test — INSERT/UPDATE/DELETE through `connect → runSetup → ensureSlot → StartReplication → handleMessage → dispatch → Parse → tupleToMap`. Drives `handleMessage` directly (not `runLoop`) so the read is never interrupted on a sub-second cadence — deterministic under `-race` (20+ consecutive clean runs).
+  - `db/timescale`: full hypertable lifecycle against real TimescaleDB — `CreateHypertable`/`SetRetention`/`EnableCompression`/`AddCompressionPolicy`, asserting policies register in the jobs catalog.
+  - `cache/redis`: `newClient` SET/GET round-trip + whitespace-trim + bad-addr error path against real Redis.
+  - **Two boundary bugs found + fixed** (the integration tests revealed them; "real boundary correctness" per the issue):
+    1. `db/timescale` `SetRetention`/`AddCompressionPolicy` used `INTERVAL $2` — a Postgres syntax error (the `INTERVAL` keyword rejects a bound parameter). Both calls would fail at runtime. Fixed to `($2)::interval`.
+    2. `db/cdc` `runSetup` started replication from `sysident.XLogPos` (current WAL head). On any restart of a persistent slot this silently skips every change between the slot's confirmed position and now — data loss. Fixed to start LSN `0`, which resumes from `confirmed_flush_lsn`.
+  - 0 lint · 0 gosec · race-green across the changed packages. No new dependencies.
+
 - 2026-04-14: **CI hardening — coverage push** (multiple commits on `main`):
   - gosec fixed: `--exclude-rules` flag in CI (was using `// #nosec` inside `//nolint` which gosec ignores). gosec now green.
   - golangci-lint: resolved all 55 issues after v9 upgrade. 0 issues.
   - Coverage: added 30+ `internal_test.go` files across the framework targeting `withDefaults`/`loadConfig`/`loadOptions` and pure functions. CI coverage: 66.9% → 67.8% (need 70%). In-flight: more tests added (grpc, cache/memory, cache/redis, otel, httpx/geofence, db/cdc, auth/policy, auth/session, kafka, outbox, outbox/cdc, timescale, geo, pgfts, httpx/client, systemd, k8s/health, leader/pg, leader/k8s, auth/oauth2server, db/pgx tracer, httpx/middleware, container/runtime, search/meilisearch, auth/lockout, apidocs). Latest push: `9d4d037` → `39a5166` → `140d209` → pending with more tests. CI still failing coverage gate (67.8%).
-  - **Pending**: coverage gate at 70% not yet reached. Remaining gap ~2.2%. Most of the remaining 0% functions require external services (Kafka, NATS, ClickHouse, Redis, PostgreSQL).
+  - **Pending**: coverage gate at 70% not yet reached. Remaining gap ~2.2%. Most of the remaining 0% functions require external services (Kafka, NATS, ClickHouse, Redis, PostgreSQL). [Partly addressed 2026-06-15 by #151 — testcontainers integration tests for `db/cdc`, `db/timescale`, `cache/redis` (redis/pgfts/timescale/cdc); kafka/nats/clickhouse still deferred.]
 
 - 2026-04-14: **Step 10c — FCM + APNS2** landed (closes Step 10 notify providers):
   - `notify/fcm/` — Firebase Cloud Messaging HTTP v1 via raw HTTP. Auth: Google service-account JSON → RS256-signed JWT assertion → OAuth2 token exchange → cached bearer (refreshed < 5 min before expiry, concurrency-safe mutex). Each `msg.To[i]` is one device token; `msg.Metadata` → FCM `data` (string-valued). `Options.ServiceAccountJSON` or `Options.ServiceAccount` for struct injection. Clock injected via `clockwork.Clock`. Dep: golang-jwt/jwt/v5 (already in go.mod).

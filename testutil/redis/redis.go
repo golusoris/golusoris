@@ -65,6 +65,34 @@ func Start(t *testing.T) rueidis.Client {
 	return client
 }
 
+// Addr boots a Redis container and returns its "host:port" address (scheme
+// stripped). Use this when you need to drive your own client constructor
+// against a real Redis instead of the ready-made rueidis.Client from Start.
+// The container is terminated via t.Cleanup.
+func Addr(t *testing.T) string {
+	t.Helper()
+	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
+
+	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+	defer cancel()
+
+	ctr, err := tcredis.Run(ctx, defaultImage)
+	if err != nil {
+		t.Fatalf("testutil/redis: start container: %v", err)
+	}
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer stopCancel()
+		_ = ctr.Terminate(stopCtx)
+	})
+
+	addr, err := ctr.ConnectionString(ctx)
+	if err != nil {
+		t.Fatalf("testutil/redis: connection string: %v", err)
+	}
+	return stripScheme(addr)
+}
+
 // stripScheme removes "redis://" or any "scheme://" prefix.
 func stripScheme(addr string) string {
 	if idx := indexOf(addr, "://"); idx >= 0 {
