@@ -35,6 +35,23 @@ func Mount(r chi.Router, reg *statuspage.Registry) {
 	r.Handle("/metrics", Handler())
 }
 
+// HandlerFor returns a /metrics handler that serves a specific
+// [*prometheus.Registry] instead of the global default — for apps that keep
+// their business metrics on their own registry.
+func HandlerFor(reg *prometheus.Registry) http.Handler {
+	return promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+}
+
+// MountFor attaches /metrics (serving reg) to a net/http mux and, when checks
+// != nil, registers the per-check status gauges on reg. No chi dependency — for
+// apps that don't run chi.
+func MountFor(mux *http.ServeMux, reg *prometheus.Registry, checks *statuspage.Registry) {
+	if checks != nil {
+		registerCheckStatusOn(reg, checks)
+	}
+	mux.Handle("/metrics", HandlerFor(reg))
+}
+
 // CheckStatusGauge is the gauge family exposing per-check status as 0/1.
 //
 //	app_check_status{name="db"} 1   # up
@@ -64,11 +81,23 @@ var CheckLatencySeconds = prometheus.NewGaugeVec(
 //
 // Idempotent: panics from MustRegister are recovered (multiple Mount calls
 // are tolerated, e.g. tests).
-func registerCheckStatus(reg *statuspage.Registry) {
+func registerCheckStatus(checks *statuspage.Registry) {
 	defer func() { _ = recover() }() // tolerate "already registered" on repeat Mount
 	prometheus.MustRegister(CheckStatusGauge, CheckLatencySeconds)
+	snapshotChecks(checks)
+}
 
-	reg.OnRun(func(_ context.Context, results []statuspage.Result) {
+// registerCheckStatusOn is the custom-registry variant of registerCheckStatus.
+func registerCheckStatusOn(reg *prometheus.Registry, checks *statuspage.Registry) {
+	defer func() { _ = recover() }() // tolerate "already registered" on repeat MountFor
+	reg.MustRegister(CheckStatusGauge, CheckLatencySeconds)
+	snapshotChecks(checks)
+}
+
+// snapshotChecks installs the hook that mirrors each check's last result into
+// the status/latency gauges (refreshed whenever the registry runs).
+func snapshotChecks(checks *statuspage.Registry) {
+	checks.OnRun(func(_ context.Context, results []statuspage.Result) {
 		for _, res := range results {
 			val := 0.0
 			if res.Status == statuspage.StatusUp {
