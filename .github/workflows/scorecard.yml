@@ -14,6 +14,11 @@ concurrency:
 on:
   push:
     branches: [main]
+  # Run on PRs targeting main so Scorecard reports a check-run and can gate
+  # supply-chain regressions in branch protection (#194). publish_results is
+  # disabled below for PRs — the OpenSSF API can't publish from a PR context.
+  pull_request:
+    branches: [main]
   schedule:
     - cron: '15 6 * * 1'   # weekly Monday 06:15 UTC
 
@@ -41,7 +46,8 @@ jobs:
         with:
           results_file: results.sarif
           results_format: sarif
-          publish_results: true
+          # Can't publish from a PR context (no id-token to the OpenSSF API).
+          publish_results: ${{ github.event_name != 'pull_request' }}
           # Fine-grained PAT with `Administration: Read-only` +
           # `Contents: Read-only` + `Metadata: Read-only` + `Webhooks:
           # Read-only`. Required for the Branch-Protection + Webhooks
