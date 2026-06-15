@@ -100,6 +100,22 @@
 
 ## Session log (recent)
 
+- 2026-06-15: **mcp/ reusable MCP server fx module** landed (#255).
+  - New opt-in `mcp.Module` wraps the official
+    `modelcontextprotocol/go-sdk`: provides a tool-less `*mcp.Server`;
+    apps register tools via `fx.Invoke(func(s *mcp.Server){ s.AddTool(...) })`.
+  - Runs the configured transport under the fx lifecycle: stdio (default,
+    ends the app via `fx.Shutdowner` on client disconnect) or
+    streamable-HTTP (dedicated `*http.Server` at `mcp.http.path`,
+    graceful shutdown on Stop).
+  - Stdout purity in stdio mode: pins the real stdout to the transport and
+    redirects the process-global `os.Stdout` to stderr for the transport's
+    lifetime, so stray `fmt.Println` can't corrupt JSON-RPC framing.
+  - No new dependency (SDK already vendored for `cmd/golusoris-mcp` +
+    `apidocs`). 84.8% coverage, race-clean, 0 lint/gosec/vuln.
+  - Orchestrator wires the umbrella `golusoris.go` + root AGENTS.md tree
+    separately.
+
 - 2026-04-14: **security hardening + ai/tiny/serve/ollama** landed.
   - `httpx/csrf` migrated to `filippo.io/csrf/gorilla` — drop-in
     replacement for gorilla/csrf that enforces same-origin via Fetch
