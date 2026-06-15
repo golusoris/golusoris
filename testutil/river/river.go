@@ -43,6 +43,9 @@ type Options struct {
 	JobTimeout time.Duration
 	// StartTimeout caps the client Start call (default 10s).
 	StartTimeout time.Duration
+	// Queues registers named queues beyond "default" so tests can exercise
+	// multi-queue behaviour.
+	Queues map[string]jobs.QueueConfig
 }
 
 // Harness is returned by [Start]. Fields are set; don't mutate.
@@ -86,7 +89,7 @@ func Start(t *testing.T, opts Options) *Harness {
 	logger := slog.New(slog.DiscardHandler)
 	client, err := jobs.New(pool, jobs.Options{
 		Enabled: true,
-		Queue:   jobs.QueueOptions{Default: jobs.QueueDefault{Max: 2}},
+		Queue:   jobs.QueueOptions{Default: jobs.QueueDefault{Max: 2}, Queues: opts.Queues},
 		Job:     jobs.JobOptions{Timeout: opts.JobTimeout, MaxAttempts: 3},
 	}, workers, logger)
 	if err != nil {
