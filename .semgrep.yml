@@ -1,0 +1,92 @@
+# Custom semgrep ruleset — golusoris-specific invariants that the AST-unaware
+# linters (golangci-lint forbidigo/depguard, gosec) cannot express. Each rule is
+# validated to produce ZERO findings on the current tree (the repo already obeys
+# every invariant); a hit means a regression, not a false positive. Run locally
+# via the pre-commit `custom-semgrep` hook; runs advisory (non-blocking) in CI.
+#
+# Deliberately NOT duplicated here (golangci-lint already gates them — see
+# tools/golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
+# math/rand (forbidigo), stdlib log (depguard), pkg/errors (gomodguard).
+rules:
+  # ── HTTP client must carry a timeout ────────────────────────────────────────
+  # A timeout-less *http.Client inherits no deadline and can hang a goroutine
+  # forever on a slow/hostile peer (Slowloris-class). Every client literal in
+  # the tree already sets Timeout; this keeps it that way. Tests are exempt:
+  # ad-hoc fixtures talk to a local httptest server with no hang risk.
+  - id: http-client-must-set-timeout
+    languages: [go]
+    severity: ERROR
+    message: >-
+      *http.Client must set a Timeout (or be built via httpx/client). A client
+      without a deadline can hang forever on a slow peer. See httpx/client.
+    paths:
+      exclude:
+        - "*_test.go"
+    patterns:
+      - pattern: '&http.Client{...}'
+      - pattern-not: '&http.Client{..., Timeout: $T, ...}'
+
+  # ── No http.DefaultClient ───────────────────────────────────────────────────
+  # The package-global DefaultClient shares one timeout-less Transport process-
+  # wide; mutating it leaks across callers. Use httpx/client (retry + breaker +
+  # timeout) or an explicit *http.Client. apidocs/ and selfupdate/ are the two
+  # sanctioned exceptions: both expose an injectable HTTPClient and fall back to
+  # DefaultClient only as an opt-in default, documented in their Options.
+  - id: no-http-default-client
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Do not use http.DefaultClient — it is timeout-less and process-global. Use
+      httpx/client or an explicit *http.Client{Timeout: ...}.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "apidocs/apidocs.go"
+        - "selfupdate/selfupdate.go"
+    pattern: http.DefaultClient
+
+  # ── No http.ListenAndServe / ListenAndServeTLS ──────────────────────────────
+  # The convenience helpers build an *http.Server with zero Read/Write/Idle
+  # timeouts (Slowloris-exposed). golusoris HTTP servers are constructed with
+  # explicit timeouts via the httpx server wiring.
+  - id: no-http-listenandserve
+    languages: [go]
+    severity: ERROR
+    message: >-
+      http.ListenAndServe builds a Server with no Read/Write/Idle timeouts. Build
+      an explicit *http.Server with timeouts (see httpx) instead.
+    paths:
+      exclude:
+        - "*_test.go"
+    patterns:
+      - pattern-either:
+          - pattern: http.ListenAndServe(...)
+          - pattern: http.ListenAndServeTLS(...)
+
+  # ── No blocking time.Sleep in library code ──────────────────────────────────
+  # time.Sleep ignores context cancellation and wall-clock injection; it blocks
+  # the goroutine past shutdown. Use a clock-driven timer / context deadline.
+  # testutil/ is exempt (it intentionally polls real wall-clock for fixtures).
+  - id: no-time-sleep-in-library
+    languages: [go]
+    severity: WARNING
+    message: >-
+      time.Sleep blocks past context cancellation and ignores the injectable
+      clock. Use a context deadline or a clockwork timer instead.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "testutil/"
+    pattern: time.Sleep(...)
+
+  # ── No deprecated io/ioutil ─────────────────────────────────────────────────
+  # io/ioutil has been deprecated since Go 1.16; its functions moved to io/os.
+  - id: no-io-ioutil
+    languages: [go]
+    severity: WARNING
+    message: >-
+      io/ioutil is deprecated (Go 1.16). Use the io and os replacements
+      (e.g. io.ReadAll, os.ReadFile, os.MkdirTemp).
+    pattern-either:
+      - pattern: ioutil.$F(...)
+      - pattern: import "io/ioutil"
