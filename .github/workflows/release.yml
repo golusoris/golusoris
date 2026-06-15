@@ -64,7 +64,13 @@ jobs:
         with:
           distribution: goreleaser
           version: '~> v2'
-          args: release --config=tools/.goreleaser.yml --clean
+          # On a dispatched rebuild of an already-cut tag, skip the before-hooks:
+          # the tag's immutable tree may carry a stale/broken hook (e.g. the
+          # pre-fix `go generate` eBPF clang compile). Binaries still build from
+          # the tag's committed Go source + go.sum — hooks are only orchestration.
+          args: >-
+            release --config=tools/.goreleaser.yml --clean
+            ${{ inputs.tag != '' && '--skip=before' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # On dispatch, force the tag goreleaser builds; empty on push (it uses the pushed tag).
