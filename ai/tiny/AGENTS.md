@@ -40,6 +40,9 @@ it via a `Predictor`.
 - `ai/tiny/serve/ollama/` — Predictor for Gemma via Ollama HTTP API.
 - `ai/tiny/serve/tflite/` — Predictor for LiteRT classifiers via a Python
   inference sidecar (in-process Go runtime deferred — see its AGENTS.md).
+- `ai/tiny/serve/fleet/` — distributed-inference recipe: serve a
+  Predictor across replicas over `jobs/` (river) + `leader/`,
+  capability-matched via queue names.
 
 ## Design notes
 

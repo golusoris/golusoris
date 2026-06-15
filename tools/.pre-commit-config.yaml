@@ -33,6 +33,27 @@ repos:
         types: [go]
         pass_filenames: true
 
+      # Custom SAST: golusoris invariants the AST-unaware linters can't express.
+      # Shift-left mirror of the advisory ci.yml `semgrep` lane. Install semgrep
+      # via `pipx install semgrep` (it is not a go tool). Whole-repo scan because
+      # cross-file rules need the full tree, not just the staged delta.
+      - id: custom-semgrep
+        name: custom-semgrep (.semgrep.yml)
+        entry: semgrep scan --config .semgrep.yml --error --metrics=off --disable-version-check --oss-only
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      # Shift-left vulnerability scan. Previously CI-only; running it here catches
+      # a vulnerable dependency before the push instead of after a CI round-trip.
+      # Whole-module scan (govulncheck is call-graph based, not per-file).
+      - id: govulncheck
+        name: govulncheck
+        entry: govulncheck ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
       - id: conventional-commit
         name: conventional commit
         entry: bash -c 'git log -1 --pretty=%s | grep -qE "^(feat|fix|chore|docs|refactor|test|perf|build|ci)(\(.+\))?!?:" || (echo "Commit message must follow Conventional Commits format" && exit 1)'

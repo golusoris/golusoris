@@ -135,7 +135,8 @@ func (c *Consumer) SetHandler(h Handler) { c.handler = h }
 
 // Module provides *Consumer into the fx graph.
 // Requires *config.Config, clock.Clock, and *slog.Logger.
-var Module = fx.Module("golusoris.cdc",
+var Module = fx.Module(
+	"golusoris.cdc",
 	fx.Provide(loadConfig),
 	fx.Provide(newConsumer),
 )
@@ -202,7 +203,8 @@ func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl
 		c.logger.ErrorContext(ctx, "cdc: identify system", "err", err)
 		return 0, false
 	}
-	c.logger.InfoContext(ctx, "cdc: connected",
+	c.logger.InfoContext(
+		ctx, "cdc: connected",
 		"system_id", sysident.SystemID,
 		"timeline", sysident.Timeline,
 		"xlogpos", sysident.XLogPos,
@@ -219,7 +221,11 @@ func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl
 			fmt.Sprintf("publication_names '%s'", c.cfg.Publication),
 		},
 	}
-	if err := pglogrepl.StartReplication(ctx, conn, c.cfg.Slot, sysident.XLogPos, opts); err != nil {
+	// Start LSN 0 resumes from the slot's confirmed_flush_lsn. Passing
+	// sysident.XLogPos (the current WAL head) would skip every change retained
+	// by a persistent slot since its last confirmed position — silent data loss
+	// on restart.
+	if err := pglogrepl.StartReplication(ctx, conn, c.cfg.Slot, 0, opts); err != nil {
 		c.logger.ErrorContext(ctx, "cdc: start replication", "err", err)
 		return 0, false
 	}

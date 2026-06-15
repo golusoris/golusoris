@@ -1,0 +1,94 @@
+site_name: golusoris
+site_description: A composable Go framework built around go.uber.org/fx.
+site_url: https://golusoris.github.io/golusoris/
+repo_url: https://github.com/golusoris/golusoris
+repo_name: golusoris/golusoris
+docs_dir: docs
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+    - toc.follow
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.details
+
+# docx/, epub/, xlsx/ hold Go exporters, and architecture/*.puml is C4 source
+# (no PlantUML renderer wired) — excluded from the build to avoid stray pages.
+exclude_docs: |
+  docx/
+  epub/
+  xlsx/
+  architecture/*.puml
+
+nav:
+  - Home: index.md
+  - Principles: principles.md
+  - Architecture Decisions:
+      - Overview: adr/README.md
+      - "ADR-0001: fx over wire for DI": adr/0001-fx-over-wire-for-di.md
+      - "ADR-0002: koanf over viper for config": adr/0002-koanf-over-viper-for-config.md
+      - "ADR-0003: slog over zap for logging": adr/0003-slog-over-zap-for-logging.md
+      - "ADR-0004: ogen over oapi-codegen": adr/0004-ogen-over-oapi-codegen.md
+      - "ADR-0005: river over asynq for jobs": adr/0005-river-over-asynq-for-jobs.md
+      - "ADR-0006: pluggable leader election": adr/0006-pluggable-leader-election.md
+      - "ADR-0007: RFC 9457 problem details": adr/0007-rfc-9457-problem-details.md
+      - Template: adr/0000-template.md
+  - Architecture: architecture/README.md
+  - Migration Guides:
+      - "v0.1.x": migrations/v0.1.x.md
+  - Upstream Snapshots:
+      - Overview: upstream/README.md
+      - go.uber.org/fx: upstream/fx/README.md
+      - jackc/pgx: upstream/pgx/README.md
+      - ogen-go/ogen: upstream/ogen/README.md
+      - riverqueue/river: upstream/river/README.md
+      - knadh/koanf: upstream/koanf/README.md
+      - maypok86/otter: upstream/otter/README.md
+      - redis/rueidis: upstream/rueidis/README.md
+      - casbin/casbin: upstream/casbin/README.md
+      - go-webauthn/webauthn: upstream/webauthn/README.md
+      - go.opentelemetry.io/otel: upstream/otel/README.md
+      - golang-migrate/migrate: upstream/golang-migrate/README.md
+      - sqlc-dev/sqlc: upstream/sqlc/README.md
+      - scalar/scalar: upstream/scalar/README.md
+      - go-chi/chi: upstream/chi/README.md
+      - jonboulle/clockwork: upstream/clockwork/README.md
+      - yuin/goldmark: upstream/goldmark/README.md
+      - k8s client-go: upstream/k8s/README.md
+      - prometheus/client_golang: upstream/prometheus/README.md
+      - log/slog: upstream/slog/README.md
+      - a-h/templ: upstream/templ/README.md
+      - testcontainers/testcontainers-go: upstream/testcontainers/README.md
+      - go-playground/validator: upstream/validator/README.md
+
+plugins:
+  - search

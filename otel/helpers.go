@@ -4,12 +4,47 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path"
+	"path/filepath"
+	"runtime/debug"
+	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
 	otlplog "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	otlptrace "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
+
+// defaultServiceName derives a service.name when the operator did not set
+// otel.service.name, so a shared bootstrap can enable OTel fleet-wide with no
+// per-binary config (issue #254). Preference order: the module path's last
+// segment from the embedded build info, else the argv[0] basename. Returns ""
+// when neither yields a usable name — the caller then errors only if enabled.
+func defaultServiceName() string {
+	if bi, ok := debug.ReadBuildInfo(); ok {
+		if name := cleanServiceName(path.Base(bi.Path)); name != "" {
+			return name
+		}
+	}
+	if len(os.Args) > 0 {
+		if name := cleanServiceName(filepath.Base(os.Args[0])); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// cleanServiceName strips a trailing platform extension and rejects the
+// path.Base/filepath.Base sentinels ("." / "/" / "\\" / "") that signal an
+// empty or root input, so they never leak through as a service name.
+func cleanServiceName(name string) string {
+	name = strings.TrimSuffix(name, filepath.Ext(name))
+	switch name {
+	case "", ".", string(filepath.Separator):
+		return ""
+	}
+	return name
+}
 
 // attributeKV is a small local type — semconv keys are typed attribute.Key
 // values, so we carry pairs through toKVs without resolving at literal sites.
