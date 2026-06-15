@@ -100,6 +100,30 @@
 
 ## Session log (recent)
 
+- 2026-06-15: **ai/tiny/serve/tflite + PG-backed registry** landed (#156).
+  - `ai/tiny/serve/tflite/` — `tiny.Predictor` for LiteRT (`.tflite`)
+    classifiers via a Python inference sidecar over HTTP (mirrors the
+    ollama adapter's thin-client shape). Validates Format=tflite +
+    TaskKind=classify, `POST /load` registers the artifact, `POST
+    /classify` maps `{scores}` → sorted `Prediction.Labels` (desc by
+    score, ties by label; TopK truncation). In-process Go runtime
+    **deferred** (CGo `libtensorflowlite` build-matrix cost); the
+    interface is stable for a future native backend.
+  - `ai/tiny/pgregistry.go` — `PGRegistry`, a durable per-tenant
+    `tiny.Registry` over `*pgxpool.Pool`. Version is monotonic per
+    `(tenant_id, name)` via `max(version)+1` + a unique index; racing
+    writers retry with a bounded loop. Job free-form fields persist as a
+    JSON `spec` blob.
+  - `ai/tiny/migrations/` — golang-migrate pair (`golusoris_tiny_jobs` +
+    `golusoris_tiny_models`), embedded as `tiny.MigrationsFS`.
+  - `ai/tiny/module.go` — `tiny.Module` provides `tiny.Registry` from
+    DB pool + clock.
+  - `tiny.Dataset` got json tags (canonical wire shape; non-breaking —
+    trainers marshal explicit maps, not the struct).
+  - Tests: tflite via httptest (no Docker); registry via testutil/pg
+    testcontainers incl. an 8-goroutine concurrent-version race test.
+    Gate green: 0 lint · 0 gosec · race-clean.
+
 - 2026-04-14: **security hardening + ai/tiny/serve/ollama** landed.
   - `httpx/csrf` migrated to `filippo.io/csrf/gorilla` — drop-in
     replacement for gorilla/csrf that enforces same-origin via Fetch

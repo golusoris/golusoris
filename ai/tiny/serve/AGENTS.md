@@ -9,7 +9,7 @@ the unified `tiny.Predictor` interface.
 ```
 serve/
   ollama/   # Ollama HTTP API → Gemma / Gemma 3n (text, generate)
-  tflite/   # (pending) Python sidecar for LiteRT models (classify)
+  tflite/   # Python sidecar → LiteRT classifiers (text/image/audio, classify)
 ```
 
 ## Contract
