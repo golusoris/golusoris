@@ -66,17 +66,17 @@ const (
 // [Dataset.URI] is resolvable by the chosen [Trainer] (typically an
 // object-storage path the Trainer's container mounts or pulls).
 type Dataset struct {
-	ID       string
-	URI      string // e.g. "s3://bucket/datasets/intent-v3.jsonl" or "file:///tmp/ds.csv"
-	Format   string // "jsonl", "csv", "imagefolder", …
-	Modality Modality
-	TaskKind TaskKind
-	Size     int64 // bytes (0 when unknown)
-	Examples int   // row count (0 when unknown)
+	ID       string   `json:"id,omitempty"`
+	URI      string   `json:"uri"`              // e.g. "s3://bucket/datasets/intent-v3.jsonl" or "file:///tmp/ds.csv"
+	Format   string   `json:"format,omitempty"` // "jsonl", "csv", "imagefolder", …
+	Modality Modality `json:"modality"`
+	TaskKind TaskKind `json:"task_kind"`
+	Size     int64    `json:"size,omitempty"`     // bytes (0 when unknown)
+	Examples int      `json:"examples,omitempty"` // row count (0 when unknown)
 	// SchemaHint is stack-specific. For JSONL chat fine-tune it names
 	// the prompt/response columns; for classifier datasets it lists the
 	// label set. Trainers document the shape they expect.
-	SchemaHint map[string]any
+	SchemaHint map[string]any `json:"schema_hint,omitempty"`
 }
 
 // Job describes a training run that has not yet produced a [Model].
