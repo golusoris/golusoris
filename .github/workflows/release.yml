@@ -15,6 +15,17 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # Manual escape hatch: release-please cuts the tag with its GITHUB_TOKEN, and
+  # GitHub does not fire tag-triggered workflows for token-created tags, so the
+  # push trigger above is skipped on bot-cut releases. Dispatch with the existing
+  # tag to build + sign its artifacts. The durable fix is a PAT
+  # (RELEASE_PLEASE_TOKEN) on release-please so the tag is cut by a real actor.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing vX.Y.Z tag to build + sign the release for'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -31,6 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
+          ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
@@ -55,6 +67,8 @@ jobs:
           args: release --config=tools/.goreleaser.yml --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # On dispatch, force the tag goreleaser builds; empty on push (it uses the pushed tag).
+          GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
 
       - name: Attest release archives
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
