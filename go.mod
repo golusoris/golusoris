@@ -63,7 +63,7 @@ require (
 	github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
-	github.com/ogen-go/ogen v1.20.3
+	github.com/ogen-go/ogen v1.21.0
 	github.com/oschwald/maxminddb-golang/v2 v2.4.0
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgvector/pgvector-go/pgx v0.4.0
@@ -74,6 +74,7 @@ require (
 	github.com/redis/rueidis v1.0.75
 	github.com/riverqueue/river v0.39.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.39.0
+	github.com/riverqueue/river/rivertype v0.39.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/cors v1.11.1
 	github.com/segmentio/ksuid v1.0.4
@@ -301,7 +302,6 @@ require (
 	github.com/riverqueue/apiframe v0.0.0-20260609005548-64f48e0e6228 // indirect
 	github.com/riverqueue/river/riverdriver v0.39.0 // indirect
 	github.com/riverqueue/river/rivershared v0.39.0 // indirect
-	github.com/riverqueue/river/rivertype v0.39.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
