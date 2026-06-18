@@ -24,7 +24,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cilium/ebpf v0.21.0
 	github.com/coder/websocket v1.8.15
-	github.com/coreos/go-oidc/v3 v3.18.0
+	github.com/coreos/go-oidc/v3 v3.19.0
 	github.com/emersion/go-smtp v0.24.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getkin/kin-openapi v0.140.0
