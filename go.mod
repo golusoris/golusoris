@@ -44,7 +44,7 @@ require (
 	github.com/golusoris/goenvoy/arr/sonarr v1.3.1-0.20260619181659-93863e575724
 	github.com/golusoris/goenvoy/arr/v2 v2.1.0
 	github.com/golusoris/goenvoy/metadata v1.3.0
-	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619181659-93863e575724
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619191131-e9e2b8d889e0
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1-0.20260619181659-93863e575724
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619181659-93863e575724
 	github.com/google/uuid v1.6.0
