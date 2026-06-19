@@ -1,0 +1,13 @@
+# Example two-region prod stack. Set the Aurora master password as a secret
+# BEFORE `pulumi up`:
+#   pulumi config set --secret golusoris-multiregion:dbPassword <strong-password>
+# WARNING: provisioning the Aurora Global Database takes ~20-40 minutes and
+# incurs cross-region replication cost. See README.md.
+config:
+  golusoris-multiregion:primaryRegion: us-east-1
+  golusoris-multiregion:secondaryRegion: us-west-2
+  golusoris-multiregion:domain: app.example.com
+  golusoris-multiregion:dbInstanceClass: db.r6g.large
+  golusoris-multiregion:dbEngineVersion: "16.6"
+  golusoris-multiregion:appImage: ghcr.io/example/myapp:v1.0.0
+  golusoris-multiregion:appPort: "8080"

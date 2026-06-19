@@ -1,7 +1,39 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-06-19 (v0.7.0 released — release flow now fully automated, no PAT).
+> Last update: 2026-06-19 (built the 9 unbuilt catalog gap-modules — issue #99).
+
+## Session log — 2026-06-19 (cont.): catalog gap-modules built (#99)
+
+**Built the 9 modules from the §4 catalog that were still unbuilt** — found by
+diffing PLAN.md §4 against the repo (the rest of the framework is complete +
+0-TODO). All gate-green (0 lint, 0 gosec, race-tested) on branch
+`feat/catalog-gap-modules`:
+
+| Module | Dep | Coverage |
+|---|---|---|
+| jsonschema | santhosh-tekuri/jsonschema/v6 | 94.7% |
+| storage/safety | code.dny.dev/ssrf + stdlib re-encode strip | 91.1% |
+| storage/scan | baruwa-enterprise/clamd (fail-closed) | 94.7% |
+| storage/tus | tus/tusd/v2/pkg/handler + Bucket DataStore | 86.7% |
+| httpx/inertia | romsar/gonertia/v3 | 96.3% |
+| integrations/goenvoy | goenvoy submodules (pseudo-ver) | 91.8% |
+| htmltmpl | stdlib html/template + sprout seam | 89.0% |
+| media/audio | go-mp3/flac/ogg/wav + ebur128 (own go.mod, pure-Go) | 88.2% |
+| deploy/pulumi + deploy/multiregion | pulumi-aws v7 (own go.mod, IaC) | n/a |
+
+Built via a research→implement workflow pair (parallel subagents). Research
+flagged + corrected weak catalog hints: `faiface/beep` is playback-only →
+switched media/audio to pure-Go decoders; `a-h/templ` needs codegen → htmltmpl
+uses stdlib html/template with a go-sprout FuncProvider seam; tusd-the-binary →
+only `pkg/handler` embedded over storage.Bucket. ADRs **0008–0014** record the
+dep decisions. Decision worth remembering: jsonschema is a STATELESS utility
+(no fx Module), matching hash/markdown — the research suggested fx; the
+stateless form is the right convention fit.
+
+Note: 4 implement-agents hit a transient server-side rate-limit mid-run; their
+code was on disk + building, a cleanup pass finished lint/tests (and caught a
+real latent nil-error-wrap bug in storage/tus). No data lost.
 
 ## Session log — 2026-06-19 (cont.): v0.7.0 + release flow fully automated
 
