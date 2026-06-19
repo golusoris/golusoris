@@ -15,11 +15,17 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  # Manual escape hatch: release-please cuts the tag with its GITHUB_TOKEN, and
-  # GitHub does not fire tag-triggered workflows for token-created tags, so the
-  # push trigger above is skipped on bot-cut releases. Dispatch with the existing
-  # tag to build + sign its artifacts. The durable fix is a PAT
-  # (RELEASE_PLEASE_TOKEN) on release-please so the tag is cut by a real actor.
+  # Auto-invoked by release-please.yml on release_created, passing the freshly
+  # cut tag. Bot-cut tags don't fire the push trigger above (GitHub doesn't run
+  # workflows for GITHUB_TOKEN-created tags), so release-please calls this
+  # workflow directly in the same run — no PAT, no manual dispatch needed.
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Existing vX.Y.Z tag to build + sign the release for'
+        required: true
+        type: string
+  # Manual escape hatch: (re)build + sign an existing tag's artifacts on demand.
   workflow_dispatch:
     inputs:
       tag:

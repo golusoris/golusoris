@@ -1,11 +1,13 @@
 # release-please — opens / updates a release PR on every push to main
 # that accumulates Conventional Commits into a CHANGELOG entry and bumps
-# the version per SemVer rules. Merging the PR tags vX.Y.Z, which fires
-# release.yml → release-go.yml (goreleaser + cosign + SBOM + SLSA).
+# the version per SemVer rules. When the PR merges, release-please cuts the
+# vX.Y.Z tag and this workflow calls release.yml in the SAME run (goreleaser +
+# cosign + SBOM + SLSA). Bot-cut tags can't fire release.yml's own push-tag
+# trigger, so calling it here avoids needing a PAT or a manual dispatch.
 name: release-please
 
 # Serialize release-PR maintenance; cancel a stale run when a newer push
-# supersedes it (#196). The actual release runs on tag push in release.yml.
+# supersedes it (#196). The release build runs in the goreleaser job below.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -24,8 +26,26 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  # Build + sign the freshly cut tag in the same run (release_created only).
+  # Calls release.yml as a reusable workflow so the goreleaser/cosign/SBOM/SLSA
+  # logic lives in one place — also reachable via release.yml's manual dispatch.
+  goreleaser:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    permissions:
+      contents: write       # create the GitHub Release + upload artifacts
+      id-token: write       # cosign keyless OIDC + SLSA
+      attestations: write   # actions/attest-build-provenance
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
