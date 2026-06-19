@@ -1,0 +1,14 @@
+# Example dev stack: single-AZ, smallest instances, fast teardown.
+# Set the db master password as a secret BEFORE `pulumi up`:
+#   pulumi config set --secret golusoris-app:dbPassword <strong-password>
+config:
+  golusoris-app:region: us-east-1
+  golusoris-app:dbInstanceClass: db.t4g.small
+  golusoris-app:dbStorageGB: "20"
+  golusoris-app:dbEngineVersion: "17.2"
+  golusoris-app:redisNodeType: cache.t3.micro
+  golusoris-app:appImage: ghcr.io/example/myapp:dev
+  golusoris-app:appReplicas: "1"
+  golusoris-app:appPort: "8080"
+  golusoris-app:multiAZ: "false"
+  golusoris-app:deletionProtection: "false"

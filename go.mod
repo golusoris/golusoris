@@ -4,6 +4,7 @@ go 1.26.4
 
 require (
 	charm.land/bubbletea/v2 v2.0.7
+	code.dny.dev/ssrf v0.2.0
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.91
 	github.com/CAFxX/httpcompression v0.0.9
@@ -16,6 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.24
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.0
 	github.com/aws/smithy-go v1.27.2
+	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/benbjohnson/hashfs v0.2.2
 	github.com/bmaupin/go-epub v1.1.0
 	github.com/brianvoe/gofakeit/v7 v7.15.0
@@ -39,6 +41,12 @@ require (
 	github.com/go-webauthn/webauthn v0.17.4
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
+	github.com/golusoris/goenvoy/arr/sonarr v1.3.1-0.20260619181659-93863e575724
+	github.com/golusoris/goenvoy/arr/v2 v2.1.0
+	github.com/golusoris/goenvoy/metadata v1.3.0
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619181659-93863e575724
+	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1-0.20260619181659-93863e575724
+	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619181659-93863e575724
 	github.com/google/uuid v1.6.0
 	github.com/grafana/pyroscope-go v1.3.1
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.3
@@ -76,7 +84,9 @@ require (
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.39.0
 	github.com/riverqueue/river/rivertype v0.39.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/romsar/gonertia/v3 v3.0.0
 	github.com/rs/cors v1.11.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
@@ -86,6 +96,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/tsenart/vegeta/v12 v12.13.0
+	github.com/tus/tusd/v2 v2.10.0
 	github.com/twmb/franz-go v1.21.3
 	github.com/ulule/limiter/v3 v3.11.2
 	github.com/uptrace/bun v1.2.18
@@ -110,7 +121,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.temporal.io/sdk v1.45.0
 	go.uber.org/fx v1.24.0
+	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.53.0
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976
 	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.21.0
@@ -306,7 +319,6 @@ require (
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529 // indirect
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
@@ -346,14 +358,12 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
 	go.temporal.io/api v1.62.14 // indirect
 	go.uber.org/dig v1.19.0 // indirect
-	go.uber.org/goleak v1.3.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
-	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/time v0.15.0 // indirect

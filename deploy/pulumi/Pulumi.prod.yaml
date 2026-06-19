@@ -1,0 +1,15 @@
+# Example prod stack: Multi-AZ, larger instances, deletion protection on.
+# Set the db master password as a secret BEFORE `pulumi up`:
+#   pulumi config set --secret golusoris-app:dbPassword <strong-password>
+config:
+  golusoris-app:region: us-east-1
+  golusoris-app:dbInstanceClass: db.m6g.large
+  golusoris-app:dbStorageGB: "100"
+  golusoris-app:dbEngineVersion: "17.2"
+  golusoris-app:redisNodeType: cache.m6g.large
+  golusoris-app:appImage: ghcr.io/example/myapp:v1.0.0
+  golusoris-app:appReplicas: "3"
+  golusoris-app:appPort: "8080"
+  golusoris-app:domain: app.example.com
+  golusoris-app:multiAZ: "true"
+  golusoris-app:deletionProtection: "true"

@@ -1,0 +1,36 @@
+name: golusoris-multiregion
+runtime: go
+description: >-
+  Reference Pulumi (Go) program for an active/passive two-region golusoris
+  deployment: Aurora Global Database (writer in the primary region, read
+  replica in the secondary) plus a per-region app+ALB stack and Route53 DNS
+  failover. Copy-and-adapt; see README.md. WARNING: Aurora Global Database is
+  expensive and slow to provision.
+
+config:
+  golusoris-multiregion:primaryRegion:
+    type: string
+    description: Region hosting the Aurora writer + active app stack.
+    default: us-east-1
+  golusoris-multiregion:secondaryRegion:
+    type: string
+    description: Region hosting the Aurora read replica + passive app stack.
+    default: us-west-2
+  golusoris-multiregion:domain:
+    type: string
+    description: Public domain for the failover record set (e.g. app.example.com).
+  golusoris-multiregion:dbInstanceClass:
+    type: string
+    description: Aurora cluster instance class.
+    default: db.r6g.large
+  golusoris-multiregion:dbEngineVersion:
+    type: string
+    description: Aurora PostgreSQL engine version.
+    default: "16.6"
+  golusoris-multiregion:appImage:
+    type: string
+    description: OCI image reference deployed in both regions.
+  golusoris-multiregion:appPort:
+    type: integer
+    description: Container port the app listens on.
+    default: 8080

@@ -1,0 +1,54 @@
+name: golusoris-app
+runtime: go
+description: >-
+  Reference Pulumi (Go) program deploying a golusoris app on AWS: VPC + RDS
+  PostgreSQL + ElastiCache Redis + ECS Fargate behind an ALB. Copy-and-adapt;
+  see README.md.
+
+# Stack config schema. Override per stack in Pulumi.<stack>.yaml or via
+# `pulumi config set golusoris-app:<key> <value>`. Secrets (db master
+# password) MUST be set with `pulumi config set --secret`.
+config:
+  golusoris-app:region:
+    type: string
+    description: AWS region to deploy into.
+    default: us-east-1
+  golusoris-app:dbInstanceClass:
+    type: string
+    description: RDS instance class.
+    default: db.t4g.small
+  golusoris-app:dbStorageGB:
+    type: integer
+    description: RDS allocated storage in GiB.
+    default: 20
+  golusoris-app:dbEngineVersion:
+    type: string
+    description: PostgreSQL engine version.
+    default: "17.2"
+  golusoris-app:redisNodeType:
+    type: string
+    description: ElastiCache node type.
+    default: cache.t3.micro
+  golusoris-app:appImage:
+    type: string
+    description: OCI image reference for the app container.
+  golusoris-app:appReplicas:
+    type: integer
+    description: Desired ECS task count.
+    default: 2
+  golusoris-app:appPort:
+    type: integer
+    description: Container port the app listens on.
+    default: 8080
+  golusoris-app:domain:
+    type: string
+    description: Optional public domain (informational; ALB DNS is exported regardless).
+    default: ""
+  golusoris-app:multiAZ:
+    type: boolean
+    description: Provision RDS Multi-AZ and ElastiCache automatic failover.
+    default: false
+  golusoris-app:deletionProtection:
+    type: boolean
+    description: Guard the database against accidental deletion.
+    default: false
