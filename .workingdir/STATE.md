@@ -1,7 +1,31 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-06-19 (v0.6.1 maintenance release + signed; ci-go.yml container enabler).
+> Last update: 2026-06-19 (v0.7.0 released — release flow now fully automated, no PAT).
+
+## Session log — 2026-06-19 (cont.): v0.7.0 + release flow fully automated
+
+**v0.7.0 released — the FIRST fully-automated, hands-off release.** Merging the
+release-please PR cut the tag AND built + signed the artifacts in the same run
+(15 assets: 6 archives + 6 SPDX SBOMs + cosign checksums.sig/.pem). No manual
+`workflow_dispatch`, no PAT. Verified end-to-end: `release-please: success` +
+`goreleaser: success` in run 27841034526.
+
+**Both release frictions eliminated — no `RELEASE_PLEASE_TOKEN` PAT needed**
+(the earlier PAT recommendation was WRONG; the app repos never used one):
+
+| Friction | Old (v0.5.0–v0.6.1) | Fix | PR |
+|---|---|---|---|
+| goreleaser didn't run on bot-cut tags → manual dispatch every release | separate `release.yml` keyed on `push: tags` (GITHUB_TOKEN tags don't fire it) | `release.yml` gained `workflow_call`; `release-please.yml` calls it from a `goreleaser` job gated on `release_created`, in the same run | #294 |
+| release PR couldn't merge (bot-PR CI never runs) → close+reopen dance | `enforce_admins=true` blocked admin click-merge past un-run required checks | `enforce_admins=false` on `main` (matches app-revenge/goenvoy) — admin click-merges the release PR | branch-protection API |
+
+This SUPERSEDES the 06-15 "pending: add a RELEASE_PLEASE_TOKEN PAT" item and the
+06-19 v0.6.1 note that "the dance persists" — both are now resolved. Pattern now
+mirrors `golusoris/app-revenge` + `golusoris/goenvoy` exactly.
+
+**Branch protection note:** `main` now has `enforce_admins=false`. Admins can
+merge past un-run/failing required checks — used deliberately for bot release/deps
+PRs whose CI doesn't auto-fire. Solo-appropriate; revisit if the team grows.
 
 ## Session log — 2026-06-19: v0.6.1 maintenance release + CI enabler
 
