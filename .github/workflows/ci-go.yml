@@ -41,6 +41,14 @@ on:
         description: Verify the Docker daemon is reachable before tests (testcontainers) — set false for apps with no container-backed tests
         type: boolean
         default: true
+      container:
+        description: "Container image to run the Go-compiling jobs in (empty = run directly on the runner). Apps whose build needs a custom image (cgo/system libs) set this. Linux-only — the macOS test leg always runs on the host."
+        type: string
+        default: ""
+      system-packages:
+        description: "Space-separated apt packages to install before the Go-compiling jobs (empty = none). For apps with cgo/system build deps on a debian-family runner or image."
+        type: string
+        default: ""
       coverage-threshold:
         description: Minimum coverage percentage (0 = skip check)
         type: number
@@ -98,8 +106,16 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -116,11 +132,19 @@ jobs:
   gosec:
     name: Security (gosec)
     runs-on: ubuntu-latest
+    container: ${{ inputs.container }}
     timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -143,8 +167,16 @@ jobs:
   vuln:
     name: Vulnerabilities (govulncheck)
     runs-on: ubuntu-latest
+    container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -163,6 +195,8 @@ jobs:
   test:
     name: Test (race + coverage)
     runs-on: ${{ matrix.os }}
+    # Container is Linux-only; the macOS portability leg always runs on the host.
+    container: ${{ matrix.os == 'ubuntu-latest' && inputs.container || '' }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -174,6 +208,13 @@ jobs:
             go: stable
             primary: true
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' && runner.os == 'Linux' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -218,8 +259,16 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
@@ -262,8 +311,16 @@ jobs:
     name: API compatibility (apidiff)
     if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
     runs-on: ubuntu-latest
+    container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
+      - name: Install system packages
+        if: ${{ inputs.system-packages != '' }}
+        shell: bash
+        run: |
+          SUDO=""; command -v sudo >/dev/null 2>&1 && SUDO=sudo
+          $SUDO apt-get update
+          $SUDO apt-get install -y --no-install-recommends ${{ inputs.system-packages }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           fetch-depth: 0

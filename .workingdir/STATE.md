@@ -1,7 +1,36 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-06-15 (v0.6.0 released + signed; release pipeline hardened).
+> Last update: 2026-06-19 (v0.6.1 maintenance release + signed; ci-go.yml container enabler).
+
+## Session log — 2026-06-19: v0.6.1 maintenance release + CI enabler
+
+**v0.6.1 released and signed** — maintenance/deps only, **no new features**
+(sockmap/tflite/grpc already shipped in v0.6.0). Bundles the post-v0.6.0
+dependency bumps (ogen 1.22, aws-sdk-go-v2 1.104, sentry-go 0.47, temporal
+1.45, go-oidc 3.19, testcontainers-go 0.43) + GitHub Actions → v7 (#290).
+release-please cut the tag (#283 — unblocked via close+reopen, since bot-PR CI
+doesn't auto-fire); `release.yml` dispatched manually for the signed build
+(15 assets: 6 archives + 6 SPDX SBOMs + cosign checksums). Still no
+`RELEASE_PLEASE_TOKEN` PAT → the close+reopen + manual-dispatch dance persists
+(see the 06-15 pending item).
+
+**#180 closed (won't-do):** SHA-pinning is already enforced repo-wide
+(`actions/permissions.sha_pinning_required: true`) — the real anti-hijack
+control. A `selected`-action allowlist is solo-over-hardening like #189/#190;
+revisit only if org membership grows.
+
+**#184 → PR #292 (ci-go.yml enabler):** added backward-compatible `container` +
+`system-packages` inputs so system-dep apps (cgo/libvips/ffmpeg) can adopt the
+reusable workflow. Per-app migration PRs follow in each app repo (0/6 adopt
+today). actionlint-clean.
+
+**CAUTION — do NOT re-investigate #266/#268/#27/#156:** these squash-merged on
+06-15 (db673ef sockmap, b65b72e tflite) and ARE in v0.6.0+. Their lingering
+`feat/issue-27` / `feat/issue-156` branches + stale PR API state can read as
+"open/DIRTY"; the features are on main. Verify with
+`git ls-tree v0.6.0 -- pkg/sockmap` before acting, not the PR list. (This turn
+burned effort re-merging already-merged work by trusting the PR list over git.)
 
 ## Session log — 2026-06-15: v0.6.0 release + release-pipeline hardening
 
