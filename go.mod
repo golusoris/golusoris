@@ -126,6 +126,7 @@ require (
 
 require (
 	aead.dev/minisign v0.3.0 // indirect
+	code.dny.dev/ssrf v0.2.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/ClickHouse/ch-go v0.72.0 // indirect
@@ -146,6 +147,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.31.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.6 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.3 // indirect
+	github.com/baruwa-enterprise/clamd v1.0.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
@@ -213,6 +215,12 @@ require (
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
+	github.com/golusoris/goenvoy/arr/sonarr v1.3.1-0.20260619181659-93863e575724 // indirect
+	github.com/golusoris/goenvoy/arr/v2 v2.1.0 // indirect
+	github.com/golusoris/goenvoy/metadata v1.3.0 // indirect
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619181659-93863e575724 // indirect
+	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1-0.20260619181659-93863e575724 // indirect
+	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619181659-93863e575724 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-tpm v0.9.8 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
@@ -306,6 +314,7 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
+	github.com/romsar/gonertia/v3 v3.0.0 // indirect
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
@@ -328,6 +337,7 @@ require (
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
+	github.com/tus/tusd/v2 v2.10.0 // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.34 // indirect
