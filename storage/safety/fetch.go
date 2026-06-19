@@ -57,6 +57,9 @@ func newFetcher(opts Options, logger *slog.Logger, clk clock.Clock) (Fetcher, er
 		ForceAttemptHTTP2:     true,
 	}
 	f.client = &http.Client{
+		// Client-level backstop in addition to the per-request context deadline
+		// in Fetch, so a slow peer can never hang a request past opts.Timeout.
+		Timeout:       f.opts.Timeout,
 		Transport:     transport,
 		CheckRedirect: f.checkRedirect,
 	}
