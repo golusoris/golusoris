@@ -433,6 +433,8 @@ github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1-0.20260619191131-e9e
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1-0.20260619191131-e9e2b8d889e0/go.mod h1:NB1afgaMIjGJRaIvMuOkJaRn2IbxuThHiFv6qnJNL1w=
 github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619181659-93863e575724 h1:2t7ApZXNbT2bUQNqse6XPylECgzFjS/K0089fqg9IJM=
 github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619181659-93863e575724/go.mod h1:8tYL0+2YjjgboR8+RzYVUDGJixgHHBHtVG1wwpqyQU4=
+github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619191131-e9e2b8d889e0 h1:+eTsarR/a+Z8V3h/JoDtZyEvk1CzGX9M5clzzD42VYg=
+github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1-0.20260619191131-e9e2b8d889e0/go.mod h1:8tYL0+2YjjgboR8+RzYVUDGJixgHHBHtVG1wwpqyQU4=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f h1:jopqB+UTSdJGEJT8tEqYyE29zN91fi2827oLET8tl7k=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f/go.mod h1:nOPhAkwVliJdNTkj3gXpljmWhjc4wCaVqbMJcPKWP4s=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
