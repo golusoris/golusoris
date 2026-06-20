@@ -1,7 +1,52 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-06-19 (built the 9 unbuilt catalog gap-modules — issue #99).
+> Last update: 2026-06-20 (built torrent/ — multi-backend torrent-client abstraction, §4.12).
+
+## Session log — 2026-06-20: torrent/ (§4.12)
+
+**Built `torrent/`** — a backend-agnostic `Client` over a running torrent
+daemon, selected by config like `storage/` selects local vs s3. One interface
+(`Add`/`AddFile`/`Remove`/`List`/`Get`/`Pause`/`Resume`/`Stats`) with a
+normalised `Torrent`/`State`/`Stats` view; unknown backend → `ErrUnsupportedBackend`.
+
+- **Backends**: `transmission` (default, hekmon/transmissionrpc/v3 v3.0.0 — auto
+  409 CSRF; returns hash on add), `qbittorrent` (autobrr/go-qbittorrent v1.16.0
+  — SID cookie login via fx `OnStart`, version-aware pause/stop), `rtorrent`
+  (autobrr/go-rtorrent v1.12.0 — XML-RPC, mutations resolve by hash). All MIT;
+  all take a timeout-bearing `*http.Client` from `Options.Timeout`.
+- **fx**: `torrent.Module` (`golusoris.torrent`) provides `torrent.Client`;
+  config under `torrent`; qBittorrent login on lifecycle `OnStart` (no `init()`).
+- **Tests**: real-API-shaped httptest servers — qBittorrent WebAPI v2
+  (cookie/version/CRUD), transmission JSON-RPC (409 handshake + tag echo),
+  rtorrent XML-RPC (per-field + `d.multicall2`). Table-driven, `-race`.
+- **Gate**: gofumpt clean, build/vet clean, golangci-lint 0, gosec 0,
+  `go test -race` green, **81.2%** coverage. Deliverables: package + tests +
+  `torrent/AGENTS.md` + ADR-0015.
+
+## Session log — 2026-06-20: media/img/pipeline (§4.12)
+
+**Built `media/img/pipeline/`** — on-demand image resize + HMAC signed-URL
+serving. Sub-package of the `media/img` module (added `require golusoris/golusoris`
++ `replace => ../..` like `media/audio`, plus fx).
+
+- **Signing**: self-contained token `base64url(payload)"."base64url(hmac-sha256)`
+  over a canonical `escape(key)|w|h|q|format|expiryUnix`; required `>=16`-byte
+  secret; constant-time verify (`hmac.Equal`); expiry via injected `clock.Clock`.
+- **Bounds**: max width/height/pixels + format allowlist validated before decode
+  (decompression-bomb guard, Power-of-10 rule 2).
+- **Handler**: chi-/mux-friendly `/img/{signed}` → 200/400(bad token)/403(bad
+  sig|expired)/404(missing source)/415(no libvips)/500. Correct `Content-Type` +
+  `Cache-Control`.
+- **fx**: `pipeline.Module` (`golusoris.media.img.pipeline`) provides `*Pipeline`
+  + a named `http.Handler`; config under `media.img.pipeline`; processor closed
+  on fx stop; no `init()`.
+- **CGO**: signing/validation/routing is CGO-independent (stock build returns 415
+  on resize since the parent `img.NewProcessor` ships stubbed). Real libvips
+  round-trip gated behind the `imgvips` build tag.
+- **Gate**: gofumpt clean, build/vet clean, golangci-lint 0, gosec 0,
+  `go test -race` green, **85.5%** coverage of the non-CGO logic. Deliverables:
+  package + tests + `pipeline/AGENTS.md` + ADR-0016.
 
 ## Session log — 2026-06-19 (cont.): catalog gap-modules built (#99)
 
