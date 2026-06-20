@@ -25,6 +25,15 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0005](0005-river-over-asynq-for-jobs.md) | river over asynq for background jobs | Accepted | jobs, db |
 | [ADR-0006](0006-pluggable-leader-election.md) | Pluggable leader election (k8s Lease + pg advisory) | Accepted | leader, runtime |
 | [ADR-0007](0007-rfc-9457-problem-details.md) | RFC 9457 Problem Details for HTTP error bodies | Accepted | http, api |
+| [ADR-0008](0008-upload-safety-strip-and-ssrf.md) | Upload hardening — strip-by-re-encode and SSRF via dialer Control | Accepted | storage, security, ssrf, uploads |
+| [ADR-0009](0009-gonertia-for-inertia-adapter.md) | gonertia/v3 for the Inertia.js server adapter | Accepted | http, frontend, inertia |
+| [ADR-0010](0010-goenvoy-multimodule-clients.md) | goenvoy multi-module clients wired onto the framework's resilient HTTP stack | Accepted | integrations, http, metadata, arr |
+| [ADR-0011](0011-clamd-upload-malware-scan.md) | baruwa-enterprise/clamd for upload malware scanning, fail-closed by default | Accepted | security, storage, supply-chain |
+| [ADR-0012](0012-tusd-handler-bucket-datastore.md) | storage/tus dependency choice | Accepted | storage, uploads, tus |
+| [ADR-0013](0013-pure-go-audio-decoders.md) | media/audio dependency choice | Accepted | media, audio |
+| [ADR-0014](0014-stdlib-html-template-sprout-seam.md) | htmltmpl dependency choice | Accepted | http, templating, security |
+| [ADR-0015](0015-torrent-client-backends.md) | torrent client abstraction and backend dependencies | Accepted | torrent, media, backends, dependencies |
+| [ADR-0016](0016-image-pipeline-signed-urls.md) | On-demand image pipeline gated by HMAC signed URLs | Accepted | media, img, http, security |
 
 ## Backfill policy
 

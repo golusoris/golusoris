@@ -145,6 +145,7 @@ golusoris/
 ├── media/
 │   ├── av/                  # FFmpeg probe + transcode (CGO sub-module)
 │   ├── img/                 # image resize + format (CGO sub-module)
+│   │   └── pipeline/        # on-demand resize + HMAC signed-URL serving
 │   ├── cv/                  # face/object detection + thumbnails (CGO sub-module)
 │   ├── audio/               # audio decode/encode/analyse
 │   ├── game/                # Ebitengine 2D game scaffold (own go.mod)
@@ -162,6 +163,7 @@ golusoris/
 ├── hash/                    # SHA-256, BLAKE3, xxhash-64, ETag helpers
 ├── fs/watch/                # recursive dir watch with debounce
 ├── httpx/rangeserve/        # HTTP range serving for video/large files
+├── torrent/                 # Client interface + rtorrent/qBittorrent/transmission backends
 │
 ├── search/                  # Indexer/Searcher interface + MemorySearcher
 ├── ai/

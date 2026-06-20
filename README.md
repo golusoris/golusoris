@@ -214,6 +214,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |
 | `media/img/` | image resize + convert + optimize (CGO sub-module) | davidbyttow/govips/v2 |
+| `media/img/pipeline/` | on-demand resize + HMAC signed-URL serving (chi handler) | stdlib crypto/hmac |
 | `media/cv/` | face detection, object detection, video thumbnails (CGO sub-module) | hybridgroup/gocv |
 | `media/audio/` | audio decode / encode / analyse | faiface/beep |
 | `ocr/` | text extraction from images + PDFs (CGO sub-module, own go.mod) | otiai10/gosseract |
