@@ -104,6 +104,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `httpx/autotls/` | autocert / Let's Encrypt or certmagic (pluggable) | x/crypto/acme + certmagic |
 | `httpx/geofence/` | IP / country allow-deny middleware | oschwald/maxminddb-golang |
 | `httpx/rangeserve/` | HTTP range-request serving for video / large files | stdlib |
+| `httpx/inertia/` | Inertia.js v2 server adapter (middleware + render) for chi | romsar/gonertia/v3 |
 | `ogenkit/` | ogen server adapter, RFC 9457 error mapper, middleware glue | ogen-go/ogen |
 | `apidocs/` | Scalar UI (`/docs`) + MCP-from-OpenAPI exposer (`/mcp`) | Scalar (JS, embedded) |
 
@@ -209,14 +210,14 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `storage/` | `Bucket` interface + local FS backend | custom |
 | `storage/presign/` | S3 direct-browser upload helpers | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
-| `storage/safety/` | EXIF strip + SSRF guards + path-traversal protection | custom |
-| `storage/scan/` | ClamAV malware scan for uploads | custom |
+| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection | code.dny.dev/ssrf + stdlib |
+| `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
 | `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |
 | `media/img/` | image resize + convert + optimize (CGO sub-module) | davidbyttow/govips/v2 |
 | `media/img/pipeline/` | on-demand resize + HMAC signed-URL serving (chi handler) | stdlib crypto/hmac |
 | `media/cv/` | face detection, object detection, video thumbnails (CGO sub-module) | hybridgroup/gocv |
-| `media/audio/` | audio decode / encode / analyse | faiface/beep |
+| `media/audio/` | audio decode + analyse — duration, waveform, LUFS loudness (own go.mod, pure-Go, no CGO) | go-mp3 + mewkiz/flac + oggvorbis + ebur128 |
 | `ocr/` | text extraction from images + PDFs (CGO sub-module, own go.mod) | otiai10/gosseract |
 | `pdf/` | HTML → PDF via headless Chrome | chromedp/chromedp |
 | `pdf/parse/` | PDF metadata + validation + merge + optimize (pure Go) | pdfcpu/pdfcpu |
@@ -224,10 +225,11 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `docs/docx/` | DOCX template substitution (body / header / footer) | nguyenthenguyen/docx |
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
-| `htmltmpl/` | type-safe HTML templates | a-h/templ |
+| `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + go-sprout |
 | `jsonschema/` | JSON Schema 2020-12 validation | santhosh-tekuri/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
+| `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |
 
 ### Search & AI
 
