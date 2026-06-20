@@ -433,6 +433,8 @@ github.com/golusoris/goenvoy/arr/v2 v2.1.0 h1:zUzG6zLH49JBII8zxAYUwoTa/a/nX7Qc8g
 github.com/golusoris/goenvoy/arr/v2 v2.1.0/go.mod h1:sLkd48dAGp87Z3hqeg6mcHBXHEU6mtzupet2Z2ar82I=
 github.com/golusoris/goenvoy/metadata v1.3.0 h1:zoGHMG45f31/tAWvisonc6HSOp8Uh/gpq1dzCbuWR3o=
 github.com/golusoris/goenvoy/metadata v1.3.0/go.mod h1:KtSq+BmeP+71uanbw8zLP7dW89pBm360LPhd0VmeJZY=
+github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=
+github.com/golusoris/goenvoy/metadata v1.3.1/go.mod h1:VDXGvMyayQDRBpacFqT9pZAHactFkqkHPFQLxgvu2Ao=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619181659-93863e575724 h1:xcheAK1hXfJeHx2jhLDm8HI6zjR92/x6E1+iPwd/4YI=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619181659-93863e575724/go.mod h1:HXAkcIGZWoixZQHU/tV8PwJJSC/agIs8WX1zDfz3cD8=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260619191131-e9e2b8d889e0 h1:4BPFqnEdmfQ3ggngrL9HSKdcDB8/gh7CIE+1DeBJ6ts=
