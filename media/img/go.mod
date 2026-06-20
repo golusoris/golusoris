@@ -3,7 +3,8 @@ module github.com/golusoris/golusoris/media/img
 go 1.26.4
 
 require (
-	github.com/golusoris/golusoris v0.0.0
+	github.com/davidbyttow/govips/v2 v2.18.0
+	github.com/golusoris/golusoris v0.7.0
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
 )
@@ -41,7 +42,10 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/image v0.38.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 )
 
 replace github.com/golusoris/golusoris => ../..
