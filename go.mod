@@ -6,7 +6,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.7
 	code.dny.dev/ssrf v0.2.0
 	filippo.io/csrf v0.2.1
-	github.com/99designs/gqlgen v0.17.91
+	github.com/99designs/gqlgen v0.17.92
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.46.0
 	github.com/Khan/genqlient v0.8.1
@@ -348,7 +348,7 @@ require (
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.13.1 // indirect
 	github.com/ulikunitz/xz v0.5.15 // indirect
-	github.com/vektah/gqlparser/v2 v2.5.34 // indirect
+	github.com/vektah/gqlparser/v2 v2.5.35 // indirect
 	github.com/vincent-petithory/dataurl v1.0.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
