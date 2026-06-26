@@ -6,7 +6,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.7
 	code.dny.dev/ssrf v0.2.0
 	filippo.io/csrf v0.2.1
-	github.com/99designs/gqlgen v0.17.92
+	github.com/99designs/gqlgen v0.17.93
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.46.0
 	github.com/Khan/genqlient v0.8.1
