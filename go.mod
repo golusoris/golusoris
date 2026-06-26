@@ -8,7 +8,7 @@ require (
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.93
 	github.com/CAFxX/httpcompression v0.0.9
-	github.com/ClickHouse/clickhouse-go/v2 v2.46.0
+	github.com/ClickHouse/clickhouse-go/v2 v2.47.0
 	github.com/Khan/genqlient v0.8.1
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/alexedwards/argon2id v1.0.0
@@ -143,7 +143,7 @@ require (
 	aead.dev/minisign v0.3.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/ClickHouse/ch-go v0.72.0 // indirect
+	github.com/ClickHouse/ch-go v0.73.0 // indirect
 	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/STARRY-S/zip v0.2.3 // indirect
@@ -272,8 +272,8 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/go-archive v0.2.0 // indirect
-	github.com/moby/moby/api v1.54.2 // indirect
-	github.com/moby/moby/client v0.4.1 // indirect
+	github.com/moby/moby/api v1.55.0 // indirect
+	github.com/moby/moby/client v0.5.0 // indirect
 	github.com/moby/patternmatcher v0.6.1 // indirect
 	github.com/moby/sys/sequential v0.7.0 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
