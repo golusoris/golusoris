@@ -75,7 +75,7 @@ require (
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ogen-go/ogen v1.22.0
-	github.com/oschwald/maxminddb-golang/v2 v2.4.0
+	github.com/oschwald/maxminddb-golang/v2 v2.4.1
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgvector/pgvector-go/pgx v0.4.0
 	github.com/pion/webrtc/v4 v4.2.16
