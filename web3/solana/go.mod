@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/gagliardetto/binary v0.8.0
-	github.com/gagliardetto/solana-go v1.21.0
+	github.com/gagliardetto/solana-go v1.22.0
 )
 
 require (
