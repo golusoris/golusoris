@@ -4,6 +4,6 @@
   "private": true,
   "version": "0.0.0",
   "dependencies": {
-    "@stoplight/spectral-cli": "6.16.0"
+    "@stoplight/spectral-cli": "6.16.1"
   }
 }
