@@ -83,9 +83,9 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 	github.com/redis/rueidis v1.0.76
-	github.com/riverqueue/river v0.39.0
-	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.39.0
-	github.com/riverqueue/river/rivertype v0.39.0
+	github.com/riverqueue/river v0.40.0
+	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.40.0
+	github.com/riverqueue/river/rivertype v0.40.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/romsar/gonertia/v3 v3.0.0
 	github.com/rs/cors v1.11.1
@@ -319,8 +319,8 @@ require (
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/riverqueue/apiframe v0.0.0-20260609005548-64f48e0e6228 // indirect
-	github.com/riverqueue/river/riverdriver v0.39.0 // indirect
-	github.com/riverqueue/river/rivershared v0.39.0 // indirect
+	github.com/riverqueue/river/riverdriver v0.40.0 // indirect
+	github.com/riverqueue/river/rivershared v0.40.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.15.0 // indirect
