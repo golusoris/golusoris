@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	charm.land/bubbletea/v2 v2.0.8
-	code.dny.dev/ssrf v0.2.0
+	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.93
 	github.com/CAFxX/httpcompression v0.0.9
