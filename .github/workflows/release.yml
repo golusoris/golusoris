@@ -46,7 +46,7 @@ jobs:
       id-token: write       # cosign keyless OIDC + SLSA
       attestations: write   # actions/attest-build-provenance
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
@@ -59,7 +59,7 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v2.6.3 # pin 2.x — cosign 3.x rejects the goreleaser signs --oidc-issuer arg
+          cosign-release: v2.6.4 # pin 2.x — cosign 3.x rejects the goreleaser signs --oidc-issuer arg
 
       - name: Install syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
