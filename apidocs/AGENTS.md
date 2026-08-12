@@ -38,3 +38,4 @@ server is extended.
 
 - Don't expose `/mcp` publicly without auth if the tools modify state. MCP tools are a remote-call surface — gate by the same middleware as the underlying API.
 - Don't ship apidocs without a `BaseURL` set — `tools/call` returns an MCP error result ("BaseURL is unset; tool calls disabled") until it's provided.
+- Don't create any bare `*http.Client` without a `Timeout`, and never use `http.DefaultClient` — all outbound HTTP must flow through the parent `httpx` / `extclient` package (which sets timeout, retry, circuit-breaker, and OTel).

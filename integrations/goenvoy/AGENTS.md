@@ -74,6 +74,10 @@ env loader splits on `_`, so to override a leaf from an env var declare it as a
 - `OnStop` calls `CloseIdleConnections()` on every built client. No `init()` —
   all construction is in fx constructors.
 
+## Don't
+
+- Don't create any bare `*http.Client` without a `Timeout`, and never use `http.DefaultClient` — all outbound HTTP must flow through the parent `httpx` / `extclient` package (which sets timeout, retry, circuit-breaker, and OTel).
+
 ## Version caveat (flag to maintainers)
 
 The per-service subpackages (`arr/sonarr`, `metadata/video/tmdb`,

@@ -57,3 +57,4 @@ body-limit truncation, Close, default-options path. No Docker required.
 - Don't assume label order from the model; always read `Prediction.Labels`
   (already sorted desc by score).
 - Don't call `Predict` before `Load` — it errors `Load not called`.
+- Don't create an inline `http.Client{}` (even with a default timeout) in production — prefer `extclient.New()` or wire the parent `httpx` transport so retry, circuit-breaker, and OTel are inherited. The zero-value fallback (`http.Client{Timeout: 30 * time.Second}`) exists only for tests and local dev.

@@ -1,0 +1,1 @@
+- Restored `Timeout` and `http.DefaultClient` Semgrep invariants: every new or modified `*http.Client` must set `Timeout`; using `http.DefaultClient` is prohibited. Anchored `.semgrep.yml` exclude patterns to prevent false-positive regressions from excluded test-harness generators (`apidocs`, `selfupdate`). All modules updated to comply; scan passes with zero findings.

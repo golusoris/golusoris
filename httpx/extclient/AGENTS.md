@@ -79,6 +79,7 @@ httpx.extclient.services.github.breaker.max     = 5
 
 - Don't cache mutating verbs — only `Get` consults the cache.
 - Don't pass a relative `BaseURL`; `New` rejects anything without scheme + host.
+- Don't create a bare `*http.Client` without setting `Timeout` or use `http.DefaultClient` — all outbound HTTP must flow through `extclient` (which sets timeout, retry, circuit-breaker, and OTel).
 - Don't reach for full OpenAPI codegen here — this package is the deliberately
   pragmatic path. If you truly need a generated typed client, that's a separate
   ogen pipeline.

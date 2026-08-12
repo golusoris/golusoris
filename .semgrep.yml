@@ -41,8 +41,8 @@ rules:
     paths:
       exclude:
         - "*_test.go"
-        - "apidocs/apidocs.go"
-        - "selfupdate/selfupdate.go"
+        - "**/apidocs/apidocs.go"
+        - "**/selfupdate/selfupdate.go"
     pattern: http.DefaultClient
 
   # ── No http.ListenAndServe / ListenAndServeTLS ──────────────────────────────

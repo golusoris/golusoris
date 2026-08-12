@@ -21,4 +21,5 @@ The HTTP stack. Opt-in via `golusoris.HTTP` (or individual modules).
 ## Don't
 
 - Don't read `r.Header.Get("X-Forwarded-For")` directly from app code. Use `middleware.TrustProxy` + `r.RemoteAddr`.
+- Don't create a `*http.Client` without setting `Timeout` — use `httpx/client` or explicitly set a timeout (default is 0 / no timeout, causing indefinite hangs). Never use `http.DefaultClient` for outbound requests (zero Timeout, shared state, no observability).
 - Don't write access logs from handlers — `middleware.Logger` emits one structured entry per request.
