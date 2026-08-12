@@ -1,7 +1,34 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-06-20 (built torrent/ — multi-backend torrent-client abstraction, §4.12).
+> Last update: 2026-07-04 (GOL-3: testcontainers integration coverage for pubsub/nats).
+
+## Session log — 2026-07-04: NATS integration tests (GOL-3)
+
+**Added testcontainers-backed integration tests** for `pubsub/nats`.
+
+- New `testutil/nats/` package: generic testcontainers helper that spins `nats:2-alpine`
+  with JetStream enabled (`-js`) and returns the server URL. Patterned on `testutil/redis/`.
+- `pubsub/nats/nats_test.go` expanded with three integration tests:
+  `TestIntegration_ConnectAndPing`, `TestIntegration_PublishSubscribe`,
+  `TestIntegration_JetStreamAvailable`.
+- Tests wire the module via `fxtest.New` + `config.New` (temp YAML) — same pattern as `storage/module_test.go`.
+- Changelog fragment: `changelog.d/added/GOL-3-testutil-nats.md`.
+
+## Session log — 2026-07-04: crypto/ coverage (GOL-4)
+
+**Lifted `crypto/` test coverage** toward the 85% security-critical target (§2.8).
+
+New tests in `crypto_test.go` (black-box):
+- `TestOpenErrShortCiphertextSentinel` — asserts `errors.Is(err, ErrShortCiphertext)` (SEI CERT ERR01-G).
+- `TestOpenTamperedCiphertext` — GCM auth-tag failure path (SEI CERT MSC00-G).
+- `TestVerifyPasswordNeedsRehash` — `needsRehash=true` branch when stored hash used weaker params.
+
+New tests in `hasher_internal_test.go` (white-box):
+- `TestHashSuccessPath` — blocking `Hash` success (slot available).
+- `TestNewPasswordHasherFromConfig` — fx provider defaults to GOMAXPROCS (SEI CERT ENV02-G).
+
+Changelog fragment: `changelog.d/added/test-crypto-coverage-85.md`.
 
 ## Session log — 2026-06-20: torrent/ (§4.12)
 

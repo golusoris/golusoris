@@ -26,5 +26,6 @@ All modules read their config from environment variables (prefix `APP_`) via koa
 - **[Architecture](architecture/README.md)** — C4 diagrams for the system.
 - **[Migration Guides](migrations/v0.1.x.md)** — per-release upgrade notes.
 - **[Upstream Snapshots](upstream/README.md)** — version-pinned API references for the framework's dependencies.
+- **[CI / Downstream Consumption](ci-downstream.md)** — how apps consume `tools/Makefile.shared` and the reusable GitHub Actions workflows.
 
 The source lives on [GitHub](https://github.com/golusoris/golusoris).

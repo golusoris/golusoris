@@ -131,6 +131,12 @@ func (c *Client) CommitOffsets(ctx context.Context) error {
 // Kgo returns the underlying kgo.Client for advanced use.
 func (c *Client) Kgo() *kgo.Client { return c.kc }
 
+// ClientFromKgo wraps an already-constructed *kgo.Client. Intended for tests
+// that need a Client without the full fx lifecycle (e.g. testutil/kafka).
+func ClientFromKgo(kc *kgo.Client) *Client {
+	return &Client{kc: kc, logger: slog.Default()}
+}
+
 // slogWriter adapts slog.Logger to the io.Writer kgo.BasicLogger expects.
 type slogWriter struct{ l *slog.Logger }
 

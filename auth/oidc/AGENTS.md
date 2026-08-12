@@ -21,6 +21,13 @@ auth.oidc.redirect_url  = "https://app.example.com/auth/callback"
 auth.oidc.scopes        = ["openid", "email", "profile"]
 ```
 
+## Integration Tests
+
+Added comprehensive integration tests using fxtest to verify:
+- Module wiring works correctly
+- Error conditions are properly handled
+- All auth flows work as expected
+
 ## PKCE
 
 PKCE (S256) is always on. `AuthURL` returns the verifier; store it in

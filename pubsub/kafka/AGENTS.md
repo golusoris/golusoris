@@ -44,6 +44,30 @@ for {
 kc := client.Kgo() // underlying *kgo.Client for transactions, admin API, etc.
 ```
 
+## Testing
+
+Integration tests live in `pubsub/kafka/integration_test.go` and require Docker
+(testutil/kafka contract). They use `testutil/kafka.Addr(t)` to spin a
+Redpanda container per test run.
+
+For tests that need a `*kafka.Client` without the full fx stack:
+
+```go
+import (
+    "github.com/twmb/franz-go/pkg/kgo"
+    "github.com/golusoris/golusoris/pubsub/kafka"
+    kafkatest "github.com/golusoris/golusoris/testutil/kafka"
+)
+
+func TestSomething(t *testing.T) {
+    addr := kafkatest.Addr(t)
+    kc, _ := kgo.NewClient(kgo.SeedBrokers(addr))
+    t.Cleanup(kc.Close)
+    client := kafka.ClientFromKgo(kc)
+    // ...
+}
+```
+
 ## Don't
 
 - Don't call `Poll` before `Subscribe` — it will block indefinitely.

@@ -53,6 +53,18 @@ for {
 }
 ```
 
+## Integration tests
+
+`nats_test.go` contains testcontainers-backed tests (require Docker):
+
+| Test | What it asserts |
+|---|---|
+| `TestIntegration_ConnectAndPing` | fx lifecycle connects; `Conn().IsConnected()` is true |
+| `TestIntegration_PublishSubscribe` | core pub/sub delivers a message end-to-end |
+| `TestIntegration_JetStreamAvailable` | `JetStream()` returns a non-nil context |
+
+Use `testutil/nats.Start(t)` in downstream tests to spin a fresh container.
+
 ## Don't
 
 - Don't use core `Publish` for work that must survive server restarts — use JetStream.

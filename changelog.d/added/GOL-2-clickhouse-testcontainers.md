@@ -1,0 +1,1 @@
+**db/clickhouse**: added testcontainers integration coverage — `testutil/clickhouse.Start(t)` boots a real ClickHouse container; `clickhouse.New(conn, log)` exposes a direct constructor; `clickhouse_test.go`, `internal_test.go`, and `example_test.go` cover `Exec`, `Query`, `Conn`, error wrapping, and internal field wiring.

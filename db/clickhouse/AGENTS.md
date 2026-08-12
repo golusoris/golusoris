@@ -39,6 +39,22 @@ _ = batch.Append(...)
 _ = batch.Send()
 ```
 
+## Testing
+
+Integration tests require Docker. Use `testutil/clickhouse.Start(t)` to boot a container:
+
+```go
+import chtestutil "github.com/golusoris/golusoris/testutil/clickhouse"
+
+func TestMyQuery(t *testing.T) {
+    conn := chtestutil.Start(t)               // boots clickhouse/clickhouse-server:24
+    db := clickhouse.New(conn, slog.Default()) // direct constructor (no fx needed)
+    // ... test against db ...
+}
+```
+
+`testcontainers.SkipIfProviderIsNotHealthy` skips cleanly when Docker is absent.
+
 ## Don't
 
 - Don't use this for transactional workloads — ClickHouse is append-optimised OLAP.

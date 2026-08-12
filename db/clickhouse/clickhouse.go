@@ -120,3 +120,9 @@ func (d *DB) Query(ctx context.Context, query string, args ...any) (chdriver.Row
 
 // Conn returns the underlying chgo.Conn for advanced use (batch inserts, etc.).
 func (d *DB) Conn() chgo.Conn { return d.conn }
+
+// New constructs a *DB from an already-opened chgo.Conn. Intended for tests and
+// advanced callers that manage the connection lifecycle themselves.
+func New(conn chgo.Conn, log *slog.Logger) *DB {
+	return &DB{conn: conn, logger: log}
+}
