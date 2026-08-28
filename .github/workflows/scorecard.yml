@@ -1,3 +1,9 @@
+# DISABLED on this Gitea instance: ossf/scorecard-action requires the GitHub
+# API and publishes to the OpenSSF results endpoint keyed on a GitHub
+# repository, so 'Scorecard analysis' fails on every run here. Left in place
+# rather than deleted so the intent survives if these repositories ever return
+# to GitHub; triggers reduced to manual only so it stops consuming the shared
+# self-hosted runner, which also builds the cluster's container images.
 # OSSF Scorecard — runs on the framework itself AND is callable as a
 # reusable workflow by downstream apps.
 #
@@ -12,19 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 on:
-  push:
-    branches: [main]
-  # Run on PRs targeting main so Scorecard reports a check-run and can gate
-  # supply-chain regressions in branch protection (#194). publish_results is
-  # disabled below for PRs — the OpenSSF API can't publish from a PR context.
-  pull_request:
-    branches: [main]
-  schedule:
-    - cron: '15 6 * * 1'   # weekly Monday 06:15 UTC
+  workflow_dispatch:
 
-  workflow_call:
-
-# Global permissions must be read-only for Scorecard publish_results to work.
 permissions:
   contents: read
 
