@@ -25,6 +25,21 @@
       "groupName": "github actions"
     },
     {
+      "description": "Keep Go module directives current through reviewed product-org pull requests.",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump",
+      "automerge": false
+    },
+    {
+      "description": "Permit direct remediation of the vulnerable transitive archive module.",
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["github.com/moby/go-archive"],
+      "enabled": true,
+      "automerge": false
+    },
+    {
       "description": "Major bumps are breaking — never auto-merge; leave for review.",
       "matchUpdateTypes": ["major"],
       "labels": ["dependencies", "breaking-change"],
