@@ -1,4 +1,5 @@
-# Framework release — triggers on v*.*.* tag push.
+# Framework release — triggers when the canonical Gitea v*.*.* tag is
+# forwarded to GitHub, with manual dispatch available for an idempotent retry.
 #
 # The framework ships Go library + two CLIs (no Docker image), so this
 # workflow runs goreleaser directly instead of calling the reusable
@@ -15,17 +16,7 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  # Auto-invoked by release-please.yml on release_created, passing the freshly
-  # cut tag. Bot-cut tags don't fire the push trigger above (GitHub doesn't run
-  # workflows for GITHUB_TOKEN-created tags), so release-please calls this
-  # workflow directly in the same run — no PAT, no manual dispatch needed.
-  workflow_call:
-    inputs:
-      tag:
-        description: 'Existing vX.Y.Z tag to build + sign the release for'
-        required: true
-        type: string
-  # Manual escape hatch: (re)build + sign an existing tag's artifacts on demand.
+  # Manual escape hatch: (re)build + sign an existing canonical tag's artifacts.
   workflow_dispatch:
     inputs:
       tag:
