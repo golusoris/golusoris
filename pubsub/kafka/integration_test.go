@@ -28,7 +28,7 @@ func newTestClient(t *testing.T, broker string, group string) *kafka.Client {
 			// New consumer groups have no committed offset; start from the
 			// earliest available record so tests that produce-then-consume
 			// don't miss messages due to the "latest" default.
-			kgo.ConsumeResetOffset(kgo.NewOffsetStart()),
+		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		)
 	}
 	kc, err := kgo.NewClient(opts...)
