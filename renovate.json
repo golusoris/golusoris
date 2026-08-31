@@ -35,6 +35,7 @@
     {
       "description": "Permit direct remediation of the vulnerable transitive archive module.",
       "matchManagers": ["gomod"],
+      "matchDepTypes": ["indirect"],
       "matchPackageNames": ["github.com/moby/go-archive"],
       "enabled": true,
       "automerge": false
