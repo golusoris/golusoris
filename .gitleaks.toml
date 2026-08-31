@@ -2,6 +2,7 @@
 # protocol example values that live in test fixtures (not real credentials):
 #   - dGhlIHNhbXBsZSBub25jZQ==  RFC 6455 "the sample nonce" WebSocket key
 #   - DGv6ra1nlYgDCS1FRnbzlw    Web Push test `auth` value
+#   - test-secret-0123456789abcdef  image-signing test fixture
 # Allowlisting by exact value (not by path) keeps every other high-entropy
 # string — including any real secret in a test file — still detected. Native
 # secret-scanning + push-protection remain the first line of defense.
@@ -13,4 +14,5 @@ description = "Protocol example values in tests — not real secrets"
 regexes = [
   '''dGhlIHNhbXBsZSBub25jZQ==''',
   '''DGv6ra1nlYgDCS1FRnbzlw''',
+  '''test-secret-0123456789abcdef''',
 ]

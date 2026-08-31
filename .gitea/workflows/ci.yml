@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitea-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: CI gate
+    runs-on: cauda-k8s-office-canary
+    container:
+      image: harbor.infra.cauda.dev/library/gitea-actions-job:2.335.1-cauda2-gitea1@sha256:fb84eb8ecbc7806e18d407a410f098fccc92b6726a7987baf64e98b7350fa0c6
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Check PR title
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+'
+
+      - name: Select the repository-declared Go toolchain
+        run: |
+          set -euo pipefail
+          declared_go=$(awk '$1 == "go" { print $2; exit }' go.mod)
+          test -n "$declared_go"
+          echo "GOTOOLCHAIN=go${declared_go}" >> "$GITHUB_ENV"
+          GOTOOLCHAIN="go${declared_go}" go version
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          restore-keys: ${{ runner.os }}-go-
+
+      - name: Verify modules
+        run: |
+          set -euo pipefail
+          go mod verify
+
+      - name: Lint
+        run: golangci-lint run --config=tools/golangci.yml --timeout=5m
+
+      - name: Security and vulnerability gates
+        run: |
+          set -euo pipefail
+          exclude_rules='testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;notify/tracking/.*:G710;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505'
+          gosec -quiet -exclude-generated --exclude-rules="$exclude_rules" ./...
+          govulncheck ./...
+          gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
+          semgrep scan --config .semgrep.yml --error --metrics=off --disable-version-check --oss-only
+
+      - name: Test with race detector and coverage
+        run: |
+          set -euo pipefail
+          docker info
+          go test -race -count=1 -timeout=10m -coverprofile=/tmp/coverage.out -covermode=atomic ./...
+          coverage=$(go tool cover -func=/tmp/coverage.out | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
+          echo "Coverage: ${coverage}%"
+          awk -v value="$coverage" 'BEGIN { exit !(value >= 70) }'
+
+      - name: Build and generated-document gates
+        run: |
+          set -euo pipefail
+          go build ./...
+          bash scripts/changelog/render.sh --check
+          if [ -f examples/full/openapi.yaml ]; then
+            npm ci --prefix tools/spectral --no-audit --no-fund
+            tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
+          fi
+
+      - name: API compatibility against the previous tag
+        run: |
+          set -euo pipefail
+          previous_tag=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          if [ -z "$previous_tag" ]; then
+            echo "No previous tag found; skipping apidiff for the first release."
+            exit 0
+          fi
+
+          go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
+          module=github.com/golusoris/golusoris
+          previous_worktree=$(mktemp -d /tmp/golusoris-apidiff.XXXXXX)
+          rmdir "$previous_worktree"
+          trap 'git worktree remove "$previous_worktree" --force >/dev/null 2>&1 || true' EXIT
+
+          apidiff -m -w /tmp/current-api.txt "$module"
+          git worktree add -q --detach "$previous_worktree" "$previous_tag"
+          (
+            cd "$previous_worktree"
+            go mod download
+            apidiff -m -w /tmp/previous-api.txt "$module"
+          )
+          apidiff /tmp/previous-api.txt /tmp/current-api.txt || true

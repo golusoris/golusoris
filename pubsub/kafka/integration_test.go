@@ -3,7 +3,6 @@ package kafka_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -21,14 +20,20 @@ import (
 func newTestClient(t *testing.T, broker string, group string) *kafka.Client {
 	t.Helper()
 
-	opts := []kgo.Opt{kgo.SeedBrokers(broker)}
+	opts := []kgo.Opt{
+		kgo.SeedBrokers(broker),
+		// Test topics are unique per subtest and intentionally created on first
+		// use; franz-go requires this client option in addition to the broker's
+		// auto-create setting.
+		kgo.AllowAutoTopicCreation(),
+	}
 	if group != "" {
 		opts = append(opts,
 			kgo.ConsumerGroup(group),
 			// New consumer groups have no committed offset; start from the
 			// earliest available record so tests that produce-then-consume
 			// don't miss messages due to the "latest" default.
-		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
+			kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		)
 	}
 	kc, err := kgo.NewClient(opts...)
@@ -48,7 +53,7 @@ func uniqueTopic(t *testing.T) string {
 	t.Helper()
 	// Replace characters invalid in Kafka topic names with dashes.
 	name := strings.NewReplacer("/", "-", " ", "-", "#", "").Replace(t.Name())
-	return fmt.Sprintf("t-%s", name)
+	return "t-" + name
 }
 
 func TestIntegration_ProduceAndPoll(t *testing.T) {
@@ -162,18 +167,21 @@ func TestIntegration_Poll_ShortTimeout(t *testing.T) {
 	_ = records
 }
 
-func TestIntegration_CommitOffsets_NoGroup(t *testing.T) {
+func TestCommitOffsets_NoGroup_ReturnsError(t *testing.T) {
 	t.Parallel()
-	addr := kafkatest.Addr(t)
 
-	// Without a consumer group, CommitOffsets is a no-op in franz-go;
-	// it must not return an error.
-	client := newTestClient(t, addr, "")
+	// franz-go rejects group-only operations when no consumer group is
+	// configured. Preserve that signal instead of silently hiding misuse.
+	client := newTestClient(t, "127.0.0.1:1", "")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := client.CommitOffsets(ctx); err != nil {
-		t.Fatalf("CommitOffsets without group: %v", err)
+	err := client.CommitOffsets(ctx)
+	if err == nil {
+		t.Fatal("CommitOffsets without group: expected error, got nil")
+	}
+	if errors.Unwrap(err) == nil {
+		t.Fatalf("CommitOffsets without group: expected wrapped error, got %v", err)
 	}
 }

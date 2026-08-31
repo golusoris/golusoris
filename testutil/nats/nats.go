@@ -33,7 +33,7 @@ const (
 // ("nats://host:port"). The container is terminated via t.Cleanup.
 func Start(t *testing.T) string {
 	t.Helper()
-	testcontainers.SkipIfProviderIsNotHealthy(t) //nolint:contextcheck // skip helper, no ctx
+	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()

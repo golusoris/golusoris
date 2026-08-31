@@ -286,6 +286,23 @@ and migration notes.
 
 ## [Unreleased]
 
+### Added
+
+Add testcontainers integration coverage for `pubsub/kafka` via `testutil/kafka`
+(Redpanda-backed); ships `integration_test.go`, `example_test.go`, and
+`kafka.ClientFromKgo` constructor for test-only wiring without the fx stack.
+
+**db/clickhouse**: added testcontainers integration coverage — `testutil/clickhouse.Start(t)` boots a real ClickHouse container; `clickhouse.New(conn, log)` exposes a direct constructor; `clickhouse_test.go`, `internal_test.go`, and `example_test.go` cover `Exec`, `Query`, `Conn`, error wrapping, and internal field wiring.
+
+- `testutil/nats`: new testcontainers helper that spins a real NATS server
+  (JetStream enabled) and returns its URL for integration tests.
+- `pubsub/nats`: added testcontainers integration tests covering connect/ping,
+  core publish/subscribe delivery, and JetStream availability via the fx
+  lifecycle (`TestIntegration_ConnectAndPing`, `TestIntegration_PublishSubscribe`,
+  `TestIntegration_JetStreamAvailable`).
+
+Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reusable CI workflows in downstream apps.
+
 ### Security
 
 - Added a custom `.semgrep.yml` ruleset of golusoris-specific SAST invariants
@@ -293,6 +310,10 @@ and migration notes.
   blocking `time.Sleep` in library code, deprecated `io/ioutil`) wired as an
   advisory CI lane and a local pre-commit hook. Promoted `gitleaks` secret
   scanning and `govulncheck` to pre-commit for shift-left supply-chain checks.
+
+Add comprehensive integration tests for OIDC and passkeys modules with fxtest to achieve 85% security-critical coverage, including proper error handling and module wiring verification.
+
+- Restored `Timeout` and `http.DefaultClient` Semgrep invariants: every new or modified `*http.Client` must set `Timeout`; using `http.DefaultClient` is prohibited. Anchored `.semgrep.yml` exclude patterns to prevent false-positive regressions from excluded test-harness generators (`apidocs`, `selfupdate`). All modules updated to comply; scan passes with zero findings.
 ## [0.1.0] — 2026-04-14
 
 First tagged release. Framework is usable via

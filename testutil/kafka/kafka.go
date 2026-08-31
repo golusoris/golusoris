@@ -15,18 +15,16 @@ package kafka
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
+	redpandacontainer "github.com/testcontainers/testcontainers-go/modules/redpanda"
 )
 
 const (
 	// redpandaImage is Kafka-API-compatible without ZooKeeper.
 	redpandaImage = "redpandadata/redpanda:v24.3.1"
-	kafkaPort     = "9092/tcp"
 	startTimeout  = 90 * time.Second
 )
 
@@ -39,25 +37,10 @@ func Addr(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	req := testcontainers.ContainerRequest{
-		Image: redpandaImage,
-		Cmd: []string{
-			"redpanda", "start",
-			"--mode", "dev-container",
-			"--smp", "1",
-			"--memory", "512M",
-			"--overprovisioned",
-			"--kafka-addr", "0.0.0.0:9092",
-			"--advertise-kafka-addr", "localhost:9092",
-		},
-		ExposedPorts: []string{kafkaPort},
-		WaitingFor:   wait.ForLog("Successfully started Redpanda!").WithStartupTimeout(startTimeout),
-	}
-
-	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
+	// The module renders Redpanda's advertised listener with Docker's mapped
+	// host port. A hand-written localhost:9092 advertisement breaks as soon as
+	// Docker assigns an ephemeral port (and races when tests run in parallel).
+	ctr, err := redpandacontainer.Run(ctx, redpandaImage, redpandacontainer.WithAutoCreateTopics())
 	if err != nil {
 		t.Fatalf("testutil/kafka: start container: %v", err)
 	}
@@ -67,14 +50,10 @@ func Addr(t *testing.T) string {
 		_ = ctr.Terminate(stopCtx)
 	})
 
-	host, err := ctr.Host(ctx)
+	broker, err := ctr.KafkaSeedBroker(ctx)
 	if err != nil {
-		t.Fatalf("testutil/kafka: get host: %v", err)
-	}
-	port, err := ctr.MappedPort(ctx, kafkaPort)
-	if err != nil {
-		t.Fatalf("testutil/kafka: get port: %v", err)
+		t.Fatalf("testutil/kafka: get seed broker: %v", err)
 	}
 
-	return fmt.Sprintf("%s:%s", host, port.Port())
+	return broker
 }

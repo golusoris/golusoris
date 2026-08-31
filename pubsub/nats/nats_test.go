@@ -50,6 +50,8 @@ func bootClient(t *testing.T, url string) *nats.Client {
 
 // TestIntegration_ConnectAndPing confirms the Module wires up and connects.
 func TestIntegration_ConnectAndPing(t *testing.T) {
+	t.Parallel()
+
 	url := natstestutil.Start(t)
 	c := bootClient(t, url)
 	if !c.Conn().IsConnected() {
@@ -59,6 +61,8 @@ func TestIntegration_ConnectAndPing(t *testing.T) {
 
 // TestIntegration_PublishSubscribe exercises core pub/sub delivery end-to-end.
 func TestIntegration_PublishSubscribe(t *testing.T) {
+	t.Parallel()
+
 	url := natstestutil.Start(t)
 	c := bootClient(t, url)
 
@@ -88,6 +92,8 @@ func TestIntegration_PublishSubscribe(t *testing.T) {
 
 // TestIntegration_JetStreamAvailable confirms the JetStream context is usable.
 func TestIntegration_JetStreamAvailable(t *testing.T) {
+	t.Parallel()
+
 	url := natstestutil.Start(t)
 	c := bootClient(t, url)
 	if c.JetStream() == nil {

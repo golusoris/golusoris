@@ -10,21 +10,21 @@ import (
 	"github.com/golusoris/golusoris/testutil/fxtest"
 )
 
-// TestOIDCModuleIntegration tests that the OIDC module can be properly wired with fxtest
+// TestOIDCModuleIntegration tests that the OIDC module can be properly wired with fxtest.
 func TestOIDCModuleIntegration(t *testing.T) {
 	t.Parallel()
-	
+
 	// Test that we can create a basic fx app with the OIDC module, which verifies:
 	// 1. Module construction works
 	// 2. Dependencies are correctly wired
 	fxtest.New(t, Module)
 }
 
-// TestOIDCProviderIntegration tests integration of the full OIDC flow as would be 
-// used in a real application - authURL generation, token exchange, and user info retrieval
+// TestOIDCProviderIntegration tests integration of the full OIDC flow as it is
+// used in a real application: auth URL generation, token exchange, and user info retrieval.
 func TestOIDCProviderIntegration(t *testing.T) {
 	t.Parallel()
-	
+
 	// Create a simple HTTP server to mock an OIDC provider for testing
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Mock all necessary endpoints to make the flow work
@@ -49,7 +49,7 @@ func TestOIDCProviderIntegration(t *testing.T) {
 		}
 	}))
 	defer server.Close()
-	
+
 	// Test that we can create a basic fx app with the OIDC module, which verifies:
 	// 1. Module construction works
 	// 2. Dependencies are correctly wired

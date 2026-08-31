@@ -1,0 +1,35 @@
+name: Security scan
+
+on:
+  schedule:
+    - cron: '15 7 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scheduled security gate
+    runs-on: cauda-k8s-office-canary
+    container:
+      image: harbor.infra.cauda.dev/library/gitea-actions-job:2.335.1-cauda2-gitea1@sha256:fb84eb8ecbc7806e18d407a410f098fccc92b6726a7987baf64e98b7350fa0c6
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: Select the repository-declared Go toolchain
+        run: |
+          set -euo pipefail
+          declared_go=$(awk '$1 == "go" { print $2; exit }' go.mod)
+          test -n "$declared_go"
+          echo "GOTOOLCHAIN=go${declared_go}" >> "$GITHUB_ENV"
+      - name: Scan
+        run: |
+          set -euo pipefail
+          exclude_rules='testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;notify/tracking/.*:G710;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505'
+          gosec -quiet -exclude-generated --exclude-rules="$exclude_rules" ./...
+          govulncheck ./...
+          gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
+          semgrep scan --config .semgrep.yml --error --metrics=off --disable-version-check --oss-only

@@ -97,6 +97,7 @@ require (
 	github.com/stripe/stripe-go/v86 v86.1.0
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
+	github.com/testcontainers/testcontainers-go/modules/redpanda v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.43.0
 	github.com/tsenart/vegeta/v12 v12.13.0
 	github.com/tus/tusd/v2 v2.10.0
