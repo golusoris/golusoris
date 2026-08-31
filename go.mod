@@ -15,9 +15,9 @@ require (
 	github.com/autobrr/go-qbittorrent v1.16.0
 	github.com/autobrr/go-rtorrent v1.12.0
 	github.com/aws/aws-sdk-go-v2 v1.42.1
-	github.com/aws/aws-sdk-go-v2/config v1.32.27
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.26
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.104.2
+	github.com/aws/aws-sdk-go-v2/config v1.32.28
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.27
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/benbjohnson/hashfs v0.2.2
@@ -34,7 +34,7 @@ require (
 	github.com/getkin/kin-openapi v0.140.0
 	github.com/getsentry/sentry-go v0.47.0
 	github.com/gkampitakis/go-snaps v0.5.23
-	github.com/go-chi/chi/v5 v5.3.0
+	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-faster/errors v0.7.1
 	github.com/go-logr/logr v1.4.3
 	github.com/go-playground/form/v4 v4.3.0
@@ -106,7 +106,7 @@ require (
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
 	github.com/uptrace/bun/extra/bundebug v1.2.18
 	github.com/wneessen/go-mail v0.8.0
-	github.com/xuri/excelize/v2 v2.10.1
+	github.com/xuri/excelize/v2 v2.11.0
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/blake3 v0.2.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
@@ -122,16 +122,16 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.20.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
-	go.temporal.io/sdk v1.45.0
+	go.temporal.io/sdk v1.46.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.53.0
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976
 	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
-	golang.org/x/sync v0.21.0
+	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.46.0
-	golang.org/x/text v0.38.0
+	golang.org/x/text v0.39.0
 	google.golang.org/grpc v1.82.0
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
@@ -159,10 +159,10 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.23 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.30 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.31 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.2.2 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.31.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.36.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sts v1.43.5 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.3.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.32.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.37.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
@@ -362,7 +362,7 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	go.temporal.io/api v1.62.14 // indirect
+	go.temporal.io/api v1.63.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
@@ -373,7 +373,7 @@ require (
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.46.0 // indirect
+	golang.org/x/tools v0.47.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
