@@ -30,7 +30,7 @@ env:
 jobs:
   semgrep:
     name: Semgrep analysis
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4

@@ -15,7 +15,7 @@ permissions:
 jobs:
   stale:
     name: Mark stale
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     permissions:
       issues: write

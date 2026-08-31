@@ -11,7 +11,7 @@ permissions:
 jobs:
   label:
     name: Label by path
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     permissions:
       contents: read

@@ -18,7 +18,7 @@ jobs:
   pr-title:
     name: PR title (Conventional Commits)
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
       - name: Check PR title
@@ -37,7 +37,7 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -55,7 +55,7 @@ jobs:
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     permissions:
       contents: read
@@ -82,7 +82,7 @@ jobs:
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -96,10 +96,8 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
-  # Matrix across OS (ubuntu + macos). The primary leg (ubuntu) owns the
-  # coverage gate + artifact upload; the macos leg is portability signal.
-  # Docker-requiring tests (testutil/pg) run on ubuntu only — macos runners have
-  # no Docker daemon, so testcontainers-backed packages skip there.
+  # The repository-scoped Linux ARC scale set owns coverage, artifacts, and
+  # Docker-backed integration tests without hosted-runner billing.
   # NOTE: no "prior Go minor" leg — go.mod requires the latest toolchain, so an
   # older Go refuses to build the module; the go: [stable] axis is kept solely
   # to preserve the required-check name "Test (race + coverage) (…, stable)".
@@ -110,11 +108,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [arc-cauda-golusoris-golusoris]
         go: [stable]
         include:
-          # Primary leg: ubuntu. Owns coverage gate + upload.
-          - os: ubuntu-latest
+          - os: arc-cauda-golusoris-golusoris
             go: stable
             primary: true
     steps:
@@ -123,7 +120,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      # Docker is preinstalled on ubuntu-latest runners — testutil/pg needs it.
+      # The ARC runner has a Docker sidecar for testcontainers-backed packages.
       - name: Verify Docker is reachable
         if: runner.os == 'Linux'
         run: docker info
@@ -163,7 +160,7 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -179,7 +176,7 @@ jobs:
   # openapi-spec input to wire spectral for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -204,7 +201,7 @@ jobs:
   # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
   apidiff:
     name: API compatibility (apidiff)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -250,7 +247,7 @@ jobs:
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     permissions:
       contents: read
@@ -271,7 +268,7 @@ jobs:
   # Scans the PR diff (and full history on push) for committed secrets.
   gitleaks:
     name: Secret scan (gitleaks)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -295,7 +292,7 @@ jobs:
   # blocking unrelated PRs. Promote to required once the ruleset has soaked.
   semgrep:
     name: Custom SAST (semgrep)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     continue-on-error: true
     steps:
@@ -319,7 +316,7 @@ jobs:
   changelog:
     name: Changelog fragments (render --check)
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     continue-on-error: true
     steps:
@@ -336,7 +333,7 @@ jobs:
     name: CI success
     if: always()
     needs: [lint, gosec, vuln, test, build]
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 2
     steps:
       - name: Verify all gating jobs passed

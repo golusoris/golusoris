@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   release-please:
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     permissions:
       contents: write

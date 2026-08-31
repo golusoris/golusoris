@@ -86,7 +86,7 @@ jobs:
   pr-title:
     name: PR title
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
       - name: Check PR title
@@ -105,7 +105,7 @@ jobs:
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
@@ -131,7 +131,7 @@ jobs:
   # ── Security scan (gosec) ─────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
     permissions:
@@ -166,7 +166,7 @@ jobs:
   # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
@@ -188,23 +188,20 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
-  # Matrix across OS (ubuntu + macos) and Go (go.mod version + prior minor).
-  # Only the primary leg (ubuntu + go.mod) gates coverage and uploads the
-  # artifact; the other legs are portability/forward-compat signal. Docker-
-  # requiring tests run on ubuntu only (macos runners have no Docker daemon).
+  # The repository-scoped Linux ARC scale set owns coverage, artifacts, and
+  # Docker-backed tests without hosted-runner billing.
   test:
     name: Test (race + coverage)
     runs-on: ${{ matrix.os }}
-    # Container is Linux-only; the macOS portability leg always runs on the host.
-    container: ${{ matrix.os == 'ubuntu-latest' && inputs.container || '' }}
+    container: ${{ matrix.os == 'arc-cauda-golusoris-golusoris' && inputs.container || '' }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [arc-cauda-golusoris-golusoris]
         go: [stable]
         include:
-          - os: ubuntu-latest
+          - os: arc-cauda-golusoris-golusoris
             go: stable
             primary: true
     steps:
@@ -258,7 +255,7 @@ jobs:
   # ── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
@@ -284,7 +281,7 @@ jobs:
   spectral:
     name: OpenAPI lint (spectral)
     if: ${{ inputs.openapi-spec != '' }}
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -310,7 +307,7 @@ jobs:
   apidiff:
     name: API compatibility (apidiff)
     if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
-    runs-on: ubuntu-latest
+    runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
     steps:
