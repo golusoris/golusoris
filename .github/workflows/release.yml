@@ -7,7 +7,7 @@
 #
 # Produces:
 #   - Multi-arch tarballs (+ zip on windows) for cmd/golusoris and cmd/golusoris-mcp
-#   - checksums.txt, checksums.txt.sig + .pem (cosign keyless)
+#   - checksums.txt + checksums.txt.sigstore.json (cosign keyless bundle)
 #   - SPDX SBOMs on the archives (syft)
 #   - SLSA-L3 provenance on all release artifacts (actions/attest-build-provenance)
 name: release
@@ -51,33 +51,41 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v2.6.3 # pin 2.x — cosign 3.x rejects the goreleaser signs --oidc-issuer arg
-
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610 # v0
-        with:
-          syft-version: v1.51.1
+      - name: Verify pre-baked release tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          for tool in cosign syft goreleaser; do command -v "$tool"; done
+          cosign version | grep -Eq 'GitVersion:[[:space:]]+v?3\.1\.3([[:space:]]|$)'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.51\.1([[:space:]]|$)'
+          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.0([[:space:]]|$)'
 
       - name: Run GoReleaser
-        id: goreleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
-        with:
-          distribution: goreleaser
-          version: v2.18.0
-          # On a dispatched rebuild of an already-cut tag, skip the before-hooks:
-          # the tag's immutable tree may carry a stale/broken hook (e.g. the
-          # pre-fix `go generate` eBPF clang compile). Binaries still build from
-          # the tag's committed Go source + go.sum — hooks are only orchestration.
-          args: >-
-            release --config=tools/.goreleaser.yml --clean
-            ${{ inputs.tag != '' && '--skip=before' || '' }}
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # On dispatch, force the tag goreleaser builds; empty on push (it uses the pushed tag).
           GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          args=(release --config=tools/.goreleaser.yml --clean)
+          # On a dispatched rebuild of an already-cut tag, skip the before-hooks:
+          # the tag's immutable tree may carry a stale/broken hook (e.g. the
+          # pre-fix `go generate` eBPF clang compile). Binaries still build from
+          # the tag's committed Go source + go.sum — hooks are only orchestration.
+          if [ -n "$DISPATCH_TAG" ]; then args+=(--skip=before); fi
+          goreleaser "${args[@]}"
+
+      - name: Verify the keyless checksum bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          cosign verify-blob \
+            --bundle dist/checksums.txt.sigstore.json \
+            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            dist/checksums.txt
 
       - name: Attest release archives
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4

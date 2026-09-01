@@ -146,8 +146,8 @@ this writing — check the workflow for the current pins):
 | Tool | Version pinned in `ci-go.yml` | Install locally |
 |---|---|---|
 | `golangci-lint` | `v2.12.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` |
-| `gosec` | `v2.25.0` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.25.0` |
-| `govulncheck` | latest | `go install golang.org/x/vuln/cmd/govulncheck@latest` |
+| `gosec` | `v2.27.1` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1` |
+| `govulncheck` | `v1.4.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.4.0` |
 | `mockery` | — | `go install github.com/vektra/mockery/v2@latest` |
 | `air` | — | `go install github.com/air-verse/air@latest` |
 
