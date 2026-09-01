@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/media/audio
 
-go 1.26.4
+go 1.26.7
 
 require (
 	github.com/CAFxX/httpcompression v0.0.9 // indirect

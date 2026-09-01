@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.26.4
+go 1.26.7
 
 require (
 	charm.land/bubbletea/v2 v2.0.8

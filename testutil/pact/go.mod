@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/testutil/pact
 
-go 1.26.2
+go 1.26.7
 
 require github.com/pact-foundation/pact-go/v2 v2.5.1
 

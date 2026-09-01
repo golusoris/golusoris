@@ -1,3 +1,3 @@
 module github.com/golusoris/golusoris/media/cv
 
-go 1.26.2
+go 1.26.7

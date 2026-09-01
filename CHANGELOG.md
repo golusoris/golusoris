@@ -305,6 +305,7 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 
 ### Security
 
+- Raised every Go module directive to 1.26.7 so builds include the standard-library fixes required by `govulncheck`, including GO-2026-6218, GO-2026-6090, GO-2026-5972, GO-2026-5856, and GO-2026-5026.
 - Added a custom `.semgrep.yml` ruleset of golusoris-specific SAST invariants
   (timeout-less `http.Client`, `http.DefaultClient`, `http.ListenAndServe`,
   blocking `time.Sleep` in library code, deprecated `io/ioutil`) wired as an
