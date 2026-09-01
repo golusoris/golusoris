@@ -85,7 +85,7 @@ jobs:
   # ── Conventional-commit PR title ──────────────────────────────────────────
   pr-title:
     name: PR title
-    if: github.event_name == 'pull_request'
+    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
@@ -105,6 +105,7 @@ jobs:
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -131,6 +132,7 @@ jobs:
   # ── Security scan (gosec) ─────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -166,6 +168,7 @@ jobs:
   # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -192,6 +195,7 @@ jobs:
   # Docker-backed tests without hosted-runner billing.
   test:
     name: Test (race + coverage)
+    if: github.actor != 'renovate[bot]'
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.os == 'arc-cauda-golusoris-golusoris' && inputs.container || '' }}
     timeout-minutes: 20
@@ -255,6 +259,7 @@ jobs:
   # ── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -280,7 +285,7 @@ jobs:
   # downstream apps can lint their own spec without vendoring tools/spectral.
   spectral:
     name: OpenAPI lint (spectral)
-    if: ${{ inputs.openapi-spec != '' }}
+    if: ${{ github.actor != 'renovate[bot]' && inputs.openapi-spec != '' }}
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -306,7 +311,7 @@ jobs:
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
     name: API compatibility (apidiff)
-    if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
+    if: ${{ github.actor != 'renovate[bot]' && !inputs.skip-apidiff && inputs.module-path != '' }}
     runs-on: arc-cauda-golusoris-golusoris
     container: ${{ inputs.container }}
     timeout-minutes: 10

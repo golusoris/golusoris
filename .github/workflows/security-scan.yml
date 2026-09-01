@@ -34,6 +34,7 @@ env:
 jobs:
   semgrep:
     name: Semgrep analysis
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 25
     steps:

@@ -16,7 +16,7 @@ jobs:
   # ── Conventional-commit PR title ────────────────────────────────────────────
   pr-title:
     name: PR title (Conventional Commits)
-    if: github.event_name == 'pull_request'
+    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
@@ -36,6 +36,7 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -54,6 +55,7 @@ jobs:
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     permissions:
@@ -81,6 +83,7 @@ jobs:
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -102,6 +105,7 @@ jobs:
   # to preserve the required-check name "Test (race + coverage) (…, stable)".
   test:
     name: Test (race + coverage)
+    if: github.actor != 'renovate[bot]'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -159,6 +163,7 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -175,6 +180,7 @@ jobs:
   # openapi-spec input to wire spectral for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -200,6 +206,7 @@ jobs:
   # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
   apidiff:
     name: API compatibility (apidiff)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -245,7 +252,7 @@ jobs:
   # high/critical advisories or copyleft (GPL/AGPL) licences entering the tree.
   dependency-review:
     name: Dependency review
-    if: github.event_name == 'pull_request'
+    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     permissions:
@@ -267,6 +274,7 @@ jobs:
   # Scans the PR diff (and full history on push) for committed secrets.
   gitleaks:
     name: Secret scan (gitleaks)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -291,6 +299,7 @@ jobs:
   # blocking unrelated PRs. Promote to required once the ruleset has soaked.
   semgrep:
     name: Custom SAST (semgrep)
+    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     continue-on-error: true
@@ -314,7 +323,7 @@ jobs:
   # locally to resync. See changelog.d/README.md.
   changelog:
     name: Changelog fragments (render --check)
-    if: github.event_name == 'pull_request'
+    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     continue-on-error: true
@@ -330,7 +339,7 @@ jobs:
   # its own required check.
   ci-success:
     name: CI success
-    if: always()
+    if: always() && github.actor != 'renovate[bot]'
     needs: [lint, gosec, vuln, test, build]
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 2
