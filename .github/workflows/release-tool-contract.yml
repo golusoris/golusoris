@@ -48,7 +48,7 @@ jobs:
           test -n "$RUNNER_TEMP"
           test -w "$RUNNER_TEMP"
           test -w "$RUNNER_TOOL_CACHE"
-          for tool in bash git curl tar gzip zip sha256sum gh go node docker cosign syft goreleaser; do
+          for tool in bash git curl tar gzip zip sha256sum gh go node docker cosign syft goreleaser gitleaks; do
             command -v "$tool"
           done
           gh --version
@@ -59,3 +59,4 @@ jobs:
           cosign version | grep -q 'GitVersion:.*v2.6.3'
           syft version | grep -q 'Version:.*1.51.1'
           goreleaser --version | grep -q 'GitVersion:.*2.18.0'
+          test "$(gitleaks version)" = "8.30.1"

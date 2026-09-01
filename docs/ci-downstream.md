@@ -106,7 +106,7 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 | `module-path` | *(empty)* | module path for the apidiff check, e.g. `github.com/myorg/myapp` |
 | `needs-docker` | `true` | verify Docker before tests; set `false` if no testcontainers |
 | `container` | *(empty)* | image to run the Go jobs in (cgo/system-lib builds) |
-| `system-packages` | *(empty)* | apt packages to install before the Go jobs |
+| `system-packages` | *(empty)* | Debian packages that the rootless ARC image must already contain |
 | `openapi-spec` | *(empty)* | path to an OpenAPI spec for spectral lint; empty = skip |
 | `skip-apidiff` | `false` | set `true` for a first release with no prior tag |
 
