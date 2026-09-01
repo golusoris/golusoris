@@ -96,16 +96,18 @@ jobs:
           fi
 
           go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
+          apidiff_bin="$(go env GOPATH)/bin/apidiff"
+          test -x "$apidiff_bin"
           module=github.com/golusoris/golusoris
           previous_worktree=$(mktemp -d /tmp/golusoris-apidiff.XXXXXX)
           rmdir "$previous_worktree"
           trap 'git worktree remove "$previous_worktree" --force >/dev/null 2>&1 || true' EXIT
 
-          apidiff -m -w /tmp/current-api.txt "$module"
+          "$apidiff_bin" -m -w /tmp/current-api.txt "$module"
           git worktree add -q --detach "$previous_worktree" "$previous_tag"
           (
             cd "$previous_worktree"
             go mod download
-            apidiff -m -w /tmp/previous-api.txt "$module"
+            "$apidiff_bin" -m -w /tmp/previous-api.txt "$module"
           )
-          apidiff /tmp/previous-api.txt /tmp/current-api.txt || true
+          "$apidiff_bin" /tmp/previous-api.txt /tmp/current-api.txt || true

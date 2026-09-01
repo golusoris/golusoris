@@ -1,7 +1,13 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-07-04 (GOL-3: testcontainers integration coverage for pubsub/nats).
+> Last update: 2026-09-01 (Gitea apidiff path contract).
+
+## Session log — 2026-09-01: Gitea apidiff path contract
+
+The Gitea CI gate now invokes the pinned `apidiff` binary from the exact
+`go env GOPATH` install path. This keeps the job rootless and independent of
+whether the job image places `GOPATH/bin` on `PATH`.
 
 ## Session log — 2026-07-04: NATS integration tests (GOL-3)
 
