@@ -36,6 +36,11 @@ jobs:
           version: v2.18.0
           install-only: true
 
+      - name: Install pinned Docker Buildx rootlessly
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+        with:
+          version: v0.36.1
+
       - name: Verify the release runtime contract
         shell: bash
         run: |
@@ -50,6 +55,7 @@ jobs:
           go version
           node --version
           docker --version
+          docker buildx version | grep -q 'v0.36.1'
           cosign version | grep -q 'GitVersion:.*v2.6.3'
           syft version | grep -q 'Version:.*1.51.1'
           goreleaser --version | grep -q 'GitVersion:.*2.18.0'
