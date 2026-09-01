@@ -70,7 +70,7 @@ jobs:
       - name: Test with race detector and coverage
         run: |
           set -euo pipefail
-          docker info
+          docker info || true
           go test -race -count=1 -timeout=10m -coverprofile=/tmp/coverage.out -covermode=atomic ./...
           coverage=$(go tool cover -func=/tmp/coverage.out | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
           echo "Coverage: ${coverage}%"
