@@ -1,7 +1,18 @@
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-09-01 (Gitea apidiff path contract).
+> Last update: 2026-09-02 (Gitea publisher main-only trigger fix).
+
+## Session log — 2026-09-02: Gitea publisher main-only trigger fix
+
+The Gitea-to-GitHub publisher now filters its `workflow_run` trigger to the
+`main` branch. Gitea 1.27.2 had been creating a publication run for every
+completed pull-request CI run; those runs shared `github-publication`
+concurrency and repeatedly cancelled the waiting, validated `main` publisher.
+The branch filter keeps the exact-head CI-to-publication gate while removing
+the pull-request cancellation storm. Live acceptance remains an exact
+Gitea-main CI success followed by a successful fast-forward of the same SHA to
+public GitHub.
 
 ## Session log — 2026-09-01: Gitea apidiff path contract
 
