@@ -21,7 +21,7 @@ jobs:
       image: harbor.infra.cauda.dev/library/gitea-actions-job:2.335.1-cauda3-gitea3@sha256:ca08d1bee54628ae8713133ae4bf2fe7f06a20a6db6ffd1d184f6ac63660297b
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
           echo "GOTOOLCHAIN=go${declared_go}" >> "$GITHUB_ENV"
           GOTOOLCHAIN="go${declared_go}" go version
 
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           path: |
             ~/.cache/go-build
