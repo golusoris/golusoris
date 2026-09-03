@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/media/game
 
-go 1.26.7
+go 1.27.1
 
 require github.com/hajimehoshi/ebiten/v2 v2.9.9
 

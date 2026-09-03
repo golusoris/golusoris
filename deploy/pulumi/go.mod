@@ -2,7 +2,7 @@
 // root go.mod. The framework's .go files never import this package.
 module github.com/golusoris/golusoris/deploy/pulumi
 
-go 1.26.7
+go 1.27.1
 
 require (
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.35.0

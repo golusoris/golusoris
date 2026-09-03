@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/hw/robotics
 
-go 1.26.7
+go 1.27.1
 
 require gobot.io/x/gobot/v2 v2.6.0
 
