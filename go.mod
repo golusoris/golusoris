@@ -109,6 +109,7 @@ require (
 	github.com/wneessen/go-mail v0.8.0
 	github.com/xuri/excelize/v2 v2.11.0
 	github.com/yuin/goldmark v1.8.2
+	github.com/yuin/goldmark/v2 v2.0.1
 	github.com/zeebo/blake3 v0.2.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.69.0
