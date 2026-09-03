@@ -12,7 +12,7 @@ require (
 	github.com/Khan/genqlient v0.8.1
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/alexedwards/argon2id v1.0.0
-	github.com/autobrr/go-qbittorrent v1.16.0
+	github.com/autobrr/go-qbittorrent v1.18.0
 	github.com/autobrr/go-rtorrent v1.12.0
 	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.28
