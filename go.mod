@@ -63,7 +63,7 @@ require (
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/v2 v2.3.5
 	github.com/leanovate/gopter v0.2.11
-	github.com/lmittmann/tint v1.1.3
+	github.com/lmittmann/tint v1.2.0
 	github.com/mattn/go-isatty v0.0.22
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
