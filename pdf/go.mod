@@ -4,7 +4,7 @@ go 1.26.7
 
 require (
 	github.com/chromedp/cdproto v0.0.0-20260804232424-e85f50dbfd32
-	github.com/chromedp/chromedp v0.15.1
+	github.com/chromedp/chromedp v0.16.0
 	github.com/pdfcpu/pdfcpu v0.13.0
 )
 
@@ -22,7 +22,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/image v0.42.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
