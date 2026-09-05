@@ -2,7 +2,7 @@ module github.com/golusoris/golusoris/media/game
 
 go 1.26.7
 
-require github.com/hajimehoshi/ebiten/v2 v2.9.9
+require github.com/hajimehoshi/ebiten/v2 v2.9.11
 
 require (
 	github.com/ebitengine/gomobile v0.0.0-20260211053922-3d992dae95d1 // indirect
