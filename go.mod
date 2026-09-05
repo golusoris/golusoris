@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris
 go 1.26.7
 
 require (
-	charm.land/bubbletea/v2 v2.0.8
+	charm.land/bubbletea/v2 v2.0.9
 	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.93
