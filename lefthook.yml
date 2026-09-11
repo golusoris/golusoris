@@ -1,0 +1,25 @@
+# Lefthook Configuration (Go 1.27+ & HISS-16 Governance)
+pre-commit:
+  parallel: true
+  commands:
+    gofmt:
+      glob: "*.go"
+      run: gofmt -w {staged_files}
+      stage_fixed: true
+    govet:
+      glob: "*.go"
+      run: go vet ./...
+    context-check:
+      run: which praetorctl >/dev/null 2>&1 && praetorctl compile-context --verify || ([ -d "./cmd/standardsctl" ] && go run ./cmd/standardsctl compile-context --verify || true)
+    hiss-audit:
+      run: which praetorctl >/dev/null 2>&1 && praetorctl audit || ([ -d "./cmd/standardsctl" ] && go run ./cmd/standardsctl audit || true)
+    block-evasion:
+      run: python3 .config/agent/hooks/block_evasion.py
+
+pre-push:
+  parallel: false
+  commands:
+    audit:
+      run: which praetorctl >/dev/null 2>&1 && praetorctl audit || ([ -d "./cmd/standardsctl" ] && go run ./cmd/standardsctl audit || true)
+    gate:
+      run: which praetorctl >/dev/null 2>&1 && praetorctl gate run --path=. || ([ -d "./cmd/standardsctl" ] && go run ./cmd/standardsctl gate run --path=. || true)

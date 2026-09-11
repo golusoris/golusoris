@@ -1,0 +1,1282 @@
+version: 1
+repository: github.com/golusoris/golusoris
+language: go
+languages:
+    - go
+go_version: 1.26.7
+framework: github.com/golusoris/golusoris
+builder_kits:
+    - golusoris/golusoris
+    - golusoris/goenvoy
+capabilities:
+    required: []
+dependencies:
+    - package: charm.land/bubbletea/v2
+      version: v2.0.9
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: code.dny.dev/ssrf
+      version: v0.3.0
+      capability: custom.ssrf
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: filippo.io/csrf
+      version: v0.2.1
+      capability: custom.csrf
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: filippo.io/csrf/gorilla
+      capability: custom.gorilla
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen
+      version: v0.17.95
+      capability: custom.gqlgen
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql
+      capability: custom.graphql
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql/handler
+      capability: custom.handler
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql/handler/extension
+      capability: custom.extension
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql/handler/lru
+      capability: custom.lru
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql/handler/transport
+      capability: custom.transport
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/99designs/gqlgen/graphql/playground
+      capability: custom.playground
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/CAFxX/httpcompression
+      version: v0.0.9
+      capability: custom.httpcompression
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ClickHouse/clickhouse-go/v2
+      version: v2.48.0
+      capability: db.clickhouse
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/clickhouse
+      notes: High-performance analytical column-store database
+    - package: github.com/ClickHouse/clickhouse-go/v2/lib/driver
+      capability: db.clickhouse
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/clickhouse
+      notes: High-performance analytical column-store database
+    - package: github.com/Khan/genqlient
+      version: v0.8.1
+      capability: custom.genqlient
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/Khan/genqlient/graphql
+      capability: custom.graphql
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/SherClockHolmes/webpush-go
+      version: v1.4.0
+      capability: custom.webpush-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/alexedwards/argon2id
+      version: v1.0.0
+      capability: custom.argon2id
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/asticode/go-astiav
+      capability: custom.go-astiav
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/autobrr/go-qbittorrent
+      version: v1.18.0
+      capability: custom.go-qbittorrent
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/autobrr/go-rtorrent
+      version: v1.12.0
+      capability: custom.go-rtorrent
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2
+      version: v1.47.0
+      capability: custom.aws-sdk-go-v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2/aws
+      capability: custom.aws
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2/config
+      version: v1.33.4
+      capability: custom.config
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2/credentials
+      version: v1.20.4
+      capability: custom.credentials
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2/service/s3
+      version: v1.113.0
+      capability: custom.s3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/aws-sdk-go-v2/service/s3/types
+      capability: custom.types
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/aws/smithy-go
+      version: v1.28.1
+      capability: custom.smithy-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/baruwa-enterprise/clamd
+      version: v1.0.1
+      capability: custom.clamd
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/benbjohnson/hashfs
+      version: v0.2.2
+      capability: custom.hashfs
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/biogo/biogo/alphabet
+      capability: custom.alphabet
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/biogo/biogo/seq/linear
+      capability: custom.linear
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/bmaupin/go-epub
+      version: v1.1.0
+      capability: custom.go-epub
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/brianvoe/gofakeit/v7
+      version: v7.17.0
+      capability: custom.v7
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/caddyserver/certmagic
+      version: v0.25.4
+      capability: custom.certmagic
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/casbin/casbin/v3
+      version: v3.11.0
+      capability: custom.v3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/casbin/casbin/v3/model
+      capability: custom.model
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/casbin/casbin/v3/persist
+      capability: custom.persist
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/casbin/casbin/v3/persist/file-adapter
+      capability: custom.file-adapter
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/cespare/xxhash/v2
+      version: v2.3.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/chromedp/cdproto/page
+      capability: custom.page
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/chromedp/chromedp
+      capability: custom.chromedp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/cilium/ebpf
+      version: v0.22.0
+      capability: kernel.ebpf
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/ebpf
+      notes: Kernel tracing and XDP/TC networking hooks
+    - package: github.com/cilium/ebpf/link
+      capability: kernel.ebpf
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/ebpf
+      notes: Kernel tracing and XDP/TC networking hooks
+    - package: github.com/coder/websocket
+      version: v1.8.15
+      capability: custom.websocket
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/coreos/go-oidc/v3
+      version: v3.21.0
+      capability: auth.oidc
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/auth/oidc
+      notes: OpenID Connect verification and claims extraction
+    - package: github.com/coreos/go-oidc/v3/oidc
+      capability: auth.oidc
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/auth/oidc
+      notes: OpenID Connect verification and claims extraction
+    - package: github.com/davidbyttow/govips/v2/vips
+      capability: custom.vips
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/emersion/go-smtp
+      version: v0.25.0
+      capability: custom.go-smtp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ethereum/go-ethereum/common
+      capability: custom.common
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ethereum/go-ethereum/crypto
+      capability: custom.crypto
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ethereum/go-ethereum/ethclient
+      capability: custom.ethclient
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/exaring/ebur128
+      capability: custom.ebur128
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/fsnotify/fsnotify
+      version: v1.10.1
+      capability: custom.fsnotify
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/g3n/engine/app
+      capability: custom.app
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/g3n/engine/core
+      capability: custom.core
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/g3n/engine/renderer
+      capability: custom.renderer
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/gagliardetto/binary
+      capability: custom.binary
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/gagliardetto/solana-go
+      capability: custom.solana-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/gagliardetto/solana-go/rpc
+      capability: custom.rpc
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/getkin/kin-openapi
+      version: v0.149.0
+      capability: http.openapi
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/apidocs
+      notes: OpenAPI 3.0 validation and specification parser
+    - package: github.com/getkin/kin-openapi/openapi3
+      capability: http.openapi
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/apidocs
+      notes: OpenAPI 3.0 validation and specification parser
+    - package: github.com/getsentry/sentry-go
+      version: v0.49.0
+      capability: custom.sentry-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/gkampitakis/go-snaps
+      version: v0.5.23
+      capability: custom.go-snaps
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/gkampitakis/go-snaps/snaps
+      capability: custom.snaps
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-audio/aiff
+      capability: custom.aiff
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-audio/audio
+      capability: custom.audio
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-audio/wav
+      capability: custom.wav
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-chi/chi/v5
+      version: v5.3.2
+      capability: http.router
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/httpx
+      notes: Composable net/http middleware and router
+    - package: github.com/go-faster/errors
+      version: v0.8.0
+      capability: custom.errors
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-logr/logr
+      version: v1.4.4
+      capability: custom.logr
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-playground/form/v4
+      version: v4.3.1
+      capability: custom.v4
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-playground/validator/v10
+      version: v10.30.4
+      capability: custom.v10
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-viper/mapstructure/v2
+      version: v2.5.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-webauthn/webauthn
+      version: v0.18.1
+      capability: custom.webauthn
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-webauthn/webauthn/protocol
+      capability: custom.protocol
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/go-webauthn/webauthn/webauthn
+      capability: custom.webauthn
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golang-jwt/jwt/v5
+      version: v5.3.1
+      capability: auth.jwt
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/auth/jwt
+      notes: Secure HMAC/RSA/Ed25519 token issuance and verification
+    - package: github.com/golang-migrate/migrate/v4
+      version: v4.20.1
+      capability: custom.v4
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golang-migrate/migrate/v4/database/pgx/v5
+      capability: custom.v5
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golang-migrate/migrate/v4/source/iofs
+      capability: custom.iofs
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/arr/sonarr
+      version: v1.3.1
+      capability: custom.sonarr
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/arr/v2
+      version: v2.1.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/metadata
+      version: v1.3.1
+      capability: custom.metadata
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/metadata/anime/anilist
+      version: v1.3.1-0.20260619191131-e9e2b8d889e0
+      capability: custom.anilist
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/metadata/tracking/trakt
+      version: v1.3.1
+      capability: custom.trakt
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/golusoris/goenvoy/metadata/video/tmdb
+      version: v1.3.1
+      capability: custom.tmdb
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/google/uuid
+      version: v1.6.0
+      capability: id.uuid
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/id
+      notes: V4 and V7 UUID generation
+    - package: github.com/grafana/pyroscope-go
+      version: v1.4.2
+      capability: custom.pyroscope-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/grpc-ecosystem/go-grpc-middleware/v2
+      version: v2.3.4
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging
+      capability: custom.logging
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery
+      capability: custom.recovery
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/hajimehoshi/ebiten/v2
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/hajimehoshi/go-mp3
+      capability: custom.go-mp3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/hashicorp/go-retryablehttp
+      version: v0.7.8
+      capability: custom.go-retryablehttp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/hekmon/transmissionrpc/v3
+      version: v3.0.0
+      capability: custom.v3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/jackc/pglogrepl
+      version: v0.0.0-20260824121319-4ae5c490f7ce
+      capability: custom.pglogrepl
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/jackc/pgx/v5
+      version: v5.11.0
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jackc/pgx/v5/multitracer
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jackc/pgx/v5/pgconn
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jackc/pgx/v5/pgproto3
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jackc/pgx/v5/pgxpool
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jackc/pgx/v5/stdlib
+      capability: db.postgres
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: Direct PostgreSQL driver and pool integration
+    - package: github.com/jfreymuth/oggvorbis
+      capability: custom.oggvorbis
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/jochenvg/go-udev
+      capability: custom.go-udev
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/jonboulle/clockwork
+      version: v0.5.0
+      capability: custom.clockwork
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/knadh/koanf/parsers/json
+      version: v1.0.1
+      capability: custom.json
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/knadh/koanf/parsers/yaml
+      version: v1.1.0
+      capability: custom.yaml
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/knadh/koanf/providers/env/v2
+      version: v2.0.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/knadh/koanf/providers/file
+      version: v1.2.1
+      capability: custom.file
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/knadh/koanf/v2
+      version: v2.3.5
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/leanovate/gopter
+      version: v0.2.11
+      capability: custom.gopter
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/lmittmann/tint
+      version: v1.1.3
+      capability: custom.tint
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/mattn/go-isatty
+      version: v0.0.24
+      capability: custom.go-isatty
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/maypok86/otter/v2
+      version: v2.3.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/mewkiz/flac
+      capability: custom.flac
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/mewkiz/flac/frame
+      capability: custom.frame
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/mholt/archives
+      version: v0.1.5
+      capability: custom.archives
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/miekg/dns
+      version: v1.1.72
+      capability: custom.dns
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/minio/selfupdate
+      version: v0.6.0
+      capability: custom.selfupdate
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/modelcontextprotocol/go-sdk
+      version: v1.6.1
+      capability: mcp.server
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/mcp
+      notes: Official MCP Go SDK wrapped in Golusoris mcp module
+    - package: github.com/modelcontextprotocol/go-sdk/mcp
+      capability: mcp.server
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/mcp
+      notes: Official MCP Go SDK wrapped in Golusoris mcp module
+    - package: github.com/nats-io/nats.go
+      version: v1.52.0
+      capability: pubsub.nats
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/pubsub/nats
+      notes: NATS Core and JetStream messaging client
+    - package: github.com/nats-io/nats.go/jetstream
+      capability: pubsub.nats
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/pubsub/nats
+      notes: NATS Core and JetStream messaging client
+    - package: github.com/nbutton23/zxcvbn-go
+      version: v0.0.0-20210217022336-fa2cb2858354
+      capability: custom.zxcvbn-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/nguyenthenguyen/docx
+      version: v0.0.0-20230621112118-9c8e795a11db
+      capability: custom.docx
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/nicksnyder/go-i18n/v2
+      version: v2.6.1
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/nicksnyder/go-i18n/v2/i18n
+      capability: custom.i18n
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ogen-go/ogen
+      version: v1.22.0
+      capability: custom.ogen
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ogen-go/ogen/middleware
+      capability: custom.middleware
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ogen-go/ogen/ogenerrors
+      capability: custom.ogenerrors
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/oschwald/maxminddb-golang/v2
+      version: v2.4.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/otiai10/gosseract/v2
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pact-foundation/pact-go/v2/consumer
+      capability: custom.consumer
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pact-foundation/pact-go/v2/provider
+      capability: custom.provider
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pdfcpu/pdfcpu/pkg/api
+      capability: custom.api
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pdfcpu/pdfcpu/pkg/pdfcpu
+      capability: custom.pdfcpu
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model
+      capability: custom.model
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pgvector/pgvector-go
+      version: v0.4.0
+      capability: custom.pgvector-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pgvector/pgvector-go/pgx
+      version: v0.4.0
+      capability: custom.pgx
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pion/webrtc/v4
+      version: v4.2.15
+      capability: custom.v4
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pquerna/otp
+      version: v1.5.0
+      capability: custom.otp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pquerna/otp/totp
+      capability: custom.totp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/prometheus/client_golang
+      version: v1.23.2
+      capability: telemetry.prometheus
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/observability
+      notes: Prometheus metrics collector and scraping handler
+    - package: github.com/prometheus/client_golang/prometheus
+      capability: telemetry.prometheus
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/observability
+      notes: Prometheus metrics collector and scraping handler
+    - package: github.com/prometheus/client_golang/prometheus/promhttp
+      capability: telemetry.prometheus
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/observability
+      notes: Prometheus metrics collector and scraping handler
+    - package: github.com/prometheus/client_model
+      version: v0.6.2
+      capability: custom.client_model
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws
+      capability: custom.aws
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/cloudwatch
+      capability: custom.cloudwatch
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2
+      capability: custom.ec2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs
+      capability: custom.ecs
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/elasticache
+      capability: custom.elasticache
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam
+      capability: custom.iam
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb
+      capability: custom.lb
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds
+      capability: custom.rds
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/route53
+      capability: custom.route53
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager
+      capability: custom.secretsmanager
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi/sdk/v3/go/pulumi
+      capability: custom.pulumi
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/pulumi/pulumi/sdk/v3/go/pulumi/config
+      capability: custom.config
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/redis/rueidis
+      version: v1.0.76
+      capability: cache.redis
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/cache/redis
+      notes: Fast auto-pipelining Redis client
+    - package: github.com/riverqueue/river
+      version: v0.39.0
+      capability: jobs.queue
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/jobs
+      notes: Native River queue engine wrapped in Golusoris
+    - package: github.com/riverqueue/river/riverdriver/riverpgxv5
+      version: v0.39.0
+      capability: jobs.queue
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/jobs
+      notes: Native River queue engine wrapped in Golusoris
+    - package: github.com/riverqueue/river/rivermigrate
+      capability: jobs.queue
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/jobs
+      notes: Native River queue engine wrapped in Golusoris
+    - package: github.com/riverqueue/river/rivertype
+      version: v0.39.0
+      capability: jobs.queue
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/jobs
+      notes: Native River queue engine wrapped in Golusoris
+    - package: github.com/robfig/cron/v3
+      version: v3.0.1
+      capability: jobs.cron
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/jobs/cron
+      notes: Scheduled recurring task manager
+    - package: github.com/romsar/gonertia/v3
+      version: v3.0.0
+      capability: custom.v3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/rs/cors
+      version: v1.11.1
+      capability: custom.cors
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/santhosh-tekuri/jsonschema/v6
+      version: v6.0.3
+      capability: custom.v6
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/segmentio/ksuid
+      version: v1.0.4
+      capability: custom.ksuid
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/sony/gobreaker/v2
+      version: v2.4.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/spf13/cobra
+      version: v1.10.2
+      capability: clikit.cobra
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/clikit
+      notes: Command line interface framework with flags
+    - package: github.com/stretchr/testify
+      version: v1.12.1
+      capability: test.assert
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/testutil
+      notes: Testify assertions and mocks mapped to Golusoris testutil
+    - package: github.com/stripe/stripe-go/v86
+      version: v86.0.0
+      capability: custom.v86
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/testcontainers/testcontainers-go
+      version: v0.43.0
+      capability: custom.testcontainers-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/testcontainers/testcontainers-go/modules/postgres
+      version: v0.43.0
+      capability: custom.postgres
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/testcontainers/testcontainers-go/modules/redis
+      version: v0.43.0
+      capability: custom.redis
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/tsenart/vegeta/v12
+      version: v12.13.0
+      capability: custom.v12
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/tsenart/vegeta/v12/lib
+      capability: custom.lib
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/tus/tusd/v2
+      version: v2.10.0
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/tus/tusd/v2/pkg/handler
+      capability: custom.handler
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/tus/tusd/v2/pkg/memorylocker
+      capability: custom.memorylocker
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/twmb/franz-go
+      version: v1.21.3
+      capability: custom.franz-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/twmb/franz-go/pkg/kgo
+      capability: custom.kgo
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ulule/limiter/v3
+      version: v3.11.2
+      capability: custom.v3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/ulule/limiter/v3/drivers/store/memory
+      capability: custom.memory
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/uptrace/bun
+      version: v1.2.18
+      capability: db.orm
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/bun
+      notes: Idiomatic Go SQL-first query builder
+    - package: github.com/uptrace/bun/dialect/pgdialect
+      version: v1.2.18
+      capability: db.orm
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/bun
+      notes: Idiomatic Go SQL-first query builder
+    - package: github.com/uptrace/bun/extra/bundebug
+      version: v1.2.18
+      capability: db.orm
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/db/bun
+      notes: Idiomatic Go SQL-first query builder
+    - package: github.com/wneessen/go-mail
+      version: v0.7.3
+      capability: custom.go-mail
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/xuri/excelize/v2
+      version: v2.10.1
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/yuin/goldmark
+      version: v1.8.2
+      capability: custom.goldmark
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/yuin/goldmark/extension
+      capability: custom.extension
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/yuin/goldmark/parser
+      capability: custom.parser
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/yuin/goldmark/renderer/html
+      capability: custom.html
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: github.com/zeebo/blake3
+      version: v0.2.4
+      capability: custom.blake3
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.opentelemetry.io/contrib/bridges/otelslog
+      version: v0.19.0
+      capability: custom.otelslog
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
+      version: v0.70.0
+      capability: custom.otelgrpc
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
+      version: v0.70.0
+      capability: custom.otelhttp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.opentelemetry.io/otel
+      version: v1.45.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/attribute
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc
+      version: v0.20.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc
+      version: v1.44.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc
+      version: v1.44.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/log
+      version: v0.20.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/log/global
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/metric
+      version: v1.45.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/propagation
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/sdk
+      version: v1.45.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/sdk/log
+      version: v0.20.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/sdk/metric
+      version: v1.45.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/sdk/resource
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/sdk/trace
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/semconv/v1.26.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.opentelemetry.io/otel/trace
+      version: v1.45.0
+      capability: telemetry.otel
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/otel
+      notes: OpenTelemetry trace, metric, and baggage context propagation
+    - package: go.temporal.io/sdk
+      version: v1.45.0
+      capability: custom.sdk
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.temporal.io/sdk/client
+      capability: custom.client
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.temporal.io/sdk/log
+      capability: custom.log
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.temporal.io/sdk/worker
+      capability: custom.worker
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: go.uber.org/fx
+      version: v1.24.0
+      capability: clikit.ioc
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/clikit
+      notes: Dependency injection container mapped to Golusoris clikit
+    - package: go.uber.org/fx/fxtest
+      capability: clikit.ioc
+      status: covered
+      golusoris_replacement: github.com/golusoris/golusoris/clikit
+      notes: Dependency injection container mapped to Golusoris clikit
+    - package: go.uber.org/goleak
+      version: v1.3.0
+      capability: custom.goleak
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gobot.io/x/gobot/v2
+      capability: custom.v2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gocv.io/x/gocv
+      capability: custom.gocv
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/crypto
+      version: v0.57.0
+      capability: custom.crypto
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/crypto/acme/autocert
+      capability: custom.autocert
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/exp
+      version: v0.0.0-20260820142414-ca536658362e
+      capability: custom.exp
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/exp/slog
+      capability: custom.slog
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/net
+      version: v0.59.0
+      capability: custom.net
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/net/http2
+      capability: custom.http2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/oauth2
+      version: v0.36.0
+      capability: custom.oauth2
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/sync
+      version: v0.23.0
+      capability: custom.sync
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/sys
+      version: v0.48.0
+      capability: custom.sys
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/sys/unix
+      capability: custom.unix
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/text
+      version: v0.42.0
+      capability: custom.text
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: golang.org/x/text/language
+      capability: custom.language
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/gonum/mat
+      capability: custom.mat
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/gonum/stat
+      capability: custom.stat
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/plot
+      capability: custom.plot
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/plot/plotter
+      capability: custom.plotter
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/plot/vg
+      capability: custom.vg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/plot/vg/draw
+      capability: custom.draw
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: gonum.org/v1/plot/vg/vgimg
+      capability: custom.vgimg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: google.golang.org/grpc
+      version: v1.83.1
+      capability: custom.grpc
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: google.golang.org/grpc/credentials
+      capability: custom.credentials
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: google.golang.org/grpc/credentials/insecure
+      capability: custom.insecure
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: google.golang.org/grpc/keepalive
+      capability: custom.keepalive
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/apimachinery
+      version: v0.36.2
+      capability: custom.apimachinery
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/apimachinery/pkg/runtime
+      capability: custom.runtime
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go
+      version: v0.36.2
+      capability: custom.client-go
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/kubernetes
+      capability: custom.kubernetes
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/kubernetes/scheme
+      capability: custom.scheme
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/rest
+      capability: custom.rest
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/tools/clientcmd
+      capability: custom.clientcmd
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/tools/leaderelection
+      capability: custom.leaderelection
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: k8s.io/client-go/tools/leaderelection/resourcelock
+      capability: custom.resourcelock
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/driver/driverreg
+      capability: custom.driverreg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/gpio
+      capability: custom.gpio
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/gpio/gpioreg
+      capability: custom.gpioreg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/i2c
+      capability: custom.i2c
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/i2c/i2creg
+      capability: custom.i2creg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/physic
+      capability: custom.physic
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/spi
+      capability: custom.spi
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: periph.io/x/conn/v3/spi/spireg
+      capability: custom.spireg
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: riverqueue.com/riverui
+      version: v0.16.0
+      capability: custom.riverui
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: sigs.k8s.io/controller-runtime
+      version: v0.24.1
+      capability: custom.controller-runtime
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: sigs.k8s.io/controller-runtime/pkg/healthz
+      capability: custom.healthz
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: sigs.k8s.io/controller-runtime/pkg/manager
+      capability: custom.manager
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: sigs.k8s.io/controller-runtime/pkg/metrics/server
+      capability: custom.server
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+    - package: sigs.k8s.io/controller-runtime/pkg/webhook
+      capability: custom.webhook
+      status: gap
+      notes: Third-party package without native Golusoris equivalent
+readiness:
+    score: 19.702602230483272
+    total_third_party_deps: 269
+    covered_deps: 53
+    gap_deps: 216
+updated_at: 2026-09-11T16:38:42.489907848Z

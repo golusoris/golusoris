@@ -1,5 +1,5 @@
 <!-- markdownlint-disable MD013 -->
-# Claude Code Guidelines: cordanaLLM/standards
+# Claude Code Guidelines: golusoris
 <!-- Compiled automatically by standardsctl compile-context from AGENTS.md. DO NOT EDIT DIRECTLY. -->
 
 ## Commands

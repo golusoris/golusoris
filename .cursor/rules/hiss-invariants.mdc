@@ -4,7 +4,7 @@ globs: *
 alwaysApply: true
 ---
 
-# Cursor Rules: cordanaLLM/standards
+# Cursor Rules: golusoris
 <!-- Compiled automatically by standardsctl compile-context from AGENTS.md. DO NOT EDIT DIRECTLY. -->
 
 ## Mandatory Invariants
