@@ -286,6 +286,13 @@ and migration notes.
 
 ## [Unreleased]
 
+
+## [v0.8.0] - 2026-09-11
+
+### Changed
+
+- Adopt Praetor standards governance and fast-forward 198 third-party package dependencies
+
 ### Security
 
 - Added a custom `.semgrep.yml` ruleset of golusoris-specific SAST invariants

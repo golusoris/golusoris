@@ -1,5 +1,7 @@
 # golusoris
 
+[![HISS-16 Compliant](https://img.shields.io/badge/Standards-HISS--16%20Compliant-brightgreen)](AGENTS.md)
+
 [![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
 [![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
@@ -380,3 +382,14 @@ If golusoris saves you time, a coffee helps ☕
     <img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Sponsors" />
   </a>
 </p>
+
+## Standards & Governance
+
+This repository conforms to High-Integrity Systems Standards (HISS-16)
+and modernized NASA JPL Power-of-10 rules.
+
+| Gate | Command | Description |
+| :--- | :--- | :--- |
+| **Verification** | `make verify-all` | Runs full audit, test suite, and context integrity check |
+| **HISS Audit** | `standardsctl audit` | Enforces zero technical debt regression against baseline |
+| **Context Sync** | `standardsctl compile-context` | Transpiles canonical `AGENTS.md` to all AI targets |

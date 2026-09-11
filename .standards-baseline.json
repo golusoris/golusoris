@@ -1,0 +1,1396 @@
+{
+  "version": 1,
+  "generated_at": "2026-09-10T23:53:33Z",
+  "repository": "",
+  "commit_sha": "",
+  "total_infractions": 195,
+  "infractions": [
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/llm/anthropic/anthropic.go",
+      "line_number": 111,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/llm/anthropic/anthropic.go:111:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/llm/anthropic/anthropic.go",
+      "line_number": 155,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/llm/anthropic/anthropic.go:155:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/llm/ollama/ollama.go",
+      "line_number": 93,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/llm/ollama/ollama.go:93:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/llm/ollama/ollama.go",
+      "line_number": 127,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/llm/ollama/ollama.go:127:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/llm/ollama/ollama.go",
+      "line_number": 168,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/llm/ollama/ollama.go:168:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/tiny/gemma/gemma.go",
+      "line_number": 121,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/tiny/gemma/gemma.go:121:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "ai/tiny/gemma/gemma.go",
+      "line_number": 105,
+      "symbol": "Train",
+      "message": "Function 'Train' (91 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/gemma/gemma.go:105:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "ai/tiny/gemma/gemma_test.go",
+      "line_number": 44,
+      "symbol": "TestTrainer_Train_happyPath",
+      "message": "Function 'TestTrainer_Train_happyPath' (81 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/gemma/gemma_test.go:44:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/tiny/litert/litert.go",
+      "line_number": 121,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/tiny/litert/litert.go:121:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "ai/tiny/litert/litert.go",
+      "line_number": 104,
+      "symbol": "Train",
+      "message": "Function 'Train' (100 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/litert/litert.go:104:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "ai/tiny/litert/litert_test.go",
+      "line_number": 41,
+      "symbol": "TestTrainer_Train_happyPath",
+      "message": "Function 'TestTrainer_Train_happyPath' (71 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/litert/litert_test.go:41:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/tiny/serve/ollama/ollama.go",
+      "line_number": 136,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/tiny/serve/ollama/ollama.go:136:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/tiny/serve/ollama/ollama.go",
+      "line_number": 172,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/tiny/serve/ollama/ollama.go:172:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ai/tiny/serve/tflite/tflite.go",
+      "line_number": 187,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ai/tiny/serve/tflite/tflite.go:187:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "apidocs/mcp.go",
+      "line_number": 99,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "apidocs/mcp.go:99:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "apidocs/scalar.go",
+      "line_number": 38,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "apidocs/scalar.go:38:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "apidocs/scalar.go",
+      "line_number": 46,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "apidocs/scalar.go:46:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "apidocs/scalar.go",
+      "line_number": 62,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "apidocs/scalar.go:62:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "archive/archive.go",
+      "line_number": 64,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "archive/archive.go:64:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "audit/audit.go",
+      "line_number": 11,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "audit/audit.go:11:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "audit/audit.go",
+      "line_number": 195,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "audit/audit.go:195:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/apikey/apikey.go",
+      "line_number": 98,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/apikey/apikey.go:98:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/captcha/captcha.go",
+      "line_number": 105,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/captcha/captcha.go:105:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/impersonate/impersonate.go",
+      "line_number": 69,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/impersonate/impersonate.go:69:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/jwt/jwt.go",
+      "line_number": 63,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/jwt/jwt.go:63:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/lockout/lockout.go",
+      "line_number": 17,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/lockout/lockout.go:17:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/lockout/lockout.go",
+      "line_number": 18,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/lockout/lockout.go:18:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/magiclink/magiclink.go",
+      "line_number": 57,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/magiclink/magiclink.go:57:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 98,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/oauth2server/oauth2server.go:98:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 120,
+      "symbol": "handleAuthorize",
+      "message": "Function 'handleAuthorize' (79 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "auth/oauth2server/oauth2server.go:120:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 269,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/oauth2server/oauth2server.go:269:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 200,
+      "symbol": "handleToken",
+      "message": "Function 'handleToken' (71 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "auth/oauth2server/oauth2server.go:200:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 287,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/oauth2server/oauth2server.go:287:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "auth/oauth2server/oauth2server_test.go",
+      "line_number": 22,
+      "symbol": "TestServer_AuthCodePKCEFlow",
+      "message": "Function 'TestServer_AuthCodePKCEFlow' (75 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "auth/oauth2server/oauth2server_test.go:22:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/oidc/oidc.go",
+      "line_number": 188,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/oidc/oidc.go:188:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/policy/policy.go",
+      "line_number": 111,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/policy/policy.go:111:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/recovery/recovery.go",
+      "line_number": 82,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "auth/recovery/recovery.go:82:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/scim/scim.go",
+      "line_number": 343,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/scim/scim.go:343:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/session/session.go",
+      "line_number": 197,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/session/session.go:197:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/session/session.go",
+      "line_number": 208,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/session/session.go:208:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/session/session.go",
+      "line_number": 223,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/session/session.go:223:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "cmd/golusoris/internal/scaffold/init.go",
+      "line_number": 79,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "cmd/golusoris/internal/scaffold/init.go:79:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "config/config.go",
+      "line_number": 211,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "config/config.go:211:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "config/config.go",
+      "line_number": 215,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "config/config.go:215:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "config/config.go",
+      "line_number": 218,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "config/config.go:218:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "config/config.go",
+      "line_number": 227,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "config/config.go:227:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "config/config.go",
+      "line_number": 236,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "config/config.go:236:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "container/runtime/runtime.go",
+      "line_number": 151,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "container/runtime/runtime.go:151:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "container/runtime/runtime.go",
+      "line_number": 173,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "container/runtime/runtime.go:173:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/cdc/cdc.go",
+      "line_number": 188,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/cdc/cdc.go:188:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "db/cdc/cdc.go",
+      "line_number": 242,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "db/cdc/cdc.go:242:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/cdc/cdc.go",
+      "line_number": 422,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/cdc/cdc.go:422:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/geo/geo.go",
+      "line_number": 13,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/geo/geo.go:13:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/migrate/migrate.go",
+      "line_number": 211,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/migrate/migrate.go:211:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/sqlc/sqlc.go",
+      "line_number": 37,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/sqlc/sqlc.go:37:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/timescale/timescale.go",
+      "line_number": 12,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/timescale/timescale.go:12:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "db/timescale/timescale.go",
+      "line_number": 13,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "db/timescale/timescale.go:13:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "docs/epub/epub.go",
+      "line_number": 100,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "docs/epub/epub.go:100:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "docs/epub/epub.go",
+      "line_number": 101,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "docs/epub/epub.go:101:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "docs/xlsx/xlsx.go",
+      "line_number": 155,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "docs/xlsx/xlsx.go:155:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "fs/watch/watch.go",
+      "line_number": 111,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "fs/watch/watch.go:111:HISS-02"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "fs/watch/watch_test.go",
+      "line_number": 99,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "fs/watch/watch_test.go:99:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "grpc/grpc.go",
+      "line_number": 107,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "grpc/grpc.go:107:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "grpc/grpc.go",
+      "line_number": 165,
+      "symbol": "newServer",
+      "message": "Function 'newServer' (96 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "grpc/grpc.go:165:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "htmltmpl/htmltmpl.go",
+      "line_number": 14,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "htmltmpl/htmltmpl.go:14:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "htmltmpl/htmltmpl_test.go",
+      "line_number": 48,
+      "symbol": "TestAutoEscaping",
+      "message": "Function 'TestAutoEscaping' (61 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "htmltmpl/htmltmpl_test.go:48:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/client/client.go",
+      "line_number": 215,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/client/client.go:215:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/client/client.go",
+      "line_number": 219,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/client/client.go:219:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/client/client.go",
+      "line_number": 220,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/client/client.go:220:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/extclient/extclient.go",
+      "line_number": 232,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/extclient/extclient.go:232:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/extclient/extclient.go",
+      "line_number": 233,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/extclient/extclient.go:233:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "httpx/extclient/extclient_test.go",
+      "line_number": 76,
+      "symbol": "TestAuthAndHeaders",
+      "message": "Function 'TestAuthAndHeaders' (62 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "httpx/extclient/extclient_test.go:76:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/geofence/geofence.go",
+      "line_number": 187,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/geofence/geofence.go:187:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/inertia/inertia.go",
+      "line_number": 15,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/inertia/inertia.go:15:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/middleware/etag.go",
+      "line_number": 42,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/middleware/etag.go:42:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "httpx/middleware/etag.go",
+      "line_number": 55,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "httpx/middleware/etag.go:55:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "hw/udev/udev.go",
+      "line_number": 54,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "hw/udev/udev.go:54:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "id/id.go",
+      "line_number": 31,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "id/id.go:31:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "idempotency/idempotency.go",
+      "line_number": 107,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "idempotency/idempotency.go:107:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "idempotency/idempotency.go",
+      "line_number": 123,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "idempotency/idempotency.go:123:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "jobs/migrate.go",
+      "line_number": 34,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "jobs/migrate.go:34:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "jobs/ui/ui.go",
+      "line_number": 104,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "jobs/ui/ui.go:104:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "k8s/health/health.go",
+      "line_number": 89,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "k8s/health/health.go:89:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "k8s/health/health.go",
+      "line_number": 102,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "k8s/health/health.go:102:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "k8s/metrics/prom/prom.go",
+      "line_number": 85,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "k8s/metrics/prom/prom.go:85:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "k8s/metrics/prom/prom.go",
+      "line_number": 92,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "k8s/metrics/prom/prom.go:92:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "k8s/operator/operator.go",
+      "line_number": 168,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "k8s/operator/operator.go:168:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "leader/pg/pg.go",
+      "line_number": 69,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "leader/pg/pg.go:69:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "leader/pg/pg.go",
+      "line_number": 99,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "leader/pg/pg.go:99:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "markdown/markdown.go",
+      "line_number": 52,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "markdown/markdown.go:52:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "mcp/module.go",
+      "line_number": 72,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "mcp/module.go:72:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "mcp/module.go",
+      "line_number": 119,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "mcp/module.go:119:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "mcp/stdout.go",
+      "line_number": 68,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "mcp/stdout.go:68:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "mcp/stdout.go",
+      "line_number": 69,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "mcp/stdout.go:69:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/3d/engine.go",
+      "line_number": 46,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/3d/engine.go:46:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/av/impl_astiav.go",
+      "line_number": 98,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/av/impl_astiav.go:98:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/av/impl_astiav.go",
+      "line_number": 99,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/av/impl_astiav.go:99:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/av/impl_astiav.go",
+      "line_number": 100,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/av/impl_astiav.go:100:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/img/pipeline/handler.go",
+      "line_number": 61,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/img/pipeline/handler.go:61:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "media/img/pipeline/module_test.go",
+      "line_number": 38,
+      "symbol": "TestModule_wiresPipelineAndHandler",
+      "message": "Function 'TestModule_wiresPipelineAndHandler' (81 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "media/img/pipeline/module_test.go:38:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "media/img/pipeline/pipeline.go",
+      "line_number": 158,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "media/img/pipeline/pipeline.go:158:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "money/money.go",
+      "line_number": 102,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "money/money.go:102:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "net/dnsserver/dnsserver.go",
+      "line_number": 17,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "net/dnsserver/dnsserver.go:17:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "net/dnsserver/dnsserver.go",
+      "line_number": 127,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "net/dnsserver/dnsserver.go:127:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "net/dnsserver/dnsserver.go",
+      "line_number": 128,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "net/dnsserver/dnsserver.go:128:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "net/wol/wol.go",
+      "line_number": 43,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "net/wol/wol.go:43:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/apns2/apns2.go",
+      "line_number": 252,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/apns2/apns2.go:252:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/bounce/bounce.go",
+      "line_number": 11,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/bounce/bounce.go:11:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/bounce/bounce.go",
+      "line_number": 207,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/bounce/bounce.go:207:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/discord/discord.go",
+      "line_number": 89,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/discord/discord.go:89:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/fcm/fcm.go",
+      "line_number": 182,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/fcm/fcm.go:182:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/fcm/fcm.go",
+      "line_number": 185,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/fcm/fcm.go:185:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/fcm/fcm.go",
+      "line_number": 231,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/fcm/fcm.go:231:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/gotify/gotify.go",
+      "line_number": 102,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/gotify/gotify.go:102:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "notify/gotify/gotify_test.go",
+      "line_number": 17,
+      "symbol": "TestSender_Send",
+      "message": "Function 'TestSender_Send' (95 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "notify/gotify/gotify_test.go:17:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/inbound/inbound.go",
+      "line_number": 224,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/inbound/inbound.go:224:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/mailgun/mailgun.go",
+      "line_number": 140,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/mailgun/mailgun.go:140:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/ntfy/ntfy.go",
+      "line_number": 99,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/ntfy/ntfy.go:99:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "notify/ntfy/ntfy_test.go",
+      "line_number": 16,
+      "symbol": "TestSender_Send",
+      "message": "Function 'TestSender_Send' (89 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "notify/ntfy/ntfy_test.go:16:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/postmark/postmark.go",
+      "line_number": 130,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/postmark/postmark.go:130:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/resend/resend.go",
+      "line_number": 126,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/resend/resend.go:126:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/sendgrid/sendgrid.go",
+      "line_number": 141,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/sendgrid/sendgrid.go:141:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "notify/sendgrid/sendgrid.go",
+      "line_number": 78,
+      "symbol": "Send",
+      "message": "Function 'Send' (70 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "notify/sendgrid/sendgrid.go:78:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/slack/slack.go",
+      "line_number": 90,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/slack/slack.go:90:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/teams/teams.go",
+      "line_number": 100,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/teams/teams.go:100:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/telegram/telegram.go",
+      "line_number": 143,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/telegram/telegram.go:143:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/tracking/tracking.go",
+      "line_number": 103,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/tracking/tracking.go:103:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/tracking/tracking.go",
+      "line_number": 114,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/tracking/tracking.go:114:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/tracking/tracking.go",
+      "line_number": 138,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/tracking/tracking.go:138:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/twilio/twilio.go",
+      "line_number": 136,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/twilio/twilio.go:136:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/twilio/twilio.go",
+      "line_number": 139,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/twilio/twilio.go:139:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/unsub/unsub.go",
+      "line_number": 91,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/unsub/unsub.go:91:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/webpush/webpush.go",
+      "line_number": 18,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/webpush/webpush.go:18:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "notify/webpush/webpush.go",
+      "line_number": 123,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "notify/webpush/webpush.go:123:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "observability/statuspage/statuspage.go",
+      "line_number": 253,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "observability/statuspage/statuspage.go:253:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "observability/statuspage/statuspage.go",
+      "line_number": 271,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "observability/statuspage/statuspage.go:271:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ocr/impl_gosseract.go",
+      "line_number": 31,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ocr/impl_gosseract.go:31:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "ocr/impl_gosseract.go",
+      "line_number": 39,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "ocr/impl_gosseract.go:39:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "outbox/cdc/cdc.go",
+      "line_number": 262,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "outbox/cdc/cdc.go:262:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "outbox/drainer.go",
+      "line_number": 75,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "outbox/drainer.go:75:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "outbox/drainer.go",
+      "line_number": 100,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "outbox/drainer.go:100:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "outbox/drainer.go",
+      "line_number": 179,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "outbox/drainer.go:179:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "payments/meter/meter.go",
+      "line_number": 14,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "payments/meter/meter.go:14:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "payments/stripe/stripe_test.go",
+      "line_number": 122,
+      "symbol": "TestNewCheckoutSession",
+      "message": "Function 'TestNewCheckoutSession' (93 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "payments/stripe/stripe_test.go:122:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "payments/stripe/stripe_test.go",
+      "line_number": 267,
+      "symbol": "TestCreatePaymentIntent",
+      "message": "Function 'TestCreatePaymentIntent' (71 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "payments/stripe/stripe_test.go:267:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "payments/subs/subs.go",
+      "line_number": 326,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "payments/subs/subs.go:326:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "payments/subs/subs.go",
+      "line_number": 331,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "payments/subs/subs.go:331:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pdf/parse/parse.go",
+      "line_number": 60,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pdf/parse/parse.go:60:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/cgroup.go",
+      "line_number": 67,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pkg/sockmap/cgroup.go:67:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/loader_linux.go",
+      "line_number": 181,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pkg/sockmap/loader_linux.go:181:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/loader_linux.go",
+      "line_number": 345,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pkg/sockmap/loader_linux.go:345:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/loader_linux.go",
+      "line_number": 350,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pkg/sockmap/loader_linux.go:350:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/loader_linux.go",
+      "line_number": 365,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "pkg/sockmap/loader_linux.go:365:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "pkg/sockmap/loader_linux_test.go",
+      "line_number": 257,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "pkg/sockmap/loader_linux_test.go:257:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "pkg/sockmap/sockmap.go",
+      "line_number": 231,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "pkg/sockmap/sockmap.go:231:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "plugin/plugin.go",
+      "line_number": 53,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "plugin/plugin.go:53:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "plugin/plugin.go",
+      "line_number": 79,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "plugin/plugin.go:79:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "realtime/pubsub/redis/redis_test.go",
+      "line_number": 63,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "realtime/pubsub/redis/redis_test.go:63:HISS-02"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "realtime/sse/sse.go",
+      "line_number": 114,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "realtime/sse/sse.go:114:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "realtime/webrtc/webrtc.go",
+      "line_number": 106,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "realtime/webrtc/webrtc.go:106:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "realtime/webrtc/webrtc.go",
+      "line_number": 153,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "realtime/webrtc/webrtc.go:153:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "realtime/webrtc/webrtc.go",
+      "line_number": 176,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "realtime/webrtc/webrtc.go:176:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "search/meilisearch/meilisearch.go",
+      "line_number": 181,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "search/meilisearch/meilisearch.go:181:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "search/typesense/typesense.go",
+      "line_number": 14,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "search/typesense/typesense.go:14:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "search/typesense/typesense.go",
+      "line_number": 126,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "search/typesense/typesense.go:126:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "search/typesense/typesense.go",
+      "line_number": 249,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "search/typesense/typesense.go:249:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "selfupdate/selfupdate.go",
+      "line_number": 88,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "selfupdate/selfupdate.go:88:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "selfupdate/selfupdate.go",
+      "line_number": 133,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "selfupdate/selfupdate.go:133:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "selfupdate/selfupdate.go",
+      "line_number": 180,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "selfupdate/selfupdate.go:180:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "selfupdate/selfupdate.go",
+      "line_number": 208,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "selfupdate/selfupdate.go:208:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/s3.go",
+      "line_number": 254,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "storage/s3.go:254:HISS-02"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "storage/safety/key_test.go",
+      "line_number": 12,
+      "symbol": "TestCleanKey",
+      "message": "Function 'TestCleanKey' (65 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "storage/safety/key_test.go:12:HISS-04"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/scan/fakeclamd_test.go",
+      "line_number": 54,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "storage/scan/fakeclamd_test.go:54:HISS-02"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/scan/fakeclamd_test.go",
+      "line_number": 92,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "storage/scan/fakeclamd_test.go:92:HISS-02"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "storage/storage_test.go",
+      "line_number": 12,
+      "symbol": "TestLocalBucket",
+      "message": "Function 'TestLocalBucket' (73 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "storage/storage_test.go:12:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "storage/tus/scratch.go",
+      "line_number": 218,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "storage/tus/scratch.go:218:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/tus/tus.go",
+      "line_number": 221,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "storage/tus/tus.go:221:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "systemd/systemd.go",
+      "line_number": 54,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "systemd/systemd.go:54:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "systemd/systemd.go",
+      "line_number": 139,
+      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "fingerprint": "systemd/systemd.go:139:HISS-02"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "tenancy/tenancy.go",
+      "line_number": 90,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "tenancy/tenancy.go:90:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/factory/factory.go",
+      "line_number": 31,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/factory/factory.go:31:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/fuzz/fuzz.go",
+      "line_number": 11,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/fuzz/fuzz.go:11:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/prop/prop.go",
+      "line_number": 51,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/prop/prop.go:51:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/redis/redis.go",
+      "line_number": 47,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/redis/redis.go:47:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/redis/redis.go",
+      "line_number": 86,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/redis/redis.go:86:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "testutil/river/river.go",
+      "line_number": 117,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "testutil/river/river.go:117:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "testutil/river/river.go",
+      "line_number": 61,
+      "symbol": "Start",
+      "message": "Function 'Start' (63 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "testutil/river/river.go:61:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "torrent/qbittorrent_test.go",
+      "line_number": 105,
+      "symbol": "TestQBittorrent_LoginAndCRUD",
+      "message": "Function 'TestQBittorrent_LoginAndCRUD' (80 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "torrent/qbittorrent_test.go:105:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "torrent/rtorrent_test.go",
+      "line_number": 148,
+      "symbol": "TestRTorrent_ListGetMutateStats",
+      "message": "Function 'TestRTorrent_ListGetMutateStats' (82 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "torrent/rtorrent_test.go:148:HISS-04"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "torrent/transmission_test.go",
+      "line_number": 96,
+      "symbol": "TestTransmission_AddListGetPauseResumeRemoveStats",
+      "message": "Function 'TestTransmission_AddListGetPauseResumeRemoveStats' (88 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "torrent/transmission_test.go:96:HISS-04"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "webhooks/out/out.go",
+      "line_number": 220,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "webhooks/out/out.go:220:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "webhooks/out/out.go",
+      "line_number": 229,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "webhooks/out/out.go:229:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "webhooks/out/out.go",
+      "line_number": 234,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "webhooks/out/out.go:234:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "webhooks/out/out.go",
+      "line_number": 252,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "webhooks/out/out.go:252:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "webhooks/out/out.go",
+      "line_number": 267,
+      "message": "Legacy panic() invocation in production code path",
+      "fingerprint": "webhooks/out/out.go:267:HISS-07"
+    }
+  ]
+}

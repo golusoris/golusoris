@@ -1,0 +1,15 @@
+version: 1
+repository:
+    owner: golusoris
+    name: golusoris
+    visibility: public
+    description: ""
+    homepage: ""
+    topics: []
+profiles:
+    - framework
+facets:
+    - security:high
+    - api:public-contract
+    - docs:seo-portal
+    - agent:sandboxed

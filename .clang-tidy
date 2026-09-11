@@ -1,0 +1,17 @@
+# cordanaLLM/praetor High-Integrity Systems Standards (HISS-16) Clang-Tidy Configuration
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  clang-analyzer-*,
+  cppcoreguidelines-*,
+  modernize-*,
+  performance-*,
+  readability-*,
+  -readability-identifier-length
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+FormatStyle: file
+...

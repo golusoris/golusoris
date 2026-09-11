@@ -46,3 +46,4 @@ tmp/
 
 # built MCP binary
 /golusoris-mcp
+.claude/worktrees/
