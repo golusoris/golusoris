@@ -36,7 +36,7 @@ require (
 	github.com/gkampitakis/go-snaps v0.5.23
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-faster/errors v0.7.1
-	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/logr v1.4.4
 	github.com/go-playground/form/v4 v4.3.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/go-viper/mapstructure/v2 v2.5.0
@@ -93,7 +93,7 @@ require (
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/stripe/stripe-go/v86 v86.1.0
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
@@ -110,19 +110,19 @@ require (
 	github.com/xuri/excelize/v2 v2.11.0
 	github.com/yuin/goldmark v1.8.2
 	github.com/zeebo/blake3 v0.2.4
-	go.opentelemetry.io/contrib/bridges/otelslog v0.19.0
-	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.69.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0
-	go.opentelemetry.io/otel v1.44.0
+	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
+	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.71.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0
+	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.20.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.44.0
-	go.opentelemetry.io/otel/log v0.20.0
-	go.opentelemetry.io/otel/metric v1.44.0
-	go.opentelemetry.io/otel/sdk v1.44.0
+	go.opentelemetry.io/otel/log v0.22.0
+	go.opentelemetry.io/otel/metric v1.46.0
+	go.opentelemetry.io/otel/sdk v1.46.0
 	go.opentelemetry.io/otel/sdk/log v0.20.0
-	go.opentelemetry.io/otel/sdk/metric v1.44.0
-	go.opentelemetry.io/otel/trace v1.44.0
+	go.opentelemetry.io/otel/sdk/metric v1.46.0
+	go.opentelemetry.io/otel/trace v1.46.0
 	go.temporal.io/sdk v1.46.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
@@ -369,7 +369,7 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/mod v0.38.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
@@ -377,8 +377,8 @@ require (
 	golang.org/x/tools v0.48.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260610212136-7ab31c22f7ad // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
