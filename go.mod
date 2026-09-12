@@ -75,7 +75,7 @@ require (
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ogen-go/ogen v1.22.0
-	github.com/oschwald/maxminddb-golang/v2 v2.4.1
+	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/pgvector/pgvector-go v0.4.0
 	github.com/pgvector/pgvector-go/pgx v0.4.0
 	github.com/pion/webrtc/v4 v4.2.16
@@ -93,7 +93,7 @@ require (
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/stripe/stripe-go/v86 v86.1.0
 	github.com/testcontainers/testcontainers-go v0.43.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.43.0
@@ -369,12 +369,12 @@ require (
 	go.uber.org/zap v1.28.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
-	golang.org/x/mod v0.38.0 // indirect
+	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.48.0 // indirect
+	golang.org/x/tools v0.49.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
