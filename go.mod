@@ -89,7 +89,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/romsar/gonertia/v3 v3.0.0
 	github.com/rs/cors v1.11.1
-	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3
 	github.com/segmentio/ksuid v1.0.4
 	github.com/sony/gobreaker/v2 v2.4.0
 	github.com/spf13/cobra v1.10.2
