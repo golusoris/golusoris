@@ -10,7 +10,7 @@ Backup recovery codes (one-time, for MFA loss) and password-reset tokens.
 
 ## Surface
 
-- `recovery.New(codeStore, tokenStore, clk, secret)` → `*Service`.
+- `recovery.New(codeStore, tokenStore, clk, secret)` → `(*Service, error)`; errors when `secret` is empty.
 - `IssueCodes(ctx, userID, n)` / `VerifyCode(ctx, userID, raw)` — recovery codes.
 - `IssueResetToken(ctx, userID, ttl)` / `VerifyResetToken(ctx, raw)` — reset tokens.
 

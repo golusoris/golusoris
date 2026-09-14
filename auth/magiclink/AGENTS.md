@@ -10,7 +10,7 @@ Passwordless sign-in via single-use email links.
 
 ## Surface
 
-- `magiclink.New(store, clk, secret, ttl)` → `*Service`.
+- `magiclink.New(store, clk, secret, ttl)` → `(*Service, error)`; errors when `secret` is empty.
 - `Issue(ctx, email)` — returns the raw token; embed in URL, email it.
 - `Verify(ctx, raw)` — returns the email + consumes the link.
 - `MemoryStore` — for tests.

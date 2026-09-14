@@ -14,7 +14,7 @@
 //
 // Usage:
 //
-//	svc := apikey.New(store, apikey.Options{Prefix: "sk"})
+//	svc, err := apikey.New(store, apikey.Options{Prefix: "sk"})
 //
 //	raw, key, err := svc.Issue(ctx, "user-123", []string{"read"})
 //	// store raw — it's never retrievable again
@@ -28,6 +28,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -95,13 +96,13 @@ type Service struct {
 	opts  Options
 }
 
-// New returns a Service. Panics if HMACSecret is empty.
-func New(store Store, opts Options) *Service {
+// New returns a Service. Returns an error if HMACSecret is empty.
+func New(store Store, opts Options) (*Service, error) {
 	opts = opts.withDefaults()
 	if len(opts.HMACSecret) == 0 {
-		panic("apikey: HMACSecret must not be empty")
+		return nil, errors.New("apikey: HMACSecret must not be empty")
 	}
-	return &Service{store: store, opts: opts}
+	return &Service{store: store, opts: opts}, nil
 }
 
 // Issue creates a new API key for ownerID with the given scopes.

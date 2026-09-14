@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -81,4 +82,56 @@ func (c cannedTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(strings.NewReader(c.body)),
 		Header:     make(http.Header),
 	}, nil
+}
+
+// errClose is returned by failCloser.Close to exercise the deferred
+// close-error path of the HIBP lookup.
+var errClose = errors.New("close failed")
+
+// failCloser is a response body whose Close always fails.
+type failCloser struct{ io.Reader }
+
+func (failCloser) Close() error { return errClose }
+
+// failCloseTransport answers every request with status and body served
+// behind a failCloser.
+type failCloseTransport struct {
+	status int
+	body   string
+}
+
+func (c failCloseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: c.status,
+		Body:       failCloser{strings.NewReader(c.body)},
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestPolicy_HIBPCloseErrorSurfaces(t *testing.T) {
+	t.Parallel()
+
+	p := policy.New(policy.Options{
+		MinLength:  4,
+		MinScore:   3,
+		CheckHIBP:  true,
+		HTTPClient: &http.Client{Transport: failCloseTransport{status: http.StatusOK, body: "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEAD:7\r\n"}},
+	})
+	err := p.Validate(context.Background(), "Tr0ub4dor&3-purple-monkey")
+	require.ErrorIs(t, err, errClose)
+	require.ErrorContains(t, err, "close hibp response body")
+}
+
+func TestPolicy_HIBPPrimaryErrorWinsOverClose(t *testing.T) {
+	t.Parallel()
+
+	p := policy.New(policy.Options{
+		MinLength:  4,
+		MinScore:   3,
+		CheckHIBP:  true,
+		HTTPClient: &http.Client{Transport: failCloseTransport{status: http.StatusServiceUnavailable}},
+	})
+	err := p.Validate(context.Background(), "Tr0ub4dor&3-purple-monkey")
+	require.ErrorContains(t, err, "hibp: status 503")
+	require.NotErrorIs(t, err, errClose)
 }

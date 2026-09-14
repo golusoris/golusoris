@@ -76,16 +76,16 @@ type Service struct {
 }
 
 // New returns a Service. secret is the HMAC key used to hash codes and
-// tokens before storage. Either store may be nil if the corresponding
-// flow is not used.
-func New(codes CodeStore, tokens TokenStore, clk clockwork.Clock, secret []byte) *Service {
+// tokens before storage; an empty secret is an error. Either store may
+// be nil if the corresponding flow is not used.
+func New(codes CodeStore, tokens TokenStore, clk clockwork.Clock, secret []byte) (*Service, error) {
+	if len(secret) == 0 {
+		return nil, errors.New("recovery: secret must not be empty")
+	}
 	if clk == nil {
 		clk = clockwork.NewRealClock()
 	}
-	if len(secret) == 0 {
-		panic("recovery: secret must not be empty")
-	}
-	return &Service{codes: codes, tokens: tokens, clk: clk, secret: secret}
+	return &Service{codes: codes, tokens: tokens, clk: clk, secret: secret}, nil
 }
 
 // IssueCodes generates n one-time recovery codes for userID. Returns the

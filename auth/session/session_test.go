@@ -5,11 +5,18 @@
 package session_test
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/auth/session"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 func TestLoadSaveRoundTrip(t *testing.T) {
@@ -106,4 +113,103 @@ func TestDestroyCookieMirrorsSecureOption(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMemoryStoreSaveRejectsUnmarshalableValue covers the marshal error path
+// added when MemoryStore.Save stopped discarding it. It is the only one of the
+// store's three JSON error paths reachable through the public API: Save's
+// unmarshal and Load's marshal can only fail on bytes json.Marshal itself just
+// produced from a map[string]any, so they stay defensive.
+func TestMemoryStoreSaveRejectsUnmarshalableValue(t *testing.T) {
+	t.Parallel()
+	store := session.NewMemoryStore()
+
+	err := store.Save(t.Context(), "sid", map[string]any{"fn": func() {}}, time.Minute)
+	if err == nil {
+		t.Fatal("Save must reject a value json.Marshal cannot encode")
+	}
+	if !strings.Contains(err.Error(), "session/memory: marshal") {
+		t.Errorf("error = %q, want it to name the marshal step", err)
+	}
+	var ute *json.UnsupportedTypeError
+	if !errors.As(err, &ute) {
+		t.Errorf("error = %q, want the json cause to survive wrapping", err)
+	}
+	// A rejected Save must not leave a half-written entry behind.
+	if _, loadErr := store.Load(t.Context(), "sid"); !isNotFoundErr(loadErr) {
+		t.Errorf("Load after failed Save = %v, want not-found", loadErr)
+	}
+}
+
+// TestMemoryStoreDeepCopies pins the reason Save and Load round-trip through
+// JSON at all: neither the caller's map nor the returned map may alias what the
+// store holds.
+func TestMemoryStoreDeepCopies(t *testing.T) {
+	t.Parallel()
+	store := session.NewMemoryStore()
+
+	data := map[string]any{"uid": "user-42", "nested": map[string]any{"k": "v"}}
+	if err := store.Save(t.Context(), "sid", data, time.Minute); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Mutating the caller's map after Save must not reach the store.
+	data["uid"] = "tampered"
+	data["nested"].(map[string]any)["k"] = "tampered"
+
+	got, err := store.Load(t.Context(), "sid")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got["uid"] != "user-42" {
+		t.Errorf("uid = %v, want user-42 (caller mutation leaked in)", got["uid"])
+	}
+	if nested, ok := got["nested"].(map[string]any); !ok || nested["k"] != "v" {
+		t.Errorf("nested = %v, want map with k=v (caller mutation leaked in)", got["nested"])
+	}
+
+	// Mutating the loaded map must not reach the store either.
+	got["uid"] = "tampered-again"
+	again, err := store.Load(t.Context(), "sid")
+	if err != nil {
+		t.Fatalf("Load again: %v", err)
+	}
+	if again["uid"] != "user-42" {
+		t.Errorf("uid = %v, want user-42 (loaded-map mutation leaked in)", again["uid"])
+	}
+}
+
+// TestMemoryStoreLoadMissingAndExpired covers the two not-found paths: an id
+// that was never saved (negative) and one whose TTL has just elapsed
+// (boundary, driven by the injected clock).
+func TestMemoryStoreLoadMissingAndExpired(t *testing.T) {
+	t.Parallel()
+	clk := clockwork.NewFakeClock()
+	store := session.NewMemoryStoreWithClock(clk)
+
+	if _, err := store.Load(t.Context(), "never-saved"); !isNotFoundErr(err) {
+		t.Errorf("Load(unknown) = %v, want not-found", err)
+	}
+
+	if err := store.Save(t.Context(), "sid", map[string]any{"k": "v"}, time.Minute); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	// Exactly at the expiry instant the entry is still live: the store
+	// compares with After, not !Before.
+	clk.Advance(time.Minute)
+	if _, err := store.Load(t.Context(), "sid"); err != nil {
+		t.Errorf("Load at the expiry instant = %v, want the entry to still be live", err)
+	}
+
+	clk.Advance(time.Nanosecond)
+	if _, err := store.Load(t.Context(), "sid"); !isNotFoundErr(err) {
+		t.Errorf("Load past expiry = %v, want not-found", err)
+	}
+}
+
+// isNotFoundErr mirrors the package's own not-found check, which is unexported.
+func isNotFoundErr(err error) bool {
+	var e *gerr.Error
+	return errors.As(err, &e) && e.Code == gerr.CodeNotFound
 }
