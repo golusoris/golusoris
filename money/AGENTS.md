@@ -14,7 +14,8 @@ to avoid floating-point rounding errors.
 ```go
 price := money.New(999, "USD")   // 999 cents = $9.99
 tax   := price.Mul(0.10)         // rounded to nearest cent
-total := price.Add(tax)
+total, err := price.Add(tax)     // ErrCurrencyMismatch if currencies differ
+if err != nil { return err }
 fmt.Println(total.String())      // "10.99 USD"
 
 m := money.FromMajor(9.99, "USD")  // float64 major → minor units
@@ -24,8 +25,8 @@ m := money.FromMajor(9.99, "USD")  // float64 major → minor units
 
 | Method | Result |
 |---|---|
-| `Add(other)` | sum (panics on currency mismatch) |
-| `Sub(other)` | difference |
+| `Add(other) (Money, error)` | sum; `ErrCurrencyMismatch` on currency mismatch |
+| `Sub(other) (Money, error)` | difference; `ErrCurrencyMismatch` on currency mismatch |
 | `Mul(factor float64)` | multiply + round |
 | `Neg()` / `Abs()` | negate / absolute |
 | `MajorUnits()` | float64 major-unit representation |
@@ -40,4 +41,5 @@ KRW, VND, …). `New(150, "JPY").String()` returns `"150 JPY"`.
 
 - Don't store `Money` as float64 — rounding errors accumulate. Use minor units.
 - Don't compare `.MajorUnits()` for equality — use `m.Amount == other.Amount`.
-- Don't cross currencies without checking `SameCurrency` first.
+- Don't cross currencies — `Add`/`Sub` return `ErrCurrencyMismatch`; check
+  `SameCurrency` up front when you need to branch before arithmetic.

@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/search"
 )
 
@@ -106,15 +107,15 @@ func (b *Backend) DeleteCollection(ctx context.Context, name string) error {
 
 // Index implements [search.Indexer]. Uses Typesense's JSONL import
 // endpoint with action=upsert so repeated indexing is idempotent.
-func (b *Backend) Index(ctx context.Context, collection string, docs []search.Document) error {
+func (b *Backend) Index(ctx context.Context, collection string, docs []search.Document) (err error) {
 	if len(docs) == 0 {
 		return nil
 	}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	for _, d := range docs {
-		if err := enc.Encode(d); err != nil {
-			return fmt.Errorf("search/typesense: encode doc: %w", err)
+		if encErr := enc.Encode(d); encErr != nil {
+			return fmt.Errorf("search/typesense: encode doc: %w", encErr)
 		}
 	}
 	path := "/collections/" + url.PathEscape(collection) + "/documents/import?action=upsert"
@@ -123,11 +124,11 @@ func (b *Backend) Index(ctx context.Context, collection string, docs []search.Do
 		return err
 	}
 	req.Header.Set("Content-Type", "text/plain")
-	resp, err := b.hc.Do(req)
+	resp, err := b.hc.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return fmt.Errorf("search/typesense: import: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "search/typesense: close response body")
 	if resp.StatusCode/100 != 2 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("search/typesense: import status %d: %s", resp.StatusCode, raw)
@@ -245,12 +246,12 @@ func (b *Backend) do(ctx context.Context, method, path string, body, dst any) er
 	return b.exec(req, dst)
 }
 
-func (b *Backend) exec(req *http.Request, dst any) error {
-	resp, err := b.hc.Do(req) //nolint:gosec // G107 SSRF: URL built from caller-supplied collection; caller owns input trust // #nosec G704
+func (b *Backend) exec(req *http.Request, dst any) (err error) {
+	resp, err := b.hc.Do(req) //nolint:gosec,bodyclose // G107 SSRF: URL built from caller-supplied collection; caller owns input trust; body closed by the deferred errors.CloseInto below // #nosec G704
 	if err != nil {
 		return fmt.Errorf("search/typesense: request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "search/typesense: close response body")
 	if resp.StatusCode/100 != 2 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("search/typesense: status %d: %s", resp.StatusCode, raw)

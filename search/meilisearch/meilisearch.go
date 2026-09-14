@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/search"
 )
 
@@ -159,12 +160,12 @@ func (b *Backend) Search(ctx context.Context, collection string, q search.Query)
 	}, nil
 }
 
-func (b *Backend) do(ctx context.Context, method, path string, body, dst any) error {
+func (b *Backend) do(ctx context.Context, method, path string, body, dst any) (err error) {
 	var r io.Reader
 	if body != nil {
-		buf, err := json.Marshal(body)
-		if err != nil {
-			return fmt.Errorf("search/meilisearch: marshal: %w", err)
+		buf, mErr := json.Marshal(body)
+		if mErr != nil {
+			return fmt.Errorf("search/meilisearch: marshal: %w", mErr)
 		}
 		r = bytes.NewReader(buf)
 	}
@@ -178,11 +179,11 @@ func (b *Backend) do(ctx context.Context, method, path string, body, dst any) er
 	if b.key != "" {
 		req.Header.Set("Authorization", "Bearer "+b.key)
 	}
-	resp, err := b.hc.Do(req)
+	resp, err := b.hc.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return fmt.Errorf("search/meilisearch: request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "search/meilisearch: close response body")
 	if resp.StatusCode/100 != 2 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("search/meilisearch: status %d: %s", resp.StatusCode, raw)

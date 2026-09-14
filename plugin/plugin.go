@@ -17,11 +17,13 @@
 //	// In your module:
 //	var PaymentProviders = plugin.New[PaymentProvider]("payment.providers")
 //
-//	// In an app or feature module:
-//	func init() { PaymentProviders.Register("stripe", &StripeProvider{}) }
+//	// In an app or feature module (e.g. from an fx.Invoke):
+//	if err := PaymentProviders.Register("stripe", &StripeProvider{}); err != nil { return err }
 //
 //	// At runtime:
 //	p, ok := PaymentProviders.Get("stripe")
+//	// Or, failing fast at startup:
+//	p, err := PaymentProviders.Lookup("stripe")
 //
 // # fx integration
 //
@@ -31,9 +33,16 @@
 package plugin
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
+
+// ErrDuplicate is returned by [Registry.Register] when the key is already taken.
+var ErrDuplicate = errors.New("plugin: duplicate registration")
+
+// ErrNotRegistered is returned by [Registry.Lookup] when no impl is registered.
+var ErrNotRegistered = errors.New("plugin: no implementation registered")
 
 // Registry is a thread-safe map from name → T.
 // T is typically an interface type.
@@ -48,19 +57,20 @@ func New[T any](name string) *Registry[T] {
 	return &Registry[T]{name: name, items: make(map[string]T)}
 }
 
-// Register adds impl under the given key. Panics on duplicate registration
-// (same semantics as http.Handle — caught at startup, not runtime).
-func (r *Registry[T]) Register(key string, impl T) {
+// Register adds impl under the given key. Returns [ErrDuplicate] on a repeat
+// registration so misconfiguration surfaces at startup (fx.Invoke), not runtime.
+func (r *Registry[T]) Register(key string, impl T) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, dup := r.items[key]; dup {
-		panic(fmt.Sprintf("plugin: %s: duplicate registration for key %q", r.name, key))
+		return fmt.Errorf("%w: %s: key %q", ErrDuplicate, r.name, key)
 	}
 	r.items[key] = impl
+	return nil
 }
 
 // MustRegister is like [Register] but replaces an existing entry instead of
-// panicking. Useful in tests that need to swap implementations.
+// failing. Useful in tests that need to swap implementations.
 func (r *Registry[T]) MustRegister(key string, impl T) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -75,14 +85,14 @@ func (r *Registry[T]) Get(key string) (T, bool) {
 	return v, ok
 }
 
-// MustGet returns the implementation or panics with a descriptive message.
-// Use at startup (fx.Invoke) to fail fast on misconfiguration.
-func (r *Registry[T]) MustGet(key string) T {
+// Lookup returns the implementation or [ErrNotRegistered] with a descriptive
+// message. Use at startup (fx.Invoke) to fail fast on misconfiguration.
+func (r *Registry[T]) Lookup(key string) (T, error) {
 	v, ok := r.Get(key)
 	if !ok {
-		panic(fmt.Sprintf("plugin: %s: no implementation registered for key %q", r.name, key))
+		return v, fmt.Errorf("%w: %s: key %q", ErrNotRegistered, r.name, key)
 	}
-	return v
+	return v, nil
 }
 
 // Keys returns a snapshot of all registered keys in undefined order.
