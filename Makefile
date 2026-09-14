@@ -25,6 +25,11 @@ MODULES := . core
 GOSEC_EXCLUDE_FILE  := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))tools/gosec.exclude-rules
 GOSEC_EXCLUDE_RULES  = $(shell grep -v -e '^#' -e '^$$' $(GOSEC_EXCLUDE_FILE) | paste -sd ';' -)
 
+# Dependencies with a docs/upstream/ snapshot, by the module that pins them.
+UPSTREAM_ROOT_MODULES := go.uber.org/fx github.com/jackc/pgx/v5 github.com/ogen-go/ogen github.com/riverqueue/river  github.com/maypok86/otter/v2 github.com/redis/rueidis github.com/casbin/casbin/v3 github.com/go-webauthn/webauthn  go.opentelemetry.io/otel github.com/golang-migrate/migrate/v4 k8s.io/client-go github.com/go-chi/chi/v5  github.com/yuin/goldmark github.com/prometheus/client_golang github.com/testcontainers/testcontainers-go
+UPSTREAM_CORE_MODULES := github.com/knadh/koanf/v2 github.com/go-playground/validator/v10 github.com/jonboulle/clockwork
+
+
 .PHONY: ci-all
 ci-all: ## lint + sec + test in every gated module
 	@for m in $(MODULES); do echo "==> $$m"; $(MAKE) -C $$m -f $(CURDIR)/Makefile _ci-module MOD=$$m || exit 1; done
@@ -63,6 +68,17 @@ compile-context-verify: ## assert vendor agent-context files match AGENTS.md
 .PHONY: capabilities-check
 capabilities-check: ## capabilities.yaml ↔ tree drift guard
 	$(GO) test -count=1 -run 'TestCapabilities' .
+
+.PHONY: docs-upstream
+docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see docs/upstream/README.md)
+	@echo "docs/upstream refresh recipe (one dependency at a time):"
+	@echo "  1. resolve the new pin: go list -m -f '{{.Version}}' <module>   (run in the module that requires it: . or core/)"
+	@echo "  2. re-fetch the upstream README / API docs at that tag into docs/upstream/<name>/"
+	@echo "  3. update the pin in docs/upstream/README.md and the table in AGENTS.md"
+	@echo "  4. commit the snapshot diff together with the go.mod bump"
+	@echo "Current pins:"
+	@for m in $(UPSTREAM_ROOT_MODULES); do printf '  %-45s %s\n' "$$m" "$$($(GO) list -m -f '{{.Version}}' $$m)"; done
+	@for m in $(UPSTREAM_CORE_MODULES); do printf '  %-45s %s (core/)\n' "$$m" "$$(cd core && $(GO) list -m -f '{{.Version}}' $$m)"; done
 
 .PHONY: verify-all
 verify-all: build-all ci-all capabilities-check compile-context-verify audit reuse-lint ## the universal verification gate
