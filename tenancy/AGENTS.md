@@ -18,7 +18,7 @@ from the request (header, subdomain, JWT claim, …) and stored in context.
 | `ExtractFunc` | `func(*http.Request) (id string, err error)` |
 | `Middleware(extract, store)` | Resolves + stores tenant; 400 on bad extract, 401 on unknown |
 | `FromContext(ctx)` | Returns `(Tenant, bool)` |
-| `MustFromContext(ctx)` | Panics when no tenant — use only behind Middleware |
+| `RequireFromContext(ctx)` | Returns `(Tenant, error)`; `ErrMissingTenant` when no tenant — use behind Middleware |
 | `HeaderExtractor(header)` | Reads tenant ID from named header |
 | `SubdomainExtractor(base)` | Reads first subdomain label (e.g. `acme.example.com` → `acme`) |
 
@@ -34,6 +34,8 @@ t, ok := tenancy.FromContext(r.Context())
 
 ## Don't
 
-- Don't call `MustFromContext` outside handlers guarded by `Middleware`.
+- Don't call `RequireFromContext` outside handlers guarded by `Middleware`
+  (it returns `ErrMissingTenant` rather than panicking, but that is still a
+  wiring bug).
 - Don't store the tenant ID directly in JWT claims without verifying it
   against the DB — use the store on every request.

@@ -86,14 +86,18 @@ func FromContext(ctx context.Context) (Tenant, bool) {
 	return t, ok
 }
 
-// MustFromContext returns the Tenant or panics. Use only in code paths
-// guaranteed to run behind [Middleware].
-func MustFromContext(ctx context.Context) Tenant {
+// ErrMissingTenant is returned by [RequireFromContext] when the context
+// carries no tenant — usually a handler mounted outside [Middleware].
+var ErrMissingTenant = errors.New("tenancy: no tenant in context — did you forget Middleware?")
+
+// RequireFromContext returns the Tenant stored by [Middleware], or
+// [ErrMissingTenant] when the request is not tenant-scoped.
+func RequireFromContext(ctx context.Context) (Tenant, error) {
 	t, ok := FromContext(ctx)
 	if !ok {
-		panic("tenancy: no tenant in context — did you forget Middleware?")
+		return Tenant{}, ErrMissingTenant
 	}
-	return t
+	return t, nil
 }
 
 // --- Built-in extractors ---

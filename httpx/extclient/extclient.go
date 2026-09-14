@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/httpx/client"
 )
 
@@ -205,7 +206,7 @@ func (c *Client) applyHeaders(req *http.Request, perRequest map[string]string) {
 // bounded body reads so the generic helpers stay thin.
 func (c *Client) doJSON(
 	ctx context.Context, method, path string, body []byte, headers map[string]string,
-) ([]byte, error) {
+) (data []byte, err error) {
 	rawURL, err := c.resolve(path)
 	if err != nil {
 		return nil, err
@@ -233,11 +234,13 @@ func (c *Client) doJSON(
 	// returns to the pool, then close. Inlined rather than via client.Drain so
 	// bodyclose sees a literal Close.
 	defer func() {
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
+		if _, cerr := io.Copy(io.Discard, resp.Body); cerr != nil {
+			c.logger.DebugContext(ctx, "extclient: drain response body", slog.Any("err", cerr))
+		}
+		gerr.CloseInto(resp.Body, &err, "extclient: close response body")
 	}()
 
-	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("extclient: read body: %w", err)
 	}

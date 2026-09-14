@@ -76,11 +76,12 @@ func newStore(clk clock.Clock, logger *slog.Logger) Store {
 
 // newMiddleware builds the configured idempotency middleware over the
 // fx-provided (possibly decorated) [Store].
-func newMiddleware(store Store, cfg Config) middleware.Middleware {
+func newMiddleware(store Store, cfg Config, logger *slog.Logger) middleware.Middleware {
 	return Middleware(store, Options{
 		Required: cfg.Required,
 		TTL:      cfg.TTL,
 		Header:   cfg.Header,
+		Logger:   logger,
 	})
 }
 

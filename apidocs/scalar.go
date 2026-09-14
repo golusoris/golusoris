@@ -39,7 +39,10 @@ func scalarHTMLHandler(title, specPath string) http.HandlerFunc {
 	body := fmt.Sprintf(scalarHTMLTemplate, html.EscapeString(title), html.EscapeString(specPath))
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		_, _ = w.Write([]byte(body))
+		// Headers are already sent: a write error only means the client left.
+		if _, err := w.Write([]byte(body)); err != nil {
+			return
+		}
 	}
 }
 
@@ -47,7 +50,9 @@ func scalarJSHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/javascript")
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-		_, _ = w.Write(scalarJS)
+		if _, err := w.Write(scalarJS); err != nil {
+			return
+		}
 	}
 }
 
@@ -63,7 +68,9 @@ func specServeHandler(spec []byte) (http.HandlerFunc, string) {
 	}
 	h := func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", contentType)
-		_, _ = w.Write(spec)
+		if _, err := w.Write(spec); err != nil {
+			return
+		}
 	}
 	return h, path
 }
