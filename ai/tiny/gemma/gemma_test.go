@@ -45,15 +45,11 @@ func TestTrainer_Name(t *testing.T) {
 	require.Equal(t, "gemma", tr.Name())
 }
 
-func TestTrainer_Train_happyPath(t *testing.T) {
-	t.Parallel()
-	bucket, err := storage.NewLocalBucket(t.TempDir())
-	require.NoError(t, err)
-
-	// StubRunner simulates the container: reads the job config,
-	// writes a fake LoRA archive + metrics.json.
-	runner := &tiny.StubRunner{Fn: func(_ context.Context, spec tiny.RunSpec) error {
-		// Validate config.json is present in InputDir.
+// happyPathRunner simulates the container: reads the job config, checks
+// what the trainer staged, and writes a fake LoRA archive + metrics.json.
+func happyPathRunner(t *testing.T) *tiny.StubRunner {
+	t.Helper()
+	return &tiny.StubRunner{Fn: func(_ context.Context, spec tiny.RunSpec) error {
 		cfgBytes, readErr := os.ReadFile(filepath.Join(spec.InputDir, "config.json"))
 		if readErr != nil {
 			return readErr
@@ -68,31 +64,25 @@ func TestTrainer_Train_happyPath(t *testing.T) {
 		if cfg["base_model"] != "gemma3:270m" {
 			t.Errorf("expected base_model gemma3:270m, got %v", cfg["base_model"])
 		}
-		// Env is expected to carry TINY_BASE_MODEL.
 		if spec.Env["TINY_BASE_MODEL"] != "gemma3:270m" {
 			t.Errorf("expected TINY_BASE_MODEL=gemma3:270m, got %q", spec.Env["TINY_BASE_MODEL"])
 		}
 		if spec.Env["HF_TOKEN"] != "hf_fake" {
 			t.Errorf("expected HF_TOKEN=hf_fake, got %q", spec.Env["HF_TOKEN"])
 		}
-		// Write fake artifact + metrics.
 		if werr := os.WriteFile(filepath.Join(spec.OutputDir, gemma.ArtifactName), []byte("fake-lora-bytes"), 0o600); werr != nil {
 			return werr
 		}
-		m := map[string]float64{"loss": 0.42, "epochs": 3}
-		b, _ := json.Marshal(m)
+		b, err := json.Marshal(map[string]float64{"loss": 0.42, "epochs": 3})
+		if err != nil {
+			return err
+		}
 		return os.WriteFile(filepath.Join(spec.OutputDir, gemma.MetricsName), b, 0o600)
 	}}
+}
 
-	tr, err := gemma.NewTrainer(gemma.Options{
-		Runner:    runner,
-		Bucket:    bucket,
-		KeyPrefix: "models/gemma",
-		ExtraEnv:  map[string]string{"HF_TOKEN": "hf_fake"},
-	})
-	require.NoError(t, err)
-
-	job := tiny.Job{
+func happyPathJob() tiny.Job {
+	return tiny.Job{
 		ID:        "job-1",
 		Name:      "intent-finetune",
 		TenantID:  "tenant-a",
@@ -106,7 +96,22 @@ func TestTrainer_Train_happyPath(t *testing.T) {
 		Hyperparams: map[string]any{"lr": 0.0002, "epochs": 3, "lora_rank": 8},
 		Tags:        map[string]string{"env": "dev"},
 	}
-	got, err := tr.Train(t.Context(), job)
+}
+
+func TestTrainer_Train_happyPath(t *testing.T) {
+	t.Parallel()
+	bucket, err := storage.NewLocalBucket(t.TempDir())
+	require.NoError(t, err)
+
+	tr, err := gemma.NewTrainer(gemma.Options{
+		Runner:    happyPathRunner(t),
+		Bucket:    bucket,
+		KeyPrefix: "models/gemma",
+		ExtraEnv:  map[string]string{"HF_TOKEN": "hf_fake"},
+	})
+	require.NoError(t, err)
+
+	got, err := tr.Train(t.Context(), happyPathJob())
 	require.NoError(t, err)
 
 	require.Equal(t, "intent-finetune", got.Name)
@@ -121,9 +126,9 @@ func TestTrainer_Train_happyPath(t *testing.T) {
 	// Verify the artifact actually landed in the bucket.
 	rc, _, err := bucket.Get(t.Context(), got.URI)
 	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
 	body, err := io.ReadAll(rc)
 	require.NoError(t, err)
+	require.NoError(t, rc.Close())
 	require.Equal(t, "fake-lora-bytes", string(body))
 }
 

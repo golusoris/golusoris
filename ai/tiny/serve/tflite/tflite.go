@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // DefaultEndpoint is the LiteRT sidecar HTTP root.
@@ -177,7 +178,7 @@ func (*Predictor) Close() error { return nil }
 
 // post issues a JSON POST to path and, when out is non-nil, decodes the
 // response body into it.
-func (p *Predictor) post(ctx context.Context, path string, body []byte, out any) error {
+func (p *Predictor) post(ctx context.Context, path string, body []byte, out any) (err error) {
 	req, rErr := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimRight(p.opts.Endpoint, "/")+path, bytes.NewReader(body))
 	if rErr != nil {
@@ -188,7 +189,7 @@ func (p *Predictor) post(ctx context.Context, path string, body []byte, out any)
 	if dErr != nil {
 		return fmt.Errorf("ai/tiny/serve/tflite: %s request: %w", path, dErr)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/tflite: close "+path+" body") }()
 	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, p.opts.MaxResponseBytes))
 	if readErr != nil {
 		return fmt.Errorf("ai/tiny/serve/tflite: read %s body: %w", path, readErr)
