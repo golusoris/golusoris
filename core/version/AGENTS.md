@@ -23,7 +23,7 @@ hand-rolling a per-binary version string.
 ## Stamping a release version
 
 ```sh
-go build -ldflags "-X github.com/golusoris/golusoris/version.version=1.2.3" ./cmd/app
+go build -ldflags "-X github.com/golusoris/golusoris/core/version.version=1.2.3" ./cmd/app
 ```
 
 Also settable: `version.revision`, `version.buildAt`. Without ldflags, `Version`

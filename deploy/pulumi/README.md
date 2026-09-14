@@ -35,7 +35,7 @@ The DB DSN and Redis URL are written to AWS Secrets Manager and injected into th
 ## Prerequisites
 
 - [Pulumi CLI](https://www.pulumi.com/docs/install/) ≥ 3.0
-- Go 1.26
+- Go 1.27
 - AWS credentials with permission to create VPC / RDS / ElastiCache / ECS / IAM / Secrets Manager resources (env vars, `~/.aws/credentials`, or OIDC)
 
 ## `pulumi up` walkthrough

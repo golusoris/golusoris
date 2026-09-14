@@ -32,7 +32,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - [ ] ADR added to `docs/adr/` if this records an architecture decision
 - [ ] `docs/architecture/container.puml` updated if a new top-level package landed
 - [ ] `.workingdir/STATE.md` session log updated
-- [ ] `README.md` "Landed so far" updated (if a PLAN step completes)
+- [ ] `README.md` module catalog + `capabilities.yaml` updated (if a package was added or moved)
 - [ ] `AGENTS.md` layout tree updated (if a new top-level package was added)
 
 ## Migration (breaking changes only)

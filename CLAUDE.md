@@ -89,8 +89,8 @@ Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint
 
 ### Don't
 
-- Don't use `time.Now()` outside `clock/`. Use `clock.Now(ctx)`.
-- Don't `fmt.Println` — use the slog handler from `log/`.
+- Don't use `time.Now()` outside `core/clock/`. Use `clock.Now(ctx)`.
+- Don't `fmt.Println` — use the slog handler from `core/log/`.
 - Don't add features beyond what the task requires (per global Claude Code guidelines).
 - Don't write multi-paragraph comments. One-liner WHY comments only.
 - Don't create new markdown docs unless explicitly asked.
@@ -98,14 +98,14 @@ Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint
 
 ### Project state
 
-- Pre-alpha. Steps 1-5 landed on `main` (`golusoris/golusoris`): Core, DB, HTTP base, HTTP extras, OTel + observability.
-- See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the full plan and [.workingdir/STATE.md](.workingdir/STATE.md) for the current status + decision log.
+- Pre-1.0. Latest tag `v0.8.0`; `v0.9.0` in preparation — lean `core/` sub-module (ADR-0017), EUPL-1.2 relicense (ADR-0018), praetor HISS-16 governance (ADR-0019), Go 1.27 floor. Every module in the README catalog is landed and gated by CI.
+- See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the plan + decisions log, [.workingdir/STATE.md](.workingdir/STATE.md) for the session log (older entries in `.workingdir/archive/`), [.workingdir/TODO.md](.workingdir/TODO.md) for open work, and [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path move.
 
 ### Every commit: keep docs in sync
 
 On each commit touching new/changed modules:
 
 - Update [.workingdir/STATE.md](.workingdir/STATE.md) session log with the commit summary.
-- Update [README.md](README.md) "Landed so far" list when a step completes.
+- Update the [README.md](README.md) module catalog (and `capabilities.yaml`) when a package is added or moved.
 - Update [AGENTS.md](AGENTS.md) layout tree when adding new top-level packages.
 - Write per-subpackage `AGENTS.md` for any new module.
