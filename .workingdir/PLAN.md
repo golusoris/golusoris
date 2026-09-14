@@ -13,7 +13,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## 1. Mission
 
-Build `github.com/golusoris/golusoris` — a single Go module providing opt-in `fx` modules so that all `lusoris/*` apps (revenge, lurkarr, subdo, arca, future) share one source of truth for cross-cutting concerns. Bumping a dependency happens once in the framework, not 4–5× per app.
+Build `github.com/golusoris/golusoris` — a root Go module plus the lean `github.com/golusoris/golusoris/core` sub-module (ADR-0017), providing opt-in `fx` modules so that all `lusoris/*` apps (revenge, lurkarr, subdo, arca, future) share one source of truth for cross-cutting concerns. Bumping a dependency happens once in the framework, not 4–5× per app.
 
 Secondary goal: bake AI-assisted-development conventions (AGENTS.md / CLAUDE.md / Skills / Hooks / cached docs / MCP server) into the repo so working on golusoris-based apps with Claude/Cursor/etc. is fast and cheap.
 
@@ -24,6 +24,8 @@ Tertiary goal: bake a **dependency-update + meaningful-changelog system** so we 
 ## 2. Principles & standards
 
 **This section is the framework's foundational contract.** It lives above the module catalog because every package below — and every app built on top — is expected to follow these rules. Deviations require a PR comment justifying the exception.
+
+Since v0.9.0 the contract is machine-enforced by [cordanallm/praetor](https://github.com/cordanallm/praetor) (ADR-0019): `.standards.yaml` selects the `framework` profile, `standardsctl audit` scores the tree against the HISS-16 invariants (HISS-01 … HISS-16, the modernised Power-of-10 mapping in `AGENTS.md`) with a ratcheting baseline, and `standardsctl compile-context` derives every vendor agent file (`CLAUDE.md`, `.cursor/`, `.gemini/`, `.codex/`, `.windsurfrules`) from the single canonical `AGENTS.md`. `make verify-all` is the one gate every agent runs.
 
 ### 2.1 Coding rules — Power of 10, Go-adapted
 
@@ -166,11 +168,16 @@ Rule of thumb: frameworks can't claim compliance — apps can, built on complian
 
 ## 3. Architecture
 
-**Single Go module, opt-in fx subpackages.** Apps import `github.com/golusoris/golusoris` and compose only the modules they need.
+**Root module + lean `core/` sub-module, opt-in fx subpackages.** Since v0.9.0 (ADR-0017) the repository holds two first-party Go modules:
+
+- `github.com/golusoris/golusoris/core` — config · log · clock · errors · crypto · id · validate · version · clikit · mcp · codec/yaml · gitx · astx · capabilities. ~20 direct dependencies; importable by governance tools and small CLIs without the root graph.
+- `github.com/golusoris/golusoris` — everything else (`db/`, `httpx/`, `auth/`, `jobs/`, …), which requires `core` (`replace => ./core` in-repo, tagged `core/vX.Y.Z` on the same commit as `vX.Y.Z`).
+
+Heavy / CGO / native-dep packages (`media/*`, `ocr/`, `pdf/`, `hw/*`, `science/*`, `web3/*`, `testutil/pact`, …) keep their own `go.mod` (§4.16b). Apps import only the modules they need; the root `capabilities.yaml` is the machine-readable contract of what each package provides.
 
 ```go
 fx.New(
-  golusoris.Core,            // config + log + lifecycle + podinfo + errors
+  golusoris.Core,            // core/config + core/log + core/errors + core/clock + core/id + core/validate + core/crypto + i18n
   golusoris.DB,              // pgx pool + migrations + sqlc
   golusoris.OTel,            // tracer + meter + logs + OTLP
   golusoris.HTTP,            // server + standard middleware + Scalar docs
@@ -194,14 +201,21 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 
 | Path | Purpose | Key dep |
 |---|---|---|
-| `config/` | koanf v2 wrapper, env+file+yaml, file-watch enabled (k8s ConfigMap hot reload), SIGHUP hook | knadh/koanf/v2 |
-| `log/` | slog factory: tint(dev) / json(prod), podinfo attrs, otelslog bridge | log/slog + lmittmann/tint + go.opentelemetry.io/contrib/bridges/otelslog |
-| `errors/` | typed errors, stack traces, ogen-status mapping | go-faster/errors |
-| `crypto/` | argon2id, AES-GCM, sealed-secret helpers, column encryption | alexedwards/argon2id + stdlib |
-| `clock/` | Clock interface (real + fake) for mockable time | jonboulle/clockwork |
-| `id/` | UUIDv7, KSUID, snowflake generators | google/uuid + segmentio/ksuid |
-| `validate/` | go-playground/validator wrapper | go-playground/validator/v10 |
-| `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n + x/text |
+| `core/config/` | koanf v2 wrapper, env+file+yaml, file-watch enabled (k8s ConfigMap hot reload), SIGHUP hook | knadh/koanf/v2 |
+| `core/log/` | slog factory: tint(dev) / json(prod), podinfo attrs, otelslog bridge | log/slog + lmittmann/tint + go.opentelemetry.io/contrib/bridges/otelslog |
+| `core/errors/` | typed errors, stack traces, ogen-status mapping | go-faster/errors |
+| `core/crypto/` | argon2id, AES-GCM, sealed-secret helpers, column encryption | alexedwards/argon2id + stdlib |
+| `core/clock/` | Clock interface (real + fake) for mockable time | jonboulle/clockwork |
+| `core/id/` | UUIDv7, KSUID, snowflake generators | google/uuid + segmentio/ksuid |
+| `core/validate/` | go-playground/validator wrapper | go-playground/validator/v10 |
+| `i18n/` | locale negotiation middleware, message catalog (root module) | nicksnyder/go-i18n + x/text |
+| `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
+| `core/clikit/` | cobra + fx CLI builder (`clikit/tui` stays in the root module) | spf13/cobra |
+| `core/mcp/` | MCP server fx module — stdio + streamable-HTTP | modelcontextprotocol/go-sdk |
+| `core/codec/yaml/` | strict, bounded YAML codec with atomic writes | go.yaml.in/yaml/v3 |
+| `core/gitx/` · `core/gitx/worktree/` | bounded git runner + per-task worktrees | stdlib |
+| `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
+| `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
 
 ### 4.2 Database & data
 
@@ -519,7 +533,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 | Path | Purpose |
 |---|---|
 | `AGENTS.md` (root + per-subpackage) | cross-tool agent guide (Claude, Cursor, Aider, Codex, Continue) |
-| `CLAUDE.md` (root) | Claude-specific deeper guide |
+| `CLAUDE.md` (root) | compiled from the `## Claude Code` section of `AGENTS.md` by `standardsctl compile-context` — never edited by hand |
 | `.claude/skills/` | scaffold-ogen-handler, add-river-worker, wire-fx-module, bump-golusoris, add-migration |
 | `.claude/hooks/` | file-pattern triggered context auto-loads (e.g. touching `internal/jobs/*.go` loads river docs) |
 | `docs/upstream/` | cached/snapshotted upstream docs for offline AI reasoning (fx, ogen, pgx, river, otter, rueidis, koanf, casbin, webauthn, OTel, golang-migrate, sqlc, scalar, k8s, etc.) |
@@ -527,9 +541,9 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 
 ---
 
-## 5. Pinned versions (initial v0.1.0)
+## 5. Pinned versions
 
-(see §4 for the per-module dep). Toolchain: **Go 1.26.2**. Versions tracked + bumped via Renovate; framework's CHANGELOG includes "Dependencies bumped" section per release.
+(see §4 for the per-module dep; `docs/upstream/README.md` carries the current pins). Toolchain floor: **Go 1.27.0** in root, `core/` and every sub-module (since v0.9.0). Versions tracked + bumped via Renovate; framework's CHANGELOG includes "Dependencies bumped" section per release.
 
 ---
 
@@ -537,7 +551,7 @@ These live under `golusoris/<area>/` with their own `go.mod` so the main framewo
 
 `tools/golangci.yml` enables the full set listed in §4.21. Standard make targets (`lint`, `vuln`, `gosec`, `sec`, `test`, `ci`, `gen`, `migrate`, `dev`, `mocks`).
 
-Pre-commit hooks: gofumpt + golangci-lint + gitleaks (secret scan) + conventional-commit check.
+Git hooks via lefthook (`lefthook.yml` + `scripts/hooks/`): gofumpt + gci + golangci-lint + go vet on staged packages, `standardsctl compile-context --verify`, `reuse lint`, gitleaks (secret scan); commit-msg checks Conventional Commits + DCO `Signed-off-by:`; pre-push builds + `go test -short` root and `core/`. Governance gate: `make verify-all` (praetor HISS-16 audit, ADR-0019).
 
 CI gates (in reusable `ci-go.yml`):
 - golangci-lint
@@ -659,7 +673,7 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 
 ## 12. Decisions log (one-line each, comprehensive)
 
-**Architecture**: single Go module + opt-in fx subpackages; lurkarr migration out of scope.
+**Architecture**: root Go module + lean `core/` sub-module (ADR-0017, v0.9.0; was a single module through v0.8.0) + opt-in fx subpackages; lurkarr migration out of scope.
 
 **Picks**: ogen v1.20.3 · golang-migrate v4.19.1 · sqlc v1.30.0 · koanf v2.3.4 (file-watch on) · river v0.34.0 · otter/v2 v2.3.0 · rueidis v1.0.74 · OTel SDK v1.43.0 · go-oidc v3.18.0 · webauthn v0.16.4 · TOTP v1.5.0 · casbin v2.135.0 · slog + tint v1.1.3 · rs/cors v1.11.1 · ulule/limiter v3.11.2 · coder/websocket v1.8.14 · gorilla/csrf v1.7.3 · sony/gobreaker v1.0.0 · go-faster/errors v0.7.1 · alexedwards/argon2id v1.0.0 · sentry-go v0.45.0 · go-astiav v0.40.0 · govips/v2 v2.18.0 · aws-sdk-go-v2 v1.41.5 · mholt/archives v0.1.5 · testcontainers v0.42.0 · testify v1.11.1 · **mockery v3** · k8s.io/client-go v0.32.x · prometheus/client_golang v1.23.2.
 
@@ -707,9 +721,11 @@ Each step a tagged `v0.x.0`. Framework usable from step 3.
 
 **API stability**: apidiff CI + Migration footer + Dependencies bumped section + `// Deprecated:` doc + staticcheck SA1019.
 
-**AI layer**: AGENTS.md + CLAUDE.md (root + per-pkg) + .claude/skills/ + .claude/hooks/ + docs/upstream/ cache + docs/migrations/ + `golusoris-mcp` MCP server + Scalar-from-OpenAPI MCP per app.
+**AI layer**: AGENTS.md (canonical; CLAUDE.md + vendor files compiled from it, HISS-16) (root + per-pkg) + .claude/skills/ + .claude/hooks/ + docs/upstream/ cache + docs/migrations/ + `golusoris-mcp` MCP server + Scalar-from-OpenAPI MCP per app.
 
 **Plan persistence**: `.workingdir/PLAN.md` (this file).
+
+**v0.9.0 (2026-09)**: lean `core/` sub-module carved out of the root module (ADR-0017) — ten packages moved to `core/…` import paths, `clikit/tui` stays in root; relicensed MIT → EUPL-1.2 (code) + CC-BY-SA-4.0 (prose) with REUSE + DCO (ADR-0018); praetor HISS-16 governance + root `capabilities.yaml` capability contract (ADR-0019); Go 1.27.0 toolchain floor; lefthook replaces pre-commit; Semgrep + gitleaks + `reuse lint` + DCO jobs in CI on ARC self-hosted runners.
 
 **Round-12 picks (Step 10 expansion)**: notify providers broken into per-provider subpackages — Resend (resend-go/v2), Postmark (mrz1836/postmark), SendGrid (sendgrid-go), Mailgun (mailgun-go/v4), AWS SES (aws-sdk-go-v2), Twilio (twilio-go), FCM (firebase.google.com/go/v4), APNs (sideshow/apns2), Web Push (SherClockHolmes/webpush-go), Telegram (tucnak/telebot/v3), Teams (atc0005/go-teams-notify/v2). All implement the same `notify.Sender` iface so the unified `Notifier` (first-success / Multi fan-out) keeps a stable contract across channels. Discord + Slack stay raw-HTTP (no SDK). New `db/cdc/` for logical replication (jackc/pglogrepl) feeds Kafka/NATS — complements `outbox/cdc/`. ConnectRPC (connectrpc/connect-go) + gqlgen already noted in §4.16; storage (gocloud.dev/blob, minio, tusd) and docs (pdfcpu, excelize, unioffice) already listed in §4.12 / §4.16.
 
@@ -735,7 +751,7 @@ _(Items previously listed here — Bioinformatics, robotics, GPIO/IoT, blockchai
 
   GitHub doesn't support nested orgs, so the `app-` prefix is the chosen visual grouping. The 4 existing apps will be transferred from `lusoris/` to `golusoris/` and renamed accordingly. `lusoris/.github` stays in place for any unrelated personal repos.
 - **Goenvoy treatment**: separate repo at `github.com/golusoris/goenvoy` (org move). Framework provides a thin `integrations/goenvoy/` adapter (fx wiring + shared HTTP client) — NOT inlined. No source duplication.
-- **License**: **MIT**.
+- **License**: **EUPL-1.2** for code, **CC-BY-SA-4.0** for prose, REUSE-compliant with DCO sign-off (ADR-0018, `LICENSING.md`). Was MIT through v0.8.0.
 - **Ko-fi handle**: `lusoris` (baked into `FUNDING.yml` template as `ko_fi: lusoris`).
 - **Examples**: `examples/` folder in same repo.
 - **MCP server transport**: stdio + HTTP (both supported).
