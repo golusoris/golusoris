@@ -7,6 +7,7 @@ package tflite_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -227,4 +228,34 @@ func TestNewPredictor_defaults(t *testing.T) {
 	got, err := p.Predict(t.Context(), "x")
 	require.NoError(t, err)
 	require.Equal(t, "a", got.Labels[0].Label)
+}
+
+var errBoom = errors.New("boom")
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// closeFailBody reads payload normally but fails Close with err.
+type closeFailBody struct {
+	io.Reader
+	err error
+}
+
+func (b *closeFailBody) Close() error { return b.err }
+
+// Negative: a failed sidecar body close surfaces from post (via Load).
+func TestPredictor_Load_closeErrorReturnsErr(t *testing.T) {
+	t.Parallel()
+	hc := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       &closeFailBody{Reader: strings.NewReader(""), err: errBoom},
+		}, nil
+	})}
+	p := tflite.NewPredictor(tflite.Options{Endpoint: "http://litert.invalid", HTTPClient: hc})
+	err := p.Load(t.Context(), classifyModel())
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "close /load body")
 }

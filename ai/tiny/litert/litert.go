@@ -107,56 +107,18 @@ func (*Trainer) Name() string { return "litert" }
 // the `.tflite` artifact. Version is left zero — the Registry assigns
 // it on SaveModel.
 func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
-	if err := tiny.ValidateJob(job); err != nil {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: validate: %w", err)
-	}
-	if job.Dataset.TaskKind != tiny.TaskClassify {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: need TaskKind=classify, got %s", job.Dataset.TaskKind)
-	}
-	switch job.Dataset.Modality {
-	case tiny.ModalityText, tiny.ModalityImage, tiny.ModalityAudio:
-	default:
-		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: Modality %s not supported (want text|image|audio)", job.Dataset.Modality)
+	if err := validateJob(job); err != nil {
+		return tiny.Model{}, err
 	}
 
 	workDir, inputDir, outputDir, err := stageWorkDir(job)
 	if err != nil {
 		return tiny.Model{}, err
 	}
-	defer func() { _ = os.RemoveAll(workDir) }()
+	defer t.cleanup(ctx, workDir)
 
-	env := map[string]string{
-		"TINY_JOB_NAME": job.Name,
-		"TINY_MODALITY": string(job.Dataset.Modality),
-		"TINY_TASK":     string(job.Dataset.TaskKind),
-	}
-	for k, v := range t.opts.ExtraEnv {
-		if _, reserved := env[k]; !reserved {
-			env[k] = v
-		}
-	}
-
-	t.opts.Logger.InfoContext(ctx, "ai/tiny/litert: training start",
-		slog.String("job", job.Name),
-		slog.String("modality", string(job.Dataset.Modality)),
-		slog.String("runner", t.opts.Runner.Name()),
-	)
-	var logBuf bytes.Buffer
-	runErr := t.opts.Runner.Run(ctx, tiny.RunSpec{
-		Image:     t.opts.Image,
-		Env:       env,
-		InputDir:  inputDir,
-		OutputDir: outputDir,
-		Timeout:   t.opts.Timeout,
-		GPUs:      t.opts.GPUs,
-		Logger:    &logBuf,
-	})
-	sc := bufio.NewScanner(&logBuf)
-	for sc.Scan() {
-		t.opts.Logger.InfoContext(ctx, "ai/tiny/litert: trainer", slog.String("line", sc.Text()))
-	}
-	if runErr != nil {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: runner: %w", runErr)
+	if runErr := t.runContainer(ctx, job, inputDir, outputDir); runErr != nil {
+		return tiny.Model{}, runErr
 	}
 
 	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; ArtifactName is a const.
@@ -164,25 +126,7 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 	if readErr != nil {
 		return tiny.Model{}, fmt.Errorf("ai/tiny/litert: read artifact: %w", readErr)
 	}
-	metrics := map[string]float64{}
-	labels := []string{}
-	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
-	if metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName)); mErr == nil {
-		// Metrics file may carry both scalar metrics and a "labels"
-		// array — decode into a loose map and sort them out.
-		var sidecar struct {
-			Metrics map[string]float64 `json:"metrics"`
-			Labels  []string           `json:"labels"`
-		}
-		if jerr := json.Unmarshal(metricsBytes, &sidecar); jerr != nil {
-			t.opts.Logger.WarnContext(ctx, "ai/tiny/litert: parse metrics", slog.String("error", jerr.Error()))
-		} else {
-			if sidecar.Metrics != nil {
-				metrics = sidecar.Metrics
-			}
-			labels = sidecar.Labels
-		}
-	}
+	metrics, labels := t.readSidecar(ctx, outputDir)
 
 	key := filepath.ToSlash(filepath.Join(t.opts.KeyPrefix, job.Name, job.ID, ArtifactName))
 	obj, err := t.opts.Bucket.Put(ctx, key, strings.NewReader(string(artifactBytes)), storage.PutOptions{
@@ -205,6 +149,97 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 		Metrics:   metrics,
 		Metadata:  maps.Clone(job.Tags),
 	}, nil
+}
+
+// validateJob rejects jobs this trainer cannot serve.
+func validateJob(job tiny.Job) error {
+	if err := tiny.ValidateJob(job); err != nil {
+		return fmt.Errorf("ai/tiny/litert: validate: %w", err)
+	}
+	if job.Dataset.TaskKind != tiny.TaskClassify {
+		return fmt.Errorf("ai/tiny/litert: need TaskKind=classify, got %s", job.Dataset.TaskKind)
+	}
+	switch job.Dataset.Modality {
+	case tiny.ModalityText, tiny.ModalityImage, tiny.ModalityAudio:
+		return nil
+	default:
+		return fmt.Errorf("ai/tiny/litert: Modality %s not supported (want text|image|audio)", job.Dataset.Modality)
+	}
+}
+
+// buildEnv merges ExtraEnv under the trainer-managed keys.
+func (t *Trainer) buildEnv(job tiny.Job) map[string]string {
+	env := map[string]string{
+		"TINY_JOB_NAME": job.Name,
+		"TINY_MODALITY": string(job.Dataset.Modality),
+		"TINY_TASK":     string(job.Dataset.TaskKind),
+	}
+	for k, v := range t.opts.ExtraEnv {
+		if _, reserved := env[k]; !reserved {
+			env[k] = v
+		}
+	}
+	return env
+}
+
+// runContainer invokes the Runner and drains its output into structured
+// logs whether or not Run errored.
+func (t *Trainer) runContainer(ctx context.Context, job tiny.Job, inputDir, outputDir string) error {
+	t.opts.Logger.InfoContext(ctx, "ai/tiny/litert: training start",
+		slog.String("job", job.Name),
+		slog.String("modality", string(job.Dataset.Modality)),
+		slog.String("runner", t.opts.Runner.Name()),
+	)
+	var logBuf bytes.Buffer
+	runErr := t.opts.Runner.Run(ctx, tiny.RunSpec{
+		Image:     t.opts.Image,
+		Env:       t.buildEnv(job),
+		InputDir:  inputDir,
+		OutputDir: outputDir,
+		Timeout:   t.opts.Timeout,
+		GPUs:      t.opts.GPUs,
+		Logger:    &logBuf,
+	})
+	sc := bufio.NewScanner(&logBuf)
+	for sc.Scan() {
+		t.opts.Logger.InfoContext(ctx, "ai/tiny/litert: trainer", slog.String("line", sc.Text()))
+	}
+	if runErr != nil {
+		return fmt.Errorf("ai/tiny/litert: runner: %w", runErr)
+	}
+	return nil
+}
+
+// readSidecar parses the optional metrics sidecar, which may carry both
+// scalar metrics and a "labels" array; a missing or malformed file
+// yields empty results.
+func (t *Trainer) readSidecar(ctx context.Context, outputDir string) (map[string]float64, []string) {
+	metrics := map[string]float64{}
+	labels := []string{}
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
+	metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName))
+	if mErr != nil {
+		return metrics, labels
+	}
+	var sidecar struct {
+		Metrics map[string]float64 `json:"metrics"`
+		Labels  []string           `json:"labels"`
+	}
+	if jerr := json.Unmarshal(metricsBytes, &sidecar); jerr != nil {
+		t.opts.Logger.WarnContext(ctx, "ai/tiny/litert: parse metrics", slog.String("error", jerr.Error()))
+		return metrics, labels
+	}
+	if sidecar.Metrics != nil {
+		metrics = sidecar.Metrics
+	}
+	return metrics, sidecar.Labels
+}
+
+// cleanup removes the staged work dir; a failure is logged, not returned.
+func (t *Trainer) cleanup(ctx context.Context, workDir string) {
+	if rmErr := os.RemoveAll(workDir); rmErr != nil {
+		t.opts.Logger.WarnContext(ctx, "ai/tiny/litert: remove work dir", slog.String("error", rmErr.Error()))
+	}
 }
 
 // stageWorkDir creates a tmp work dir with input/ + output/ subdirs

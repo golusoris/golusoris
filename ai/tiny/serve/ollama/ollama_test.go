@@ -7,6 +7,7 @@ package ollama_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -206,4 +207,43 @@ func TestPredictor_Close_noop(t *testing.T) {
 	t.Parallel()
 	p := ollama.NewPredictor(ollama.Options{})
 	require.NoError(t, p.Close())
+}
+
+var errBoom = errors.New("boom")
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// closeFailBody reads payload normally but fails Close with err.
+type closeFailBody struct {
+	io.Reader
+	err error
+}
+
+func (b *closeFailBody) Close() error { return b.err }
+
+// Negative: a failed /api/generate body close surfaces from Predict.
+// /api/show (used by Load) closes cleanly so the failure is isolated
+// to the generate path.
+func TestPredictor_Predict_closeErrorReturnsErr(t *testing.T) {
+	t.Parallel()
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		var closeErr error
+		if r.URL.Path == "/api/generate" {
+			closeErr = errBoom
+		}
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       &closeFailBody{Reader: strings.NewReader(`{"response":"hi","model":"m"}`), err: closeErr},
+		}, nil
+	})}
+	p := ollama.NewPredictor(ollama.Options{Endpoint: "http://ollama.invalid", HTTPClient: hc})
+	require.NoError(t, p.Load(t.Context(), tiny.Model{
+		Name: "intent-v1", Modality: tiny.ModalityText, TaskKind: tiny.TaskGenerate,
+	}))
+	_, err := p.Predict(t.Context(), "say hi")
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "close generate body")
 }
