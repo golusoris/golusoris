@@ -378,7 +378,7 @@ Local git hooks run through [lefthook](lefthook.yml) (`lefthook install`); see
 golusoris init my-service          # generate a minimal new app
 golusoris add grpc                 # wire grpc module into existing app
 golusoris add auth/oidc
-golusoris bump v0.9.0              # apply codemods for the new version (core/ import paths)
+golusoris bump v0.9.0              # go get + go mod tidy to that version; the core/ import-path rewrite is in docs/migrations/v0.9.0.md
 ```
 
 ---
