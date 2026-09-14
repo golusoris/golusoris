@@ -105,8 +105,13 @@ func TestOpenErrors(t *testing.T) {
 		t.Fatalf("empty path: got %v", err)
 	}
 	missingDir := filepath.Join(t.TempDir(), "nope", "x.db")
-	if _, err := sqlite.Open(t.Context(), sqlite.Options{Path: missingDir}, discard()); err == nil {
+	_, err := sqlite.Open(t.Context(), sqlite.Options{Path: missingDir}, discard())
+	if err == nil {
 		t.Fatal("expected error when the parent directory does not exist")
+	}
+	// sql.Open is lazy, so the failure must surface through the ping wrap.
+	if !strings.Contains(err.Error(), "db/sqlite: ping "+missingDir) {
+		t.Fatalf("expected ping-wrapped error, got %v", err)
 	}
 }
 
