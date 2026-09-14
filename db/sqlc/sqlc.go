@@ -26,8 +26,11 @@ import (
 type TxFn func(ctx context.Context, tx pgx.Tx) error
 
 // WithTx runs fn inside a Postgres transaction. The tx is committed if fn
-// returns nil; otherwise it's rolled back. fn errors flow through unchanged
-// so callers can use [errors.Is] / [errors.As] on the original cause.
+// returns nil; otherwise it's rolled back. fn errors flow through so callers
+// can use [errors.Is] / [errors.As] on the original cause; if the rollback
+// itself fails (other than [pgx.ErrTxClosed]) the returned error is
+// [errors.Join] of the fn error and the rollback error, so compare with
+// [errors.Is], not ==.
 //
 //	err := sqlc.WithTx(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
 //	    return queries.WithTx(tx).InsertOrder(ctx, args)
