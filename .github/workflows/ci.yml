@@ -119,7 +119,11 @@ jobs:
     name: Vulnerabilities (govulncheck)
     if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
+    # 20: whichever cache-using job finishes first pays the full setup-go
+    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
+    # run, vs 33-74s for the jobs that then find the key already written).
+    # 10 was enough only for the jobs that lost that race.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -250,7 +254,11 @@ jobs:
     name: Build
     if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
+    # 20: whichever cache-using job finishes first pays the full setup-go
+    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
+    # run, vs 33-74s for the jobs that then find the key already written).
+    # 10 was enough only for the jobs that lost that race.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -294,7 +302,11 @@ jobs:
     name: API compatibility (apidiff)
     if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
+    # 20: whichever cache-using job finishes first pays the full setup-go
+    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
+    # run, vs 33-74s for the jobs that then find the key already written).
+    # 10 was enough only for the jobs that lost that race.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
