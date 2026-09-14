@@ -19,8 +19,8 @@ We aim to acknowledge within 72 hours and provide a remediation plan within 7 da
 | Version | Supported | Licence |
 |---|---|---|
 | `v0.9.x` (current, root + `core/` sub-module) | yes — security fixes land here | EUPL-1.2 |
-| `v0.8.x` | until `v0.9.0` is tagged, then no | MIT |
-| `< v0.8.0` | no | MIT |
+| `v0.7.x` (latest tag; `v0.8.0` is prepared in `CHANGELOG.md` but not yet tagged) | until `v0.9.0` is tagged, then no | MIT |
+| `< v0.7.0` | no | MIT |
 
 Only the latest minor release is patched; the project is pre-1.0, so a
 security fix may ship with a breaking change (called out in the commit
