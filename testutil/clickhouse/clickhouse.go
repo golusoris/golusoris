@@ -39,6 +39,10 @@ const (
 // The container and connection are closed via t.Cleanup.
 func Start(t *testing.T) chgo.Conn {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/clickhouse: container-backed; skipped under -short")
+	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)

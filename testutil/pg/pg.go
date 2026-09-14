@@ -82,6 +82,9 @@ func (o Options) withDefaults() Options {
 // failure — Docker is a hard requirement per the testutil/pg contract.
 func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/pg: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 	o := Options{}
 	if len(opts) > 0 {
@@ -142,6 +145,9 @@ const (
 // Both the regular pool and the container are torn down via t.Cleanup.
 func StartReplication(t *testing.T, opts ...Options) (*pgxpool.Pool, string) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/pg: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 	o := Options{}
 	if len(opts) > 0 {
@@ -230,6 +236,9 @@ func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
 // credentials customizers and registers cleanup. Shared by the Start* helpers.
 func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.PostgresContainer {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/pg: container-backed; skipped under -short")
+	}
 	customizers := append([]testcontainers.ContainerCustomizer{
 		tcpostgres.WithDatabase(o.Database),
 		tcpostgres.WithUsername(o.User),
@@ -255,6 +264,9 @@ func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.Post
 // is cleaned up via t.Cleanup.
 func DSN(t *testing.T, opts ...Options) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/pg: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 	o := Options{}
 	if len(opts) > 0 {
