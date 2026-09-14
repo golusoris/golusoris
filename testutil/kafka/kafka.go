@@ -53,7 +53,9 @@ func Addr(t *testing.T) string {
 	t.Cleanup(func() {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer stopCancel()
-		_ = ctr.Terminate(stopCtx)
+		if terr := ctr.Terminate(stopCtx); terr != nil {
+			t.Logf("testutil/kafka: terminate container: %v", terr)
+		}
 	})
 
 	broker, err := ctr.KafkaSeedBroker(ctx)

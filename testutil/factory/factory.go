@@ -32,7 +32,9 @@ type Faker = gofakeit.Faker
 func New(t *testing.T) *Faker {
 	t.Helper()
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(t.Name()))
+	if _, err := h.Write([]byte(t.Name())); err != nil {
+		t.Fatalf("hash test name: %v", err)
+	}
 	return gofakeit.New(h.Sum64())
 }
 

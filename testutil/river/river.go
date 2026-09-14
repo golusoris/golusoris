@@ -118,7 +118,9 @@ func Start(t *testing.T, opts Options) *Harness {
 		t.Cleanup(func() {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer stopCancel()
-			_ = client.Stop(stopCtx)
+			if serr := client.Stop(stopCtx); serr != nil {
+				t.Logf("testutil/river: stop client: %v", serr)
+			}
 			startCancel()
 		})
 	}

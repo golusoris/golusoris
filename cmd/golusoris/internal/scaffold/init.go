@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/golusoris/golusoris/core/clikit"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // InitCmd returns the `golusoris init <name>` command.
@@ -75,7 +76,7 @@ func initApp(name, module string) error {
 	return nil
 }
 
-func writeTemplate(path, tmplStr string, data any) error {
+func writeTemplate(path, tmplStr string, data any) (err error) {
 	t, err := template.New("").Parse(tmplStr)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
@@ -84,7 +85,7 @@ func writeTemplate(path, tmplStr string, data any) error {
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer gerr.CloseInto(f, &err, "scaffold: close "+path)
 	return t.Execute(f, data) //nolint:wrapcheck // template error is descriptive
 }
 
