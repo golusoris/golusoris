@@ -344,7 +344,9 @@ func ensureGroupSchema(g *Group) {
 func writeJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", mediaTypeKey)
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		return // status + headers already sent; nothing more to report to the client
+	}
 }
 
 func writeErr(w http.ResponseWriter, status int, detail, scimType string) {

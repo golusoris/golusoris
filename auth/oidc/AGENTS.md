@@ -12,7 +12,7 @@ OIDC + OAuth 2.0 PKCE client via [coreos/go-oidc/v3]. Module provides
 ## Flow
 
 ```
-1. handler: url, verifier := provider.AuthURL(state) → store verifier in session → redirect
+1. handler: url, verifier, err := provider.AuthURL(state) → store verifier in session → redirect
 2. callback: set, err := provider.Exchange(ctx, code, verifier)
 3. callback: info, err := provider.UserInfo(ctx, set.AccessToken)
 ```

@@ -20,14 +20,22 @@ type fakeSession struct {
 	ok       bool
 }
 
+func TestMiddleware_RequiresSessionHooks(t *testing.T) {
+	t.Parallel()
+
+	_, err := impersonate.Middleware(impersonate.Options{})
+	require.Error(t, err)
+}
+
 func TestMiddleware_PassesThroughWithoutSession(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	mw := impersonate.Middleware(impersonate.Options{
+	mw, err := impersonate.Middleware(impersonate.Options{
 		SessionGet: func(_ *http.Request) (string, string, bool) { return "", "", false },
 		SessionSet: func(_ http.ResponseWriter, _ *http.Request, _, _ string) error { return nil },
 	})
+	require.NoError(t, err)
 	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { called = true }))
 
 	w := httptest.NewRecorder()
@@ -41,10 +49,11 @@ func TestMiddleware_PassesThroughWithoutSession(t *testing.T) {
 func TestMiddleware_AddsHeaderWhenImpersonating(t *testing.T) {
 	t.Parallel()
 
-	mw := impersonate.Middleware(impersonate.Options{
+	mw, err := impersonate.Middleware(impersonate.Options{
 		SessionGet: func(_ *http.Request) (string, string, bool) { return "target", "admin", true },
 		SessionSet: func(_ http.ResponseWriter, _ *http.Request, _, _ string) error { return nil },
 	})
+	require.NoError(t, err)
 	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		p := impersonate.FromContext(r.Context())
 		require.Equal(t, "target", p.Current)
@@ -62,7 +71,7 @@ func TestMiddleware_ExitFlow(t *testing.T) {
 
 	sess := fakeSession{current: "target", original: "admin", ok: true}
 	exitCalled := false
-	mw := impersonate.Middleware(impersonate.Options{
+	mw, err := impersonate.Middleware(impersonate.Options{
 		SessionGet: func(_ *http.Request) (string, string, bool) {
 			return sess.current, sess.original, sess.ok
 		},
@@ -72,6 +81,7 @@ func TestMiddleware_ExitFlow(t *testing.T) {
 		},
 		OnExit: func(_, _ string) { exitCalled = true },
 	})
+	require.NoError(t, err)
 	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		p := impersonate.FromContext(r.Context())
 		require.Equal(t, "admin", p.Current)

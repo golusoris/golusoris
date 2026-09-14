@@ -114,12 +114,13 @@ func NewManager(store Store, opts Options) *Manager {
 func (m *Manager) Load(r *http.Request) (*Session, error) {
 	cookie, err := r.Cookie(m.opts.CookieName)
 	if err != nil {
-		return newSession(genID()), nil //nolint:nilerr // missing cookie is not an error; caller gets a fresh session
+		// Missing cookie is not an error; the caller gets a fresh session.
+		return newEmptySession()
 	}
 	data, loadErr := m.store.Load(r.Context(), cookie.Value)
 	if loadErr != nil {
 		if isNotFound(loadErr) {
-			return newSession(genID()), nil
+			return newEmptySession()
 		}
 		return nil, fmt.Errorf("session: load: %w", loadErr)
 	}
@@ -196,9 +197,14 @@ func (m *MemoryStore) Load(_ context.Context, id string) (map[string]any, error)
 		return nil, gerr.NotFound("session not found")
 	}
 	// Deep-copy via JSON to prevent mutation.
-	b, _ := json.Marshal(e.data)
+	b, err := json.Marshal(e.data)
+	if err != nil {
+		return nil, fmt.Errorf("session/memory: marshal: %w", err)
+	}
 	var out map[string]any
-	_ = json.Unmarshal(b, &out)
+	if unmarshalErr := json.Unmarshal(b, &out); unmarshalErr != nil {
+		return nil, fmt.Errorf("session/memory: unmarshal: %w", unmarshalErr)
+	}
 	return out, nil
 }
 
@@ -209,7 +215,9 @@ func (m *MemoryStore) Save(_ context.Context, id string, data map[string]any, tt
 		return fmt.Errorf("session/memory: marshal: %w", err)
 	}
 	var cp map[string]any
-	_ = json.Unmarshal(b, &cp)
+	if unmarshalErr := json.Unmarshal(b, &cp); unmarshalErr != nil {
+		return fmt.Errorf("session/memory: unmarshal: %w", unmarshalErr)
+	}
 	m.data[id] = memEntry{data: cp, expires: m.clk.Now().Add(ttl)}
 	return nil
 }
@@ -222,10 +230,21 @@ func (m *MemoryStore) Delete(_ context.Context, id string) error {
 
 // --- helpers ---
 
-func genID() string {
+// newEmptySession mints a fresh session under a random ID.
+func newEmptySession() (*Session, error) {
+	id, err := genID()
+	if err != nil {
+		return nil, err
+	}
+	return newSession(id), nil
+}
+
+func genID() (string, error) {
 	b := make([]byte, idBytes)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("session: generate id: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func isNotFound(err error) bool {

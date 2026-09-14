@@ -57,12 +57,22 @@ type notFoundErr struct{}
 
 func (e *notFoundErr) Error() string { return "not found" }
 
+func TestNew_EmptySecret(t *testing.T) {
+	t.Parallel()
+	if _, err := apikey.New(newMemStore(), apikey.Options{}); err == nil {
+		t.Fatal("expected error for empty HMACSecret")
+	}
+}
+
 func TestIssueAndVerify(t *testing.T) {
 	t.Parallel()
-	svc := apikey.New(newMemStore(), apikey.Options{
+	svc, err := apikey.New(newMemStore(), apikey.Options{
 		Prefix:     "sk",
 		HMACSecret: []byte("super-secret-hmac-key"),
 	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	raw, key, err := svc.Issue(context.Background(), "user-1", []string{"read"})
 	if err != nil {
@@ -84,7 +94,10 @@ func TestIssueAndVerify(t *testing.T) {
 func TestVerifyRevoked(t *testing.T) {
 	t.Parallel()
 	store := newMemStore()
-	svc := apikey.New(store, apikey.Options{HMACSecret: []byte("secret")})
+	svc, err := apikey.New(store, apikey.Options{HMACSecret: []byte("secret")})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 
 	raw, key, _ := svc.Issue(context.Background(), "u", nil)
 	_ = svc.Revoke(context.Background(), key.ID)
@@ -96,7 +109,10 @@ func TestVerifyRevoked(t *testing.T) {
 
 func TestVerifyTampered(t *testing.T) {
 	t.Parallel()
-	svc := apikey.New(newMemStore(), apikey.Options{HMACSecret: []byte("secret")})
+	svc, err := apikey.New(newMemStore(), apikey.Options{HMACSecret: []byte("secret")})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	raw, _, _ := svc.Issue(context.Background(), "u", nil)
 
 	// Flip the last char to a guaranteed-different one. Replacing it with a

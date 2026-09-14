@@ -23,6 +23,12 @@ import (
 	"github.com/golusoris/golusoris/auth/oauth2server"
 )
 
+func TestNew_RequiresOptions(t *testing.T) {
+	t.Parallel()
+	_, err := oauth2server.New(oauth2server.Options{Issuer: "iss"})
+	require.Error(t, err)
+}
+
 func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	t.Parallel()
 
@@ -33,9 +39,10 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 		RedirectURIs: []string{"http://localhost/callback"},
 		PublicClient: true,
 	})
-	signer := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour)
+	signer, err := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour)
+	require.NoError(t, err)
 
-	srv := oauth2server.New(oauth2server.Options{
+	srv, err := oauth2server.New(oauth2server.Options{
 		Issuer:       "https://issuer.test",
 		Clients:      clients,
 		Codes:        oauth2server.NewMemoryCodeStore(),
@@ -43,6 +50,7 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 		Clock:        clk,
 		Authenticate: func(_ *http.Request) string { return "user-1" },
 	})
+	require.NoError(t, err)
 
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
@@ -116,14 +124,16 @@ func TestServer_RejectsBadPKCE(t *testing.T) {
 			ExpiresAt:           time.Now().Add(time.Minute),
 		},
 	}))
-	signer := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour)
-	srv := oauth2server.New(oauth2server.Options{
+	signer, err := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour)
+	require.NoError(t, err)
+	srv, err := oauth2server.New(oauth2server.Options{
 		Issuer:       "iss",
 		Clients:      clients,
 		Codes:        codes,
 		Signer:       signer,
 		Authenticate: func(_ *http.Request) string { return "u" },
 	})
+	require.NoError(t, err)
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
 

@@ -18,9 +18,25 @@ type testClaims struct {
 	UserID string `json:"uid"`
 }
 
+func newSigner(t *testing.T, secret string) *jwtpkg.Signer {
+	t.Helper()
+	s, err := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte(secret), time.Hour)
+	if err != nil {
+		t.Fatalf("NewHMACSigner: %v", err)
+	}
+	return s
+}
+
+func TestNewHMACSigner_EmptySecret(t *testing.T) {
+	t.Parallel()
+	if _, err := jwtpkg.NewHMACSigner(jwtpkg.HS256, nil, time.Hour); err == nil {
+		t.Fatal("expected error for empty secret")
+	}
+}
+
 func TestSignAndParse(t *testing.T) {
 	t.Parallel()
-	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	s := newSigner(t, "test-secret-32-bytes-long-enough")
 
 	claims := testClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -45,7 +61,7 @@ func TestSignAndParse(t *testing.T) {
 
 func TestParseExpired(t *testing.T) {
 	t.Parallel()
-	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	s := newSigner(t, "test-secret-32-bytes-long-enough")
 
 	claims := testClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -64,8 +80,8 @@ func TestParseExpired(t *testing.T) {
 
 func TestParseWrongSecret(t *testing.T) {
 	t.Parallel()
-	signer := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-a"), time.Hour)
-	verifier := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-b"), time.Hour)
+	signer := newSigner(t, "secret-a")
+	verifier := newSigner(t, "secret-b")
 
 	tok, _ := signer.Sign(testClaims{})
 	if err := verifier.Parse(tok, &testClaims{}); err == nil {
@@ -75,8 +91,8 @@ func TestParseWrongSecret(t *testing.T) {
 
 func TestErrInvalid_wrongSignature(t *testing.T) {
 	t.Parallel()
-	signer := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-a"), time.Hour)
-	verifier := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("secret-b"), time.Hour)
+	signer := newSigner(t, "secret-a")
+	verifier := newSigner(t, "secret-b")
 
 	tok, _ := signer.Sign(testClaims{})
 	err := verifier.Parse(tok, &testClaims{})
@@ -90,7 +106,7 @@ func TestErrInvalid_wrongSignature(t *testing.T) {
 
 func TestErrInvalid_malformed(t *testing.T) {
 	t.Parallel()
-	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	s := newSigner(t, "test-secret-32-bytes-long-enough")
 	err := s.Parse("not.a.jwt", &testClaims{})
 	if err == nil {
 		t.Fatal("expected error")
@@ -102,7 +118,7 @@ func TestErrInvalid_malformed(t *testing.T) {
 
 func TestErrInvalid_validToken(t *testing.T) {
 	t.Parallel()
-	s := jwtpkg.NewHMACSigner(jwtpkg.HS256, []byte("test-secret-32-bytes-long-enough"), time.Hour)
+	s := newSigner(t, "test-secret-32-bytes-long-enough")
 	claims := testClaims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),

@@ -11,7 +11,7 @@ JWT sign + verify via [golang-jwt/jwt/v5]. Pure utility — no fx module.
 ## Usage
 
 ```go
-s := jwt.NewHMACSigner(jwt.HS256, []byte(secret), time.Hour)
+s, err := jwt.NewHMACSigner(jwt.HS256, []byte(secret), time.Hour) // err when secret is empty
 
 type Claims struct {
     jwt.RegisteredClaims
@@ -27,7 +27,7 @@ err = s.Parse(tok, &got)
 
 | Function | Purpose |
 |---|---|
-| `NewHMACSigner(alg, secret, ttl)` | HMAC signer (HS256/384/512) |
+| `NewHMACSigner(alg, secret, ttl)` | `(*Signer, error)` — HMAC signer (HS256/384/512); error on empty secret |
 | `Signer.Sign(claims)` | Returns signed token string |
 | `Signer.Parse(tok, &claims)` | Validates + populates claims |
 | `ErrExpired(err)` | True if token is past expiry |

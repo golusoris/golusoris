@@ -51,19 +51,19 @@ type Service struct {
 	ttl    time.Duration
 }
 
-// New returns a Service. ttl defaults to 15 minutes if zero. secret must
-// be non-empty.
-func New(store Store, clk clockwork.Clock, secret []byte, ttl time.Duration) *Service {
+// New returns a Service. ttl defaults to 15 minutes if zero. Returns an
+// error if secret is empty.
+func New(store Store, clk clockwork.Clock, secret []byte, ttl time.Duration) (*Service, error) {
+	if len(secret) == 0 {
+		return nil, errors.New("magiclink: secret must not be empty")
+	}
 	if clk == nil {
 		clk = clockwork.NewRealClock()
-	}
-	if len(secret) == 0 {
-		panic("magiclink: secret must not be empty")
 	}
 	if ttl == 0 {
 		ttl = 15 * time.Minute
 	}
-	return &Service{store: store, clk: clk, secret: secret, ttl: ttl}
+	return &Service{store: store, clk: clk, secret: secret, ttl: ttl}, nil
 }
 
 // Issue creates a single-use link token for email. Returns the raw

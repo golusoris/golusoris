@@ -8,7 +8,7 @@
 //
 // Wire-up:
 //
-//	mw := impersonate.Middleware(impersonate.Options{
+//	mw, err := impersonate.Middleware(impersonate.Options{
 //	    SessionGet:  func(r *http.Request) (string, string, bool) { ... },
 //	    SessionSet:  func(w, r, current, original string) { ... },
 //	    OnImpersonate: func(actor, target string) { auditLog.Record(...) },
@@ -67,10 +67,11 @@ type Options struct {
 }
 
 // Middleware injects a Principal into every request context based on
-// the session and handles the exit flow.
-func Middleware(opts Options) func(http.Handler) http.Handler {
+// the session and handles the exit flow. Returns an error when
+// SessionGet or SessionSet is nil.
+func Middleware(opts Options) (func(http.Handler) http.Handler, error) {
 	if opts.SessionGet == nil || opts.SessionSet == nil {
-		panic("impersonate: SessionGet + SessionSet required")
+		return nil, errors.New("impersonate: SessionGet + SessionSet required")
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +98,7 @@ func Middleware(opts Options) func(http.Handler) http.Handler {
 			ctx := WithContext(r.Context(), Principal{Current: cur, Original: orig})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
-	}
+	}, nil
 }
 
 // Begin starts an impersonation: replaces the current principal with

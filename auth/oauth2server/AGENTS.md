@@ -10,7 +10,7 @@ Minimal OAuth 2.1 / OIDC issuer: authorization-code flow with PKCE.
 
 ## Surface
 
-- `oauth2server.New(opts)` → `*Server`.
+- `oauth2server.New(opts)` → `(*Server, error)`; errors when `Issuer`, `Clients`, `Codes`, `Signer` or `Authenticate` is unset.
 - `Server.Routes()` → `http.Handler` exposing `/authorize` + `/token`.
 - `MemoryClientStore`, `MemoryCodeStore` for tests / single-replica deployments.
 - `Options.Authenticate(r)` is the integration point with your session store.
