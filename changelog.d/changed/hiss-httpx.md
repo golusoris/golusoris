@@ -23,4 +23,4 @@
   - `httpx/client.Drain` now logs drain/close failures at Debug on `slog.Default()` (signature unchanged).
   - `httpx/extclient`: a failed response-body close now surfaces as the call error when the request otherwise succeeded.
   - `httpx/geofence.Module`: the fx `OnStop` hook returns the mmdb reader's close error instead of swallowing it.
-  - `apidocs` `/mcp` tool proxy: a failed response-body close is returned as the tool-call error instead of being dropped.
+  - `apidocs` `/mcp` tool proxy: a failed response-body read or close is reported as an `IsError` tool result instead of being dropped (a short read previously produced a silently truncated reply).
