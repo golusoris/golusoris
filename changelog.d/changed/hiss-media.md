@@ -4,8 +4,8 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-- **markdown**: `RenderString` returns an error instead of panicking on a
-  goldmark failure (HISS-07 burn-down).
+- **BREAKING**: `markdown.RenderString` returns an error instead of panicking on
+  a goldmark failure (HISS-07 burn-down).
 
   ```go
   // before
@@ -14,8 +14,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
   html, err := markdown.RenderString(src)
   ```
 
-- **media/3d**: `(*App).Run` returns the first frame render error instead of
-  discarding it; the render loop still runs until the window closes.
+- **BREAKING**: `media/3d` `(*App).Run` returns the first frame render error
+  instead of discarding it; the render loop still runs until the window closes.
 
   ```go
   // before
