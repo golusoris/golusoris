@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+//go:build unix
+
 package scan_test
 
 import (
