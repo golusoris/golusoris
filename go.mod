@@ -67,7 +67,7 @@ require (
 	github.com/mattn/go-isatty v0.0.22
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
-	github.com/miekg/dns v1.1.72
+	github.com/miekg/dns v1.1.73
 	github.com/minio/selfupdate v0.6.0
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/nats-io/nats.go v1.52.0
