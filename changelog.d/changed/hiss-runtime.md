@@ -1,4 +1,4 @@
-- `k8s/metrics/prom`: `Mount` and `MountFor` now return `error` instead of silently recovering from Prometheus registration panics. "Already registered" is still tolerated; any other registration failure is surfaced. HISS-07 burn-down (group `runtime`).
+- **BREAKING**: `k8s/metrics/prom` `Mount` and `MountFor` now return `error` instead of silently recovering from Prometheus registration panics. "Already registered" is still tolerated; any other registration failure is surfaced. HISS-07 burn-down (group `runtime`).
 
   ```go
   // before
