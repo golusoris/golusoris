@@ -316,8 +316,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Module | Purpose | Key dep |
 |---|---|---|
-| `clikit/` | cobra + fx-aware CLI app builder | spf13/cobra |
-| `clikit/tui/` | bubbletea `Run` / `RunInline` helpers | charmbracelet/bubbletea |
+| `clikit/tui/` | bubbletea `Run` / `RunInline` helpers (the CLI builder itself is `core/clikit/`) | charmbracelet/bubbletea |
 | `selfupdate/` | binary self-update from GitHub releases with SHA-256 verification | minio/selfupdate |
 | `plugin/` | generic thread-safe extension-point `Registry[T]` | custom |
 
@@ -361,11 +360,17 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make ci          # golangci-lint + govulncheck + gosec + go test -race
+make verify-all  # the universal gate: build + ci in root and core/, capabilities drift, compile-context, HISS audit, reuse lint
+make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
+make ci-all      # the same in every gated module (root + core/)
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
+make reuse-lint  # REUSE / SPDX compliance
 ```
+
+Local git hooks run through [lefthook](lefthook.yml) (`lefthook install`); see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Scaffolding
 
@@ -373,14 +378,22 @@ make sec         # govulncheck + gosec
 golusoris init my-service          # generate a minimal new app
 golusoris add grpc                 # wire grpc module into existing app
 golusoris add auth/oidc
-golusoris bump v0.5.0              # apply codemods for the new version
+golusoris bump v0.9.0              # apply codemods for the new version (core/ import paths)
 ```
 
 ---
 
 ## Status
 
-Pre-alpha (`v0.0.x`). All modules above are committed; public API may change before `v0.1.0`.
+Pre-1.0, actively developed. Latest tagged release: **v0.8.0** (MIT). This
+branch prepares **v0.9.0**: the lean `core/` sub-module (ADR-0017), the
+EUPL-1.2 relicense (ADR-0018) and praetor HISS-16 governance (ADR-0019), on a
+Go 1.27 toolchain floor. Breaking changes between minor versions are called
+out in the commit `Migration:` footer and in `docs/migrations/` — start with
+[docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path
+move (`config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`,
+`version`, `clikit`, `mcp` → `core/…`). Every module in the catalog above is
+committed and exercised by CI.
 
 ---
 
