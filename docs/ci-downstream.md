@@ -40,7 +40,7 @@ Targets after inclusion:
 | Target | What it runs |
 |---|---|
 | `make ci` | `lint` + `sec` + `test` — the full local gate |
-| `make lint` | `golangci-lint run --config $(GOLANGCI_CONFIG)` (default `tools/golangci.yml`) |
+| `make lint` | `golangci-lint run --config $(GOLANGCI_CONFIG)` (default `.golangci.yml`) |
 | `make sec` | `vuln` + `gosec` (`govulncheck` then `gosec -quiet`) |
 | `make test` | `go test -race -count=1 -timeout=120s ./...` |
 | `make cover` | `go test` with `-coverprofile=coverage.out`, renders `coverage.html` |
@@ -55,7 +55,7 @@ every tool is a `?=` default:
 
 ```makefile
 GOLANGCI        := $(shell which golangci-lint)
-GOLANGCI_CONFIG := tools/golangci.yml   # point at your own or the shared config
+GOLANGCI_CONFIG := .golangci.yml   # point at your own or the shared config
 include tools/Makefile.shared
 ```
 
@@ -168,19 +168,24 @@ this writing — check the workflow for the current pins):
 
 ## 5. golangci-lint config
 
-`tools/golangci.yml` is a golangci-lint **v2** config and the shared baseline
-for the framework and downstream apps. Point `GOLANGCI_CONFIG` (local) and the
-`golangci-config` input (CI) at it, or extend it in your app:
+`.golangci.yml` (repo root — golangci-lint's own auto-discovery path, and
+where praetor's flavor audit expects it) is a golangci-lint **v2** config and
+the shared baseline for the framework and downstream apps. Point
+`GOLANGCI_CONFIG` (local) and the `golangci-config` input (CI) at your copy,
+or extend it in your app:
 
 ```yaml
 # myapp/.golangci.yml  (golangci-lint v2)
 version: "2"
-# copy the shared tools/golangci.yml and layer app-specific overrides here,
-# or vendor it and set golangci-config: tools/golangci.yml in ci-go.yml.
+# copy the shared .golangci.yml and layer app-specific overrides here,
+# or vendor it under a different name and set golangci-config accordingly
+# in ci-go.yml.
 ```
 
 If `golangci-config` is left empty in `ci-go.yml`, golangci-lint auto-discovers
-the app's own `.golangci.yml`; set it to opt into the shared ruleset explicitly.
+the app's own `.golangci.yml` at its repo root — the recommended default, and
+the same file praetor's flavor audit looks for; set `golangci-config` only to
+opt into a path other than your own root `.golangci.yml`.
 
 ## 6. Git hooks
 

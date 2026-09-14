@@ -9,7 +9,7 @@
 # via the pre-commit `custom-semgrep` hook; runs advisory (non-blocking) in CI.
 #
 # Deliberately NOT duplicated here (golangci-lint already gates them — see
-# tools/golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
+# .golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
 # math/rand (forbidigo), stdlib log (depguard), pkg/errors (gomodguard).
 rules:
   # ── HTTP client must carry a timeout ────────────────────────────────────────

@@ -111,7 +111,7 @@ func (b *LocalBucket) Put(_ context.Context, key string, r io.Reader, _ PutOptio
 	if mkErr := os.MkdirAll(filepath.Dir(path), 0o750); mkErr != nil {
 		return Object{}, fmt.Errorf("storage: mkdir: %w", mkErr)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) //nolint:gosec // G304: path is caller-supplied, validated at storage boundary // #nosec G304
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600) // #nosec G304 -- path is caller-supplied, validated at storage boundary
 	if err != nil {
 		return Object{}, fmt.Errorf("storage: create: %w", err)
 	}
@@ -132,7 +132,7 @@ func (b *LocalBucket) Get(_ context.Context, key string) (io.ReadCloser, Object,
 	if err != nil {
 		return nil, Object{}, err
 	}
-	f, err := os.Open(path) //nolint:gosec // G304: path is caller-supplied, validated at storage boundary // #nosec G304
+	f, err := os.Open(path) // #nosec G304 -- path is caller-supplied, validated at storage boundary
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, Object{}, ErrNotFound
 	}

@@ -26,7 +26,7 @@ repos:
     rev: v2.0.0
     hooks:
       - id: golangci-lint
-        args: ["--config=tools/golangci.yml"]
+        args: ["--config=.golangci.yml"]
 
   - repo: local
     hooks:

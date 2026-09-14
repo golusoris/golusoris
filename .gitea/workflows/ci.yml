@@ -59,7 +59,7 @@ jobs:
           go mod verify
 
       - name: Lint
-        run: golangci-lint run --config=tools/golangci.yml --timeout=5m
+        run: golangci-lint run --config=.golangci.yml --timeout=5m
 
       - name: Security and vulnerability gates
         run: |

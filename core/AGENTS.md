@@ -48,7 +48,7 @@ cloud, or CGO code lives here — those stay in the root module and import core.
 ## Developing
 
 ```sh
-cd core && go build ./... && go test -race ./... && golangci-lint run --config ../tools/golangci.yml ./...
+cd core && go build ./... && go test -race ./... && golangci-lint run --config ../.golangci.yml ./...
 # or from the repo root:
 make build-all ci-all
 ```

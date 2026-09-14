@@ -86,7 +86,7 @@ lefthook install          # writes .git/hooks/{pre-commit,commit-msg,pre-push}
 
 | Hook | Runs |
 | --- | --- |
-| `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config tools/golangci.yml` and `go vet` on the packages of the staged files; `standardsctl compile-context --verify`, `reuse lint`, `gitleaks git --staged` |
+| `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config .golangci.yml` and `go vet` on the packages of the staged files; `standardsctl compile-context --verify`, `reuse lint`, `gitleaks git --staged` |
 | `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`) and the DCO `Signed-off-by:` trailer |
 | `pre-push` | `go build ./...` + `go test -short ./...` (no `-race`) in the root and `core/` modules |
 

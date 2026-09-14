@@ -140,7 +140,7 @@ The full table (and the refresh recipe, `make docs-upstream`) is in [docs/upstre
 
 Every PR must pass:
 
-- `golangci-lint` (30+ linters — see `tools/golangci.yml`)
+- `golangci-lint` (30+ linters — see `.golangci.yml`)
 - `govulncheck`
 - `go test -race -count=1` + 70% coverage (85% on security-critical packages)
 - `apidiff` vs previous tag — no undeclared breaking changes
