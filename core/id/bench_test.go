@@ -14,7 +14,9 @@ func BenchmarkNewUUID(b *testing.B) {
 	g := id.New()
 	b.ReportAllocs()
 	for b.Loop() {
-		_ = g.NewUUID()
+		if _, err := g.NewUUID(); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 

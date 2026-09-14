@@ -65,7 +65,11 @@ func NewPGRegistryWithClock(pool *pgxpool.Pool, clk clockwork.Clock) (*PGRegistr
 // only id/name/tenant_id/base_model/created_at are queryable columns.
 func (r *PGRegistry) SaveJob(ctx context.Context, j Job) error {
 	if j.ID == "" {
-		j.ID = r.idGen.NewUUID().String()
+		u, err := r.idGen.NewUUID()
+		if err != nil {
+			return fmt.Errorf("ai/tiny: job id: %w", err)
+		}
+		j.ID = u.String()
 	}
 	if j.CreatedAt.IsZero() {
 		j.CreatedAt = r.clk.Now().UTC()
@@ -136,7 +140,11 @@ func (r *PGRegistry) SaveModel(ctx context.Context, m *Model) error {
 		return errors.New("ai/tiny: model.Name required")
 	}
 	if m.ID == "" {
-		m.ID = r.idGen.NewUUID().String()
+		u, err := r.idGen.NewUUID()
+		if err != nil {
+			return fmt.Errorf("ai/tiny: model id: %w", err)
+		}
+		m.ID = u.String()
 	}
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = r.clk.Now().UTC()

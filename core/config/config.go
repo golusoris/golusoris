@@ -16,6 +16,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -53,6 +54,9 @@ type Options struct {
 	// instead. Default behavior (split every underscore) is unchanged when
 	// this is empty.
 	CompoundKeys []string
+	// Logger receives file-watch and SIGHUP reload failures. Nil means
+	// slog.Default(), which the log module rewires to the app handler.
+	Logger *slog.Logger
 }
 
 // Config is the dependency apps inject.
@@ -202,33 +206,77 @@ func New(opts Options) (*Config, error) {
 	return c, nil
 }
 
-// startWatch wires file watchers + SIGHUP handler. Returns a stop func.
-func (c *Config) startWatch(ctx context.Context) func() {
+// logger returns the reload-failure logger, defaulting to slog.Default().
+func (c *Config) logger() *slog.Logger {
+	if c.opts.Logger != nil {
+		return c.opts.Logger
+	}
+	return slog.Default()
+}
+
+// reload re-reads one file into the tree and logs (never drops) a failure.
+func (c *Config) reload(path string, p koanf.Provider) {
+	if err := c.k.Load(p, parserFor(path)); err != nil {
+		c.logger().Warn("config: reload failed", slog.String("path", path), slog.Any("err", err))
+	}
+}
+
+// startWatch wires file watchers + SIGHUP handler. Returns a stop func; on a
+// watch registration failure the already-registered watches are torn down.
+func (c *Config) startWatch(ctx context.Context) (func(), error) {
 	stops := make([]func(), 0, len(c.opts.Files)+1)
+	stopAll := func() {
+		for _, s := range stops {
+			s()
+		}
+	}
 
 	if c.opts.Watch {
 		for _, path := range c.opts.Files {
 			if _, err := os.Stat(path); err != nil {
 				continue
 			}
-			fp := file.Provider(path)
-			_ = fp.Watch(func(_ any, err error) {
-				if err != nil {
-					return
-				}
-				_ = c.k.Load(fp, parserFor(path))
-				c.fire()
-			})
-			stops = append(stops, func() { _ = fp.Unwatch() })
+			stop, err := c.watchFile(path)
+			if err != nil {
+				stopAll()
+				return nil, err
+			}
+			stops = append(stops, stop)
 		}
 	}
 
-	// SIGHUP -> reload all files + fire listeners.
+	stops = append(stops, c.startHUP(ctx))
+	return stopAll, nil
+}
+
+// watchFile registers a change watcher on path and returns its unwatch func.
+func (c *Config) watchFile(path string) (func(), error) {
+	fp := file.Provider(path)
+	err := fp.Watch(func(_ any, err error) {
+		if err != nil {
+			c.logger().Warn("config: watch event failed", slog.String("path", path), slog.Any("err", err))
+			return
+		}
+		c.reload(path, fp)
+		c.fire()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("config: watch %s: %w", path, err)
+	}
+	return func() {
+		if uerr := fp.Unwatch(); uerr != nil {
+			c.logger().Debug("config: unwatch failed", slog.String("path", path), slog.Any("err", uerr))
+		}
+	}, nil
+}
+
+// startHUP reloads all files + fires listeners on SIGHUP until stopped.
+func (c *Config) startHUP(ctx context.Context) func() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP)
 	hupCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		for {
+		for hupCtx.Err() == nil {
 			select {
 			case <-hupCtx.Done():
 				return
@@ -237,19 +285,13 @@ func (c *Config) startWatch(ctx context.Context) func() {
 					if _, err := os.Stat(path); err != nil {
 						continue
 					}
-					_ = c.k.Load(file.Provider(path), parserFor(path))
+					c.reload(path, file.Provider(path))
 				}
 				c.fire()
 			}
 		}
 	}()
-	stops = append(stops, func() { signal.Stop(sigs); cancel() })
-
-	return func() {
-		for _, s := range stops {
-			s()
-		}
-	}
+	return func() { signal.Stop(sigs); cancel() }
 }
 
 func parserFor(path string) koanf.Parser {
@@ -280,9 +322,9 @@ var Module = fx.Module("golusoris.config",
 		}
 		var stop func()
 		lc.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				stop = c.startWatch(ctx)
-				return nil
+			OnStart: func(ctx context.Context) (err error) {
+				stop, err = c.startWatch(ctx)
+				return err
 			},
 			OnStop: func(_ context.Context) error {
 				if stop != nil {

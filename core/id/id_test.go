@@ -13,7 +13,10 @@ import (
 func TestNewUUIDIsV7(t *testing.T) {
 	t.Parallel()
 	g := id.New()
-	u := g.NewUUID()
+	u, err := g.NewUUID()
+	if err != nil {
+		t.Fatalf("NewUUID: %v", err)
+	}
 	if u.Version() != 7 {
 		t.Errorf("UUID version = %d, want 7", u.Version())
 	}

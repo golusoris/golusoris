@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 
 	yamlv3 "go.yaml.in/yaml/v3"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // MaxDocumentSize bounds a single decode (Power-of-10 rule 2: no unbounded
@@ -124,12 +126,12 @@ func (o Options) Decode(r io.Reader, v any) error {
 func ReadFile(path string, v any) error { return Options{}.ReadFile(path, v) }
 
 // ReadFile decodes the YAML file at path into v.
-func (o Options) ReadFile(path string, v any) error {
+func (o Options) ReadFile(path string, v any) (err error) {
 	f, err := os.Open(path) // #nosec G304 -- manifest path is caller-controlled by design (library API); size-bounded by Decode
 	if err != nil {
 		return fmt.Errorf("yaml: open %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer gerr.CloseInto(f, &err, "yaml: close "+path)
 	if err := o.Decode(f, v); err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -156,27 +158,30 @@ func (o Options) WriteFile(path string, v any, perm os.FileMode) error {
 	}
 	tmpName := tmp.Name()
 	if err := writeAndClose(tmp, data, perm); err != nil {
-		_ = os.Remove(tmpName)
-		return err
+		return removeTemp(tmpName, err)
 	}
 	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("yaml: rename %s: %w", path, err)
+		return removeTemp(tmpName, fmt.Errorf("yaml: rename %s: %w", path, err))
 	}
 	return nil
 }
 
-func writeAndClose(f *os.File, data []byte, perm os.FileMode) error {
+// removeTemp deletes the leftover temp file after a failed write and joins a
+// removal failure onto the primary error instead of discarding it.
+func removeTemp(tmpName string, err error) error {
+	if rerr := os.Remove(tmpName); rerr != nil {
+		return errors.Join(err, fmt.Errorf("yaml: remove temp %s: %w", tmpName, rerr))
+	}
+	return err
+}
+
+func writeAndClose(f *os.File, data []byte, perm os.FileMode) (err error) {
+	defer gerr.CloseJoin(f, &err, "yaml: close "+f.Name())
 	if _, err := f.Write(data); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("yaml: write %s: %w", f.Name(), err)
 	}
 	if err := f.Chmod(perm); err != nil {
-		_ = f.Close()
 		return fmt.Errorf("yaml: chmod %s: %w", f.Name(), err)
-	}
-	if err := f.Close(); err != nil {
-		return fmt.Errorf("yaml: close %s: %w", f.Name(), err)
 	}
 	return nil
 }

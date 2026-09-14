@@ -31,6 +31,13 @@ type runParams struct {
 	Shutdowner fx.Shutdowner
 }
 
+// shutdown ends the app via fx.Shutdowner, logging a refused shutdown.
+func (p runParams) shutdown(ctx context.Context) {
+	if err := p.Shutdowner.Shutdown(); err != nil {
+		p.Logger.ErrorContext(ctx, "mcp: app shutdown failed", slog.Any("err", err))
+	}
+}
+
 // run wires the configured transport into the fx lifecycle.
 func run(p runParams) error {
 	switch p.Opts.Transport {
@@ -73,7 +80,7 @@ func runStdio(p runParams) {
 				}
 				// Run returned: the client disconnected (or we were cancelled).
 				// End the app so the process exits like a CLI MCP server.
-				_ = p.Shutdowner.Shutdown()
+				p.shutdown(ctx)
 			}()
 			return nil
 		},
@@ -120,7 +127,7 @@ func runHTTP(p runParams) {
 			go func() {
 				if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
 					p.Logger.ErrorContext(ctx, "mcp: streamable-HTTP serve failed", slog.Any("err", serveErr))
-					_ = p.Shutdowner.Shutdown()
+					p.shutdown(ctx)
 				}
 			}()
 			return nil

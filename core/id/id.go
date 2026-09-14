@@ -14,27 +14,28 @@
 package id
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/segmentio/ksuid"
 	"go.uber.org/fx"
 )
 
-// Generator produces both flavors.
+// Generator produces both flavors. NewUUID returns an error only when the
+// system random source fails; callers surface it rather than panicking.
 type Generator interface {
-	NewUUID() uuid.UUID
+	NewUUID() (uuid.UUID, error)
 	NewKSUID() ksuid.KSUID
 }
 
 type defaultGen struct{}
 
-func (defaultGen) NewUUID() uuid.UUID {
+func (defaultGen) NewUUID() (uuid.UUID, error) {
 	v, err := uuid.NewV7()
 	if err != nil {
-		// uuid.NewV7 only fails when the random source fails, which on Linux
-		// means catastrophic system state — panic is appropriate.
-		panic("id: UUIDv7 generation failed: " + err.Error())
+		return uuid.Nil, fmt.Errorf("id: uuidv7: %w", err)
 	}
-	return v
+	return v, nil
 }
 
 func (defaultGen) NewKSUID() ksuid.KSUID {
