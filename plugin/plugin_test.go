@@ -25,7 +25,7 @@ func (h hiGreeter) Greet() string { return "hi" }
 func TestRegister_and_Get(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	r.Register("hello", helloGreeter{})
+	require.NoError(t, r.Register("hello", helloGreeter{}))
 
 	g, ok := r.Get("hello")
 	require.True(t, ok)
@@ -39,11 +39,11 @@ func TestGet_missing(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestRegister_duplicatePanics(t *testing.T) {
+func TestRegister_duplicateErrors(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	r.Register("dup", helloGreeter{})
-	require.Panics(t, func() { r.Register("dup", helloGreeter{}) })
+	require.NoError(t, r.Register("dup", helloGreeter{}))
+	require.ErrorIs(t, r.Register("dup", helloGreeter{}), plugin.ErrDuplicate)
 }
 
 func TestMustRegister_replaces(t *testing.T) {
@@ -55,25 +55,30 @@ func TestMustRegister_replaces(t *testing.T) {
 	require.Equal(t, "hi", g.Greet())
 }
 
-func TestMustGet_panicsOnMissing(t *testing.T) {
+func TestLookup(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	require.Panics(t, func() { r.MustGet("missing") })
+	_, err := r.Lookup("missing")
+	require.ErrorIs(t, err, plugin.ErrNotRegistered)
+	require.NoError(t, r.Register("hello", helloGreeter{}))
+	g, err := r.Lookup("hello")
+	require.NoError(t, err)
+	require.Equal(t, "hello", g.Greet())
 }
 
 func TestKeys(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	r.Register("a", helloGreeter{})
-	r.Register("b", hiGreeter{})
+	require.NoError(t, r.Register("a", helloGreeter{}))
+	require.NoError(t, r.Register("b", hiGreeter{}))
 	require.ElementsMatch(t, []string{"a", "b"}, r.Keys())
 }
 
 func TestAll(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	r.Register("hello", helloGreeter{})
-	r.Register("hi", hiGreeter{})
+	require.NoError(t, r.Register("hello", helloGreeter{}))
+	require.NoError(t, r.Register("hi", hiGreeter{}))
 	all := r.All()
 	require.Len(t, all, 2)
 	require.Equal(t, "hello", all["hello"].Greet())
@@ -83,14 +88,14 @@ func TestLen(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
 	require.Equal(t, 0, r.Len())
-	r.Register("a", helloGreeter{})
+	require.NoError(t, r.Register("a", helloGreeter{}))
 	require.Equal(t, 1, r.Len())
 }
 
 func TestEntries(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.greeters")
-	r.Register("hello", helloGreeter{})
+	require.NoError(t, r.Register("hello", helloGreeter{}))
 	entries := r.Entries()
 	require.Len(t, entries, 1)
 	require.Equal(t, "hello", entries[0].Key)
@@ -100,7 +105,7 @@ func TestEntries(t *testing.T) {
 func TestConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	r := plugin.New[greeter]("test.concurrent")
-	r.Register("base", helloGreeter{})
+	require.NoError(t, r.Register("base", helloGreeter{}))
 
 	done := make(chan struct{})
 	for range 50 {

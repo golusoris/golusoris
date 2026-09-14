@@ -222,7 +222,7 @@ func (h *Handler) wireLifecycle(lc fx.Lifecycle) {
 func (h *Handler) drainCompletions(ctx context.Context) {
 	defer close(h.drainDone)
 	ch := h.unrouted.CompleteUploads
-	for {
+	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
 			return

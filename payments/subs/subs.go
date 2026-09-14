@@ -327,15 +327,26 @@ func (s *Service) ProcessDue(ctx context.Context, subIDs []string) error {
 			continue
 		}
 		if sub.CancelAt != nil && !sub.CancelAt.After(now) && sub.Status != StatusCanceled {
-			_ = s.Cancel(ctx, sid, time.Time{})
+			s.cancelDue(ctx, sid, "cancel_at reached")
 			continue
 		}
 		if sub.Status == StatusTrialing && sub.TrialEndsAt != nil && !sub.TrialEndsAt.After(now) {
-			// Trial ended without activation → cancel.
-			_ = s.Cancel(ctx, sid, time.Time{})
+			s.cancelDue(ctx, sid, "trial ended without activation")
 		}
 	}
 	return nil
+}
+
+// cancelDue cancels one due subscription and logs (rather than aborts the
+// sweep on) a failure so one bad row cannot stall the scheduled job.
+func (s *Service) cancelDue(ctx context.Context, subID, reason string) {
+	if err := s.Cancel(ctx, subID, time.Time{}); err != nil {
+		s.logger.WarnContext(ctx, "subs: due cancel failed",
+			slog.String("id", subID),
+			slog.String("reason", reason),
+			slog.Any("err", err),
+		)
+	}
 }
 
 // fetch is a thin Store.Get wrapper that adds a contextual error

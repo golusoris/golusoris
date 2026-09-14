@@ -17,6 +17,7 @@
 package money
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -47,16 +48,24 @@ func (m Money) MajorUnits() float64 {
 	return float64(m.Amount) / float64(minorUnitDivisor(m.Currency))
 }
 
-// Add returns m + other. Panics if currencies differ.
-func (m Money) Add(other Money) Money {
-	m.mustSameCurrency(other)
-	return Money{Amount: m.Amount + other.Amount, Currency: m.Currency}
+// ErrCurrencyMismatch is returned by [Money.Add] and [Money.Sub] when the
+// operands use different currencies.
+var ErrCurrencyMismatch = errors.New("money: currency mismatch")
+
+// Add returns m + other, or [ErrCurrencyMismatch] if currencies differ.
+func (m Money) Add(other Money) (Money, error) {
+	if err := m.checkSameCurrency(other); err != nil {
+		return Money{}, err
+	}
+	return Money{Amount: m.Amount + other.Amount, Currency: m.Currency}, nil
 }
 
-// Sub returns m - other. Panics if currencies differ.
-func (m Money) Sub(other Money) Money {
-	m.mustSameCurrency(other)
-	return Money{Amount: m.Amount - other.Amount, Currency: m.Currency}
+// Sub returns m - other, or [ErrCurrencyMismatch] if currencies differ.
+func (m Money) Sub(other Money) (Money, error) {
+	if err := m.checkSameCurrency(other); err != nil {
+		return Money{}, err
+	}
+	return Money{Amount: m.Amount - other.Amount, Currency: m.Currency}, nil
 }
 
 // Mul multiplies by a factor and rounds to the nearest minor unit.
@@ -101,10 +110,11 @@ func (m Money) String() string {
 	return fmt.Sprintf("%d.%0*d %s", major, decimals, minor, m.Currency)
 }
 
-func (m Money) mustSameCurrency(other Money) {
+func (m Money) checkSameCurrency(other Money) error {
 	if m.Currency != other.Currency {
-		panic(fmt.Sprintf("money: currency mismatch %s vs %s", m.Currency, other.Currency))
+		return fmt.Errorf("%w: %s vs %s", ErrCurrencyMismatch, m.Currency, other.Currency)
 	}
+	return nil
 }
 
 // minorUnitDivisor returns the number of minor units per major unit.

@@ -255,7 +255,7 @@ func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error)
 	}
 
 	var out []Object
-	for {
+	for ctx.Err() == nil {
 		page, err := b.client.ListObjectsV2(ctx, in)
 		if err != nil {
 			return nil, fmt.Errorf("storage/s3: list %q: %w", opts.Prefix, err)
@@ -277,6 +277,7 @@ func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error)
 		}
 		in.ContinuationToken = page.NextContinuationToken
 	}
+	return nil, fmt.Errorf("storage/s3: list %q: %w", opts.Prefix, ctx.Err())
 }
 
 // URL implements [Bucket] by issuing a presigned GET valid for the configured

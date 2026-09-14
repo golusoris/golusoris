@@ -33,6 +33,8 @@ import (
 	"strings"
 
 	"github.com/minio/selfupdate"
+
+	"github.com/golusoris/golusoris/core/errors"
 )
 
 // Options configures the updater.
@@ -59,7 +61,7 @@ type Result struct {
 
 // Update checks for a newer GitHub release and, if one exists, replaces the
 // running binary. Returns Updated=false when already on the latest version.
-func Update(ctx context.Context, opts Options) (Result, error) {
+func Update(ctx context.Context, opts Options) (res Result, err error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -89,7 +91,7 @@ func Update(ctx context.Context, opts Options) (Result, error) {
 	if err != nil {
 		return result, fmt.Errorf("selfupdate: fetch asset: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
+	defer errors.CloseInto(rc, &err, "selfupdate: close asset body")
 
 	h := sha256.New()
 	r := io.TeeReader(rc, h)
@@ -122,7 +124,7 @@ type ghAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-func latestRelease(ctx context.Context, client *http.Client, owner, repo string) (ghRelease, error) {
+func latestRelease(ctx context.Context, client *http.Client, owner, repo string) (rel ghRelease, err error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -130,17 +132,16 @@ func latestRelease(ctx context.Context, client *http.Client, owner, repo string)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return ghRelease{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer errors.CloseInto(resp.Body, &err, "selfupdate: close release body")
 
 	if resp.StatusCode != http.StatusOK {
 		return ghRelease{}, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
 
-	var rel ghRelease
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return ghRelease{}, err
 	}
@@ -161,7 +162,7 @@ func selectAsset(rel ghRelease, opts Options) (string, error) {
 }
 
 // fetchChecksum looks for a *_checksums.txt asset and extracts the SHA-256 for assetURL.
-func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, assetURL string) (string, error) {
+func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, assetURL string) (sum string, err error) {
 	var checksumURL string
 	for _, a := range rel.Assets {
 		if strings.HasSuffix(a.Name, "_checksums.txt") || strings.HasSuffix(a.Name, "checksums.txt") {
@@ -177,11 +178,11 @@ func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, asse
 	if err != nil {
 		return "", err
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer errors.CloseInto(resp.Body, &err, "selfupdate: close checksum body")
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -209,8 +210,9 @@ func fetchAsset(ctx context.Context, client *http.Client, url string) (io.ReadCl
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("asset download returned %d", resp.StatusCode)
+		statusErr := fmt.Errorf("asset download returned %d", resp.StatusCode)
+		errors.CloseJoin(resp.Body, &statusErr, "selfupdate: close asset body")
+		return nil, statusErr
 	}
 	return resp.Body, nil
 }

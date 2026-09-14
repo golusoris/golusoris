@@ -55,7 +55,7 @@ func (f *fakeClamd) addr() string { return f.ln.Addr().String() }
 
 func (f *fakeClamd) serve() {
 	defer f.wg.Done()
-	for {
+	for range maxFakeConns {
 		conn, err := f.ln.Accept()
 		if err != nil {
 			return // listener closed
@@ -93,7 +93,7 @@ func (f *fakeClamd) handle(conn net.Conn) {
 // data) until the zero-length terminator, mirroring clamd's framing.
 func drainInstream(r *bufio.Reader) error {
 	var lenBuf [4]byte
-	for {
+	for range maxChunks {
 		if _, err := io.ReadFull(r, lenBuf[:]); err != nil {
 			return err
 		}
@@ -108,8 +108,16 @@ func drainInstream(r *bufio.Reader) error {
 			return err
 		}
 	}
+	return errors.New("fake clamd: too many chunks")
 }
 
 // maxChunk bounds a single declared chunk to a sane size so a malformed length
 // prefix can't make the fake server allocate/read unbounded data.
 const maxChunk = 1 << 20
+
+// maxChunks and maxFakeConns bound the fake's loops so a test can never spin
+// forever on a stream that omits its terminator or a listener that never closes.
+const (
+	maxChunks    = 1 << 16
+	maxFakeConns = 1 << 16
+)

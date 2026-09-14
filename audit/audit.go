@@ -106,7 +106,11 @@ func New(store Store, opts ...Option) *Logger {
 // Log appends e to the audit log, assigning ID and CreatedAt if unset.
 func (l *Logger) Log(ctx context.Context, e Event) error {
 	if e.ID == "" {
-		e.ID = newID()
+		id, err := newID()
+		if err != nil {
+			return err
+		}
+		e.ID = id
 	}
 	if e.CreatedAt.IsZero() {
 		e.CreatedAt = l.clk.Now()
@@ -193,10 +197,10 @@ func (s *MemoryStore) All() []Event {
 
 // --- helpers ---
 
-func newID() string {
+func newID() (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("audit: rand.Read: %v", err))
+		return "", fmt.Errorf("audit: rand.Read: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }

@@ -123,18 +123,19 @@ func TestNew_NilLoggerAccepted(t *testing.T) {
 	require.NotNil(t, c)
 }
 
-func TestNewCheckoutSession(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name       string
-		params     CheckoutParams
-		status     int
-		body       string
-		wantURL    string
-		wantErr    bool
-		wantMode   string // expected mode form field
-		assertForm func(t *testing.T, f url.Values)
-	}{
+type checkoutCase struct {
+	name       string
+	params     CheckoutParams
+	status     int
+	body       string
+	wantURL    string
+	wantErr    bool
+	wantMode   string // expected mode form field
+	assertForm func(t *testing.T, f url.Values)
+}
+
+func checkoutCases() []checkoutCase {
+	return []checkoutCase{
 		{
 			name: "success defaults mode to payment",
 			params: CheckoutParams{
@@ -188,7 +189,11 @@ func TestNewCheckoutSession(t *testing.T) {
 			wantErr: true,
 		},
 	}
-	for _, tc := range tests {
+}
+
+func TestNewCheckoutSession(t *testing.T) {
+	t.Parallel()
+	for _, tc := range checkoutCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var got capturedRequest

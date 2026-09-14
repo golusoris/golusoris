@@ -18,6 +18,8 @@ import (
 	"time"
 
 	tusd "github.com/tus/tusd/v2/pkg/handler"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // scratchEntry is the append-capable, offset-tracking view of one in-progress
@@ -212,19 +214,16 @@ func (e *localEntry) writeInfo() error {
 }
 
 // writeFile (over)writes path with content, creating parent dirs as needed.
-func writeFile(path string, content []byte) error {
+func writeFile(path string, content []byte) (err error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, scratchFilePerm) //nolint:gosec // G304: path built from sanitized id at scratch boundary // #nosec G304
 	if err != nil {
 		return fmt.Errorf("tus: create scratch file: %w", err)
 	}
+	defer gerr.CloseInto(f, &err, "tus: close scratch file")
 	if len(content) > 0 {
 		if _, wErr := f.Write(content); wErr != nil {
-			_ = f.Close()
 			return fmt.Errorf("tus: write scratch file: %w", wErr)
 		}
-	}
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("tus: close scratch file: %w", err)
 	}
 	return nil
 }
