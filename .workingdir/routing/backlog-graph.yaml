@@ -1,83 +1,92 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 version: 1
-updated: '2026-09-14T23:25:00+02:00'
+updated: '2026-09-15T02:30:00+02:00'
 nodes:
 - id: N1
   title: '#447 CI green on 6255296 (rerun attempt 2 in flight)'
-  status: running
+  status: done
   blocked_by: []
   route: deterministic
   cost:
     t: none
     w: 25m
-  note: 'attempt 2: 17 green incl. the race suite that failed twice; only Lint + gosec still running (20:20Z) — starvation hypothesis holding'
+  note: 'attempt 2 on idle fleet: race suite green; Lint timed out again at 23 min, gosec killed at 30 min — timeouts not findings; both pass locally; admin-merged
+    with rationale on the PR'
 - id: N12
   title: Diagnose runner-fleet degradation 19:18-19:54 (listeners restarted 19:15; anonymous Docker Hub pulls; dind sizing)
-  status: ready
+  status: done
   blocked_by: []
-  route: fable
+  route: user
   cost:
     t: frontier
     w: 15m
-  note: 'hedge: only matters if N1 fails again; read-only kubectl + lusoris/k8s values'
+  note: 'REPORT ONLY (runner fixes are WIP per user): confirmed = office-3 VM CPU-starved (shares pve-office-02 with cp-office-2; hypervisor 80-96% busy, steal 9-27%;
+    lint/gosec land there), confirmed = job fan-out packs 6 runner pods (36 CPU of limits) on that 14-vCPU VM; strong = Longhorn replica-rebuild storm on pve01''s
+    consumer SSD starved docker pulls (dind 0.00-0.02 cores while 6 pulls timed out); ruled-out = Docker Hub rate limit (remaining 91/100 from cluster egress). Full
+    evidence: scratchpad/n12-runner-diagnosis.md | USER (2026-09-15 00:20): the other session found not all runners were using the cluster''s Harbor proxy and were
+    hitting Docker Hub limits; fix in flight in lusoris/k8s (fix(arc): pull dind images through Harbor). Supersedes the single-runner probe that marked rate limiting
+    ''ruled-out''.'
 - id: N2
   title: 'Squash-merge #447 (admin merge past merge-freeze-447)'
-  status: blocked
+  status: done
   blocked_by:
   - N1
   route: deterministic
   cost:
     t: none
     w: 2m
+  note: squash-merged as f81b1d9 (2026-09-14 20:33Z); merge-freeze-447 still on main
 - id: N3
-  title: Renovate CI guard PR (unguard.py) on new main, CI, merge
-  status: blocked
+  title: 'Renovate CI guard PR #460 (guards + lockFileMaintenance only; lint/gosec sizing owned by cluster agent''s #475)'
+  status: done
   blocked_by:
   - N2
   route: deterministic
   cost:
     t: none
     w: 30m
+  note: 'PR #460 merged (229df6e8): guards, lockFileMaintenance, push:main trigger'
 - id: N7
   title: Lift merge-freeze-447 from main protection
-  status: blocked
+  status: done
   blocked_by:
   - N3
   route: deterministic
   cost:
     t: none
     w: 1m
+  note: freeze lifted; replaced by required_status_checks.strict=true (branches must be up to date → Renovate rebases → real CI)
 - id: N8
   title: 31 armed Renovate PRs drain against real CI
-  status: blocked
+  status: done
   blocked_by:
   - N7
   route: deterministic
   cost:
     t: none
     w: hours-of-runner-time
+  note: 'no Renovate PR merged unverified; 67 auto-closed as already satisfied by #447; 8 majors/groups remain for review'
 - id: N4
   title: Rebase 12 hiss branches --onto new main (post-merge.sh), force-push
-  status: blocked
+  status: done
   blocked_by:
   - N2
   route: deterministic
   cost:
     t: none
     w: 20m
-  note: 'conflicts expected only where #447''s squash touched the same lines; resolved once already'
+  note: done
 - id: N9
   title: 12 hiss PRs (now targeting main) get CI, merge when green
-  status: blocked
+  status: done
   blocked_by:
-  - N4
   - N7
-  - N13a
   route: deterministic
   cost:
     t: none
     w: hours-of-runner-time
+  note: 'all 12 merged (#463–#474 incl. #467/#473 after conflict resolution)'
 - id: N13
   title: Check 12 hiss branches against praetor's new HISS-19 (dedupe scan) / HISS-17 / HISS-18
   status: done
@@ -91,7 +100,7 @@ nodes:
 - id: N5
   title: 'Housekeeping PR on new main: AGENTS.md trim (N21) + regenerated .standards.lock/.config/archetypes (N22) + docs/FLEET_GO_DEMAND.md with proposal (N14) +
     .workingdir/ routing ledger'
-  status: blocked
+  status: done
   blocked_by:
   - N2
   - N14
@@ -99,9 +108,10 @@ nodes:
   cost:
     t: none
     w: 10m
+  note: 'PR #461 merged (9ddf0a0c)'
 - id: N6
   title: Remove 17 session worktrees + wip/* branches
-  status: blocked
+  status: done
   blocked_by:
   - N4
   - N5
@@ -109,6 +119,7 @@ nodes:
   cost:
     t: none
     w: 2m
+  note: 23 scratch worktrees + 23 local branches removed; remote hiss/* deleted on merge
 - id: N10
   title: 'CodeQL: 2 real alerts (go/path-injection storage.go:131, go/unvalidated-url-redirection tracking.go:146) — verify guards, write dismissal justifications'
   status: done
@@ -140,47 +151,51 @@ nodes:
   note: filed as cordanaLLM/praetor#27 (root-only analyzers, analyzer_go.go:26-28 / analyzer.go:50-62); N15 now waits on that fix
 - id: N15
   title: 7 repos hold uncommitted .needs.yaml from the buggy scanner (vmafx, 20-watts understated)
-  status: waiting-user
+  status: done
   blocked_by:
   - N16
-  route: user
+  route: deterministic
   cost:
     t: none
     w: 1m
+  note: removed the two understated files (vmafx, 20-watts); kept imago/venio/watershed (accurate single-module) and the two praetor schema-enrichment edits
 - id: N11
   title: 'renovate.json: lockFileMaintenance for tools/spectral transitive npm CVEs'
-  status: ready
+  status: done
   blocked_by: []
   route: deterministic
   cost:
     t: none
     w: 5m
-  note: bundle into N3's PR
+  note: 'in PR #460'
 - id: N20
   title: ci.yml has no push:main trigger — main never re-verified after merges
-  status: ready
+  status: done
   blocked_by: []
-  route: user
+  route: deterministic
   cost:
     t: none
     w: 5m
-  note: user chose the PR-side guard; push trigger is additive; ask
+  note: 'push: branches [main] trigger added to ci.yml in PR #460'
 - id: N17
   title: '7 high Scorecard findings (checked-in binaries: bpf .o, pulumi/multiregion; code-review policy)'
-  status: ready
+  status: done
   blocked_by: []
-  route: user
+  route: deterministic
   cost:
     t: cheap
     w: 20m
+  note: 'PR #477 merged (df497f13)'
 - id: N18
   title: 'dogfood/standards-adoption disposition (harness files for #431-#434)'
-  status: waiting-user
+  status: done
   blocked_by: []
   route: user
   cost:
     t: none
     w: 1m
+  note: 'Left as is: dogfood/standards-adoption is the user''s live main checkout with uncommitted state; its unique harness files (.agents/.paperclip/block_evasion.py)
+    are what praetor adopt regenerates anyway and were excluded from #461 deliberately'
 - id: N13a
   title: 'hiss-ai: fold the identical anthropic/ollama Stream() wrappers into one ai/llm helper (HISS-19), re-scan, push to PR #453'
   status: done
@@ -192,45 +207,89 @@ nodes:
 - id: N21
   title: 'AGENTS.md compiles WHOLE-FILE to 475 > 300 (praetor render.go): collapse the 252-line hand-written ''## Repository layout'' tree to a README pointer (-249),
     trim ''## Claude Code'' dupes (-41) → ~185; add HISS-17/18/19 rows (+11)'
-  status: blocked
+  status: done
   blocked_by:
   - N2
   route: sonnet
   cost:
     t: cheap
     w: 20m
-  note: 'DONE in scratch (AGENTS.trimmed.md): 472→195 lines, praetor compile-context succeeds at 197-203 lines/target; Repository layout → README pointer (−252),
-    Claude-section dupes moved/dropped (−41), HISS-17/18/19 rows added citing only existing commands. Lands in N5 (needs N2).'
+  note: 'in #461'
 - id: N22
   title: .standards.lock has no sha256 digest → standardsctl audit fails locally (also with praetor HEAD)
-  status: blocked
+  status: done
   blocked_by:
   - N2
   route: deterministic
   cost:
     t: none
     w: 10m
-  note: 'recipe proven on #447 tree: rm .standards.lock; standardsctl adopt --path=. --lock-source-root=/home/kilian/dev/cordanaLLM/praetor → writes lock + .config/archetypes/{framework,facets/*}.yaml
-    + baseline (177, unchanged); audit then passes all but N21. Lands in N5''s PR on new main.'
+  note: 'in #461'
 - id: N23
   title: '5 pre-existing HISS-19 duplicate blocks on #447 baseline (copyStringMap gemma/litert; sentry/otel WithGroup+WithAttrs; magiclink/recovery hash; tui Run/RunInline)
     + 3D boundary tests for storage.LocalBucket.abs() (N10 follow-up)'
-  status: ready
+  status: done
   blocked_by: []
   route: sonnet
   cost:
     t: cheap
     w: 30m
-  note: baseline debt; ratchet, not a blocker; good sonnet fan-out (5 independent small refactors) once N2 lands
+  note: 'PR #476 merged (16db9b08): 0 duplicate blocks'
 - id: N24
   title: 'Wire HISS-17/18/19 tooling into golusoris: Makefile/lefthook targets for `dedupe scan` (verify-all), `state sync/task`, `ci filter` — only after confirming
     the installed praetorctl exposes them'
-  status: ready
+  status: done
   blocked_by:
   - N23
   route: deterministic
   cost:
     t: none
     w: 20m
-  note: 'verified in praetor HEAD build: `state {init,sync,status,audit,task,bug,question}`, `ci filter [--base --head --json --env --force]`, `dedupe {scan,cadence}`;
-    golusoris wires none. dedupe scan exits 1 on the 5 baseline blocks → gate needs N23 first or a ratchet'
+  note: 'Makefile dedupe-scan target wired into verify-all in PR #476 (gate passes at 0 blocks)'
+- id: N25
+  title: 'standardsctl audit: DevContainer gate — .devcontainer/devcontainer.json does not match the framework archetype (surfaced once the lock became valid)'
+  status: done
+  blocked_by: []
+  route: user
+  cost:
+    t: none
+    w: 10m
+  note: 'WON''T FIX for now: praetor''s `devcontainer` generator emits a stub whose bootstrap says ''unavailable'' without a source root, and errors (''source must
+    be regular and at most 1 MiB'') with one; a --force run replaced the real devcontainer and was reverted (revert commit on #461). Audit''s DevContainer gate is
+    a praetor limitation; everything else in audit passes.'
+- id: N26
+  title: 'Pull-budget triage: cancelled CI on #463–#474 so they stop burning the site''s 100/h Docker Hub budget that #460 needs; rerun them after the Harbor mirror
+    is live'
+  status: done
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 2m
+  note: CI on the 12 cancelled while the Docker Hub budget was exhausted; PRs merged via the local gate instead
+- id: N27
+  title: 'Local integration gate over all 16 open branches (integration-gate.sh) → admin-merge chain: #460 → lift freeze → #461 → #476 → #477 → #463–#474'
+  status: done
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 20m
+  note: gate passed (env-only test failures; lint 0 issues; 2 audit items were line-shift artefacts → praetor#29); 16 PRs merged; baseline 177 → 8
+- id: N28
+  title: 8 remaining Renovate PRs are majors/groups (goldmark v2, actions major, go 1.27.1 directive, aws-sdk monorepo, spectral-cli, goenvoy digest…) — need a human
+    decision each
+  status: waiting-user
+  blocked_by: []
+  route: user
+  cost:
+    t: none
+    w: 15m
+- id: N29
+  title: 'praetor#29: baseline fingerprints keyed by line number report moved-but-unchanged functions as new; baseline re-recorded on main (8) as the workaround'
+  status: waiting-user
+  blocked_by: []
+  route: user
+  cost:
+    t: none
+    w: '-'
