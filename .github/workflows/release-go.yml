@@ -15,12 +15,18 @@
 #   jobs:
 #     release:
 #       uses: golusoris/golusoris/.github/workflows/release-go.yml@main
+#       with:
+#         runs-on: arc-cauda-golusoris-myapp
 #       secrets: inherit
 name: release-go (reusable)
 
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: Self-hosted runner-set label the caller's ARC scale set is registered under.
+        type: string
+        default: arc-cauda-golusoris-golusoris
       image-name:
         description: OCI image name (e.g. ghcr.io/myorg/myapp)
         type: string
@@ -43,7 +49,7 @@ permissions:
 jobs:
   goreleaser:
     name: GoReleaser
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 30
     permissions:
       contents: write

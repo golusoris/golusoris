@@ -9,6 +9,8 @@
 #     ci:
 #       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
 #       with:
+#         runs-on: arc-cauda-golusoris-myapp
+#         working-directory: .
 #         go-version-file: go.mod
 #         coverage-threshold: 70
 #         module-path: github.com/myorg/myapp
@@ -17,8 +19,16 @@ name: ci-go (reusable)
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: Self-hosted runner-set label the caller's ARC scale set is registered under. Every job in this workflow runs on this label (the test job's matrix included).
+        type: string
+        default: arc-cauda-golusoris-golusoris
+      working-directory:
+        description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses:` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
+        type: string
+        default: "."
       go-version-file:
-        description: Path to go.mod for Go version resolution
+        description: "Path to go.mod for Go version resolution, relative to the repository ROOT (not to `working-directory`) — this is an `actions/setup-go` input, and job `defaults.run.working-directory` only applies to `run:` steps. Callers with a non-root module must pass this explicitly, e.g. `<working-directory>/go.mod`."
         type: string
         default: go.mod
       prior-go-version:
@@ -30,7 +40,7 @@ on:
         type: string
         default: v2.12.2
       golangci-config:
-        description: Path to a golangci-lint config (empty = golangci-lint auto-discovers the caller's .golangci.yml; apps opt into a shared ruleset by setting this)
+        description: "Path to a golangci-lint config, relative to `working-directory` (golangci-lint-action's own `working-directory` input is wired below, so this — like its config auto-discovery — resolves against the module directory, not the repo root). Empty = golangci-lint auto-discovers the caller's .golangci.yml in that same directory."
         type: string
         default: ""
       lint-timeout:
@@ -90,7 +100,7 @@ jobs:
   pr-title:
     name: PR title
     if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 5
     steps:
       - name: Check PR title
@@ -110,9 +120,12 @@ jobs:
   lint:
     name: Lint
     if: github.actor != 'renovate[bot]'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify pre-baked system packages
@@ -122,14 +135,16 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ inputs.golangci-version }}
+          working-directory: ${{ inputs.working-directory }}
           # Pass --config only when the caller supplies one; otherwise golangci-lint
           # auto-discovers the app's own .golangci.yml (issue #197).
           args: ${{ inputs.golangci-config != '' && format('--config={0} --timeout={1}', inputs.golangci-config, inputs.lint-timeout) || format('--timeout={0}', inputs.lint-timeout) }}
@@ -138,12 +153,15 @@ jobs:
   gosec:
     name: Security (gosec)
     if: github.actor != 'renovate[bot]'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
     permissions:
       contents: read
       security-events: write
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify pre-baked system packages
@@ -153,11 +171,12 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: gosec
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
@@ -168,16 +187,19 @@ jobs:
         if: always()
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
-          sarif_file: gosec.sarif
+          sarif_file: ${{ inputs.working-directory }}/gosec.sarif
         continue-on-error: true
 
   # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
     if: github.actor != 'renovate[bot]'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify pre-baked system packages
@@ -187,11 +209,12 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
@@ -204,17 +227,20 @@ jobs:
     name: Test (race + coverage)
     if: github.actor != 'renovate[bot]'
     runs-on: ${{ matrix.os }}
-    container: ${{ matrix.os == 'arc-cauda-golusoris-golusoris' && inputs.container || '' }}
+    container: ${{ matrix.os == inputs.runs-on && inputs.container || '' }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [arc-cauda-golusoris-golusoris]
+        os: ["${{ inputs.runs-on }}"]
         toolchain: [module]
         include:
-          - os: arc-cauda-golusoris-golusoris
+          - os: ${{ inputs.runs-on }}
             toolchain: module
             primary: true
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify pre-baked system packages
@@ -224,11 +250,12 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       # Fail fast with a clear signal if testcontainers have no Docker daemon
       # (matches ci.yml's own preflight — issue #198).
       - name: Verify Docker is reachable
@@ -261,16 +288,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
-          path: coverage.out
+          path: ${{ inputs.working-directory }}/coverage.out
           retention-days: 7
 
   # ── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
     if: github.actor != 'renovate[bot]'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Verify pre-baked system packages
@@ -280,11 +310,12 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - run: go build ./...
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
@@ -292,10 +323,12 @@ jobs:
   # checkout, using the caller's `spectral-ruleset` (or Spectral's built-in oas
   # ruleset when none is given). No dependency on the framework's tools/ dir, so
   # downstream apps can lint their own spec without vendoring tools/spectral.
+  # Not Go-module-scoped, so `working-directory` is not wired here — spec and
+  # ruleset paths are always given by the caller relative to the repo root.
   spectral:
     name: OpenAPI lint (spectral)
     if: ${{ github.actor != 'renovate[bot]' && inputs.openapi-spec != '' }}
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -321,9 +354,12 @@ jobs:
   apidiff:
     name: API compatibility (apidiff)
     if: ${{ github.actor != 'renovate[bot]' && !inputs.skip-apidiff && inputs.module-path != '' }}
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -335,11 +371,12 @@ jobs:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
         run: |
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          scripts/ci/verify-system-packages.sh "${packages[@]}"
+          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
+          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: Install apidiff
         run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
       - name: Run apidiff vs previous tag (informational pre-1.0)
@@ -353,7 +390,7 @@ jobs:
           echo "Comparing HEAD against $PREV_TAG"
           apidiff -m -w /tmp/cur-api.txt "$MOD"
           git worktree add -q --detach /tmp/apidiff-prev "$PREV_TAG"
-          ( cd /tmp/apidiff-prev && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
+          ( cd "/tmp/apidiff-prev/${{ inputs.working-directory }}" && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
             || echo "::warning::could not export $PREV_TAG API"
           git worktree remove /tmp/apidiff-prev --force || true
           echo "## API changes vs $PREV_TAG"
