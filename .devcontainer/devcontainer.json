@@ -1,19 +1,19 @@
 {
-  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae",
-  "name": "golusoris/golusoris",
+  "name": "golusoris",
+  "build": {
+    "dockerfile": "../docker/dev/Dockerfile",
+    "context": ".."
+  },
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {},
-    "ghcr.io/devcontainers/features/go:1": {}
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": false,
+      "upgradePackages": true
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.27"
+    }
   },
   "customizations": {
-    "praetor": {
-      "bootstrap": {
-        "version": 1,
-        "state": "unavailable",
-        "reason": "Select a complete Praetor source root; a config-only catalog cannot bootstrap the CLI.",
-        "baseImage": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae"
-      }
-    },
     "vscode": {
       "extensions": [
         "GitHub.vscode-pull-request-github",
@@ -36,5 +36,5 @@
     }
   },
   "remoteUser": "vscode",
-  "postCreateCommand": "printf '%s\\n' 'Praetor bootstrap unavailable: select a complete, verified Praetor source bundle and regenerate this DevContainer.' >&2; exit 1"
+  "postCreateCommand": "go run ./cmd/standardsctl compile-context \u0026\u0026 make verify-all"
 }
