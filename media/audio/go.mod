@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/media/audio
 
-go 1.27.0
+go 1.27.1
 
 require (
 	github.com/exaring/ebur128 v0.0.0-20260217210235-a476130e2d41
