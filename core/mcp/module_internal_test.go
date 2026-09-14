@@ -7,6 +7,7 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -213,5 +214,36 @@ func swapStdioSeam(transport sdkmcp.Transport) func() {
 			newStdioTransport = prevNew
 			stdin = prevStdin
 		})
+	}
+}
+
+// failWriter rejects every write, standing in for a broken stderr sink.
+type failWriter struct{ err error }
+
+func (w failWriter) Write([]byte) (int, error) { return 0, w.err }
+
+// TestStdoutRedirect_CloseSurfacesDrainFailure pins the HISS-07 contract: a
+// sink write failure during drain is recorded and reported by Close instead
+// of being dropped, while os.Stdout is still restored.
+//
+//nolint:paralleltest // mutates the process-global os.Stdout; must run serially.
+func TestStdoutRedirect_CloseSurfacesDrainFailure(t *testing.T) {
+	sinkErr := errors.New("sink down")
+	red, realOut, err := installStdoutRedirect(failWriter{err: sinkErr})
+	if err != nil {
+		t.Fatalf("installStdoutRedirect: %v", err)
+	}
+	if _, werr := os.Stdout.WriteString("stray-line\n"); werr != nil {
+		t.Fatalf("write to redirected stdout: %v", werr)
+	}
+	err = red.Close()
+	if err == nil {
+		t.Fatal("Close returned nil after the sink rejected the drained write")
+	}
+	if !errors.Is(err, sinkErr) {
+		t.Errorf("Close error = %v, want it to wrap the sink error", err)
+	}
+	if os.Stdout != realOut {
+		t.Error("Close did not restore os.Stdout to the original after a drain failure")
 	}
 }

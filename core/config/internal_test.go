@@ -5,9 +5,14 @@
 package config
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/knadh/koanf/providers/file"
 )
 
 func TestParserFor_yaml(t *testing.T) {
@@ -143,5 +148,61 @@ func TestFire_invokesListeners(t *testing.T) {
 	c.fire()
 	if called != 2 {
 		t.Errorf("fire called listeners %d times, want 2", called)
+	}
+}
+
+func TestLogger_DefaultsToSlogDefault(t *testing.T) {
+	t.Parallel()
+	c := &Config{opts: Options{}}
+	if c.logger() != slog.Default() {
+		t.Error("logger() with a nil Options.Logger should return slog.Default()")
+	}
+	custom := slog.New(slog.DiscardHandler)
+	c = &Config{opts: Options{Logger: custom}}
+	if c.logger() != custom {
+		t.Error("logger() should return the configured Options.Logger")
+	}
+}
+
+// TestReload_LogsFailureThroughOptionsLogger pins the HISS-07 contract for the
+// file-watch / SIGHUP reload path: a good reload updates the tree silently, a
+// bad one is logged through Options.Logger and leaves the last good tree.
+func TestReload_LogsFailureThroughOptionsLogger(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cfg.yaml")
+	if err := os.WriteFile(path, []byte("x: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	c, err := New(Options{
+		Files:  []string{path},
+		Logger: slog.New(slog.NewTextHandler(&buf, nil)),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// positive: a valid rewrite is merged and nothing is logged.
+	if err := os.WriteFile(path, []byte("x: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.reload(path, file.Provider(path))
+	if got := c.k.Int("x"); got != 2 {
+		t.Errorf("after valid reload x = %d, want 2", got)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("valid reload logged %q, want nothing", buf.String())
+	}
+
+	// negative: malformed YAML is reported, the last good tree survives.
+	if err := os.WriteFile(path, []byte("x: [\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.reload(path, file.Provider(path))
+	if !strings.Contains(buf.String(), "config: reload failed") {
+		t.Errorf("invalid reload logged %q, want a reload-failed record", buf.String())
+	}
+	if got := c.k.Int("x"); got != 2 {
+		t.Errorf("after invalid reload x = %d, want last good value 2", got)
 	}
 }
