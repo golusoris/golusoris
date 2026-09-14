@@ -14,7 +14,7 @@ and auto-heading IDs.
 
 ```go
 html, err := markdown.Render([]byte(src))     // []byte → []byte
-html := markdown.RenderString(src)            // panics on error — for static/trusted content
+html, err := markdown.RenderString(src)       // string in, string out
 err  := markdown.RenderTo(&buf, []byte(src))  // write to existing buffer
 ```
 
@@ -30,5 +30,5 @@ safe := bluemonday.UGCPolicy().SanitizeBytes(out)
 
 ## Don't
 
-- Don't call `RenderString` with user input — it panics on parse error.
+- Don't discard the `RenderString` error; it returns one instead of panicking.
 - Don't skip sanitization when rendering untrusted Markdown in browser output.

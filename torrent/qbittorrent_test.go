@@ -31,6 +31,39 @@ func (s *qbitState) record(path string) {
 	s.mu.Unlock()
 }
 
+// last returns the most recently hit endpoint path.
+func (s *qbitState) last() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.lastPath
+}
+
+// qbitAssertListAndGet checks List and Get against the single seeded torrent.
+func qbitAssertListAndGet(t *testing.T, ctx context.Context, c Client, hash string) {
+	t.Helper()
+	list, err := c.List(ctx)
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("List len = %d, want 1", len(list))
+	}
+	if list[0].State != StateSeeding {
+		t.Errorf("State = %q, want seeding", list[0].State)
+	}
+	if list[0].SizeBytes != 2048 {
+		t.Errorf("SizeBytes = %d, want 2048", list[0].SizeBytes)
+	}
+
+	one, err := c.Get(ctx, hash)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if one.Hash != hash {
+		t.Errorf("Get hash = %q", one.Hash)
+	}
+}
+
 // newQBittorrentServer mimics the qBittorrent WebAPI v2: cookie login,
 // version, torrents/info, transfer/info, and the add/delete/start/stop
 // endpoints. It reports WebAPI 2.11.0 so the new start/stop routes are used.
@@ -119,52 +152,23 @@ func TestQBittorrent_LoginAndCRUD(t *testing.T) {
 	if _, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
-	st.mu.Lock()
-	addPath := st.lastPath
-	st.mu.Unlock()
-	if addPath != "torrents/add" {
+	if addPath := st.last(); addPath != "torrents/add" {
 		t.Errorf("Add hit %q, want torrents/add", addPath)
 	}
 
-	list, err := c.List(ctx)
-	if err != nil {
-		t.Fatalf("List: %v", err)
-	}
-	if len(list) != 1 {
-		t.Fatalf("List len = %d, want 1", len(list))
-	}
-	if list[0].State != StateSeeding {
-		t.Errorf("State = %q, want seeding", list[0].State)
-	}
-	if list[0].SizeBytes != 2048 {
-		t.Errorf("SizeBytes = %d, want 2048", list[0].SizeBytes)
-	}
+	qbitAssertListAndGet(t, ctx, c, hash)
 
-	one, err := c.Get(ctx, hash)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if one.Hash != hash {
-		t.Errorf("Get hash = %q", one.Hash)
-	}
-
-	if err = c.Pause(ctx, hash); err != nil {
+	if err := c.Pause(ctx, hash); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
-	st.mu.Lock()
-	pausePath := st.lastPath
-	st.mu.Unlock()
-	if pausePath != "torrents/stop" {
+	if pausePath := st.last(); pausePath != "torrents/stop" {
 		t.Errorf("Pause hit %q, want torrents/stop (WebAPI 2.11)", pausePath)
 	}
 
-	if err = c.Resume(ctx, hash); err != nil {
+	if err := c.Resume(ctx, hash); err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
-	st.mu.Lock()
-	resumePath := st.lastPath
-	st.mu.Unlock()
-	if resumePath != "torrents/start" {
+	if resumePath := st.last(); resumePath != "torrents/start" {
 		t.Errorf("Resume hit %q, want torrents/start", resumePath)
 	}
 
@@ -176,13 +180,10 @@ func TestQBittorrent_LoginAndCRUD(t *testing.T) {
 		t.Errorf("Stats = %+v", stats)
 	}
 
-	if err = c.Remove(ctx, hash, true); err != nil {
+	if err := c.Remove(ctx, hash, true); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	st.mu.Lock()
-	delPath := st.lastPath
-	st.mu.Unlock()
-	if delPath != "torrents/delete" {
+	if delPath := st.last(); delPath != "torrents/delete" {
 		t.Errorf("Remove hit %q, want torrents/delete", delPath)
 	}
 }

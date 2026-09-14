@@ -30,8 +30,8 @@ func FuzzRender(f *testing.F) {
 	}
 
 	f.Fuzz(func(_ *testing.T, src []byte) {
-		_, _ = markdown.Render(src)            // must not panic
-		_ = markdown.RenderString(string(src)) // must not panic
+		_, _ = markdown.Render(src)               // must not panic
+		_, _ = markdown.RenderString(string(src)) // must not panic
 		_ = markdown.RenderTo(&bytes.Buffer{}, src)
 	})
 }

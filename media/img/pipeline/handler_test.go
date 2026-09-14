@@ -6,6 +6,7 @@ package pipeline_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -74,6 +75,19 @@ func (m mapSource) Get(_ context.Context, key string) (io.ReadCloser, error) {
 		return nil, storage.ErrNotFound
 	}
 	return io.NopCloser(strings.NewReader(string(b))), nil
+}
+
+// failCloser reads a fixed body but fails on Close, so the deferred source
+// close in render is the only thing that can go wrong on the request path.
+type failCloser struct{ io.Reader }
+
+func (failCloser) Close() error { return errors.New("close boom") }
+
+// failCloseSource is a pipeline.Source whose ReadCloser fails on Close.
+type failCloseSource struct{}
+
+func (failCloseSource) Get(context.Context, string) (io.ReadCloser, error) {
+	return failCloser{strings.NewReader("raw")}, nil
 }
 
 func newHandlerPipeline(t *testing.T, proc img.Processor, src pipeline.Source) (*pipeline.Pipeline, *clockwork.FakeClock) {
@@ -218,6 +232,38 @@ func TestHandler_tokenFromPathFallback(t *testing.T) {
 	p.Handler().ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200 (fallback extraction); body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandler_500_sourceCloseFails covers the deferred-close error path in
+// render: a source whose Close fails after an otherwise successful read and
+// resize must surface as a 500 rather than being silently discarded.
+func TestHandler_500_sourceCloseFails(t *testing.T) {
+	t.Parallel()
+	p, _ := newHandlerPipeline(t, &fakeProcessor{}, failCloseSource{})
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	rec := serve(t, p, tok)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestHandler_415_closeErrorDoesNotMaskPrimary is the boundary case for the
+// deferred close: when the resize already failed, the close failure must not
+// overwrite the primary error, so the 415 mapping still wins.
+func TestHandler_415_closeErrorDoesNotMaskPrimary(t *testing.T) {
+	t.Parallel()
+	p, _ := newHandlerPipeline(t, stubProcessor{}, failCloseSource{})
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	rec := serve(t, p, tok)
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415; body=%s", rec.Code, rec.Body.String())
 	}
 }
 

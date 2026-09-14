@@ -15,7 +15,7 @@ loop, not a server component.
 ```go
 app, err := threed.NewApp()   // g3n singleton window + default shaders
 scene := threed.NewScene()    // *core.Node root; add meshes/lights/cameras
-app.Run(scene)                // blocks on the g3n render loop
+err = app.Run(scene)          // blocks on the g3n render loop; first render error
 ```
 
 `threed.Scene` is an alias for g3n `core.Node`. g3n v0.2 owns a single global

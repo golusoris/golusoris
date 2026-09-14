@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/core/clock"
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/media/img"
 )
 
@@ -154,12 +155,12 @@ type rendered struct {
 // variant bytes + Content-Type. The transform is assumed validated (Verify or
 // Sign did so). The actual resize delegates to the injected img.Processor; on a
 // no-libvips build it surfaces img.ErrCGORequired.
-func (p *Pipeline) render(ctx context.Context, key string, t Transform) (rendered, error) {
+func (p *Pipeline) render(ctx context.Context, key string, t Transform) (res rendered, err error) {
 	rc, err := p.src.Get(ctx, key)
 	if err != nil {
 		return rendered{}, fmt.Errorf("pipeline: fetch source: %w", err)
 	}
-	defer func() { _ = rc.Close() }()
+	defer gerr.CloseInto(rc, &err, "pipeline: close source "+key)
 
 	srcBytes, err := io.ReadAll(rc)
 	if err != nil {

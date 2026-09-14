@@ -48,7 +48,10 @@ func TestRender_strikethrough(t *testing.T) {
 
 func TestRenderString(t *testing.T) {
 	t.Parallel()
-	got := markdown.RenderString("**bold**")
+	got, err := markdown.RenderString("**bold**")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !strings.Contains(got, "<strong>") {
 		t.Fatalf("expected strong tag, got: %s", got)
 	}

@@ -149,31 +149,10 @@ func newTestRTorrent(t *testing.T, addr string) *rtorrentBackend {
 	return c
 }
 
-func TestRTorrent_ListGetMutateStats(t *testing.T) {
-	t.Parallel()
-	const hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
-	st := &rtServerState{
-		hash: hash, name: "ubuntu.iso", size: 4096, label: "iso",
-		complete: 1, ratioMilli: 1500,
-	}
-	srv := newRTorrentServer(t, st)
-	c := newTestRTorrent(t, srv.URL)
-	ctx := context.Background()
-
-	if _, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Label: "iso", SavePath: "/x"}); err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if st.last() != "load.start" {
-		t.Errorf("Add called %q, want load.start", st.last())
-	}
-
-	if _, err := c.AddFile(ctx, []byte("data"), AddOptions{Paused: true}); err != nil {
-		t.Fatalf("AddFile: %v", err)
-	}
-	if st.last() != "load.raw" { // AddTorrentStopped maps to load.raw
-		t.Errorf("AddFile(paused) called %q, want load.raw", st.last())
-	}
-
+// rtAssertListAndGet checks List and Get against the single seeded torrent;
+// rtorrent reports hashes upper-case and the client lower-cases them.
+func rtAssertListAndGet(t *testing.T, ctx context.Context, c Client, hash string) {
+	t.Helper()
 	list, err := c.List(ctx)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -202,14 +181,42 @@ func TestRTorrent_ListGetMutateStats(t *testing.T) {
 	if one.Hash != strings.ToLower(hash) {
 		t.Errorf("Get hash = %q", one.Hash)
 	}
+}
 
-	if err = c.Pause(ctx, hash); err != nil {
+func TestRTorrent_ListGetMutateStats(t *testing.T) {
+	t.Parallel()
+	const hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+	st := &rtServerState{
+		hash: hash, name: "ubuntu.iso", size: 4096, label: "iso",
+		complete: 1, ratioMilli: 1500,
+	}
+	srv := newRTorrentServer(t, st)
+	c := newTestRTorrent(t, srv.URL)
+	ctx := context.Background()
+
+	if _, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Label: "iso", SavePath: "/x"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if st.last() != "load.start" {
+		t.Errorf("Add called %q, want load.start", st.last())
+	}
+
+	if _, err := c.AddFile(ctx, []byte("data"), AddOptions{Paused: true}); err != nil {
+		t.Fatalf("AddFile: %v", err)
+	}
+	if st.last() != "load.raw" { // AddTorrentStopped maps to load.raw
+		t.Errorf("AddFile(paused) called %q, want load.raw", st.last())
+	}
+
+	rtAssertListAndGet(t, ctx, c, hash)
+
+	if err := c.Pause(ctx, hash); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
 	if st.last() != "d.pause" {
 		t.Errorf("Pause called %q, want d.pause", st.last())
 	}
-	if err = c.Resume(ctx, hash); err != nil {
+	if err := c.Resume(ctx, hash); err != nil {
 		t.Fatalf("Resume: %v", err)
 	}
 	if st.last() != "d.resume" {
@@ -224,7 +231,7 @@ func TestRTorrent_ListGetMutateStats(t *testing.T) {
 		t.Errorf("Stats = %+v", stats)
 	}
 
-	if err = c.Remove(ctx, hash, true); err != nil {
+	if err := c.Remove(ctx, hash, true); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if st.last() != "d.erase" {

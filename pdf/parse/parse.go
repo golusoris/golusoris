@@ -56,12 +56,17 @@ func Info(_ context.Context, r io.ReadSeeker, fileName string) (Metadata, error)
 }
 
 // InfoFile returns metadata for the PDF at path.
-func InfoFile(_ context.Context, path string) (Metadata, error) {
+func InfoFile(_ context.Context, path string) (meta Metadata, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return Metadata{}, fmt.Errorf("pdf/parse: open %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() {
+		// A close failure only surfaces when the read itself succeeded.
+		if cerr := f.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("pdf/parse: close %s: %w", path, cerr)
+		}
+	}()
 
 	info, err := api.PDFInfo(f, path, nil, false, model.NewDefaultConfiguration())
 	if err != nil {
@@ -90,7 +95,7 @@ func metaFromInfo(i *pdfcpu.PDFInfo) Metadata {
 
 // ParseTime attempts to parse a PDF date string (D:YYYYMMDDHHmmSS).
 // Returns zero time on failure.
-func ParseTime(pdfDate string) time.Time {
+func ParseTime(pdfDate string) time.Time { //nolint:revive // parse.Time would read as a type; the verb form is the documented API
 	s := strings.TrimPrefix(pdfDate, "D:")
 	if len(s) < 8 {
 		return time.Time{}

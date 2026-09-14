@@ -13,12 +13,21 @@ package ocr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/otiai10/gosseract/v2"
 )
 
 func wrapf(format string, a ...any) error { return fmt.Errorf("ocr: "+format, a...) }
+
+// closeOnErr releases a half-built client and joins any close failure onto err.
+func closeOnErr(c *gosseract.Client, err error) error {
+	if cerr := c.Close(); cerr != nil {
+		return errors.Join(err, wrapf("close client: %w", cerr))
+	}
+	return err
+}
 
 type gosseractReader struct {
 	client *gosseract.Client
@@ -32,16 +41,14 @@ func NewReader(opts Options) (Reader, error) {
 		lang = "eng"
 	}
 	if err := c.SetLanguage(lang); err != nil {
-		_ = c.Close()
-		return nil, wrapf("set language: %w", err)
+		return nil, closeOnErr(c, wrapf("set language: %w", err))
 	}
 	if opts.TessdataPrefix != "" {
 		c.TessdataPrefix = opts.TessdataPrefix
 	}
 	if opts.AllowList != "" {
 		if err := c.SetWhitelist(opts.AllowList); err != nil {
-			_ = c.Close()
-			return nil, wrapf("set whitelist: %w", err)
+			return nil, closeOnErr(c, wrapf("set whitelist: %w", err))
 		}
 	}
 	return &gosseractReader{client: c}, nil

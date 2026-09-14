@@ -13,7 +13,7 @@
 //	app, err := threed.NewApp()
 //	scene := threed.NewScene()
 //	// add meshes, lights, cameras to scene
-//	app.Run(scene)
+//	err = app.Run(scene)
 package threed
 
 import (
@@ -44,11 +44,16 @@ func NewApp() (*App, error) {
 	return &App{a: a, r: r}, nil
 }
 
-// Run starts the render loop with scene as the root node.
-func (a *App) Run(scene *core.Node) {
+// Run starts the render loop with scene as the root node and blocks until the
+// window closes. It returns the first frame that failed to render, if any.
+func (a *App) Run(scene *core.Node) error {
+	var renderErr error
 	a.a.Run(func(rend *renderer.Renderer, _ time.Duration) {
-		_ = rend.Render(scene, nil)
+		if err := rend.Render(scene, nil); err != nil && renderErr == nil {
+			renderErr = fmt.Errorf("3d: render: %w", err)
+		}
 	})
+	return renderErr
 }
 
 // Scene wraps a g3n core.Node as the scene root.
