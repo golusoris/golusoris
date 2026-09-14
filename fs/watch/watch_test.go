@@ -97,10 +97,12 @@ func TestWatcher_debounce(t *testing.T) {
 		_ = os.WriteFile(path, []byte("x"), 0o640)
 	}
 
+	// maxEvents bounds the drain loop; the timeout normally ends it first.
+	const maxEvents = 100
 	var eventCount int
 	timeout := time.After(500 * time.Millisecond)
 loop:
-	for {
+	for range maxEvents {
 		select {
 		case <-w.Events():
 			eventCount++

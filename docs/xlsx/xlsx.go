@@ -26,6 +26,8 @@ import (
 	"io"
 
 	"github.com/xuri/excelize/v2"
+
+	"github.com/golusoris/golusoris/core/errors"
 )
 
 // File wraps an excelize.File with convenience methods.
@@ -151,13 +153,13 @@ func (f *File) Raw() *excelize.File { return f.f }
 
 // ReadRows is a convenience function that opens path and returns all rows
 // from sheet without keeping the file handle open.
-func ReadRows(_ context.Context, path, sheet string) ([][]string, error) {
+func ReadRows(_ context.Context, path, sheet string) (rows [][]string, err error) {
 	f, err := excelize.OpenFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("xlsx: open %s: %w", path, err)
 	}
-	defer func() { _ = f.Close() }()
-	rows, err := f.GetRows(sheet)
+	defer errors.CloseInto(f, &err, "xlsx: close "+path)
+	rows, err = f.GetRows(sheet)
 	if err != nil {
 		return nil, fmt.Errorf("xlsx: get rows %s: %w", sheet, err)
 	}

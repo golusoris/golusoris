@@ -97,12 +97,12 @@ func newTestTransmission(t *testing.T, url string) *transmissionBackend {
 	return c
 }
 
-func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
-	t.Parallel()
-	const hash = "abcdef0123456789abcdef0123456789abcdef01"
-	var lastMethod string
-	srv := newTransmissionServer(t, func(method string, _ json.RawMessage) any {
-		lastMethod = method
+// newTransmissionCRUDServer serves one seeded torrent for every RPC method and
+// records the most recent method name into *lastMethod.
+func newTransmissionCRUDServer(t *testing.T, hash string, lastMethod *string) *httptest.Server {
+	t.Helper()
+	return newTransmissionServer(t, func(method string, _ json.RawMessage) any {
+		*lastMethod = method
 		switch method {
 		case "torrent-add":
 			return map[string]any{
@@ -120,17 +120,11 @@ func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
 			return map[string]any{}
 		}
 	})
-	c := newTestTransmission(t, srv.URL)
-	ctx := context.Background()
+}
 
-	gotHash, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"})
-	if err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if gotHash != hash {
-		t.Errorf("Add hash = %q, want %q", gotHash, hash)
-	}
-
+// trAssertListAndGet checks List and Get against the single seeded torrent.
+func trAssertListAndGet(t *testing.T, ctx context.Context, c Client, hash string) {
+	t.Helper()
 	list, err := c.List(ctx)
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -159,6 +153,25 @@ func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
 	if one.Hash != hash {
 		t.Errorf("Get hash = %q", one.Hash)
 	}
+}
+
+func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
+	t.Parallel()
+	const hash = "abcdef0123456789abcdef0123456789abcdef01"
+	var lastMethod string
+	srv := newTransmissionCRUDServer(t, hash, &lastMethod)
+	c := newTestTransmission(t, srv.URL)
+	ctx := context.Background()
+
+	gotHash, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if gotHash != hash {
+		t.Errorf("Add hash = %q, want %q", gotHash, hash)
+	}
+
+	trAssertListAndGet(t, ctx, c, hash)
 
 	if err = c.Pause(ctx, hash); err != nil {
 		t.Fatalf("Pause: %v", err)

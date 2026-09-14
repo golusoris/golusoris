@@ -24,6 +24,8 @@ import (
 	"path/filepath"
 
 	"github.com/mholt/archives"
+
+	"github.com/golusoris/golusoris/core/errors"
 )
 
 // Extract decompresses src archive into destDir, creating it if needed.
@@ -65,8 +67,9 @@ func Extract(ctx context.Context, src, destDir string) error {
 		}
 
 		if _, copyErr := io.Copy(out, f); copyErr != nil {
-			_ = out.Close()
-			return fmt.Errorf("archive: extract %s: %w", path, copyErr)
+			extractErr := fmt.Errorf("archive: extract %s: %w", path, copyErr)
+			errors.CloseJoin(out, &extractErr, "archive: close "+dest)
+			return extractErr
 		}
 		// Check Close error on write path: kernel may buffer writes and a
 		// flush failure would silently truncate the extracted file otherwise.

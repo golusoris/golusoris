@@ -9,7 +9,7 @@
 // Usage:
 //
 //	html, err := markdown.Render([]byte("# Hello\nWorld"))
-//	safe := markdown.RenderString("**bold**")
+//	safe, err := markdown.RenderString("**bold**")
 package markdown
 
 import (
@@ -49,13 +49,12 @@ func Render(src []byte) ([]byte, error) {
 }
 
 // RenderString is a convenience wrapper that accepts and returns strings.
-// Panics on error (suitable for static/trusted content at init time).
-func RenderString(src string) string {
+func RenderString(src string) (string, error) {
 	out, err := Render([]byte(src))
 	if err != nil {
-		panic(fmt.Sprintf("markdown: %v", err))
+		return "", err
 	}
-	return string(out)
+	return string(out), nil
 }
 
 // RenderTo writes the HTML representation of src to buf.

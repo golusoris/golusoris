@@ -62,7 +62,10 @@ func (p *Pipeline) Handler() http.Handler {
 		w.Header().Set("Content-Length", strconv.Itoa(len(out.body)))
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
-			_, _ = w.Write(out.body)
+			if _, werr := w.Write(out.body); werr != nil {
+				// Headers are already sent; the client most likely went away.
+				p.log.DebugContext(r.Context(), "pipeline: write body", slog.String("err", werr.Error()))
+			}
 		}
 	})
 }

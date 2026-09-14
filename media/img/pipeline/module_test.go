@@ -35,13 +35,11 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
-// TestModule_wiresPipelineAndHandler boots the fx Module against a config that
-// supplies the signing secret, a LocalBucket seeded with one object, and a fake
-// clock, then drives the provided handler end-to-end. This exercises
-// loadOptions, newProcessor, newPipeline, and the bucketSource adapter.
-func TestModule_wiresPipelineAndHandler(t *testing.T) {
-	t.Parallel()
-
+// bootModule boots the fx Module against a config that supplies the signing
+// secret, a LocalBucket seeded with "logo.png", and a fake clock, and returns
+// the populated pipeline, named handler, and bucket.
+func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Handler, storage.Bucket) {
+	t.Helper()
 	dataDir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dataDir, "logo.png"), []byte("rawbytes"), 0o600); err != nil {
 		t.Fatalf("seed object: %v", err)
@@ -72,8 +70,6 @@ func TestModule_wiresPipelineAndHandler(t *testing.T) {
 		fx.Populate(&p, &bkt),
 		fx.Populate(fx.Annotate(&h, fx.ParamTags(`name:"media.img.pipeline"`))),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	t.Cleanup(cancel)
 	if startErr := app.Start(ctx); startErr != nil {
 		t.Fatalf("Start: %v", startErr)
 	}
@@ -86,6 +82,17 @@ func TestModule_wiresPipelineAndHandler(t *testing.T) {
 	if p == nil || h == nil {
 		t.Fatal("module did not provide pipeline + handler")
 	}
+	return p, h, bkt
+}
+
+// TestModule_wiresPipelineAndHandler boots the fx Module and drives the
+// provided handler end-to-end. This exercises loadOptions, newProcessor,
+// newPipeline, and the bucketSource adapter.
+func TestModule_wiresPipelineAndHandler(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	p, h, bkt := bootModule(t, ctx)
 
 	// The handler should reach the LocalBucket. With the no-CGO stub processor
 	// the resize yields 415; with a real libvips build it yields 200. Either
