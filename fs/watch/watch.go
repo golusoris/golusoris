@@ -112,25 +112,32 @@ func (w *Watcher) Close() error {
 
 func (w *Watcher) run() {
 	defer close(w.done)
-	for {
-		select {
-		case ev, ok := <-w.inner.Events:
-			if !ok {
-				w.flush()
-				return
-			}
-			if ev.Op == fsnotify.Chmod {
-				continue // ignore pure permission changes
-			}
-			w.schedule(ev.Name)
-
-		case _, ok := <-w.inner.Errors:
-			if !ok {
-				return
-			}
-			// Errors are surfaced as a closed channel; callers can reopen.
-		}
+	for open := true; open; {
+		open = w.step()
 	}
+}
+
+// step handles one inner fsnotify event; it reports false once either inner
+// channel is closed, which ends the run loop.
+func (w *Watcher) step() bool {
+	select {
+	case ev, ok := <-w.inner.Events:
+		if !ok {
+			w.flush()
+			return false
+		}
+		if ev.Op == fsnotify.Chmod {
+			return true // ignore pure permission changes
+		}
+		w.schedule(ev.Name)
+
+	case _, ok := <-w.inner.Errors:
+		if !ok {
+			return false
+		}
+		// Errors are surfaced as a closed channel; callers can reopen.
+	}
+	return true
 }
 
 func (w *Watcher) schedule(path string) {

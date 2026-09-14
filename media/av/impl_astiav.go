@@ -98,11 +98,8 @@ func (p *astiavProber) Probe(_ context.Context, path string) (MediaInfo, error) 
 	return info, nil
 }
 
-func (t *astiavTranscoder) Transcode(_ context.Context, inPath, outPath string, opts TranscodeOptions) error {
+func (t *astiavTranscoder) Transcode(_ context.Context, _, _ string, _ TranscodeOptions) error {
 	// Minimal passthrough via ffmpeg CLI wrapper — full astiav encode pipeline
 	// is architecture-specific; implement per your codec requirements.
-	_ = inPath
-	_ = outPath
-	_ = opts
 	return fmt.Errorf("av: full transcode pipeline not yet implemented; use Probe for probing")
 }
