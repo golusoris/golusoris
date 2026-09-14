@@ -69,6 +69,25 @@ type Chunk struct {
 	Err     error // non-nil signals stream error; final chunk has empty Content + nil Err
 }
 
+// streamBuffer is the channel depth every backend's Stream uses: enough to
+// absorb a burst of deltas without the producer blocking on a slow consumer.
+const streamBuffer = 32
+
+// RunStream is the one goroutine wrapper behind every backend's Stream
+// (HISS-19): it hands fn a fresh buffered channel, forwards fn's error as a
+// terminal Chunk{Err}, and closes the channel once fn returns. fn must only
+// send on ch and return; it must not close it.
+func RunStream(fn func(ch chan<- Chunk) error) <-chan Chunk {
+	ch := make(chan Chunk, streamBuffer)
+	go func() {
+		defer close(ch)
+		if err := fn(ch); err != nil {
+			ch <- Chunk{Err: err}
+		}
+	}()
+	return ch
+}
+
 // Settings are the per-request generation knobs an [Option] mutates.
 // Backend implementations (OpenAIClient, anthropic, ollama, …) resolve
 // Options into a Settings via [Resolve] and then emit the

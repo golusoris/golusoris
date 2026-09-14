@@ -115,14 +115,7 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 // Stream implements [llm.Client]. Ollama emits NDJSON — one JSON object
 // per line, terminated by {"done":true}.
 func (c *Client) Stream(ctx context.Context, messages []llm.Message, opts ...llm.Option) <-chan llm.Chunk {
-	ch := make(chan llm.Chunk, 32)
-	go func() {
-		defer close(ch)
-		if err := c.stream(ctx, messages, opts, ch); err != nil {
-			ch <- llm.Chunk{Err: err}
-		}
-	}()
-	return ch
+	return llm.RunStream(func(ch chan<- llm.Chunk) error { return c.stream(ctx, messages, opts, ch) })
 }
 
 // stream performs one NDJSON request and forwards content onto ch.
