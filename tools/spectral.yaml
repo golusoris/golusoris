@@ -7,7 +7,14 @@ extends: ["spectral:oas"]
 
 rules:
   # Strict: every operation must have summary, description, operationId, tags
-  operation-summary: error
+  # Not part of spectral:oas (only description/operationId/tags are); define it.
+  operation-summary:
+    description: Every operation must have a summary.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace]"
+    then:
+      field: summary
+      function: truthy
   operation-description: error
   operation-operationId: error
   operation-tags: error
