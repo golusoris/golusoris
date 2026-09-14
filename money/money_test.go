@@ -5,6 +5,7 @@
 package money_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/golusoris/golusoris/money"
@@ -43,7 +44,10 @@ func TestAdd(t *testing.T) {
 	t.Parallel()
 	a := money.New(100, "USD")
 	b := money.New(50, "USD")
-	got := a.Add(b)
+	got, err := a.Add(b)
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	if got.Amount != 150 {
 		t.Fatalf("expected 150, got %d", got.Amount)
 	}
@@ -51,7 +55,10 @@ func TestAdd(t *testing.T) {
 
 func TestSub(t *testing.T) {
 	t.Parallel()
-	got := money.New(100, "USD").Sub(money.New(30, "USD"))
+	got, err := money.New(100, "USD").Sub(money.New(30, "USD"))
+	if err != nil {
+		t.Fatalf("Sub: %v", err)
+	}
 	if got.Amount != 70 {
 		t.Fatalf("expected 70, got %d", got.Amount)
 	}
@@ -95,12 +102,12 @@ func TestSameCurrency(t *testing.T) {
 	}
 }
 
-func TestCurrencyMismatch_panics(t *testing.T) {
+func TestCurrencyMismatch_errors(t *testing.T) {
 	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic on currency mismatch")
-		}
-	}()
-	money.New(1, "USD").Add(money.New(1, "EUR"))
+	if _, err := money.New(1, "USD").Add(money.New(1, "EUR")); !errors.Is(err, money.ErrCurrencyMismatch) {
+		t.Fatalf("Add: expected ErrCurrencyMismatch, got %v", err)
+	}
+	if _, err := money.New(1, "USD").Sub(money.New(1, "EUR")); !errors.Is(err, money.ErrCurrencyMismatch) {
+		t.Fatalf("Sub: expected ErrCurrencyMismatch, got %v", err)
+	}
 }

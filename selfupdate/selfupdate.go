@@ -33,6 +33,8 @@ import (
 	"strings"
 
 	"github.com/minio/selfupdate"
+
+	"github.com/golusoris/golusoris/core/errors"
 )
 
 // Options configures the updater.
@@ -85,22 +87,9 @@ func Update(ctx context.Context, opts Options) (Result, error) {
 
 	checksum, _ := fetchChecksum(ctx, client, release, assetURL) // best-effort
 
-	rc, err := fetchAsset(ctx, client, assetURL)
+	data, err := downloadAsset(ctx, client, assetURL, checksum)
 	if err != nil {
-		return result, fmt.Errorf("selfupdate: fetch asset: %w", err)
-	}
-	defer func() { _ = rc.Close() }()
-
-	h := sha256.New()
-	r := io.TeeReader(rc, h)
-	data, err2 := io.ReadAll(r)
-	if err2 != nil {
-		return result, fmt.Errorf("selfupdate: read asset: %w", err2)
-	}
-	if checksum != "" {
-		if got := hex.EncodeToString(h.Sum(nil)); got != checksum {
-			return result, fmt.Errorf("selfupdate: checksum mismatch: got %s, want %s", got, checksum)
-		}
+		return result, err
 	}
 
 	if err := selfupdate.Apply(bytes.NewReader(data), selfupdate.Options{}); err != nil {
@@ -109,6 +98,30 @@ func Update(ctx context.Context, opts Options) (Result, error) {
 
 	result.Updated = true
 	return result, nil
+}
+
+// downloadAsset fetches assetURL into memory and verifies it against checksum
+// (skipped when empty). The response body is closed — and a close failure
+// surfaced — before the caller applies the binary, so Updated=true is never
+// paired with a non-nil error.
+func downloadAsset(ctx context.Context, client *http.Client, assetURL, checksum string) (data []byte, err error) {
+	rc, err := fetchAsset(ctx, client, assetURL)
+	if err != nil {
+		return nil, fmt.Errorf("selfupdate: fetch asset: %w", err)
+	}
+	defer errors.CloseInto(rc, &err, "selfupdate: close asset body")
+
+	h := sha256.New()
+	data, err = io.ReadAll(io.TeeReader(rc, h))
+	if err != nil {
+		return nil, fmt.Errorf("selfupdate: read asset: %w", err)
+	}
+	if checksum != "" {
+		if got := hex.EncodeToString(h.Sum(nil)); got != checksum {
+			return nil, fmt.Errorf("selfupdate: checksum mismatch: got %s, want %s", got, checksum)
+		}
+	}
+	return data, nil
 }
 
 // ghRelease is a minimal GitHub API /releases/latest response.
@@ -122,7 +135,7 @@ type ghAsset struct {
 	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
-func latestRelease(ctx context.Context, client *http.Client, owner, repo string) (ghRelease, error) {
+func latestRelease(ctx context.Context, client *http.Client, owner, repo string) (rel ghRelease, err error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", owner, repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -130,17 +143,16 @@ func latestRelease(ctx context.Context, client *http.Client, owner, repo string)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return ghRelease{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer errors.CloseInto(resp.Body, &err, "selfupdate: close release body")
 
 	if resp.StatusCode != http.StatusOK {
 		return ghRelease{}, fmt.Errorf("GitHub API returned %d", resp.StatusCode)
 	}
 
-	var rel ghRelease
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
 		return ghRelease{}, err
 	}
@@ -161,7 +173,7 @@ func selectAsset(rel ghRelease, opts Options) (string, error) {
 }
 
 // fetchChecksum looks for a *_checksums.txt asset and extracts the SHA-256 for assetURL.
-func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, assetURL string) (string, error) {
+func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, assetURL string) (sum string, err error) {
 	var checksumURL string
 	for _, a := range rel.Assets {
 		if strings.HasSuffix(a.Name, "_checksums.txt") || strings.HasSuffix(a.Name, "checksums.txt") {
@@ -177,11 +189,11 @@ func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, asse
 	if err != nil {
 		return "", err
 	}
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) //nolint:bodyclose // closed by the deferred errors.CloseInto below
 	if err != nil {
 		return "", err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer errors.CloseInto(resp.Body, &err, "selfupdate: close checksum body")
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -209,8 +221,9 @@ func fetchAsset(ctx context.Context, client *http.Client, url string) (io.ReadCl
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("asset download returned %d", resp.StatusCode)
+		statusErr := fmt.Errorf("asset download returned %d", resp.StatusCode)
+		errors.CloseJoin(resp.Body, &statusErr, "selfupdate: close asset body")
+		return nil, statusErr
 	}
 	return resp.Body, nil
 }

@@ -254,7 +254,9 @@ func writeJSON(w http.ResponseWriter, results []Result, uptime time.Duration) {
 	if payload.Status == string(StatusDown) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
-	_ = json.NewEncoder(w).Encode(payload)
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		return // headers already sent; the client went away mid-body
+	}
 }
 
 func writeHTML(w http.ResponseWriter, results []Result, uptime time.Duration) {
@@ -272,7 +274,9 @@ func writeHTML(w http.ResponseWriter, results []Result, uptime time.Duration) {
 		http.Error(w, fmt.Sprintf("render: %v", err), http.StatusInternalServerError)
 		return
 	}
-	_, _ = w.Write(buf.Bytes())
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		return // headers already sent; the client went away mid-body
+	}
 }
 
 // overallStatus is down if any check is down; else degraded if any is degraded;
