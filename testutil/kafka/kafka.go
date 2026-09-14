@@ -38,6 +38,9 @@ const (
 // address as "host:port". The container is terminated via t.Cleanup.
 func Addr(t *testing.T) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/kafka: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)

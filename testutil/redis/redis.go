@@ -38,6 +38,10 @@ const (
 // The container and client are stopped/closed via t.Cleanup.
 func Start(t *testing.T) rueidis.Client {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/redis: container-backed; skipped under -short")
+	}
+
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
@@ -79,6 +83,9 @@ func Start(t *testing.T) rueidis.Client {
 // The container is terminated via t.Cleanup.
 func Addr(t *testing.T) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("testutil/redis: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
