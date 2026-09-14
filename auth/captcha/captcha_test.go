@@ -6,6 +6,8 @@ package captcha_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -73,4 +75,43 @@ func (r rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.URL.Host = t
 	}
 	return r.base.RoundTrip(req)
+}
+
+// errClose is returned by failCloser.Close to exercise the deferred
+// close-error path.
+var errClose = errors.New("close failed")
+
+// failCloser is a response body whose Close always fails.
+type failCloser struct{ io.Reader }
+
+func (failCloser) Close() error { return errClose }
+
+// cannedClient satisfies captcha.HTTPClient with a fixed JSON body served
+// behind a failCloser.
+type cannedClient struct{ body string }
+
+func (c cannedClient) Do(_ *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       failCloser{strings.NewReader(c.body)},
+		Header:     make(http.Header),
+	}, nil
+}
+
+func TestVerifier_CloseErrorSurfaces(t *testing.T) {
+	t.Parallel()
+	v := captcha.NewTurnstile("secret", cannedClient{body: `{"success":true}`})
+
+	err := v.Verify(context.Background(), "tok", "")
+	require.ErrorIs(t, err, errClose)
+	require.ErrorContains(t, err, "close response body")
+}
+
+func TestVerifier_PrimaryErrorWinsOverClose(t *testing.T) {
+	t.Parallel()
+	v := captcha.NewTurnstile("secret", cannedClient{body: `{"success":false,"error-codes":["invalid-input-response"]}`})
+
+	err := v.Verify(context.Background(), "tok", "")
+	require.ErrorContains(t, err, "invalid-input-response")
+	require.NotErrorIs(t, err, errClose)
 }
