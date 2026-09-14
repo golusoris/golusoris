@@ -12,7 +12,7 @@
 //
 // Usage:
 //
-//	svc := tracking.New(store, []byte(secret))
+//	svc := tracking.New(store, []byte(secret), logger) // nil logger → slog.Default()
 //	mux.Handle("/t/open",  svc.PixelHandler())
 //	mux.Handle("/t/click", svc.ClickHandler())
 //
