@@ -115,7 +115,7 @@ func (h *Hub) Handler() http.Handler {
 		h.add(c)
 		defer h.remove(c)
 
-		for {
+		for r.Context().Err() == nil {
 			select {
 			case <-r.Context().Done():
 				return

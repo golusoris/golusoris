@@ -5,8 +5,11 @@
 package tracking_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -41,7 +44,7 @@ func (m *memStore) list() []tracking.Event {
 func TestPixelHandler_recordsOpen(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	urlStr := svc.PixelURL("http://example.com/t/open", "msg1", "alice@example.com")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
@@ -65,7 +68,7 @@ func TestPixelHandler_recordsOpen(t *testing.T) {
 func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/t/open?m=x&r=a&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.PixelHandler().ServeHTTP(rec, req)
@@ -77,7 +80,7 @@ func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 func TestClickHandler_redirects(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	target := "https://example.com/landing?x=1"
 	urlStr := svc.ClickURL("http://example.com/t/click", "msg2", "bob@example.com", target)
 
@@ -99,7 +102,7 @@ func TestClickHandler_redirects(t *testing.T) {
 func TestClickHandler_forwardedFor(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "https://ex.com/")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
@@ -112,7 +115,7 @@ func TestClickHandler_forwardedFor(t *testing.T) {
 
 func TestClickHandler_rejectsBadSig(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m&r=r&u=https%3A%2F%2Fex.com&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -121,7 +124,7 @@ func TestClickHandler_rejectsBadSig(t *testing.T) {
 
 func TestClickHandler_rejectsMissingParams(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -131,7 +134,7 @@ func TestClickHandler_rejectsMissingParams(t *testing.T) {
 func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	// Signed but with a javascript: target — must be rejected.
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "javascript:alert(1)")
 
@@ -145,9 +148,61 @@ func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 
 func TestPixelURL_containsExpectedFields(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	got := svc.PixelURL("http://x/p", "m1", "a@b")
 	require.True(t, strings.HasPrefix(got, "http://x/p?"))
 	require.Contains(t, got, "m=m1")
 	require.Contains(t, got, "sig=")
+}
+
+// failStore fails every Record call.
+type failStore struct{ err error }
+
+func (f failStore) Record(context.Context, tracking.Event) error { return f.err }
+
+func newLoggedService(t *testing.T, store tracking.Store) (*tracking.Service, *bytes.Buffer) {
+	t.Helper()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	return tracking.New(store, []byte("k"), logger), &buf
+}
+
+// Negative path: a store failure must not break the pixel; it is logged.
+func TestPixelHandler_storeFailureStillServesAndLogs(t *testing.T) {
+	t.Parallel()
+	svc, buf := newLoggedService(t, failStore{err: errors.New("db down")})
+	req := httptest.NewRequest(http.MethodGet, svc.PixelURL("http://x/p", "msg1", "a@b"), nil)
+	rec := httptest.NewRecorder()
+	svc.PixelHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "image/gif", rec.Header().Get("Content-Type"))
+	require.Contains(t, buf.String(), "notify/tracking: record event")
+	require.Contains(t, buf.String(), "kind=open")
+	require.Contains(t, buf.String(), "db down")
+}
+
+// Negative path: a store failure must not break the redirect; it is logged.
+func TestClickHandler_storeFailureStillRedirectsAndLogs(t *testing.T) {
+	t.Parallel()
+	svc, buf := newLoggedService(t, failStore{err: errors.New("db down")})
+	target := "https://example.com/landing"
+	req := httptest.NewRequest(http.MethodGet, svc.ClickURL("http://x/c", "msg2", "b@c", target), nil)
+	rec := httptest.NewRecorder()
+	svc.ClickHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, target, rec.Header().Get("Location"))
+	require.Contains(t, buf.String(), "kind=click")
+	require.Contains(t, buf.String(), "message_id=msg2")
+}
+
+// Boundary: a nil logger must fall back to slog.Default() rather than panic.
+func TestNew_nilLoggerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+	svc := tracking.New(failStore{err: errors.New("db down")}, []byte("k"), nil)
+	req := httptest.NewRequest(http.MethodGet, svc.PixelURL("http://x/p", "m", "r"), nil)
+	rec := httptest.NewRecorder()
+	require.NotPanics(t, func() { svc.PixelHandler().ServeHTTP(rec, req) })
+	require.Equal(t, http.StatusOK, rec.Code)
 }

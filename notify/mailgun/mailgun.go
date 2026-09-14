@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -90,7 +91,7 @@ func (s *Sender) Name() string { return "mailgun" }
 
 // Send implements [notify.Sender]. Maps notify.Message to a Mailgun
 // form-encoded POST. Requires HTML or Text.
-func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
+func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 	if len(msg.To) == 0 {
 		return errors.New("notify/mailgun: at least one recipient required")
 	}
@@ -137,11 +138,11 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	req.SetBasicAuth("api", s.opts.APIKey)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := s.hc.Do(req)
+	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
 	if err != nil {
 		return fmt.Errorf("notify/mailgun: post: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "notify/mailgun: close response body")
 	if resp.StatusCode/100 != 2 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("notify/mailgun: status %d: %s", resp.StatusCode, respBody)

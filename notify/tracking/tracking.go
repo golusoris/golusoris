@@ -12,7 +12,7 @@
 //
 // Usage:
 //
-//	svc := tracking.New(store, []byte(secret))
+//	svc := tracking.New(store, []byte(secret), logger) // nil logger → slog.Default()
 //	mux.Handle("/t/open",  svc.PixelHandler())
 //	mux.Handle("/t/click", svc.ClickHandler())
 //
@@ -28,6 +28,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 )
@@ -64,12 +65,18 @@ type Store interface {
 type Service struct {
 	store  Store
 	secret []byte
+	logger *slog.Logger
 }
 
 // New returns a Service. secret must be stable; rotating it
-// invalidates outstanding tracking URLs.
-func New(store Store, secret []byte) *Service {
-	return &Service{store: store, secret: secret}
+// invalidates outstanding tracking URLs. A nil logger falls back to
+// slog.Default(); store failures are logged, never surfaced to the mail
+// client.
+func New(store Store, secret []byte, logger *slog.Logger) *Service {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &Service{store: store, secret: secret, logger: logger}
 }
 
 // PixelURL returns a signed URL for the 1×1 open-tracking pixel.
@@ -104,7 +111,7 @@ func (s *Service) PixelHandler() http.Handler {
 		recipient := r.URL.Query().Get("r")
 		sig := r.URL.Query().Get("sig")
 		if m != "" && hmac.Equal([]byte(s.sign(m, recipient, "")), []byte(sig)) {
-			_ = s.store.Record(r.Context(), Event{
+			s.record(r, Event{
 				MessageID: m,
 				Recipient: recipient,
 				Kind:      KindOpen,
@@ -115,7 +122,9 @@ func (s *Service) PixelHandler() http.Handler {
 		w.Header().Set("Content-Type", "image/gif")
 		w.Header().Set("Cache-Control", "no-store, max-age=0")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_, _ = w.Write(pixelGIF)
+		if _, err := w.Write(pixelGIF); err != nil {
+			s.logger.DebugContext(r.Context(), "notify/tracking: write pixel", slog.String("error", err.Error()))
+		}
 	})
 }
 
@@ -139,7 +148,7 @@ func (s *Service) ClickHandler() http.Handler {
 			http.Error(w, "invalid target", http.StatusBadRequest)
 			return
 		}
-		_ = s.store.Record(r.Context(), Event{
+		s.record(r, Event{
 			MessageID: m,
 			Recipient: recipient,
 			Kind:      KindClick,
@@ -149,6 +158,15 @@ func (s *Service) ClickHandler() http.Handler {
 		})
 		http.Redirect(w, r, target, http.StatusFound) // #nosec G710 -- target is bound to a server-issued link by the HMAC check above and validateRedirectURL enforces http(s) scheme + non-empty host // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- target is HMAC-signed, scheme+host validated
 	})
+}
+
+// record persists ev; a store failure must not break the pixel/redirect,
+// so it is logged instead of surfaced.
+func (s *Service) record(r *http.Request, ev Event) {
+	if err := s.store.Record(r.Context(), ev); err != nil {
+		s.logger.WarnContext(r.Context(), "notify/tracking: record event",
+			slog.String("kind", string(ev.Kind)), slog.String("message_id", ev.MessageID), slog.String("error", err.Error()))
+	}
 }
 
 func (s *Service) sign(messageID, recipient, target string) string {

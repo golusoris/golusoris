@@ -162,8 +162,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		if !ep.Active {
 			continue
 		}
+		id, err := newID()
+		if err != nil {
+			return err
+		}
 		del := Delivery{
-			ID:         newID(),
+			ID:         id,
 			EndpointID: ep.ID,
 			Event:      event,
 			Payload:    body,
@@ -221,7 +225,7 @@ func (d *Dispatcher) deliver(ctx context.Context, ep Endpoint, del *Delivery) er
 		if err == nil && code < 400 {
 			del.Status = StatusDelivered
 			del.Error = ""
-			_ = d.store.SaveDelivery(ctx, *del)
+			d.saveDelivery(ctx, del)
 			return nil
 		}
 
@@ -230,13 +234,21 @@ func (d *Dispatcher) deliver(ctx context.Context, ep Endpoint, del *Delivery) er
 		} else {
 			del.Error = fmt.Sprintf("HTTP %d", code)
 		}
-		_ = d.store.SaveDelivery(ctx, *del)
+		d.saveDelivery(ctx, del)
 	}
 
 	del.Status = StatusFailed
 	del.UpdatedAt = d.clk.Now()
-	_ = d.store.SaveDelivery(ctx, *del)
+	d.saveDelivery(ctx, del)
 	return fmt.Errorf("webhooks/out: delivery %s dead-lettered after %d attempts: %s", del.ID, del.Attempts, del.Error)
+}
+
+// saveDelivery persists the attempt record; a store failure must not abort
+// the retry loop, so it is logged instead of returned.
+func (d *Dispatcher) saveDelivery(ctx context.Context, del *Delivery) {
+	if err := d.store.SaveDelivery(ctx, *del); err != nil {
+		d.logger.WarnContext(ctx, "webhooks/out: save delivery", "delivery", del.ID, "err", err)
+	}
 }
 
 func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig string, body []byte) (int, error) {
@@ -253,7 +265,12 @@ func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig strin
 	if err != nil {
 		return 0, err
 	}
-	_ = resp.Body.Close()
+	// The endpoint has already answered with resp.StatusCode. Failing to
+	// close the (unread) body is not a delivery failure and must not turn an
+	// acknowledged delivery into a duplicate retry, so it is logged instead.
+	if cerr := resp.Body.Close(); cerr != nil {
+		d.logger.DebugContext(ctx, "webhooks/out: close response body", "delivery", deliveryID, "err", cerr)
+	}
 	return resp.StatusCode, nil
 }
 
@@ -265,10 +282,10 @@ func sign(secret, payload []byte) string {
 }
 
 // newID returns a 16-byte random hex string suitable for delivery IDs.
-func newID() string {
+func newID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("webhooks/out: rand.Read: %v", err))
+		return "", fmt.Errorf("webhooks/out: rand.Read: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
