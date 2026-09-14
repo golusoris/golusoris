@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -124,23 +125,30 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 			form.Set("StatusCallback", s.opts.StatusCallback)
 		}
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewBufferString(form.Encode()))
-		if err != nil {
-			return fmt.Errorf("notify/twilio: new request: %w", err)
+		if err := s.sendOne(ctx, target, to, form); err != nil {
+			return err
 		}
-		req.SetBasicAuth(s.opts.AccountSID, s.opts.AuthToken)
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
+	return nil
+}
 
-		resp, err := s.hc.Do(req)
-		if err != nil {
-			return fmt.Errorf("notify/twilio: post: %w", err)
-		}
-		if resp.StatusCode/100 != 2 {
-			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-			_ = resp.Body.Close()
-			return fmt.Errorf("notify/twilio: status %d for %s: %s", resp.StatusCode, to, respBody)
-		}
-		_ = resp.Body.Close()
+// sendOne posts a single Messages.json form and maps non-2xx to an error.
+func (s *Sender) sendOne(ctx context.Context, target, to string, form url.Values) (err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewBufferString(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("notify/twilio: new request: %w", err)
+	}
+	req.SetBasicAuth(s.opts.AccountSID, s.opts.AuthToken)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
+	if err != nil {
+		return fmt.Errorf("notify/twilio: post: %w", err)
+	}
+	defer gerr.CloseInto(resp.Body, &err, "notify/twilio: close response body")
+	if resp.StatusCode/100 != 2 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("notify/twilio: status %d for %s: %s", resp.StatusCode, to, respBody)
 	}
 	return nil
 }

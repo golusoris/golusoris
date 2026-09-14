@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -57,7 +58,7 @@ func (s *Sender) Name() string { return "discord" }
 
 // Send implements [notify.Sender]. The Body field is sent as the message
 // content; if Body is empty, a Subject + Text fallback is used.
-func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
+func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 	content := msg.Body
 	if content == "" {
 		var b strings.Builder
@@ -86,11 +87,11 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 		return fmt.Errorf("notify/discord: new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := s.hc.Do(req)
+	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
 	if err != nil {
 		return fmt.Errorf("notify/discord: post: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "notify/discord: close response body")
 	if resp.StatusCode/100 != 2 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("notify/discord: status %d: %s", resp.StatusCode, respBody)

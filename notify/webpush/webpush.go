@@ -40,6 +40,7 @@ import (
 
 	wp "github.com/SherClockHolmes/webpush-go"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -95,14 +96,14 @@ func (s *Sender) Name() string { return "webpush" }
 // be JSON-encoded and placed in msg.Metadata["subscription"]. The push
 // payload is msg.Body (use your own JSON / plain-text convention — the
 // browser service worker sees it verbatim).
-func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
+func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 	subJSON := msg.Metadata["subscription"]
 	if subJSON == "" {
 		return errors.New("notify/webpush: Metadata[\"subscription\"] is required (JSON-encoded PushSubscription)")
 	}
 	var sub wp.Subscription
-	if err := json.Unmarshal([]byte(subJSON), &sub); err != nil {
-		return fmt.Errorf("notify/webpush: subscription: %w", err)
+	if uerr := json.Unmarshal([]byte(subJSON), &sub); uerr != nil {
+		return fmt.Errorf("notify/webpush: subscription: %w", uerr)
 	}
 	if msg.Body == "" {
 		return errors.New("notify/webpush: msg.Body required (payload sent verbatim to the service worker)")
@@ -112,7 +113,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	if ttl == 0 {
 		ttl = 86400
 	}
-	resp, err := wp.SendNotificationWithContext(ctx, []byte(msg.Body), &sub, &wp.Options{
+	resp, err := wp.SendNotificationWithContext(ctx, []byte(msg.Body), &sub, &wp.Options{ //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
 		HTTPClient:      s.hc,
 		Subscriber:      s.opts.Subject,
 		VAPIDPublicKey:  s.opts.VAPIDPublicKey,
@@ -124,7 +125,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	if err != nil {
 		return fmt.Errorf("notify/webpush: send: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "notify/webpush: close response body")
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("notify/webpush: status %d", resp.StatusCode)
 	}

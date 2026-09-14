@@ -39,6 +39,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jonboulle/clockwork"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -166,34 +167,41 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 				Data: msg.Metadata,
 			},
 		}
-		buf, err := json.Marshal(payload)
-		if err != nil {
-			return fmt.Errorf("notify/fcm: marshal: %w", err)
+		if err := s.sendOne(ctx, target, token, device, payload); err != nil {
+			return err
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(buf))
-		if err != nil {
-			return fmt.Errorf("notify/fcm: new request: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
+	}
+	return nil
+}
 
-		resp, err := s.hc.Do(req)
-		if err != nil {
-			return fmt.Errorf("notify/fcm: post: %w", err)
-		}
-		if resp.StatusCode/100 != 2 {
-			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-			_ = resp.Body.Close()
-			return fmt.Errorf("notify/fcm: status %d for %s: %s", resp.StatusCode, device, respBody)
-		}
-		_ = resp.Body.Close()
+// sendOne posts a single FCM v1 message and maps non-2xx to an error.
+func (s *Sender) sendOne(ctx context.Context, target, token, device string, payload fcmSendRequest) (err error) {
+	buf, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("notify/fcm: marshal: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(buf))
+	if err != nil {
+		return fmt.Errorf("notify/fcm: new request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
+	if err != nil {
+		return fmt.Errorf("notify/fcm: post: %w", err)
+	}
+	defer gerr.CloseInto(resp.Body, &err, "notify/fcm: close response body")
+	if resp.StatusCode/100 != 2 {
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("notify/fcm: status %d for %s: %s", resp.StatusCode, device, respBody)
 	}
 	return nil
 }
 
 // accessToken returns a cached OAuth2 bearer token, refreshing when
 // < 5 min remaining.
-func (s *Sender) accessToken(ctx context.Context) (string, error) {
+func (s *Sender) accessToken(ctx context.Context) (token string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -228,11 +236,11 @@ func (s *Sender) accessToken(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("notify/fcm: token req: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := s.hc.Do(req)
+	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
 	if err != nil {
 		return "", fmt.Errorf("notify/fcm: token post: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "notify/fcm: close token response body")
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))

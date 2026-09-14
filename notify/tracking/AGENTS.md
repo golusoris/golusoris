@@ -10,7 +10,7 @@ Email open/click tracking via signed URLs and a 1×1 pixel.
 
 ## Surface
 
-- `tracking.New(store, secret)` → `*Service`.
+- `tracking.New(store, secret, logger)` → `*Service` (nil logger → `slog.Default()`; `Record` failures are logged at Warn).
 - `svc.PixelURL(baseURL, messageID, recipient)` → signed pixel URL.
 - `svc.ClickURL(baseURL, messageID, recipient, target)` → signed redirect URL.
 - `svc.PixelHandler()` → serves 1×1 GIF, records open.

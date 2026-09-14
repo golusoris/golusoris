@@ -33,6 +33,8 @@ import (
 	"net/http"
 
 	pionwebrtc "github.com/pion/webrtc/v4"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // DefaultMaxBodyBytes caps incoming SDP offers. Real offers are
@@ -107,7 +109,7 @@ func (s *Signaler) Answer(ctx context.Context, offerSDP string) (answerSDP strin
 	// On any early failure, close the PC so the caller doesn't leak it.
 	defer func() {
 		if err != nil {
-			_ = pc.Close()
+			gerr.CloseJoin(pc, &err, "webrtc: close peer connection")
 			pc = nil
 		}
 	}()
@@ -153,8 +155,13 @@ func (s *Signaler) Handler() http.Handler {
 			http.Error(w, "expected Content-Type application/sdp", http.StatusUnsupportedMediaType)
 			return
 		}
+		ctx := r.Context()
 		r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
-		defer func() { _ = r.Body.Close() }()
+		defer func() {
+			if cerr := r.Body.Close(); cerr != nil {
+				s.logger.DebugContext(ctx, "webrtc: close request body", slog.String("error", cerr.Error()))
+			}
+		}()
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "read offer: "+err.Error(), http.StatusBadRequest)
@@ -164,27 +171,32 @@ func (s *Signaler) Handler() http.Handler {
 			http.Error(w, "empty offer", http.StatusBadRequest)
 			return
 		}
-		answer, pc, err := s.Answer(r.Context(), string(body))
+		answer, pc, err := s.Answer(ctx, string(body))
 		if err != nil {
-			s.logger.WarnContext(r.Context(), "webrtc: answer failed", slog.String("error", err.Error()))
+			s.logger.WarnContext(ctx, "webrtc: answer failed", slog.String("error", err.Error()))
 			http.Error(w, "negotiation failed", http.StatusBadRequest)
 			return
 		}
 		// Close the PC when it fails — caller tracks data channels /
 		// tracks via OnConnect; there's no explicit teardown URL in the
 		// one-shot handler.
+		// The callback outlives the request, so detach cancellation but keep
+		// the request's trace/log values.
+		bg := context.WithoutCancel(ctx)
 		pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
 			if state == pionwebrtc.PeerConnectionStateFailed ||
 				state == pionwebrtc.PeerConnectionStateClosed ||
 				state == pionwebrtc.PeerConnectionStateDisconnected {
-				_ = pc.Close()
+				if cerr := pc.Close(); cerr != nil {
+					s.logger.DebugContext(bg, "webrtc: close peer connection", slog.String("state", state.String()), slog.String("error", cerr.Error()))
+				}
 			}
 		})
 
 		w.Header().Set("Content-Type", "application/sdp")
 		w.WriteHeader(http.StatusCreated)
 		if _, werr := w.Write([]byte(answer)); werr != nil {
-			s.logger.WarnContext(r.Context(), "webrtc: write answer", slog.String("error", werr.Error()))
+			s.logger.WarnContext(ctx, "webrtc: write answer", slog.String("error", werr.Error()))
 		}
 	})
 }

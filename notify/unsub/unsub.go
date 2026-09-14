@@ -89,13 +89,15 @@ func (s *Service) Handler() http.Handler {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
-		if r.Method == http.MethodGet {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			_, _ = fmt.Fprintf(w, "You have been unsubscribed from %s.", html.EscapeString(email))
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusOK)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if _, err := fmt.Fprintf(w, "You have been unsubscribed from %s.", html.EscapeString(email)); err != nil {
+			return // headers already sent; the client went away
+		}
 	})
 }
 

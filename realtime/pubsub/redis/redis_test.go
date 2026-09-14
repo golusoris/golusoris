@@ -61,10 +61,11 @@ func TestPubSubRoundTrip(t *testing.T) {
 
 	// SUBSCRIBE is established asynchronously, so retry the publish until the
 	// subscriber receives it (or we time out).
+	const maxPublishAttempts = 100
 	deadline := time.After(10 * time.Second)
 	tick := time.NewTicker(150 * time.Millisecond)
 	defer tick.Stop()
-	for {
+	for range maxPublishAttempts {
 		select {
 		case b := <-got:
 			if string(b) != "hello" {
@@ -77,4 +78,5 @@ func TestPubSubRoundTrip(t *testing.T) {
 			t.Fatal("timed out waiting for published message")
 		}
 	}
+	t.Fatalf("no message after %d publish attempts", maxPublishAttempts)
 }

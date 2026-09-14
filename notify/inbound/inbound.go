@@ -30,6 +30,8 @@ import (
 	"net/mail"
 	"strings"
 	"time"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Email is a normalized inbound message.
@@ -223,10 +225,10 @@ func headersFromPostmark(h []postmarkHeader) map[string][]string {
 	return out
 }
 
-func readBody(r *http.Request) ([]byte, error) {
+func readBody(r *http.Request) (b []byte, err error) {
 	r.Body = http.MaxBytesReader(nil, r.Body, maxBodyBytes)
-	defer func() { _ = r.Body.Close() }()
-	b, err := io.ReadAll(r.Body)
+	defer gerr.CloseInto(r.Body, &err, "notify/inbound: close request body")
+	b, err = io.ReadAll(r.Body)
 	if err != nil {
 		return nil, fmt.Errorf("notify/inbound: read body: %w", err)
 	}
