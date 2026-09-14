@@ -29,6 +29,7 @@ type Verdict struct { Clean bool; Signature string; Raw string }
 var ErrInfected    // a signature fired (ScanStrict only)
 var ErrUnavailable // dial/timeout/daemon failure — distinct from a verdict
 var ErrTooLarge    // reader exceeds max_size, rejected before dialing
+var ErrUnsupported // clamd backend not compiled on this OS (non-unix); wraps errors.ErrUnsupported
 
 // Direct construction (apps usually use Module instead):
 scan.NewClamdScanner(ClamdOptions{...}, logger, clk) (Scanner, error)
@@ -69,6 +70,17 @@ enforces its own `StreamMaxLength`.
 - Alternatives rejected: `lyimmi/go-clamd` (bool-only verdict, no signature),
   `dutchcoders/go-clamd` (unmaintained, no ctx), a hand-rolled INSTREAM client
   (parsing-bug surface in the trust boundary). Full rationale in ADR-0008.
+
+## Portability
+
+- `baruwa-enterprise/clamd` uses unix-only syscalls (`syscall.UnixRights` /
+  `Sendmsg`), so the clamd backend is compiled under `//go:build unix`
+  (`clamd.go`, `limit.go`, and the fake-clamd unit tests). `clamd_stub.go`
+  (`!unix`, i.e. Windows) keeps the exported API: `NewClamdScanner` and the
+  `backend: clamd` fx path fail closed with `ErrUnsupported` (wraps
+  `errors.ErrUnsupported`). Only the noop backend works there — local dev on
+  Windows must opt in explicitly; `fail_open` does not mask it (it only covers
+  the boot ping). `go build ./...` / `go vet ./...` pass on every OS.
 
 ## Notes
 
