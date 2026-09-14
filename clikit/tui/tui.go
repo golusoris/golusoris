@@ -42,15 +42,21 @@ import (
 // the model via the [tea.View] it returns (View.AltScreen, View.MouseMode),
 // not by program options, so Run no longer enables them automatically.
 func Run(m tea.Model, opts ...tea.ProgramOption) error {
-	p := tea.NewProgram(m, opts...)
-	_, err := p.Run()
-	return err //nolint:wrapcheck // tea error is already descriptive
+	return runProgram(m, opts...)
 }
 
 // RunInline runs the program in inline mode (no alternate screen). Since the
 // alternate screen is now opt-in via the model's [tea.View], this is a thin
 // alias of Run kept for API symmetry.
 func RunInline(m tea.Model, opts ...tea.ProgramOption) error {
+	return runProgram(m, opts...)
+}
+
+// runProgram builds and runs a bubbletea program with the given initial
+// model and options, blocking until it exits. Run and RunInline both
+// delegate here; whether the program uses the alternate screen is decided
+// by the model's [tea.View] (View.AltScreen), not by which wrapper is used.
+func runProgram(m tea.Model, opts ...tea.ProgramOption) error {
 	p := tea.NewProgram(m, opts...)
 	_, err := p.Run()
 	return err //nolint:wrapcheck // tea error is already descriptive

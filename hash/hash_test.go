@@ -5,6 +5,7 @@
 package hash_test
 
 import (
+	"encoding/hex"
 	"os"
 	"strings"
 	"testing"
@@ -105,6 +106,32 @@ func TestBLAKE3Reader(t *testing.T) {
 	}
 	if got != hash.BLAKE3([]byte("hello")) {
 		t.Fatalf("BLAKE3Reader mismatch: %q", got)
+	}
+}
+
+// TestHMACSHA256 checks against RFC 4231 test case 1 (known key/data →
+// known digest), so any accidental change to the hash construction is
+// caught immediately.
+func TestHMACSHA256(t *testing.T) {
+	t.Parallel()
+	key, err := hex.DecodeString("0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := hash.HMACSHA256(key, []byte("Hi There"))
+	want := "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+	if hex.EncodeToString(got) != want {
+		t.Fatalf("HMACSHA256: got %x want %s", got, want)
+	}
+}
+
+func TestHMACSHA256DifferentSecretsDifferentDigests(t *testing.T) {
+	t.Parallel()
+	data := []byte("token")
+	a := hash.HMACSHA256([]byte("secret-a"), data)
+	b := hash.HMACSHA256([]byte("secret-b"), data)
+	if hex.EncodeToString(a) == hex.EncodeToString(b) {
+		t.Fatal("HMACSHA256: different secrets produced the same digest")
 	}
 }
 

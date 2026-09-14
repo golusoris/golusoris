@@ -24,6 +24,7 @@ the configured handler.
 | `log.Options` | `Format`, `Level`, `Output`, `AddSource` (zero value usable) |
 | `log.Format` consts | `FormatAuto` / `FormatTint` / `FormatJSON` |
 | `log.LevelFromString(s)` | parse a level name → `(slog.Level, ok)` |
+| `log.FanoutHandler` | `slog.Handler` that fans a record out to every wrapped handler — shared by the otel and sentry bridge modules |
 
 ## Config (env, read by `Module`)
 

@@ -30,6 +30,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,7 +203,7 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 		BaseModel: job.BaseModel,
 		Labels:    labels,
 		Metrics:   metrics,
-		Metadata:  copyStringMap(job.Tags),
+		Metadata:  maps.Clone(job.Tags),
 	}, nil
 }
 
@@ -241,15 +242,4 @@ func stageWorkDir(job tiny.Job) (workDir, inputDir, outputDir string, err error)
 		return "", "", "", fmt.Errorf("ai/tiny/litert: write config: %w", writeErr)
 	}
 	return workDir, inputDir, outputDir, nil
-}
-
-func copyStringMap(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
 }

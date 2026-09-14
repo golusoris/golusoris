@@ -16,6 +16,7 @@
 package hash
 
 import (
+	"crypto/hmac"
 	"crypto/sha1" //nolint:gosec // SHA-1 for ETag compatibility only // #nosec G505
 	"crypto/sha256"
 	"encoding/hex"
@@ -84,6 +85,16 @@ func ETag(data []byte) string {
 	h := sha1.New() //nolint:gosec // SHA-1 for ETag, not security-critical // #nosec G401 // nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-sha1 -- ETag is a content fingerprint, not a signature
 	h.Write(data)
 	return `"` + hex.EncodeToString(h.Sum(nil)) + `"`
+}
+
+// HMACSHA256 returns the raw HMAC-SHA256 of data keyed by secret. Use this
+// for keyed token/credential hashing (magic links, recovery codes, API
+// keys, ...) where the digest must not be reproducible without the secret;
+// use [SHA256] instead for unkeyed content hashing.
+func HMACSHA256(secret, data []byte) []byte {
+	h := hmac.New(sha256.New, secret)
+	h.Write(data)
+	return h.Sum(nil)
 }
 
 // --- helpers ---

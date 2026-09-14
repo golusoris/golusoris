@@ -14,7 +14,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -24,6 +23,7 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	tokenhash "github.com/golusoris/golusoris/hash"
 )
 
 const tokenBytes = 24
@@ -77,7 +77,7 @@ func (s *Service) Issue(ctx context.Context, email string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	hash := s.hash(raw)
+	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
 	l := Link{Email: email, Hash: hash, ExpiresAt: s.clk.Now().Add(s.ttl)}
 	if saveErr := s.store.Save(ctx, l); saveErr != nil {
 		return "", fmt.Errorf("magiclink: save: %w", saveErr)
@@ -88,7 +88,7 @@ func (s *Service) Issue(ctx context.Context, email string) (string, error) {
 // Verify consumes a token and returns the email address it was issued
 // for. Failures wrap gerr.CodeUnauthorized.
 func (s *Service) Verify(ctx context.Context, raw string) (string, error) {
-	hash := s.hash(raw)
+	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
 	l, err := s.store.Find(ctx, hash)
 	if err != nil {
 		return "", fmt.Errorf("%w: magiclink: %w", gerr.Unauthorized("invalid magic link"), err)
@@ -106,12 +106,6 @@ func (s *Service) Verify(ctx context.Context, raw string) (string, error) {
 		return "", fmt.Errorf("magiclink: mark used: %w", useErr)
 	}
 	return l.Email, nil
-}
-
-func (s *Service) hash(raw string) []byte {
-	h := hmac.New(sha256.New, s.secret)
-	h.Write([]byte(raw))
-	return h.Sum(nil)
 }
 
 func randomToken() (string, error) {

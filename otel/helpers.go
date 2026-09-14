@@ -5,8 +5,6 @@
 package otel
 
 import (
-	"context"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -17,6 +15,8 @@ import (
 	otlplog "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	otlptrace "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+
+	corelog "github.com/golusoris/golusoris/core/log"
 )
 
 // defaultServiceName derives a service.name when the operator did not set
@@ -158,44 +158,6 @@ func logDialOpts(opts Options) []otlplog.Option {
 
 // fanoutHandler writes each record to every wrapped handler. Used by
 // ModuleWithSlogBridge so slog logs appear in both the local handler
-// (stdout/tint/JSON) and the OTel exporter.
-type fanoutHandler struct {
-	handlers []slog.Handler
-}
-
-func (f *fanoutHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
-	for _, h := range f.handlers {
-		if h.Enabled(ctx, lvl) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f *fanoutHandler) Handle(ctx context.Context, r slog.Record) error {
-	for _, h := range f.handlers {
-		if !h.Enabled(ctx, r.Level) {
-			continue
-		}
-		if err := h.Handle(ctx, r.Clone()); err != nil {
-			return err //nolint:wrapcheck // fan-out: error context already descriptive
-		}
-	}
-	return nil
-}
-
-func (f *fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	cloned := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		cloned[i] = h.WithAttrs(attrs)
-	}
-	return &fanoutHandler{handlers: cloned}
-}
-
-func (f *fanoutHandler) WithGroup(name string) slog.Handler {
-	cloned := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		cloned[i] = h.WithGroup(name)
-	}
-	return &fanoutHandler{handlers: cloned}
-}
+// (stdout/tint/JSON) and the OTel exporter. Shared with the sentry bridge
+// via core/log.FanoutHandler.
+type fanoutHandler = corelog.FanoutHandler

@@ -14,6 +14,7 @@ Content-hashing helpers. Pick the right hash for the task:
 | `BLAKE3(data)` | BLAKE3 | Fast cryptographic hash (3× faster than SHA-256) |
 | `XX64(data)` | xxhash-64 | Non-cryptographic: caching keys, fast dedup, Bloom filters |
 | `ETag(data)` | SHA-1 (quoted) | HTTP ETag headers (RFC 7232) |
+| `HMACSHA256(secret, data)` | HMAC-SHA256 | Keyed token/credential hashing (magic links, recovery codes, API keys) |
 | `*Reader` variants | — | Streaming hash without loading full content into memory |
 | `SHA256File(path)` | SHA-256 | Hashing files on disk |
 

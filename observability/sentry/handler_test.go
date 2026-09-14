@@ -80,7 +80,7 @@ func TestFanoutHandler(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer
 	base := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
-	f := &fanoutHandler{handlers: []slog.Handler{base}}
+	f := &fanoutHandler{Handlers: []slog.Handler{base}}
 
 	if !f.Enabled(context.Background(), slog.LevelInfo) {
 		t.Error("fanout should be enabled for Info")
