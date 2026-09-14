@@ -1,0 +1,1 @@
+- `core/codec/yaml`: fleet YAML codec — strict decoding, bounded input, atomic `WriteFile` (capability `config.yaml`).

@@ -1,0 +1,1 @@
+- `db/sqlite`: embedded SQLite fx module over modernc.org/sqlite (pure Go, WAL + foreign keys on by default; config prefix `db.sqlite`).
