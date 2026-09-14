@@ -134,7 +134,7 @@ func ReadFileBounded(path string, limit int64) ([]byte, error) {
 	if info.Size() > limit {
 		return nil, fmt.Errorf("astx: %s is %d bytes, limit %d", path, info.Size(), limit)
 	}
-	data, err := os.ReadFile(path) //nolint:gosec // G304: source path comes from a bounded Walk or the operator // #nosec G304
+	data, err := os.ReadFile(path) // #nosec G304 -- source path comes from a bounded Walk or the operator; size-bounded by the Stat check above
 	if err != nil {
 		return nil, fmt.Errorf("astx: read %s: %w", path, err)
 	}

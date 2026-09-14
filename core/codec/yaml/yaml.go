@@ -125,7 +125,7 @@ func ReadFile(path string, v any) error { return Options{}.ReadFile(path, v) }
 
 // ReadFile decodes the YAML file at path into v.
 func (o Options) ReadFile(path string, v any) error {
-	f, err := os.Open(path) //nolint:gosec // G304: manifest path is caller-controlled by design // #nosec G304
+	f, err := os.Open(path) // #nosec G304 -- manifest path is caller-controlled by design (library API); size-bounded by Decode
 	if err != nil {
 		return fmt.Errorf("yaml: open %s: %w", path, err)
 	}

@@ -15,6 +15,11 @@ REUSE        ?= reuse
 # web3/, …) build on demand and are not part of the default gate.
 MODULES := . core
 
+# Path-based gosec exclusions for the ROOT module, read from the same file CI
+# uses (.github/workflows/ci.yml, job "Security (gosec)") so `make ci-all` and
+# CI agree. core/ is scanned with no exclusions in both places.
+GOSEC_EXCLUDE_RULES := $(shell grep -v -e '^\#' -e '^$$' $(CURDIR)/tools/gosec.exclude-rules | paste -sd ';' -)
+
 .PHONY: ci-all
 ci-all: ## lint + sec + test in every gated module
 	@for m in $(MODULES); do echo "==> $$m"; $(MAKE) -C $$m -f $(CURDIR)/Makefile _ci-module MOD=$$m || exit 1; done
@@ -23,7 +28,7 @@ ci-all: ## lint + sec + test in every gated module
 _ci-module:
 	$(GOLANGCI) run --config $(CURDIR)/tools/golangci.yml --timeout=20m ./...
 	$(GOVULNCHECK) ./...
-	$(GOSEC) -quiet -exclude-generated ./...
+	$(GOSEC) -quiet -exclude-generated $(if $(filter .,$(MOD)),--exclude-rules="$(GOSEC_EXCLUDE_RULES)",) ./...
 	$(GO) test -race -count=1 -timeout=10m ./...
 
 .PHONY: build-all

@@ -101,7 +101,7 @@ func (r *Runner) Run(ctx context.Context, args ...string) ([]byte, error) {
 	full := make([]string, 0, len(args)+2)
 	full = append(full, "-c", "core.longpaths=true")
 	full = append(full, args...)
-	cmd := exec.CommandContext(ctx, r.bin, full...) //nolint:gosec // G204: fixed binary, args NUL-checked and caller-owned // #nosec G204
+	cmd := exec.CommandContext(ctx, r.bin, full...) // #nosec G204 -- no shell: binary is git unless the caller-owned WithBinary option overrides it; args are NUL-checked and caller-owned
 	cmd.Dir = r.dir
 	stdout := &limitedBuffer{max: r.maxOut}
 	stderr := &limitedBuffer{max: r.maxOut}

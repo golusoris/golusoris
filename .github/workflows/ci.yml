@@ -75,7 +75,13 @@ jobs:
     name: Security (gosec)
     if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
+    # Measured with gosec v2.27.1 (171 root + 16 core pkgs) on a 32-core box:
+    # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
+    # core <1 s. The ARC runner pod is capped at 4 vCPU (750m request, so it can
+    # be throttled lower) -> a cold scan there is ~8 min (it failed to finish
+    # install + two root scans in 9m44s). 30 = >=3x that cold scan, hard bound;
+    # a warm cache (go.sum unchanged) finishes the whole job in ~2 min.
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
@@ -87,10 +93,19 @@ jobs:
           cache: true
       - name: gosec
         run: |
+          set -euo pipefail
           go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
-          EXCLUDE_RULES="testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505"
-          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" -fmt sarif -out gosec.sarif ./... || true
-          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" ./...
+          # Path exclusions live in ONE file shared with `make ci-all` (Makefile
+          # _ci-module) so the two gates cannot drift; see the file's header.
+          EXCLUDE_RULES=$(grep -v -e '^#' -e '^$' tools/gosec.exclude-rules | paste -sd ';' -)
+          # One root scan: `-out` writes the SARIF for code scanning, `-stdout
+          # -verbose text` prints the findings to the log, and the exit code
+          # still gates (gosec exits 1 on any unsuppressed issue or build error;
+          # never add `-quiet`: it skips writing the SARIF when clean).
+          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" \
+            -fmt sarif -out gosec.sarif -stdout -verbose text ./...
+          # core/ is a separate module (not reached by ./... above) and is held
+          # to the full rule set with no path exclusions.
           (cd core && gosec -exclude-generated ./...)
       - name: Upload SARIF
         if: always()
