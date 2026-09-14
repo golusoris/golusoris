@@ -17,8 +17,13 @@ MODULES := . core
 
 # Path-based gosec exclusions for the ROOT module, read from the same file CI
 # uses (.github/workflows/ci.yml, job "Security (gosec)") so `make ci-all` and
-# CI agree. core/ is scanned with no exclusions in both places.
-GOSEC_EXCLUDE_RULES := $(shell grep -v -e '^\#' -e '^$$' $(CURDIR)/tools/gosec.exclude-rules | paste -sd ';' -)
+# CI agree. core/ is scanned with no exclusions in both places. The path is
+# resolved against this Makefile (not CURDIR: ci-all re-invokes it with
+# -C core) and the value is expanded lazily, so the file is read only by the
+# root _ci-module recipe. A `#` inside a function call is literal since GNU
+# make 4.3; escaping it would hand grep a stray backslash (and a warning).
+GOSEC_EXCLUDE_FILE  := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))tools/gosec.exclude-rules
+GOSEC_EXCLUDE_RULES  = $(shell grep -v -e '^#' -e '^$$' $(GOSEC_EXCLUDE_FILE) | paste -sd ';' -)
 
 .PHONY: ci-all
 ci-all: ## lint + sec + test in every gated module
