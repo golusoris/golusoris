@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package impersonate lets an admin act as another user with full audit
 // trail. The impersonator's original principal is stored in a session
 // claim so the action can be reverted.
@@ -20,7 +24,7 @@ import (
 	"errors"
 	"net/http"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // HeaderImpersonating is set by the middleware on every response so

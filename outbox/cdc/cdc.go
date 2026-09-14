@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package cdc provides a CDC-based drain for the transactional outbox.
 //
 // Instead of polling the outbox table (as [outbox.Drainer] does), this drain
@@ -41,7 +45,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	dbcdc "github.com/golusoris/golusoris/db/cdc"
 	"github.com/golusoris/golusoris/outbox"
 	"github.com/golusoris/golusoris/pubsub/kafka"

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package hashfs serves content-addressable asset filenames — e.g.
 // `assets/logo-abc123def.png` — for aggressive immutable caching. Thin
 // wrapper over benbjohnson/hashfs; apps get:

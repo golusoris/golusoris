@@ -1,0 +1,1 @@
+- **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).

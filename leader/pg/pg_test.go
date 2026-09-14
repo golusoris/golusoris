@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package pg_test
 
 import (
@@ -9,7 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/leader"
 	leaderpg "github.com/golusoris/golusoris/leader/pg"
 	"github.com/golusoris/golusoris/testutil/pg"

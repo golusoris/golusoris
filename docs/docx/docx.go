@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package docx provides helpers for reading and writing DOCX files using the
 // nguyenthenguyen/docx library (pure Go, no libreoffice dependency).
 //

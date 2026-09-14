@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command full demonstrates a production-ready golusoris app composing the
 // major modules. Copy and remove the modules you don't need.
 //

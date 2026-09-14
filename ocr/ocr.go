@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ocr extracts text from images and PDFs using Tesseract via
 // gosseract (CGO). The system library libtesseract + tessdata must be
 // installed before this package can be used.
@@ -12,9 +16,9 @@
 //
 // Activate implementation:
 //
-//	1. Remove //go:build ignore from ocr/impl_gosseract.go
-//	2. Add the dep: go get github.com/otiai10/gosseract/v2
-//	3. go mod tidy
+//  1. Remove //go:build ignore from ocr/impl_gosseract.go
+//  2. Add the dep: go get github.com/otiai10/gosseract/v2
+//  3. go mod tidy
 //
 // Usage:
 //
@@ -55,7 +59,7 @@ type Options struct {
 // stub is the no-op implementation returned when the real one is not compiled in.
 type stub struct{}
 
-func (stub) Read(_ context.Context, _ []byte) (string, error)   { return "", ErrCGORequired }
+func (stub) Read(_ context.Context, _ []byte) (string, error)     { return "", ErrCGORequired }
 func (stub) ReadFile(_ context.Context, _ string) (string, error) { return "", ErrCGORequired }
 func (stub) Close() error                                         { return nil }
 

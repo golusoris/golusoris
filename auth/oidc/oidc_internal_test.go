@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package oidc
 
 import (
@@ -6,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 func TestOptions_withDefaults_addsDefaultScopes(t *testing.T) {

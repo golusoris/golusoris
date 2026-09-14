@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package cv provides computer vision helpers backed by OpenCV via gocv (CGO).
 // OpenCV 4 must be installed before this package can be used.
 //
@@ -11,9 +15,9 @@
 //
 // Activate implementation:
 //
-//	1. Remove //go:build ignore from media/cv/impl_gocv.go
-//	2. Add the dep: go get gocv.io/x/gocv
-//	3. go mod tidy
+//  1. Remove //go:build ignore from media/cv/impl_gocv.go
+//  2. Add the dep: go get gocv.io/x/gocv
+//  3. go mod tidy
 //
 // Usage:
 //
@@ -73,9 +77,11 @@ type stub struct{}
 func (stub) DetectFaces(_ context.Context, _ []byte) ([]Face, error) {
 	return nil, ErrCGORequired
 }
+
 func (stub) DetectObjects(_ context.Context, _ []byte) ([]Detection, error) {
 	return nil, ErrCGORequired
 }
+
 func (stub) Thumbnail(_ context.Context, _ string, _ float64) ([]byte, error) {
 	return nil, ErrCGORequired
 }

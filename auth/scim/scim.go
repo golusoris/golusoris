@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package scim implements a minimal SCIM 2.0 server for user and group
 // provisioning (RFC 7643 + RFC 7644). The package ships HTTP handlers
 // mounted under `/scim/v2/`, validating the SCIM JSON envelope and

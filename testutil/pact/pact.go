@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pact provides helpers for Pact consumer-driven contract testing.
 //
 // This is a separate go.mod sub-module because pact-go v2 embeds a Ruby

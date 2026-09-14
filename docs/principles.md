@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # golusoris — coding & compliance contract
 
 > This is the framework's foundational contract (§2 of the design plan).

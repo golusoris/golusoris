@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package page provides typed pagination helpers for cursor-based and
 // offset-based queries, designed to compose cleanly with sqlc-generated
 // queries and ogen response types.

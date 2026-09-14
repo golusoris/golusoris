@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package apikey issues, rotates, and verifies API keys. Keys are
 // stored as HMAC-SHA256 hashes (never plaintext). The raw key is
 // returned only at creation time.
@@ -30,7 +34,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const (

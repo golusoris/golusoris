@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Mark long-idle issues/PRs stale for triage VISIBILITY only. Non-destructive:
 # days-before-close is -1, so nothing is ever auto-closed — the curated backlog
 # (P0–P3 / milestoned items) stays intact. All priority + security labels and

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # notify/fcm
 
 Firebase Cloud Messaging (HTTP v1) sender for `notify.Sender`.

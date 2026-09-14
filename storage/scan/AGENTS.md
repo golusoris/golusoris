@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — storage/scan/
 
 Malware scanning of untrusted upload bytes via ClamAV's **clamd** daemon (TCP or

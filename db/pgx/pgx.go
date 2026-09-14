@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pgx wires a [*pgxpool.Pool] as an fx dependency. The module reads
 // its configuration from [config.Config] under the "db" key, retries the
 // initial connection with exponential backoff (so apps don't crash-loop while
@@ -36,8 +40,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options configures the pgx pool. Zero value is mostly usable after

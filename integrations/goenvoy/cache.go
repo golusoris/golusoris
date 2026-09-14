@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package goenvoy
 
 import (
@@ -7,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // maxCacheBytes caps how much of a response body the cacheTransport buffers,

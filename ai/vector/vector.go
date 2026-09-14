@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package vector provides helpers for storing and querying vector embeddings
 // using pgvector (the PostgreSQL vector extension). Wraps pgvector-go types
 // for use with pgx/v5.

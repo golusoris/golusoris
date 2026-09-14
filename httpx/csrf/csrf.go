@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package csrf exposes a CSRF middleware as a golusoris module.
 //
 // Uses [filippo.io/csrf/gorilla] — a drop-in replacement for
@@ -26,7 +30,7 @@ import (
 	gcsrf "filippo.io/csrf/gorilla"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 

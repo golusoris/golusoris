@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //go:build ignore
 // +build ignore
 
@@ -20,8 +24,8 @@ import (
 func wrapf(format string, a ...any) error { return fmt.Errorf("cv: "+format, a...) }
 
 type gocvAnalyzer struct {
-	opts       Options
-	faceModel  gocv.CascadeClassifier
+	opts      Options
+	faceModel gocv.CascadeClassifier
 }
 
 // NewAnalyzer returns an OpenCV-backed Analyzer.

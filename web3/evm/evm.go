@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package evm provides Ethereum/EVM chain helpers using go-ethereum.
 //
 // This is a separate go.mod sub-module because go-ethereum's dependency graph

@@ -4,7 +4,7 @@ version: "2"
 
 run:
   timeout: 5m
-  go: "1.26"
+  go: "1.27"
   tests: true
   allow-parallel-runners: true
 
@@ -66,6 +66,7 @@ linters:
     - prealloc
     - makezero
     # project discipline
+    - goheader
     - forbidigo
     - depguard
     - gochecknoinits
@@ -81,6 +82,15 @@ linters:
     - gomodguard
 
   settings:
+    # Every first-party Go file carries the REUSE/SPDX header (see LICENSING.md).
+    goheader:
+      values:
+        regexp:
+          year: 20\d\d
+      template: |-
+        SPDX-FileCopyrightText: {{ year }} lusoris <lusoris@pm.me>
+
+        SPDX-License-Identifier: EUPL-1.2
     gocyclo:
       min-complexity: 18
     funlen:

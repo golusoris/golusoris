@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package threed provides a thin wrapper over g3n/engine for 3D rendering.
 //
 // This is a separate go.mod sub-module because g3n pulls CGO + OpenGL/GLFW

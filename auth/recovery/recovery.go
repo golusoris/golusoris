@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package recovery provides backup recovery codes and password-reset
 // tokens. Codes are HMAC-hashed before storage; the raw value is shown
 // once at issuance time.
@@ -26,7 +30,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const (

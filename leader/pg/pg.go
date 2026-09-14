@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pg elects a single leader via a PostgreSQL session-scoped
 // advisory lock. Works anywhere the app already has a pg connection
 // (no k8s required). Suitable for Docker Compose, Swarm, Nomad, bare
@@ -37,8 +41,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/leader"
 )
 

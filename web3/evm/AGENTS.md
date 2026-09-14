@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — web3/evm/
 
 Ethereum/EVM JSON-RPC helpers over [go-ethereum]. `Client` wraps

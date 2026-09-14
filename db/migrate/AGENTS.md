@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — db/migrate
 
 Wraps golang-migrate v4 with the pgx/v5 database driver. Provides `*Migrator` via fx.

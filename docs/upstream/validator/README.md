@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # go-playground/validator/v10 — v10.26.0 snapshot
 
 Pinned: **v10.26.0**

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # deploy/multiregion
 
 Reference [Pulumi](https://www.pulumi.com) (Go) program for an **active/passive**

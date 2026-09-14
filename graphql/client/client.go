@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package client provides a thin fx-wired wrapper around the genqlient
 // GraphQL client for consuming external GraphQL APIs.
 //
@@ -45,7 +49,7 @@ import (
 	"github.com/Khan/genqlient/graphql"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 const defaultTimeout = 30 * time.Second

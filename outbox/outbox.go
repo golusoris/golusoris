@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package outbox implements the transactional-outbox pattern.
 //
 // Apps write domain changes + outbox events in the same pg transaction;

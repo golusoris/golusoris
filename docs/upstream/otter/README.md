@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # maypok86/otter/v2 — v2.2.0 snapshot
 
 Pinned: **v2.2.0**

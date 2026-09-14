@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package plot provides thin helpers over gonum/plot for generating charts.
 //
 // This is a separate go.mod sub-module because gonum/plot pulls font and image
@@ -68,7 +72,7 @@ func (c *Chart) AddScatter(label string, xs, ys []float64) error {
 
 // WritePNG writes the chart as a PNG to w at widthPx × heightPx.
 func (c *Chart) WritePNG(w io.Writer, widthPx, heightPx float64) error {
-	width := vg.Length(widthPx) * vg.Inch / 96  // screen DPI 96
+	width := vg.Length(widthPx) * vg.Inch / 96 // screen DPI 96
 	height := vg.Length(heightPx) * vg.Inch / 96
 	canvas := vgimg.New(width, height)
 	dc := draw.New(canvas)

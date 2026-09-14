@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # notify/telegram
 
 Telegram Bot API sender for `notify.Sender`. Intended for ops/alert

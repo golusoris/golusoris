@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ws is a thin wrapper over coder/websocket. It exposes:
 //
 //   - [Accept] that applies an origin-check + sensible defaults.

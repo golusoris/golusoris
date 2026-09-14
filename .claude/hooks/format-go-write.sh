@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # PostToolUse hook for Edit / Write on *.go files.
 #
 # Runs the formatter stack (gofumpt + goimports) on the touched file so

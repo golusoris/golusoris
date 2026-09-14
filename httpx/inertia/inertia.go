@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package inertia wires the gonertia Inertia.js v2 server adapter into the fx
 // graph. It provides a *inertia.Inertia handle apps inject into handlers to
 // render server-driven SPA pages over chi/net/http.

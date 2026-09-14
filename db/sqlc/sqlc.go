@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package sqlc holds runtime helpers that complement sqlc-generated code:
 // transaction wrappers, pgx-error → golusoris-error mapping, and a shared
 // sqlc.yaml fragment template lives in tools/sqlc.yaml.fragment.
@@ -15,7 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // TxFn is the function signature used with [WithTx].

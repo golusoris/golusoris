@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package oauth2server is a minimal OAuth 2.1 / OIDC issuer implementing
 // the authorization-code-with-PKCE grant. It does not aim to be a fully
 // spec-conformant IdP — it covers the common case of "be the IdP for my

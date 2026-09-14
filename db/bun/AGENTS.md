@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — db/bun/
 
 Opt-in [uptrace/bun](https://bun.uptrace.dev) ORM module, an alternative to the

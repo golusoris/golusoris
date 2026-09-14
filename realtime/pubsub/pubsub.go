@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pubsub provides a lightweight in-process pub/sub bus. For
 // cross-replica pub/sub use the redis sub-package (backed by rueidis
 // SUBSCRIBE) or the pg sub-package (backed by LISTEN/NOTIFY) — both

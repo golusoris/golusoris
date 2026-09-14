@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Example Prometheus scrape config for a golusoris app.
 # Copy into your prometheus deployment + point the app service at :8080.
 #

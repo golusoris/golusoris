@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ui mounts the River UI (queue dashboard) at a configurable
 // prefix with optional basic-auth. Apps typically mount this behind an
 // admin-only sub-router, never on the public router.

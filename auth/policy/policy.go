@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package policy enforces password and credential policies. It bundles
 // zxcvbn strength scoring with optional HaveIBeenPwned (HIBP)
 // k-anonymity breach checking.
@@ -21,7 +25,7 @@ import (
 
 	zxcvbn "github.com/nbutton23/zxcvbn-go"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const (

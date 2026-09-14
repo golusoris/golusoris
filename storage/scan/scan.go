@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package scan scans untrusted upload bytes for malware via ClamAV's clamd
 // daemon (over TCP or a unix socket) and maps the result to a typed [Verdict].
 //

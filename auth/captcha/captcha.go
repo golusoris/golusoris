@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package captcha verifies CAPTCHA tokens against the major providers
 // (Cloudflare Turnstile, hCaptcha, Google reCAPTCHA v2/v3).
 //
@@ -21,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Endpoints for each shipped provider.

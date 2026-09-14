@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package fssnap provides helpers for creating and managing ZFS and Btrfs
 // snapshots by wrapping the respective CLI tools.
 //

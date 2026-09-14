@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package memory provides a typed, in-process L1 cache backed by
 // [maypok86/otter/v2]. Exposed as an fx module so apps opt in with a
 // single line.
@@ -29,7 +33,7 @@ import (
 	"github.com/maypok86/otter/v2"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Cache is the concrete otter cache type used by this module.

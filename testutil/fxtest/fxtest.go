@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package fxtest provides helpers for testing fx applications.
 //
 // It wraps go.uber.org/fx/fxtest with convenience functions that integrate

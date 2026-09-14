@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package workflow wraps the Temporal Go SDK as an fx module.
 //
 // It provides a [client.Client] and (optionally) a [worker.Worker] that are
@@ -42,7 +46,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Config holds connection options for a Temporal server or Temporal Cloud.

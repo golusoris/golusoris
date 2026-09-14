@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package jsonschema validates JSON documents against JSON Schema (draft
 // 2020-12 by default) via santhosh-tekuri/jsonschema/v6.
 //

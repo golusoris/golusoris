@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package bounce handles email bounce and complaint webhooks from
 // SES (via SNS) and Postmark. Handlers parse the provider-specific
 // payload, classify the event, and forward it to a [Handler] closure

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # auth/oauth2server
 
 Minimal OAuth 2.1 / OIDC issuer: authorization-code flow with PKCE.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package statuspage exposes an HTML + JSON "/status" endpoint driven by a
 // check registry. Checks are periodic functions reporting up/down + detail;
 // the page also shows process uptime.
@@ -21,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // Status is a single check's current state.

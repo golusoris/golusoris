@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package hash provides content-hashing helpers using SHA-256 (cryptographic),
 // xxhash (fast non-cryptographic), and BLAKE3 (fast cryptographic).
 //

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command minimal demonstrates a minimal golusoris app composing five modules:
 // Core (config + log + clock + id), DB (pgx + migrate), HTTP (server + router),
 // OTel (tracer + meter), and K8s health probes (/livez /readyz /startupz).

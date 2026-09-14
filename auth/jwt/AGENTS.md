@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — auth/jwt/
 
 JWT sign + verify via [golang-jwt/jwt/v5]. Pure utility — no fx module.

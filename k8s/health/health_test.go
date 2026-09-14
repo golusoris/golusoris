@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package health_test
 
 import (
@@ -11,7 +15,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/k8s/health"
 	"github.com/golusoris/golusoris/observability/statuspage"
 )

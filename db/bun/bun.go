@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package bun wires a [*bun.DB] ORM over the pool provided by db/pgx, as an
 // opt-in alternative to hand-written sqlc queries. It borrows the shared
 // [*pgxpool.Pool] — db/pgx owns the pool lifecycle — so an app can mix bun and
@@ -26,7 +30,7 @@ import (
 	"github.com/uptrace/bun/extra/bundebug"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes the bun ORM. Config keys live under the "db.bun" prefix.

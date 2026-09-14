@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // This file wires the idempotency package as an opt-in golusoris fx module.
 //
 // The module provides the [Store] interface (defaulting to an in-memory,
@@ -29,8 +33,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 

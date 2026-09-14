@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package geoip provides MaxMind GeoLite2 / GeoIP2 database lookups.
 // The caller supplies the mmdb file path; the framework does not bundle the
 // database (it is licensed separately by MaxMind).

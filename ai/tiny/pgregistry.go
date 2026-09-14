@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package tiny
 
 import (
@@ -12,7 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/id"
+	"github.com/golusoris/golusoris/core/id"
 )
 
 // maxVersionRetries bounds the optimistic-version retry loop. A unique

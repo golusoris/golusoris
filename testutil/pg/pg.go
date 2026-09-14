@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pg starts a real PostgreSQL container via testcontainers-go and
 // returns a connected [*pgxpool.Pool]. Tests using this helper need Docker
 // reachable on the host; CI runners (ubuntu-latest) ship Docker by default.

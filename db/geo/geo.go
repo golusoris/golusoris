@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package geo provides PostGIS geometry helpers for pgx/v5.
 //
 // It registers the pgtype codecs needed to scan WKB/EWKB geometry values

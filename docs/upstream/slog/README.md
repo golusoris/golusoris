@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # log/slog — Go 1.26.2 stdlib snapshot
 
 Source: https://pkg.go.dev/log/slog (stdlib, go1.26.2)

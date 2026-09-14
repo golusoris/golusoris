@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package apns2 sends Apple push notifications via APNs HTTP/2 with
 // token-based auth (.p8 key + team ID + key ID).
 //

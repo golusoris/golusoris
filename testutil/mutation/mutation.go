@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package mutation provides helpers for mutation testing via go-mutesting.
 //
 // go-mutesting must be installed separately:

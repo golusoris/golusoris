@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — cache/twotier/
 
 Unified two-tier read-through cache: **L1** in-process ([cache/memory](../memory),

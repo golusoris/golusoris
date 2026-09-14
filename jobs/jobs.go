@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package jobs wires a [river] client as an fx dependency so apps can
 // enqueue + process background jobs backed by Postgres.
 //
@@ -31,7 +35,7 @@ import (
 	"github.com/riverqueue/river/rivertype"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes the river client.

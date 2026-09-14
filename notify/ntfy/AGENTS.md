@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # notify/ntfy
 
 ntfy (ntfy.sh / self-hosted pub-sub push) sender for `notify.Sender`.

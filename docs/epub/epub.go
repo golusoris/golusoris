@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package epub provides a thin wrapper over [go-epub] for generating
 // EPUB 3.0 files (with EPUB 2.0 table-of-contents for compatibility).
 //

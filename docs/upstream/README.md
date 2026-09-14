@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # docs/upstream — pinned upstream documentation snapshots
 
 Version-pinned API reference snapshots for AI coding assistants (Claude Code, Cursor, Aider, Codex, Continue).

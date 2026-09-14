@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — cache/memory/
 
 Typed, in-process L1 cache backed by [otter v2](https://github.com/maypok86/otter).

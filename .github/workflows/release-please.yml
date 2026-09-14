@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # release-please prepares release metadata on public GitHub. Gitea remains the
 # canonical source: an equivalent Gitea PR must pass canonical CI before its
 # immutable vX.Y.Z tag is created there and forwarded to GitHub.

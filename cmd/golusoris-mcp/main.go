@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command golusoris-mcp is a standalone MCP server that exposes golusoris
 // framework capabilities as MCP tools. It allows AI agents (Claude, Cursor,
 // Copilot, etc.) to scaffold apps, add modules, and query framework docs.
@@ -30,7 +34,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
-	"github.com/golusoris/golusoris/clikit"
+	"github.com/golusoris/golusoris/core/clikit"
 )
 
 const (

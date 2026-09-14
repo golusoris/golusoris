@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — cmd/golusoris/
 
 Scaffolder CLI built with `clikit/`. Wraps the three core subcommands.

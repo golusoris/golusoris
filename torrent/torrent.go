@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package torrent provides a backend-agnostic Client abstraction over a
 // running torrent daemon. Apps add, remove, list, inspect, pause and resume
 // torrents through a single [Client] interface; the concrete backend

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tracking implements email open/click tracking via signed
 // redirect URLs and a 1×1 tracking pixel.
 //

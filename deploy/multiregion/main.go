@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command golusoris-multiregion is a reference Pulumi (Go) program for an
 // active/passive two-region golusoris deployment: Aurora Global Database
 // (writer in the primary region, read replica in the secondary), a per-region

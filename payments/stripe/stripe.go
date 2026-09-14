@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package stripe provides a thin fx-compatible wrapper around stripe-go/v86.
 // It exposes a [Client] covering the most common SaaS payment flows:
 // payment intents, checkout sessions, and customer portal.
@@ -25,7 +29,7 @@ import (
 	sdk "github.com/stripe/stripe-go/v86"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options configures the Stripe client.

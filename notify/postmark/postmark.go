@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package postmark sends transactional email via Postmark's HTTP API.
 //
 // Raw HTTP — no SDK. The Postmark wire format is small enough that we

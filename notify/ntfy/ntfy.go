@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ntfy sends notifications to an ntfy server (https://ntfy.sh or
 // a self-hosted instance).
 //

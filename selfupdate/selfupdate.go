@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package selfupdate provides binary self-update from GitHub releases.
 //
 // The updater fetches the latest GitHub release, selects the asset matching

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package idempotency provides HTTP middleware that enforces the
 // Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header).
 // On the first request for a key the middleware captures the response and

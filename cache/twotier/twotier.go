@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package twotier composes the L1 in-process cache (cache/memory, otter) and
 // the L2 distributed cache (cache/redis, rueidis) into a single read-through,
 // write-through cache with singleflight de-duplication.

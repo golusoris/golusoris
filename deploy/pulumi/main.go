@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command golusoris-app is a reference Pulumi (Go) program deploying a
 // golusoris application on AWS: VPC + RDS Postgres + ElastiCache Redis + ECS
 // Fargate behind an ALB. It is documentation-grade IaC — copy and adapt.

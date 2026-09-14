@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package singleflight exposes [golang.org/x/sync/singleflight] as a
 // tiny typed wrapper and fx module. It de-duplicates concurrent
 // identical reads so only one goroutine hits the backing store while

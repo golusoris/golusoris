@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # deploy/argocd
 
 [ArgoCD](https://argo-cd.readthedocs.io) manifests for deploying a golusoris-app via GitOps.

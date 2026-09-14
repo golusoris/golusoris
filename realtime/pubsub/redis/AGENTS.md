@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — realtime/pubsub/redis
 
 Cross-replica pub/sub `Bus` backed by Redis PUBLISH/SUBSCRIBE (rueidis).

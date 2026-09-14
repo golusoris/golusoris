@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package linking maps external identity-provider subjects (OIDC,
 // OAuth) to local user IDs. A single user can have multiple linked
 // identities (e.g. Google + GitHub).
@@ -14,7 +18,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Identity is the (provider, subject) pair issued by an external IdP,

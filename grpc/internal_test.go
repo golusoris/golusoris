@@ -1,9 +1,13 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package grpc
 
 import (
 	"testing"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 func TestWithDefaults_zeroFillsListen(t *testing.T) {

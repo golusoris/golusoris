@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package archive provides extraction and creation of compressed archives
 // (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives.
 //

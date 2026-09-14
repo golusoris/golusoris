@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package litert implements a [tiny.Trainer] for MediaPipe Model
 // Maker. Go orchestrates; a pinned Python container trains a
 // task-specific model and exports a LiteRT (`.tflite`) artifact for

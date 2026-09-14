@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package authz provides RBAC/ABAC policy enforcement via
 // [casbin/casbin/v3]. Exposed as an fx module; apps supply a policy
 // adapter (file, Postgres, etc.) and get an [*Enforcer] back.

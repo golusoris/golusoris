@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package bio provides bioinformatics helpers — sequence handling, FASTA/FASTQ
 // parsing, and basic alignment utilities using biogo/biogo.
 //

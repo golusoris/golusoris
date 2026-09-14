@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Emit a "Dependencies bumped" markdown section by diffing go.mod
 # `require` blocks between two refs. See PLAN.md §10.
 #

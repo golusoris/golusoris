@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package magiclink implements passwordless sign-in via single-use
 // email links. The service issues a token tied to an email address,
 // stores its HMAC-SHA256 hash, and validates+consumes it on click.
@@ -19,7 +23,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const tokenBytes = 24

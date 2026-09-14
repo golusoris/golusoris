@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package jwt provides helpers for signing and verifying JWTs using
 // [golang-jwt/jwt/v5]. It wraps the library with the framework's
 // error conventions and clock.
@@ -18,7 +22,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Algorithm is a re-export of the signing method type for callers that

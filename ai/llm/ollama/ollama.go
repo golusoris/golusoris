@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ollama implements the [llm.Client] interface against
 // Ollama's native API (/api/chat, /api/generate, /api/embeddings).
 //

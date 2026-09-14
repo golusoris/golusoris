@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package goenvoy wires opt-in goenvoy service clients (Sonarr, TMDb, AniList,
 // Trakt, ...) onto the framework's resilient outbound *http.Client. It is a
 // thin fx adapter — it does NOT reimplement goenvoy.
@@ -46,7 +50,7 @@ import (
 	"github.com/golusoris/goenvoy/metadata/video/tmdb"
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/client"
 )
 

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 output "host" {
   description = "DB host (connect endpoint)."
   value       = aws_db_instance.this.address

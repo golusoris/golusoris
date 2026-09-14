@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package nats boots a real NATS container via testcontainers-go and returns
 // its URL. Used by integration tests that exercise pubsub/nats behaviour
 // (connect, publish, subscribe, JetStream) against a live server.

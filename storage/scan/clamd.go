@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package scan
 
 import (
@@ -9,7 +13,7 @@ import (
 
 	"github.com/baruwa-enterprise/clamd"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // clamdStatusOK is the clamd status token for a clean scan; clamdStatusFound is

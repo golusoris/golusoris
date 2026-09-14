@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package storage provides a Bucket abstraction for object storage with
 // a local-filesystem backend included. Cloud backends (S3, GCS, Azure Blob)
 // implement the same interface so apps swap backends via fx.

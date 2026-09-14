@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package kafka boots a Kafka-compatible broker via testcontainers-go and
 // returns a broker address suitable for use with twmb/franz-go. Backed by
 // Redpanda, which is Kafka-API-compatible and requires no ZooKeeper.

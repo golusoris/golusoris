@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package smtpserver provides an fx-wired inbound SMTP server using
 // [emersion/go-smtp].
 //
@@ -36,7 +40,7 @@ import (
 	gosmtp "github.com/emersion/go-smtp"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 const (

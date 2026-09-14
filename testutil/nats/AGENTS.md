@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — testutil/nats/
 
 Spins up a real NATS container (testcontainers-go generic API, `nats:2-alpine`,

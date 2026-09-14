@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package resend sends transactional email via Resend's HTTP API.
 //
 // The Resend wire format is small enough that we use raw HTTP instead

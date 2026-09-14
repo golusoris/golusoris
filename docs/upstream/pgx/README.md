@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # jackc/pgx/v5 — v5.9.1 snapshot
 
 Pinned: **v5.9.1**

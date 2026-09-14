@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package oidc provides an OIDC + OAuth 2.0 PKCE client as an fx
 // module. It builds on [coreos/go-oidc/v3] and [golang.org/x/oauth2].
 //
@@ -28,8 +32,8 @@ import (
 	"go.uber.org/fx"
 	"golang.org/x/oauth2"
 
-	"github.com/golusoris/golusoris/config"
-	gerr "github.com/golusoris/golusoris/errors"
+	"github.com/golusoris/golusoris/core/config"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Options configure the OIDC provider.

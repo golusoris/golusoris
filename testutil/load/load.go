@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package load provides load-testing helpers backed by tsenart/vegeta.
 //
 // Load tests are opt-in: guard them with testing.Short() or a custom flag so

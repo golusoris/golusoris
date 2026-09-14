@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // This file wires extclient as an opt-in golusoris fx module.
 //
 // The module reads named upstream services from config (prefix
@@ -34,7 +38,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/cache/memory"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options is the koanf-bound config under the httpx.extclient prefix. Each

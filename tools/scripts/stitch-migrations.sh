@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Stitch `Migration:` commit footers between two refs into
 # docs/migrations/<to>.md. See PLAN.md §10.
 #

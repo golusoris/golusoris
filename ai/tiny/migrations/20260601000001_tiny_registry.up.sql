@@ -1,3 +1,7 @@
+-- SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+--
+-- SPDX-License-Identifier: EUPL-1.2
+
 -- golusoris/ai/tiny: per-tenant model + job registry.
 -- Backs PGRegistry. Model.Version is monotonic per (tenant_id, name);
 -- the unique index enforces that no two models share a version within a

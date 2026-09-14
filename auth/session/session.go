@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package session manages server-side sessions stored in Redis or
 // Postgres. Each session is a JSON blob keyed by a random, opaque
 // session ID. The ID is stored in a cookie; the data lives server-side.
@@ -31,7 +35,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const (

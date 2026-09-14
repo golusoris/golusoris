@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tenancy provides multi-tenant context propagation and HTTP middleware.
 // A Tenant is resolved from the incoming request (subdomain, header, path
 // segment, JWT claim, …) and stored in the context so downstream handlers

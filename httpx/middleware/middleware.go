@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package middleware collects golusoris's opinionated HTTP middleware:
 // request-ID injection, panic recovery, structured access logs, OpenTelemetry
 // instrumentation, secure-header defaults, proxy-trust, compression, and

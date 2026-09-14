@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package out provides outbound webhook delivery with HMAC-SHA256 signing,
 // exponential-backoff retry, dead-letter queue, and replay.
 //
@@ -28,7 +32,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // Status is the delivery outcome.

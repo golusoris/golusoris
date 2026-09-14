@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package systemd implements sd_notify + watchdog for processes run as
 // systemd units. Zero-dep (talks to the NOTIFY_SOCKET unix datagram
 // directly). No-op when NOTIFY_SOCKET is unset, so the module is safe to
@@ -32,7 +36,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // Available reports whether the process is running under systemd with

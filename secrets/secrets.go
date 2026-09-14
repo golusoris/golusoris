@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package secrets provides a pluggable Secret interface with env-var and
 // file-based backends. Apps that need HashiCorp Vault, AWS Secrets Manager,
 // GCP Secret Manager, or Azure Key Vault can wrap this interface without

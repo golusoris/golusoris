@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package sentry wires getsentry/sentry-go as a golusoris module with:
 //
 //   - slog-adapted handler: every slog.Error (and above) is also captured
@@ -25,7 +29,7 @@ import (
 	sentrygo "github.com/getsentry/sentry-go"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes the Sentry client.

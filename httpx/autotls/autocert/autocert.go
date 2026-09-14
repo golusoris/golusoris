@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package autocert wires x/crypto/acme/autocert as an autotls provider.
 //
 // Config keys (env: APP_HTTP_AUTOTLS_AUTOCERT_*):
@@ -18,7 +22,7 @@ import (
 	"go.uber.org/fx"
 	stdacme "golang.org/x/crypto/acme/autocert"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options configures autocert.

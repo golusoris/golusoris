@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package safety_test
 
 import (
@@ -11,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/storage/safety"
 )
 

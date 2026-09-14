@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package runtime detects the container/process runtime (Kubernetes,
 // Docker, Podman, systemd-managed, or plain binary) and exposes a
 // unified [Info] so the rest of the framework can attach identity

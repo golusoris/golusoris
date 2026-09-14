@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 name: CI
 
 on:
@@ -51,6 +55,12 @@ jobs:
           # new linter findings) is a deliberate, reviewed change, not a float.
           version: v2.13.2
           args: --config=tools/golangci.yml --timeout=5m
+      - name: Lint core module
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        with:
+          version: v2.13.2
+          working-directory: core
+          args: --config=../tools/golangci.yml --timeout=5m
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
@@ -73,6 +83,7 @@ jobs:
           EXCLUDE_RULES="testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505"
           gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" -fmt sarif -out gosec.sarif ./... || true
           gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" ./...
+          (cd core && gosec -exclude-generated ./...)
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
@@ -96,6 +107,7 @@ jobs:
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
           govulncheck ./...
+          (cd core && govulncheck ./...)
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
   # The repository-scoped Linux ARC scale set owns coverage, artifacts, and
@@ -131,7 +143,11 @@ jobs:
       # packages so the portability leg passes instead of failing on infra.
       - name: Run tests (Linux — full suite with Docker)
         if: runner.os == 'Linux'
-        run: go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+        run: |
+          go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+          (cd core && go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
+          # One merged profile: the threshold below covers root + core together.
+          tail -n +2 core/coverage.out >> coverage.out
       - name: Run tests (macOS — skip Docker-requiring packages)
         if: runner.os != 'Linux'
         run: |
@@ -173,6 +189,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - run: go build ./...
+      - run: cd core && go build ./... && go vet ./...
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────────
   # The framework has no single openapi.yaml (apps generate their own with ogen).
@@ -332,6 +349,44 @@ jobs:
       - name: Render check
         run: bash scripts/changelog/render.sh --check
 
+  # ── Developer Certificate of Origin ─────────────────────────────────────────
+  # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
+  dco:
+    name: DCO sign-off
+    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Check Signed-off-by on every PR commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          missing=0
+          for sha in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            if ! git show -s --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+@.+>$'; then
+              echo "::error::commit $sha lacks a Signed-off-by trailer (use git commit -s)"
+              missing=1
+            fi
+          done
+          exit $missing
+
+  # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
+  reuse:
+    name: Licensing (reuse lint)
+    if: github.actor != 'renovate[bot]'
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: reuse lint
+        run: |
+          python3 -m pip install --user --quiet 'reuse==6.2.0'
+          python3 -m reuse lint
+
   # ── Aggregate gate ───────────────────────────────────────────────────────────
   # Single "green only if every gating job passed" check, so branch protection
   # can require ONE stable context instead of enumerating each job (whose names
@@ -340,7 +395,7 @@ jobs:
   ci-success:
     name: CI success
     if: always() && github.actor != 'renovate[bot]'
-    needs: [lint, gosec, vuln, test, build]
+    needs: [lint, gosec, vuln, test, build, reuse]
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 2
     steps:

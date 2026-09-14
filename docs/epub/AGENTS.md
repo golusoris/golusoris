@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — docs/epub/
 
 Generate EPUB 3.0 files (with EPUB 2.0 ToC for compatibility) via a thin

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package webpush sends browser push notifications via the Web Push
 // Protocol (RFC 8030 / draft-ietf-webpush-encryption-08). It signs
 // requests with VAPID (RFC 8292) so no Google/Mozilla API key is

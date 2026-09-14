@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package sqlc_test
 
 import (
@@ -7,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	dbsqlc "github.com/golusoris/golusoris/db/sqlc"
-	gerr "github.com/golusoris/golusoris/errors"
 )
 
 func TestMapError(t *testing.T) {

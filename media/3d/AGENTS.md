@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — media/3d/
 
 Thin wrapper over g3n/engine for 3D rendering. Package name is `threed` (the dir

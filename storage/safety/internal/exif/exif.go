@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package exif reads only the JPEG EXIF Orientation tag and bakes the
 // corresponding rotation/flip into pixels. It is deliberately minimal: a full
 // EXIF parser is out of scope, since the surrounding safety package strips all

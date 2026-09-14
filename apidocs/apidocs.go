@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package apidocs mounts an OpenAPI-driven docs UI (Scalar) and an MCP
 // server (Model Context Protocol over HTTP) so AI agents can call the app's
 // operations as tools.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package certmagic wires caddyserver/certmagic as an autotls provider.
 //
 // Richer than autocert: on-demand issuance, distributed storage, DNS-01 via
@@ -18,7 +22,7 @@ import (
 	cm "github.com/caddyserver/certmagic"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options configures certmagic.

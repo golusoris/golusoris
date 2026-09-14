@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tus mounts a tus 1.0 resumable-upload endpoint backed by a
 // storage.Bucket. It wraps github.com/tus/tusd/v2/pkg/handler with a
 // Bucket-backed DataStore: chunks land in an append-capable scratch area
@@ -41,8 +45,8 @@ import (
 	"github.com/tus/tusd/v2/pkg/memorylocker"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/storage"
 )
 

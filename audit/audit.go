@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package audit provides an append-only structured audit log.
 // Events record who did what to which resource, with optional before/after
 // diff and arbitrary metadata.
@@ -25,7 +29,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // FieldChange captures a single field's before and after values.

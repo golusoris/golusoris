@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — k8s/operator/
 
 Opt-in fx module wrapping a [controller-runtime](https://sigs.k8s.io/controller-runtime)

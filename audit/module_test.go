@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package audit_test
 
 import (
@@ -10,8 +14,8 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/audit"
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // TestModule_ProvidesLogger boots the audit Module via fxtest to cover

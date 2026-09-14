@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # PreToolUse hook for Edit / Write on *.go files.
 #
 # Enforces the project conventions that are otherwise caught only at

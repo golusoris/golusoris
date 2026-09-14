@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # search/typesense
 
 Typesense backend for `search.Backend` — covers both the Indexer and Searcher interfaces.

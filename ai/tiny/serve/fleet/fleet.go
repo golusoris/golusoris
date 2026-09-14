@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package fleet is the distributed-inference recipe for [ai/tiny]: it
 // serves a [tiny.Predictor] across a replica set using the framework's
 // own [jobs] (river) queue + [leader] election, instead of a

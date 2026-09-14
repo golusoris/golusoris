@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # go.opentelemetry.io/otel — v1.35.0 snapshot
 
 Pinned: **v1.35.0** (semconv: v1.26.0)

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package factory provides test data factories backed by brianvoe/gofakeit.
 //
 // It re-exports [gofakeit.Faker] and adds seed helpers so tests are

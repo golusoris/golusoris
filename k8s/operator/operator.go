@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package operator provides an opt-in fx module wrapping a controller-runtime
 // [manager.Manager], so apps can ship Kubernetes CRDs + reconcilers the way
 // they ship HTTP handlers.

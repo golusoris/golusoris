@@ -60,6 +60,13 @@
   "packages": {
     ".": {
       "package-name": "golusoris"
+    },
+    "core": {
+      "package-name": "golusoris-core",
+      "component": "core",
+      "include-component-in-tag": true,
+      "tag-separator": "/",
+      "changelog-path": "CHANGELOG.md"
     }
   }
 }
