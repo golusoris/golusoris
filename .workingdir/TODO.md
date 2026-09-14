@@ -93,6 +93,18 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - [x] Fleet-wide needs: every Go repo under `~/dev` scanned; `capabilities.yaml` `replaces` + praetor classifier fixes lift coverage to 97.5 %. Real gaps listed in FLEET-DEMAND.md.
 - [x] `db/sqlite` (modernc) — 2 fleet consumers (VMAFx, cauda.dev/knowledge-mcp).
 
+## Carried over from the v0.1.0 readiness checklist (`V0.1.0.md`, deleted 2026-09-14)
+
+Still-open items; everything else in that file (gates, shipped scope,
+`ai/tiny/serve/tflite`, `integrations/goenvoy`) has landed.
+
+- [ ] Pin `golusoris/golusoris` + `golusoris/goenvoy` on the org page — UI-only: <https://github.com/orgs/golusoris>.
+- [ ] Upload the org avatar — UI-only: <https://github.com/organizations/golusoris/settings/profile>.
+- [ ] `labels.yml` sync workflow in each child repo (source of truth: `golusoris/.github/labels.yml`).
+- [ ] Promote `apidiff` to a **required** status check on `main` (informational since v0.1.0).
+- [ ] Announce a release (Ko-fi supporters, `/r/golang`, optional HN) — never done for any tag so far.
+- [ ] Realistic first-party demo app beyond `examples/{minimal,full}`.
+
 ## Deferred (next session)
 
 - praetor code migration onto core (yaml.v3 → codec/yaml, flag → clikit, JSON-RPC → mcp, receipts, worktree, slog).
