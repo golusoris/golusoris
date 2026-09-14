@@ -221,8 +221,8 @@ linters:
         - module: github.com/pkg/errors
           recommendations:
             - github.com/go-faster/errors
-            - github.com/golusoris/golusoris/errors
-          reason: "use go-faster/errors or golusoris/errors"
+            - github.com/golusoris/golusoris/core/errors
+          reason: "use go-faster/errors or golusoris/core/errors"
 
   exclusions:
     presets:

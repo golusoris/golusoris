@@ -42,5 +42,5 @@ After writing, run:
 
 Then update:
 - `AGENTS.md` layout tree (top-level)
-- `README.md` "Landed so far"
+- `README.md` module catalog + `capabilities.yaml`
 - `.workingdir/STATE.md` session log

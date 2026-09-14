@@ -31,7 +31,9 @@
 # `^## ` — because fragment bodies may legitimately contain `## ` subheadings;
 # a bare `^## ` sentinel would treat those as boundaries and corrupt the splice.
 #
-# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
 
 set -euo pipefail
 

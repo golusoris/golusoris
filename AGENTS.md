@@ -126,10 +126,12 @@ Version-pinned snapshots live in `docs/upstream/`. Consult these before suggesti
 | Package | Pinned version |
 |---|---|
 | `go.uber.org/fx` | v1.24.0 |
-| `jackc/pgx/v5` | v5.9.1 |
-| `ogen-go/ogen` | v1.20.3 |
-| `riverqueue/river` | v0.34.0 |
-| `knadh/koanf/v2` | v2.3.4 |
+| `jackc/pgx/v5` | v5.11.0 |
+| `ogen-go/ogen` | v1.24.0 |
+| `riverqueue/river` | v0.47.0 |
+| `knadh/koanf/v2` | v2.3.6 (`core/`) |
+
+The full table (and the refresh recipe, `make docs-upstream`) is in [docs/upstream/README.md](docs/upstream/README.md).
 
 ## CI gates
 

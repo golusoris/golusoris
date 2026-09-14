@@ -177,15 +177,11 @@ version: "2"
 If `golangci-config` is left empty in `ci-go.yml`, golangci-lint auto-discovers
 the app's own `.golangci.yml`; set it to opt into the shared ruleset explicitly.
 
-## 6. Pre-commit hook
+## 6. Git hooks
 
-`make ci` is the intended pre-commit check. Wire it with a plain git hook:
-
-```sh
-echo 'make ci' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
-```
-
-or with a hook manager such as [lefthook](https://github.com/evilmartians/lefthook):
+`make ci` is the intended local gate. The framework itself runs it through
+[lefthook](https://github.com/evilmartians/lefthook); the minimal app-side
+configuration is:
 
 ```yaml
 # lefthook.yml
