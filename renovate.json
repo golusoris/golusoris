@@ -72,6 +72,20 @@
         "breaking-change"
       ],
       "automerge": false
+    },
+    {
+      "description": "Hold goldmark on v1: v2 (yuin/goldmark/v2) is 'still in the early stages of release' per its README, replaces the New/WithExtensions API markdown/ builds on, and third-party extensions lag. Revisit when v2 is declared stable.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "github.com/yuin/goldmark",
+        "github.com/yuin/goldmark/v2"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "enabled": false
     }
   ],
   "lockFileMaintenance": {
