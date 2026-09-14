@@ -155,6 +155,11 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 			return nil
 		}
 	}
+	// A dropped connection, a cancelled ctx or an over-long line ends
+	// Scan early; surface it instead of reporting a clean end-of-stream.
+	if scanErr := scanner.Err(); scanErr != nil {
+		return fmt.Errorf("ollama: stream: %w", scanErr)
+	}
 	return nil
 }
 
