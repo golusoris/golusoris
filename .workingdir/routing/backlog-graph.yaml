@@ -1,0 +1,236 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+version: 1
+updated: '2026-09-14T23:25:00+02:00'
+nodes:
+- id: N1
+  title: '#447 CI green on 6255296 (rerun attempt 2 in flight)'
+  status: running
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 25m
+  note: 'attempt 2: 17 green incl. the race suite that failed twice; only Lint + gosec still running (20:20Z) — starvation hypothesis holding'
+- id: N12
+  title: Diagnose runner-fleet degradation 19:18-19:54 (listeners restarted 19:15; anonymous Docker Hub pulls; dind sizing)
+  status: ready
+  blocked_by: []
+  route: fable
+  cost:
+    t: frontier
+    w: 15m
+  note: 'hedge: only matters if N1 fails again; read-only kubectl + lusoris/k8s values'
+- id: N2
+  title: 'Squash-merge #447 (admin merge past merge-freeze-447)'
+  status: blocked
+  blocked_by:
+  - N1
+  route: deterministic
+  cost:
+    t: none
+    w: 2m
+- id: N3
+  title: Renovate CI guard PR (unguard.py) on new main, CI, merge
+  status: blocked
+  blocked_by:
+  - N2
+  route: deterministic
+  cost:
+    t: none
+    w: 30m
+- id: N7
+  title: Lift merge-freeze-447 from main protection
+  status: blocked
+  blocked_by:
+  - N3
+  route: deterministic
+  cost:
+    t: none
+    w: 1m
+- id: N8
+  title: 31 armed Renovate PRs drain against real CI
+  status: blocked
+  blocked_by:
+  - N7
+  route: deterministic
+  cost:
+    t: none
+    w: hours-of-runner-time
+- id: N4
+  title: Rebase 12 hiss branches --onto new main (post-merge.sh), force-push
+  status: blocked
+  blocked_by:
+  - N2
+  route: deterministic
+  cost:
+    t: none
+    w: 20m
+  note: 'conflicts expected only where #447''s squash touched the same lines; resolved once already'
+- id: N9
+  title: 12 hiss PRs (now targeting main) get CI, merge when green
+  status: blocked
+  blocked_by:
+  - N4
+  - N7
+  - N13a
+  route: deterministic
+  cost:
+    t: none
+    w: hours-of-runner-time
+- id: N13
+  title: Check 12 hiss branches against praetor's new HISS-19 (dedupe scan) / HISS-17 / HISS-18
+  status: done
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 15m
+  note: 'dedupe scan done: baseline 5 dup blocks (pre-existing, N23); 11 branches +0; hiss-ai +1 (anthropic.Stream == ollama.Stream wrapper) → N13a | N13a folded
+    into llm.RunStream, pushed to PR #453'
+- id: N5
+  title: 'Housekeeping PR on new main: AGENTS.md trim (N21) + regenerated .standards.lock/.config/archetypes (N22) + docs/FLEET_GO_DEMAND.md with proposal (N14) +
+    .workingdir/ routing ledger'
+  status: blocked
+  blocked_by:
+  - N2
+  - N14
+  route: deterministic
+  cost:
+    t: none
+    w: 10m
+- id: N6
+  title: Remove 17 session worktrees + wip/* branches
+  status: blocked
+  blocked_by:
+  - N4
+  - N5
+  route: deterministic
+  cost:
+    t: none
+    w: 2m
+- id: N10
+  title: 'CodeQL: 2 real alerts (go/path-injection storage.go:131, go/unvalidated-url-redirection tracking.go:146) — verify guards, write dismissal justifications'
+  status: done
+  blocked_by: []
+  route: sonnet
+  cost:
+    t: cheap
+    w: 10m
+  note: '#171 (storage.go:135 Get, guarded by abs()) and #161 (tracking.go:146, HMAC+validateRedirectURL, predates #447) dismissed as false positive with ≤280-char
+    justifications; follow-up: 3D boundary tests for abs() (fold into N23)'
+- id: N14
+  title: 'Triage 58 fleet-demand gaps into capability proposals for epic tasks #431-#434'
+  status: done
+  blocked_by: []
+  route: haiku+sonnet
+  cost:
+    t: cheap
+    w: 15m
+  note: 12 clusters, 11-item first sprint, 51/58 gaps are vmafx-only; proposal appended to FLEET_GO_DEMAND.md (199 lines); item 9 (declare ~30 non-goals in .needs.yaml)
+    is the cheapest readiness win
+- id: N16
+  title: 'praetor `needs scan` bug report: root-only go.mod, no analyzer without root module, .claude/.workingdir fixtures counted'
+  status: done
+  blocked_by: []
+  route: sonnet
+  cost:
+    t: cheap
+    w: 10m
+  note: filed as cordanaLLM/praetor#27 (root-only analyzers, analyzer_go.go:26-28 / analyzer.go:50-62); N15 now waits on that fix
+- id: N15
+  title: 7 repos hold uncommitted .needs.yaml from the buggy scanner (vmafx, 20-watts understated)
+  status: waiting-user
+  blocked_by:
+  - N16
+  route: user
+  cost:
+    t: none
+    w: 1m
+- id: N11
+  title: 'renovate.json: lockFileMaintenance for tools/spectral transitive npm CVEs'
+  status: ready
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 5m
+  note: bundle into N3's PR
+- id: N20
+  title: ci.yml has no push:main trigger — main never re-verified after merges
+  status: ready
+  blocked_by: []
+  route: user
+  cost:
+    t: none
+    w: 5m
+  note: user chose the PR-side guard; push trigger is additive; ask
+- id: N17
+  title: '7 high Scorecard findings (checked-in binaries: bpf .o, pulumi/multiregion; code-review policy)'
+  status: ready
+  blocked_by: []
+  route: user
+  cost:
+    t: cheap
+    w: 20m
+- id: N18
+  title: 'dogfood/standards-adoption disposition (harness files for #431-#434)'
+  status: waiting-user
+  blocked_by: []
+  route: user
+  cost:
+    t: none
+    w: 1m
+- id: N13a
+  title: 'hiss-ai: fold the identical anthropic/ollama Stream() wrappers into one ai/llm helper (HISS-19), re-scan, push to PR #453'
+  status: done
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 15m
+- id: N21
+  title: 'AGENTS.md compiles WHOLE-FILE to 475 > 300 (praetor render.go): collapse the 252-line hand-written ''## Repository layout'' tree to a README pointer (-249),
+    trim ''## Claude Code'' dupes (-41) → ~185; add HISS-17/18/19 rows (+11)'
+  status: blocked
+  blocked_by:
+  - N2
+  route: sonnet
+  cost:
+    t: cheap
+    w: 20m
+  note: 'DONE in scratch (AGENTS.trimmed.md): 472→195 lines, praetor compile-context succeeds at 197-203 lines/target; Repository layout → README pointer (−252),
+    Claude-section dupes moved/dropped (−41), HISS-17/18/19 rows added citing only existing commands. Lands in N5 (needs N2).'
+- id: N22
+  title: .standards.lock has no sha256 digest → standardsctl audit fails locally (also with praetor HEAD)
+  status: blocked
+  blocked_by:
+  - N2
+  route: deterministic
+  cost:
+    t: none
+    w: 10m
+  note: 'recipe proven on #447 tree: rm .standards.lock; standardsctl adopt --path=. --lock-source-root=/home/kilian/dev/cordanaLLM/praetor → writes lock + .config/archetypes/{framework,facets/*}.yaml
+    + baseline (177, unchanged); audit then passes all but N21. Lands in N5''s PR on new main.'
+- id: N23
+  title: '5 pre-existing HISS-19 duplicate blocks on #447 baseline (copyStringMap gemma/litert; sentry/otel WithGroup+WithAttrs; magiclink/recovery hash; tui Run/RunInline)
+    + 3D boundary tests for storage.LocalBucket.abs() (N10 follow-up)'
+  status: ready
+  blocked_by: []
+  route: sonnet
+  cost:
+    t: cheap
+    w: 30m
+  note: baseline debt; ratchet, not a blocker; good sonnet fan-out (5 independent small refactors) once N2 lands
+- id: N24
+  title: 'Wire HISS-17/18/19 tooling into golusoris: Makefile/lefthook targets for `dedupe scan` (verify-all), `state sync/task`, `ci filter` — only after confirming
+    the installed praetorctl exposes them'
+  status: ready
+  blocked_by:
+  - N23
+  route: deterministic
+  cost:
+    t: none
+    w: 20m
+  note: 'verified in praetor HEAD build: `state {init,sync,status,audit,task,bug,question}`, `ci filter [--base --head --json --env --force]`, `dedupe {scan,cadence}`;
+    golusoris wires none. dedupe scan exits 1 on the 5 baseline blocks → gate needs N23 first or a ratchet'

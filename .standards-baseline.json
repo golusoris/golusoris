@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generated_at": "2026-09-14T12:18:37Z",
+  "generated_at": "2026-09-14T20:35:23Z",
   "repository": "",
   "commit_sha": "",
   "total_infractions": 177,
@@ -41,6 +41,14 @@
       "fingerprint": "ai/llm/ollama/ollama.go:172:HISS-07"
     },
     {
+      "rule_id": "HISS-04",
+      "file_path": "ai/tiny/gemma/gemma.go",
+      "line_number": 109,
+      "symbol": "Train",
+      "message": "Function 'Train' (91 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/gemma/gemma.go:109:HISS-04"
+    },
+    {
       "rule_id": "HISS-07",
       "file_path": "ai/tiny/gemma/gemma.go",
       "line_number": 125,
@@ -49,19 +57,11 @@
     },
     {
       "rule_id": "HISS-04",
-      "file_path": "ai/tiny/gemma/gemma.go",
-      "line_number": 109,
+      "file_path": "ai/tiny/litert/litert.go",
+      "line_number": 108,
       "symbol": "Train",
-      "message": "Function 'Train' (91 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "ai/tiny/gemma/gemma.go:109:HISS-04"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "ai/tiny/gemma/gemma_test.go",
-      "line_number": 48,
-      "symbol": "TestTrainer_Train_happyPath",
-      "message": "Function 'TestTrainer_Train_happyPath' (81 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "ai/tiny/gemma/gemma_test.go:48:HISS-04"
+      "message": "Function 'Train' (100 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "ai/tiny/litert/litert.go:108:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -69,14 +69,6 @@
       "line_number": 125,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "ai/tiny/litert/litert.go:125:HISS-07"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "ai/tiny/litert/litert.go",
-      "line_number": 108,
-      "symbol": "Train",
-      "message": "Function 'Train' (100 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "ai/tiny/litert/litert.go:108:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -188,22 +180,30 @@
       "file_path": "auth/oauth2server/oauth2server.go",
       "line_number": 124,
       "symbol": "handleAuthorize",
-      "message": "Function 'handleAuthorize' (79 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
+      "message": "Function 'handleAuthorize' (81 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
       "fingerprint": "auth/oauth2server/oauth2server.go:124:HISS-04"
     },
     {
-      "rule_id": "HISS-07",
+      "rule_id": "HISS-04",
       "file_path": "auth/oauth2server/oauth2server.go",
-      "line_number": 273,
-      "message": "Legacy unchecked error assignment",
-      "fingerprint": "auth/oauth2server/oauth2server.go:273:HISS-07"
+      "line_number": 206,
+      "symbol": "handleToken",
+      "message": "Function 'handleToken' (71 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "auth/oauth2server/oauth2server.go:206:HISS-04"
     },
     {
       "rule_id": "HISS-07",
       "file_path": "auth/oauth2server/oauth2server.go",
-      "line_number": 291,
+      "line_number": 275,
       "message": "Legacy unchecked error assignment",
-      "fingerprint": "auth/oauth2server/oauth2server.go:291:HISS-07"
+      "fingerprint": "auth/oauth2server/oauth2server.go:275:HISS-07"
+    },
+    {
+      "rule_id": "HISS-07",
+      "file_path": "auth/oauth2server/oauth2server.go",
+      "line_number": 293,
+      "message": "Legacy unchecked error assignment",
+      "fingerprint": "auth/oauth2server/oauth2server.go:293:HISS-07"
     },
     {
       "rule_id": "HISS-07",
@@ -253,6 +253,13 @@
       "line_number": 227,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "auth/session/session.go:227:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "cache/twotier/module.go",
+      "line_number": 99,
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
+      "fingerprint": "cache/twotier/module.go:99:HISS-02"
     },
     {
       "rule_id": "HISS-07",
@@ -335,7 +342,7 @@
       "rule_id": "HISS-02",
       "file_path": "core/config/config.go",
       "line_number": 231,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "core/config/config.go:231:HISS-02"
     },
     {
@@ -391,8 +398,16 @@
       "rule_id": "HISS-02",
       "file_path": "db/cdc/cdc.go",
       "line_number": 246,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "db/cdc/cdc.go:246:HISS-02"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "db/cdc/cdc.go",
+      "line_number": 320,
+      "symbol": "dispatch",
+      "message": "Function 'dispatch' (82 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "db/cdc/cdc.go:320:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -423,6 +438,14 @@
       "fingerprint": "db/sqlite/sqlite.go:123:HISS-07"
     },
     {
+      "rule_id": "HISS-04",
+      "file_path": "deploy/multiregion/region.go",
+      "line_number": 256,
+      "symbol": "newRegionService",
+      "message": "Function 'newRegionService' (66 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "deploy/multiregion/region.go:256:HISS-04"
+    },
+    {
       "rule_id": "HISS-07",
       "file_path": "docs/epub/epub.go",
       "line_number": 104,
@@ -447,14 +470,14 @@
       "rule_id": "HISS-02",
       "file_path": "fs/watch/watch.go",
       "line_number": 115,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "fs/watch/watch.go:115:HISS-02"
     },
     {
       "rule_id": "HISS-02",
       "file_path": "fs/watch/watch_test.go",
       "line_number": 103,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "fs/watch/watch_test.go:103:HISS-02"
     },
     {
@@ -469,7 +492,7 @@
       "file_path": "grpc/grpc.go",
       "line_number": 169,
       "symbol": "newServer",
-      "message": "Function 'newServer' (96 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
+      "message": "Function 'newServer' (96 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
       "fingerprint": "grpc/grpc.go:169:HISS-04"
     },
     {
@@ -532,7 +555,7 @@
       "rule_id": "HISS-02",
       "file_path": "hw/udev/udev.go",
       "line_number": 58,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "hw/udev/udev.go:58:HISS-02"
     },
     {
@@ -602,7 +625,7 @@
       "rule_id": "HISS-02",
       "file_path": "leader/pg/pg.go",
       "line_number": 103,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "leader/pg/pg.go:103:HISS-02"
     },
     {
@@ -618,6 +641,20 @@
       "line_number": 50,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "media/3d/engine.go:50:HISS-07"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "media/audio/analyze.go",
+      "line_number": 62,
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
+      "fingerprint": "media/audio/analyze.go:62:HISS-02"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "media/audio/analyze.go",
+      "line_number": 102,
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
+      "fingerprint": "media/audio/analyze.go:102:HISS-02"
     },
     {
       "rule_id": "HISS-07",
@@ -646,14 +683,6 @@
       "line_number": 65,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "media/img/pipeline/handler.go:65:HISS-07"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "media/img/pipeline/module_test.go",
-      "line_number": 42,
-      "symbol": "TestModule_wiresPipelineAndHandler",
-      "message": "Function 'TestModule_wiresPipelineAndHandler' (81 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "media/img/pipeline/module_test.go:42:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -740,14 +769,6 @@
       "fingerprint": "notify/gotify/gotify.go:106:HISS-07"
     },
     {
-      "rule_id": "HISS-04",
-      "file_path": "notify/gotify/gotify_test.go",
-      "line_number": 21,
-      "symbol": "TestSender_Send",
-      "message": "Function 'TestSender_Send' (95 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "notify/gotify/gotify_test.go:21:HISS-04"
-    },
-    {
       "rule_id": "HISS-07",
       "file_path": "notify/inbound/inbound.go",
       "line_number": 228,
@@ -769,14 +790,6 @@
       "fingerprint": "notify/ntfy/ntfy.go:103:HISS-07"
     },
     {
-      "rule_id": "HISS-04",
-      "file_path": "notify/ntfy/ntfy_test.go",
-      "line_number": 20,
-      "symbol": "TestSender_Send",
-      "message": "Function 'TestSender_Send' (89 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "notify/ntfy/ntfy_test.go:20:HISS-04"
-    },
-    {
       "rule_id": "HISS-07",
       "file_path": "notify/postmark/postmark.go",
       "line_number": 134,
@@ -789,6 +802,14 @@
       "line_number": 130,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "notify/resend/resend.go:130:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "notify/sendgrid/sendgrid.go",
+      "line_number": 82,
+      "symbol": "Send",
+      "message": "Function 'Send' (70 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "notify/sendgrid/sendgrid.go:82:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -906,7 +927,7 @@
       "rule_id": "HISS-02",
       "file_path": "outbox/drainer.go",
       "line_number": 79,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "outbox/drainer.go:79:HISS-02"
     },
     {
@@ -922,14 +943,6 @@
       "line_number": 183,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "outbox/drainer.go:183:HISS-07"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "payments/stripe/stripe_test.go",
-      "line_number": 126,
-      "symbol": "TestNewCheckoutSession",
-      "message": "Function 'TestNewCheckoutSession' (93 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "payments/stripe/stripe_test.go:126:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -991,7 +1004,7 @@
       "rule_id": "HISS-02",
       "file_path": "pkg/sockmap/loader_linux_test.go",
       "line_number": 261,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "pkg/sockmap/loader_linux_test.go:261:HISS-02"
     },
     {
@@ -1019,14 +1032,14 @@
       "rule_id": "HISS-02",
       "file_path": "realtime/pubsub/redis/redis_test.go",
       "line_number": 67,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "realtime/pubsub/redis/redis_test.go:67:HISS-02"
     },
     {
       "rule_id": "HISS-02",
       "file_path": "realtime/sse/sse.go",
       "line_number": 118,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "realtime/sse/sse.go:118:HISS-02"
     },
     {
@@ -1103,21 +1116,21 @@
       "rule_id": "HISS-02",
       "file_path": "storage/s3.go",
       "line_number": 258,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "storage/s3.go:258:HISS-02"
     },
     {
       "rule_id": "HISS-02",
       "file_path": "storage/scan/fakeclamd_test.go",
       "line_number": 58,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "storage/scan/fakeclamd_test.go:58:HISS-02"
     },
     {
       "rule_id": "HISS-02",
       "file_path": "storage/scan/fakeclamd_test.go",
       "line_number": 96,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "storage/scan/fakeclamd_test.go:96:HISS-02"
     },
     {
@@ -1131,7 +1144,7 @@
       "rule_id": "HISS-02",
       "file_path": "storage/tus/tus.go",
       "line_number": 225,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "storage/tus/tus.go:225:HISS-02"
     },
     {
@@ -1145,7 +1158,7 @@
       "rule_id": "HISS-02",
       "file_path": "systemd/systemd.go",
       "line_number": 143,
-      "message": "Legacy unbounded for {} loop without explicit exit condition",
+      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
       "fingerprint": "systemd/systemd.go:143:HISS-02"
     },
     {
@@ -1165,9 +1178,9 @@
     {
       "rule_id": "HISS-07",
       "file_path": "testutil/kafka/kafka.go",
-      "line_number": 54,
+      "line_number": 56,
       "message": "Legacy unchecked error assignment",
-      "fingerprint": "testutil/kafka/kafka.go:54:HISS-07"
+      "fingerprint": "testutil/kafka/kafka.go:56:HISS-07"
     },
     {
       "rule_id": "HISS-07",
@@ -1179,16 +1192,24 @@
     {
       "rule_id": "HISS-07",
       "file_path": "testutil/redis/redis.go",
-      "line_number": 51,
+      "line_number": 53,
       "message": "Legacy unchecked error assignment",
-      "fingerprint": "testutil/redis/redis.go:51:HISS-07"
+      "fingerprint": "testutil/redis/redis.go:53:HISS-07"
     },
     {
       "rule_id": "HISS-07",
       "file_path": "testutil/redis/redis.go",
-      "line_number": 90,
+      "line_number": 92,
       "message": "Legacy unchecked error assignment",
-      "fingerprint": "testutil/redis/redis.go:90:HISS-07"
+      "fingerprint": "testutil/redis/redis.go:92:HISS-07"
+    },
+    {
+      "rule_id": "HISS-04",
+      "file_path": "testutil/river/river.go",
+      "line_number": 65,
+      "symbol": "Start",
+      "message": "Function 'Start' (63 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
+      "fingerprint": "testutil/river/river.go:65:HISS-04"
     },
     {
       "rule_id": "HISS-07",
@@ -1196,30 +1217,6 @@
       "line_number": 121,
       "message": "Legacy unchecked error assignment",
       "fingerprint": "testutil/river/river.go:121:HISS-07"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "torrent/qbittorrent_test.go",
-      "line_number": 109,
-      "symbol": "TestQBittorrent_LoginAndCRUD",
-      "message": "Function 'TestQBittorrent_LoginAndCRUD' (80 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "torrent/qbittorrent_test.go:109:HISS-04"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "torrent/rtorrent_test.go",
-      "line_number": 152,
-      "symbol": "TestRTorrent_ListGetMutateStats",
-      "message": "Function 'TestRTorrent_ListGetMutateStats' (82 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "torrent/rtorrent_test.go:152:HISS-04"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "torrent/transmission_test.go",
-      "line_number": 100,
-      "symbol": "TestTransmission_AddListGetPauseResumeRemoveStats",
-      "message": "Function 'TestTransmission_AddListGetPauseResumeRemoveStats' (88 LOC) exceeds HISS-04 / NASA Rule 4 limit of 75 LOC",
-      "fingerprint": "torrent/transmission_test.go:100:HISS-04"
     },
     {
       "rule_id": "HISS-07",
