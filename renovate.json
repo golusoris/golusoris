@@ -6,45 +6,82 @@
     ":dependencyDashboard",
     ":semanticCommits"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "prConcurrentLimit": 5,
   "gomod": {
     "enabled": true
   },
   "packageRules": [
     {
-      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
-      "matchUpdateTypes": ["pin", "pinDigest", "digest", "patch", "minor"],
+      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass \u2014 keeps the queue self-clearing.",
+      "matchUpdateTypes": [
+        "pin",
+        "pinDigest",
+        "digest",
+        "patch",
+        "minor"
+      ],
       "automerge": true,
       "automergeStrategy": "squash",
       "platformAutomerge": true
     },
     {
       "description": "Group all GitHub Actions bumps into a single PR.",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github actions"
     },
     {
       "description": "Keep Go module directives current through reviewed product-org pull requests.",
-      "matchManagers": ["gomod"],
-      "matchDepNames": ["go"],
-      "matchDepTypes": ["golang"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "go"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
       "rangeStrategy": "bump",
       "automerge": false
     },
     {
       "description": "Permit direct remediation of the vulnerable transitive archive module.",
-      "matchManagers": ["gomod"],
-      "matchDepTypes": ["indirect"],
-      "matchPackageNames": ["github.com/moby/go-archive"],
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchPackageNames": [
+        "github.com/moby/go-archive"
+      ],
       "enabled": true,
       "automerge": false
     },
     {
-      "description": "Major bumps are breaking — never auto-merge; leave for review.",
-      "matchUpdateTypes": ["major"],
-      "labels": ["dependencies", "breaking-change"],
+      "description": "Major bumps are breaking \u2014 never auto-merge; leave for review.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "labels": [
+        "dependencies",
+        "breaking-change"
+      ],
       "automerge": false
     }
-  ]
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "description": "Refresh lockfiles so transitive CVE fixes (e.g. brace-expansion, fast-uri under tools/spectral) land without Dependabot; Renovate updates direct deps only otherwise.",
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "automerge": true,
+    "automergeStrategy": "squash",
+    "platformAutomerge": true
+  }
 }
