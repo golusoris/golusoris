@@ -120,8 +120,11 @@ func Open(ctx context.Context, opts Options, logger *slog.Logger) (*sql.DB, erro
 	pingCtx, cancel := context.WithTimeout(ctx, opts.BusyTimeout)
 	defer cancel()
 	if err := db.PingContext(pingCtx); err != nil {
-		_ = db.Close()
-		return nil, fmt.Errorf("db/sqlite: ping %s: %w", opts.Path, err)
+		pingErr := fmt.Errorf("db/sqlite: ping %s: %w", opts.Path, err)
+		if cerr := db.Close(); cerr != nil {
+			return nil, errors.Join(pingErr, fmt.Errorf("db/sqlite: close %s: %w", opts.Path, cerr))
+		}
+		return nil, pingErr
 	}
 	logger.InfoContext(ctx, "db/sqlite: opened", slog.String("path", opts.Path), slog.Bool("wal", !opts.DisableWAL), slog.Bool("read_only", opts.ReadOnly))
 	return db, nil

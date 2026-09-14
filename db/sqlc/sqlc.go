@@ -38,7 +38,10 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn TxFn) error {
 		return fmt.Errorf("db/sqlc: begin tx: %w", err)
 	}
 	if err := fn(ctx, tx); err != nil {
-		_ = tx.Rollback(ctx)
+		// Join keeps errors.Is/As on the original cause working.
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			return errors.Join(err, fmt.Errorf("db/sqlc: rollback: %w", rbErr))
+		}
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

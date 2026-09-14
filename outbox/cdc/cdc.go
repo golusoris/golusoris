@@ -246,7 +246,7 @@ func NewWebhookSink(url string, opts ...WebhookOption) *WebhookSink {
 }
 
 // Send implements [Sink].
-func (s *WebhookSink) Send(ctx context.Context, ev outbox.Event) error {
+func (s *WebhookSink) Send(ctx context.Context, ev outbox.Event) (err error) {
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("webhook sink: marshal: %w", err)
@@ -263,7 +263,12 @@ func (s *WebhookSink) Send(ctx context.Context, ev outbox.Event) error {
 	if err != nil {
 		return fmt.Errorf("webhook sink: do: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	// Literal Close so bodyclose sees it; a close failure never masks the primary error.
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("webhook sink: close body: %w", cerr)
+		}
+	}()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("webhook sink: unexpected status %d", resp.StatusCode)
 	}
