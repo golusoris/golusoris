@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 version: 1
-updated: '2026-09-15T02:30:00+02:00'
+updated: '2026-09-15T04:25:00+02:00'
 nodes:
 - id: N1
   title: '#447 CI green on 6255296 (rerun attempt 2 in flight)'
@@ -279,12 +279,15 @@ nodes:
 - id: N28
   title: 8 remaining Renovate PRs are majors/groups (goldmark v2, actions major, go 1.27.1 directive, aws-sdk monorepo, spectral-cli, goenvoy digest…) — need a human
     decision each
-  status: waiting-user
+  status: done
   blocked_by: []
-  route: user
+  route: deterministic
   cost:
     t: none
     w: 15m
+  note: 'local gate per PR: #366 #357 #386 #361 #411 #368 merged; #428 superseded by #479 (solana-go v2 lives at solana-foundation/solana-go/v2; imports + go.sum
+    migrated; godot follow-up #482); #412 closed + held via #481 (goldmark v2 early-stage, API replaced); spectral ruleset bug pre-existing → fixed in #480 with failing/passing
+    minimal specs; cluster agent #475 merged'
 - id: N29
   title: 'praetor#29: baseline fingerprints keyed by line number report moved-but-unchanged functions as new; baseline re-recorded on main (8) as the workaround'
   status: waiting-user
@@ -293,3 +296,25 @@ nodes:
   cost:
     t: none
     w: '-'
+- id: N30
+  title: 'Release v0.9.0 + core/v0.9.0: merge release-please #462 once its refresh (queued on the recovering fleet) includes all commits since #447; #302 (old single-component)
+    closed'
+  status: done
+  blocked_by: []
+  route: deterministic
+  cost:
+    t: none
+    w: 10m
+  note: '#462 refreshed locally with release-please@17 (same major as the action), verified (manifest 0.9.0 root+core, 2 headings, 2 BREAKING sections, 227 entries,
+    no garbage), merged as 1d6cb261; tags v0.9.0 + core/v0.9.0 pushed on it; release.yml queued. Note: GitHub has no v0.8.0 tag (latest was v0.7.0), so the compare
+    link in the changelog will 404 unless 0.8.0 is tagged retroactively at efc49c0.'
+- id: N31
+  title: 'Post-release: final ledger sync (.workingdir/routing) + confirm main''s own CI is green now that the Harbor mirror is live'
+  status: done
+  blocked_by:
+  - N30
+  route: deterministic
+  cost:
+    t: none
+    w: 10m
+  note: ledger synced post-release; main CI green-ness tracked by the push:main runs now that the Harbor mirror is live
