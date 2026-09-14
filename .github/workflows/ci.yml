@@ -47,10 +47,23 @@ jobs:
     # (63 s wall on 32 cores; the go/packages load phase alone is ~530 CPU-s),
     # core ~44 CPU-s. The ARC job container is guaranteed only 750m CPU (4-CPU
     # burst limit) and starts with a cold Go module/build cache, so the root
-    # step can need ~18 min under contention -> --timeout=20m per step. Job
-    # timeout = setup (~3 min) + 2 x 20m, rounded up. Keep in sync with
+    # step can need ~18 min under contention.
+    #
+    # 20m was not enough: one office worker sits on a Proxmox host carrying 26
+    # vCPU on 16 threads, so it loses 1-3 cores to steal with no CFS throttling
+    # to show for it, and the go/packages load ran past 20m twice (1200.7 s) on
+    # that node while the Test job passed on a healthy one. 30m covers the
+    # starved node; it is temporary headroom, not the fix -- the hypervisor
+    # resize is already declared in the cluster repo's vms.auto.tfvars and just
+    # needs applying. Revisit once it lands.
+    #
+    # A timeout here is also self-perpetuating: setup-go's cache-save post step
+    # is skipped when the job fails, so a run that times out on a cold cache
+    # leaves the next run cold too. One green run warms it to ~2 min.
+    #
+    # Job timeout = setup (~3 min) + 2 x 30m, rounded up. Keep in sync with
     # run.timeout in tools/golangci.yml and the Makefile _ci-module target.
-    timeout-minutes: 45
+    timeout-minutes: 65
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -62,13 +75,13 @@ jobs:
           # Pinned for reproducible CI — bumping golangci-lint (and adopting any
           # new linter findings) is a deliberate, reviewed change, not a float.
           version: v2.13.2
-          args: --config=tools/golangci.yml --timeout=20m
+          args: --config=tools/golangci.yml --timeout=30m
       - name: Lint core module
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.13.2
           working-directory: core
-          args: --config=../tools/golangci.yml --timeout=20m
+          args: --config=../tools/golangci.yml --timeout=30m
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
@@ -79,9 +92,14 @@ jobs:
     # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
     # core <1 s. The ARC runner pod is capped at 4 vCPU (750m request, so it can
     # be throttled lower) -> a cold scan there is ~8 min (it failed to finish
-    # install + two root scans in 9m44s). 30 = >=3x that cold scan, hard bound;
-    # a warm cache (go.sum unchanged) finishes the whole job in ~2 min.
-    timeout-minutes: 30
+    # install + two root scans in 9m44s). A warm cache (go.sum unchanged)
+    # finishes the whole job in ~2 min.
+    #
+    # 30 was not a hard enough bound: on the office worker that loses 1-3 cores
+    # to hypervisor steal, a cold run passed 30m and was killed (32.7 min wall,
+    # 2026-09-14). 45 is temporary headroom for that node, not the fix -- see
+    # the Lint job comment above for the pending hypervisor resize.
+    timeout-minutes: 45
     permissions:
       contents: read
       security-events: write
