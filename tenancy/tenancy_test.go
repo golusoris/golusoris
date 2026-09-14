@@ -139,6 +139,31 @@ func TestSubdomainExtractor(t *testing.T) {
 	}
 }
 
+func TestRequireFromContext_present(t *testing.T) {
+	t.Parallel()
+	acme := tenancy.Tenant{ID: "t1", Slug: "acme", Plan: "pro"}
+	var (
+		got    tenancy.Tenant
+		gotErr error
+	)
+	handler := tenancy.Middleware(tenancy.HeaderExtractor("X-Tenant-ID"), newStore(acme))(
+		http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			got, gotErr = tenancy.RequireFromContext(r.Context())
+		}),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-Tenant-Id", "t1")
+	handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	if gotErr != nil {
+		t.Fatalf("RequireFromContext behind Middleware: %v", gotErr)
+	}
+	if got.ID != acme.ID || got.Slug != acme.Slug || got.Plan != acme.Plan {
+		t.Fatalf("tenant = %+v, want %+v", got, acme)
+	}
+}
+
 func TestRequireFromContext_missing(t *testing.T) {
 	t.Parallel()
 	_, err := tenancy.RequireFromContext(context.Background())

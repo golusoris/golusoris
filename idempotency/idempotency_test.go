@@ -5,14 +5,31 @@
 package idempotency_test
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/idempotency"
 )
+
+// failingStore never finds a key and fails every Save with err.
+type failingStore struct{ err error }
+
+func (failingStore) Find(context.Context, string) (idempotency.CachedResponse, bool, error) {
+	return idempotency.CachedResponse{}, false, nil
+}
+
+func (s failingStore) Save(context.Context, string, idempotency.CachedResponse, time.Duration) error {
+	return s.err
+}
 
 func handler(body string, code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -163,5 +180,30 @@ func TestMiddleware_5xxNotCached(t *testing.T) {
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("5xx should not be cached: got %d calls", calls.Load())
+	}
+}
+
+// TestMiddleware_saveFailure proves a Store.Save error neither blocks the
+// response nor is dropped: the handler's reply is delivered and the failure is
+// logged on Options.Logger.
+func TestMiddleware_saveFailure(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	h := idempotency.Middleware(
+		failingStore{err: errors.New("disk full")},
+		idempotency.Options{Logger: logger},
+	)(handler("created", http.StatusCreated))
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Idempotency-Key", "key-1")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusCreated || rw.Body.String() != "created" {
+		t.Fatalf("response not delivered: %d %q", rw.Code, rw.Body.String())
+	}
+	if got := logs.String(); !strings.Contains(got, "idempotency: save response") || !strings.Contains(got, "disk full") {
+		t.Fatalf("save failure not logged: %q", got)
 	}
 }
