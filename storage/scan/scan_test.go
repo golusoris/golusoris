@@ -47,6 +47,16 @@ func TestNoopScanner_DrainError(t *testing.T) {
 	}
 }
 
+// TestErrUnsupported_WrapsStdlib pins the documented contract that the
+// non-unix sentinel is recognisable through the stdlib errors.ErrUnsupported
+// on every platform, not only where the clamd stub is compiled.
+func TestErrUnsupported_WrapsStdlib(t *testing.T) {
+	t.Parallel()
+	if !errors.Is(scan.ErrUnsupported, errors.ErrUnsupported) {
+		t.Fatalf("scan.ErrUnsupported = %v, want it to wrap errors.ErrUnsupported", scan.ErrUnsupported)
+	}
+}
+
 func newNoopForTest(t *testing.T) scan.Scanner {
 	t.Helper()
 	return scan.NewNoopScanner(discardLogger(t))
