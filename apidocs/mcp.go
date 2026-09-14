@@ -15,8 +15,6 @@ import (
 	"regexp"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
-
-	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // MCP server built on the official Go SDK
@@ -103,10 +101,19 @@ func proxyHandler(opts Options, tool Tool) mcp.ToolHandler {
 			return toolError("request failed: " + err.Error()), nil
 		}
 		// Closure rather than a bare defer so bodyclose sees the Body reach a
-		// closer.
-		defer func() { gerr.CloseInto(resp.Body, &err, "apidocs: close response body") }()
+		// closer. A close failure is reported like every other failure in this
+		// handler — as an IsError tool result. Returning it as the handler's
+		// error would make the go-sdk emit a JSON-RPC protocol error instead.
+		defer func() {
+			if cerr := resp.Body.Close(); cerr != nil && err == nil {
+				res = toolError("apidocs: close response body: " + cerr.Error())
+			}
+		}()
 
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return toolError("read response: " + err.Error()), nil
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{
 				Text: fmt.Sprintf("HTTP %d\n%s", resp.StatusCode, string(bodyBytes)),

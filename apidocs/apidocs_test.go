@@ -6,6 +6,7 @@ package apidocs_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,6 +58,13 @@ paths:
 
 func mount(t *testing.T, baseURL string) chi.Router {
 	t.Helper()
+	return mountWith(t, baseURL, nil)
+}
+
+// mountWith is mount with an explicit outbound client for the /mcp proxy
+// (nil keeps http.DefaultClient).
+func mountWith(t *testing.T, baseURL string, hc *http.Client) chi.Router {
+	t.Helper()
 	r := chi.NewRouter()
 	if err := apidocs.Mount(r, apidocs.Options{
 		Title:         "Example",
@@ -64,6 +72,7 @@ func mount(t *testing.T, baseURL string) chi.Router {
 		BaseURL:       baseURL,
 		ServerName:    "example",
 		ServerVersion: "0.0.1",
+		HTTPClient:    hc,
 	}); err != nil {
 		t.Fatalf("Mount: %v", err)
 	}
@@ -123,7 +132,14 @@ func TestOpenAPISpecServedAtCorrectPath(t *testing.T) {
 // an MCP client over the streamable-HTTP transport, returning the live session.
 func mcpSession(t *testing.T, baseURL string) *mcp.ClientSession {
 	t.Helper()
-	srv := httptest.NewServer(mount(t, baseURL))
+	return mcpSessionWith(t, baseURL, nil)
+}
+
+// mcpSessionWith is mcpSession with an explicit outbound client for the
+// tools/call proxy.
+func mcpSessionWith(t *testing.T, baseURL string, hc *http.Client) *mcp.ClientSession {
+	t.Helper()
+	srv := httptest.NewServer(mountWith(t, baseURL, hc))
 	t.Cleanup(srv.Close)
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp"}, nil)
@@ -214,6 +230,62 @@ func TestMCPToolsCallPostsBody(t *testing.T) {
 	}
 	if body := gotBody.Load().(string); !strings.Contains(body, `"widget"`) {
 		t.Errorf("upstream body = %q", body)
+	}
+}
+
+// roundTripperFunc adapts a func to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// failingBody is an empty response body whose Read or Close fails on demand.
+type failingBody struct {
+	readErr, closeErr error
+}
+
+func (b failingBody) Read([]byte) (int, error) {
+	if b.readErr != nil {
+		return 0, b.readErr
+	}
+	return 0, io.EOF
+}
+
+func (b failingBody) Close() error { return b.closeErr }
+
+// TestMCPToolsCallBodyFailures proves that a failed body read or close is
+// reported as an IsError tool result — never as a JSON-RPC protocol error and
+// never as a silently truncated reply.
+func TestMCPToolsCallBodyFailures(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		body failingBody
+		want string
+	}{
+		{name: "read", body: failingBody{readErr: errors.New("boom-read")}, want: "read response: boom-read"},
+		{name: "close", body: failingBody{closeErr: errors.New("boom-close")}, want: "close response body: boom-close"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			hc := &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: http.StatusOK, Header: http.Header{}, Body: tc.body}, nil
+			})}
+			cs := mcpSessionWith(t, "http://upstream.test", hc)
+			res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+				Name:      "getEcho",
+				Arguments: map[string]any{"id": "abc"},
+			})
+			if err != nil {
+				t.Fatalf("call tool: unexpected protocol error: %v", err)
+			}
+			if !res.IsError {
+				t.Errorf("IsError=false, want tool error: %+v", res.Content)
+			}
+			if !resultContains(res, tc.want) {
+				t.Errorf("result content = %+v, want substring %q", res.Content, tc.want)
+			}
+		})
 	}
 }
 
