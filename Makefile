@@ -64,6 +64,10 @@ compile-context-verify: ## assert vendor agent-context files match AGENTS.md
 capabilities-check: ## capabilities.yaml ↔ tree drift guard
 	$(GO) test -count=1 -run 'TestCapabilities' .
 
+.PHONY: dedupe-scan
+dedupe-scan: ## praetor HISS-19 duplicate-block gate (Reuse Before Writing)
+	$(STANDARDSCTL) dedupe scan .
+
 .PHONY: verify-all
-verify-all: build-all ci-all capabilities-check compile-context-verify audit reuse-lint ## the universal verification gate
+verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
