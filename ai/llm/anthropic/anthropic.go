@@ -171,20 +171,8 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 	scanner := bufio.NewScanner(resp.Body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
 	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
-		}
-		data := strings.TrimPrefix(line, "data: ")
-		if data == "" || data == "[DONE]" {
-			continue
-		}
-		var ev streamEvent
-		if err := json.Unmarshal([]byte(data), &ev); err != nil {
-			continue
-		}
-		if ev.Type == "content_block_delta" && ev.Delta.Type == "text_delta" && ev.Delta.Text != "" {
-			ch <- llm.Chunk{Content: ev.Delta.Text}
+		if text, ok := textDelta(scanner.Text()); ok {
+			ch <- llm.Chunk{Content: text}
 		}
 	}
 	// A dropped connection, a cancelled ctx or an over-long line ends
@@ -193,6 +181,26 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 		return fmt.Errorf("anthropic: stream: %w", scanErr)
 	}
 	return nil
+}
+
+// textDelta reports the text carried by one SSE line. Only a
+// content_block_delta event with a non-empty text_delta yields ok; a line
+// without the "data: " prefix, the [DONE] sentinel, an unparsable payload
+// and any other event type are all skipped, exactly as the stream loop
+// used to skip them inline.
+func textDelta(line string) (string, bool) {
+	data, found := strings.CutPrefix(line, "data: ")
+	if !found || data == "" || data == "[DONE]" {
+		return "", false
+	}
+	var ev streamEvent
+	if err := json.Unmarshal([]byte(data), &ev); err != nil {
+		return "", false
+	}
+	if ev.Type != "content_block_delta" || ev.Delta.Type != "text_delta" {
+		return "", false
+	}
+	return ev.Delta.Text, ev.Delta.Text != ""
 }
 
 // Embed implements [llm.Client]. Anthropic does not expose an
