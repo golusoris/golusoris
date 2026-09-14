@@ -95,6 +95,8 @@ jobs:
   ci:
     uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
     with:
+      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
+      working-directory: .                  # dir holding go.mod; "." for a root module
       go-version-file: go.mod
       coverage-threshold: 70          # 85 for security-critical packages
       module-path: github.com/myorg/myapp
@@ -109,10 +111,12 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 
 | Input | Default | Purpose |
 |---|---|---|
-| `go-version-file` | `go.mod` | where the Go version is resolved from |
+| `runs-on` | `arc-cauda-golusoris-golusoris` | self-hosted runner-set label every job runs on; set to your own app's ARC label |
+| `working-directory` | `.` | directory holding your module's go.mod, relative to the repo root; set for apps whose module is not at the repo root |
+| `go-version-file` | `go.mod` | where the Go version is resolved from — **relative to the repo root**, not `working-directory` (see the input's own description in `ci-go.yml`); a non-root module must pass e.g. `<working-directory>/go.mod` |
 | `coverage-threshold` | `70` | minimum total coverage %; `0` skips the check |
 | `golangci-version` | `v2.12.2` | golangci-lint version to install |
-| `golangci-config` | *(empty)* | path to a shared ruleset; empty = auto-discover the app's `.golangci.yml` |
+| `golangci-config` | *(empty)* | path to a shared ruleset, relative to `working-directory`; empty = auto-discover the app's `.golangci.yml` in that same directory |
 | `module-path` | *(empty)* | module path for the apidiff check, e.g. `github.com/myorg/myapp` |
 | `needs-docker` | `true` | verify Docker before tests; set `false` if no testcontainers |
 | `container` | *(empty)* | image to run the Go jobs in (cgo/system-lib builds) |
@@ -142,6 +146,7 @@ jobs:
   release:
     uses: golusoris/golusoris/.github/workflows/release-go.yml@main
     with:
+      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
       image-name: ghcr.io/myorg/myapp     # required
       goreleaser-config: tools/.goreleaser.yml
     secrets: inherit                       # COSIGN_PASSWORD is optional

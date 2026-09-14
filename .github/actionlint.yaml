@@ -1,0 +1,14 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# actionlint config: https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# actionlint has no way to know about our ARC self-hosted runner-set labels,
+# so it flags every `runs-on: arc-cauda-golusoris-golusoris` as an unknown
+# label (the `runner-label` check). Declaring it here is the documented fix.
+# `runs-on: ${{ inputs.runs-on }}` (an expression) is unaffected either way —
+# actionlint only checks literal label strings.
+self-hosted-runner:
+  labels:
+    - arc-cauda-golusoris-golusoris
