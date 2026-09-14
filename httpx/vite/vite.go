@@ -92,18 +92,33 @@ func (m *Manifest) CSS(src string) []string {
 	return collectCSS(m.entries, src, map[string]bool{})
 }
 
+// collectCSS walks src and its transitive imports depth-first (pre-order, in
+// manifest import order) and returns every CSS file once. It uses an explicit
+// stack instead of recursion (HISS-01); every visited entry pushes each of its
+// imports once, so the loop is bounded by the number of import edges in the
+// manifest plus one (HISS-02), whatever cycles the manifest contains.
 func collectCSS(entries map[string]Entry, src string, seen map[string]bool) []string {
-	if seen[src] {
-		return nil
+	limit := 1
+	for _, e := range entries {
+		limit += len(e.Imports)
 	}
-	seen[src] = true
-	e, ok := entries[src]
-	if !ok {
-		return nil
-	}
-	out := append([]string(nil), e.CSS...)
-	for _, imp := range e.Imports {
-		out = append(out, collectCSS(entries, imp, seen)...)
+	var out []string
+	stack := []string{src}
+	for i := 0; i < limit && len(stack) > 0; i++ {
+		cur := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[cur] {
+			continue
+		}
+		seen[cur] = true
+		e, ok := entries[cur]
+		if !ok {
+			continue
+		}
+		out = append(out, e.CSS...)
+		for j := len(e.Imports) - 1; j >= 0; j-- { // reverse push keeps import order
+			stack = append(stack, e.Imports[j])
+		}
 	}
 	return out
 }

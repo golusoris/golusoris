@@ -78,19 +78,30 @@ func funcName(fn *ast.FuncDecl) string {
 	return recvTypeName(fn.Recv.List[0].Type) + "." + fn.Name.Name
 }
 
+// recvTypeNameMaxDepth bounds the unwrapping loop (HISS-02): a receiver is
+// at most a pointer to a generic instantiation, so a handful of levels is
+// already generous; deeper shapes are not valid receivers and yield "?".
+const recvTypeNameMaxDepth = 8
+
+// recvTypeName returns the identifier under any pointer, index or index-list
+// wrapping of a receiver type expression, or "?" for shapes Go does not allow
+// as receivers. It unwraps iteratively (HISS-01: no recursion).
 func recvTypeName(expr ast.Expr) string {
-	switch t := expr.(type) {
-	case *ast.StarExpr:
-		return recvTypeName(t.X)
-	case *ast.Ident:
-		return t.Name
-	case *ast.IndexExpr:
-		return recvTypeName(t.X)
-	case *ast.IndexListExpr:
-		return recvTypeName(t.X)
-	default:
-		return "?"
+	for range recvTypeNameMaxDepth {
+		switch t := expr.(type) {
+		case *ast.StarExpr:
+			expr = t.X
+		case *ast.IndexExpr:
+			expr = t.X
+		case *ast.IndexListExpr:
+			expr = t.X
+		case *ast.Ident:
+			return t.Name
+		default:
+			return "?"
+		}
 	}
+	return "?"
 }
 
 // branchWeight returns the cyclomatic contribution of n.

@@ -1,19 +1,26 @@
 {
-  "name": "golusoris",
+  "name": "golusoris/golusoris",
   "build": {
-    "dockerfile": "../docker/dev/Dockerfile",
-    "context": ".."
+    "dockerfile": "Dockerfile.praetor",
+    "context": "."
   },
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {
-      "installZsh": false,
-      "upgradePackages": true
-    },
-    "ghcr.io/devcontainers/features/go:1": {
-      "version": "1.27"
-    }
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/go:1": {}
   },
   "customizations": {
+    "praetor": {
+      "bootstrap": {
+        "version": 1,
+        "state": "source-bundle",
+        "builderImage": "docker.io/library/golang:1.27-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125",
+        "baseImage": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae",
+        "sourceSHA256": "sha256:4bf808aa37d466d7556016c37abd09dae1859b386c0fa4918a6f3a41673a5141",
+        "archiveSHA256": "sha256:abc4673ce99ff915ff754a7b4cb53833d16a6b5760ea27c035288930b47cb0f1",
+        "archiveParts": 3,
+        "dockerfileSHA256": "sha256:76023d4ced039d0c41d89ee220885827fdd11a46f423e447926bb2afb00d03d6"
+      }
+    },
     "vscode": {
       "extensions": [
         "GitHub.vscode-pull-request-github",
@@ -36,5 +43,5 @@
     }
   },
   "remoteUser": "vscode",
-  "postCreateCommand": "go run ./cmd/standardsctl compile-context \u0026\u0026 make verify-all"
+  "postCreateCommand": "export PATH=\"/usr/local/bin:$PATH\"; /usr/local/bin/praetorctl compile-context && /usr/bin/make verify-all"
 }
