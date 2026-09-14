@@ -4,8 +4,9 @@ version: "2"
 
 run:
   # Sized to the measured cold-cache cost of the root module (~810 CPU-s) on a
-  # 750m-CPU-guaranteed ARC runner; see the Lint job comment in ci.yml.
-  timeout: 20m
+  # 750m-CPU-guaranteed ARC runner, plus headroom for the one office worker
+  # losing cores to hypervisor steal; see the Lint job comment in ci.yml.
+  timeout: 30m
   go: "1.27"
   tests: true
   allow-parallel-runners: true
