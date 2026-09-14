@@ -138,7 +138,7 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// the trusted value copied out of config — never the raw query param.
 	// This gives CodeQL a clear allow-list sanitizer for the open-redirect
 	// taint flow into http.Redirect below.
-	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri"))
+	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri")) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- exact-match allow-list of registered URIs
 	if redirect == "" {
 		http.Error(w, "redirect_uri not registered", http.StatusBadRequest)
 		return

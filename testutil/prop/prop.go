@@ -35,7 +35,7 @@ package prop
 
 import (
 	"hash/fnv"
-	"math/rand"
+	"math/rand" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- seeded PRNG for reproducible property tests, not security
 	"testing"
 
 	"github.com/leanovate/gopter"

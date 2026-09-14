@@ -133,7 +133,7 @@ func (m *Manager) Save(w http.ResponseWriter, s *Session) error {
 	if err := m.store.Save(context.Background(), s.ID, s.data, m.opts.TTL); err != nil {
 		return fmt.Errorf("session: save: %w", err)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
 		Name:     m.opts.CookieName,
 		Value:    s.ID,
 		Path:     m.opts.Path,

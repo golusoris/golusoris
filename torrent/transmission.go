@@ -57,7 +57,7 @@ func newHTTPClient(timeout time.Duration, insecure bool) *http.Client {
 	transport := http.DefaultTransport
 	if insecure {
 		// #nosec G402 -- opt-in InsecureSkipVerify is test-only config, off by default.
-		transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+		transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}} // nosemgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
 	}
 	return &http.Client{Timeout: timeout, Transport: transport}
 }
