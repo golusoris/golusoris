@@ -6,8 +6,9 @@
 # API and publishes to the OpenSSF results endpoint keyed on a GitHub
 # repository, so 'Scorecard analysis' fails on every run here. Left in place
 # rather than deleted so the intent survives if these repositories ever return
-# to GitHub; triggers reduced to manual only so it stops consuming the shared
-# self-hosted runner, which also builds the cluster's container images.
+# to GitHub; triggers reduced to manual and reusable-call only so it stops
+# consuming the shared self-hosted runner, which also builds the cluster's
+# container images.
 # OSSF Scorecard — runs on the framework itself AND is callable as a
 # reusable workflow by downstream apps.
 #
@@ -23,6 +24,9 @@ concurrency:
 
 on:
   workflow_dispatch:
+  # Kept callable so downstream apps generated from template/ can pin it;
+  # a workflow_call trigger never runs on its own in this repository.
+  workflow_call:
 
 permissions:
   contents: read
