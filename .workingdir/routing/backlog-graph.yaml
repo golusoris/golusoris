@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 version: 1
-updated: '2026-09-15T00:40:00+02:00'
+updated: '2026-09-15T00:55:00+02:00'
 nodes:
 - id: N1
   title: '#447 CI green on 6255296 (rerun attempt 2 in flight)'
@@ -328,3 +328,42 @@ nodes:
     t: none
     w: 20m
   note: 'found while vetting Renovate #483 (only in-repo consumer of the refs is template/ itself; GitHub code search shows no external caller). Fix: codeql job dropped from the template (GitHub default setup replaces it), workflow_call restored on scorecard.yml (never self-triggers). Ships as a 0.9.1 patch; #483 closed so Renovate re-proposes the 0.9.1 SHA.'
+- id: N33
+  title: '#431 epic task 2/5 Decoupling & Config Externalization: hardcoded localhost / in-cluster DNS URLs, secrets behind env or Vault, module-level import cycles'
+  status: ready
+  blocked_by: []
+  route: sonnet
+  cost:
+    t: cheap
+    w: 2-4h
+  note: 'Unblocked since #430 landed (2026-09-14). Start deterministic: grep for localhost/127.0.0.1/.svc.cluster.local and literal credentials; Go rejects package cycles, so "circular imports" can only mean root<->core module edges (check the go.mod require graph). Frontier only for the Vault boundary decision.'
+- id: N34
+  title: '#432 epic task 3/5 Framework Dependency Substitution: swap external deps for golusoris kits, reconcile .needs.yaml'
+  status: ready
+  blocked_by:
+  - N33
+  route: haiku+sonnet
+  cost:
+    t: cheap
+    w: 3-6h
+  note: 'Inputs exist: docs/FLEET_GO_DEMAND.md (N14) lists 58 gaps, 51 vmafx-only. For golusoris itself substitution is self-referential, so the deliverable is capability coverage plus the ~30 .needs.yaml non-goals (N14 item 9), not import rewrites.'
+- id: N35
+  title: '#433 epic task 4/5 Gated Verification & Ed25519 receipt: standardsctl gate run, 5 gates, signed Exit-0 receipt'
+  status: waiting-upstream
+  blocked_by:
+  - N34
+  route: user
+  cost:
+    t: none
+    w: '-'
+  note: 'praetor 51ceede (2026-09-15) has no `gate` or `receipt` subcommand (standardsctl --help); cannot start until praetor ships them. Nearest proxy today is make verify-all + standardsctl audit, green except the devcontainer gate.'
+- id: N36
+  title: '#434 epic task 5/5 Praetor activation & lockdown: standardsctl sync rulesets, strict-zero-debt, paperclip harness, runner routing policy'
+  status: ready
+  blocked_by:
+  - N35
+  route: sonnet
+  cost:
+    t: frontier
+    w: 2-3h
+  note: 'Partly delivered out of order: rulesets already strict (CI success / PR title / Analyze (go), linear history), baseline at 8 (strict-zero-debt needs 0), `sync` and `paperclip` exist in praetor HEAD. Runner routing policy is the cluster-agent lane (lusoris/k8s), not golusoris.'
