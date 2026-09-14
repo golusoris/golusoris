@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 version: 1
-updated: '2026-09-15T04:25:00+02:00'
+updated: '2026-09-15T00:40:00+02:00'
 nodes:
 - id: N1
   title: '#447 CI green on 6255296 (rerun attempt 2 in flight)'
@@ -318,3 +318,13 @@ nodes:
     t: none
     w: 10m
   note: ledger synced post-release; main CI green-ness tracked by the push:main runs now that the Harbor mirror is live
+- id: N32
+  title: 'template/ pins reusable workflows that v0.9.0 no longer publishes: codeql.yml deleted (edbee31) and scorecard.yml lost workflow_call (6839f0b); Renovate #483 would bump downstream pins onto the broken SHA'
+  status: done
+  blocked_by:
+  - N30
+  route: deterministic
+  cost:
+    t: none
+    w: 20m
+  note: 'found while vetting Renovate #483 (only in-repo consumer of the refs is template/ itself; GitHub code search shows no external caller). Fix: codeql job dropped from the template (GitHub default setup replaces it), workflow_call restored on scorecard.yml (never self-triggers). Ships as a 0.9.1 patch; #483 closed so Renovate re-proposes the 0.9.1 SHA.'
