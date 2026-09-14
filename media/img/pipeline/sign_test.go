@@ -89,11 +89,18 @@ func TestVerify_tampered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}
-	// Flip the byte just before the dot to tamper the payload.
+	// Replace the byte just before the dot with a different base64url
+	// alphabet character so the payload still decodes and only the MAC check
+	// fails. (Flipping a bit can leave the alphabet, e.g. 'z' -> '{', which
+	// decodes as ErrBadToken instead and made this test time-dependent.)
 	b := []byte(tok)
 	for i := range b {
 		if b[i] == '.' {
-			b[i-1] ^= 0x01
+			if b[i-1] == 'A' {
+				b[i-1] = 'B'
+			} else {
+				b[i-1] = 'A'
+			}
 			break
 		}
 	}
