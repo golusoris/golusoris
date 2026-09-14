@@ -88,3 +88,38 @@ func TestVerifyPKCE_unknown(t *testing.T) {
 		t.Error("expected false for unknown method")
 	}
 }
+
+func TestPickRegistered_found(t *testing.T) {
+	t.Parallel()
+	if got := pickRegistered([]string{"a", "b"}, "b"); got != "b" {
+		t.Errorf("expected registered entry %q, got %q", "b", got)
+	}
+}
+
+func TestPickRegistered_notFound(t *testing.T) {
+	t.Parallel()
+	if got := pickRegistered([]string{"a", "b"}, "c"); got != "" {
+		t.Errorf("expected empty string for unregistered candidate, got %q", got)
+	}
+}
+
+func TestPickRegistered_prefixIsNotAMatch(t *testing.T) {
+	t.Parallel()
+	if got := pickRegistered([]string{"http://x/cb"}, "http://x/cb/"); got != "" {
+		t.Errorf("expected empty string for a prefix-only match, got %q", got)
+	}
+}
+
+func TestPickRegistered_emptyRegistered(t *testing.T) {
+	t.Parallel()
+	if got := pickRegistered(nil, "a"); got != "" {
+		t.Errorf("expected empty string for nil registered list, got %q", got)
+	}
+}
+
+func TestPickRegistered_emptyCandidate(t *testing.T) {
+	t.Parallel()
+	if got := pickRegistered([]string{"a"}, ""); got != "" {
+		t.Errorf("expected empty string for empty candidate, got %q", got)
+	}
+}

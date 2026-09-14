@@ -198,7 +198,9 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		v.Set("state", state)
 	}
 	u.RawQuery = v.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	// Semgrep's taint-mode open-redirect rule reports at this sink, not at the
+	// pickRegistered allow-list above; TestServer_AuthorizeRedirectAllowList pins the invariant.
+	http.Redirect(w, r, u.String(), http.StatusFound) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- u is built from the exact-match allow-listed entry of client.RedirectURIs (pickRegistered), never the raw redirect_uri
 }
 
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {

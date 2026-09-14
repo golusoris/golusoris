@@ -154,7 +154,7 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 	if delErr := m.store.Delete(context.Background(), cookie.Value); delErr != nil && !isNotFound(delErr) {
 		return fmt.Errorf("session: destroy: %w", delErr)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
 		Name:     m.opts.CookieName,
 		Value:    "",
 		Path:     m.opts.Path,
