@@ -23,7 +23,8 @@ import (
 // InitCmd returns the `golusoris init <name>` command.
 func InitCmd() *cobra.Command {
 	var module string
-	cmd := clikit.Command("init", "Scaffold a new golusoris application",
+	cmd := clikit.Command(
+		"init", "Scaffold a new golusoris application",
 		clikit.WithRunE(func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return errors.New("usage: golusoris init <app-name>")
@@ -81,7 +82,7 @@ func writeTemplate(path, tmplStr string, data any) (err error) {
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)
 	}
-	f, err := os.Create(path) //nolint:gosec // G304: scaffold output path is operator-specified // #nosec G304
+	f, err := os.Create(path) // #nosec G304 -- scaffold output path is operator-specified
 	if err != nil {
 		return fmt.Errorf("create %s: %w", path, err)
 	}

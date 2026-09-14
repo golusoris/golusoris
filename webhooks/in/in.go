@@ -23,7 +23,7 @@ package in
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/sha1" //nolint:gosec // SHA-1 required by GitHub webhook spec // #nosec G505
+	"crypto/sha1" // #nosec G505 -- SHA-1 required by GitHub webhook spec
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"

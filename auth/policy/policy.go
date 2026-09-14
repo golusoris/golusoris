@@ -14,7 +14,7 @@ package policy
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec // sha1 is required by the HIBP k-anonymity API. // #nosec G505
+	"crypto/sha1" // #nosec G505 -- sha1 is required by the HIBP k-anonymity API.
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -99,7 +99,7 @@ func (p *Policy) Score(password string, userInputs ...string) int {
 // hibpCount queries the HaveIBeenPwned k-anonymity API and returns the
 // number of breaches password appears in (0 if none).
 func (p *Policy) hibpCount(ctx context.Context, password string) (count int, err error) {
-	sum := sha1.Sum([]byte(password)) //nolint:gosec // HIBP requires sha1. // #nosec G401 // nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-sha1 -- k-anonymity protocol mandates SHA-1
+	sum := sha1.Sum([]byte(password)) // #nosec G401 -- HIBP requires sha1. // nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-sha1 (k-anonymity protocol mandates SHA-1)
 	hash := strings.ToUpper(hex.EncodeToString(sum[:]))
 	prefix, suffix := hash[:5], hash[5:]
 

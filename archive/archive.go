@@ -61,7 +61,7 @@ func Extract(ctx context.Context, src, destDir string) error {
 		}
 		defer f.Close() //nolint:errcheck
 
-		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640) //nolint:gosec // G304: archive extraction path validated by caller // #nosec G304,G302
+		out, createErr := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o640) // #nosec G304,G302 -- archive extraction path validated by caller
 		if createErr != nil {
 			return fmt.Errorf("archive: create %s: %w", dest, createErr)
 		}

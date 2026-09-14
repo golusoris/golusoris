@@ -16,7 +16,8 @@ import (
 
 // BumpCmd returns the `golusoris bump <version>` command.
 func BumpCmd() *cobra.Command {
-	return clikit.Command("bump", "Bump golusoris to a specific version in the current module",
+	return clikit.Command(
+		"bump", "Bump golusoris to a specific version in the current module",
 		clikit.WithRunE(func(cmd *cobra.Command, args []string) error {
 			version := "latest"
 			if len(args) > 0 {
@@ -36,7 +37,7 @@ func bumpGolusoris(cmd *cobra.Command, version string) error {
 	target := pkg + "@" + version
 
 	fmt.Printf("Running: go get %s\n", target)
-	c := exec.CommandContext(ctx, "go", "get", target) //nolint:gosec // G204: version string comes from CLI arg, not user input // #nosec G204
+	c := exec.CommandContext(ctx, "go", "get", target) // #nosec G204 -- version string comes from CLI arg, not user input
 	c.Stdout = nil
 	out, err := c.CombinedOutput()
 	if err != nil {

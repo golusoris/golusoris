@@ -63,7 +63,7 @@ jobs:
     # leaves the next run cold too. One green run warms it to ~2 min.
     #
     # Job timeout = setup (~3 min) + 2 x 30m, rounded up. Keep in sync with
-    # run.timeout in tools/golangci.yml and the Makefile _ci-module target.
+    # run.timeout in .golangci.yml and the Makefile _ci-module target.
     timeout-minutes: 65
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -76,13 +76,13 @@ jobs:
           # Pinned for reproducible CI — bumping golangci-lint (and adopting any
           # new linter findings) is a deliberate, reviewed change, not a float.
           version: v2.13.2
-          args: --config=tools/golangci.yml --timeout=30m
+          args: --config=.golangci.yml --timeout=30m
       - name: Lint core module
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.13.2
           working-directory: core
-          args: --config=../tools/golangci.yml --timeout=30m
+          args: --config=../.golangci.yml --timeout=30m
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
@@ -118,17 +118,19 @@ jobs:
           # name: "")` and exits 1 with zero findings. Populate the cache first.
           go mod download
           (cd core && go mod download)
-          # Path exclusions live in ONE file shared with `make ci-all` (Makefile
-          # _ci-module) so the two gates cannot drift; see the file's header.
-          EXCLUDE_RULES=$(grep -v -e '^#' -e '^$' tools/gosec.exclude-rules | paste -sd ';' -)
+          # .gosec.json is the ONE config shared with `make ci-all` (Makefile
+          # _ci-module) and praetor's own `gosec -conf .gosec.json` gate, so the
+          # three cannot drift. Path-scoped suppressions were retired in favor of
+          # targeted inline `// #nosec Gxxx -- reason` comments at each flagged
+          # line (see git history for the exclusion list this replaced).
           # One root scan: `-out` writes the SARIF for code scanning, `-stdout
           # -verbose text` prints the findings to the log, and the exit code
           # still gates (gosec exits 1 on any unsuppressed issue or build error;
           # never add `-quiet`: it skips writing the SARIF when clean).
-          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" \
+          gosec -conf .gosec.json -exclude-generated \
             -fmt sarif -out gosec.sarif -stdout -verbose text ./...
           # core/ is a separate module (not reached by ./... above) and is held
-          # to the full rule set with no path exclusions.
+          # to the full rule set with no exclusions.
           (cd core && gosec -exclude-generated ./...)
       - name: Upload SARIF
         if: always()

@@ -56,7 +56,7 @@ func New(t *testing.T) *Properties {
 		t.Fatalf("hash test name: %v", err)
 	}
 	params := gopter.DefaultTestParameters()
-	params.Rng = rand.New(rand.NewSource(int64(h.Sum64()))) //nolint:gosec // G404: test RNG not crypto; G115: conversion is safe, Sum64 fits int64 range in practice // #nosec G115,G404
+	params.Rng = rand.New(rand.NewSource(int64(h.Sum64()))) // #nosec G115,G404 -- test RNG not crypto; conversion is safe, Sum64 fits int64 range in practice
 	return gopter.NewProperties(params)
 }
 

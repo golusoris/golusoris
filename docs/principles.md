@@ -29,7 +29,7 @@ Reference: <https://spinroot.com/gerard/pdf/P10.pdf>
 | 7 | Check every return value; check every parameter. | `errcheck` + `wrapcheck` + `nilerr` on. Errors wrapped with context via `gerr.Wrap` or `fmt.Errorf("pkg: op: %w", err)`. Exported funcs validate inputs at the boundary. |
 | 8 | Preprocessor limited to simple macros. | N/A in Go. `go generate` directives stay simple + declarative. No build tags for behaviour switches in production paths. |
 | 9 | Pointers restricted; one dereference per expression; no function pointers. | Soft: no multi-hop `*foo.bar.baz` chains. Small interfaces (≤5 methods) only, defined where consumed. No `unsafe` outside explicitly-reviewed performance code. |
-| 10 | Compile at most pedantic warning level. | `golangci.yml` is the gate. Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green**. `//nolint` requires a justification comment + PR review. |
+| 10 | Compile at most pedantic warning level. | `.golangci.yml` is the gate. Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green**. `//nolint` requires a justification comment + PR review. |
 
 **Hard gates** (CI blocks on violation): rules 1, 2, 4, 7, 10.  
 **Guidance** (cite rule ID in review): rules 3, 5, 6, 9.  
@@ -151,7 +151,7 @@ References:
 | Tool / Standard | Enforcement |
 |---|---|
 | **EditorConfig** | `.editorconfig` at repo root; tabs/spaces/line endings consistent across editors |
-| **gofumpt** | Stricter gofmt — configured in `tools/golangci.yml` |
+| **gofumpt** | Stricter gofmt — configured in `.golangci.yml` |
 | **gci** | Grouped imports: standard / external / `prefix(github.com/golusoris/golusoris)` |
 | **golines** | Line-length cap at 120 chars; long lines broken at safe points |
 | **Conventional Commits 1.0** | CI PR-title check; release-please reads commit history |

@@ -21,7 +21,7 @@ help: ## Show this help
 
 .PHONY: lint
 lint: ## golangci-lint run
-	$(GOLANGCI) run --config $(or $(GOLANGCI_CONFIG),tools/golangci.yml) $(PKG)
+	$(GOLANGCI) run --config $(or $(GOLANGCI_CONFIG),.golangci.yml) $(PKG)
 
 .PHONY: vuln
 vuln: ## govulncheck

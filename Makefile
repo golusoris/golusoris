@@ -15,15 +15,13 @@ REUSE        ?= reuse
 # web3/, …) build on demand and are not part of the default gate.
 MODULES := . core
 
-# Path-based gosec exclusions for the ROOT module, read from the same file CI
-# uses (.github/workflows/ci.yml, job "Security (gosec)") so `make ci-all` and
-# CI agree. core/ is scanned with no exclusions in both places. The path is
-# resolved against this Makefile (not CURDIR: ci-all re-invokes it with
-# -C core) and the value is expanded lazily, so the file is read only by the
-# root _ci-module recipe. A `#` inside a function call is literal since GNU
-# make 4.3; escaping it would hand grep a stray backslash (and a warning).
-GOSEC_EXCLUDE_FILE  := $(dir $(realpath $(firstword $(MAKEFILE_LIST))))tools/gosec.exclude-rules
-GOSEC_EXCLUDE_RULES  = $(shell grep -v -e '^#' -e '^$$' $(GOSEC_EXCLUDE_FILE) | paste -sd ';' -)
+# .gosec.json (repo root) is the ONE gosec config shared with CI
+# (.github/workflows/ci.yml, job "Security (gosec)") and praetor's own
+# `gosec -conf .gosec.json` gate, so `make ci-all`, CI, and the governance
+# gate cannot drift. core/ is scanned with no config (full rule set) in all
+# three places; the ROOT module's former path-scoped exclusions are now
+# targeted inline `// #nosec Gxxx -- reason` comments at each flagged line.
+GOSEC_CONFIG := $(CURDIR)/.gosec.json
 
 # Dependencies with a docs/upstream/ snapshot, by the module that pins them.
 UPSTREAM_ROOT_MODULES := go.uber.org/fx github.com/jackc/pgx/v5 github.com/ogen-go/ogen github.com/riverqueue/river  github.com/maypok86/otter/v2 github.com/redis/rueidis github.com/casbin/casbin/v3 github.com/go-webauthn/webauthn  go.opentelemetry.io/otel github.com/golang-migrate/migrate/v4 k8s.io/client-go github.com/go-chi/chi/v5  github.com/yuin/goldmark github.com/prometheus/client_golang github.com/testcontainers/testcontainers-go
@@ -36,9 +34,9 @@ ci-all: ## lint + sec + test in every gated module
 
 .PHONY: _ci-module
 _ci-module:
-	$(GOLANGCI) run --config $(CURDIR)/tools/golangci.yml --timeout=30m ./...
+	$(GOLANGCI) run --config $(CURDIR)/.golangci.yml --timeout=30m ./...
 	$(GOVULNCHECK) ./...
-	$(GOSEC) -quiet -exclude-generated $(if $(filter .,$(MOD)),--exclude-rules="$(GOSEC_EXCLUDE_RULES)",) ./...
+	$(GOSEC) -quiet -exclude-generated $(if $(filter .,$(MOD)),-conf $(GOSEC_CONFIG),) ./...
 	$(GO) test -race -count=1 -timeout=10m ./...
 
 .PHONY: build-all

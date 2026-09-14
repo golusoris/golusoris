@@ -24,7 +24,7 @@ Teams incoming webhook (legacy connector or Power Automate / Workflow).
 - Teams' legacy connector wire format uses `@type` / `@context` /
   `themeColor` — tagliatelle's snake-case rule doesn't apply. This
   package carries a linter exception via the file-level struct JSON
-  tags; add to `tools/golangci.yml` exclusions if tagliatelle starts
+  tags; add to `.golangci.yml` exclusions if tagliatelle starts
   complaining.
 - Microsoft announced the legacy connector will be sunset in favour of
   Workflow URLs, but MessageCard payloads remain supported by the

@@ -113,7 +113,7 @@ func (s *localScratch) Get(_ context.Context, id string) (scratchEntry, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(infoPath) //nolint:gosec // G304: id sanitized by idPath at the scratch boundary // #nosec G304
+	data, err := os.ReadFile(infoPath) // #nosec G304 -- id sanitized by idPath at the scratch boundary
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, tusd.ErrNotFound
@@ -215,7 +215,7 @@ func (e *localEntry) writeInfo() error {
 
 // writeFile (over)writes path with content, creating parent dirs as needed.
 func writeFile(path string, content []byte) (err error) {
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, scratchFilePerm) //nolint:gosec // G304: path built from sanitized id at scratch boundary // #nosec G304
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, scratchFilePerm) // #nosec G304 -- path built from sanitized id at scratch boundary
 	if err != nil {
 		return fmt.Errorf("tus: create scratch file: %w", err)
 	}
