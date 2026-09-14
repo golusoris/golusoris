@@ -21,7 +21,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -31,6 +30,7 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	tokenhash "github.com/golusoris/golusoris/hash"
 )
 
 const (
@@ -105,7 +105,7 @@ func (s *Service) IssueCodes(ctx context.Context, userID string, n int) ([]strin
 			return nil, err
 		}
 		raws[i] = raw
-		records[i] = Code{UserID: userID, Hash: s.hash(raw)}
+		records[i] = Code{UserID: userID, Hash: tokenhash.HMACSHA256(s.secret, []byte(raw))}
 	}
 	if err := s.codes.SaveBatch(ctx, records); err != nil {
 		return nil, fmt.Errorf("recovery: save codes: %w", err)
@@ -119,7 +119,7 @@ func (s *Service) VerifyCode(ctx context.Context, userID, raw string) error {
 	if s.codes == nil {
 		return errors.New("recovery: no code store configured")
 	}
-	hash := s.hash(raw)
+	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
 	all, err := s.codes.FindForUser(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("recovery: lookup: %w", err)
@@ -148,7 +148,7 @@ func (s *Service) IssueResetToken(ctx context.Context, userID string, ttl time.D
 	if err != nil {
 		return "", err
 	}
-	hash := s.hash(raw)
+	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
 	t := Token{
 		UserID:    userID,
 		Hash:      hash,
@@ -166,7 +166,7 @@ func (s *Service) VerifyResetToken(ctx context.Context, raw string) (string, err
 	if s.tokens == nil {
 		return "", errors.New("recovery: no token store configured")
 	}
-	hash := s.hash(raw)
+	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
 	t, err := s.tokens.Find(ctx, hash)
 	if err != nil {
 		return "", fmt.Errorf("%w: recovery: find: %w", gerr.Unauthorized("invalid reset token"), err)
@@ -181,12 +181,6 @@ func (s *Service) VerifyResetToken(ctx context.Context, raw string) (string, err
 		return "", fmt.Errorf("recovery: mark used: %w", useErr)
 	}
 	return t.UserID, nil
-}
-
-func (s *Service) hash(raw string) []byte {
-	h := hmac.New(sha256.New, s.secret)
-	h.Write([]byte(raw))
-	return h.Sum(nil)
 }
 
 // randomCode returns a 13-char base32 (uppercase, no padding) code.
