@@ -15,6 +15,8 @@ import (
 	"regexp"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // MCP server built on the official Go SDK
@@ -69,7 +71,7 @@ func newMCPHandler(opts Options) (http.Handler, error) {
 // proxyHandler forwards a tools/call invocation to the live API operation,
 // with two layers of SSRF sanitization on the constructed URL.
 func proxyHandler(opts Options, tool Tool) mcp.ToolHandler {
-	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, req *mcp.CallToolRequest) (res *mcp.CallToolResult, err error) {
 		if opts.BaseURL == "" {
 			return toolError("apidocs: BaseURL is unset; tool calls disabled"), nil
 		}
@@ -100,7 +102,9 @@ func proxyHandler(opts Options, tool Tool) mcp.ToolHandler {
 		if err != nil {
 			return toolError("request failed: " + err.Error()), nil
 		}
-		defer func() { _ = resp.Body.Close() }()
+		// Closure rather than a bare defer so bodyclose sees the Body reach a
+		// closer.
+		defer func() { gerr.CloseInto(resp.Body, &err, "apidocs: close response body") }()
 
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return &mcp.CallToolResult{

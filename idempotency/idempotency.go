@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -51,6 +52,9 @@ type Options struct {
 	// Required, when true, rejects requests without the header (HTTP 400).
 	// Default: false (header is optional; requests without it pass through).
 	Required bool
+	// Logger receives store-save and replay-write failures (the response is
+	// still delivered either way). nil falls back to slog.Default().
+	Logger *slog.Logger
 }
 
 func (o *Options) defaults() {
@@ -59,6 +63,9 @@ func (o *Options) defaults() {
 	}
 	if o.TTL == 0 {
 		o.TTL = 24 * time.Hour
+	}
+	if o.Logger == nil {
+		o.Logger = slog.Default()
 	}
 }
 
@@ -92,7 +99,7 @@ func Middleware(store Store, opts Options) func(http.Handler) http.Handler {
 				return
 			}
 			if found {
-				replay(w, cached)
+				replay(r.Context(), w, cached, opts.Logger)
 				return
 			}
 
@@ -108,23 +115,29 @@ func Middleware(store Store, opts Options) func(http.Handler) http.Handler {
 			// Only cache successful (2xx) and client-error (4xx) responses —
 			// don't cache 5xx so transient failures can be retried.
 			if resp.StatusCode < 500 {
-				_ = store.Save(r.Context(), key, resp, opts.TTL)
+				if err := store.Save(r.Context(), key, resp, opts.TTL); err != nil {
+					opts.Logger.WarnContext(r.Context(), "idempotency: save response", slog.Any("err", err))
+				}
 			}
 
 			// Write captured response to the real ResponseWriter.
-			replay(w, resp)
+			replay(r.Context(), w, resp, opts.Logger)
 		})
 	}
 }
 
-func replay(w http.ResponseWriter, r CachedResponse) {
+// replay writes a captured response onto w. A write error only means the
+// client went away — headers are already sent, so it is logged, not returned.
+func replay(ctx context.Context, w http.ResponseWriter, r CachedResponse, logger *slog.Logger) {
 	for k, vs := range r.Header {
 		for _, v := range vs {
 			w.Header().Add(k, v)
 		}
 	}
 	w.WriteHeader(r.StatusCode)
-	_, _ = w.Write(r.Body)
+	if _, err := w.Write(r.Body); err != nil {
+		logger.DebugContext(ctx, "idempotency: write response", slog.Any("err", err))
+	}
 }
 
 // responseRecorder captures an http.Handler's output.

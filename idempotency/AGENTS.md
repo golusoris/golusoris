@@ -17,7 +17,7 @@ handler.
 |---|---|
 | `CachedResponse` | Stored representation: StatusCode, Header, Body |
 | `Store` | `Find` + `Save` — implement with Redis or Postgres; `MemoryStore` for tests |
-| `Options` | Header name, TTL, Required flag |
+| `Options` | Header name, TTL, Required flag, Logger (store-save failures; nil = slog.Default()) |
 | `Middleware(store, opts)` | Wraps non-safe methods (POST/PUT/PATCH/DELETE) |
 
 ## Behaviour

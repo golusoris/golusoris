@@ -188,7 +188,9 @@ var Module = fx.Module("golusoris.httpx.geofence",
 			if reader != nil {
 				lc.Append(fx.Hook{
 					OnStop: func(_ context.Context) error {
-						_ = reader.Close()
+						if err := reader.Close(); err != nil {
+							return fmt.Errorf("httpx/geofence: close mmdb reader: %w", err)
+						}
 						return nil
 					},
 				})
