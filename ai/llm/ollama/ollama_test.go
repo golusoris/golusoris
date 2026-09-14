@@ -7,6 +7,7 @@ package ollama_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -89,3 +90,112 @@ func TestEmbed(t *testing.T) {
 }
 
 var _ llm.Client = (*ollama.Client)(nil)
+
+var errBoom = errors.New("boom")
+
+// roundTripFunc adapts a func into an http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+// faultyBody serves payload, then reports readErr (when set) instead of
+// io.EOF, and reports closeErr (when set) from Close.
+type faultyBody struct {
+	r        io.Reader
+	readErr  error
+	closeErr error
+}
+
+func (b *faultyBody) Read(p []byte) (int, error) {
+	n, err := b.r.Read(p)
+	if errors.Is(err, io.EOF) && b.readErr != nil {
+		return n, b.readErr
+	}
+	return n, err
+}
+
+func (b *faultyBody) Close() error { return b.closeErr }
+
+// faultyClient answers every request with 200 and a faultyBody.
+func faultyClient(payload string, readErr, closeErr error) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       &faultyBody{r: strings.NewReader(payload), readErr: readErr, closeErr: closeErr},
+		}, nil
+	})}
+}
+
+// drain consumes a Stream channel and returns the concatenated content
+// plus the single error chunk, if any.
+func drain(t *testing.T, ch <-chan llm.Chunk) (string, error) {
+	t.Helper()
+	var sb strings.Builder
+	var streamErr error
+	for chunk := range ch {
+		if chunk.Err != nil {
+			require.NoError(t, streamErr, "more than one error chunk")
+			streamErr = chunk.Err
+			continue
+		}
+		sb.WriteString(chunk.Content)
+	}
+	return sb.String(), streamErr
+}
+
+const partialLine = `{"message":{"content":"Hello"},"done":false}` + "\n"
+
+func streamHi(t *testing.T, hc *http.Client) (string, error) {
+	t.Helper()
+	c := ollama.New(ollama.Config{Model: "m", HTTPClient: hc})
+	return drain(t, c.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}}))
+}
+
+// Negative: a body read error before {"done":true} ends the stream with
+// an error chunk instead of a clean close.
+func TestStream_readErrorSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	out, err := streamHi(t, faultyClient(partialLine, errBoom, nil))
+	require.Equal(t, "Hello", out)
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "ollama: stream")
+}
+
+// Negative: a failed body close surfaces as the error chunk.
+func TestStream_closeErrorSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	out, err := streamHi(t, faultyClient(partialLine, nil, errBoom))
+	require.Equal(t, "Hello", out)
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "close stream body")
+}
+
+// Boundary: when both fail, the read error is primary and the close
+// error is not joined onto it.
+func TestStream_readErrorWinsOverCloseError(t *testing.T) {
+	t.Parallel()
+	closeErr := errors.New("close failed")
+	_, err := streamHi(t, faultyClient(partialLine, errBoom, closeErr))
+	require.ErrorIs(t, err, errBoom)
+	require.False(t, errors.Is(err, closeErr))
+}
+
+// Negative: Chat reports a failed body close even after a good decode.
+func TestChat_closeErrorReturnsErr(t *testing.T) {
+	t.Parallel()
+	const payload = `{"model":"m","done":true,"message":{"role":"assistant","content":"Hi"}}`
+	c := ollama.New(ollama.Config{Model: "m", HTTPClient: faultyClient(payload, nil, errBoom)})
+	_, err := c.Chat(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "close response body")
+}
+
+// Negative: Embed reports a failed body close even after a good decode.
+func TestEmbed_closeErrorReturnsErr(t *testing.T) {
+	t.Parallel()
+	c := ollama.New(ollama.Config{Model: "m", HTTPClient: faultyClient(`{"embedding":[0.1]}`, nil, errBoom)})
+	_, err := c.Embed(context.Background(), "hello")
+	require.ErrorIs(t, err, errBoom)
+	require.Contains(t, err.Error(), "close embed body")
+}
