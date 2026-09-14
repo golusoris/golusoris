@@ -12,8 +12,6 @@ github.com/fatih/color v1.19.0 h1:Zp3PiM21/9Ld6FzSKyL5c/BULoe/ONr9KlbYVOfG8+w=
 github.com/fatih/color v1.19.0/go.mod h1:zNk67I0ZUT1bEGsSGyCZYZNrHuTkJJB+r6Q9VuMi0LE=
 github.com/gagliardetto/binary v0.8.0 h1:U9ahc45v9HW0d15LoN++vIXSJyqR/pWw8DDlhd7zvxg=
 github.com/gagliardetto/binary v0.8.0/go.mod h1:2tfj51g5o9dnvsc+fL3Jxr22MuWzYXwx9wEoN0XQ7/c=
-github.com/gagliardetto/solana-go v1.23.0 h1:Bw4fPmtgt9Z1VSEfqNVbNe1tJTDW2elYJ42HuvaZFwE=
-github.com/gagliardetto/solana-go v1.23.0/go.mod h1:IvX/MCo9XX9GOxIp6Hz7ZvEz9m3p/5XIz/kiNvUDUAo=
 github.com/gagliardetto/treeout v0.1.4 h1:ozeYerrLCmCubo1TcIjFiOWTTGteOOHND1twdFpgwaw=
 github.com/gagliardetto/treeout v0.1.4/go.mod h1:loUefvXTrlRG5rYmJmExNryyBRh8f89VZhmMOyCyqok=
 github.com/goccy/go-json v0.10.6 h1:p8HrPJzOakx/mn/bQtjgNjdTcN+/S6FcG2CTtQOrHVU=
@@ -54,6 +52,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/shopspring/decimal v1.3.1 h1:2Usl1nmF/WZucqkFZhnfFYxxxu8LG21F6nPQBE5gKV8=
 github.com/shopspring/decimal v1.3.1/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
+github.com/solana-foundation/solana-go/v2 v2.0.0 h1:5ZuwMHhVYcOJgcrytYsrkMAK4X/T33prhAQwP5RiiVA=
+github.com/solana-foundation/solana-go/v2 v2.0.0/go.mod h1:CWL+e1A3YUeqnnmFoWk1TMz2wcT2kymE8Veq9ZTEZEg=
 github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091/go.mod h1:VlduQ80JcGJSargkRU4Sg9Xo63wZD/l8A5NC/Uo1/uU=
 github.com/streamingfast/logging v1.2.2 h1:hybYz/jtI+5PdGAAVLT+cGvSYo2Zi9dYpjTMRAvxjCQ=
 github.com/streamingfast/logging v1.2.2/go.mod h1:fJ5nP7ZSMB4MQQ6RM7cF+LiSQ43b5cVletcSUNL8z2M=
