@@ -8,6 +8,10 @@
           {
             "type": "command",
             "command": ".claude/hooks/guard-bash.sh"
+          },
+          {
+            "type": "command",
+            "command": "python3 .config/agent/hooks/block_evasion.py"
           }
         ]
       },
