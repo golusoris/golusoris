@@ -139,12 +139,10 @@ func TestSubdomainExtractor(t *testing.T) {
 	}
 }
 
-func TestMustFromContext_panics(t *testing.T) {
+func TestRequireFromContext_missing(t *testing.T) {
 	t.Parallel()
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic")
-		}
-	}()
-	tenancy.MustFromContext(context.Background())
+	_, err := tenancy.RequireFromContext(context.Background())
+	if !errors.Is(err, tenancy.ErrMissingTenant) {
+		t.Fatalf("expected ErrMissingTenant, got %v", err)
+	}
 }

@@ -102,13 +102,12 @@ type ConnFactory struct {
 
 // Dial opens a gRPC connection to target.
 // The connection inherits OTel trace propagation automatically.
-func (f *ConnFactory) Dial(ctx context.Context, target string, extra ...grpc.DialOption) (*grpc.ClientConn, error) {
+func (f *ConnFactory) Dial(_ context.Context, target string, extra ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts := append(f.dialOpts, extra...) //nolint:gocritic // appendAssign: safe — f.dialOpts not reused
 	conn, err := grpc.NewClient(target, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("grpc: dial %s: %w", target, err)
 	}
-	_ = ctx
 	return conn, nil
 }
 
@@ -168,6 +167,21 @@ type serverParams struct {
 
 func newServer(p serverParams) (*grpc.Server, error) {
 	cfg, logger := p.Config, p.Logger
+	serverOpts, err := frameworkServerOptions(cfg, logger)
+	if err != nil {
+		return nil, err
+	}
+	// App-supplied options (interceptors, custom server options) run after the
+	// framework's.
+	serverOpts = append(serverOpts, p.Options...)
+	srv := grpc.NewServer(serverOpts...)
+	p.LC.Append(serverHook(srv, cfg, logger))
+	return srv, nil
+}
+
+// frameworkServerOptions builds the framework's own server options: TLS,
+// message-size limits, keepalive, and the OTel → logging → recovery chain.
+func frameworkServerOptions(cfg Config, logger *slog.Logger) ([]grpc.ServerOption, error) {
 	var serverOpts []grpc.ServerOption
 
 	// TLS
@@ -198,7 +212,25 @@ func newServer(p serverParams) (*grpc.Server, error) {
 	}))
 
 	// Interceptors: OTel → logging → recovery (outermost first).
-	logAdapter := grpclogging.LoggerFunc(func(ctx context.Context, lvl grpclogging.Level, msg string, fields ...any) {
+	logAdapter := newLogAdapter(logger)
+	serverOpts = append(
+		serverOpts,
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.ChainUnaryInterceptor(
+			grpclogging.UnaryServerInterceptor(logAdapter),
+			grpcrecovery.UnaryServerInterceptor(),
+		),
+		grpc.ChainStreamInterceptor(
+			grpclogging.StreamServerInterceptor(logAdapter),
+			grpcrecovery.StreamServerInterceptor(),
+		),
+	)
+	return serverOpts, nil
+}
+
+// newLogAdapter maps go-grpc-middleware log levels onto the slog logger.
+func newLogAdapter(logger *slog.Logger) grpclogging.Logger {
+	return grpclogging.LoggerFunc(func(ctx context.Context, lvl grpclogging.Level, msg string, fields ...any) {
 		switch lvl {
 		case grpclogging.LevelDebug:
 			logger.DebugContext(ctx, msg, fields...)
@@ -212,26 +244,11 @@ func newServer(p serverParams) (*grpc.Server, error) {
 			logger.InfoContext(ctx, msg, fields...)
 		}
 	})
+}
 
-	serverOpts = append(
-		serverOpts,
-		grpc.StatsHandler(otelgrpc.NewServerHandler()),
-		grpc.ChainUnaryInterceptor(
-			grpclogging.UnaryServerInterceptor(logAdapter),
-			grpcrecovery.UnaryServerInterceptor(),
-		),
-		grpc.ChainStreamInterceptor(
-			grpclogging.StreamServerInterceptor(logAdapter),
-			grpcrecovery.StreamServerInterceptor(),
-		),
-	)
-
-	// App-supplied options (interceptors, custom server options) run after the
-	// framework's.
-	serverOpts = append(serverOpts, p.Options...)
-	srv := grpc.NewServer(serverOpts...)
-
-	p.LC.Append(fx.Hook{
+// serverHook binds listen/serve and the bounded graceful stop to fx lifecycle.
+func serverHook(srv *grpc.Server, cfg Config, logger *slog.Logger) fx.Hook {
+	return fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			lc := &net.ListenConfig{}
 			ln, err := lc.Listen(ctx, "tcp", cfg.Listen)
@@ -259,8 +276,7 @@ func newServer(p serverParams) (*grpc.Server, error) {
 			}
 			return nil
 		},
-	})
-	return srv, nil
+	}
 }
 
 func newConnFactory() *ConnFactory { return NewConnFactory() }

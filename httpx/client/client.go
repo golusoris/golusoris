@@ -214,12 +214,14 @@ func valOrDefaultU32(v, d uint32) uint32 {
 // Drain reads + closes resp.Body so the underlying connection is returned to
 // the pool. Call this when you've read what you need and want the connection
 // reused (e.g. after a HEAD, or after an error early-return from a JSON
-// decoder).
+// decoder). Failures are logged at Debug — the body is being discarded, so
+// there is nothing for the caller to recover.
 func Drain(ctx context.Context, resp *http.Response) {
-	_ = ctx
 	if resp == nil || resp.Body == nil {
 		return
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	_ = resp.Body.Close()
+	_, copyErr := io.Copy(io.Discard, resp.Body)
+	if err := errors.Join(copyErr, resp.Body.Close()); err != nil {
+		slog.Default().DebugContext(ctx, "httpx/client: drain response body", slog.Any("err", err))
+	}
 }

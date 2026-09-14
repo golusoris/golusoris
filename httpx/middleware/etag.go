@@ -42,8 +42,7 @@ func ETag(next http.Handler) http.Handler {
 			status = http.StatusOK
 		}
 		if status != http.StatusOK {
-			w.WriteHeader(status)
-			_, _ = w.Write(rec.buf.Bytes())
+			rec.flush(w, status)
 			return
 		}
 
@@ -55,7 +54,15 @@ func ETag(next http.Handler) http.Handler {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		w.WriteHeader(status)
-		_, _ = w.Write(rec.buf.Bytes())
+		rec.flush(w, status)
 	})
+}
+
+// flush replays the buffered body onto w. A write error only means the
+// client went away — the headers are already sent, so nothing is reported.
+func (e *etagRecorder) flush(w http.ResponseWriter, status int) {
+	w.WriteHeader(status)
+	if _, err := w.Write(e.buf.Bytes()); err != nil {
+		return
+	}
 }
