@@ -194,3 +194,7 @@ pre-commit:
     ci:
       run: make ci
 ```
+
+The framework's own [`lefthook.yml`](../lefthook.yml) + `scripts/hooks/` is a
+finer-grained template (staged-package lint, commit-msg Conventional Commits +
+DCO, pre-push build + `go test -short`) that apps can copy verbatim.

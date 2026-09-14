@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,9 @@ func TestNotifyNoopWithoutSocket(t *testing.T) {
 // TestNotifyWritesToSocket creates a local unixgram socket + verifies the
 // message arrives verbatim.
 func TestNotifyWritesToSocket(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unixgram sockets are not supported on Windows")
+	}
 	dir := t.TempDir()
 	sock := filepath.Join(dir, "notify.sock")
 

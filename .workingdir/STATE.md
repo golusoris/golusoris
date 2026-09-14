@@ -369,6 +369,17 @@ If it recurs, deparallelize those tests — likely runner resource contention, n
 
 ## Session log (recent)
 
+- 2026-09-14: **lefthook git-hook gate** landed (`lefthook.yml` + `scripts/hooks/`).
+  - pre-commit (parallel): gofumpt / gci / golangci-lint / go vet on the
+    staged packages, `standardsctl compile-context --verify`, `reuse lint`,
+    `gitleaks git --staged`; commit-msg: Conventional Commits + DCO trailer;
+    pre-push: `go build` + `go test -short` in root and `core/`. Missing
+    tools skip with an install hint — CI stays authoritative.
+  - Replaces the phantom `pre-commit install` / "pre-commit runs make ci"
+    claims in CONTRIBUTING.md and AGENTS.md.
+  - Three Windows-only test fixes surfaced by the pre-push gate
+    (k8s/client USERPROFILE, storage open-handle delete, systemd unixgram skip).
+
 - 2026-06-15: **mcp/ reusable MCP server fx module** landed (#255).
   - New opt-in `mcp.Module` wraps the official
     `modelcontextprotocol/go-sdk`: provides a tool-less `*mcp.Server`;

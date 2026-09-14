@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+#
+# lefthook git-hook gate (fleet convention: cordanallm/praetor).
+#   install:  go install github.com/evilmartians/lefthook@latest && lefthook install
+#   dry-run:  lefthook run pre-commit [--all-files | --file <path>]
+# Every check lives in scripts/hooks/*.sh so it runs identically from bash on
+# Linux, macOS and Git-for-Windows. Optional tools (gofumpt, gci,
+# golangci-lint, standardsctl, reuse, gitleaks) skip with a clear message when
+# they are not on PATH — a hook never requires Python or a tool that is
+# absent. CI (make verify-all) remains the authoritative gate.
+
+pre-commit:
+  parallel: true
+  commands:
+    gofumpt:
+      glob: "*.go"
+      run: bash scripts/hooks/gofumpt.sh {staged_files}
+    gci:
+      glob: "*.go"
+      run: bash scripts/hooks/gci.sh {staged_files}
+    golangci-lint:
+      glob: "*.go"
+      run: bash scripts/hooks/golangci-lint.sh {staged_files}
+    govet:
+      glob: "*.go"
+      run: bash scripts/hooks/govet.sh {staged_files}
+    compile-context:
+      run: bash scripts/hooks/compile-context.sh
+    reuse:
+      run: bash scripts/hooks/reuse.sh
+    gitleaks:
+      run: bash scripts/hooks/gitleaks.sh
+
+commit-msg:
+  commands:
+    conventional-dco:
+      run: bash scripts/hooks/commit-msg.sh {1}
+
+pre-push:
+  parallel: false
+  commands:
+    build-test:
+      run: bash scripts/hooks/pre-push.sh

@@ -108,6 +108,7 @@ See [docs/principles.md](docs/principles.md) for the full Power-of-10, CERT, sty
 golusoris/
 ├── golusoris.go              # top-level fx.Module re-exports (Core, DB, HTTP, …)
 ├── capabilities.yaml         # machine-readable capability contract (praetor `needs` reads it)
+├── lefthook.yml              # git-hook gate (pre-commit / commit-msg / pre-push) — scripts in scripts/hooks/
 │
 ├── core/                     # LEAN SUB-MODULE (own go.mod) — github.com/golusoris/golusoris/core
 │   ├── config/               # koanf v2: env + file + YAML + file-watch
@@ -332,6 +333,7 @@ golusoris/
 │   └── crossplane/          # XRD + Composition + claim example
 │
 ├── tools/                   # golangci.yml, sqlc.yaml.fragment, Makefile helpers
+├── scripts/                 # hooks/ (lefthook checks), changelog/ (fragment renderer), ci/
 ├── template/
 │   ├── .github/             # per-app CI + release workflow stubs, dependabot
 │   └── .devcontainer/       # Go + Postgres + Redis + NATS devcontainer
@@ -414,7 +416,7 @@ Located in `.claude/hooks/`:
 - Touching `**/jobs/*.go` auto-loads `docs/upstream/river/` + `jobs/AGENTS.md`
 - Touching `**/migrations/*.sql` auto-loads `docs/upstream/golang-migrate/` + the project's existing migrations summary
 - Touching `**/api/*.go` (ogen) auto-loads `docs/upstream/ogen/` + the OpenAPI spec
-- Pre-commit: runs `make ci` (lint + sec + test)
+- Git hooks (`lefthook.yml`, scripts in `scripts/hooks/`; install with `lefthook install`): pre-commit runs gofumpt / gci / golangci-lint / go vet on the staged packages plus `standardsctl compile-context --verify`, `reuse lint`, `gitleaks`; commit-msg checks Conventional Commits + `Signed-off-by:` (DCO); pre-push runs `go build` + `go test -short` in root and `core/`. Absent tools skip with a message — `make verify-all` / CI stays authoritative.
 
 ### Tone
 

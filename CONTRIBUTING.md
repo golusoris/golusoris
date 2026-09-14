@@ -73,10 +73,32 @@ make verify-all  # root + core + governance gates (what CI runs)
 make gen    # sqlc / ogen / mockery codegen
 ```
 
-## Pre-commit hooks
+## Git hooks (lefthook)
+
+Local gates run through [lefthook](https://github.com/evilmartians/lefthook)
+— configuration in [`lefthook.yml`](lefthook.yml), one bash script per check
+under [`scripts/hooks/`](scripts/hooks/). Install once per clone:
 
 ```bash
-pre-commit install
+go install github.com/evilmartians/lefthook@latest
+lefthook install          # writes .git/hooks/{pre-commit,commit-msg,pre-push}
 ```
 
-Hooks: `gofumpt`, `golangci-lint`, `gitleaks`, conventional-commit check.
+| Hook | Runs |
+| --- | --- |
+| `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config tools/golangci.yml` and `go vet` on the packages of the staged files; `standardsctl compile-context --verify`, `reuse lint`, `gitleaks git --staged` |
+| `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`) and the DCO `Signed-off-by:` trailer |
+| `pre-push` | `go build ./...` + `go test -short ./...` (no `-race`) in the root and `core/` modules |
+
+A check whose tool is not on PATH (`gofumpt`, `gci`, `golangci-lint`,
+`standardsctl`, `reuse`, `gitleaks`) skips with an install hint instead of
+failing — the hooks never require Python. CI (`make verify-all`) remains the
+authoritative gate, so a skipped local check is still enforced on the PR.
+
+Dry-run without committing:
+
+```bash
+lefthook run pre-commit                      # staged files
+lefthook run pre-commit --file path/to/x.go  # a specific file
+lefthook run commit-msg .git/COMMIT_EDITMSG
+```

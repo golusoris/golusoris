@@ -376,6 +376,8 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 
 - `db/sqlite`: embedded SQLite fx module over modernc.org/sqlite (pure Go, WAL + foreign keys on by default; config prefix `db.sqlite`).
 
+- lefthook git-hook gate (`lefthook.yml` + `scripts/hooks/`): pre-commit runs gofumpt, gci, golangci-lint and go vet on the staged packages plus `standardsctl compile-context --verify`, `reuse lint` and `gitleaks`; commit-msg enforces Conventional Commits and the DCO `Signed-off-by:` trailer; pre-push runs `go build` + `go test -short` in root and `core/`. Tools missing from PATH skip with a message. Install: `go install github.com/evilmartians/lefthook@latest && lefthook install`.
+
 - Praetor governance adopted: `.standards.yaml`, HISS-16 debt baseline, compiled vendor agent context (`CLAUDE.md` is now generated from the `## Claude Code` section of `AGENTS.md`), `make verify-all` universal gate, root `Makefile`.
 
 ### Changed

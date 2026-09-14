@@ -56,7 +56,7 @@ Located in `.claude/hooks/`:
 - Touching `**/jobs/*.go` auto-loads `docs/upstream/river/` + `jobs/AGENTS.md`
 - Touching `**/migrations/*.sql` auto-loads `docs/upstream/golang-migrate/` + the project's existing migrations summary
 - Touching `**/api/*.go` (ogen) auto-loads `docs/upstream/ogen/` + the OpenAPI spec
-- Pre-commit: runs `make ci` (lint + sec + test)
+- Git hooks (`lefthook.yml`, scripts in `scripts/hooks/`; install with `lefthook install`): pre-commit runs gofumpt / gci / golangci-lint / go vet on the staged packages plus `standardsctl compile-context --verify`, `reuse lint`, `gitleaks`; commit-msg checks Conventional Commits + `Signed-off-by:` (DCO); pre-push runs `go build` + `go test -short` in root and `core/`. Absent tools skip with a message — `make verify-all` / CI stays authoritative.
 
 ### Tone
 
