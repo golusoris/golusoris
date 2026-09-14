@@ -2,7 +2,7 @@ module github.com/golusoris/golusoris/testutil/pact
 
 go 1.26.7
 
-require github.com/pact-foundation/pact-go/v2 v2.5.1
+require github.com/pact-foundation/pact-go/v2 v2.7.1
 
 require (
 	github.com/hashicorp/go-version v1.9.0 // indirect
