@@ -69,7 +69,9 @@ Releases are:
 Verify a release container:
 
 ```bash
-cosign verify ghcr.io/golusoris/golusoris:vX.Y.Z   --certificate-identity-regexp '^https://github.com/golusoris/golusoris/'   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
+cosign verify ghcr.io/golusoris/golusoris:vX.Y.Z \
+  --certificate-identity-regexp '^https://github.com/golusoris/golusoris/' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com'
 ```
 
 ## Dependencies
