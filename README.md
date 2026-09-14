@@ -385,8 +385,9 @@ golusoris bump v0.9.0              # apply codemods for the new version (core/ i
 
 ## Status
 
-Pre-1.0, actively developed. Latest tagged release: **v0.8.0** (MIT). This
-branch prepares **v0.9.0**: the lean `core/` sub-module (ADR-0017), the
+Pre-1.0, actively developed. Latest tagged release: **v0.7.0** (MIT);
+`v0.8.0` is prepared in `CHANGELOG.md` and the release-please manifest but
+not yet tagged. This branch prepares **v0.9.0**: the lean `core/` sub-module (ADR-0017), the
 EUPL-1.2 relicense (ADR-0018) and praetor HISS-16 governance (ADR-0019), on a
 Go 1.27 toolchain floor. Breaking changes between minor versions are called
 out in the commit `Migration:` footer and in `docs/migrations/` — start with
