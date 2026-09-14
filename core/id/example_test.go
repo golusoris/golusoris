@@ -13,7 +13,11 @@ import (
 // ExampleNew shows obtaining the default generator and producing both flavors.
 func ExampleNew() {
 	g := id.New()
-	u := g.NewUUID()
+	u, err := g.NewUUID()
+	if err != nil {
+		fmt.Println("error:", err)
+		return
+	}
 	k := g.NewKSUID()
 	fmt.Println("uuid version:", u.Version())
 	fmt.Println("ksuid len:", len(k.String()))

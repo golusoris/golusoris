@@ -26,7 +26,8 @@ func New(Options) (*Config, error)
 
 `Options` (zero value usable: env-only, prefix `APP_`, delimiter `.`):
 `EnvPrefix`, `Delimiter`, `Files []string`, `Watch bool` (default true),
-`CompoundKeys []string`.
+`CompoundKeys []string`, `Logger *slog.Logger` (reload-failure sink; nil =
+`slog.Default()`).
 
 ## Wiring
 

@@ -17,10 +17,10 @@
 //
 //	r := invoice.NewHTMLRenderer(nil) // default template
 //	num := invoice.NewMemoryNumberer("INV", 6) // INV-000001 …
-//	id := id.New().NewUUID().String()
+//	u, _ := id.New().NewUUID()
 //	number, _ := num.Next(ctx, "tenant_42")
 //	html, _ := r.Render(ctx, invoice.Invoice{
-//	    ID: id, Number: number,
+//	    ID: u.String(), Number: number,
 //	    TenantID: "tenant_42", CustomerID: "cust_99",
 //	    IssueDate: time.Now(), DueDate: time.Now().AddDate(0, 0, 14),
 //	    LineItems: []invoice.LineItem{

@@ -19,7 +19,7 @@ Two flavors:
 
 | Symbol | Purpose |
 |---|---|
-| `id.Generator` | interface: `NewUUID() uuid.UUID`, `NewKSUID() ksuid.KSUID` |
+| `id.Generator` | interface: `NewUUID() (uuid.UUID, error)`, `NewKSUID() ksuid.KSUID` |
 | `id.New()` | the default generator |
 | `id.Module` | fx module — provides `Generator` |
 
@@ -30,8 +30,12 @@ fx.New(golusoris.Core, id.Module)
 
 func NewUserSvc(g id.Generator) *UserSvc { return &UserSvc{ids: g} }
 
-func (s *UserSvc) Create() User {
-    return User{ID: s.ids.NewUUID()} // UUIDv7, time-ordered
+func (s *UserSvc) Create() (User, error) {
+    u, err := s.ids.NewUUID() // UUIDv7, time-ordered
+    if err != nil {
+        return User{}, err
+    }
+    return User{ID: u}, nil
 }
 ```
 
@@ -40,5 +44,5 @@ func (s *UserSvc) Create() User {
 - Don't call `uuid.NewV7()` / `ksuid.New()` directly in app code — go through
   `Generator` so generation stays uniform and mockable.
 - Don't use a KSUID where you want a sortable DB primary key — prefer UUIDv7.
-- Note: `NewUUID` **panics** if the system random source fails (catastrophic on
-  Linux). Don't wrap it expecting an error return.
+- Note: `NewUUID` returns an error only when the system random source fails
+  (catastrophic on Linux). Surface it; never discard it.

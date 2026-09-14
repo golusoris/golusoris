@@ -100,8 +100,8 @@ type Options struct {
 	// already happened). Keep the callback fast; fan out to a worker if
 	// needed.
 	OnChange func(context.Context, ChangeEvent)
-	// IDGen overrides the default UUIDv7 generator.
-	IDGen func() string
+	// IDGen overrides the default UUIDv7 generator. An error aborts Start.
+	IDGen func() (string, error)
 	// PeriodLength is the default billing period when apps don't set
 	// one explicitly (Start/Renew use it). Default: 30 days.
 	PeriodLength time.Duration
@@ -122,7 +122,13 @@ func New(store Store, clk clock.Clock, logger *slog.Logger, opts Options) *Servi
 	}
 	if opts.IDGen == nil {
 		g := id.New()
-		opts.IDGen = func() string { return g.NewUUID().String() }
+		opts.IDGen = func() (string, error) {
+			u, err := g.NewUUID()
+			if err != nil {
+				return "", fmt.Errorf("payments/subs: id: %w", err)
+			}
+			return u.String(), nil
+		}
 	}
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
@@ -147,9 +153,13 @@ func (s *Service) Start(ctx context.Context, p StartParams) (*Subscription, erro
 	if p.CustomerID == "" || p.Plan == "" {
 		return nil, errors.New("payments/subs: CustomerID and Plan required")
 	}
+	subID, err := s.opts.IDGen()
+	if err != nil {
+		return nil, err
+	}
 	now := s.clock.Now()
 	sub := &Subscription{
-		ID:                 s.opts.IDGen(),
+		ID:                 subID,
 		CustomerID:         p.CustomerID,
 		Plan:               p.Plan,
 		Seats:              p.Seats,
