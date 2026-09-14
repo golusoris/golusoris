@@ -37,6 +37,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Available reports whether the process is running under systemd with
@@ -46,7 +47,7 @@ func Available() bool { return os.Getenv("NOTIFY_SOCKET") != "" }
 // Notify sends a single sd_notify message. state is formatted as systemd
 // expects — "READY=1", "RELOADING=1", "STOPPING=1", "STATUS=...", etc.
 // Returns nil when NOTIFY_SOCKET is unset (no-op).
-func Notify(state string) error {
+func Notify(state string) (err error) {
 	sock := os.Getenv("NOTIFY_SOCKET")
 	if sock == "" {
 		return nil
@@ -55,9 +56,9 @@ func Notify(state string) error {
 	if err != nil {
 		return fmt.Errorf("systemd: dial %s: %w", sock, err)
 	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.Write([]byte(state)); err != nil {
-		return fmt.Errorf("systemd: write: %w", err)
+	defer gerr.CloseInto(conn, &err, "systemd: close notify socket")
+	if _, werr := conn.Write([]byte(state)); werr != nil {
+		return fmt.Errorf("systemd: write: %w", werr)
 	}
 	return nil
 }
@@ -140,7 +141,7 @@ func runWatchdog(ctx context.Context, clk clock.Clock, logger *slog.Logger) {
 		return
 	}
 	logger.InfoContext(ctx, "systemd: watchdog enabled", slog.Duration("interval", interval))
-	for {
+	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
 			return

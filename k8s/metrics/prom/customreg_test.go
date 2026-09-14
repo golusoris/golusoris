@@ -38,7 +38,9 @@ func TestMountForOnServeMux(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
 	mux := http.NewServeMux()
-	prom.MountFor(mux, reg, nil)
+	if err := prom.MountFor(mux, reg, nil); err != nil {
+		t.Fatalf("MountFor: %v", err)
+	}
 
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))

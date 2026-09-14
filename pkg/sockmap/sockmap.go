@@ -191,7 +191,7 @@ type metricsParams struct {
 }
 
 // provideMetrics is the fx constructor for *Metrics.
-func provideMetrics(p metricsParams) *Metrics {
+func provideMetrics(p metricsParams) (*Metrics, error) {
 	var reg prometheus.Registerer
 	if p.Registry != nil {
 		reg = p.Registry
@@ -201,8 +201,8 @@ func provideMetrics(p metricsParams) *Metrics {
 
 // newMetrics builds the collectors and registers them on reg. A nil reg falls
 // back to the default registerer. Registration is tolerant of duplicates so
-// repeated wiring (e.g. in tests) doesn't panic.
-func newMetrics(reg prometheus.Registerer) *Metrics {
+// repeated wiring (e.g. in tests) doesn't fail.
+func newMetrics(reg prometheus.Registerer) (*Metrics, error) {
 	m := &Metrics{
 		RedirectedBytes: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "golusoris_sockmap_redirected_bytes_total",
@@ -220,21 +220,26 @@ func newMetrics(reg prometheus.Registerer) *Metrics {
 	if reg == nil {
 		reg = prometheus.DefaultRegisterer
 	}
-	register(reg, m.RedirectedBytes)
-	register(reg, m.ActiveSockets)
-	register(reg, m.RedirectErrors)
-	return m
-}
-
-// register is MustRegister that tolerates AlreadyRegisteredError so the module
-// is safe to wire more than once in a process (tests, multi-app embeds).
-func register(reg prometheus.Registerer, c prometheus.Collector) {
-	if err := reg.Register(c); err != nil {
-		var are prometheus.AlreadyRegisteredError
-		if !asAlreadyRegistered(err, &are) {
-			panic(err)
+	for _, c := range []prometheus.Collector{m.RedirectedBytes, m.ActiveSockets, m.RedirectErrors} {
+		if err := register(reg, c); err != nil {
+			return nil, err
 		}
 	}
+	return m, nil
+}
+
+// register is Register that tolerates AlreadyRegisteredError so the module
+// is safe to wire more than once in a process (tests, multi-app embeds).
+func register(reg prometheus.Registerer, c prometheus.Collector) error {
+	err := reg.Register(c)
+	if err == nil {
+		return nil
+	}
+	var are prometheus.AlreadyRegisteredError
+	if asAlreadyRegistered(err, &are) {
+		return nil
+	}
+	return fmt.Errorf("sockmap: register metric: %w", err)
 }
 
 func asAlreadyRegistered(err error, target *prometheus.AlreadyRegisteredError) bool {

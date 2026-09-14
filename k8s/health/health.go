@@ -88,22 +88,32 @@ func probeHandler(reg *statuspage.Registry, tag string) http.HandlerFunc {
 			body = "not ok\n"
 		}
 		if r.URL.Query().Get("verbose") == "1" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			_ = json.NewEncoder(w).Encode(struct {
-				Status string              `json:"status"`
-				Tag    string              `json:"tag"`
-				Checks []statuspage.Result `json:"checks"`
-			}{
-				Status: overall(results),
-				Tag:    tag,
-				Checks: results,
-			})
+			writeVerbose(w, status, tag, results)
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(body))
+		if _, err := w.Write([]byte(body)); err != nil {
+			return // headers already sent; the client went away
+		}
+	}
+}
+
+// writeVerbose emits the JSON per-check dump for `?verbose=1`.
+func writeVerbose(w http.ResponseWriter, status int, tag string, results []statuspage.Result) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	payload := struct {
+		Status string              `json:"status"`
+		Tag    string              `json:"tag"`
+		Checks []statuspage.Result `json:"checks"`
+	}{
+		Status: overall(results),
+		Tag:    tag,
+		Checks: results,
+	}
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		return // headers already sent; the client went away
 	}
 }
 

@@ -16,6 +16,8 @@ package prom
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -31,12 +33,17 @@ import (
 func Handler() http.Handler { return promhttp.Handler() }
 
 // Mount attaches /metrics to r and (when reg != nil) registers a status
-// gauge per check on the default Prometheus registry.
-func Mount(r chi.Router, reg *statuspage.Registry) {
+// gauge per check on the default Prometheus registry. Repeat calls are
+// tolerated (already-registered gauges are reused); any other registration
+// failure is returned.
+func Mount(r chi.Router, reg *statuspage.Registry) error {
 	if reg != nil {
-		registerCheckStatus(reg)
+		if err := registerCheckStatusOn(prometheus.DefaultRegisterer, reg); err != nil {
+			return err
+		}
 	}
 	r.Handle("/metrics", Handler())
+	return nil
 }
 
 // HandlerFor returns a /metrics handler that serves a specific
@@ -48,12 +55,16 @@ func HandlerFor(reg *prometheus.Registry) http.Handler {
 
 // MountFor attaches /metrics (serving reg) to a net/http mux and, when checks
 // != nil, registers the per-check status gauges on reg. No chi dependency — for
-// apps that don't run chi.
-func MountFor(mux *http.ServeMux, reg *prometheus.Registry, checks *statuspage.Registry) {
+// apps that don't run chi. Repeat calls are tolerated; any other registration
+// failure is returned.
+func MountFor(mux *http.ServeMux, reg *prometheus.Registry, checks *statuspage.Registry) error {
 	if checks != nil {
-		registerCheckStatusOn(reg, checks)
+		if err := registerCheckStatusOn(reg, checks); err != nil {
+			return err
+		}
 	}
 	mux.Handle("/metrics", HandlerFor(reg))
+	return nil
 }
 
 // CheckStatusGauge is the gauge family exposing per-check status as 0/1.
@@ -78,24 +89,31 @@ var CheckLatencySeconds = prometheus.NewGaugeVec(
 	[]string{"name"},
 )
 
-// registerCheckStatus wires the gauges onto the default registry + installs
-// a Run hook that snapshots results into the gauges. The gauge values
-// refresh whenever any /livez /readyz /startupz /status request runs the
-// registry — Prometheus then scrapes the latest snapshot.
+// registerCheckStatusOn wires the gauges onto reg + installs a Run hook that
+// snapshots results into the gauges. The gauge values refresh whenever any
+// /livez /readyz /startupz /status request runs the registry — Prometheus then
+// scrapes the latest snapshot.
 //
-// Idempotent: panics from MustRegister are recovered (multiple Mount calls
-// are tolerated, e.g. tests).
-func registerCheckStatus(checks *statuspage.Registry) {
-	defer func() { _ = recover() }() // tolerate "already registered" on repeat Mount
-	prometheus.MustRegister(CheckStatusGauge, CheckLatencySeconds)
+// Idempotent: an AlreadyRegisteredError is accepted (multiple Mount calls are
+// tolerated, e.g. tests); any other registration error is returned.
+func registerCheckStatusOn(reg prometheus.Registerer, checks *statuspage.Registry) error {
+	for _, c := range []prometheus.Collector{CheckStatusGauge, CheckLatencySeconds} {
+		if err := registerTolerant(reg, c); err != nil {
+			return err
+		}
+	}
 	snapshotChecks(checks)
+	return nil
 }
 
-// registerCheckStatusOn is the custom-registry variant of registerCheckStatus.
-func registerCheckStatusOn(reg *prometheus.Registry, checks *statuspage.Registry) {
-	defer func() { _ = recover() }() // tolerate "already registered" on repeat MountFor
-	reg.MustRegister(CheckStatusGauge, CheckLatencySeconds)
-	snapshotChecks(checks)
+// registerTolerant registers c on reg, treating "already registered" as success.
+func registerTolerant(reg prometheus.Registerer, c prometheus.Collector) error {
+	err := reg.Register(c)
+	var are prometheus.AlreadyRegisteredError
+	if err == nil || errors.As(err, &are) {
+		return nil
+	}
+	return fmt.Errorf("prom: register check gauge: %w", err)
 }
 
 // snapshotChecks installs the hook that mirrors each check's last result into
