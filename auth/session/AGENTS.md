@@ -21,12 +21,22 @@ mgr := session.NewManager(store, session.Options{
 })
 
 // In a handler:
-sess, _ := mgr.Load(r)
+sess, err := mgr.Load(r)
+if err != nil {
+    http.Error(w, "session", http.StatusInternalServerError)
+    return
+}
 sess.Set("user_id", "u-123")
-_ = mgr.Save(w, sess)
+if err := mgr.Save(w, sess); err != nil {
+    http.Error(w, "session", http.StatusInternalServerError)
+    return
+}
 
 // Log out:
-_ = mgr.Destroy(w, r)
+if err := mgr.Destroy(w, r); err != nil {
+    http.Error(w, "session", http.StatusInternalServerError)
+    return
+}
 ```
 
 ## Store contract
