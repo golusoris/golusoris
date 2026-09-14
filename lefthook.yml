@@ -4,12 +4,43 @@
 #
 # lefthook git-hook gate (fleet convention: cordanallm/praetor).
 #   install:  go install github.com/evilmartians/lefthook@latest && lefthook install
-#   dry-run:  lefthook run pre-commit [--all-files | --file <path>]
-# Every check lives in scripts/hooks/*.sh so it runs identically from bash on
-# Linux, macOS and Git-for-Windows. Optional tools (gofumpt, gci,
-# golangci-lint, standardsctl, reuse, gitleaks) skip with a clear message when
-# they are not on PATH — a hook never requires Python or a tool that is
-# absent. CI (make verify-all) remains the authoritative gate.
+#   dry-run:  lefthook run pre-commit --no-auto-install [--all-files | --file <path>]
+#
+# Adopts Praetor's canonical governance jobs verbatim from
+# `standardsctl adopt --lock-source-root=<praetor>` (agent-checkpoint-*,
+# context-check, hiss-audit, state-sync, dedupe-cadence, and the pre-push
+# security/flavor-audit/audit/gate jobs). golusoris-specific checks that
+# Praetor's generic scaffold does not cover — or covers less strictly for
+# this monorepo — stay wired through scripts/hooks/*.sh (HISS-19 "one
+# behavior, one implementation"):
+#   - gofumpt.sh is kept over Praetor's plain `gofmt -w`: gofumpt is a
+#     verified strict superset of gofmt (upstream: "gofumpt is happy with a
+#     subset of the formats that gofmt is happy with"), so a second gofmt
+#     job would duplicate work with strictly less coverage.
+#   - govet.sh is kept over Praetor's plain `go vet ./...`: this repo is a
+#     multi-module monorepo (core/, pdf/, ocr/, web3/*, science/*, media/*,
+#     hw/*, deploy/* each carry their own go.mod). A bare `go vet ./...` at
+#     the root never descends into those nested modules; govet.sh's
+#     run_per_module iterates every module touched by the staged files.
+#   - gci, golangci-lint, reuse, gitleaks: no Praetor equivalent, kept as-is.
+#   - commit-msg (Conventional Commits + DCO): Praetor's scaffold has no
+#     commit-msg hook.
+#   - pre-push build-test (go build + go test -short across root and core/):
+#     Praetor's scaffold has no build/test gate.
+# Optional tools (gofumpt, gci, golangci-lint, standardsctl/praetorctl,
+# reuse, gitleaks, govulncheck) skip with a clear message when absent from
+# PATH — a hook never requires Python beyond the checkpoint lifecycle jobs
+# below. CI (make verify-all) remains the authoritative gate.
+
+agent-checkpoint-tool:
+  commands:
+    checkpoint:
+      run: python3 -B .config/lefthook/scripts/checkpoint.py --event tool --json --marker
+
+agent-checkpoint-stop:
+  commands:
+    checkpoint:
+      run: python3 -B .config/lefthook/scripts/checkpoint.py --event stop --json --marker
 
 pre-commit:
   parallel: true
@@ -26,8 +57,10 @@ pre-commit:
     govet:
       glob: "*.go"
       run: bash scripts/hooks/govet.sh {staged_files}
-    compile-context:
-      run: bash scripts/hooks/compile-context.sh
+    context-check:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl compile-context --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl compile-context --verify; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    hiss-audit:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
     reuse:
       run: bash scripts/hooks/reuse.sh
     gitleaks:
@@ -38,8 +71,27 @@ commit-msg:
     conventional-dco:
       run: bash scripts/hooks/commit-msg.sh {1}
 
+post-commit:
+  commands:
+    state-sync:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl state sync .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl state sync .; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    dedupe-cadence:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl dedupe cadence --threshold=20 --record .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl dedupe cadence --threshold=20 --record .; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+
 pre-push:
   parallel: false
   commands:
     build-test:
       run: bash scripts/hooks/pre-push.sh
+    security:
+      run: if command -v govulncheck >/dev/null 2>&1; then govulncheck ./...; else echo govulncheck is not installed, skipping >&2; fi
+    # flavor-audit is held back: praetor detects this library as go-service
+    # (go.mod + cmd/) and demands a Dockerfile, an on:-less security.yml and
+    # duplicate lint/gosec stubs (cordanaLLM/praetor#36). Re-enable when the
+    # flavor is correct: `praetorctl flavor audit .` must exit 0 on main.
+    audit:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    # gate is held back for the same reason: its stage 4 (flavor conformance)
+    # is the flavor audit above; stages 1-3 (lockfiles, HISS scan, security)
+    # pass on main. Re-enable together with flavor-audit once praetor#36 is
+    # fixed: `praetorctl gate run --path=.` must exit 0 on main.

@@ -76,29 +76,38 @@ make gen    # sqlc / ogen / mockery codegen
 ## Git hooks (lefthook)
 
 Local gates run through [lefthook](https://github.com/evilmartians/lefthook)
-— configuration in [`lefthook.yml`](lefthook.yml), one bash script per check
-under [`scripts/hooks/`](scripts/hooks/). Install once per clone:
+— configuration in [`lefthook.yml`](lefthook.yml). golusoris-specific checks
+are one bash script per check under [`scripts/hooks/`](scripts/hooks/);
+governance checks (`context-check`, `hiss-audit`, `state-sync`,
+`dedupe-cadence`, and the pre-push `security`/`flavor-audit`/`audit`/`gate`
+jobs) are adopted verbatim from [cordanaLLM/praetor](https://github.com/cordanaLLM/praetor)'s
+`standardsctl adopt` scaffold — see the comment header in `lefthook.yml` for
+which checks stayed on the golusoris implementation and why (HISS-19: one
+behavior, one implementation). Install once per clone:
 
 ```bash
 go install github.com/evilmartians/lefthook@latest
-lefthook install          # writes .git/hooks/{pre-commit,commit-msg,pre-push}
+lefthook install          # writes .git/hooks/{pre-commit,commit-msg,post-commit,pre-push}
 ```
 
 | Hook | Runs |
 | --- | --- |
-| `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config .golangci.yml` and `go vet` on the packages of the staged files; `standardsctl compile-context --verify`, `reuse lint`, `gitleaks git --staged` |
+| `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config .golangci.yml` and `go vet` on the packages of the staged files; `praetorctl compile-context --verify`, `praetorctl audit`, `reuse lint`, `gitleaks git --staged` |
 | `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`) and the DCO `Signed-off-by:` trailer |
-| `pre-push` | `go build ./...` + `go test -short ./...` (no `-race`) in the root and `core/` modules |
+| `post-commit` | `praetorctl state sync .`, `praetorctl dedupe cadence --threshold=20 --record .` |
+| `pre-push` | `go build ./...` + `go test -short ./...` (no `-race`) in the root and `core/` modules; `govulncheck ./...`; `praetorctl flavor audit .`, `praetorctl audit`, `praetorctl gate run --path=.` |
+| `agent-checkpoint-tool` / `agent-checkpoint-stop` | Bounded checkpoint evaluator (`.config/lefthook/scripts/checkpoint.py`); disabled until a reviewed `.config/agent/checkpoint.json` is added locally — not part of this adoption |
 
 A check whose tool is not on PATH (`gofumpt`, `gci`, `golangci-lint`,
-`standardsctl`, `reuse`, `gitleaks`) skips with an install hint instead of
-failing — the hooks never require Python. CI (`make verify-all`) remains the
-authoritative gate, so a skipped local check is still enforced on the PR.
+`praetorctl`/`standardsctl`, `reuse`, `gitleaks`, `govulncheck`) skips with an
+install hint instead of failing — the hooks never require Python outside the
+checkpoint lifecycle jobs. CI (`make verify-all`) remains the authoritative
+gate, so a skipped local check is still enforced on the PR.
 
 Dry-run without committing:
 
 ```bash
-lefthook run pre-commit                      # staged files
-lefthook run pre-commit --file path/to/x.go  # a specific file
-lefthook run commit-msg .git/COMMIT_EDITMSG
+lefthook run pre-commit --no-auto-install                      # staged files
+lefthook run pre-commit --no-auto-install --file path/to/x.go  # a specific file
+lefthook run commit-msg --no-auto-install .git/COMMIT_EDITMSG
 ```

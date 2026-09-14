@@ -1,6 +1,3 @@
-# .workingdir/ is INTENTIONALLY checked in — it persists session state
-# (PLAN.md, STATE.md, decisions log) across workstations and AI sessions.
-
 # Audit clones — temporary, only used during the initial cross-repo audit.
 _audit/
 
@@ -55,3 +52,18 @@ tmp/
 # Compiled deploy binaries are build outputs, never checked in (OSSF Scorecard BinaryArtifacts).
 /deploy/pulumi/pulumi
 /deploy/multiregion/multiregion
+
+# Claude Code worktrees (personal, machine-local; never checked in).
+/.claude/worktrees/
+
+# Node tooling, when present (e.g. docs tooling, editor extensions).
+node_modules/
+
+# .workingdir/ is private, git-ignored session state (PLAN.md, STATE.md,
+# decisions log, scratch files) per praetor HISS-17 — never staged, including
+# with force. Publish reviewed, sanitized documentation under docs/ instead.
+# The nested rule covers per-package copies (e.g. deploy/pulumi/.workingdir/).
+# Keep /.workingdir/ as the final line: praetor's adopt recognises this exact
+# trailing rule and will not re-append it on a future non-force adopt.
+.workingdir/
+/.workingdir/
