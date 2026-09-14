@@ -5,8 +5,11 @@
 package tracking_test
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -150,4 +153,56 @@ func TestPixelURL_containsExpectedFields(t *testing.T) {
 	require.True(t, strings.HasPrefix(got, "http://x/p?"))
 	require.Contains(t, got, "m=m1")
 	require.Contains(t, got, "sig=")
+}
+
+// failStore fails every Record call.
+type failStore struct{ err error }
+
+func (f failStore) Record(context.Context, tracking.Event) error { return f.err }
+
+func newLoggedService(t *testing.T, store tracking.Store) (*tracking.Service, *bytes.Buffer) {
+	t.Helper()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	return tracking.New(store, []byte("k"), logger), &buf
+}
+
+// Negative path: a store failure must not break the pixel; it is logged.
+func TestPixelHandler_storeFailureStillServesAndLogs(t *testing.T) {
+	t.Parallel()
+	svc, buf := newLoggedService(t, failStore{err: errors.New("db down")})
+	req := httptest.NewRequest(http.MethodGet, svc.PixelURL("http://x/p", "msg1", "a@b"), nil)
+	rec := httptest.NewRecorder()
+	svc.PixelHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, "image/gif", rec.Header().Get("Content-Type"))
+	require.Contains(t, buf.String(), "notify/tracking: record event")
+	require.Contains(t, buf.String(), "kind=open")
+	require.Contains(t, buf.String(), "db down")
+}
+
+// Negative path: a store failure must not break the redirect; it is logged.
+func TestClickHandler_storeFailureStillRedirectsAndLogs(t *testing.T) {
+	t.Parallel()
+	svc, buf := newLoggedService(t, failStore{err: errors.New("db down")})
+	target := "https://example.com/landing"
+	req := httptest.NewRequest(http.MethodGet, svc.ClickURL("http://x/c", "msg2", "b@c", target), nil)
+	rec := httptest.NewRecorder()
+	svc.ClickHandler().ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusFound, rec.Code)
+	require.Equal(t, target, rec.Header().Get("Location"))
+	require.Contains(t, buf.String(), "kind=click")
+	require.Contains(t, buf.String(), "message_id=msg2")
+}
+
+// Boundary: a nil logger must fall back to slog.Default() rather than panic.
+func TestNew_nilLoggerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+	svc := tracking.New(failStore{err: errors.New("db down")}, []byte("k"), nil)
+	req := httptest.NewRequest(http.MethodGet, svc.PixelURL("http://x/p", "m", "r"), nil)
+	rec := httptest.NewRecorder()
+	require.NotPanics(t, func() { svc.PixelHandler().ServeHTTP(rec, req) })
+	require.Equal(t, http.StatusOK, rec.Code)
 }
