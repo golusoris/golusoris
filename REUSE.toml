@@ -1,13 +1,85 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
 # REUSE (https://reuse.software) annotations — makes the repo's licensing
-# machine-readable for SPDX/SBOM accuracy (EU CRA, OpenSSF). The full license
-# text lives under LICENSES/. Run `reuse lint` to verify compliance.
+# machine-readable for SPDX/SBOM accuracy (EU CRA, OpenSSF). The licence is
+# split by the nature of the material (see LICENSING.md); later tables win for
+# files matched by more than one table (REUSE specification 3.3). Full licence
+# texts live under LICENSES/. Run `reuse lint` to verify compliance.
 version = 1
 SPDX-PackageName = "golusoris"
 SPDX-PackageSupplier = "lusoris <lusoris@pm.me>"
 SPDX-PackageDownloadLocation = "https://github.com/golusoris/golusoris"
 
+# ── First-party code, configuration, tooling, deploy manifests ──────────────
 [[annotations]]
-path = "**"
+path = ["**"]
 precedence = "aggregate"
-SPDX-FileCopyrightText = "2026 lusoris"
+SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
+SPDX-License-Identifier = "EUPL-1.2"
+
+# ── First-party prose: documentation, guides, agent context, changelogs ─────
+[[annotations]]
+path = [
+  "README.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "GOVERNANCE.md",
+  "LICENSING.md",
+  "CHANGELOG.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "**/AGENTS.md",
+  "**/README.md",
+  "docs/**",
+  ".workingdir/**",
+  "changelog.d/**",
+  ".claude/skills/*.md",
+  ".claude/hooks/README.md",
+  "template/.github/**/*.md",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 lusoris <lusoris@pm.me>"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+
+# ── Contributor Covenant v2.1 (adapted) ─────────────────────────────────────
+[[annotations]]
+path = ["CODE_OF_CONDUCT.md"]
+precedence = "override"
+SPDX-FileCopyrightText = "Contributor Covenant contributors <https://www.contributor-covenant.org>"
+SPDX-License-Identifier = "CC-BY-4.0"
+
+# ── Vendored third-party agent skills (copies, not derivative works) ────────
+[[annotations]]
+path = [".claude/skills/superpowers/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "2025 Jesse Vincent <https://github.com/obra/superpowers>"
 SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [".claude/skills/community/owasp-security/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "agamm <https://github.com/agamm/claude-code-owasp>"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [".claude/skills/community/skill-check/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "Olga Safonova <https://github.com/olgasafonova/SkillCheck-Free>"
+SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = [".claude/skills/community/vibesec/**"]
+precedence = "override"
+SPDX-FileCopyrightText = "BehiSecc <https://github.com/BehiSecc/VibeSec-Skill>"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = [
+  ".claude/skills/community/git-pushing/**",
+  ".claude/skills/community/review-implementing/**",
+  ".claude/skills/community/test-fixing/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "mhattingpete <https://github.com/mhattingpete/claude-skills-marketplace>"
+SPDX-License-Identifier = "Apache-2.0"

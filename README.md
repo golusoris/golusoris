@@ -1,10 +1,20 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # golusoris
+
+[![HISS-16 Compliant](https://img.shields.io/badge/Standards-HISS--16%20Compliant-brightgreen)](AGENTS.md)
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
 [![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
 [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
+[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
+[![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
 [![ko-fi](https://img.shields.io/badge/ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/lusoris)
 
@@ -59,15 +69,25 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 
 ### Core
 
+`core/` is its own Go module (`github.com/golusoris/golusoris/core`, ADR-0017): ~20 direct dependencies, importable by governance tools and small CLIs without the root module's graph. The capability contract every package participates in lives in [`capabilities.yaml`](capabilities.yaml).
+
 | Module | Purpose | Key dep |
 |---|---|---|
-| `config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
-| `log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
-| `errors/` | typed errors, stack traces, ogen-status mapping | go-faster/errors |
-| `crypto/` | argon2id, AES-GCM, sealed-secret helpers, column encryption | alexedwards/argon2id |
-| `clock/` | mockable wall clock (real + fake) — `time.Now()` is banned outside this package | jonboulle/clockwork |
-| `id/` | UUIDv7, KSUID, snowflake generators | google/uuid · segmentio/ksuid |
-| `validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
+| `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
+| `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
+| `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
+| `core/errors/` | typed errors, stack traces, ogen-status mapping | go-faster/errors |
+| `core/crypto/` | argon2id, AES-GCM, sealed-secret helpers, column encryption | alexedwards/argon2id |
+| `core/crypto/receipt/` | Ed25519 Exit-0 execution receipts (praetor-compatible) | stdlib |
+| `core/clock/` | mockable wall clock (real + fake) — `time.Now()` is banned outside this package | jonboulle/clockwork |
+| `core/id/` | UUIDv7, KSUID, snowflake generators | google/uuid · segmentio/ksuid |
+| `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
+| `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
+| `core/clikit/` | cobra + fx CLI builder (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
+| `core/mcp/` | MCP server fx module — stdio + streamable-HTTP | modelcontextprotocol/go-sdk |
+| `core/gitx/` | bounded git runner + `worktree/` per-task worktrees | stdlib |
+| `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
+| `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data
@@ -75,6 +95,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | Module | Purpose | Key dep |
 |---|---|---|
 | `db/pgx/` | pgx pool fx module + startup retry + slow-query logger | jackc/pgx/v5 |
+| `db/sqlite/` | embedded SQLite (modernc, pure Go) fx module — WAL + foreign keys on by default | modernc.org/sqlite |
 | `db/migrate/` | golang-migrate v4 runner + fx lifecycle hook | golang-migrate/migrate/v4 |
 | `db/sqlc/` | shared sqlc.yaml fragment + query helpers | sqlc-dev/sqlc |
 | `db/geo/` | PostGIS pgx type handlers — Point, BBox, EWKB scanner, Haversine | custom on pgx |
@@ -365,7 +386,10 @@ Pre-alpha (`v0.0.x`). All modules above are committed; public API may change bef
 
 ## License
 
-[MIT](LICENSE).
+Code is licensed under the [European Union Public Licence 1.2](LICENSE)
+(`EUPL-1.2`); documentation under `CC-BY-SA-4.0`. The repository is
+[REUSE](https://reuse.software)-compliant — see [LICENSING.md](LICENSING.md)
+for the full split, third-party carve-outs, and the DCO contribution terms.
 
 ## Support
 
@@ -380,3 +404,14 @@ If golusoris saves you time, a coffee helps ☕
     <img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Sponsors" />
   </a>
 </p>
+
+## Standards & Governance
+
+This repository conforms to High-Integrity Systems Standards (HISS-16)
+and modernized NASA JPL Power-of-10 rules.
+
+| Gate | Command | Description |
+| :--- | :--- | :--- |
+| **Verification** | `make verify-all` | Runs full audit, test suite, and context integrity check |
+| **HISS Audit** | `standardsctl audit` | Enforces zero technical debt regression against baseline |
+| **Context Sync** | `standardsctl compile-context` | Transpiles canonical `AGENTS.md` to all AI targets |

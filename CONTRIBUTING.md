@@ -34,6 +34,25 @@ Migration:
 
 The `Migration:` footer is **required** for breaking changes. CI fails without it. The footer is auto-stitched into `docs/migrations/vX.Y.Z.md`.
 
+## Licensing and the Developer Certificate of Origin
+
+Contributions are accepted under the licence of the material they touch —
+`EUPL-1.2` for code, `CC-BY-SA-4.0` for prose (see [LICENSING.md](LICENSING.md)).
+Every commit must carry a `Signed-off-by:` trailer certifying the
+[Developer Certificate of Origin](https://developercertificate.org/):
+
+```bash
+git commit -s -m "feat(scope): subject"
+```
+
+CI rejects pull requests with unsigned commits. New Go files start with the
+SPDX header (`goheader` lint enforces it):
+
+```go
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+// SPDX-License-Identifier: EUPL-1.2
+```
+
 ## CI gates
 
 Every PR runs:
@@ -41,12 +60,16 @@ Every PR runs:
 - `make vuln` — govulncheck
 - `make test` — `go test -race -count=1`
 - `apidiff` vs the previous tagged release — fails on undeclared API breakage
+- `reuse lint` — REUSE/SPDX compliance
+- DCO — `Signed-off-by:` on every commit
+- `capabilities.yaml` drift guard — every package is in the capability contract
 
 ## Local dev
 
 ```bash
 make dev    # air hot-reload (when implemented)
-make ci     # full local CI
+make ci     # full local CI (root module)
+make verify-all  # root + core + governance gates (what CI runs)
 make gen    # sqlc / ogen / mockery codegen
 ```
 

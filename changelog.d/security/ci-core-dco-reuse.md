@@ -1,0 +1,1 @@
+- CI: lint / gosec / govulncheck / test / build now cover the `core` module; new `dco` and `reuse` jobs; `goheader` lint enforces SPDX headers.
