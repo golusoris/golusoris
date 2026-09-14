@@ -48,6 +48,14 @@ run_per_module() {
   shift
   pairs=$(module_pkgs "$files")
   for m in $(printf '%s\n' "$pairs" | cut -f1 | sort -u); do
+    if [ "$(go env GOOS)" != linux ] && [ "$m" = "hw/udev" ]; then
+      note "$m: skip (linux-only module on $(go env GOOS))"
+      continue
+    fi
+    if ! command -v gcc >/dev/null 2>&1 && [ "$m" = "media/3d" ]; then
+      note "$m: skip (C compiler gcc absent for cgo module)"
+      continue
+    fi
     pkgs=$(printf '%s\n' "$pairs" | awk -F'\t' -v m="$m" '$1==m{print $2}' | tr '\n' ' ')
     note "$m: $* $pkgs"
     # shellcheck disable=SC2086 # package list is intentionally word-split
