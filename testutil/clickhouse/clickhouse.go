@@ -68,6 +68,13 @@ func Start(t *testing.T) chgo.Conn {
 		}
 	})
 
+	return openConn(ctx, t, ctr)
+}
+
+// openConn resolves the container's native port, opens a chgo connection,
+// verifies it with a ping and registers its closing with t.Cleanup.
+func openConn(ctx context.Context, t *testing.T, ctr testcontainers.Container) chgo.Conn {
+	t.Helper()
 	host, err := ctr.Host(ctx)
 	if err != nil {
 		t.Fatalf("testutil/clickhouse: get host: %v", err)
