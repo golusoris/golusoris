@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/core/clock"
-	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Status is the delivery outcome.
@@ -252,7 +251,7 @@ func (d *Dispatcher) saveDelivery(ctx context.Context, del *Delivery) {
 	}
 }
 
-func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig string, body []byte) (code int, err error) {
+func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig string, body []byte) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("build request: %w", err)
@@ -262,11 +261,16 @@ func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig strin
 	req.Header.Set("X-Webhook-Event", event)
 	req.Header.Set("X-Webhook-Delivery", deliveryID)
 
-	resp, err := d.client.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
+	resp, err := d.client.Do(req)
 	if err != nil {
 		return 0, err
 	}
-	defer gerr.CloseInto(resp.Body, &err, "webhooks/out: close response body")
+	// The endpoint has already answered with resp.StatusCode. Failing to
+	// close the (unread) body is not a delivery failure and must not turn an
+	// acknowledged delivery into a duplicate retry, so it is logged instead.
+	if cerr := resp.Body.Close(); cerr != nil {
+		d.logger.DebugContext(ctx, "webhooks/out: close response body", "delivery", deliveryID, "err", cerr)
+	}
 	return resp.StatusCode, nil
 }
 
