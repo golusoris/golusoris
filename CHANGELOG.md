@@ -387,6 +387,7 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 - Relicensed: code EUPL-1.2 (was MIT), documentation CC-BY-SA-4.0; REUSE-compliant with SPDX headers on every first-party file, `reuse lint` and DCO sign-off enforced in CI (ADR-0018, `LICENSING.md`). Releases up to v0.8.0 stay MIT.
 
 - **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).
+- `notify/apns2`: the default HTTP client now enables HTTP/2 through `http.Transport.Protocols` (Go 1.24+) instead of the deprecated `golang.org/x/net/http2.ConfigureTransport`; the negotiated ALPN set (h2, http/1.1) is unchanged and `golang.org/x/net` is no longer a direct dependency.
 
 ### Security
 

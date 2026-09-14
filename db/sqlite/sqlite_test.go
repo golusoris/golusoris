@@ -70,11 +70,11 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 		t.Fatalf("Open memory: %v", err)
 	}
 	t.Cleanup(func() { _ = mem.Close() })
-	if _, err := mem.ExecContext(t.Context(), "CREATE TABLE m (x INT)"); err != nil {
+	if _, err = mem.ExecContext(t.Context(), "CREATE TABLE m (x INT)"); err != nil {
 		t.Fatal(err)
 	}
 	// A second statement must see the table: the pool is pinned to one conn.
-	if _, err := mem.ExecContext(t.Context(), "INSERT INTO m VALUES (1)"); err != nil {
+	if _, err = mem.ExecContext(t.Context(), "INSERT INTO m VALUES (1)"); err != nil {
 		t.Fatalf("second statement lost the in-memory database: %v", err)
 	}
 
@@ -83,10 +83,10 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := rw.ExecContext(t.Context(), "CREATE TABLE r (x INT)"); err != nil {
+	if _, err = rw.ExecContext(t.Context(), "CREATE TABLE r (x INT)"); err != nil {
 		t.Fatal(err)
 	}
-	if err := rw.Close(); err != nil {
+	if err = rw.Close(); err != nil {
 		t.Fatal(err)
 	}
 	ro, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, ReadOnly: true, DisableWAL: true}, discard())
@@ -141,11 +141,11 @@ func TestModule(t *testing.T) {
 	var db *sql.DB
 	app := fxtest.New(t, fx.Supply(cfg, discard()), sqlite.Module, fx.Populate(&db))
 	app.RequireStart()
-	if err := db.PingContext(t.Context()); err != nil {
+	if err = db.PingContext(t.Context()); err != nil {
 		t.Fatalf("ping via module: %v", err)
 	}
 	app.RequireStop()
-	if err := db.PingContext(t.Context()); err == nil {
+	if err = db.PingContext(t.Context()); err == nil {
 		t.Fatal("database must be closed after fx stop")
 	}
 

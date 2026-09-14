@@ -89,7 +89,7 @@ func packageDirs(t *testing.T) map[string]string {
 				return filepath.SkipDir
 			}
 			if rel != "." {
-				if gm, err := astx.ParseGoMod(filepath.Join(path, "go.mod")); err == nil {
+				if gm, parseErr := astx.ParseGoMod(filepath.Join(path, "go.mod")); parseErr == nil {
 					modules[rel] = gm.Module
 				}
 			}

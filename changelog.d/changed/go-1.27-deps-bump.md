@@ -1,1 +1,2 @@
 - **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).
+- `notify/apns2`: the default HTTP client now enables HTTP/2 through `http.Transport.Protocols` (Go 1.24+) instead of the deprecated `golang.org/x/net/http2.ConfigureTransport`; the negotiated ALPN set (h2, http/1.1) is unchanged and `golang.org/x/net` is no longer a direct dependency.

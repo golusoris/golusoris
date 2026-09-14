@@ -3,7 +3,9 @@
 version: "2"
 
 run:
-  timeout: 5m
+  # Sized to the measured cold-cache cost of the root module (~810 CPU-s) on a
+  # 750m-CPU-guaranteed ARC runner; see the Lint job comment in ci.yml.
+  timeout: 20m
   go: "1.27"
   tests: true
   allow-parallel-runners: true
@@ -79,7 +81,7 @@ linters:
     - testifylint
     # supply-chain
     - gomoddirectives
-    - gomodguard
+    - gomodguard_v2
 
   settings:
     # Every first-party Go file carries the REUSE/SPDX header (see LICENSING.md).
@@ -211,14 +213,16 @@ linters:
       replace-local: true
       retract-allow-no-explanation: false
       exclude-forbidden: true
-    gomodguard:
+    # gomodguard_v2 schema (golangci-lint >= v2.12; the v1 linter is deprecated):
+    # `blocked` is a flat list of {module, recommendations, reason}; an empty
+    # match-type means an exact module-path match.
+    gomodguard_v2:
       blocked:
-        modules:
-          - github.com/pkg/errors:
-              recommendations:
-                - github.com/go-faster/errors
-                - github.com/golusoris/golusoris/errors
-              reason: "use go-faster/errors or golusoris/errors"
+        - module: github.com/pkg/errors
+          recommendations:
+            - github.com/go-faster/errors
+            - github.com/golusoris/golusoris/errors
+          reason: "use go-faster/errors or golusoris/errors"
 
   exclusions:
     presets:

@@ -42,7 +42,15 @@ jobs:
     name: Lint
     if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
+    # Lint timeout sizing (measured 2026-09-14 on the PR #447 tip, cold caches):
+    # a full `golangci-lint run` of the root module (171 pkgs) costs ~810 CPU-s
+    # (63 s wall on 32 cores; the go/packages load phase alone is ~530 CPU-s),
+    # core ~44 CPU-s. The ARC job container is guaranteed only 750m CPU (4-CPU
+    # burst limit) and starts with a cold Go module/build cache, so the root
+    # step can need ~18 min under contention -> --timeout=20m per step. Job
+    # timeout = setup (~3 min) + 2 x 20m, rounded up. Keep in sync with
+    # run.timeout in tools/golangci.yml and the Makefile _ci-module target.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -54,13 +62,13 @@ jobs:
           # Pinned for reproducible CI — bumping golangci-lint (and adopting any
           # new linter findings) is a deliberate, reviewed change, not a float.
           version: v2.13.2
-          args: --config=tools/golangci.yml --timeout=5m
+          args: --config=tools/golangci.yml --timeout=20m
       - name: Lint core module
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.13.2
           working-directory: core
-          args: --config=../tools/golangci.yml --timeout=5m
+          args: --config=../tools/golangci.yml --timeout=20m
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
