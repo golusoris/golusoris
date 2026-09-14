@@ -48,9 +48,11 @@ runners — `runs-on: arc-cauda-golusoris-golusoris` — with pinned action SHAs
   first-party file (SPDX headers + `REUSE.toml`; see
   [LICENSING.md](LICENSING.md)) — the licence of every file is
   machine-readable for SBOM accuracy
-- Dependency review, CodeQL and OpenSSF Scorecard
+- Dependency review and OpenSSF Scorecard (CodeQL was retired on
+  2026-08-28 — it cannot run on the self-hosted runners)
 - praetor **HISS-16** governance audit (`standardsctl audit`, ratcheting
-  baseline in `.standards-baseline.json`) through `make verify-all`
+  baseline in `.standards-baseline.json`) through `make verify-all` —
+  today a local / lefthook gate rather than a CI job
 
 Releases are:
 

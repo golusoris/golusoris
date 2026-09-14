@@ -36,8 +36,9 @@ Since v0.9.0 the contract is machine-enforced by
 - [`AGENTS.md`](AGENTS.md) is the **single canonical agent harness**. Every
   vendor context file (`CLAUDE.md`, `.cursor/`, `.gemini/`, `.codex/`,
   `.windsurfrules`, IDE configs) is compiled from it by
-  `standardsctl compile-context` and verified in CI and the lefthook
-  pre-commit hook — never edited by hand (HISS-16, Context Integrity).
+  `standardsctl compile-context` and verified by the lefthook pre-commit
+  hook and `make verify-all` — never edited by hand (HISS-16, Context
+  Integrity).
 - `standardsctl audit` scores the tree against the HISS invariants (the
   modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
   baseline in `.standards-baseline.json`; a change may not regress it.
@@ -78,7 +79,8 @@ outbound: contributions are licensed under the terms of the material they
 touch — [`EUPL-1.2`](LICENSE) for code, `CC-BY-SA-4.0` for prose (see
 [`LICENSING.md`](LICENSING.md)) — and every commit certifies the
 [Developer Certificate of Origin](https://developercertificate.org/) with a
-`Signed-off-by:` trailer (`git commit -s`). CI rejects unsigned commits.
+`Signed-off-by:` trailer (`git commit -s`). The CI `DCO sign-off` job fails on
+unsigned commits.
 
 ## 3. Decision-making
 
@@ -98,8 +100,10 @@ Every PR must satisfy:
 
 - Conventional Commits (`type(scope): subject`).
 - DCO `Signed-off-by:` trailer on every commit.
-- The framework's required status checks (lint, gosec, govulncheck, race tests,
-  build, apidiff, Semgrep, gitleaks, `reuse lint`, DCO, CodeQL). `main` is
+- The framework's required status checks — `CI success` (lint, gosec,
+  govulncheck, race tests, build, `reuse lint`) and the PR-title check — plus
+  the advisory jobs (apidiff, Semgrep, gitleaks, DCO, changelog fragments;
+  CodeQL was retired on 2026-08-28). `main` is
   host-protected with `enforce_admins` on — no bypass, including for the BDFL.
 
 ### 3.3 Disagreements

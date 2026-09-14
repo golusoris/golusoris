@@ -179,9 +179,9 @@ the app's own `.golangci.yml`; set it to opt into the shared ruleset explicitly.
 
 ## 6. Git hooks
 
-`make ci` is the intended local gate. The framework itself runs it through
-[lefthook](https://github.com/evilmartians/lefthook); the minimal app-side
-configuration is:
+`make ci` is the intended local gate for apps. The framework itself uses
+[lefthook](https://github.com/evilmartians/lefthook) with finer-grained hooks
+(below); the minimal app-side configuration is:
 
 ```yaml
 # lefthook.yml
