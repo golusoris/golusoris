@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.27.0
+go 1.27.1
 
 replace github.com/golusoris/golusoris/core => ./core
 

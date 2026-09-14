@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/media/img
 
-go 1.27.0
+go 1.27.1
 
 require (
 	github.com/davidbyttow/govips/v2 v2.18.0

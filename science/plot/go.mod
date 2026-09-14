@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/science/plot
 
-go 1.27.0
+go 1.27.1
 
 require gonum.org/v1/plot v0.17.0
 
