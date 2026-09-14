@@ -18,6 +18,7 @@ package udev
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	udevlib "github.com/jochenvg/go-udev"
@@ -46,7 +47,7 @@ func NewMonitor(ctx context.Context) (*Monitor, error) {
 	u := udevlib.Udev{}
 	mon := u.NewMonitorFromNetlink("udev")
 	if mon == nil {
-		return nil, fmt.Errorf("udev: create monitor")
+		return nil, errors.New("udev: create monitor")
 	}
 	devCh, errCh, err := mon.DeviceChan(ctx)
 	if err != nil {
