@@ -78,7 +78,7 @@ nav:
       - knadh/koanf: upstream/koanf/README.md
       - maypok86/otter: upstream/otter/README.md
       - redis/rueidis: upstream/rueidis/README.md
-      - casbin/casbin: upstream/casbin/README.md
+      - casbin/casbin/v3: upstream/casbin/README.md
       - go-webauthn/webauthn: upstream/webauthn/README.md
       - go.opentelemetry.io/otel: upstream/otel/README.md
       - golang-migrate/migrate: upstream/golang-migrate/README.md
@@ -90,7 +90,6 @@ nav:
       - k8s client-go: upstream/k8s/README.md
       - prometheus/client_golang: upstream/prometheus/README.md
       - log/slog: upstream/slog/README.md
-      - a-h/templ: upstream/templ/README.md
       - testcontainers/testcontainers-go: upstream/testcontainers/README.md
       - go-playground/validator: upstream/validator/README.md
 

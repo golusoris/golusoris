@@ -21,8 +21,33 @@ compose à la carte. The framework's binding constraints are encoded in
 - Architecture decisions recorded as ADRs under [`docs/adr/`](docs/adr/).
 - Supply-chain + compliance posture (SLSA L3, OWASP ASVS L2, NIST SSDF, EU CRA,
   OpenSSF) asserted in [`SECURITY.md`](SECURITY.md).
+- Licensing: EUPL-1.2 for code, CC-BY-SA-4.0 for prose, REUSE-compliant, DCO
+  sign-off ([ADR-0018](docs/adr/0018-eupl-relicense-and-reuse.md),
+  [`LICENSING.md`](LICENSING.md)).
 
 These are non-negotiable: a change that regresses a hard gate does not merge.
+
+### 1.1 Governance harness — praetor HISS-16
+
+Since v0.9.0 the contract is machine-enforced by
+[cordanallm/praetor](https://github.com/cordanallm/praetor)
+([ADR-0019](docs/adr/0019-praetor-governance-and-capability-contract.md)):
+
+- [`AGENTS.md`](AGENTS.md) is the **single canonical agent harness**. Every
+  vendor context file (`CLAUDE.md`, `.cursor/`, `.gemini/`, `.codex/`,
+  `.windsurfrules`, IDE configs) is compiled from it by
+  `standardsctl compile-context` and verified by the lefthook pre-commit
+  hook and `make verify-all` — never edited by hand (HISS-16, Context
+  Integrity).
+- `standardsctl audit` scores the tree against the HISS invariants (the
+  modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
+  baseline in `.standards-baseline.json`; a change may not regress it.
+- [`capabilities.yaml`](capabilities.yaml) is the machine-readable capability
+  contract that praetor `needs` resolves fleet demand against; the root
+  `capabilities_test.go` guards it against tree drift.
+- `make verify-all` runs build, lint, tests, the capability drift guard,
+  `compile-context --verify`, `audit` and `reuse lint` — the one gate every
+  maintainer and agent runs before concluding a change.
 
 ## 2. Roles
 
@@ -49,9 +74,13 @@ subtrees (see [`.github/CODEOWNERS`](.github/CODEOWNERS)). They are listed in
 
 ### 2.3 Contributors
 
-Anyone who opens an issue or PR is a contributor. There is no CLA — by
-submitting code, contributors agree to license it under the terms in
-[`LICENSE`](LICENSE) (MIT).
+Anyone who opens an issue or PR is a contributor. There is no CLA. Inbound =
+outbound: contributions are licensed under the terms of the material they
+touch — [`EUPL-1.2`](LICENSE) for code, `CC-BY-SA-4.0` for prose (see
+[`LICENSING.md`](LICENSING.md)) — and every commit certifies the
+[Developer Certificate of Origin](https://developercertificate.org/) with a
+`Signed-off-by:` trailer (`git commit -s`). The CI `DCO sign-off` job fails on
+unsigned commits.
 
 ## 3. Decision-making
 
@@ -70,9 +99,12 @@ Bug fixes and implementation work flow through pull requests against `main`.
 Every PR must satisfy:
 
 - Conventional Commits (`type(scope): subject`).
-- The framework's required status checks (lint, gosec, govulncheck, race tests,
-  build, CodeQL). `main` is host-protected with `enforce_admins` on — no
-  bypass, including for the BDFL.
+- DCO `Signed-off-by:` trailer on every commit.
+- The framework's required status checks — `CI success` (lint, gosec,
+  govulncheck, race tests, build, `reuse lint`) and the PR-title check — plus
+  the advisory jobs (apidiff, Semgrep, gitleaks, DCO, changelog fragments;
+  CodeQL was retired on 2026-08-28). `main` is
+  host-protected with `enforce_admins` on — no bypass, including for the BDFL.
 
 ### 3.3 Disagreements
 
@@ -84,7 +116,9 @@ in the ADR's `## References` section.
 
 Releases are automated by [release-please](.github/workflows/release-please.yml)
 on pushes to `main`, following [SemVer](https://semver.org) and
-[Keep a Changelog](https://keepachangelog.com). The project is pre-1.0:
+[Keep a Changelog](https://keepachangelog.com). The root module and the
+`core/` sub-module ([ADR-0017](docs/adr/0017-lean-core-submodule.md)) are
+tagged together (`vX.Y.Z` + `core/vX.Y.Z`). The project is pre-1.0:
 breaking changes are permitted between minor versions and called out in the
 commit `Migration:` footer and the changelog.
 

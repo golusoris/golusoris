@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 # Per-app CI — delegates to the reusable workflow in golusoris/golusoris.
-# Refs are pinned to the v0.4.0 release commit; Renovate bumps them.
+# Refs are pinned to a release commit (currently v0.7.0); Renovate bumps them.
 name: CI
 
 on:

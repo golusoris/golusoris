@@ -384,6 +384,8 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 
 - **BREAKING**: `config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`, `version`, `clikit`, `mcp` moved into the new lean sub-module `github.com/golusoris/golusoris/core` (import paths now `…/core/<pkg>`; `clikit/tui` unchanged). See `docs/migrations/v0.9.0.md` and ADR-0017.
 
+- Docs: repository-wide stale-content sweep for v0.9.0 — README status + module paths, PLAN.md architecture (root + `core/` sub-module, EUPL-1.2, Go 1.27, praetor), `docs/upstream/` pins refreshed from `go.mod` (`make docs-upstream` prints the refresh recipe; `a-h/templ` snapshot dropped), SECURITY.md / GOVERNANCE.md reflect the v0.9.0 supply-chain and governance posture, pre-June STATE.md session logs archived under `.workingdir/archive/`, `V0.1.0.md` folded into TODO.md.
+
 - Relicensed: code EUPL-1.2 (was MIT), documentation CC-BY-SA-4.0; REUSE-compliant with SPDX headers on every first-party file, `reuse lint` and DCO sign-off enforced in CI (ADR-0018, `LICENSING.md`). Releases up to v0.8.0 stay MIT.
 
 - **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).

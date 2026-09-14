@@ -10,7 +10,7 @@
 //
 // Stamp a release version at build time:
 //
-//	go build -ldflags "-X github.com/golusoris/golusoris/version.version=1.2.3"
+//	go build -ldflags "-X github.com/golusoris/golusoris/core/version.version=1.2.3"
 //
 // With no ldflags, Version falls back to the VCS tag (or "(devel)") and
 // Revision/Time/Dirty come from the embedded build info.
