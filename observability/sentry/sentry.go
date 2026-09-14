@@ -96,7 +96,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // Module initializes Sentry and installs the slog bridge handler. DSN-less
 // configurations are a no-op — the bridge short-circuits.
-var Module = fx.Module("golusoris.observability.sentry",
+var Module = fx.Module(
+	"golusoris.observability.sentry",
 	fx.Provide(loadOptions),
 	fx.Invoke(func(lc fx.Lifecycle, opts Options, existing *slog.Logger) error {
 		if err := Init(opts); err != nil {
@@ -105,7 +106,7 @@ var Module = fx.Module("golusoris.observability.sentry",
 		if opts.DSN != "" {
 			// Fan out to the existing handler + Sentry bridge for Error+.
 			bridged := slog.New(&fanoutHandler{
-				handlers: []slog.Handler{existing.Handler(), newSentryHandler()},
+				Handlers: []slog.Handler{existing.Handler(), newSentryHandler()},
 			})
 			slog.SetDefault(bridged)
 		}

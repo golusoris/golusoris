@@ -10,6 +10,8 @@ import (
 	"log/slog"
 
 	sentrygo "github.com/getsentry/sentry-go"
+
+	corelog "github.com/golusoris/golusoris/core/log"
 )
 
 // sentryHandler is a slog.Handler that forwards Error-level records to
@@ -62,46 +64,6 @@ func (h *sentryHandler) WithGroup(name string) slog.Handler {
 	return &sentryHandler{attrs: h.attrs, group: name}
 }
 
-// fanoutHandler writes each record to every wrapped handler. Mirrors the
-// otel fanout — factoring this to an internal package is worth doing once
-// both are stable.
-type fanoutHandler struct {
-	handlers []slog.Handler
-}
-
-func (f *fanoutHandler) Enabled(ctx context.Context, lvl slog.Level) bool {
-	for _, h := range f.handlers {
-		if h.Enabled(ctx, lvl) {
-			return true
-		}
-	}
-	return false
-}
-
-func (f *fanoutHandler) Handle(ctx context.Context, r slog.Record) error {
-	for _, h := range f.handlers {
-		if !h.Enabled(ctx, r.Level) {
-			continue
-		}
-		if err := h.Handle(ctx, r.Clone()); err != nil {
-			return err //nolint:wrapcheck // fan-out: error context already descriptive
-		}
-	}
-	return nil
-}
-
-func (f *fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	cloned := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		cloned[i] = h.WithAttrs(attrs)
-	}
-	return &fanoutHandler{handlers: cloned}
-}
-
-func (f *fanoutHandler) WithGroup(name string) slog.Handler {
-	cloned := make([]slog.Handler, len(f.handlers))
-	for i, h := range f.handlers {
-		cloned[i] = h.WithGroup(name)
-	}
-	return &fanoutHandler{handlers: cloned}
-}
+// fanoutHandler writes each record to every wrapped handler. Shared with the
+// otel bridge via core/log.FanoutHandler.
+type fanoutHandler = corelog.FanoutHandler

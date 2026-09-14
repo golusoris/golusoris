@@ -283,7 +283,7 @@ var ModuleWithSlogBridge = fx.Module(
 			otelslog.WithLoggerProvider(providers.Logger),
 		)
 		slog.SetDefault(slog.New(&fanoutHandler{
-			handlers: []slog.Handler{existing.Handler(), otelHandler},
+			Handlers: []slog.Handler{existing.Handler(), otelHandler},
 		}))
 	}),
 )
