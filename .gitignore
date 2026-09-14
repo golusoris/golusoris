@@ -51,3 +51,7 @@ tmp/
 # praetor governance runtime state (ephemeral worktrees, receipts)
 .standards/
 .golusoris/worktrees/
+
+# Compiled deploy binaries are build outputs, never checked in (OSSF Scorecard BinaryArtifacts).
+/deploy/pulumi/pulumi
+/deploy/multiregion/multiregion
