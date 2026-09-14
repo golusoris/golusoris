@@ -1,7 +1,74 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Session state — golusoris
 
 > Persistent state across workstations and AI sessions. Updated as significant changes happen.
-> Last update: 2026-09-02 (Gitea publisher main-only trigger fix).
+> Last update: 2026-09-14 (v0.9.0 prep: lean `core/` sub-module · capability contract · EUPL-1.2 · praetor governance).
+
+## Session log — 2026-09-14: praetor onboarding, lean core, EUPL-1.2 (branch `feat/core-submodule-praetor-eupl`)
+
+Goal: make golusoris the dedupe target for every Go repo in `~/dev` and
+onboard it with cordanallm/praetor in both directions. Work graph in
+[TODO.md](TODO.md); fleet demand in [FLEET-DEMAND.md](FLEET-DEMAND.md).
+
+- **Local `main` was 192 commits behind origin** (tags to v0.7.0, 0.8.0 prepared
+  but untagged). Fast-forwarded first. GitHub is the push target for now;
+  the Gitea canonical remote comes later (user decision).
+- **`core/` sub-module (ADR-0017)** — `config log clock errors crypto id
+  validate version clikit mcp` moved to `github.com/golusoris/golusoris/core/…`
+  (201 import sites rewritten); `clikit/tui` stays in root. Root and
+  `media/{audio,img}` require `core v0.9.0` via in-repo `replace`. New core
+  packages: `codec/yaml`, `crypto/receipt`, `gitx` + `gitx/worktree`, `astx`,
+  `capabilities`. Root gained `db/sqlite` (modernc, 2 fleet consumers).
+- **Hard bump** — `go 1.27.0` in all 22 go.mod files; `go get -u -t` everywhere.
+  Only breakage: k8s `kube-openapi` had to be pinned to the version
+  `apimachinery v0.37.0` requires (structured-merge-diff v6/v7 clash);
+  `tint.NewHandler` → `NewTextHandler`. Local toolchain: golangci-lint v2.13.2
+  (CI pin), gofumpt, apidiff, reuse 6.2.0.
+- **Capability contract (ADR-0019)** — root `capabilities.yaml` (202 packages,
+  21 modules, generated skeleton + hand-tuned keys/`replaces`),
+  `capabilities_test.go` drift guard. praetor now reads it: fleet coverage
+  20.9 % → **97.5 %**; praetor `.needs.yaml` **100 %**. Remaining real gaps
+  (backlog): otelpgx, hashicorp/raft(+boltdb), anthropic-sdk-go,
+  govalues/decimal, embedded-postgres, imroc/req, go-hclog, ginkgo/gomega,
+  goptuna, parquet-go, containerd/nri, go.uber.org/mock, goleak.
+- **praetor fixes (branch `feat/golusoris-core-onboarding`)** — module path
+  `github.com/cordanaLLM/standards` → `github.com/cordanallm/praetor`;
+  `needs` reads `capabilities.yaml` (`GOLUSORIS_PATH` / module cache
+  discovery, no `/home/kilian` defaults), version from `git describe`,
+  fleet-owned prefixes + `golang.org/x` classified native, major-version-
+  insensitive `replaces` matching, `custom.v2` noise fixed, walk-root skip bug
+  (`--path=.` scanned nothing) fixed; transpiler is repo-name-aware and carries
+  `## <Vendor>` sections from AGENTS.md into each target; catalog paths moved
+  to `core/`. `docs/golusoris-migration-plan.md` records the code migration
+  (deferred to a later session).
+- **EUPL-1.2 (ADR-0018)** — LICENSE/LICENSES (EUPL-1.2, CC-BY-SA-4.0,
+  CC-BY-4.0, MIT, Apache-2.0, GPL-2.0-only for the eBPF program), REUSE.toml
+  with third-party carve-outs, LICENSING.md, SPDX headers on 1 012 files
+  (`reuse annotate` layout; front-matter and generated files covered by
+  REUSE.toml instead), `goheader` lint, `reuse lint` + DCO jobs in CI,
+  README badges, CONTRIBUTING DCO section, `golusoris init` scaffolds
+  LICENSE + REUSE.toml + headers.
+- **Praetor governance (full adopt)** — `.standards.yaml` (framework;
+  security:high, api:public-contract, docs:seo-portal, agent:sandboxed),
+  `.standards.lock`, baseline of **1 807** HISS infractions (HISS-04 60-LOC
+  func cap dominates), compiled vendor context for 6 agents, IDE configs,
+  devcontainer, `.config/labels.yaml`, `.github/rulesets/main.json`. The
+  former `CLAUDE.md` body now lives in `AGENTS.md` `## Claude Code`; the
+  transpiler compiles CLAUDE.md (112 lines). `standardsctl audit` → 100 %.
+- **Gate (local, Windows)** — build + vet green (root, core, 20 sub-modules);
+  golangci-lint 0 issues (root + core); `reuse lint` compliant; core tests
+  green; root tests green except 3 Windows-only environment failures
+  (`k8s/client` kubeconfig present on host, `storage` file lock on delete,
+  `systemd` unixgram) and `storage/scan` (clamd is Linux-only) — CI runs
+  Linux. `-race` unavailable locally (no gcc); CI covers it.
+- **Release note** — v0.9.0 is breaking (import paths, Go 1.27). Tag
+  `core/v0.9.0` and `v0.9.0` on the same commit; release-please has a `core`
+  component with `tag-separator: "/"`.
 
 ## Session log — 2026-09-02: Gitea publisher main-only trigger fix
 

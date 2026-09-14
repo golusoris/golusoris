@@ -1,0 +1,1 @@
+- Praetor governance adopted: `.standards.yaml`, HISS-16 debt baseline, compiled vendor agent context (`CLAUDE.md` is now generated from the `## Claude Code` section of `AGENTS.md`), `make verify-all` universal gate, root `Makefile`.

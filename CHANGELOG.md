@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
@@ -358,6 +364,28 @@ Add testcontainers integration coverage for `pubsub/kafka` via `testutil/kafka`
 
 Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reusable CI workflows in downstream apps.
 
+- `capabilities.yaml` + `core/capabilities`: machine-readable capability contract (package → capability keys → replaced third-party modules) consumed by cordanallm/praetor `needs`; root drift test keeps it in sync (ADR-0019).
+
+- `core/astx`: bounded Go-source walker, AST import rewriter (the `golusoris bump` codemod engine), per-function metrics, go.mod reader (capability `ast.analyzer`).
+
+- `core/codec/yaml`: fleet YAML codec — strict decoding, bounded input, atomic `WriteFile` (capability `config.yaml`).
+
+- `core/crypto/receipt`: Ed25519-signed Exit-0 execution receipts, clock-injected, fx `Module` reading `crypto.receipt.seed` (capability `crypto.receipt`).
+
+- `core/gitx` + `core/gitx/worktree`: bounded git runner (deadline, output cap, ref validation) and per-task worktree manager (capability `git.worktree`).
+
+- `db/sqlite`: embedded SQLite fx module over modernc.org/sqlite (pure Go, WAL + foreign keys on by default; config prefix `db.sqlite`).
+
+- Praetor governance adopted: `.standards.yaml`, HISS-16 debt baseline, compiled vendor agent context (`CLAUDE.md` is now generated from the `## Claude Code` section of `AGENTS.md`), `make verify-all` universal gate, root `Makefile`.
+
+### Changed
+
+- **BREAKING**: `config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`, `version`, `clikit`, `mcp` moved into the new lean sub-module `github.com/golusoris/golusoris/core` (import paths now `…/core/<pkg>`; `clikit/tui` unchanged). See `docs/migrations/v0.9.0.md` and ADR-0017.
+
+- Relicensed: code EUPL-1.2 (was MIT), documentation CC-BY-SA-4.0; REUSE-compliant with SPDX headers on every first-party file, `reuse lint` and DCO sign-off enforced in CI (ADR-0018, `LICENSING.md`). Releases up to v0.8.0 stay MIT.
+
+- **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).
+
 ### Security
 
 - Added a custom `.semgrep.yml` ruleset of golusoris-specific SAST invariants
@@ -369,6 +397,8 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 Add comprehensive integration tests for OIDC and passkeys modules with fxtest to achieve 85% security-critical coverage, including proper error handling and module wiring verification.
 
 - Restored `Timeout` and `http.DefaultClient` Semgrep invariants: every new or modified `*http.Client` must set `Timeout`; using `http.DefaultClient` is prohibited. Anchored `.semgrep.yml` exclude patterns to prevent false-positive regressions from excluded test-harness generators (`apidocs`, `selfupdate`). All modules updated to comply; scan passes with zero findings.
+
+- CI: lint / gosec / govulncheck / test / build now cover the `core` module; new `dco` and `reuse` jobs; `goheader` lint enforces SPDX headers.
 
 - Raised every Go module directive to 1.26.7 so builds include the standard-library fixes required by `govulncheck`, including GO-2026-6218, GO-2026-6090, GO-2026-5972, GO-2026-5856, and GO-2026-5026.
 ## [0.1.0] — 2026-04-14

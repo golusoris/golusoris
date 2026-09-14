@@ -1,8 +1,41 @@
-# Claude Code guide — golusoris
+<!-- markdownlint-disable MD013 -->
+# Claude Code Guidelines: golusoris/golusoris
+<!-- Compiled automatically by standardsctl compile-context from AGENTS.md. DO NOT EDIT DIRECTLY. -->
 
-> Claude Code-specific guide. For cross-tool conventions read [AGENTS.md](AGENTS.md) first; this file extends it.
+Read `AGENTS.md` first — it is the canonical operating harness; this file is compiled from it.
 
-## Skills available
+## Commands
+
+```bash
+go test -v -race ./...
+standardsctl compile-context --verify
+standardsctl audit
+make verify-all
+```
+
+## Architectural Invariants (HISS-16)
+
+- **Acyclic Control Flow (HISS-01)**: Recursion strictly prohibited; call graph must be DAG.
+- **Bounded Loops & Timeouts (HISS-02)**: Scalar upper bounds on loops; context timeout on all I/O.
+- **Complexity Caps (HISS-04)**: McCabe Cyclomatic <= 10, Cognitive <= 15, Func LOC <= 75.
+- **Zero Unchecked Errors (HISS-07)**: Zero .unwrap() / .expect(); handle all errors explicitly.
+- **Zero Warnings (HISS-10)**: Compilers and linters must pass with zero warnings.
+- **3D Testing (HISS-15)**: Positive, negative, and boundary tests mandatory.
+- **Context Integrity (HISS-16)**: Single canonical AGENTS.md source.
+
+## Behavioral Invariants
+
+- **Lead with Action**: Return code changes and commands directly without conversational preamble.
+- **Diagnostic Distillation**: Limit compiler/linter error feedback to <= 1500 tokens with line pointers.
+- **No Evasion**: Never bypass hooks or use --no-verify.
+
+## Repository-specific guidance
+<!-- Copied verbatim from the `## Claude Code` section of AGENTS.md. -->
+
+> Compiled into `CLAUDE.md` by `standardsctl compile-context` — edit here, never there.
+> Claude Code loads `.claude/skills/*` and `.claude/hooks/*` on top of this section.
+
+### Skills available
 
 Located in `.claude/skills/`:
 
@@ -16,7 +49,7 @@ Located in `.claude/skills/`:
 
 Invoke via `/<skill-name>` in Claude Code.
 
-## Hooks active
+### Hooks active
 
 Located in `.claude/hooks/`:
 
@@ -25,14 +58,14 @@ Located in `.claude/hooks/`:
 - Touching `**/api/*.go` (ogen) auto-loads `docs/upstream/ogen/` + the OpenAPI spec
 - Pre-commit: runs `make ci` (lint + sec + test)
 
-## Tone
+### Tone
 
 - Be terse. No preamble.
 - When changing public API: write the `Migration:` footer in the commit body, with before/after Go snippets.
 - When adding a dependency: state which awesome-go alternatives you considered and why this one wins.
 - Never add init() side effects. Always use fx lifecycle.
 
-## Project principles — read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) first
+### Project principles — read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) first
 
 §2 is the framework's foundational contract. Quick hitlist for AI agents:
 
@@ -48,13 +81,13 @@ Located in `.claude/hooks/`:
 
 Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint` needs a justification comment.
 
-## Working agreements (for AI agents)
+### Working agreements (for AI agents)
 
 - **Decisions go through `AskUserQuestion`.** Any clarifying question or multi-option choice uses the popup, never prose options — even binary ones. (#25)
 - **State hygiene — update [.workingdir/STATE.md](.workingdir/STATE.md) immediately** after each bug is fixed, confirmed, or ruled out; don't batch to session end, or the next session re-investigates closed work. (#26)
 - **Deep-dive deliverables.** A research/hardening PR ships the full set — per-module `AGENTS.md`, a decision/benchmark digest, and a STATE.md delta — not a config-only change. (#28)
 
-## Don't
+### Don't
 
 - Don't use `time.Now()` outside `clock/`. Use `clock.Now(ctx)`.
 - Don't `fmt.Println` — use the slog handler from `log/`.
@@ -63,12 +96,12 @@ Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint
 - Don't create new markdown docs unless explicitly asked.
 - Don't silence a linter without adding a justification comment next to the `//nolint` directive.
 
-## Project state
+### Project state
 
 - Pre-alpha. Steps 1-5 landed on `main` (`golusoris/golusoris`): Core, DB, HTTP base, HTTP extras, OTel + observability.
 - See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the full plan and [.workingdir/STATE.md](.workingdir/STATE.md) for the current status + decision log.
 
-## Every commit: keep docs in sync
+### Every commit: keep docs in sync
 
 On each commit touching new/changed modules:
 

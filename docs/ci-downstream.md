@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Consuming the framework's shared CI tooling
 
 Downstream apps get lint, security scans, tests, and coverage two ways, which
@@ -58,6 +64,10 @@ Scope a run to a subtree with `PKG`:
 ```sh
 make test PKG=./internal/payments/...
 ```
+
+### Multi-module repositories
+
+The framework itself is two gated Go modules (root + `core/`). `make ci-all`, `make build-all`, and `make verify-all` in the framework `Makefile` loop over both; downstream apps that adopt the same shape can copy the `MODULES` loop.
 
 ## 2. Reusable CI workflow — `ci-go.yml`
 
