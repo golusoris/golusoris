@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package podinfo reads the Kubernetes downward API env vars (POD_NAME,
 // POD_NAMESPACE, POD_IP, NODE_NAME, SERVICE_ACCOUNT, CONTAINER_NAME,
 // CONTAINER_IMAGE) and exposes them as a typed [PodInfo] via fx.

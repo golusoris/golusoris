@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package passkeys wraps go-webauthn/webauthn for passkey
 // (registration + assertion) and pquerna/otp for TOTP MFA.
 //

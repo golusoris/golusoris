@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package redis provides a cross-replica pub/sub Bus backed by Redis
 // PUBLISH/SUBSCRIBE (rueidis), implementing [pubsub.Bus]. Use it in place of
 // the in-process pubsub.LocalBus when messages must reach subscribers on other

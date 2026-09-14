@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package oauth2server_test
 
 import (
@@ -133,4 +137,93 @@ func TestServer_RejectsBadPKCE(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
+}
+
+// newAuthorizeServer returns a test server whose single public client "spa"
+// has exactly the given registered redirect URIs.
+func newAuthorizeServer(t *testing.T, registered []string) *httptest.Server {
+	t.Helper()
+	clients := oauth2server.NewMemoryClientStore()
+	clients.Add(oauth2server.Client{ID: "spa", RedirectURIs: registered, PublicClient: true})
+	srv := oauth2server.New(oauth2server.Options{
+		Issuer:       "https://issuer.test",
+		Clients:      clients,
+		Codes:        oauth2server.NewMemoryCodeStore(),
+		Signer:       jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour),
+		Clock:        clockwork.NewFakeClock(),
+		Authenticate: func(_ *http.Request) string { return "user-1" },
+	})
+	ts := httptest.NewServer(srv.Routes())
+	t.Cleanup(ts.Close)
+	return ts
+}
+
+// authorize issues a non-following GET /authorize with a valid plain PKCE
+// challenge and returns the status code and Location header. An empty
+// redirectURI or state omits that query parameter entirely.
+func authorize(t *testing.T, ts *httptest.Server, redirectURI, state string) (int, string) {
+	t.Helper()
+	q := url.Values{}
+	q.Set("response_type", "code")
+	q.Set("client_id", "spa")
+	q.Set("code_challenge", "plain-challenge-that-is-long-enough-for-pkce-x")
+	q.Set("code_challenge_method", "plain")
+	if redirectURI != "" {
+		q.Set("redirect_uri", redirectURI)
+	}
+	if state != "" {
+		q.Set("state", state)
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+"/authorize?"+q.Encode(), http.NoBody)
+	require.NoError(t, err)
+	noFollow := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noFollow.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return resp.StatusCode, resp.Header.Get("Location")
+}
+
+// TestServer_AuthorizeRedirectAllowList pins the invariant behind the
+// open-redirect suppression in handleAuthorize: the Location header is only
+// ever built from an exact entry of Client.RedirectURIs, and any other
+// redirect_uri (or none at all) is refused with 400 and no Location header.
+func TestServer_AuthorizeRedirectAllowList(t *testing.T) {
+	t.Parallel()
+
+	const cb = "http://localhost/callback"
+	cases := []struct {
+		name        string
+		registered  []string
+		redirectURI string
+		state       string
+		wantStatus  int
+	}{
+		// positive: exact matches redirect, and only to the registered entry
+		{name: "exact registered entry", registered: []string{cb, "http://localhost/other"}, redirectURI: "http://localhost/other", state: "xyz", wantStatus: http.StatusFound},
+		{name: "hostile state stays inside the query", registered: []string{cb}, redirectURI: cb, state: "x#y&z=1//attacker.example", wantStatus: http.StatusFound},
+		// negative: anything that is not an exact registered entry is refused
+		{name: "unregistered host", registered: []string{cb}, redirectURI: "http://attacker.example/callback", wantStatus: http.StatusBadRequest},
+		{name: "registered prefix with extra path", registered: []string{cb}, redirectURI: cb + "/../evil", wantStatus: http.StatusBadRequest},
+		{name: "registered entry with extra query", registered: []string{cb}, redirectURI: cb + "?next=http://attacker.example", wantStatus: http.StatusBadRequest},
+		// boundary: empty inputs fail closed
+		{name: "missing redirect_uri", registered: []string{cb}, wantStatus: http.StatusBadRequest},
+		{name: "client with no registered URIs", registered: nil, redirectURI: cb, wantStatus: http.StatusBadRequest},
+		{name: "empty registered entry never matches a missing redirect_uri", registered: []string{""}, wantStatus: http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			status, loc := authorize(t, newAuthorizeServer(t, tc.registered), tc.redirectURI, tc.state)
+			require.Equal(t, tc.wantStatus, status)
+			if tc.wantStatus != http.StatusFound {
+				require.Empty(t, loc, "a refused authorize request must not redirect anywhere")
+				return
+			}
+			got, err := url.Parse(loc)
+			require.NoError(t, err)
+			require.Contains(t, tc.registered, got.Scheme+"://"+got.Host+got.Path, "Location must be a registered entry")
+			require.NotEmpty(t, got.Query().Get("code"))
+			require.Equal(t, tc.state, got.Query().Get("state"))
+		})
+	}
 }

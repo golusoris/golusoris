@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — k8s/podinfo
 
 Reads the k8s downward-API env vars and exposes them as `PodInfo` via fx.

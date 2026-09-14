@@ -1,0 +1,1 @@
+- `core/crypto/receipt`: Ed25519-signed Exit-0 execution receipts, clock-injected, fx `Module` reading `crypto.receipt.seed` (capability `crypto.receipt`).

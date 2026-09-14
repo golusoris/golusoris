@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package health serves the canonical Kubernetes probe endpoints —
 // /livez, /readyz, /startupz — backed by a [statuspage.Registry].
 //

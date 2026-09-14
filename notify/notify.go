@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package notify provides a unified notification interface. Apps
 // compose a [Notifier] from one or more [Sender] implementations
 // (SMTP, Resend, Postmark, Discord, Slack, webhook, …).

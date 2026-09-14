@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package safety hardens user uploads before they reach a storage backend:
 // metadata stripping (EXIF/GPS/XMP/text chunks dropped via stdlib re-encode),
 // SSRF-guarded fetch-by-URL (dial-time IP validation re-run on every redirect
@@ -24,7 +28,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes upload hardening. Config keys live under "storage.safety".

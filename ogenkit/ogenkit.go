@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ogenkit is the glue between ogen-generated code and golusoris
 // conventions. It provides:
 //
@@ -32,7 +36,7 @@ import (
 	ogenmw "github.com/ogen-go/ogen/middleware"
 	"github.com/ogen-go/ogen/ogenerrors"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // errorBody is the JSON shape written by [ErrorHandler]. Matches the

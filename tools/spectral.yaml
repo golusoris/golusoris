@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Spectral OpenAPI lint ruleset. Apps `make spec-lint` runs this.
 extends: ["spectral:oas"]
 

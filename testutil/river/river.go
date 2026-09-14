@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package river boots a [jobs.Client] backed by a real Postgres
 // container (via testutil/pg) and the river migrations applied. Used by
 // tests that need to exercise actual worker execution.

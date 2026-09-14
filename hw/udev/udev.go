@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package udev provides Linux device event monitoring using libudev via
 // jochenvg/go-udev (CGO).
 //

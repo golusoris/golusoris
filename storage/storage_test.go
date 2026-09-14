@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package storage_test
 
 import (
@@ -39,10 +43,10 @@ func TestLocalBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	defer rc.Close()
 	if got.Size != 5 {
 		t.Fatalf("size: expected 5, got %d", got.Size)
 	}
+	_ = rc.Close() // Windows refuses to delete a file that is still open
 
 	// List
 	objects, err := b.List(ctx, storage.ListOptions{Prefix: "dir/"})

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # ai/tiny/serve/ollama — AGENTS.md
 
 [tiny.Predictor] that routes generate calls to an Ollama HTTP

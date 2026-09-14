@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — cmd/golusoris/internal/scaffold/
 
 Implements the `golusoris` CLI subcommands (cobra, built via `clikit`).

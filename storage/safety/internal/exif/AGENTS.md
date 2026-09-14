@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — storage/safety/internal/exif/
 
 **Internal** package (not for direct app import). Reads *only* the JPEG EXIF

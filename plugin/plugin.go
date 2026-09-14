@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package plugin provides a type-safe, in-process extension-point registry.
 //
 // It lets framework modules define named extension points and lets apps (or

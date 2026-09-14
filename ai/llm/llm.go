@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package llm provides a provider-agnostic LLM client interface and an
 // HTTP backend compatible with OpenAI-format APIs (OpenAI, Azure OpenAI,
 // Ollama, LM Studio, Groq, Mistral, …).

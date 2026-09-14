@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package markdown renders Markdown to HTML using goldmark with GitHub
 // Flavored Markdown extensions enabled: tables, strikethrough, task lists,
 // linkify, and auto-heading IDs.

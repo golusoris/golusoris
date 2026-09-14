@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package oauth2server is a minimal OAuth 2.1 / OIDC issuer implementing
 // the authorization-code-with-PKCE grant. It does not aim to be a fully
 // spec-conformant IdP — it covers the common case of "be the IdP for my
@@ -134,7 +138,7 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	// the trusted value copied out of config — never the raw query param.
 	// This gives CodeQL a clear allow-list sanitizer for the open-redirect
 	// taint flow into http.Redirect below.
-	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri"))
+	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri")) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- exact-match allow-list of registered URIs
 	if redirect == "" {
 		http.Error(w, "redirect_uri not registered", http.StatusBadRequest)
 		return
@@ -194,7 +198,9 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		v.Set("state", state)
 	}
 	u.RawQuery = v.Encode()
-	http.Redirect(w, r, u.String(), http.StatusFound)
+	// Semgrep's taint-mode open-redirect rule reports at this sink, not at the
+	// pickRegistered allow-list above; TestServer_AuthorizeRedirectAllowList pins the invariant.
+	http.Redirect(w, r, u.String(), http.StatusFound) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- u is built from the exact-match allow-listed entry of client.RedirectURIs (pickRegistered), never the raw redirect_uri
 }
 
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {

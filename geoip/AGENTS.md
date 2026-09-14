@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — geoip/
 
 Thin wrapper around `oschwald/maxminddb-golang/v2` for MaxMind GeoLite2 / GeoIP2 database lookups.

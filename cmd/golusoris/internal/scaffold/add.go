@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package scaffold
 
 import (
@@ -5,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/golusoris/golusoris/clikit"
+	"github.com/golusoris/golusoris/core/clikit"
 )
 
 // knownModules maps short names to their golusoris import paths and fx vars.

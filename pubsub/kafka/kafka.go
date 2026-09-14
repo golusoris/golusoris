@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package kafka provides an fx-wired Kafka producer/consumer via twmb/franz-go.
 //
 // Usage:
@@ -19,7 +23,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Config holds Kafka connection settings.

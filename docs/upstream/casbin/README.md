@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # casbin/casbin/v2 — v2.105.0 snapshot
 
 Pinned: **v2.105.0**

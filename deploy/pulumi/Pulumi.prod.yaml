@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Example prod stack: Multi-AZ, larger instances, deletion protection on.
 # Set the db master password as a secret BEFORE `pulumi up`:
 #   pulumi config set --secret golusoris-app:dbPassword <strong-password>

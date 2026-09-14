@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package session_test
 
 import (
@@ -67,5 +71,39 @@ func TestDestroyExpiresCookie(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected expired cookie after Destroy")
+	}
+}
+
+// TestDestroyCookieMirrorsSecureOption pins the justification of the
+// cookie-missing-secure suppression in Destroy: the expiring cookie carries
+// exactly Options.Secure (true in production) and is always HttpOnly.
+func TestDestroyCookieMirrorsSecureOption(t *testing.T) {
+	t.Parallel()
+	for _, secure := range []bool{true, false} {
+		t.Run(map[bool]string{true: "secure", false: "insecure"}[secure], func(t *testing.T) {
+			t.Parallel()
+			mgr := session.NewManager(session.NewMemoryStore(), session.Options{Secure: secure})
+
+			r := httptest.NewRequest(http.MethodGet, "/", nil)
+			r.AddCookie(&http.Cookie{Name: "sid", Value: "some-session-id"})
+			w := httptest.NewRecorder()
+			if err := mgr.Destroy(w, r); err != nil {
+				t.Fatalf("Destroy: %v", err)
+			}
+			cookies := w.Result().Cookies()
+			if len(cookies) != 1 {
+				t.Fatalf("expected exactly one expiring cookie, got %d", len(cookies))
+			}
+			c := cookies[0]
+			if c.MaxAge != -1 || c.Value != "" {
+				t.Errorf("expected an expired empty cookie, got MaxAge=%d Value=%q", c.MaxAge, c.Value)
+			}
+			if c.Secure != secure {
+				t.Errorf("Secure = %v, want Options.Secure = %v", c.Secure, secure)
+			}
+			if !c.HttpOnly {
+				t.Error("expected HttpOnly on the expiring cookie")
+			}
+		})
 	}
 }

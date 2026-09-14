@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package img provides image processing helpers backed by libvips via govips
 // (CGO). libvips must be installed before this package can be used.
 //
@@ -11,9 +15,9 @@
 //
 // Activate implementation:
 //
-//	1. Remove //go:build ignore from media/img/impl_govips.go
-//	2. Add the dep: go get github.com/davidbyttow/govips/v2
-//	3. go mod tidy
+//  1. Remove //go:build ignore from media/img/impl_govips.go
+//  2. Add the dep: go get github.com/davidbyttow/govips/v2
+//  3. go mod tidy
 //
 // Usage:
 //
@@ -83,6 +87,7 @@ type stub struct{}
 func (stub) Resize(_ context.Context, _ []byte, _, _ int, _ ResizeOptions) ([]byte, error) {
 	return nil, ErrCGORequired
 }
+
 func (stub) Convert(_ context.Context, _ []byte, _ Format, _ int) ([]byte, error) {
 	return nil, ErrCGORequired
 }

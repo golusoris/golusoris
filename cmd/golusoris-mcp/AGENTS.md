@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — cmd/golusoris-mcp/
 
 Standalone MCP server that exposes golusoris scaffolding as MCP tools.

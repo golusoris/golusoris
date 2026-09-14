@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — auth/oidc/
 
 OIDC + OAuth 2.0 PKCE client via [coreos/go-oidc/v3]. Module provides

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # ai/tiny/gemma — AGENTS.md
 
 LoRA fine-tune trainer for Gemma 3 / Gemma 3n. Implements `tiny.Trainer`.

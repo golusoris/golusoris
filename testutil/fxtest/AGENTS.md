@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — testutil/fxtest/
 
 Thin wrapper around `go.uber.org/fx/fxtest` that integrates with `*testing.T`

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package invoice provides invoice modelling, sequential numbering,
 // and HTML rendering for SaaS billing. PDF rendering is intentionally
 // not bundled — when the framework's pdf/ module lands (CGO chromedp

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package robotics provides helpers for robotic platforms using gobot.
 //
 // This is a separate go.mod sub-module because gobot pulls CGO adapters for

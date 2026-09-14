@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package watch provides a debounced recursive directory watcher built on
 // fsnotify. A single Handler func is called once per debounce window with
 // all paths that changed, preventing event storms from editors that write

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package migrate wraps golang-migrate v4 with golusoris conventions: an fx
 // module that opens a migrate.Migrate against the configured DB and (opt-in)
 // runs Up() during fx start. A Migrator handle is also provided so apps can
@@ -28,7 +32,7 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 )
 

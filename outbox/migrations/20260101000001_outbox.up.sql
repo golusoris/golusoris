@@ -1,3 +1,7 @@
+-- SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+--
+-- SPDX-License-Identifier: EUPL-1.2
+
 -- golusoris/outbox: transactional outbox table.
 -- Apps write events into this table in the same tx as their domain
 -- changes. A leader-gated drainer picks them up and enqueues river jobs.

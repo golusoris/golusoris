@@ -4,8 +4,10 @@
 
 /auth/          @lusoris
 /authz/         @lusoris
-/crypto/        @lusoris
-/errors/        @lusoris
+/core/crypto/   @lusoris
+/core/errors/   @lusoris
+/core/mcp/      @lusoris
+/core/gitx/     @lusoris
 /secrets/       @lusoris
 /hash/          @lusoris
 /webhooks/      @lusoris
@@ -20,6 +22,16 @@
 /tools/         @lusoris
 /go.mod         @lusoris
 /go.sum         @lusoris
+/core/go.mod    @lusoris
+/core/go.sum    @lusoris
+/capabilities.yaml @lusoris
+
+# Licensing
+
+/LICENSE        @lusoris
+/LICENSES/      @lusoris
+/REUSE.toml     @lusoris
+/LICENSING.md   @lusoris
 
 # Architecture decisions and compliance docs
 

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tflite implements a [tiny.Predictor] that serves LiteRT
 // (`.tflite`) classifiers produced by [ai/tiny/litert] via a Python
 // inference sidecar over HTTP.

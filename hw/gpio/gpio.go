@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package gpio provides GPIO, SPI, and I²C helpers using periph.io.
 //
 // This is a separate go.mod sub-module because periph.io/x/conn pulls Linux

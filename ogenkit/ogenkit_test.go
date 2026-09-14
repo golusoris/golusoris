@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package ogenkit_test
 
 import (
@@ -12,7 +16,7 @@ import (
 
 	ogenmw "github.com/ogen-go/ogen/middleware"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/ogenkit"
 )
 

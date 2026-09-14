@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package sendgrid sends transactional email via SendGrid's v3 HTTP API.
 //
 // Raw HTTP — we don't pull in sendgrid/sendgrid-go because its SDK is

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 ---
 # Example AppStack claim — place this in the app's namespace.
 # The platform team's Composition translates it into cloud resources.

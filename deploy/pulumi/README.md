@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # deploy/pulumi
 
 Reference [Pulumi](https://www.pulumi.com) (Go) program deploying a golusoris app on AWS. It provisions a VPC, an RDS PostgreSQL instance, an ElastiCache Redis replication group, and an ECS Fargate service behind an Application Load Balancer.

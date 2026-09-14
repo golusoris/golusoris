@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package webrtc is a thin helper around [pion/webrtc] for one-shot
 // SDP offer/answer exchange over HTTP. Suitable for WHIP-style
 // ingestion and browser → server data-channel sessions.

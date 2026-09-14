@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — pkg/sockmap/
 
 Opt-in fx module for colocated, zero-TCP-stack IPC via an eBPF SK_MSG /

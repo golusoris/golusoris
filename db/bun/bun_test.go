@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package bun_test
 
 import (
@@ -5,7 +9,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	dbbun "github.com/golusoris/golusoris/db/bun"
 	pgtest "github.com/golusoris/golusoris/testutil/pg"
 )

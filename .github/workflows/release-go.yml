@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Reusable release workflow for golusoris-based Go applications.
 # Runs on version tags (v*.*.*) and produces:
 #   - Multi-arch OCI image pushed to GHCR

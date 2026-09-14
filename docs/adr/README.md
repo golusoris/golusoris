@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Architecture Decision Records (ADRs)
 
 This directory captures every architectural decision worth preserving — pinned dependencies, interface choices, cross-cutting conventions, deviations from defaults.
@@ -34,6 +40,9 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0014](0014-stdlib-html-template-sprout-seam.md) | htmltmpl dependency choice | Accepted | http, templating, security |
 | [ADR-0015](0015-torrent-client-backends.md) | torrent client abstraction and backend dependencies | Accepted | torrent, media, backends, dependencies |
 | [ADR-0016](0016-image-pipeline-signed-urls.md) | On-demand image pipeline gated by HMAC signed URLs | Accepted | media, img, http, security |
+| [ADR-0017](0017-lean-core-submodule.md) | `core/` is a separate, lean Go module | Accepted | modules, dependencies, governance, breaking-change |
+| [ADR-0018](0018-eupl-relicense-and-reuse.md) | Relicense to EUPL-1.2 + CC-BY-SA-4.0, REUSE, DCO | Accepted | licensing, compliance, governance |
+| [ADR-0019](0019-praetor-governance-and-capability-contract.md) | Adopt praetor governance; publish `capabilities.yaml` | Accepted | governance, agents, tooling, fleet |
 
 ## Backfill policy
 

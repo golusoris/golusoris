@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package clickhouse boots a real ClickHouse container via testcontainers-go
 // and returns a connected [chgo.Conn]. Used by tests that need to exercise
 // actual ClickHouse behaviour (DDL, queries, batch inserts).
@@ -26,7 +30,9 @@ import (
 
 const (
 	defaultImage = "clickhouse/clickhouse-server:24"
-	startTimeout = 90 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Start boots a ClickHouse container and returns a connected chgo.Conn.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package rangeserve provides HTTP range-request serving for large files
 // (video playback, resumable downloads) backed by any io.ReadSeeker.
 // Delegates to stdlib http.ServeContent which implements RFC 7233 fully:

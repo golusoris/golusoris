@@ -1,9 +1,14 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package systemd_test
 
 import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,6 +34,9 @@ func TestNotifyNoopWithoutSocket(t *testing.T) {
 // TestNotifyWritesToSocket creates a local unixgram socket + verifies the
 // message arrives verbatim.
 func TestNotifyWritesToSocket(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unixgram sockets are not supported on Windows")
+	}
 	dir := t.TempDir()
 	sock := filepath.Join(dir, "notify.sock")
 

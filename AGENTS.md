@@ -1,3 +1,85 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
+<!-- markdownlint-disable MD013 MD025 -->
+# golusoris Agent Operating Harness
+
+Run verification before concluding any turn:
+
+```bash
+make verify-all
+```
+
+```mermaid
+flowchart LR
+    AGENT["Autonomous Agent"] --> CHECK["make verify-all"]
+    CHECK --> AUDIT["standardsctl audit"]
+    CHECK --> COMPILER["standardsctl compile-context --verify"]
+    CHECK --> GATE{"All checks Pass?"}
+    GATE -- Yes --> RECEIPT["Ed25519 Exit-0 Receipt"]
+    GATE -- No --> DISTILL["SARIF Diagnostic Distillation (<= 1500 tokens)"]
+```
+
+## Core Directives & Invariants (Modernized NASA JPL Power-of-10)
+
+| Invariant | Scope | NASA Rule | Enforcement Mechanism | Failure Action |
+| :--- | :--- | :--- | :--- | :--- |
+| **HISS-01** | Control Flow | Rule 1 | Recursion strictly prohibited; call graph must be DAG; zero `goto`. | Immediate build failure |
+| **HISS-02** | Loops & I/O | Rule 2 | Scalar upper bound on all loops; explicit `context.Context` timeout on all I/O. | Semgrep / AST error |
+| **HISS-03** | Memory | Rule 3 | Zero dynamic heap allocation (`malloc` / `free`) in hot simulation/tick loops. | Allocation audit sweep |
+| **HISS-04** | Complexity | Rule 4 | Function length $\le 60$ LOC, McCabe Cyclomatic $\le 10$, Statements $\le 50$. | AST sweep blocker |
+| **HISS-07** | Error Handling | Rule 7 | Zero `.unwrap()` / `.expect()`; all errors handled or wrapped with context. | Linter / Compiler error |
+| **HISS-08** | Determinism | Rule 8 | Zero dynamic execution (`eval` / `exec`); zero banned unsafe libc (`gets` / `strcpy` / `sprintf`). | AST / Linter error |
+| **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proofs for all pointer arithmetic and `unsafe` blocks. | AST check blocker |
+| **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Exit code 1 |
+| **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for all public interfaces. | CI coverage gate |
+| **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled via `standardsctl compile-context`. | Pre-commit blocker |
+
+## Operational Rules
+
+1. **Act on Verified State**:
+   Read source files and run real commands before hypothesizing or editing. Never guess flag names, library signatures, or repo configurations from memory.
+
+2. **Lead with Output**:
+   Provide direct answers, diffs, and commands. Avoid filler preambles, "Based on", restatements, or conversational chatter.
+
+3. **Context Transpiler First**:
+   Never edit `CLAUDE.md`, `.cursor/rules/*.mdc`, `.windsurfrules`, or `.github/copilot-instructions.md` manually. Make all agent instruction updates in `AGENTS.md` and execute:
+
+   ```bash
+   standardsctl compile-context
+   ```
+
+4. **SARIF Diagnostic Distillation**:
+   When reporting compiler or linter errors, distill output to $\le 1,500$ tokens ($< 60$ lines). Print the top 3 root-cause failures with file/line pointers and write full SARIF logs to ephemeral storage.
+
+5. **No Evasion Tolerated**:
+   Do not attempt `--no-verify`, `LEFTHOOK=0`, or modifying `.git/hooks`. All pull requests are authoritatively re-checked in an ephemeral isolated sandbox by `cordana-standards[bot]`.
+
+6. **Anti-Loop Interception**:
+   If the same AST diff and error category repeats $\ge 3$ times, halt execution immediately. Re-evaluate the underlying design instead of making micro-textual retries.
+
+## Primary Verification Commands
+
+```bash
+# Fast local test suite
+go test -v -race ./...
+
+# Recompile and verify cross-agent context outputs
+standardsctl compile-context --verify
+
+# Audit repository against declared HISS-16 standards
+standardsctl audit
+
+# Run all formatting, linting, and security gates
+make verify-all
+```
+
+---
+
 # Agent guide — golusoris
 
 > Cross-tool context for [Claude Code](https://claude.com/claude-code), [Cursor](https://cursor.sh), [Aider](https://aider.chat), [Codex](https://github.com/openai/codex), [Continue](https://continue.dev), and other coding assistants.
@@ -5,7 +87,7 @@
 
 ## What this repo is
 
-`golusoris` is a single Go module (`github.com/golusoris/golusoris`) that wraps a pinned set of best-in-class libraries behind opt-in `go.uber.org/fx` modules. Apps compose only what they need — nothing else ships. See [README.md](README.md) for the full module catalog and [docs/principles.md](docs/principles.md) for the complete coding contract.
+`golusoris` is a Go module (`github.com/golusoris/golusoris`) plus the lean `core/` sub-module (`github.com/golusoris/golusoris/core`, ADR-0017) that wraps a pinned set of best-in-class libraries behind opt-in `go.uber.org/fx` modules. Apps compose only what they need — nothing else ships. See [README.md](README.md) for the full module catalog and [docs/principles.md](docs/principles.md) for the complete coding contract.
 
 ## Hard rules
 
@@ -13,9 +95,9 @@
 2. **Never add a transitive dependency** without weighing awesome-go alternatives. State the choice in the PR if non-obvious.
 3. **Every subpackage exposes its capability as `fx.Module` or `fx.Options`.** Apps never import internals directly.
 4. **No `init()` side effects.** All wiring goes through fx lifecycle hooks.
-5. **All errors flow through `golusoris/errors`** (or `fmt.Errorf("pkg: op: %w", err)` — same convention).
-6. **All time uses `golusoris/clock`.** `time.Now()` is banned outside the clock package.
-7. **Logs go through the slog handler from `golusoris/log`.** No `fmt.Println`, no global loggers.
+5. **All errors flow through `golusoris/core/errors`** (or `fmt.Errorf("pkg: op: %w", err)` — same convention).
+6. **All time uses `golusoris/core/clock`.** `time.Now()` is banned outside the clock package.
+7. **Logs go through the slog handler from `golusoris/core/log`.** No `fmt.Println`, no global loggers.
 8. **Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green.** `//nolint` requires a justification comment.
 
 See [docs/principles.md](docs/principles.md) for the full Power-of-10, CERT, style, and compliance contract.
@@ -25,20 +107,34 @@ See [docs/principles.md](docs/principles.md) for the full Power-of-10, CERT, sty
 ```
 golusoris/
 ├── golusoris.go              # top-level fx.Module re-exports (Core, DB, HTTP, …)
+├── capabilities.yaml         # machine-readable capability contract (praetor `needs` reads it)
+├── lefthook.yml              # git-hook gate (pre-commit / commit-msg / pre-push) — scripts in scripts/hooks/
 │
-├── config/                   # koanf v2: env + file + YAML + file-watch
-├── log/                      # slog factory: tint(dev)/JSON(prod) + OTel bridge
-├── errors/                   # typed errors + stack traces + ogen-status mapping
-├── crypto/                   # argon2id · AES-GCM · sealed secrets · column encryption
-├── clock/                    # mockable Clock (real + fake) — time.Now() ban
-├── id/                       # UUIDv7 · KSUID · snowflake generators
-├── validate/                 # go-playground/validator wrapper
+├── core/                     # LEAN SUB-MODULE (own go.mod) — github.com/golusoris/golusoris/core
+│   ├── config/               # koanf v2: env + file + YAML + file-watch
+│   ├── codec/yaml/           # fleet YAML codec — strict · bounded · atomic writes
+│   ├── log/                  # slog factory: tint(dev)/JSON(prod) + OTel bridge
+│   ├── errors/               # typed errors + stack traces + ogen-status mapping
+│   ├── crypto/               # argon2id · AES-GCM · sealed secrets · column encryption
+│   │   └── receipt/          # Ed25519 Exit-0 execution receipts
+│   ├── clock/                # mockable Clock (real + fake) — time.Now() ban
+│   ├── id/                   # UUIDv7 · KSUID · snowflake generators
+│   ├── validate/             # go-playground/validator wrapper
+│   ├── version/              # build metadata (ldflags / VCS)
+│   ├── clikit/               # cobra + fx-aware CLI app builder
+│   ├── mcp/                  # MCP server fx module (stdio + streamable-HTTP)
+│   ├── gitx/                 # bounded git runner
+│   │   └── worktree/         # per-task git worktrees
+│   ├── astx/                 # source walker · AST import rewriter · func metrics · go.mod
+│   └── capabilities/         # schema + loader for capabilities.yaml
+│
 ├── i18n/                     # locale negotiation middleware + message catalog
 │
 ├── db/
 │   ├── pgx/                  # pgx pool fx module + startup retry + slow-query logger
 │   ├── migrate/              # golang-migrate v4 runner + fx hook
 │   ├── sqlc/                 # shared sqlc.yaml fragment + query helpers
+│   ├── sqlite/               # embedded SQLite (modernc, pure Go) fx module
 │   ├── bun/                  # uptrace/bun ORM over the db/pgx pool (opt-in)
 │   ├── geo/                  # PostGIS pgx types — Point, BBox, EWKB, Haversine
 │   ├── timescale/            # TimescaleDB hypertable + retention + compression
@@ -206,8 +302,7 @@ golusoris/
 │   ├── udev/                # Linux udev events (own go.mod)
 │   └── fssnap/              # ZFS + Btrfs snapshot CLI wrappers (own go.mod)
 │
-├── clikit/                  # cobra + fx-aware CLI app builder
-│   └── tui/                 # bubbletea Run/RunInline helpers
+├── clikit/tui/              # bubbletea Run/RunInline helpers (clikit itself is in core/)
 ├── selfupdate/              # binary self-update from GitHub releases
 ├── plugin/                  # generic thread-safe Registry[T]
 │
@@ -238,6 +333,7 @@ golusoris/
 │   └── crossplane/          # XRD + Composition + claim example
 │
 ├── tools/                   # golangci.yml, sqlc.yaml.fragment, Makefile helpers
+├── scripts/                 # hooks/ (lefthook checks), changelog/ (fragment renderer), ci/
 ├── template/
 │   ├── .github/             # per-app CI + release workflow stubs, dependabot
 │   └── .devcontainer/       # Go + Postgres + Redis + NATS devcontainer
@@ -293,3 +389,83 @@ Every PR must pass:
 ## When in doubt
 
 Read [docs/principles.md](docs/principles.md) for the full coding contract, then read the per-subpackage `AGENTS.md` for the area you're touching.
+
+## Claude Code
+
+> Compiled into `CLAUDE.md` by `standardsctl compile-context` — edit here, never there.
+> Claude Code loads `.claude/skills/*` and `.claude/hooks/*` on top of this section.
+
+### Skills available
+
+Located in `.claude/skills/`:
+
+| Skill | When to use |
+|---|---|
+| `wire-fx-module` | Adding a new opt-in fx module to the framework |
+| `scaffold-ogen-handler` | Generating an ogen handler stub from an operationId |
+| `add-river-worker` | Adding a river job worker (registered in fx) |
+| `add-migration` | Creating a timestamped golang-migrate up/down pair |
+| `bump-golusoris` | Bumping golusoris in a downstream app + applying codemods from migration notes |
+
+Invoke via `/<skill-name>` in Claude Code.
+
+### Hooks active
+
+Located in `.claude/hooks/`:
+
+- Touching `**/jobs/*.go` auto-loads `docs/upstream/river/` + `jobs/AGENTS.md`
+- Touching `**/migrations/*.sql` auto-loads `docs/upstream/golang-migrate/` + the project's existing migrations summary
+- Touching `**/api/*.go` (ogen) auto-loads `docs/upstream/ogen/` + the OpenAPI spec
+- Git hooks (`lefthook.yml`, scripts in `scripts/hooks/`; install with `lefthook install`): pre-commit runs gofumpt / gci / golangci-lint / go vet on the staged packages plus `standardsctl compile-context --verify`, `reuse lint`, `gitleaks`; commit-msg checks Conventional Commits + `Signed-off-by:` (DCO); pre-push runs `go build` + `go test -short` in root and `core/`. Absent tools skip with a message — `make verify-all` / CI stays authoritative.
+
+### Tone
+
+- Be terse. No preamble.
+- When changing public API: write the `Migration:` footer in the commit body, with before/after Go snippets.
+- When adding a dependency: state which awesome-go alternatives you considered and why this one wins.
+- Never add init() side effects. Always use fx lifecycle.
+
+### Project principles — read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) first
+
+§2 is the framework's foundational contract. Quick hitlist for AI agents:
+
+- **§2.1 Power of 10, Go-adapted** — hard gates on rules 1, 2, 4, 7, 10 (control flow, bounded loops, function size, error wrapping, zero lint/gosec/vuln). Guidance on 3, 5, 6, 9.
+- **§2.2 SEI CERT for Go** — security rules (crypto, input validation, concurrency). Cite rule IDs in review.
+- **§2.3 Google Go Style Guide** — canonical style. Effective Go + Code Review Comments secondary.
+- **§2.4 C4 + ADRs** — architecture decisions in `docs/adr/`, one per decision, Nygard format.
+- **§2.5 Security + supply-chain standards** — SLSA L3, OWASP ASVS L2, NIST SSDF, EU CRA, NIS2, BSI IT-Grundschutz, BSI C5, UK NCSC, ENISA, GDPR, EU AI Act. Framework ships scaffolding; apps assert compliance in `SECURITY.md`.
+- **§2.6 Wire protocols** — RFC 9457 Problem Details (error body), OpenAPI 3.1, OTel SemConv v1.26, JWT/OAuth/PKCE/WebAuthn.
+- **§2.7 Tooling + formatting** — EditorConfig, gofumpt, gci, golines, Conventional Commits, SemVer, Keep-a-Changelog, Trunk-Based Dev.
+- **§2.8 Testing** — table-driven tests, `go test -race`, integration over mocks, fuzz + property-based opt-in, 70% coverage (85% on security-critical pkgs).
+- **§2.9 Deployment** — Twelve-Factor, CNCF cloud-native, OCI, rootless + read-only FS.
+
+Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint` needs a justification comment.
+
+### Working agreements (for AI agents)
+
+- **Decisions go through `AskUserQuestion`.** Any clarifying question or multi-option choice uses the popup, never prose options — even binary ones. (#25)
+- **State hygiene — update [.workingdir/STATE.md](.workingdir/STATE.md) immediately** after each bug is fixed, confirmed, or ruled out; don't batch to session end, or the next session re-investigates closed work. (#26)
+- **Deep-dive deliverables.** A research/hardening PR ships the full set — per-module `AGENTS.md`, a decision/benchmark digest, and a STATE.md delta — not a config-only change. (#28)
+
+### Don't
+
+- Don't use `time.Now()` outside `clock/`. Use `clock.Now(ctx)`.
+- Don't `fmt.Println` — use the slog handler from `log/`.
+- Don't add features beyond what the task requires (per global Claude Code guidelines).
+- Don't write multi-paragraph comments. One-liner WHY comments only.
+- Don't create new markdown docs unless explicitly asked.
+- Don't silence a linter without adding a justification comment next to the `//nolint` directive.
+
+### Project state
+
+- Pre-alpha. Steps 1-5 landed on `main` (`golusoris/golusoris`): Core, DB, HTTP base, HTTP extras, OTel + observability.
+- See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the full plan and [.workingdir/STATE.md](.workingdir/STATE.md) for the current status + decision log.
+
+### Every commit: keep docs in sync
+
+On each commit touching new/changed modules:
+
+- Update [.workingdir/STATE.md](.workingdir/STATE.md) session log with the commit summary.
+- Update [README.md](README.md) "Landed so far" list when a step completes.
+- Update [AGENTS.md](AGENTS.md) layout tree when adding new top-level packages.
+- Write per-subpackage `AGENTS.md` for any new module.

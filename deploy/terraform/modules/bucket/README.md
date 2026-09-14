@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # terraform/modules/bucket
 
 Object-store bucket with sane defaults: AES-256 at rest, public access blocked, optional versioning + lifecycle.

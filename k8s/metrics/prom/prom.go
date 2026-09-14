@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package prom mounts a Prometheus /metrics endpoint and exposes the check
 // registry's per-check status as Gauges so Prometheus alerting can fire on
 // individual dep failures (not just overall).

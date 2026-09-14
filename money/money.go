@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package money provides a currency-aware money type stored as integer
 // minor units (cents, pence, …) to avoid floating-point rounding errors.
 //

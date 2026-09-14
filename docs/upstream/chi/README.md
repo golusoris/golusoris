@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # go-chi/chi/v5 — v5.2.1 snapshot
 
 Pinned: **v5.2.1**

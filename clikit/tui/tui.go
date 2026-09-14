@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tui provides lightweight helpers for building terminal UIs with
 // charmbracelet/bubbletea v2. It exports a thin Run wrapper and a few common
 // model building blocks (Spinner, Confirm, Select) so callers can compose a

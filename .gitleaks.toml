@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # gitleaks config — extends the default ruleset with a TIGHT allowlist for two
 # protocol example values that live in test fixtures (not real credentials):
 #   - dGhlIHNhbXBsZSBub25jZQ==  RFC 6455 "the sample nonce" WebSocket key

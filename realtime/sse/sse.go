@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package sse provides a Server-Sent Events (SSE) handler. Clients
 // connect over HTTP and receive a stream of events. The server pushes
 // events via a per-connection channel.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package nats boots a real NATS container via testcontainers-go and returns
 // its URL. Used by integration tests that exercise pubsub/nats behaviour
 // (connect, publish, subscribe, JetStream) against a live server.
@@ -26,7 +30,9 @@ import (
 const (
 	defaultImage = "nats:2-alpine"
 	natsPort     = "4222/tcp"
-	startTimeout = 60 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Start boots a NATS container with JetStream enabled and returns its URL

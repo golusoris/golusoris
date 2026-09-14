@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # golusoris — Framework Plan (consolidated)
 
 > **Source of truth for the framework design.** Any future session (human or AI) can resume from this file alone.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package inbound parses inbound-email webhooks from SES (via SNS) and
 // Postmark, plus raw RFC 5322 MIME emails from SMTP servers.
 // Each path normalizes to [Email], which the app consumes via a

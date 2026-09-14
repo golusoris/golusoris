@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # knadh/koanf/v2 — v2.3.4 snapshot
 
 Pinned: **v2.3.4**

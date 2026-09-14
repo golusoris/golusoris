@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package slack sends notifications to Slack via incoming webhooks.
 //
 // Configure a Slack incoming webhook (https://api.slack.com/messaging/webhooks)

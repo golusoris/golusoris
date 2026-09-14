@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package cors exposes an rs/cors-backed middleware as a golusoris module.
 // Options are koanf-driven; defaults deny cross-origin traffic so CORS is
 // opt-in per-app.
@@ -20,7 +24,7 @@ import (
 	rscors "github.com/rs/cors"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 

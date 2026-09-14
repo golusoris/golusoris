@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pdf generates PDF documents from URLs or raw HTML using a headless
 // Chrome browser via chromedp.
 //

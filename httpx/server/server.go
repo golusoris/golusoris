@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package server wires [*http.Server] as an fx dependency with slow-loris
 // guards, body-size limits, and graceful shutdown.
 //
@@ -34,7 +38,7 @@ import (
 
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes the server. Durations accept koanf strings like "30s".

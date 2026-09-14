@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — i18n/
 
 Thin wrapper around [nicksnyder/go-i18n](https://github.com/nicksnyder/go-i18n)

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tracking implements email open/click tracking via signed
 // redirect URLs and a 1×1 tracking pixel.
 //
@@ -143,7 +147,7 @@ func (s *Service) ClickHandler() http.Handler {
 			UserAgent: r.UserAgent(),
 			IP:        clientIP(r),
 		})
-		http.Redirect(w, r, target, http.StatusFound) //nolint:gosec // G710: target is HMAC-signed + validated above
+		http.Redirect(w, r, target, http.StatusFound) // #nosec G710 -- target is bound to a server-issued link by the HMAC check above and validateRedirectURL enforces http(s) scheme + non-empty host // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- target is HMAC-signed, scheme+host validated
 	})
 }
 

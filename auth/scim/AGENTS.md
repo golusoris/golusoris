@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # auth/scim
 
 Minimal SCIM 2.0 (RFC 7643 + 7644) HTTP handlers for User and Group provisioning.

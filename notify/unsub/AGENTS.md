@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — notify/unsub/
 
 RFC 8058 one-click unsubscribe + suppression list. Generates HMAC-signed

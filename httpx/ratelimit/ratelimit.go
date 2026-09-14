@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ratelimit wraps ulule/limiter/v3 as a golusoris middleware.
 //
 // Defaults to an in-memory store keyed by client IP. For distributed apps
@@ -21,7 +25,7 @@ import (
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 

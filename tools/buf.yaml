@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Shared buf module + lint/breaking fragment for golusoris-based apps that
 # expose gRPC. Copy into the app's repo root and adjust the module path under
 # `modules:`. buf v2 schema; see https://buf.build/docs/configuration/v2/buf-yaml.

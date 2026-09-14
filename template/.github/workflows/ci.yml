@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Per-app CI — delegates to the reusable workflow in golusoris/golusoris.
 # Refs are pinned to the v0.4.0 release commit; Renovate bumps them.
 name: CI

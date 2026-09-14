@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package otel wires OpenTelemetry — tracer, meter, and logger — with an
 // OTLP gRPC exporter. The SDK registers itself as the global OTel provider
 // so [httpx/middleware.OTel] and [httpx/client] produce spans automatically.
@@ -52,7 +56,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options configures the OTel SDK.

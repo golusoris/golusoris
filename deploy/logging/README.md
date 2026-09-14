@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # deploy/logging
 
 Loki + Promtail manifests for shipping golusoris-app logs to a Grafana Loki stack.

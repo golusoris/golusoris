@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — clikit/tui/
 
 Thin wrappers over charmbracelet/bubbletea v2 (`charm.land/bubbletea/v2`) for

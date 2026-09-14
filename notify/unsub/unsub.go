@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package unsub implements RFC 8058 one-click unsubscribe and a
 // per-email suppression list.
 //

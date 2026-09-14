@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package parse extracts text, metadata, and page information from PDF files
 // using pdfcpu (pure-Go, no CGO required).
 //

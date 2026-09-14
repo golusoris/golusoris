@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //go:build ignore
 // +build ignore
 
@@ -16,8 +20,10 @@ import (
 	"github.com/asticode/go-astiav"
 )
 
-type astiavProber struct{}
-type astiavTranscoder struct{ opts Options }
+type (
+	astiavProber     struct{}
+	astiavTranscoder struct{ opts Options }
+)
 
 // NewProber returns an FFmpeg-backed Prober.
 func NewProber(opts Options) (Prober, error) {

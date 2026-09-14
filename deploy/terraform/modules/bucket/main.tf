@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Object-store bucket module. AWS S3 by default; GCS / Azure Blob
 # equivalents noted in the comments for apps that want to swap providers.
 

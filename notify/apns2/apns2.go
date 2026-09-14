@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package apns2 sends Apple push notifications via APNs HTTP/2 with
 // token-based auth (.p8 key + team ID + key ID).
 //
@@ -40,7 +44,6 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jonboulle/clockwork"
-	"golang.org/x/net/http2"
 
 	"github.com/golusoris/golusoris/notify"
 )
@@ -145,14 +148,15 @@ func NewSender(opts Options) (*Sender, error) {
 	}
 	hc := opts.HTTPClient
 	if hc == nil {
-		// APNs requires HTTP/2. Go's stdlib negotiates h2 by default
-		// with TLS; the explicit http2 transport enables h2 without
-		// relying on that negotiation.
+		// APNs requires HTTP/2. Transport.Protocols (Go 1.24+) replaces the
+		// deprecated x/net http2.ConfigureTransport and offers the same ALPN
+		// set it registered: h2 preferred, HTTP/1.1 as fallback.
+		protocols := new(http.Protocols)
+		protocols.SetHTTP1(true)
+		protocols.SetHTTP2(true)
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-		}
-		if err := http2.ConfigureTransport(tr); err != nil {
-			return nil, fmt.Errorf("notify/apns2: configure h2: %w", err)
+			Protocols:       protocols,
 		}
 		hc = &http.Client{Transport: tr, Timeout: 15 * time.Second}
 	}

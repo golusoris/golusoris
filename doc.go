@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package golusoris is a composable Go framework built around [go.uber.org/fx].
 //
 // It bundles best-in-class libraries behind opt-in fx modules so apps share a

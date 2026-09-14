@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package kafka boots a Kafka-compatible broker via testcontainers-go and
 // returns a broker address suitable for use with twmb/franz-go. Backed by
 // Redpanda, which is Kafka-API-compatible and requires no ZooKeeper.
@@ -25,7 +29,9 @@ import (
 const (
 	// redpandaImage is Kafka-API-compatible without ZooKeeper.
 	redpandaImage = "redpandadata/redpanda:v24.3.1"
-	startTimeout  = 90 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Addr boots a Redpanda container and returns its Kafka-compatible broker

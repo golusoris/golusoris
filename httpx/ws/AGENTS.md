@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — httpx/ws
 
 Thin wrapper over coder/websocket. Provides a same-origin-by-default upgrade + a reference in-process broadcaster.

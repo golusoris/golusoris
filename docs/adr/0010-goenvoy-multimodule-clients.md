@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # ADR-0010: goenvoy multi-module clients wired onto the framework's resilient HTTP stack
 
 - **Status**: Accepted

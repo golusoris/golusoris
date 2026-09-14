@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package pg starts a real PostgreSQL container via testcontainers-go and
 // returns a connected [*pgxpool.Pool]. Tests using this helper need Docker
 // reachable on the host; CI runners (ubuntu-latest) ship Docker by default.
@@ -31,7 +35,16 @@ const (
 	defaultDB       = "test"
 	defaultUser     = "test"
 	defaultPassword = "test"
-	startTimeout    = 60 * time.Second
+	// startTimeout bounds one container start (HISS-02) — image pull included.
+	// It is deliberately generous: the CI ARC runners begin every job with an
+	// empty Docker image cache (docker info: "Images: 0") and `go test ./...`
+	// launches every testcontainers-backed package at once, so one pull
+	// competes with half a dozen others (timescaledb alone is >2 GB
+	// uncompressed); the previous 60 s expired mid-pull. CI pre-pulls the
+	// images (ci.yml "Pre-pull testcontainers images"), so this bound is the
+	// fallback for cold caches, not the expected path. The other testutil
+	// container helpers (clickhouse, kafka, nats, redis) use the same value.
+	startTimeout = 3 * time.Minute
 )
 
 // Options tweak the container. Zero value uses defaults.
@@ -116,7 +129,11 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 
 // Defaults for the specialised replication + TimescaleDB containers.
 const (
-	defaultTimescaleImage = "timescale/timescaledb:latest-pg17"
+	// defaultTimescaleImage is pinned to a released TimescaleDB tag rather than
+	// the floating latest-pg17 so runs are reproducible and CI can pre-pull the
+	// exact image. Bump deliberately, and keep the CI pre-pull list
+	// (.github/workflows/ci.yml) and testutil/pg/AGENTS.md in sync.
+	defaultTimescaleImage = "timescale/timescaledb:2.30.0-pg17"
 )
 
 // StartReplication boots a Postgres container configured for logical

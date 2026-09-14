@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package client_test
 
 import (
@@ -58,7 +62,9 @@ func TestNewLoadsExplicitKubeconfig(t *testing.T) {
 func TestNewMissingKubeconfigErrors(t *testing.T) {
 	// t.Setenv forbids t.Parallel.
 	t.Setenv("KUBECONFIG", "")
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads USERPROFILE on Windows
 
 	_, err := client.New(client.Options{})
 	if err == nil {

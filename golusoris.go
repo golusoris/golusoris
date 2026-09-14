@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package golusoris is the top-level entry: it re-exports composable [fx.Module]
 // groupings so apps can compose only what they need.
 //
@@ -22,9 +26,14 @@ import (
 	cachemem "github.com/golusoris/golusoris/cache/memory"
 	cacheredis "github.com/golusoris/golusoris/cache/redis"
 	cachetwotier "github.com/golusoris/golusoris/cache/twotier"
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
-	"github.com/golusoris/golusoris/crypto"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/crypto"
+	"github.com/golusoris/golusoris/core/id"
+	"github.com/golusoris/golusoris/core/log"
+	"github.com/golusoris/golusoris/core/mcp"
+	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/core/version"
 	dbbun "github.com/golusoris/golusoris/db/bun"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
@@ -32,22 +41,17 @@ import (
 	extclient "github.com/golusoris/golusoris/httpx/extclient"
 	"github.com/golusoris/golusoris/httpx/router"
 	"github.com/golusoris/golusoris/httpx/server"
-	"github.com/golusoris/golusoris/id"
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/jobs"
 	k8sclient "github.com/golusoris/golusoris/k8s/client"
 	"github.com/golusoris/golusoris/k8s/operator"
 	"github.com/golusoris/golusoris/k8s/podinfo"
-	"github.com/golusoris/golusoris/log"
-	"github.com/golusoris/golusoris/mcp"
 	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/outbox"
 	"github.com/golusoris/golusoris/search"
 	"github.com/golusoris/golusoris/secrets"
 	"github.com/golusoris/golusoris/storage"
 	"github.com/golusoris/golusoris/tenancy"
-	"github.com/golusoris/golusoris/validate"
-	"github.com/golusoris/golusoris/version"
 )
 
 // Core bundles the foundational modules every app needs:

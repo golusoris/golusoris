@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package search provides a provider-agnostic full-text and vector search
 // abstraction. Backends (Typesense, Meilisearch, OpenSearch, Postgres FTS)
 // implement the [Indexer] and [Searcher] interfaces. Use [MemorySearcher]

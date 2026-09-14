@@ -1,0 +1,1014 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Capability contract: every importable golusoris package, the capability keys
+# it satisfies, and the third-party modules it supersedes. Downstream governance
+# (cordanallm/praetor: needs scan | report | migrate) resolves .needs.yaml demands
+# against this file; capabilities_test.go keeps it in sync with the tree.
+# Schema: core/capabilities (version 1). Keys: domain.name[.sub], lowercase.
+# Regenerate the skeleton with scripts/capabilities/generate.py; hand-tune keys.
+version: 1
+framework: github.com/golusoris/golusoris
+modules:
+  - github.com/golusoris/golusoris/core
+  - github.com/golusoris/golusoris/deploy/multiregion
+  - github.com/golusoris/golusoris/deploy/pulumi
+  - github.com/golusoris/golusoris/hw/fssnap
+  - github.com/golusoris/golusoris/hw/gpio
+  - github.com/golusoris/golusoris/hw/robotics
+  - github.com/golusoris/golusoris/hw/udev
+  - github.com/golusoris/golusoris/media/3d
+  - github.com/golusoris/golusoris/media/audio
+  - github.com/golusoris/golusoris/media/av
+  - github.com/golusoris/golusoris/media/cv
+  - github.com/golusoris/golusoris/media/game
+  - github.com/golusoris/golusoris/media/img
+  - github.com/golusoris/golusoris/ocr
+  - github.com/golusoris/golusoris/pdf
+  - github.com/golusoris/golusoris/science/bio
+  - github.com/golusoris/golusoris/science/numerical
+  - github.com/golusoris/golusoris/science/plot
+  - github.com/golusoris/golusoris/testutil/pact
+  - github.com/golusoris/golusoris/web3/evm
+  - github.com/golusoris/golusoris/web3/solana
+packages:
+  - import: github.com/golusoris/golusoris/core/astx
+    module: github.com/golusoris/golusoris/core
+    domain: ast
+    capabilities: [ast.analyzer, ast.rewrite]
+    description: "Package astx holds the Go-source analysis primitives the framework's tooling shares — a bounded source walker, an AST-based import rewriter (the `golusoris bump"
+  - import: github.com/golusoris/golusoris/core/capabilities
+    module: github.com/golusoris/golusoris/core
+    domain: needs
+    capabilities: [needs.capabilities]
+    description: "Package capabilities defines the framework's machine-readable capability contract: the schema of the repository-root capabilities.yaml that maps every golusoris"
+  - import: github.com/golusoris/golusoris/core/clikit
+    module: github.com/golusoris/golusoris/core
+    domain: clikit
+    capabilities: [clikit.cli, clikit.cobra, clikit.ioc]
+    description: "Package clikit provides a cobra + fx-aware CLI builder."
+    replaces: [github.com/alecthomas/kong, github.com/spf13/cobra, github.com/spf13/pflag, github.com/urfave/cli]
+  - import: github.com/golusoris/golusoris/core/clock
+    module: github.com/golusoris/golusoris/core
+    domain: time
+    capabilities: [time.clock]
+    description: "Package clock exposes a mockable wall clock."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/core/codec/yaml
+    module: github.com/golusoris/golusoris/core
+    domain: config
+    capabilities: [config.yaml]
+    description: "Package yaml is the framework's single YAML codec."
+    replaces: [github.com/goccy/go-yaml, go.yaml.in/yaml/v3, gopkg.in/yaml.v2, gopkg.in/yaml.v3, sigs.k8s.io/yaml]
+  - import: github.com/golusoris/golusoris/core/config
+    module: github.com/golusoris/golusoris/core
+    domain: config
+    capabilities: [config.loader, config.env, config.watch]
+    description: "Package config is golusoris's config layer: a thin koanf v2 wrapper that loads from env + optional YAML/JSON files, with file-watch enabled by default so a moun"
+    replaces: [github.com/caarlos0/env, github.com/go-viper/mapstructure/v2, github.com/kelseyhightower/envconfig, github.com/knadh/koanf, github.com/knadh/koanf/parsers/json, github.com/knadh/koanf/parsers/yaml, github.com/knadh/koanf/providers/env/v2, github.com/knadh/koanf/providers/file, github.com/knadh/koanf/v2, github.com/spf13/viper]
+  - import: github.com/golusoris/golusoris/core/crypto
+    module: github.com/golusoris/golusoris/core
+    domain: crypto
+    capabilities: [crypto.password, crypto.aead, crypto.token]
+    description: "Package crypto bundles golusoris's small set of cryptographic primitives: argon2id password hashing, AES-GCM symmetric encryption, and secure-random helpers."
+    replaces: [github.com/alexedwards/argon2id]
+  - import: github.com/golusoris/golusoris/core/crypto/receipt
+    module: github.com/golusoris/golusoris/core
+    domain: crypto
+    capabilities: [crypto.receipt]
+    description: "Package receipt issues and verifies Ed25519-signed execution receipts — a compact, portable proof that a named command exited 0 at a given time for a given comm"
+  - import: github.com/golusoris/golusoris/core/errors
+    module: github.com/golusoris/golusoris/core
+    domain: errors
+    capabilities: [errors.typed, errors.problem_details]
+    description: "Package errors is golusoris's error package: thin layer over go-faster/errors adding a typed Code + HTTP status mapping that ogenkit and HTTP middleware underst"
+    replaces: [github.com/go-faster/errors, github.com/pkg/errors]
+  - import: github.com/golusoris/golusoris/core/gitx
+    module: github.com/golusoris/golusoris/core
+    domain: git
+    capabilities: [git.runner]
+    description: "Package gitx runs git with the bounds the framework requires of every subprocess: an explicit context deadline, argument validation, and captured output of boun"
+  - import: github.com/golusoris/golusoris/core/gitx/worktree
+    module: github.com/golusoris/golusoris/core
+    domain: git
+    capabilities: [git.worktree]
+    description: "Package worktree manages ephemeral git worktrees under a repository — one per task, on its own branch — so agents and CI jobs work in isolation and are cleaned "
+  - import: github.com/golusoris/golusoris/core/id
+    module: github.com/golusoris/golusoris/core
+    domain: id
+    capabilities: [id.uuid, id.ksuid]
+    description: "Package id provides standardized identifier generators for golusoris apps."
+    replaces: [github.com/gofrs/uuid, github.com/oklog/ulid, github.com/rs/xid, github.com/segmentio/ksuid]
+  - import: github.com/golusoris/golusoris/core/log
+    module: github.com/golusoris/golusoris/core
+    domain: telemetry
+    capabilities: [telemetry.logging]
+    description: "Package log is golusoris's logging layer."
+    replaces: [github.com/lmittmann/tint, github.com/mattn/go-isatty, github.com/rs/zerolog, github.com/sirupsen/logrus, go.uber.org/zap]
+  - import: github.com/golusoris/golusoris/core/mcp
+    module: github.com/golusoris/golusoris/core
+    domain: mcp
+    capabilities: [mcp.server]
+    description: "Package mcp wires a reusable Model Context Protocol (MCP) server into the fx lifecycle."
+    replaces: [github.com/mark3labs/mcp-go, github.com/modelcontextprotocol/go-sdk]
+  - import: github.com/golusoris/golusoris/core/validate
+    module: github.com/golusoris/golusoris/core
+    domain: validate
+    capabilities: [validate.struct]
+    description: "Package validate wraps go-playground/validator with golusoris conventions: errors map to errors.Validation with a structured message describing failed fields by"
+    replaces: [github.com/go-playground/validator/v10]
+  - import: github.com/golusoris/golusoris/core/version
+    module: github.com/golusoris/golusoris/core
+    domain: build
+    capabilities: [build.version]
+    description: "Package version exposes the binary's build metadata as a typed [Info], sourced from ldflags -X overrides when present, otherwise from runtime/debug.ReadBuildInf"
+  - import: github.com/golusoris/golusoris/ai/llm
+    domain: ai
+    capabilities: [ai.llm_client]
+    description: "Package llm provides a provider-agnostic LLM client interface and an HTTP backend compatible with OpenAI-format APIs (OpenAI, Azure OpenAI, Ollama, LM Studio, G"
+  - import: github.com/golusoris/golusoris/ai/llm/anthropic
+    domain: ai
+    capabilities: [ai.llm_anthropic]
+    description: "Package anthropic implements the [llm.Client] interface against Anthropic's Messages API."
+  - import: github.com/golusoris/golusoris/ai/llm/ollama
+    domain: ai
+    capabilities: [ai.llm_ollama]
+    description: "Package ollama implements the [llm.Client] interface against Ollama's native API (/api/chat, /api/generate, /api/embeddings)."
+  - import: github.com/golusoris/golusoris/ai/tiny
+    domain: ai
+    capabilities: [ai.tiny]
+    description: "Package tiny is a framework for training and serving small task-specific models — text/image/audio classifiers, embedding extractors, and tiny generative LMs (e"
+    replaces: [github.com/jackc/pgx/v5, github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/ai/tiny/gemma
+    domain: ai
+    capabilities: [ai.tiny_gemma]
+    description: "Package gemma implements a [tiny.Trainer] for LoRA fine-tuning Google Gemma 3 / Gemma 3n on a JSONL prompt/response corpus."
+  - import: github.com/golusoris/golusoris/ai/tiny/litert
+    domain: ai
+    capabilities: [ai.tiny_litert]
+    description: "Package litert implements a [tiny.Trainer] for MediaPipe Model Maker."
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/fleet
+    domain: ai
+    capabilities: [ai.tiny_serve_fleet]
+    description: "Package fleet is the distributed-inference recipe for ai/tiny: it serves a [tiny.Predictor] across a replica set using the framework's own [jobs] (river) queue "
+    replaces: [github.com/riverqueue/river, github.com/riverqueue/river/rivertype]
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/ollama
+    domain: ai
+    capabilities: [ai.tiny_serve_ollama]
+    description: "Package ollama implements a [tiny.Predictor] that serves Gemma (base + LoRA) via an [ollama](https://ollama.com) endpoint."
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/tflite
+    domain: ai
+    capabilities: [ai.tiny_serve_tflite]
+    description: "Package tflite implements a [tiny.Predictor] that serves LiteRT (`.tflite`) classifiers produced by ai/tiny/litert via a Python inference sidecar over HTTP."
+  - import: github.com/golusoris/golusoris/ai/vector
+    domain: ai
+    capabilities: [ai.embeddings, ai.vector_search]
+    description: "Package vector provides helpers for storing and querying vector embeddings using pgvector (the PostgreSQL vector extension)."
+    replaces: [github.com/jackc/pgx/v5, github.com/pgvector/pgvector-go, github.com/pgvector/pgvector-go/pgx]
+  - import: github.com/golusoris/golusoris/apidocs
+    domain: apidocs
+    capabilities: [http.openapi, mcp.openapi]
+    description: "Package apidocs mounts an OpenAPI-driven docs UI (Scalar) and an MCP server (Model Context Protocol over HTTP) so AI agents can call the app's operations as too"
+    replaces: [github.com/getkin/kin-openapi, github.com/go-chi/chi/v5, github.com/modelcontextprotocol/go-sdk, github.com/swaggo/gin-swagger, github.com/swaggo/swag]
+  - import: github.com/golusoris/golusoris/archive
+    domain: files
+    capabilities: [files.archive]
+    description: "Package archive provides extraction and creation of compressed archives (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives."
+    replaces: [github.com/mholt/archives]
+  - import: github.com/golusoris/golusoris/audit
+    domain: saas
+    capabilities: [saas.audit]
+    description: "Package audit provides an append-only structured audit log."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/apikey
+    domain: auth
+    capabilities: [auth.apikey]
+    description: "Package apikey issues, rotates, and verifies API keys."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/captcha
+    domain: auth
+    capabilities: [auth.captcha]
+    description: "Package captcha verifies CAPTCHA tokens against the major providers (Cloudflare Turnstile, hCaptcha, Google reCAPTCHA v2/v3)."
+  - import: github.com/golusoris/golusoris/auth/impersonate
+    domain: auth
+    capabilities: [auth.impersonate]
+    description: "Package impersonate lets an admin act as another user with full audit trail."
+  - import: github.com/golusoris/golusoris/auth/jwt
+    domain: auth
+    capabilities: [auth.jwt]
+    description: "Package jwt provides helpers for signing and verifying JWTs using golang-jwt/jwt/v5."
+    replaces: [github.com/golang-jwt/jwt, github.com/golang-jwt/jwt/v5, github.com/lestrrat-go/jwx]
+  - import: github.com/golusoris/golusoris/auth/linking
+    domain: auth
+    capabilities: [auth.linking]
+    description: "Package linking maps external identity-provider subjects (OIDC, OAuth) to local user IDs."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/lockout
+    domain: auth
+    capabilities: [auth.lockout]
+    description: "Package lockout implements per-identity login lockout: after N failed attempts within a window the identity is locked for a cooldown."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/magiclink
+    domain: auth
+    capabilities: [auth.magiclink]
+    description: "Package magiclink implements passwordless sign-in via single-use email links."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/oauth2server
+    domain: auth
+    capabilities: [auth.oauth2_server]
+    description: "Package oauth2server is a minimal OAuth 2.1 / OIDC issuer implementing the authorization-code-with-PKCE grant."
+    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/oidc
+    domain: auth
+    capabilities: [auth.oidc]
+    description: "Package oidc provides an OIDC + OAuth 2.0 PKCE client as an fx module."
+    replaces: [github.com/coreos/go-oidc/v3]
+  - import: github.com/golusoris/golusoris/auth/passkeys
+    domain: auth
+    capabilities: [auth.passkeys, auth.totp]
+    description: "Package passkeys wraps go-webauthn/webauthn for passkey (registration + assertion) and pquerna/otp for TOTP MFA."
+    replaces: [github.com/go-webauthn/webauthn, github.com/pquerna/otp]
+  - import: github.com/golusoris/golusoris/auth/policy
+    domain: auth
+    capabilities: [auth.password_policy]
+    description: "Package policy enforces password and credential policies."
+    replaces: [github.com/nbutton23/zxcvbn-go]
+  - import: github.com/golusoris/golusoris/auth/recovery
+    domain: auth
+    capabilities: [auth.recovery]
+    description: "Package recovery provides backup recovery codes and password-reset tokens."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/auth/scim
+    domain: auth
+    capabilities: [auth.scim]
+    description: "Package scim implements a minimal SCIM 2.0 server for user and group provisioning (RFC 7643 + RFC 7644)."
+  - import: github.com/golusoris/golusoris/auth/session
+    domain: auth
+    capabilities: [auth.session]
+    description: "Package session manages server-side sessions stored in Redis or Postgres."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/authz
+    domain: authz
+    capabilities: [authz.casbin]
+    description: "Package authz provides RBAC/ABAC policy enforcement via casbin/casbin/v3."
+    replaces: [github.com/casbin/casbin, github.com/casbin/casbin/v3]
+  - import: github.com/golusoris/golusoris/cache/memory
+    domain: cache
+    capabilities: [cache.inmemory]
+    description: "Package memory provides a typed, in-process L1 cache backed by maypok86/otter/v2."
+    replaces: [github.com/dgraph-io/ristretto, github.com/maypok86/otter/v2, github.com/patrickmn/go-cache]
+  - import: github.com/golusoris/golusoris/cache/redis
+    domain: cache
+    capabilities: [cache.redis]
+    description: "Package redis provides a [rueidis] client as an fx module."
+    replaces: [github.com/redis/go-redis, github.com/redis/rueidis]
+  - import: github.com/golusoris/golusoris/cache/singleflight
+    domain: cache
+    capabilities: [cache.singleflight]
+    description: "Package singleflight exposes golang.org/x/sync/singleflight as a tiny typed wrapper and fx module."
+  - import: github.com/golusoris/golusoris/cache/twotier
+    domain: cache
+    capabilities: [cache.twotier]
+    description: "Package twotier composes the L1 in-process cache (cache/memory, otter) and the L2 distributed cache (cache/redis, rueidis) into a single read-through, write-thr"
+    replaces: [github.com/redis/rueidis]
+  - import: github.com/golusoris/golusoris/clikit/tui
+    domain: clikit
+    capabilities: [clikit.tui]
+    description: "Package tui provides lightweight helpers for building terminal UIs with charmbracelet/bubbletea v2."
+    replaces: [charm.land/bubbletea/v2]
+  - import: github.com/golusoris/golusoris/container/runtime
+    domain: runtime
+    capabilities: [runtime.detect]
+    description: "Package runtime detects the container/process runtime (Kubernetes, Docker, Podman, systemd-managed, or plain binary) and exposes a unified [Info] so the rest of"
+  - import: github.com/golusoris/golusoris/db/bun
+    domain: db
+    capabilities: [db.orm]
+    description: "Package bun wires a [*bun.DB] ORM over the pool provided by db/pgx, as an opt-in alternative to hand-written sqlc queries."
+    replaces: [github.com/jackc/pgx/v5, github.com/uptrace/bun, github.com/uptrace/bun/dialect/pgdialect, github.com/uptrace/bun/extra/bundebug, gorm.io/gorm]
+  - import: github.com/golusoris/golusoris/db/cdc
+    domain: db
+    capabilities: [db.cdc]
+    description: "Package cdc implements a PostgreSQL logical-replication (WAL) consumer using the pglogrepl library."
+    replaces: [github.com/jackc/pglogrepl, github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/db/clickhouse
+    domain: db
+    capabilities: [db.clickhouse]
+    description: "Package clickhouse provides an fx-wired ClickHouse client via ClickHouse/clickhouse-go/v2."
+    replaces: [github.com/ClickHouse/clickhouse-go/v2]
+  - import: github.com/golusoris/golusoris/db/geo
+    domain: db
+    capabilities: [db.postgis]
+    description: "Package geo provides PostGIS geometry helpers for pgx/v5."
+    replaces: [github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/db/migrate
+    domain: db
+    capabilities: [db.migrate]
+    description: "Package migrate wraps golang-migrate v4 with golusoris conventions: an fx module that opens a migrate.Migrate against the configured DB and (opt-in) runs Up() d"
+    replaces: [github.com/golang-migrate/migrate/v4]
+  - import: github.com/golusoris/golusoris/db/pgx
+    domain: db
+    capabilities: [db.postgres]
+    description: "Package pgx wires a [*pgxpool.Pool] as an fx dependency."
+    replaces: [github.com/jackc/pgx/v5, github.com/jmoiron/sqlx, github.com/lib/pq]
+  - import: github.com/golusoris/golusoris/db/sqlc
+    domain: db
+    capabilities: [db.sqlc]
+    description: "Package sqlc holds runtime helpers that complement sqlc-generated code: transaction wrappers, pgx-error → golusoris-error mapping, and a shared sqlc.yaml fragme"
+    replaces: [github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/db/sqlite
+    domain: db
+    capabilities: [db.sqlite]
+    description: "Package sqlite provides an embedded SQLite database as an fx module over modernc.org/sqlite — a pure-Go (CGO-free) driver, so binaries stay statically linked an"
+    replaces: [github.com/mattn/go-sqlite3, modernc.org/sqlite]
+  - import: github.com/golusoris/golusoris/db/timescale
+    domain: db
+    capabilities: [db.timescale]
+    description: "Package timescale provides TimescaleDB hypertable helpers for pgx/v5."
+    replaces: [github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/deploy/multiregion
+    module: github.com/golusoris/golusoris/deploy/multiregion
+    domain: deploy
+    capabilities: [deploy.multiregion]
+    description: "Command golusoris-multiregion is a reference Pulumi (Go) program for an active/passive two-region golusoris deployment: Aurora Global Database (writer in the pr"
+    replaces: [github.com/pulumi/pulumi-aws/sdk/v7, github.com/pulumi/pulumi/sdk/v3]
+  - import: github.com/golusoris/golusoris/deploy/pulumi
+    module: github.com/golusoris/golusoris/deploy/pulumi
+    domain: deploy
+    capabilities: [deploy.pulumi]
+    description: "Command golusoris-app is a reference Pulumi (Go) program deploying a golusoris application on AWS: VPC + RDS Postgres + ElastiCache Redis + ECS Fargate behind a"
+    replaces: [github.com/pulumi/pulumi-aws/sdk/v7, github.com/pulumi/pulumi/sdk/v3]
+  - import: github.com/golusoris/golusoris/docs/docx
+    domain: docs
+    capabilities: [docs.docx]
+    description: "Package docx provides helpers for reading and writing DOCX files using the nguyenthenguyen/docx library (pure Go, no libreoffice dependency)."
+    replaces: [github.com/nguyenthenguyen/docx]
+  - import: github.com/golusoris/golusoris/docs/epub
+    domain: docs
+    capabilities: [docs.epub]
+    description: "Package epub provides a thin wrapper over [go-epub] for generating EPUB 3.0 files (with EPUB 2.0 table-of-contents for compatibility)."
+    replaces: [github.com/bmaupin/go-epub]
+  - import: github.com/golusoris/golusoris/docs/xlsx
+    domain: docs
+    capabilities: [docs.xlsx]
+    description: "Package xlsx provides thin helpers over [excelize] for reading and writing XLSX spreadsheets."
+    replaces: [github.com/xuri/excelize/v2]
+  - import: github.com/golusoris/golusoris/ebpf
+    domain: kernel
+    capabilities: [kernel.ebpf]
+    description: "Package ebpf provides an fx-wired scaffold for loading and managing eBPF programs using cilium/ebpf."
+    replaces: [github.com/cilium/ebpf]
+  - import: github.com/golusoris/golusoris/flags
+    domain: saas
+    capabilities: [saas.flags]
+    description: "Package flags provides typed feature-flag evaluation backed by a pluggable [Provider]."
+  - import: github.com/golusoris/golusoris/fs/watch
+    domain: fs
+    capabilities: [fs.watch]
+    description: "Package watch provides a debounced recursive directory watcher built on fsnotify."
+    replaces: [github.com/fsnotify/fsnotify]
+  - import: github.com/golusoris/golusoris/geoip
+    domain: net
+    capabilities: [net.geoip]
+    description: "Package geoip provides MaxMind GeoLite2 / GeoIP2 database lookups."
+    replaces: [github.com/oschwald/maxminddb-golang/v2]
+  - import: github.com/golusoris/golusoris/graphql
+    domain: graphql
+    capabilities: [graphql.server]
+    description: "Package graphql wires a gqlgen [*handler.Server] as an fx dependency."
+    replaces: [github.com/99designs/gqlgen, github.com/go-chi/chi/v5, github.com/graph-gophers/graphql-go]
+  - import: github.com/golusoris/golusoris/graphql/client
+    domain: graphql
+    capabilities: [graphql.client]
+    description: "Package client provides a thin fx-wired wrapper around the genqlient GraphQL client for consuming external GraphQL APIs."
+    replaces: [github.com/Khan/genqlient]
+  - import: github.com/golusoris/golusoris/grpc
+    domain: grpc
+    capabilities: [grpc.server, grpc.client]
+    description: "Package grpc provides an fx-wired gRPC server and client connection factory with OpenTelemetry tracing, panic recovery, and structured logging built in."
+    replaces: [github.com/grpc-ecosystem/go-grpc-middleware, github.com/grpc-ecosystem/go-grpc-middleware/v2, go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc, google.golang.org/grpc]
+  - import: github.com/golusoris/golusoris/hash
+    domain: hash
+    capabilities: [crypto.hash]
+    description: "Package hash provides content-hashing helpers using SHA-256 (cryptographic), xxhash (fast non-cryptographic), and BLAKE3 (fast cryptographic)."
+    replaces: [github.com/cespare/xxhash, github.com/cespare/xxhash/v2, github.com/zeebo/blake3]
+  - import: github.com/golusoris/golusoris/htmltmpl
+    domain: http
+    capabilities: [http.templates]
+    description: "Package htmltmpl is an ergonomic, auto-escaping SSR template layer over the standard library's html/template."
+  - import: github.com/golusoris/golusoris/httpx/autotls
+    domain: http
+    capabilities: [http.tls]
+    description: "Package autotls defines a pluggable TLS interface for auto-issued certificates."
+  - import: github.com/golusoris/golusoris/httpx/autotls/autocert
+    domain: http
+    capabilities: [http.autotls_autocert]
+    description: "Package autocert wires x/crypto/acme/autocert as an autotls provider."
+  - import: github.com/golusoris/golusoris/httpx/autotls/certmagic
+    domain: http
+    capabilities: [http.autotls_certmagic]
+    description: "Package certmagic wires caddyserver/certmagic as an autotls provider."
+    replaces: [github.com/caddyserver/certmagic]
+  - import: github.com/golusoris/golusoris/httpx/client
+    domain: http
+    capabilities: [http.client]
+    description: "Package client builds outbound [*http.Client] instances with retry, circuit-breaker, and OTel instrumentation."
+    replaces: [github.com/hashicorp/go-retryablehttp, github.com/sony/gobreaker, github.com/sony/gobreaker/v2, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp, go.opentelemetry.io/otel, go.opentelemetry.io/otel/trace]
+  - import: github.com/golusoris/golusoris/httpx/cors
+    domain: http
+    capabilities: [http.cors]
+    description: "Package cors exposes an rs/cors-backed middleware as a golusoris module."
+    replaces: [github.com/rs/cors]
+  - import: github.com/golusoris/golusoris/httpx/csrf
+    domain: http
+    capabilities: [http.csrf]
+    description: "Package csrf exposes a CSRF middleware as a golusoris module."
+    replaces: [filippo.io/csrf]
+  - import: github.com/golusoris/golusoris/httpx/extclient
+    domain: http
+    capabilities: [http.client_external]
+    description: "Package extclient is a pragmatic typed external-API client factory built on the framework's outbound client stack (httpx/client: retry + circuit-breaker + otelh"
+  - import: github.com/golusoris/golusoris/httpx/form
+    domain: http
+    capabilities: [http.form]
+    description: "Package form decodes HTML form submissions into Go structs."
+    replaces: [github.com/go-playground/form/v4]
+  - import: github.com/golusoris/golusoris/httpx/geofence
+    domain: http
+    capabilities: [http.geofence]
+    description: "Package geofence provides country-level allow/deny middleware backed by a MaxMind mmdb file (e.g."
+    replaces: [github.com/oschwald/maxminddb-golang/v2]
+  - import: github.com/golusoris/golusoris/httpx/htmx
+    domain: http
+    capabilities: [http.htmx]
+    description: "Package htmx provides helpers for HTMX request detection + response headers."
+  - import: github.com/golusoris/golusoris/httpx/inertia
+    domain: http
+    capabilities: [http.inertia]
+    description: "Package inertia wires the gonertia Inertia.js v2 server adapter into the fx graph."
+    replaces: [github.com/romsar/gonertia/v3]
+  - import: github.com/golusoris/golusoris/httpx/middleware
+    domain: http
+    capabilities: [http.middleware]
+    description: "Package middleware collects golusoris's opinionated HTTP middleware: request-ID injection, panic recovery, structured access logs, OpenTelemetry instrumentation"
+    replaces: [github.com/CAFxX/httpcompression, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp, go.opentelemetry.io/otel, go.opentelemetry.io/otel/trace]
+  - import: github.com/golusoris/golusoris/httpx/rangeserve
+    domain: http
+    capabilities: [http.range]
+    description: "Package rangeserve provides HTTP range-request serving for large files (video playback, resumable downloads) backed by any io.ReadSeeker."
+  - import: github.com/golusoris/golusoris/httpx/ratelimit
+    domain: http
+    capabilities: [http.ratelimit]
+    description: "Package ratelimit wraps ulule/limiter/v3 as a golusoris middleware."
+    replaces: [github.com/ulule/limiter/v3, golang.org/x/time/rate]
+  - import: github.com/golusoris/golusoris/httpx/router
+    domain: http
+    capabilities: [http.router]
+    description: "Package router provides a [chi.Router] as an fx dependency."
+    replaces: [github.com/gin-gonic/gin, github.com/go-chi/chi/v5, github.com/gofiber/fiber, github.com/gorilla/mux, github.com/labstack/echo]
+  - import: github.com/golusoris/golusoris/httpx/server
+    domain: http
+    capabilities: [http.server]
+    description: "Package server wires [*http.Server] as an fx dependency with slow-loris guards, body-size limits, and graceful shutdown."
+  - import: github.com/golusoris/golusoris/httpx/static
+    domain: http
+    capabilities: [http.static]
+    description: "Package static serves files from an [fs.FS] with ETag + cache-control headers tuned for typical web workloads."
+  - import: github.com/golusoris/golusoris/httpx/static/hashfs
+    domain: http
+    capabilities: [http.static_hashed]
+    description: "Package hashfs serves content-addressable asset filenames — e.g."
+    replaces: [github.com/benbjohnson/hashfs]
+  - import: github.com/golusoris/golusoris/httpx/vite
+    domain: http
+    capabilities: [http.vite]
+    description: "Package vite reads Vite's build manifest.json and resolves entry points to hashed asset URLs."
+  - import: github.com/golusoris/golusoris/httpx/ws
+    domain: http
+    capabilities: [http.websocket]
+    description: "Package ws is a thin wrapper over coder/websocket."
+    replaces: [github.com/coder/websocket]
+  - import: github.com/golusoris/golusoris/hw/fssnap
+    module: github.com/golusoris/golusoris/hw/fssnap
+    domain: hw
+    capabilities: [hw.fssnap]
+    description: "Package fssnap provides helpers for creating and managing ZFS and Btrfs snapshots by wrapping the respective CLI tools."
+  - import: github.com/golusoris/golusoris/hw/gpio
+    module: github.com/golusoris/golusoris/hw/gpio
+    domain: hw
+    capabilities: [hw.gpio]
+    description: "Package gpio provides GPIO, SPI, and I²C helpers using periph.io."
+    replaces: [periph.io/x/conn/v3]
+  - import: github.com/golusoris/golusoris/hw/robotics
+    module: github.com/golusoris/golusoris/hw/robotics
+    domain: hw
+    capabilities: [hw.robotics]
+    description: "Package robotics provides helpers for robotic platforms using gobot."
+    replaces: [gobot.io/x/gobot/v2]
+  - import: github.com/golusoris/golusoris/hw/udev
+    module: github.com/golusoris/golusoris/hw/udev
+    domain: hw
+    capabilities: [hw.udev]
+    description: "Package udev provides Linux device event monitoring using libudev via jochenvg/go-udev (CGO)."
+    replaces: [github.com/jochenvg/go-udev]
+  - import: github.com/golusoris/golusoris/i18n
+    domain: i18n
+    capabilities: [i18n.messages]
+    description: "Package i18n is a thin wrapper around nicksnyder/go-i18n providing locale negotiation from HTTP Accept-Language and a per-request [Localizer]."
+    replaces: [github.com/nicksnyder/go-i18n/v2]
+  - import: github.com/golusoris/golusoris/idempotency
+    domain: http
+    capabilities: [http.idempotency]
+    description: "Package idempotency provides HTTP middleware that enforces the Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header)."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/integrations/goenvoy
+    domain: integrations
+    capabilities: [integrations.goenvoy]
+    description: "Package goenvoy wires opt-in goenvoy service clients (Sonarr, TMDb, AniList, Trakt, ...) onto the framework's resilient outbound *http.Client."
+    replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/jobs
+    domain: jobs
+    capabilities: [jobs.queue]
+    description: "Package jobs wires a [river] client as an fx dependency so apps can enqueue + process background jobs backed by Postgres."
+    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype]
+  - import: github.com/golusoris/golusoris/jobs/cron
+    domain: jobs
+    capabilities: [jobs.cron]
+    description: "Package cron parses cron expressions (robfig/cron/v3) and registers them as river periodic jobs."
+    replaces: [github.com/go-co-op/gocron, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/robfig/cron, github.com/robfig/cron/v3]
+  - import: github.com/golusoris/golusoris/jobs/ui
+    domain: jobs
+    capabilities: [jobs.ui]
+    description: "Package ui mounts the River UI (queue dashboard) at a configurable prefix with optional basic-auth."
+    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river, riverqueue.com/riverui]
+  - import: github.com/golusoris/golusoris/jobs/workflow
+    domain: jobs
+    capabilities: [jobs.workflow]
+    description: "Package workflow wraps the Temporal Go SDK as an fx module."
+    replaces: [go.temporal.io/sdk]
+  - import: github.com/golusoris/golusoris/jsonschema
+    domain: jsonschema
+    capabilities: [validate.jsonschema]
+    description: "Package jsonschema validates JSON documents against JSON Schema (draft 2020-12 by default) via santhosh-tekuri/jsonschema/v6."
+    replaces: [github.com/santhosh-tekuri/jsonschema/v6]
+  - import: github.com/golusoris/golusoris/k8s/client
+    domain: k8s
+    capabilities: [k8s.client]
+    description: "Package client builds a *rest.Config + Kubernetes clientset with graceful fallback across deployment modes:"
+    replaces: [k8s.io/api, k8s.io/apimachinery, k8s.io/client-go]
+  - import: github.com/golusoris/golusoris/k8s/health
+    domain: k8s
+    capabilities: [k8s.health]
+    description: "Package health serves the canonical Kubernetes probe endpoints — /livez, /readyz, /startupz — backed by a [statuspage.Registry]."
+    replaces: [github.com/go-chi/chi/v5]
+  - import: github.com/golusoris/golusoris/k8s/metrics/prom
+    domain: k8s
+    capabilities: [telemetry.prometheus]
+    description: "Package prom mounts a Prometheus /metrics endpoint and exposes the check registry's per-check status as Gauges so Prometheus alerting can fire on individual dep"
+    replaces: [github.com/go-chi/chi/v5, github.com/prometheus/client_golang, github.com/prometheus/client_model]
+  - import: github.com/golusoris/golusoris/k8s/operator
+    domain: k8s
+    capabilities: [k8s.operator, telemetry.logr]
+    description: "Package operator provides an opt-in fx module wrapping a controller-runtime [manager.Manager], so apps can ship Kubernetes CRDs + reconcilers the way they ship "
+    replaces: [github.com/go-logr/logr, k8s.io/apimachinery, k8s.io/client-go, sigs.k8s.io/controller-runtime]
+  - import: github.com/golusoris/golusoris/k8s/podinfo
+    domain: k8s
+    capabilities: [k8s.podinfo]
+    description: "Package podinfo reads the Kubernetes downward API env vars (POD_NAME, POD_NAMESPACE, POD_IP, NODE_NAME, SERVICE_ACCOUNT, CONTAINER_NAME, CONTAINER_IMAGE) and ex"
+  - import: github.com/golusoris/golusoris/leader
+    domain: leader
+    capabilities: [leader.election]
+    description: "Package leader defines the pluggable interface for single-leader election across a replica set."
+  - import: github.com/golusoris/golusoris/leader/k8s
+    domain: leader
+    capabilities: [leader.k8s]
+    description: "Package k8s elects a single leader via the Kubernetes Lease API (client-go)."
+    replaces: [k8s.io/client-go]
+  - import: github.com/golusoris/golusoris/leader/pg
+    domain: leader
+    capabilities: [leader.pg]
+    description: "Package pg elects a single leader via a PostgreSQL session-scoped advisory lock."
+    replaces: [github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/markdown
+    domain: docs
+    capabilities: [docs.markdown]
+    description: "Package markdown renders Markdown to HTML using goldmark with GitHub Flavored Markdown extensions enabled: tables, strikethrough, task lists, linkify, and auto-"
+    replaces: [github.com/gomarkdown/markdown, github.com/russross/blackfriday, github.com/yuin/goldmark]
+  - import: github.com/golusoris/golusoris/media/3d
+    module: github.com/golusoris/golusoris/media/3d
+    domain: media
+    capabilities: [media.3d]
+    description: "Package threed provides a thin wrapper over g3n/engine for 3D rendering."
+    replaces: [github.com/g3n/engine]
+  - import: github.com/golusoris/golusoris/media/audio
+    module: github.com/golusoris/golusoris/media/audio
+    domain: media
+    capabilities: [media.audio]
+    description: "Package audio is golusoris's pure-Go, no-CGO server-side audio analysis layer: probe (format/duration/rate), decoded-PCM streaming, waveform peak buckets and EB"
+    replaces: [github.com/exaring/ebur128, github.com/go-audio/aiff, github.com/go-audio/audio, github.com/go-audio/wav, github.com/hajimehoshi/go-mp3, github.com/jfreymuth/oggvorbis, github.com/mewkiz/flac]
+  - import: github.com/golusoris/golusoris/media/av
+    module: github.com/golusoris/golusoris/media/av
+    domain: media
+    capabilities: [media.av]
+    description: "Package av wraps FFmpeg via go-astiav (CGO) for audio/video transcoding and media probing."
+    replaces: [github.com/asticode/go-astiav]
+  - import: github.com/golusoris/golusoris/media/cv
+    module: github.com/golusoris/golusoris/media/cv
+    domain: media
+    capabilities: [media.cv]
+    description: "Package cv provides computer vision helpers backed by OpenCV via gocv (CGO)."
+    replaces: [gocv.io/x/gocv]
+  - import: github.com/golusoris/golusoris/media/game
+    module: github.com/golusoris/golusoris/media/game
+    domain: media
+    capabilities: [media.game]
+    description: "Package game provides a thin wrapper over Ebitengine for 2D games and interactive apps."
+    replaces: [github.com/hajimehoshi/ebiten/v2]
+  - import: github.com/golusoris/golusoris/media/img
+    module: github.com/golusoris/golusoris/media/img
+    domain: media
+    capabilities: [media.img]
+    description: "Package img provides image processing helpers backed by libvips via govips (CGO)."
+    replaces: [github.com/davidbyttow/govips, github.com/disintegration/imaging, github.com/h2non/bimg]
+  - import: github.com/golusoris/golusoris/media/img/pipeline
+    module: github.com/golusoris/golusoris/media/img
+    domain: media
+    capabilities: [media.img_pipeline]
+    description: "Package pipeline provides on-demand image resize + signed-URL serving on top of the media/img govips transforms."
+  - import: github.com/golusoris/golusoris/money
+    domain: payments
+    capabilities: [payments.money]
+    description: "Package money provides a currency-aware money type stored as integer minor units (cents, pence, …) to avoid floating-point rounding errors."
+  - import: github.com/golusoris/golusoris/net/dnsserver
+    domain: net
+    capabilities: [net.dns_server]
+    description: "Package dnsserver provides an fx-wired DNS server using miekg/dns."
+    replaces: [github.com/miekg/dns]
+  - import: github.com/golusoris/golusoris/net/smtpserver
+    domain: net
+    capabilities: [net.smtp_server]
+    description: "Package smtpserver provides an fx-wired inbound SMTP server using emersion/go-smtp."
+    replaces: [github.com/emersion/go-smtp]
+  - import: github.com/golusoris/golusoris/net/wol
+    domain: net
+    capabilities: [net.wol]
+    description: "Package wol sends Wake-on-LAN magic packets over UDP."
+  - import: github.com/golusoris/golusoris/notify
+    domain: notify
+    capabilities: [notify.core]
+    description: "Package notify provides a unified notification interface."
+    replaces: [github.com/wneessen/go-mail]
+  - import: github.com/golusoris/golusoris/notify/apns2
+    domain: notify
+    capabilities: [notify.apns2]
+    description: "Package apns2 sends Apple push notifications via APNs HTTP/2 with token-based auth (.p8 key + team ID + key ID)."
+    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/notify/bounce
+    domain: notify
+    capabilities: [notify.bounce]
+    description: "Package bounce handles email bounce and complaint webhooks from SES (via SNS) and Postmark."
+  - import: github.com/golusoris/golusoris/notify/discord
+    domain: notify
+    capabilities: [notify.discord]
+    description: "Package discord sends notifications to Discord via incoming webhooks."
+  - import: github.com/golusoris/golusoris/notify/fcm
+    domain: notify
+    capabilities: [notify.fcm]
+    description: "Package fcm sends push notifications via Firebase Cloud Messaging HTTP v1 API."
+    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/notify/gotify
+    domain: notify
+    capabilities: [notify.gotify]
+    description: "Package gotify sends notifications to a self-hosted Gotify server."
+  - import: github.com/golusoris/golusoris/notify/inbound
+    domain: notify
+    capabilities: [notify.inbound]
+    description: "Package inbound parses inbound-email webhooks from SES (via SNS) and Postmark, plus raw RFC 5322 MIME emails from SMTP servers."
+  - import: github.com/golusoris/golusoris/notify/mailgun
+    domain: notify
+    capabilities: [notify.mailgun]
+    description: "Package mailgun sends transactional email via Mailgun's HTTP API."
+  - import: github.com/golusoris/golusoris/notify/ntfy
+    domain: notify
+    capabilities: [notify.ntfy]
+    description: "Package ntfy sends notifications to an ntfy server (https://ntfy.sh or a self-hosted instance)."
+  - import: github.com/golusoris/golusoris/notify/postmark
+    domain: notify
+    capabilities: [notify.postmark]
+    description: "Package postmark sends transactional email via Postmark's HTTP API."
+  - import: github.com/golusoris/golusoris/notify/resend
+    domain: notify
+    capabilities: [notify.resend]
+    description: "Package resend sends transactional email via Resend's HTTP API."
+  - import: github.com/golusoris/golusoris/notify/sendgrid
+    domain: notify
+    capabilities: [notify.sendgrid]
+    description: "Package sendgrid sends transactional email via SendGrid's v3 HTTP API."
+  - import: github.com/golusoris/golusoris/notify/slack
+    domain: notify
+    capabilities: [notify.slack]
+    description: "Package slack sends notifications to Slack via incoming webhooks."
+  - import: github.com/golusoris/golusoris/notify/teams
+    domain: notify
+    capabilities: [notify.teams]
+    description: "Package teams sends notifications to Microsoft Teams via legacy incoming webhooks (Connectors) or Power Automate / Workflow URLs."
+  - import: github.com/golusoris/golusoris/notify/telegram
+    domain: notify
+    capabilities: [notify.telegram]
+    description: "Package telegram sends chat notifications via the Telegram Bot API."
+  - import: github.com/golusoris/golusoris/notify/tracking
+    domain: notify
+    capabilities: [notify.tracking]
+    description: "Package tracking implements email open/click tracking via signed redirect URLs and a 1×1 tracking pixel."
+  - import: github.com/golusoris/golusoris/notify/twilio
+    domain: notify
+    capabilities: [notify.twilio]
+    description: "Package twilio sends SMS via Twilio's REST API."
+  - import: github.com/golusoris/golusoris/notify/unsub
+    domain: notify
+    capabilities: [notify.unsub]
+    description: "Package unsub implements RFC 8058 one-click unsubscribe and a per-email suppression list."
+  - import: github.com/golusoris/golusoris/notify/webpush
+    domain: notify
+    capabilities: [notify.webpush]
+    description: "Package webpush sends browser push notifications via the Web Push Protocol (RFC 8030 / draft-ietf-webpush-encryption-08)."
+    replaces: [github.com/SherClockHolmes/webpush-go]
+  - import: github.com/golusoris/golusoris/observability/pprof
+    domain: telemetry
+    capabilities: [telemetry.pprof]
+    description: "Package pprof mounts stdlib net/http/pprof handlers under /debug/pprof with optional basic-auth gating."
+    replaces: [github.com/go-chi/chi/v5]
+  - import: github.com/golusoris/golusoris/observability/profiling
+    domain: telemetry
+    capabilities: [telemetry.profiling]
+    description: "Package profiling wires grafana/pyroscope-go for continuous in-process profiling."
+    replaces: [github.com/grafana/pyroscope-go]
+  - import: github.com/golusoris/golusoris/observability/sentry
+    domain: telemetry
+    capabilities: [telemetry.sentry]
+    description: "Package sentry wires getsentry/sentry-go as a golusoris module with:"
+    replaces: [github.com/getsentry/sentry-go]
+  - import: github.com/golusoris/golusoris/observability/statuspage
+    domain: telemetry
+    capabilities: [telemetry.statuspage]
+    description: "Package statuspage exposes an HTML + JSON \"/status\" endpoint driven by a check registry."
+  - import: github.com/golusoris/golusoris/ocr
+    module: github.com/golusoris/golusoris/ocr
+    domain: media
+    capabilities: [media.ocr]
+    description: "Package ocr extracts text from images and PDFs using Tesseract via gosseract (CGO)."
+    replaces: [github.com/otiai10/gosseract]
+  - import: github.com/golusoris/golusoris/ogenkit
+    domain: ogenkit
+    capabilities: [http.openapi_server]
+    description: "Package ogenkit is the glue between ogen-generated code and golusoris conventions."
+    replaces: [github.com/deepmap/oapi-codegen, github.com/go-faster/jx, github.com/oapi-codegen/runtime, github.com/ogen-go/ogen]
+  - import: github.com/golusoris/golusoris/otel
+    domain: telemetry
+    capabilities: [telemetry.otel]
+    description: "Package otel wires OpenTelemetry — tracer, meter, and logger — with an OTLP gRPC exporter."
+    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
+  - import: github.com/golusoris/golusoris/outbox
+    domain: outbox
+    capabilities: [jobs.outbox]
+    description: "Package outbox implements the transactional-outbox pattern."
+    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river]
+  - import: github.com/golusoris/golusoris/outbox/cdc
+    domain: outbox
+    capabilities: [jobs.outbox_cdc]
+    description: "Package cdc provides a CDC-based drain for the transactional outbox."
+  - import: github.com/golusoris/golusoris/page
+    domain: http
+    capabilities: [http.pagination]
+    description: "Package page provides typed pagination helpers for cursor-based and offset-based queries, designed to compose cleanly with sqlc-generated queries and ogen respo"
+  - import: github.com/golusoris/golusoris/payments/invoice
+    domain: payments
+    capabilities: [payments.invoice]
+    description: "Package invoice provides invoice modelling, sequential numbering, and HTML rendering for SaaS billing."
+  - import: github.com/golusoris/golusoris/payments/meter
+    domain: payments
+    capabilities: [payments.metering]
+    description: "Package meter provides usage metering for billing-by-consumption SaaS apps."
+  - import: github.com/golusoris/golusoris/payments/stripe
+    domain: payments
+    capabilities: [payments.stripe]
+    description: "Package stripe provides a thin fx-compatible wrapper around stripe-go/v86."
+    replaces: [github.com/stripe/stripe-go/v86]
+  - import: github.com/golusoris/golusoris/payments/subs
+    domain: payments
+    capabilities: [payments.subscriptions]
+    description: "Package subs provides a provider-agnostic subscription-lifecycle state machine for SaaS billing."
+  - import: github.com/golusoris/golusoris/pdf
+    module: github.com/golusoris/golusoris/pdf
+    domain: docs
+    capabilities: [docs.pdf]
+    description: "Package pdf generates PDF documents from URLs or raw HTML using a headless Chrome browser via chromedp."
+    replaces: [github.com/chromedp/cdproto, github.com/chromedp/chromedp]
+  - import: github.com/golusoris/golusoris/pdf/parse
+    module: github.com/golusoris/golusoris/pdf
+    domain: docs
+    capabilities: [docs.pdf_parse]
+    description: "Package parse extracts text, metadata, and page information from PDF files using pdfcpu (pure-Go, no CGO required)."
+    replaces: [github.com/pdfcpu/pdfcpu]
+  - import: github.com/golusoris/golusoris/pkg/sockmap
+    domain: kernel
+    capabilities: [kernel.sockmap]
+    description: "Package sockmap is an opt-in fx module for colocated, zero-TCP-stack IPC via an eBPF SK_MSG / SOCK_OPS sockmap redirect."
+    replaces: [github.com/prometheus/client_golang]
+  - import: github.com/golusoris/golusoris/plugin
+    domain: plugin
+    capabilities: [plugin.registry]
+    description: "Package plugin provides a type-safe, in-process extension-point registry."
+  - import: github.com/golusoris/golusoris/pubsub/kafka
+    domain: pubsub
+    capabilities: [pubsub.kafka]
+    description: "Package kafka provides an fx-wired Kafka producer/consumer via twmb/franz-go."
+    replaces: [github.com/twmb/franz-go]
+  - import: github.com/golusoris/golusoris/pubsub/nats
+    domain: pubsub
+    capabilities: [pubsub.nats]
+    description: "Package nats provides an fx-wired NATS JetStream client via nats-io/nats.go."
+    replaces: [github.com/nats-io/nats.go]
+  - import: github.com/golusoris/golusoris/realtime/pubsub
+    domain: realtime
+    capabilities: [realtime.pubsub]
+    description: "Package pubsub provides a lightweight in-process pub/sub bus."
+  - import: github.com/golusoris/golusoris/realtime/pubsub/redis
+    domain: realtime
+    capabilities: [realtime.pubsub_redis]
+    description: "Package redis provides a cross-replica pub/sub Bus backed by Redis PUBLISH/SUBSCRIBE (rueidis), implementing [pubsub.Bus]."
+    replaces: [github.com/redis/rueidis]
+  - import: github.com/golusoris/golusoris/realtime/sse
+    domain: realtime
+    capabilities: [realtime.sse]
+    description: "Package sse provides a Server-Sent Events (SSE) handler."
+  - import: github.com/golusoris/golusoris/realtime/webrtc
+    domain: realtime
+    capabilities: [realtime.webrtc]
+    description: "Package webrtc is a thin helper around pion/webrtc for one-shot SDP offer/answer exchange over HTTP."
+    replaces: [github.com/pion/webrtc/v4]
+  - import: github.com/golusoris/golusoris/science/bio
+    module: github.com/golusoris/golusoris/science/bio
+    domain: science
+    capabilities: [science.bio]
+    description: "Package bio provides bioinformatics helpers — sequence handling, FASTA/FASTQ parsing, and basic alignment utilities using biogo/biogo."
+    replaces: [github.com/biogo/biogo]
+  - import: github.com/golusoris/golusoris/science/numerical
+    module: github.com/golusoris/golusoris/science/numerical
+    domain: science
+    capabilities: [science.numerical]
+    description: "Package numerical provides gonum-based linear algebra, statistics, and optimization helpers."
+    replaces: [gonum.org/v1/gonum]
+  - import: github.com/golusoris/golusoris/science/plot
+    module: github.com/golusoris/golusoris/science/plot
+    domain: science
+    capabilities: [science.plot]
+    description: "Package plot provides thin helpers over gonum/plot for generating charts."
+    replaces: [gonum.org/v1/plot]
+  - import: github.com/golusoris/golusoris/search
+    domain: search
+    capabilities: [search.core]
+    description: "Package search provides a provider-agnostic full-text and vector search abstraction."
+  - import: github.com/golusoris/golusoris/search/meilisearch
+    domain: search
+    capabilities: [search.meilisearch]
+    description: "Package meilisearch implements the [search.Backend] interface against a Meilisearch cluster."
+  - import: github.com/golusoris/golusoris/search/pgfts
+    domain: search
+    capabilities: [search.pgfts]
+    description: "Package pgfts implements the [search.Searcher] interface against Postgres full-text search (tsvector + tsquery)."
+    replaces: [github.com/jackc/pgx/v5]
+  - import: github.com/golusoris/golusoris/search/typesense
+    domain: search
+    capabilities: [search.typesense]
+    description: "Package typesense implements the [search.Backend] interface against a Typesense cluster."
+    replaces: [github.com/typesense/typesense-go]
+  - import: github.com/golusoris/golusoris/secrets
+    domain: security
+    capabilities: [security.secrets]
+    description: "Package secrets provides a pluggable Secret interface with env-var and file-based backends."
+  - import: github.com/golusoris/golusoris/selfupdate
+    domain: cli
+    capabilities: [cli.selfupdate]
+    description: "Package selfupdate provides binary self-update from GitHub releases."
+    replaces: [github.com/minio/selfupdate]
+  - import: github.com/golusoris/golusoris/storage
+    domain: storage
+    capabilities: [storage.bucket, storage.s3]
+    description: "Package storage provides a Bucket abstraction for object storage with a local-filesystem backend included."
+    replaces: [github.com/aws/aws-sdk-go-v2, github.com/aws/aws-sdk-go-v2/config, github.com/aws/aws-sdk-go-v2/credentials, github.com/aws/aws-sdk-go-v2/service/s3, github.com/aws/smithy-go]
+  - import: github.com/golusoris/golusoris/storage/safety
+    domain: storage
+    capabilities: [storage.safety]
+    description: "Package safety hardens user uploads before they reach a storage backend: metadata stripping (EXIF/GPS/XMP/text chunks dropped via stdlib re-encode), SSRF-guarde"
+    replaces: [code.dny.dev/ssrf]
+  - import: github.com/golusoris/golusoris/storage/scan
+    domain: storage
+    capabilities: [storage.malware_scan]
+    description: "Package scan scans untrusted upload bytes for malware via ClamAV's clamd daemon (over TCP or a unix socket) and maps the result to a typed [Verdict]."
+    replaces: [github.com/baruwa-enterprise/clamd]
+  - import: github.com/golusoris/golusoris/storage/tus
+    domain: storage
+    capabilities: [storage.tus]
+    description: "Package tus mounts a tus 1.0 resumable-upload endpoint backed by a storage.Bucket."
+    replaces: [github.com/go-chi/chi/v5, github.com/tus/tusd/v2]
+  - import: github.com/golusoris/golusoris/systemd
+    domain: runtime
+    capabilities: [runtime.systemd]
+    description: "Package systemd implements sd_notify + watchdog for processes run as systemd units."
+  - import: github.com/golusoris/golusoris/tenancy
+    domain: saas
+    capabilities: [saas.tenancy]
+    description: "Package tenancy provides multi-tenant context propagation and HTTP middleware."
+  - import: github.com/golusoris/golusoris/testutil/clickhouse
+    domain: test
+    capabilities: [test.clickhouse]
+    description: "Package clickhouse boots a real ClickHouse container via testcontainers-go and returns a connected [chgo.Conn]."
+    replaces: [github.com/ClickHouse/clickhouse-go/v2, github.com/testcontainers/testcontainers-go]
+  - import: github.com/golusoris/golusoris/testutil/factory
+    domain: test
+    capabilities: [test.factory]
+    description: "Package factory provides test data factories backed by brianvoe/gofakeit."
+    replaces: [github.com/brianvoe/gofakeit/v7]
+  - import: github.com/golusoris/golusoris/testutil/fuzz
+    domain: test
+    capabilities: [test.fuzz]
+    description: "Package fuzz provides helpers for fuzz testing."
+  - import: github.com/golusoris/golusoris/testutil/fxtest
+    domain: test
+    capabilities: [test.fxtest]
+    description: "Package fxtest provides helpers for testing fx applications."
+  - import: github.com/golusoris/golusoris/testutil/kafka
+    domain: test
+    capabilities: [test.kafka]
+    description: "Package kafka boots a Kafka-compatible broker via testcontainers-go and returns a broker address suitable for use with twmb/franz-go."
+    replaces: [github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/redpanda]
+  - import: github.com/golusoris/golusoris/testutil/load
+    domain: test
+    capabilities: [test.load]
+    description: "Package load provides load-testing helpers backed by tsenart/vegeta."
+    replaces: [github.com/tsenart/vegeta/v12]
+  - import: github.com/golusoris/golusoris/testutil/mutation
+    domain: test
+    capabilities: [test.mutation]
+    description: "Package mutation provides helpers for mutation testing via go-mutesting."
+  - import: github.com/golusoris/golusoris/testutil/nats
+    domain: test
+    capabilities: [test.nats]
+    description: "Package nats boots a real NATS container via testcontainers-go and returns its URL."
+    replaces: [github.com/testcontainers/testcontainers-go]
+  - import: github.com/golusoris/golusoris/testutil/pact
+    module: github.com/golusoris/golusoris/testutil/pact
+    domain: test
+    capabilities: [test.pact]
+    description: "Package pact provides helpers for Pact consumer-driven contract testing."
+    replaces: [github.com/pact-foundation/pact-go/v2]
+  - import: github.com/golusoris/golusoris/testutil/pg
+    domain: test
+    capabilities: [test.pg]
+    description: "Package pg starts a real PostgreSQL container via testcontainers-go and returns a connected [*pgxpool.Pool]."
+    replaces: [github.com/jackc/pgx/v5, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/postgres]
+  - import: github.com/golusoris/golusoris/testutil/prop
+    domain: test
+    capabilities: [test.prop]
+    description: "Package prop provides property-based testing helpers backed by leanovate/gopter."
+    replaces: [github.com/leanovate/gopter]
+  - import: github.com/golusoris/golusoris/testutil/redis
+    domain: test
+    capabilities: [test.redis]
+    description: "Package redis boots a real Redis container via testcontainers-go and returns a connected [rueidis.Client]."
+    replaces: [github.com/redis/rueidis, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/redis]
+  - import: github.com/golusoris/golusoris/testutil/river
+    domain: test
+    capabilities: [test.river]
+    description: "Package river boots a [jobs.Client] backed by a real Postgres container (via testutil/pg) and the river migrations applied."
+    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver/riverpgxv5]
+  - import: github.com/golusoris/golusoris/testutil/snapshot
+    domain: test
+    capabilities: [test.snapshot]
+    description: "Package snapshot provides snapshot testing helpers backed by gkampitakis/go-snaps."
+    replaces: [github.com/gkampitakis/go-snaps]
+  - import: github.com/golusoris/golusoris/torrent
+    domain: media
+    capabilities: [media.torrent]
+    description: "Package torrent provides a backend-agnostic Client abstraction over a running torrent daemon."
+    replaces: [github.com/autobrr/go-qbittorrent, github.com/autobrr/go-rtorrent, github.com/hekmon/transmissionrpc/v3]
+  - import: github.com/golusoris/golusoris/web3/evm
+    module: github.com/golusoris/golusoris/web3/evm
+    domain: web3
+    capabilities: [web3.evm]
+    description: "Package evm provides Ethereum/EVM chain helpers using go-ethereum."
+    replaces: [github.com/ethereum/go-ethereum]
+  - import: github.com/golusoris/golusoris/web3/solana
+    module: github.com/golusoris/golusoris/web3/solana
+    domain: web3
+    capabilities: [web3.solana]
+    description: "Package solana provides Solana blockchain helpers using gagliardetto/solana-go."
+    replaces: [github.com/gagliardetto/binary, github.com/gagliardetto/solana-go]
+  - import: github.com/golusoris/golusoris/webhooks/in
+    domain: webhooks
+    capabilities: [webhooks.inbound]
+    description: "Package in provides HTTP middleware for verifying inbound webhook signatures from common providers."
+  - import: github.com/golusoris/golusoris/webhooks/out
+    domain: webhooks
+    capabilities: [webhooks.outbound]
+    description: "Package out provides outbound webhook delivery with HMAC-SHA256 signing, exponential-backoff retry, dead-letter queue, and replay."

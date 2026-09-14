@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package vite reads Vite's build manifest.json and resolves entry points to
 // hashed asset URLs. No Go runtime dependencies beyond stdlib; apps `vite
 // build` in their frontend pipeline and this package teaches Go templates +

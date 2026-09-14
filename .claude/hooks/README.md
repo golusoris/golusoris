@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Claude Code hooks — golusoris
 
 Working hook scripts wired from [`../settings.json`](../settings.json). Each

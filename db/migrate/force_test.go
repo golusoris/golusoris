@@ -1,12 +1,16 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package migrate_test
 
 import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/golusoris/golusoris/core/log"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
-	"github.com/golusoris/golusoris/log"
 	pgtest "github.com/golusoris/golusoris/testutil/pg"
 )
 

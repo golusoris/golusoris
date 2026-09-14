@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — media/audio/
 
 Pure-Go, **no-CGO** server-side audio analysis: probe (format/duration/sample

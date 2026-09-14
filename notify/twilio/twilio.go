@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package twilio sends SMS via Twilio's REST API.
 //
 // Raw HTTP — we don't pull in twilio-go because its SDK covers 40+

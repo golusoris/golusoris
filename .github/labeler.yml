@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Path → label map for actions/labeler (v5 schema). Labels MUST already exist
 # in the repo (the action does not create them). Kept in sync with the topical
 # labels in the issue/PR taxonomy.
@@ -10,7 +14,7 @@ documentation:
 security:
   - changed-files:
       - any-glob-to-any-file:
-          ['auth/**', 'authz/**', 'crypto/**', 'secrets/**', 'hash/**', 'webhooks/**', 'payments/**', 'SECURITY.md']
+          ['auth/**', 'authz/**', 'core/crypto/**', 'secrets/**', 'hash/**', 'webhooks/**', 'payments/**', 'SECURITY.md']
 k8s:
   - changed-files:
       - any-glob-to-any-file: ['k8s/**', 'leader/k8s/**']
@@ -19,13 +23,19 @@ ai:
       - any-glob-to-any-file: ['ai/**']
 mcp:
   - changed-files:
-      - any-glob-to-any-file: ['mcp/**', '**/mcp/**']
+      - any-glob-to-any-file: ['core/mcp/**', '**/mcp/**']
 observability:
   - changed-files:
       - any-glob-to-any-file: ['otel/**']
 testing:
   - changed-files:
       - any-glob-to-any-file: ['**/*_test.go', 'testutil/**']
+core:
+  - changed-files:
+      - any-glob-to-any-file: ['core/**', 'capabilities.yaml']
+licensing:
+  - changed-files:
+      - any-glob-to-any-file: ['LICENSE', 'LICENSES/**', 'REUSE.toml', 'LICENSING.md']
 dependencies:
   - changed-files:
-      - any-glob-to-any-file: ['go.mod', 'go.sum']
+      - any-glob-to-any-file: ['go.mod', 'go.sum', '**/go.mod', '**/go.sum']

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # sqlc-dev/sqlc — v1.29.0 snapshot
 
 Pinned: **v1.29.0**

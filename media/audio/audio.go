@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package audio is golusoris's pure-Go, no-CGO server-side audio analysis layer:
 // probe (format/duration/rate), decoded-PCM streaming, waveform peak buckets and
 // EBU R128 / BS.1770 loudness (integrated LUFS + true-peak + loudness range).

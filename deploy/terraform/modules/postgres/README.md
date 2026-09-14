@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # terraform/modules/postgres
 
 Managed Postgres via AWS RDS with production defaults: Multi-AZ, encrypted storage, gp3, Performance Insights, 7-day backups, IAM auth enabled.

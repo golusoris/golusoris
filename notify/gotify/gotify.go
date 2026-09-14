@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package gotify sends notifications to a self-hosted Gotify server.
 //
 // Configure a Gotify application (Gotify UI → Apps → Create Application)

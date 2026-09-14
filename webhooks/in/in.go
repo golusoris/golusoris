@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package in provides HTTP middleware for verifying inbound webhook
 // signatures from common providers. Each provider uses a different
 // scheme; the middleware reads the raw body, verifies the signature,

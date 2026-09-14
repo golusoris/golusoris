@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package mailgun sends transactional email via Mailgun's HTTP API.
 //
 // Raw HTTP — we don't pull in mailgun-go/v4 because its transitive deps

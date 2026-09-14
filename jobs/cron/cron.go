@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package cron parses cron expressions (robfig/cron/v3) and registers them
 // as river periodic jobs.
 //

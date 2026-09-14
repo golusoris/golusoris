@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package htmltmpl is an ergonomic, auto-escaping SSR template layer over the
 // standard library's html/template. It owns a parsed template tree loaded from
 // an fs.FS (an embed.FS in prod, os.DirFS in dev), composes pages with named
@@ -31,7 +35,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // maxWalkEntries bounds the fs.FS walk so a hostile or misconfigured tree can

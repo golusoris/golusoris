@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package i18n is a thin wrapper around nicksnyder/go-i18n providing locale
 // negotiation from HTTP Accept-Language and a per-request [Localizer].
 //

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 Bump golusoris in a downstream app and apply migration notes.
 
 ## Task
@@ -11,7 +17,7 @@ Bump golusoris to version: `$ARGUMENTS` (e.g. `v0.5.0` or `latest`)
 ```sh
 golusoris bump $ARGUMENTS
 # or manually:
-go get github.com/golusoris/golusoris@$ARGUMENTS
+go get github.com/golusoris/golusoris/core@$ARGUMENTS github.com/golusoris/golusoris@$ARGUMENTS
 go mod tidy
 ```
 
@@ -22,7 +28,7 @@ go mod tidy
    - New required config keys.
    - Deprecated symbols (staticcheck SA1019 will surface uses).
 
-3. **Apply codemods** — fix each breaking change listed in the migration guide:
+3. **Apply codemods** — fix each breaking change listed in the migration guide. Import-path moves (e.g. v0.9.0 `…/config` → `…/core/config`) are applied with `astx.RewriteImportsFile` over `astx.Walk` (see `docs/migrations/v0.9.0.md`); then:
    - Rename types/functions as described.
    - Add new required config fields with sensible defaults.
    - Replace deprecated calls.

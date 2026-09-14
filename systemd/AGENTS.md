@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — systemd
 
 sd_notify + watchdog for processes run as systemd units. Zero deps (unixgram to NOTIFY_SOCKET).

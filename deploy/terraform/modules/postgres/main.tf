@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Managed Postgres via AWS RDS. For CloudSQL / Azure Database / DO /
 # Neon / Supabase / Fly, fork and swap the resource block; the
 # input variables + outputs (host, port, database, username, password)

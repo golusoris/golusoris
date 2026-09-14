@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package cdc implements a PostgreSQL logical-replication (WAL) consumer
 // using the pglogrepl library.  It decodes pgoutput messages into structured
 // [Event] values and delivers them to a caller-supplied [Handler].
@@ -40,8 +44,8 @@ import (
 	"github.com/jackc/pgx/v5/pgproto3"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 const (

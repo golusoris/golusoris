@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package prop provides property-based testing helpers backed by
 // leanovate/gopter.
 //
@@ -31,7 +35,7 @@ package prop
 
 import (
 	"hash/fnv"
-	"math/rand"
+	"math/rand" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- seeded PRNG for reproducible property tests, not security
 	"testing"
 
 	"github.com/leanovate/gopter"

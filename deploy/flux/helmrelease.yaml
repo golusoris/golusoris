@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Flux HelmRelease — deploys golusoris-app into the given namespace.
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2

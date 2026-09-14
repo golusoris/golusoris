@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # ADR-0016: On-demand image pipeline gated by HMAC signed URLs
 
 - **Status**: Accepted

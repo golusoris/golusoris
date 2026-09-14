@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package redis provides a [rueidis] client as an fx module. rueidis
 // auto-detects cluster vs standalone mode from InitAddress and supports
 // client-side caching out of the box.
@@ -20,7 +24,7 @@ import (
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options are the configuration knobs for the redis module.

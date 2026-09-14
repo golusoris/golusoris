@@ -1,10 +1,14 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package middleware
 
 import (
 	"log/slog"
 	"net/http"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // statusRecorder captures the status code + bytes written so Logger can log

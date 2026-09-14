@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package subs provides a provider-agnostic subscription-lifecycle
 // state machine for SaaS billing. Apps layer it on top of any payment
 // processor (Stripe, Paddle, Lemon Squeezy, self-hosted) — the state
@@ -25,8 +29,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/id"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/id"
 )
 
 // Status is the subscription lifecycle state.

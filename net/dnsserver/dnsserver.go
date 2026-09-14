@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package dnsserver provides an fx-wired DNS server using [miekg/dns].
 //
 // Apps register handlers via [ServeMux] (a [dns.ServeMux]) or implement
@@ -33,7 +37,7 @@ import (
 	"github.com/miekg/dns"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 const (

@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — pubsub/nats/
 
 fx-wired NATS JetStream client via nats-io/nats.go v1.50.0.

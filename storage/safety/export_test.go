@@ -1,9 +1,13 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package safety
 
 import (
 	"log/slog"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // NewStripperForTest exposes the unexported stripper constructor to the

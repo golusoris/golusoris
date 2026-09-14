@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package lockout implements per-identity login lockout: after N failed
 // attempts within a window the identity is locked for a cooldown.
 //
@@ -27,7 +31,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Options tune the lockout policy.

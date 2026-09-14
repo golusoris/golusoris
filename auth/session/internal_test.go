@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package session
 
 import (
@@ -5,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 func TestWithDefaults_cookieName(t *testing.T) {

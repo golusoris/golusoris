@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package stripe
 
 import (
@@ -19,7 +23,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // capturedRequest records what the stub Stripe server received.

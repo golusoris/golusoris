@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package flags provides typed feature-flag evaluation backed by a pluggable
 // [Provider]. A [Client] exposes Bool/String/Int/Float methods. The MemoryProvider
 // ships for testing; production deployments should back the provider with

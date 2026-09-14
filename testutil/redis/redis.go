@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package redis boots a real Redis container via testcontainers-go and
 // returns a connected [rueidis.Client]. Used by tests that need to
 // exercise actual Redis behaviour (TTL, pub/sub, distributed locks).
@@ -25,7 +29,9 @@ import (
 
 const (
 	defaultImage = "redis:7-alpine"
-	startTimeout = 60 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Start boots a Redis container and returns a connected rueidis.Client.

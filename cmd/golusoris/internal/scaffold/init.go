@@ -1,7 +1,12 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package scaffold implements the golusoris scaffolder subcommands.
 package scaffold
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
@@ -11,7 +16,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/golusoris/golusoris/clikit"
+	"github.com/golusoris/golusoris/core/clikit"
 )
 
 // InitCmd returns the `golusoris init <name>` command.
@@ -44,14 +49,17 @@ func initApp(name, module string) error {
 	}
 
 	files := map[string]string{
-		"go.mod":  goModTmpl,
-		"main.go": mainGoTmpl,
+		"go.mod":     goModTmpl,
+		"main.go":    mainGoTmpl,
+		"LICENSE":    eupl12Text,
+		"REUSE.toml": reuseTomlTmpl,
 	}
 
-	data := struct{ Name, Module, GoVersion string }{
+	data := struct{ Name, Module, GoVersion, Year string }{
 		Name:      name,
 		Module:    module,
-		GoVersion: "1.24",
+		GoVersion: "1.27.0",
+		Year:      "2026",
 	}
 
 	for name, tmpl := range files {
@@ -62,8 +70,8 @@ func initApp(name, module string) error {
 		fmt.Printf("  created %s\n", path)
 	}
 
-	fmt.Printf("\nApp scaffolded in ./%s\n", dir)
-	fmt.Printf("Next steps:\n  cd %s\n  go mod tidy\n  go run .\n", dir)
+	fmt.Printf("\nApp scaffolded in ./%s (EUPL-1.2, REUSE-ready)\n", dir)
+	fmt.Printf("Next steps:\n  cd %s\n  go get github.com/golusoris/golusoris/core@latest\n  go mod tidy\n  go run .\n", dir)
 	return nil
 }
 
@@ -91,20 +99,53 @@ func validateName(name string) error {
 	return nil
 }
 
+// goModTmpl declares no requirement on purpose: "latest" is not valid go.mod
+// syntax, so the next-steps `go get` pins a real version.
 var goModTmpl = `module {{.Module}}
 
 go {{.GoVersion}}
-
-require github.com/golusoris/golusoris latest
 `
 
-var mainGoTmpl = `package main
+// eupl12Text is the licence every scaffolded app starts under (ADR-0018).
+//
+//go:embed eupl-1.2.txt
+var eupl12Text string
+
+var reuseTomlTmpl = `# SPDX-FileCopyrightText: {{.Year}} {{.Name}} contributors
+#
+# SPDX-License-Identifier: EUPL-1.2
+#
+# REUSE (https://reuse.software) annotations. Code is EUPL-1.2, prose is
+# CC-BY-SA-4.0; run ` + "`reuse download --all`" + ` to fetch LICENSES/ texts and
+# ` + "`reuse lint`" + ` to verify.
+version = 1
+SPDX-PackageName = "{{.Name}}"
+SPDX-PackageDownloadLocation = "https://{{.Module}}"
+
+[[annotations]]
+path = ["**"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "{{.Year}} {{.Name}} contributors"
+SPDX-License-Identifier = "EUPL-1.2"
+
+[[annotations]]
+path = ["README.md", "docs/**", "**/AGENTS.md"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "{{.Year}} {{.Name}} contributors"
+SPDX-License-Identifier = "CC-BY-SA-4.0"
+`
+
+var mainGoTmpl = `// SPDX-FileCopyrightText: {{.Year}} {{.Name}} contributors
+//
+// SPDX-License-Identifier: EUPL-1.2
+
+package main
 
 import (
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
-	"github.com/golusoris/golusoris/log"
+	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/log"
 )
 
 func main() {

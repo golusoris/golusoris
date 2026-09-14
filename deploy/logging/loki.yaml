@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Minimal single-instance Loki for dev / small prod.
 # For scale-out use the grafana/loki Helm chart.
 ---

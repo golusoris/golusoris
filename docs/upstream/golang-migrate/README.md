@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # golang-migrate/migrate/v4 — v4.18.3 snapshot
 
 Pinned: **v4.18.3**

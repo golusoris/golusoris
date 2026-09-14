@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package profiling wires grafana/pyroscope-go for continuous in-process
 // profiling. Off by default — enable via config. eBPF-mode profiling (node-
 // wide) ships as deploy manifests in [deploy/observability/], not in this
@@ -21,7 +25,7 @@ import (
 	"github.com/grafana/pyroscope-go"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Options tunes the Pyroscope client.

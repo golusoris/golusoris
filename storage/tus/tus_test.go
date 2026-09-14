@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package tus_test
 
 import (
@@ -19,8 +23,8 @@ import (
 	"go.uber.org/fx/fxtest"
 	"go.uber.org/goleak"
 
-	"github.com/golusoris/golusoris/clock"
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/storage"
 	"github.com/golusoris/golusoris/storage/tus"
 )

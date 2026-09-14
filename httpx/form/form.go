@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package form decodes HTML form submissions into Go structs. Thin wrapper
 // over go-playground/form/v4 with golusoris error semantics: decode
 // failures become [*gerr.Error] with [gerr.CodeBadRequest].
@@ -16,7 +20,7 @@ import (
 	gpform "github.com/go-playground/form/v4"
 	"go.uber.org/fx"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // Decoder wraps *gpform.Decoder.

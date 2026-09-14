@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Command golusoris is the golusoris framework scaffolder.
 //
 // Usage:
@@ -10,8 +14,8 @@ package main
 import (
 	"os"
 
-	"github.com/golusoris/golusoris/clikit"
 	"github.com/golusoris/golusoris/cmd/golusoris/internal/scaffold"
+	"github.com/golusoris/golusoris/core/clikit"
 )
 
 func main() {

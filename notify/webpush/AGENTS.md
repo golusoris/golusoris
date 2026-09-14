@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # notify/webpush
 
 Browser Web Push sender (RFC 8030 + VAPID RFC 8292) for `notify.Sender`.

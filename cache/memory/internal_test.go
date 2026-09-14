@@ -1,10 +1,14 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package memory
 
 import (
 	"testing"
 	"time"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 func TestDefaultOptions_maxSize(t *testing.T) {

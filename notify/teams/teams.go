@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package teams sends notifications to Microsoft Teams via legacy
 // incoming webhooks (Connectors) or Power Automate / Workflow URLs.
 //

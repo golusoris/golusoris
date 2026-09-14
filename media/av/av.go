@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package av wraps FFmpeg via go-astiav (CGO) for audio/video transcoding and
 // media probing. FFmpeg shared libraries must be installed before use.
 //
@@ -12,9 +16,9 @@
 //
 // Activate implementation:
 //
-//	1. Remove //go:build ignore from media/av/impl_astiav.go
-//	2. Add the dep: go get github.com/asticode/go-astiav
-//	3. go mod tidy
+//  1. Remove //go:build ignore from media/av/impl_astiav.go
+//  2. Add the dep: go get github.com/asticode/go-astiav
+//  3. go mod tidy
 //
 // Usage:
 //
@@ -39,16 +43,16 @@ var ErrCGORequired = errors.New("av: CGO implementation not activated; see packa
 
 // StreamInfo describes a single audio or video stream within a media file.
 type StreamInfo struct {
-	Index     int
-	CodecName string
-	CodecType string // "video" | "audio" | "subtitle"
-	Width     int    // video only
-	Height    int    // video only
-	FrameRate float64
-	Channels  int           // audio only
-	SampleRate int          // audio only
-	BitRate   int64
-	Duration  time.Duration
+	Index      int
+	CodecName  string
+	CodecType  string // "video" | "audio" | "subtitle"
+	Width      int    // video only
+	Height     int    // video only
+	FrameRate  float64
+	Channels   int // audio only
+	SampleRate int // audio only
+	BitRate    int64
+	Duration   time.Duration
 }
 
 // MediaInfo describes a media container (file or stream).
@@ -92,12 +96,15 @@ type Transcoder interface {
 	Transcode(ctx context.Context, inPath, outPath string, opts TranscodeOptions) error
 }
 
-type stubProber struct{}
-type stubTranscoder struct{}
+type (
+	stubProber     struct{}
+	stubTranscoder struct{}
+)
 
 func (stubProber) Probe(_ context.Context, _ string) (MediaInfo, error) {
 	return MediaInfo{}, ErrCGORequired
 }
+
 func (stubTranscoder) Transcode(_ context.Context, _, _ string, _ TranscodeOptions) error {
 	return ErrCGORequired
 }

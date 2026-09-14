@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package session manages server-side sessions stored in Redis or
 // Postgres. Each session is a JSON blob keyed by a random, opaque
 // session ID. The ID is stored in a cookie; the data lives server-side.
@@ -31,7 +35,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 const (
@@ -129,7 +133,7 @@ func (m *Manager) Save(w http.ResponseWriter, s *Session) error {
 	if err := m.store.Save(context.Background(), s.ID, s.data, m.opts.TTL); err != nil {
 		return fmt.Errorf("session: save: %w", err)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
 		Name:     m.opts.CookieName,
 		Value:    s.ID,
 		Path:     m.opts.Path,
@@ -150,7 +154,7 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 	if delErr := m.store.Delete(context.Background(), cookie.Value); delErr != nil && !isNotFound(delErr) {
 		return fmt.Errorf("session: destroy: %w", delErr)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
 		Name:     m.opts.CookieName,
 		Value:    "",
 		Path:     m.opts.Path,

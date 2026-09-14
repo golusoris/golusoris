@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package discord sends notifications to Discord via incoming webhooks.
 //
 // Configure a Discord channel webhook (Server Settings → Integrations →

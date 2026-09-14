@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # ADR-0006: Pluggable leader election (k8s Lease + pg advisory)
 
 - **Status**: Accepted

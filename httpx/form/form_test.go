@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package form_test
 
 import (
@@ -5,7 +9,7 @@ import (
 	"net/url"
 	"testing"
 
-	gerr "github.com/golusoris/golusoris/errors"
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/httpx/form"
 )
 

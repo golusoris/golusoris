@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package router provides a [chi.Router] as an fx dependency. Apps mount
 // routes via fx.Invoke(func(r chi.Router) { r.Get("/foo", ...) }).
 //

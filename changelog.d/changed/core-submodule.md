@@ -1,0 +1,1 @@
+- **BREAKING**: `config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`, `version`, `clikit`, `mcp` moved into the new lean sub-module `github.com/golusoris/golusoris/core` (import paths now `…/core/<pkg>`; `clikit/tui` unchanged). See `docs/migrations/v0.9.0.md` and ADR-0017.

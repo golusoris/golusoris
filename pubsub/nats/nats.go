@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package nats provides an fx-wired NATS JetStream client via nats-io/nats.go.
 //
 // Usage:
@@ -19,7 +23,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 )
 
 // Config holds NATS connection settings.

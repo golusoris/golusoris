@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # Flux HelmRepository — points at the golusoris chart source.
 # Adjust `url` if you publish charts to a different registry.
 ---

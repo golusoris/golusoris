@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package meter provides usage metering for billing-by-consumption
 // SaaS apps. Apps record granular usage events; the package
 // deduplicates by event ID, stores them, and aggregates over time
@@ -28,7 +32,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // Event is a single usage record.

@@ -1,0 +1,1 @@
+- `core/gitx` + `core/gitx/worktree`: bounded git runner (deadline, output cap, ref validation) and per-task worktree manager (capability `git.worktree`).

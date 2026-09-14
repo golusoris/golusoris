@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package gemma implements a [tiny.Trainer] for LoRA fine-tuning
 // Google Gemma 3 / Gemma 3n on a JSONL prompt/response corpus. Go
 // orchestrates; a pinned Python container does the training via

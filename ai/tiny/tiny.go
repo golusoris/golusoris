@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package tiny is a framework for training and serving small
 // task-specific models — text/image/audio classifiers, embedding
 // extractors, and tiny generative LMs (e.g. Gemma 3 270M/1B, Gemma 3n
@@ -27,7 +31,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/id"
+	"github.com/golusoris/golusoris/core/id"
 )
 
 // Modality is the input shape the model consumes.

@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 # PreToolUse hook for the Bash tool.
 #
 # Reads a JSON envelope on stdin (see Claude Code hook schema), inspects

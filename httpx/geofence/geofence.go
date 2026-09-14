@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package geofence provides country-level allow/deny middleware backed by a
 // MaxMind mmdb file (e.g. GeoLite2-Country).
 //
@@ -27,7 +31,7 @@ import (
 	maxminddb "github.com/oschwald/maxminddb-golang/v2"
 	"go.uber.org/fx"
 
-	"github.com/golusoris/golusoris/config"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 

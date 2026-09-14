@@ -1,0 +1,1 @@
+- Relicensed: code EUPL-1.2 (was MIT), documentation CC-BY-SA-4.0; REUSE-compliant with SPDX headers on every first-party file, `reuse lint` and DCO sign-off enforced in CI (ADR-0018, `LICENSING.md`). Releases up to v0.8.0 stay MIT.

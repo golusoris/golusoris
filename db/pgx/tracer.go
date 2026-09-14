@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 package pgx
 
 import (
@@ -7,7 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/golusoris/golusoris/clock"
+	"github.com/golusoris/golusoris/core/clock"
 )
 
 // slowQueryTracer is a pgx.QueryTracer that logs queries slower than threshold

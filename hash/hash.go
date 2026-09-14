@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package hash provides content-hashing helpers using SHA-256 (cryptographic),
 // xxhash (fast non-cryptographic), and BLAKE3 (fast cryptographic).
 //
@@ -77,7 +81,7 @@ func XX64Reader(r io.Reader) (string, error) {
 // ETag computes an HTTP ETag value for data using SHA-1 (RFC 7232 §2.3).
 // The returned string includes the enclosing double-quotes.
 func ETag(data []byte) string {
-	h := sha1.New() //nolint:gosec // SHA-1 for ETag, not security-critical // #nosec G401
+	h := sha1.New() //nolint:gosec // SHA-1 for ETag, not security-critical // #nosec G401 // nosemgrep: go.lang.security.audit.crypto.use_of_weak_crypto.use-of-sha1 -- ETag is a content fingerprint, not a signature
 	h.Write(data)
 	return `"` + hex.EncodeToString(h.Sum(nil)) + `"`
 }

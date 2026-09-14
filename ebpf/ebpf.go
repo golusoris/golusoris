@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 // Package ebpf provides an fx-wired scaffold for loading and managing eBPF
 // programs using [cilium/ebpf].
 //

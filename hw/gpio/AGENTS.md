@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
 # Agent guide — hw/gpio/
 
 GPIO, SPI, and I²C helpers over periph.io. Stateless utility — **no fx wiring**.
