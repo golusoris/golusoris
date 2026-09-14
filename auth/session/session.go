@@ -110,7 +110,8 @@ func NewManager(store Store, opts Options) *Manager {
 
 // Load reads the session ID from the request cookie and fetches data
 // from the store. If no cookie exists or the session is not found, a
-// new empty session is returned (no error).
+// new empty session is returned; that path only fails when a fresh
+// session ID cannot be generated.
 func (m *Manager) Load(r *http.Request) (*Session, error) {
 	cookie, err := r.Cookie(m.opts.CookieName)
 	if err != nil {
