@@ -95,6 +95,11 @@ jobs:
         run: |
           set -euo pipefail
           go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
+          # gosec type-checks but never fetches: against a partially restored
+          # module cache it reports `could not import ... (invalid package
+          # name: "")` and exits 1 with zero findings. Populate the cache first.
+          go mod download
+          (cd core && go mod download)
           # Path exclusions live in ONE file shared with `make ci-all` (Makefile
           # _ci-module) so the two gates cannot drift; see the file's header.
           EXCLUDE_RULES=$(grep -v -e '^#' -e '^$' tools/gosec.exclude-rules | paste -sd ';' -)
