@@ -24,8 +24,8 @@ import (
 	"fmt"
 
 	bin "github.com/gagliardetto/binary"
-	solanago "github.com/gagliardetto/solana-go"
-	"github.com/gagliardetto/solana-go/rpc"
+	solanago "github.com/solana-foundation/solana-go/v2"
+	"github.com/solana-foundation/solana-go/v2/rpc"
 )
 
 // Client wraps a Solana RPC client.
