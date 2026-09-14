@@ -101,15 +101,17 @@ func (b *Book) WriteToWriter(w io.Writer) (err error) {
 		return fmt.Errorf("epub: create temp: %w", err)
 	}
 	name := f.Name()
-	if err = f.Close(); err != nil {
-		return fmt.Errorf("epub: close temp: %w", err)
-	}
+	// Register the cleanup before the close below so a close failure cannot
+	// leak the temp file.
 	defer func() {
 		// A leaked temp file only surfaces when nothing else failed.
 		if rmErr := os.Remove(name); rmErr != nil && err == nil {
 			err = fmt.Errorf("epub: remove temp: %w", rmErr)
 		}
 	}()
+	if err = f.Close(); err != nil {
+		return fmt.Errorf("epub: close temp: %w", err)
+	}
 
 	if writeErr := b.e.Write(name); writeErr != nil {
 		return fmt.Errorf("epub: write temp: %w", writeErr)
