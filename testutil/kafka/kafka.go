@@ -29,7 +29,9 @@ import (
 const (
 	// redpandaImage is Kafka-API-compatible without ZooKeeper.
 	redpandaImage = "redpandadata/redpanda:v24.3.1"
-	startTimeout  = 90 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Addr boots a Redpanda container and returns its Kafka-compatible broker

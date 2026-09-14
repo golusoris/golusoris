@@ -142,7 +142,10 @@ jobs:
     name: Test (race + coverage)
     if: github.actor != 'renovate[bot]'
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 20
+    # 30: the Docker-backed suite took 13.5 min on a cold ARC runner before the
+    # pre-pull step existed; keep headroom above the 10 min per-module go test
+    # timeout plus the pre-pull.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -162,6 +165,49 @@ jobs:
       - name: Verify Docker is reachable
         if: runner.os == 'Linux'
         run: docker info
+      # Every testcontainers-backed package pulls its image on first use. The
+      # ARC runner starts each job with an empty image cache ("Images: 0") and
+      # `go test ./...` launches all those packages at once, so the pulls
+      # compete for the Docker sidecar and container-start bounds expired
+      # mid-pull (PR #447). Pull the whole set up front, in parallel and
+      # bounded, so the test step starts warm.
+      - name: Pre-pull testcontainers images
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          # Single source of truth for CI. Keep in sync with the default images
+          # in testutil/{pg,redis,nats,kafka,clickhouse} and the ryuk reaper that
+          # testcontainers-go v0.44.0 spawns (internal/config/config.go:
+          # ReaperDefaultImage). storage/scan's clamav image is behind the
+          # `integration` build tag, which this job does not set, so it is
+          # deliberately not listed.
+          IMAGES=(
+            postgres:17-alpine
+            timescale/timescaledb:2.30.0-pg17
+            redis:7-alpine
+            nats:2-alpine
+            clickhouse/clickhouse-server:24
+            redpandadata/redpanda:v24.3.1
+            testcontainers/ryuk:0.14.0
+          )
+          PULL_TIMEOUT_SECONDS=300  # per image; HISS-02 bounded I/O
+          pids=()
+          for image in "${IMAGES[@]}"; do
+            timeout "$PULL_TIMEOUT_SECONDS" docker pull --quiet "$image" &
+            pids+=("$!")
+          done
+          failed=0
+          for i in "${!pids[@]}"; do
+            if ! wait "${pids[$i]}"; then
+              echo "::error::docker pull failed or exceeded ${PULL_TIMEOUT_SECONDS}s: ${IMAGES[$i]}"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "::error::pre-pull incomplete — the test step would otherwise pull under contention"
+            exit 1
+          fi
+          docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
       # On macOS there is no Docker daemon; skip the testcontainers-backed
       # packages so the portability leg passes instead of failing on infra.
       - name: Run tests (Linux — full suite with Docker)

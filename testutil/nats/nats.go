@@ -30,7 +30,9 @@ import (
 const (
 	defaultImage = "nats:2-alpine"
 	natsPort     = "4222/tcp"
-	startTimeout = 60 * time.Second
+	// startTimeout bounds one container start including a cold image pull;
+	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	startTimeout = 3 * time.Minute
 )
 
 // Start boots a NATS container with JetStream enabled and returns its URL
