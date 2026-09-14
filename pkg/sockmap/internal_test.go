@@ -230,3 +230,26 @@ func TestNewMetrics_RegistersOnce(t *testing.T) {
 	require.True(t, names["golusoris_sockmap_active_sockets"])
 	require.True(t, names["golusoris_sockmap_redirect_errors_total"])
 }
+
+// TestNewMetrics_RegistrationConflict is the negative path of newMetrics: a
+// registry that already holds a *different* descriptor under the same
+// fully-qualified name (different help string) is a real registration
+// failure, not a tolerated duplicate, so newMetrics must return it.
+func TestNewMetrics_RegistrationConflict(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "golusoris_sockmap_redirected_bytes_total",
+		Help: "conflicting help",
+	}))
+
+	m, err := newMetrics(reg)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sockmap: register metric")
+	require.Nil(t, m)
+
+	// The fx constructor propagates the same failure.
+	m, err = provideMetrics(metricsParams{Registry: reg})
+	require.Error(t, err)
+	require.Nil(t, m)
+}
