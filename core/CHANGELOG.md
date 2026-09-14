@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1](https://github.com/golusoris/golusoris/compare/core/v0.9.0...core/v0.9.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **governance:** make the praetor audit pass (devcontainer, HISS-01 recursion) ([#493](https://github.com/golusoris/golusoris/issues/493)) ([dfb3356](https://github.com/golusoris/golusoris/commit/dfb3356206b8d7eb93dafae3e49526fa355b7a6a))
+
+
+### Code Refactoring
+
+* **governance:** move lint and gosec configs to praetor's canonical paths ([#494](https://github.com/golusoris/golusoris/issues/494)) ([8dad6ef](https://github.com/golusoris/golusoris/commit/8dad6ef7d3770e3bb02857506449ae22be6a7ea6))
+
 ## [0.9.0](https://github.com/golusoris/golusoris/compare/core/v0.8.0...core/v0.9.0) (2026-09-14)
 
 
