@@ -18,18 +18,19 @@ import (
 	"github.com/golusoris/golusoris/notify/gotify"
 )
 
-func TestSender_Send(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name         string
-		opts         gotify.Options
-		msg          notify.Message
-		wantTitle    string
-		wantMessage  string
-		wantPriority float64
-		wantClick    string
-		wantIcon     string
-	}{
+type sendCase struct {
+	name         string
+	opts         gotify.Options
+	msg          notify.Message
+	wantTitle    string
+	wantMessage  string
+	wantPriority float64
+	wantClick    string
+	wantIcon     string
+}
+
+func sendCases() []sendCase {
+	return []sendCase{
 		{
 			name:         "body and subject",
 			opts:         gotify.Options{Priority: 5},
@@ -63,43 +64,58 @@ func TestSender_Send(t *testing.T) {
 			wantIcon:     "https://img.example/poster.png",
 		},
 	}
-	for _, tt := range tests {
+}
+
+// assertRequest checks the captured Gotify request against the case's expectations.
+func (tt sendCase) assertRequest(t *testing.T, r *http.Request) {
+	t.Helper()
+	require.Equal(t, http.MethodPost, r.Method)
+	require.Equal(t, "application/json", r.Header.Get("Content-Type"))
+	require.Equal(t, "/message", r.URL.Path)
+	require.Equal(t, "tok123", r.URL.Query().Get("token"))
+	body, err := io.ReadAll(r.Body)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(body, &got))
+	require.Equal(t, tt.wantMessage, got["message"])
+	require.Equal(t, tt.wantPriority, got["priority"])
+	if tt.wantTitle != "" {
+		require.Equal(t, tt.wantTitle, got["title"])
+	} else {
+		_, hasTitle := got["title"]
+		require.False(t, hasTitle)
+	}
+	tt.assertExtras(t, got)
+}
+
+func (tt sendCase) assertExtras(t *testing.T, got map[string]any) {
+	t.Helper()
+	if tt.wantClick == "" && tt.wantIcon == "" {
+		_, hasExtras := got["extras"]
+		require.False(t, hasExtras)
+		return
+	}
+	extras, ok := got["extras"].(map[string]any)
+	require.True(t, ok, "extras must be present")
+	if tt.wantClick != "" {
+		click, ok := extras["client::notification.click"].(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, tt.wantClick, click["url"])
+	}
+	if tt.wantIcon != "" {
+		img, ok := extras["client::notification.bigImageUrl"].(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, tt.wantIcon, img["imageUrl"])
+	}
+}
+
+func TestSender_Send(t *testing.T) {
+	t.Parallel()
+	for _, tt := range sendCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				require.Equal(t, "application/json", r.Header.Get("Content-Type"))
-				require.Equal(t, "/message", r.URL.Path)
-				require.Equal(t, "tok123", r.URL.Query().Get("token"))
-				body, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				var got map[string]any
-				require.NoError(t, json.Unmarshal(body, &got))
-				require.Equal(t, tt.wantMessage, got["message"])
-				require.Equal(t, tt.wantPriority, got["priority"])
-				if tt.wantTitle != "" {
-					require.Equal(t, tt.wantTitle, got["title"])
-				} else {
-					_, hasTitle := got["title"]
-					require.False(t, hasTitle)
-				}
-				if tt.wantClick != "" || tt.wantIcon != "" {
-					extras, ok := got["extras"].(map[string]any)
-					require.True(t, ok, "extras must be present")
-					if tt.wantClick != "" {
-						click, ok := extras["client::notification.click"].(map[string]any)
-						require.True(t, ok)
-						require.Equal(t, tt.wantClick, click["url"])
-					}
-					if tt.wantIcon != "" {
-						img, ok := extras["client::notification.bigImageUrl"].(map[string]any)
-						require.True(t, ok)
-						require.Equal(t, tt.wantIcon, img["imageUrl"])
-					}
-				} else {
-					_, hasExtras := got["extras"]
-					require.False(t, hasExtras)
-				}
+				tt.assertRequest(t, r)
 				w.WriteHeader(http.StatusOK)
 			}))
 			t.Cleanup(srv.Close)

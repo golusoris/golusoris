@@ -17,20 +17,21 @@ import (
 	"github.com/golusoris/golusoris/notify/ntfy"
 )
 
-func TestSender_Send(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name         string
-		opts         ntfy.Options
-		msg          notify.Message
-		wantBody     string
-		wantTitle    string
-		wantPriority string
-		wantTags     string
-		wantAuth     string
-		wantClick    string
-		wantIcon     string
-	}{
+type sendCase struct {
+	name         string
+	opts         ntfy.Options
+	msg          notify.Message
+	wantBody     string
+	wantTitle    string
+	wantPriority string
+	wantTags     string
+	wantAuth     string
+	wantClick    string
+	wantIcon     string
+}
+
+func sendCases() []sendCase {
+	return []sendCase{
 		{
 			name:         "body with defaults",
 			opts:         ntfy.Options{Priority: 4, Tags: []string{"warning", "skull"}},
@@ -78,21 +79,31 @@ func TestSender_Send(t *testing.T) {
 			wantIcon:  "https://img.example/poster.png",
 		},
 	}
-	for _, tt := range tests {
+}
+
+// assertRequest checks the captured ntfy request against the case's expectations.
+func (tt sendCase) assertRequest(t *testing.T, r *http.Request) {
+	t.Helper()
+	require.Equal(t, http.MethodPost, r.Method)
+	require.Equal(t, "/alerts", r.URL.Path)
+	body, err := io.ReadAll(r.Body)
+	require.NoError(t, err)
+	require.Equal(t, tt.wantBody, string(body))
+	require.Equal(t, tt.wantTitle, r.Header.Get("Title"))
+	require.Equal(t, tt.wantPriority, r.Header.Get("Priority"))
+	require.Equal(t, tt.wantTags, r.Header.Get("Tags"))
+	require.Equal(t, tt.wantAuth, r.Header.Get("Authorization"))
+	require.Equal(t, tt.wantClick, r.Header.Get("Click"))
+	require.Equal(t, tt.wantIcon, r.Header.Get("Icon"))
+}
+
+func TestSender_Send(t *testing.T) {
+	t.Parallel()
+	for _, tt := range sendCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				require.Equal(t, http.MethodPost, r.Method)
-				require.Equal(t, "/alerts", r.URL.Path)
-				body, err := io.ReadAll(r.Body)
-				require.NoError(t, err)
-				require.Equal(t, tt.wantBody, string(body))
-				require.Equal(t, tt.wantTitle, r.Header.Get("Title"))
-				require.Equal(t, tt.wantPriority, r.Header.Get("Priority"))
-				require.Equal(t, tt.wantTags, r.Header.Get("Tags"))
-				require.Equal(t, tt.wantAuth, r.Header.Get("Authorization"))
-				require.Equal(t, tt.wantClick, r.Header.Get("Click"))
-				require.Equal(t, tt.wantIcon, r.Header.Get("Icon"))
+				tt.assertRequest(t, r)
 				w.WriteHeader(http.StatusOK)
 			}))
 			t.Cleanup(srv.Close)

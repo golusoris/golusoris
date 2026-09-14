@@ -41,7 +41,7 @@ func (m *memStore) list() []tracking.Event {
 func TestPixelHandler_recordsOpen(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	urlStr := svc.PixelURL("http://example.com/t/open", "msg1", "alice@example.com")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
@@ -65,7 +65,7 @@ func TestPixelHandler_recordsOpen(t *testing.T) {
 func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/t/open?m=x&r=a&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.PixelHandler().ServeHTTP(rec, req)
@@ -77,7 +77,7 @@ func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 func TestClickHandler_redirects(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	target := "https://example.com/landing?x=1"
 	urlStr := svc.ClickURL("http://example.com/t/click", "msg2", "bob@example.com", target)
 
@@ -99,7 +99,7 @@ func TestClickHandler_redirects(t *testing.T) {
 func TestClickHandler_forwardedFor(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "https://ex.com/")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
@@ -112,7 +112,7 @@ func TestClickHandler_forwardedFor(t *testing.T) {
 
 func TestClickHandler_rejectsBadSig(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m&r=r&u=https%3A%2F%2Fex.com&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -121,7 +121,7 @@ func TestClickHandler_rejectsBadSig(t *testing.T) {
 
 func TestClickHandler_rejectsMissingParams(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -131,7 +131,7 @@ func TestClickHandler_rejectsMissingParams(t *testing.T) {
 func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"))
+	svc := tracking.New(store, []byte("k"), nil)
 	// Signed but with a javascript: target — must be rejected.
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "javascript:alert(1)")
 
@@ -145,7 +145,7 @@ func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 
 func TestPixelURL_containsExpectedFields(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"))
+	svc := tracking.New(&memStore{}, []byte("k"), nil)
 	got := svc.PixelURL("http://x/p", "m1", "a@b")
 	require.True(t, strings.HasPrefix(got, "http://x/p?"))
 	require.Contains(t, got, "m=m1")
