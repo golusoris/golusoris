@@ -35,10 +35,12 @@ deny() {
 }
 
 # ── git safety ──────────────────────────────────────────────────────────
-# Never skip commit/push hooks. Pre-commit runs lint+sec+test; bypassing
-# it is how broken code reaches main.
+# Hook evasion (--no-verify, -n, LEFTHOOK=0, SKIP=, core.hooksPath=/dev/null,
+# rm .git/hooks) is owned by praetor's interceptor,
+# .config/agent/hooks/block_evasion.py, wired next to this script in
+# .claude/settings.json (HISS-19: one behavior, one implementation). This
+# script keeps the repo-specific destructive-git and filesystem checks.
 case "$cmd" in
-  *--no-verify*)        deny "'--no-verify' disables pre-commit/push hooks. Fix the failure instead." ;;
   *--no-gpg-sign*)      deny "'--no-gpg-sign' bypasses commit signing. Not allowed in this repo." ;;
 esac
 
