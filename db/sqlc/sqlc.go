@@ -26,8 +26,11 @@ import (
 type TxFn func(ctx context.Context, tx pgx.Tx) error
 
 // WithTx runs fn inside a Postgres transaction. The tx is committed if fn
-// returns nil; otherwise it's rolled back. fn errors flow through unchanged
-// so callers can use [errors.Is] / [errors.As] on the original cause.
+// returns nil; otherwise it's rolled back. fn errors flow through so callers
+// can use [errors.Is] / [errors.As] on the original cause; if the rollback
+// itself fails (other than [pgx.ErrTxClosed]) the returned error is
+// [errors.Join] of the fn error and the rollback error, so compare with
+// [errors.Is], not ==.
 //
 //	err := sqlc.WithTx(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
 //	    return queries.WithTx(tx).InsertOrder(ctx, args)
@@ -38,7 +41,10 @@ func WithTx(ctx context.Context, pool *pgxpool.Pool, fn TxFn) error {
 		return fmt.Errorf("db/sqlc: begin tx: %w", err)
 	}
 	if err := fn(ctx, tx); err != nil {
-		_ = tx.Rollback(ctx)
+		// Join keeps errors.Is/As on the original cause working.
+		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
+			return errors.Join(err, fmt.Errorf("db/sqlc: rollback: %w", rbErr))
+		}
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {

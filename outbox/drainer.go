@@ -76,7 +76,7 @@ func (d *Drainer) Run(ctx context.Context) error {
 		slog.Duration("interval", d.opts.Interval),
 		slog.Int("batch", d.opts.Batch),
 	)
-	for {
+	for ctx.Err() == nil {
 		if err := d.drain(ctx); err != nil {
 			d.logger.WarnContext(ctx, "outbox/drainer: drain failed", slog.String("error", err.Error()))
 			// Continue — transient errors shouldn't kill the drainer.
@@ -87,6 +87,7 @@ func (d *Drainer) Run(ctx context.Context) error {
 		case <-d.clk.After(d.opts.Interval):
 		}
 	}
+	return nil
 }
 
 func (d *Drainer) drain(ctx context.Context) error {
@@ -101,7 +102,12 @@ func (d *Drainer) drain(ctx context.Context) error {
 				slog.String("kind", ev.Kind),
 				slog.String("error", dispatchErr.Error()),
 			)
-			_ = MarkFailed(ctx, d.pool, ev.ID, dispatchErr)
+			if failErr := MarkFailed(ctx, d.pool, ev.ID, dispatchErr); failErr != nil {
+				d.logger.WarnContext(ctx, "outbox/drainer: mark failed",
+					slog.Int64("id", ev.ID),
+					slog.String("error", failErr.Error()),
+				)
+			}
 			continue
 		}
 		if markErr := MarkDispatched(ctx, d.pool, ev.ID); markErr != nil {
@@ -180,7 +186,9 @@ var Module = fx.Module("golusoris.outbox",
 			OnStart: func(_ context.Context) error {
 				go func() {
 					defer close(done)
-					_ = d.Run(ctx)
+					if runErr := d.Run(ctx); runErr != nil {
+						d.logger.ErrorContext(ctx, "outbox/drainer: run", slog.String("error", runErr.Error()))
+					}
 				}()
 				return nil
 			},

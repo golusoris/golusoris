@@ -70,12 +70,12 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 		t.Fatalf("Open memory: %v", err)
 	}
 	t.Cleanup(func() { _ = mem.Close() })
-	if _, err = mem.ExecContext(t.Context(), "CREATE TABLE m (x INT)"); err != nil {
-		t.Fatal(err)
+	if _, execErr := mem.ExecContext(t.Context(), "CREATE TABLE m (x INT)"); execErr != nil {
+		t.Fatal(execErr)
 	}
 	// A second statement must see the table: the pool is pinned to one conn.
-	if _, err = mem.ExecContext(t.Context(), "INSERT INTO m VALUES (1)"); err != nil {
-		t.Fatalf("second statement lost the in-memory database: %v", err)
+	if _, execErr := mem.ExecContext(t.Context(), "INSERT INTO m VALUES (1)"); execErr != nil {
+		t.Fatalf("second statement lost the in-memory database: %v", execErr)
 	}
 
 	path := filepath.Join(t.TempDir(), "ro.db")
@@ -83,11 +83,11 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = rw.ExecContext(t.Context(), "CREATE TABLE r (x INT)"); err != nil {
-		t.Fatal(err)
+	if _, execErr := rw.ExecContext(t.Context(), "CREATE TABLE r (x INT)"); execErr != nil {
+		t.Fatal(execErr)
 	}
-	if err = rw.Close(); err != nil {
-		t.Fatal(err)
+	if closeErr := rw.Close(); closeErr != nil {
+		t.Fatal(closeErr)
 	}
 	ro, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, ReadOnly: true, DisableWAL: true}, discard())
 	if err != nil {
@@ -105,8 +105,13 @@ func TestOpenErrors(t *testing.T) {
 		t.Fatalf("empty path: got %v", err)
 	}
 	missingDir := filepath.Join(t.TempDir(), "nope", "x.db")
-	if _, err := sqlite.Open(t.Context(), sqlite.Options{Path: missingDir}, discard()); err == nil {
+	_, err := sqlite.Open(t.Context(), sqlite.Options{Path: missingDir}, discard())
+	if err == nil {
 		t.Fatal("expected error when the parent directory does not exist")
+	}
+	// sql.Open is lazy, so the failure must surface through the ping wrap.
+	if !strings.Contains(err.Error(), "db/sqlite: ping "+missingDir) {
+		t.Fatalf("expected ping-wrapped error, got %v", err)
 	}
 }
 
@@ -141,11 +146,11 @@ func TestModule(t *testing.T) {
 	var db *sql.DB
 	app := fxtest.New(t, fx.Supply(cfg, discard()), sqlite.Module, fx.Populate(&db))
 	app.RequireStart()
-	if err = db.PingContext(t.Context()); err != nil {
-		t.Fatalf("ping via module: %v", err)
+	if pingErr := db.PingContext(t.Context()); pingErr != nil {
+		t.Fatalf("ping via module: %v", pingErr)
 	}
 	app.RequireStop()
-	if err = db.PingContext(t.Context()); err == nil {
+	if pingErr := db.PingContext(t.Context()); pingErr == nil {
 		t.Fatal("database must be closed after fx stop")
 	}
 

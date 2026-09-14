@@ -6,6 +6,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,7 +23,7 @@ const migrateLockKey int64 = 0x7269766572
 // exactly once — the holder migrates while the rest wait, then see a no-op.
 // Run it as a one-shot init step (or fx.Invoke) before the jobs client starts;
 // it is safe to call on every pod.
-func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
+func Migrate(ctx context.Context, pool *pgxpool.Pool) (err error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("jobs: migrate: acquire conn: %w", err)
@@ -35,7 +36,9 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	defer func() {
 		// Unlock even if ctx is already cancelled, else the lock lingers on the
 		// pooled session until it is closed.
-		_, _ = conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrateLockKey)
+		if _, unlockErr := conn.Exec(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", migrateLockKey); unlockErr != nil {
+			err = errors.Join(err, fmt.Errorf("jobs: migrate: advisory unlock: %w", unlockErr))
+		}
 	}()
 
 	migrator, err := rivermigrate.New(riverpgxv5.New(pool), nil)
