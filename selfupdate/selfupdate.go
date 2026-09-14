@@ -61,7 +61,7 @@ type Result struct {
 
 // Update checks for a newer GitHub release and, if one exists, replaces the
 // running binary. Returns Updated=false when already on the latest version.
-func Update(ctx context.Context, opts Options) (res Result, err error) {
+func Update(ctx context.Context, opts Options) (Result, error) {
 	client := opts.HTTPClient
 	if client == nil {
 		client = http.DefaultClient
@@ -87,22 +87,9 @@ func Update(ctx context.Context, opts Options) (res Result, err error) {
 
 	checksum, _ := fetchChecksum(ctx, client, release, assetURL) // best-effort
 
-	rc, err := fetchAsset(ctx, client, assetURL)
+	data, err := downloadAsset(ctx, client, assetURL, checksum)
 	if err != nil {
-		return result, fmt.Errorf("selfupdate: fetch asset: %w", err)
-	}
-	defer errors.CloseInto(rc, &err, "selfupdate: close asset body")
-
-	h := sha256.New()
-	r := io.TeeReader(rc, h)
-	data, err2 := io.ReadAll(r)
-	if err2 != nil {
-		return result, fmt.Errorf("selfupdate: read asset: %w", err2)
-	}
-	if checksum != "" {
-		if got := hex.EncodeToString(h.Sum(nil)); got != checksum {
-			return result, fmt.Errorf("selfupdate: checksum mismatch: got %s, want %s", got, checksum)
-		}
+		return result, err
 	}
 
 	if err := selfupdate.Apply(bytes.NewReader(data), selfupdate.Options{}); err != nil {
@@ -111,6 +98,30 @@ func Update(ctx context.Context, opts Options) (res Result, err error) {
 
 	result.Updated = true
 	return result, nil
+}
+
+// downloadAsset fetches assetURL into memory and verifies it against checksum
+// (skipped when empty). The response body is closed — and a close failure
+// surfaced — before the caller applies the binary, so Updated=true is never
+// paired with a non-nil error.
+func downloadAsset(ctx context.Context, client *http.Client, assetURL, checksum string) (data []byte, err error) {
+	rc, err := fetchAsset(ctx, client, assetURL)
+	if err != nil {
+		return nil, fmt.Errorf("selfupdate: fetch asset: %w", err)
+	}
+	defer errors.CloseInto(rc, &err, "selfupdate: close asset body")
+
+	h := sha256.New()
+	data, err = io.ReadAll(io.TeeReader(rc, h))
+	if err != nil {
+		return nil, fmt.Errorf("selfupdate: read asset: %w", err)
+	}
+	if checksum != "" {
+		if got := hex.EncodeToString(h.Sum(nil)); got != checksum {
+			return nil, fmt.Errorf("selfupdate: checksum mismatch: got %s, want %s", got, checksum)
+		}
+	}
+	return data, nil
 }
 
 // ghRelease is a minimal GitHub API /releases/latest response.
