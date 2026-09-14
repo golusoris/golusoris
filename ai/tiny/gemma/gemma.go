@@ -107,56 +107,18 @@ func (*Trainer) Name() string { return "gemma" }
 // uploads the resulting LoRA bundle. The returned [tiny.Model] has a
 // zero Version — the Registry assigns it on SaveModel.
 func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
-	if err := tiny.ValidateJob(job); err != nil {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: validate: %w", err)
-	}
-	if job.Dataset.Modality != tiny.ModalityText || job.Dataset.TaskKind != tiny.TaskGenerate {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: need Modality=text + TaskKind=generate, got %s/%s",
-			job.Dataset.Modality, job.Dataset.TaskKind)
-	}
-	if !strings.HasPrefix(job.BaseModel, "gemma3:") && !strings.HasPrefix(job.BaseModel, "gemma3n:") {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: BaseModel %q: expected gemma3:* or gemma3n:*", job.BaseModel)
+	if err := validateJob(job); err != nil {
+		return tiny.Model{}, err
 	}
 
 	workDir, inputDir, outputDir, err := stageWorkDir(job)
 	if err != nil {
 		return tiny.Model{}, err
 	}
-	defer func() { _ = os.RemoveAll(workDir) }()
+	defer t.cleanup(ctx, workDir)
 
-	env := map[string]string{
-		"TINY_JOB_NAME":   job.Name,
-		"TINY_BASE_MODEL": job.BaseModel,
-	}
-	for k, v := range t.opts.ExtraEnv {
-		if _, reserved := env[k]; !reserved {
-			env[k] = v
-		}
-	}
-
-	t.opts.Logger.InfoContext(ctx, "ai/tiny/gemma: training start",
-		slog.String("job", job.Name),
-		slog.String("base", job.BaseModel),
-		slog.String("runner", t.opts.Runner.Name()),
-	)
-	var logBuf bytes.Buffer
-	runErr := t.opts.Runner.Run(ctx, tiny.RunSpec{
-		Image:     t.opts.Image,
-		Env:       env,
-		InputDir:  inputDir,
-		OutputDir: outputDir,
-		Timeout:   t.opts.Timeout,
-		GPUs:      t.opts.GPUs,
-		Logger:    &logBuf,
-	})
-	// Drain trainer stdout/stderr into structured logs whether or not Run
-	// errored — failure output is often more useful than success output.
-	sc := bufio.NewScanner(&logBuf)
-	for sc.Scan() {
-		t.opts.Logger.InfoContext(ctx, "ai/tiny/gemma: trainer", slog.String("line", sc.Text()))
-	}
-	if runErr != nil {
-		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: runner: %w", runErr)
+	if runErr := t.runContainer(ctx, job, inputDir, outputDir); runErr != nil {
+		return tiny.Model{}, runErr
 	}
 
 	artifactPath := filepath.Join(outputDir, ArtifactName)
@@ -165,13 +127,7 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 	if readErr != nil {
 		return tiny.Model{}, fmt.Errorf("ai/tiny/gemma: read artifact: %w", readErr)
 	}
-	metrics := map[string]float64{}
-	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
-	if metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName)); mErr == nil {
-		if jerr := json.Unmarshal(metricsBytes, &metrics); jerr != nil {
-			t.opts.Logger.WarnContext(ctx, "ai/tiny/gemma: parse metrics", slog.String("error", jerr.Error()))
-		}
-	}
+	metrics := t.readMetrics(ctx, outputDir)
 
 	// Upload. Registry assigns Version, so the URI embeds the job ID
 	// until the caller re-keys after SaveModel — good enough for a
@@ -196,6 +152,86 @@ func (t *Trainer) Train(ctx context.Context, job tiny.Job) (tiny.Model, error) {
 		Metrics:   metrics,
 		Metadata:  copyStringMap(job.Tags),
 	}, nil
+}
+
+// validateJob rejects jobs this trainer cannot serve.
+func validateJob(job tiny.Job) error {
+	if err := tiny.ValidateJob(job); err != nil {
+		return fmt.Errorf("ai/tiny/gemma: validate: %w", err)
+	}
+	if job.Dataset.Modality != tiny.ModalityText || job.Dataset.TaskKind != tiny.TaskGenerate {
+		return fmt.Errorf("ai/tiny/gemma: need Modality=text + TaskKind=generate, got %s/%s",
+			job.Dataset.Modality, job.Dataset.TaskKind)
+	}
+	if !strings.HasPrefix(job.BaseModel, "gemma3:") && !strings.HasPrefix(job.BaseModel, "gemma3n:") {
+		return fmt.Errorf("ai/tiny/gemma: BaseModel %q: expected gemma3:* or gemma3n:*", job.BaseModel)
+	}
+	return nil
+}
+
+// buildEnv merges ExtraEnv under the trainer-managed keys.
+func (t *Trainer) buildEnv(job tiny.Job) map[string]string {
+	env := map[string]string{
+		"TINY_JOB_NAME":   job.Name,
+		"TINY_BASE_MODEL": job.BaseModel,
+	}
+	for k, v := range t.opts.ExtraEnv {
+		if _, reserved := env[k]; !reserved {
+			env[k] = v
+		}
+	}
+	return env
+}
+
+// runContainer invokes the Runner and drains its output into structured
+// logs whether or not Run errored — failure output is often more useful
+// than success output.
+func (t *Trainer) runContainer(ctx context.Context, job tiny.Job, inputDir, outputDir string) error {
+	t.opts.Logger.InfoContext(ctx, "ai/tiny/gemma: training start",
+		slog.String("job", job.Name),
+		slog.String("base", job.BaseModel),
+		slog.String("runner", t.opts.Runner.Name()),
+	)
+	var logBuf bytes.Buffer
+	runErr := t.opts.Runner.Run(ctx, tiny.RunSpec{
+		Image:     t.opts.Image,
+		Env:       t.buildEnv(job),
+		InputDir:  inputDir,
+		OutputDir: outputDir,
+		Timeout:   t.opts.Timeout,
+		GPUs:      t.opts.GPUs,
+		Logger:    &logBuf,
+	})
+	sc := bufio.NewScanner(&logBuf)
+	for sc.Scan() {
+		t.opts.Logger.InfoContext(ctx, "ai/tiny/gemma: trainer", slog.String("line", sc.Text()))
+	}
+	if runErr != nil {
+		return fmt.Errorf("ai/tiny/gemma: runner: %w", runErr)
+	}
+	return nil
+}
+
+// readMetrics parses the optional metrics sidecar; a missing or
+// malformed file yields an empty map.
+func (t *Trainer) readMetrics(ctx context.Context, outputDir string) map[string]float64 {
+	metrics := map[string]float64{}
+	// #nosec G304 -- outputDir is an os.MkdirTemp-owned path; MetricsName is a const.
+	metricsBytes, mErr := os.ReadFile(filepath.Join(outputDir, MetricsName))
+	if mErr != nil {
+		return metrics
+	}
+	if jerr := json.Unmarshal(metricsBytes, &metrics); jerr != nil {
+		t.opts.Logger.WarnContext(ctx, "ai/tiny/gemma: parse metrics", slog.String("error", jerr.Error()))
+	}
+	return metrics
+}
+
+// cleanup removes the staged work dir; a failure is logged, not returned.
+func (t *Trainer) cleanup(ctx context.Context, workDir string) {
+	if rmErr := os.RemoveAll(workDir); rmErr != nil {
+		t.opts.Logger.WarnContext(ctx, "ai/tiny/gemma: remove work dir", slog.String("error", rmErr.Error()))
+	}
 }
 
 // stageWorkDir creates a temp work directory with input/ + output/

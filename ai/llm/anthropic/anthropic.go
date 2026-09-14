@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/llm"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // DefaultEndpoint is Anthropic's v1 Messages API.
@@ -98,7 +99,7 @@ func New(cfg Config) *Client {
 }
 
 // Chat implements [llm.Client].
-func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.Option) (llm.Response, error) {
+func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.Option) (_ llm.Response, err error) {
 	o := c.resolve(opts)
 	body, err := json.Marshal(c.buildRequest(o, messages, false))
 	if err != nil {
@@ -112,7 +113,7 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 	if err != nil {
 		return llm.Response{}, fmt.Errorf("anthropic: request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "anthropic: close response body") }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return llm.Response{}, fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, raw)
@@ -140,49 +141,53 @@ func (c *Client) Stream(ctx context.Context, messages []llm.Message, opts ...llm
 	ch := make(chan llm.Chunk, 32)
 	go func() {
 		defer close(ch)
-		o := c.resolve(opts)
-		body, err := json.Marshal(c.buildRequest(o, messages, true))
-		if err != nil {
-			ch <- llm.Chunk{Err: fmt.Errorf("anthropic: marshal: %w", err)}
-			return
-		}
-		req, err := c.newRequest(ctx, body)
-		if err != nil {
+		if err := c.stream(ctx, messages, opts, ch); err != nil {
 			ch <- llm.Chunk{Err: err}
-			return
-		}
-		resp, err := c.hc.Do(req)
-		if err != nil {
-			ch <- llm.Chunk{Err: fmt.Errorf("anthropic: request: %w", err)}
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-			ch <- llm.Chunk{Err: fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, raw)}
-			return
-		}
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "" || data == "[DONE]" {
-				continue
-			}
-			var ev streamEvent
-			if err := json.Unmarshal([]byte(data), &ev); err != nil {
-				continue
-			}
-			if ev.Type == "content_block_delta" && ev.Delta.Type == "text_delta" && ev.Delta.Text != "" {
-				ch <- llm.Chunk{Content: ev.Delta.Text}
-			}
 		}
 	}()
 	return ch
+}
+
+// stream performs one SSE request and forwards text deltas onto ch.
+func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.Option, ch chan<- llm.Chunk) (err error) {
+	o := c.resolve(opts)
+	body, err := json.Marshal(c.buildRequest(o, messages, true))
+	if err != nil {
+		return fmt.Errorf("anthropic: marshal: %w", err)
+	}
+	req, err := c.newRequest(ctx, body)
+	if err != nil {
+		return err
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return fmt.Errorf("anthropic: request: %w", err)
+	}
+	defer func() { gerr.CloseInto(resp.Body, &err, "anthropic: close stream body") }()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, raw)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "" || data == "[DONE]" {
+			continue
+		}
+		var ev streamEvent
+		if err := json.Unmarshal([]byte(data), &ev); err != nil {
+			continue
+		}
+		if ev.Type == "content_block_delta" && ev.Delta.Type == "text_delta" && ev.Delta.Text != "" {
+			ch <- llm.Chunk{Content: ev.Delta.Text}
+		}
+	}
+	return nil
 }
 
 // Embed implements [llm.Client]. Anthropic does not expose an

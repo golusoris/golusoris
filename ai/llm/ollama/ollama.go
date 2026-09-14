@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/llm"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // DefaultBaseURL is Ollama's default local endpoint.
@@ -83,7 +84,7 @@ func New(cfg Config) *Client {
 }
 
 // Chat implements [llm.Client].
-func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.Option) (llm.Response, error) {
+func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.Option) (_ llm.Response, err error) {
 	s := c.resolve(opts)
 	req := c.buildChatRequest(s, messages, false)
 	body, err := json.Marshal(req)
@@ -94,7 +95,7 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 	if err != nil {
 		return llm.Response{}, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close response body") }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return llm.Response{}, fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, raw)
@@ -117,43 +118,48 @@ func (c *Client) Stream(ctx context.Context, messages []llm.Message, opts ...llm
 	ch := make(chan llm.Chunk, 32)
 	go func() {
 		defer close(ch)
-		s := c.resolve(opts)
-		body, err := json.Marshal(c.buildChatRequest(s, messages, true))
-		if err != nil {
-			ch <- llm.Chunk{Err: fmt.Errorf("ollama: marshal: %w", err)}
-			return
-		}
-		resp, err := c.post(ctx, "/api/chat", body)
-		if err != nil {
+		if err := c.stream(ctx, messages, opts, ch); err != nil {
 			ch <- llm.Chunk{Err: err}
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-			ch <- llm.Chunk{Err: fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, raw)}
-			return
-		}
-		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-		for scanner.Scan() {
-			var ev chatResponse
-			if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
-				continue
-			}
-			if ev.Message.Content != "" {
-				ch <- llm.Chunk{Content: ev.Message.Content}
-			}
-			if ev.Done {
-				return
-			}
 		}
 	}()
 	return ch
 }
 
+// stream performs one NDJSON request and forwards content onto ch.
+func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.Option, ch chan<- llm.Chunk) (err error) {
+	s := c.resolve(opts)
+	body, err := json.Marshal(c.buildChatRequest(s, messages, true))
+	if err != nil {
+		return fmt.Errorf("ollama: marshal: %w", err)
+	}
+	resp, err := c.post(ctx, "/api/chat", body)
+	if err != nil {
+		return err
+	}
+	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close stream body") }()
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		return fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, raw)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for scanner.Scan() {
+		var ev chatResponse
+		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
+			continue
+		}
+		if ev.Message.Content != "" {
+			ch <- llm.Chunk{Content: ev.Message.Content}
+		}
+		if ev.Done {
+			return nil
+		}
+	}
+	return nil
+}
+
 // Embed implements [llm.Client].
-func (c *Client) Embed(ctx context.Context, text string) ([]float32, error) {
+func (c *Client) Embed(ctx context.Context, text string) (_ []float32, err error) {
 	model := c.cfg.EmbedModel
 	if model == "" {
 		model = c.cfg.Model
@@ -169,7 +175,7 @@ func (c *Client) Embed(ctx context.Context, text string) ([]float32, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close embed body") }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return nil, fmt.Errorf("ollama: embed HTTP %d: %s", resp.StatusCode, raw)

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // DefaultEndpoint is the ollama HTTP API root.
@@ -108,7 +109,7 @@ func (p *Predictor) Load(ctx context.Context, m tiny.Model) error {
 
 // Predict sends the prompt to ollama and returns the generated text.
 // Input must be a string (prompt).
-func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, error) {
+func (p *Predictor) Predict(ctx context.Context, input any) (_ tiny.Prediction, err error) {
 	p.mu.RLock()
 	loaded, tag := p.loaded, p.tag
 	p.mu.RUnlock()
@@ -137,7 +138,7 @@ func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, er
 	if dErr != nil {
 		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/ollama: request: %w", dErr)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/ollama: close generate body") }()
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, p.opts.MaxResponseBytes))
 	if readErr != nil {
 		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/ollama: read body: %w", readErr)
@@ -158,7 +159,7 @@ func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, er
 func (*Predictor) Close() error { return nil }
 
 // showModel verifies an ollama model tag is resolvable via /api/show.
-func (p *Predictor) showModel(ctx context.Context, tag string) error {
+func (p *Predictor) showModel(ctx context.Context, tag string) (err error) {
 	reqBody, mErr := json.Marshal(map[string]string{"name": tag})
 	if mErr != nil {
 		return fmt.Errorf("ai/tiny/serve/ollama: marshal show: %w", mErr)
@@ -173,7 +174,7 @@ func (p *Predictor) showModel(ctx context.Context, tag string) error {
 	if dErr != nil {
 		return fmt.Errorf("ai/tiny/serve/ollama: show request: %w", dErr)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/ollama: close show body") }()
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("ai/tiny/serve/ollama: model %q not registered in ollama (404)", tag)
 	}
