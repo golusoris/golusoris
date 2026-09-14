@@ -51,7 +51,7 @@ Typical SaaS billing flow:
 ```go
 sub, _ := subsService.Get(ctx, subID)
 inv := invoice.Invoice{
-    ID:        id.New().NewUUID().String(),
+    ID:        must(id.New().NewUUID()).String(),
     Number:    must(numberer.Next(ctx, sub.CustomerID)),
     TenantID:  sub.CustomerID,
     Status:    invoice.StatusIssued,

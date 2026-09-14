@@ -213,7 +213,11 @@ func (r *MemoryRegistry) SaveJob(_ context.Context, j Job) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if j.ID == "" {
-		j.ID = r.idGen.NewUUID().String()
+		u, err := r.idGen.NewUUID()
+		if err != nil {
+			return fmt.Errorf("ai/tiny: job id: %w", err)
+		}
+		j.ID = u.String()
 	}
 	if j.CreatedAt.IsZero() {
 		j.CreatedAt = r.clk.Now().UTC()
@@ -245,7 +249,11 @@ func (r *MemoryRegistry) SaveModel(_ context.Context, m *Model) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if m.ID == "" {
-		m.ID = r.idGen.NewUUID().String()
+		u, err := r.idGen.NewUUID()
+		if err != nil {
+			return fmt.Errorf("ai/tiny: model id: %w", err)
+		}
+		m.ID = u.String()
 	}
 	if m.CreatedAt.IsZero() {
 		m.CreatedAt = r.clk.Now().UTC()

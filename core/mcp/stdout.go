@@ -5,6 +5,7 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -36,6 +37,8 @@ type stdoutRedirect struct {
 	writeEnd *os.File
 	// done closes when the copy goroutine has fully drained the pipe.
 	done chan struct{}
+	// drainErr records a copy/close failure from drain; Close surfaces it.
+	drainErr error
 	// sink is where redirected stray output goes (os.Stderr in production;
 	// overridable in tests).
 	sink io.Writer
@@ -66,11 +69,15 @@ func installStdoutRedirect(sink io.Writer) (*stdoutRedirect, *os.File, error) {
 }
 
 // drain copies redirected stdout writes to the sink until the write end is
-// closed, then signals completion.
+// closed, then signals completion. Failures are kept for Close to report.
 func (r *stdoutRedirect) drain(readEnd *os.File) {
 	defer close(r.done)
-	_, _ = io.Copy(r.sink, readEnd)
-	_ = readEnd.Close()
+	if _, err := io.Copy(r.sink, readEnd); err != nil {
+		r.drainErr = fmt.Errorf("mcp: drain redirected stdout: %w", err)
+	}
+	if err := readEnd.Close(); err != nil {
+		r.drainErr = errors.Join(r.drainErr, fmt.Errorf("mcp: close stdout redirect read end: %w", err))
+	}
 }
 
 // Close restores the original os.Stdout, closes the pipe write end, and waits
@@ -85,5 +92,5 @@ func (r *stdoutRedirect) Close() error {
 		return fmt.Errorf("mcp: close stdout redirect: %w", err)
 	}
 	<-r.done
-	return nil
+	return r.drainErr
 }

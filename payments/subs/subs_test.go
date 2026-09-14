@@ -6,6 +6,7 @@ package subs_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -188,4 +189,27 @@ func TestChangePlan(t *testing.T) {
 	got, _ := store.Get(context.Background(), sub.ID)
 	require.Equal(t, "pro", got.Plan)
 	require.Equal(t, 5, got.Seats)
+}
+
+// TestStart_IDGenFailureAborts pins the HISS-07 contract of the Options.IDGen
+// error return: Start surfaces the generator error, persists nothing and
+// fires no change event.
+func TestStart_IDGenFailureAborts(t *testing.T) {
+	t.Parallel()
+	idErr := errors.New("random source down")
+	store := subs.NewMemoryStore()
+	var events []subs.ChangeEvent
+	svc := subs.New(store, clock.NewFake(), nil, subs.Options{
+		IDGen:    func() (string, error) { return "", idErr },
+		OnChange: func(_ context.Context, e subs.ChangeEvent) { events = append(events, e) },
+	})
+
+	sub, err := svc.Start(context.Background(), subs.StartParams{CustomerID: "c1", Plan: "pro"})
+
+	require.ErrorIs(t, err, idErr)
+	require.Nil(t, sub)
+	require.Empty(t, events)
+	got, err := store.GetByCustomer(context.Background(), "c1")
+	require.NoError(t, err)
+	require.Empty(t, got)
 }
