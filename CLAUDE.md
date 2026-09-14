@@ -98,7 +98,7 @@ Every merged commit: 0 lint · 0 gosec · 0 govulncheck · race-green. `//nolint
 
 ### Project state
 
-- Pre-1.0. Latest tag `v0.7.0` (`v0.8.0` is prepared in `CHANGELOG.md` / the release-please manifest, not yet tagged); `v0.9.0` in preparation — lean `core/` sub-module (ADR-0017), EUPL-1.2 relicense (ADR-0018), praetor HISS-16 governance (ADR-0019), Go 1.27 floor. Every module in the README catalog is landed and gated by CI.
+- Pre-1.0. Latest tag `v0.7.0` (`v0.8.0` is prepared in `CHANGELOG.md` / the release-please manifest, not yet tagged); `v0.9.0` in preparation — lean `core/` sub-module (ADR-0017), EUPL-1.2 relicense (ADR-0018), praetor HISS-16 governance (ADR-0019), Go 1.27 floor. Every module in the README catalog is landed; CI gates the root module and `core/`, the heavy sub-modules (own `go.mod`) build on demand.
 - See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the plan + decisions log, [.workingdir/STATE.md](.workingdir/STATE.md) for the session log (older entries in `.workingdir/archive/`), [.workingdir/TODO.md](.workingdir/TODO.md) for open work, and [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path move.
 
 ### Every commit: keep docs in sync

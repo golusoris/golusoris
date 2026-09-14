@@ -394,7 +394,8 @@ out in the commit `Migration:` footer and in `docs/migrations/` — start with
 [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path
 move (`config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`,
 `version`, `clikit`, `mcp` → `core/…`). Every module in the catalog above is
-committed and exercised by CI.
+committed; CI gates the root module and `core/`, while the heavy sub-modules
+(own `go.mod`) build on demand.
 
 ---
 
