@@ -169,7 +169,9 @@ func runManager(lc fx.Lifecycle, mgr manager.Manager, logger *slog.Logger, sd fx
 			go func() {
 				if err := mgr.Start(ctx); err != nil {
 					logger.Error("operator: manager exited", slog.Any("err", err))
-					_ = sd.Shutdown()
+					if serr := sd.Shutdown(); serr != nil {
+						logger.Error("operator: shutdown request failed", slog.Any("err", serr))
+					}
 				}
 			}()
 			return nil

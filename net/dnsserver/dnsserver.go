@@ -128,8 +128,12 @@ func register(p params) {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			_ = udp.ShutdownContext(ctx)
-			_ = tcp.ShutdownContext(ctx)
+			if err := udp.ShutdownContext(ctx); err != nil {
+				p.Logger.WarnContext(ctx, "dnsserver: udp shutdown", "err", err)
+			}
+			if err := tcp.ShutdownContext(ctx); err != nil {
+				p.Logger.WarnContext(ctx, "dnsserver: tcp shutdown", "err", err)
+			}
 			return nil
 		},
 	})

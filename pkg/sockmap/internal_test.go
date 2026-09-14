@@ -158,7 +158,8 @@ func TestLoadOptions_PartialConfigRestoresDefaults(t *testing.T) {
 func TestProvideMetrics(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	m := provideMetrics(metricsParams{Registry: reg})
+	m, err := provideMetrics(metricsParams{Registry: reg})
+	require.NoError(t, err)
 	require.NotNil(t, m)
 	m.RedirectedBytes.Add(7)
 	mfs, err := reg.Gather()
@@ -175,7 +176,8 @@ func TestProvideMetrics(t *testing.T) {
 
 //nolint:paralleltest // touches the global prometheus default registerer; must not run in parallel
 func TestProvideMetrics_NilRegistryUsesDefault(t *testing.T) {
-	m := provideMetrics(metricsParams{Registry: nil})
+	m, err := provideMetrics(metricsParams{Registry: nil})
+	require.NoError(t, err)
 	require.NotNil(t, m.ActiveSockets)
 }
 
@@ -208,13 +210,15 @@ func TestActivationCount(t *testing.T) {
 func TestNewMetrics_RegistersOnce(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	m := newMetrics(reg)
+	m, err := newMetrics(reg)
+	require.NoError(t, err)
 	require.NotNil(t, m.RedirectedBytes)
 	require.NotNil(t, m.ActiveSockets)
 	require.NotNil(t, m.RedirectErrors)
 
-	// Re-registering on the same registry must not panic (duplicate-tolerant).
-	require.NotPanics(t, func() { _ = newMetrics(reg) })
+	// Re-registering on the same registry must not fail (duplicate-tolerant).
+	_, err = newMetrics(reg)
+	require.NoError(t, err)
 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)
@@ -225,4 +229,27 @@ func TestNewMetrics_RegistersOnce(t *testing.T) {
 	require.True(t, names["golusoris_sockmap_redirected_bytes_total"])
 	require.True(t, names["golusoris_sockmap_active_sockets"])
 	require.True(t, names["golusoris_sockmap_redirect_errors_total"])
+}
+
+// TestNewMetrics_RegistrationConflict is the negative path of newMetrics: a
+// registry that already holds a *different* descriptor under the same
+// fully-qualified name (different help string) is a real registration
+// failure, not a tolerated duplicate, so newMetrics must return it.
+func TestNewMetrics_RegistrationConflict(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "golusoris_sockmap_redirected_bytes_total",
+		Help: "conflicting help",
+	}))
+
+	m, err := newMetrics(reg)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "sockmap: register metric")
+	require.Nil(t, m)
+
+	// The fx constructor propagates the same failure.
+	m, err = provideMetrics(metricsParams{Registry: reg})
+	require.Error(t, err)
+	require.Nil(t, m)
 }

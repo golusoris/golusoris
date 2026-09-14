@@ -46,7 +46,9 @@ func TestMountWiresCheckGauges(t *testing.T) {
 		Name: "down-check",
 		Fn:   func(context.Context) error { return errors.New("boom") },
 	})
-	prom.Mount(r, reg)
+	if err := prom.Mount(r, reg); err != nil {
+		t.Fatalf("Mount: %v", err)
+	}
 
 	// Run the registry so the OnRun hook fires + gauges populate.
 	reg.Run(context.Background())

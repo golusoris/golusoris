@@ -22,6 +22,8 @@ import (
 	"github.com/cilium/ebpf/link"
 	"go.uber.org/fx"
 	"golang.org/x/sys/unix"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // sockKey is the connection 4-tuple keying the sockhash. It mirrors the
@@ -182,8 +184,9 @@ func (s *Sockmap) loadSockhash(spec *ebpf.CollectionSpec) error {
 		return fmt.Errorf("sockmap: create sockhash: %w", err)
 	}
 	if err := m.Pin(s.opts.PinPath); err != nil {
-		_ = m.Close()
-		return fmt.Errorf("sockmap: pin sockhash at %s: %w", s.opts.PinPath, err)
+		perr := fmt.Errorf("sockmap: pin sockhash at %s: %w", s.opts.PinPath, err)
+		gerr.CloseJoin(m, &perr, "sockmap: close unpinned sockhash")
+		return perr
 	}
 	s.sockhash = m
 	return nil
@@ -346,16 +349,21 @@ func (s *Sockmap) teardownLocked() {
 		s.m.ActiveSockets.Set(0)
 	}
 	if s.sockOps != nil {
-		_ = s.sockOps.Close()
+		if err := s.sockOps.Close(); err != nil {
+			s.log.Warn("sockmap: close SOCK_OPS link", slog.String("error", err.Error()))
+		}
 		s.sockOps = nil
 	}
 	if s.skMsgAttd && s.sockhash != nil && s.coll != nil {
 		if prog := s.coll.Programs[s.opts.SkMsgProg]; prog != nil {
-			_ = link.RawDetachProgram(link.RawDetachProgramOptions{
+			err := link.RawDetachProgram(link.RawDetachProgramOptions{
 				Target:  s.sockhash.FD(),
 				Program: prog,
 				Attach:  ebpf.AttachSkMsgVerdict,
 			})
+			if err != nil {
+				s.log.Warn("sockmap: detach SK_MSG program", slog.String("error", err.Error()))
+			}
 		}
 		s.skMsgAttd = false
 	}
@@ -366,7 +374,9 @@ func (s *Sockmap) teardownLocked() {
 	if s.sockhash != nil {
 		// Close our handle; the pin keeps the map alive for the external
 		// loader (it is a client of the same pinned sockhash).
-		_ = s.sockhash.Close()
+		if err := s.sockhash.Close(); err != nil {
+			s.log.Warn("sockmap: close sockhash handle", slog.String("error", err.Error()))
+		}
 		s.sockhash = nil
 	}
 }

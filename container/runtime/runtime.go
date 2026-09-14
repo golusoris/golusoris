@@ -24,7 +24,6 @@
 package runtime
 
 import (
-	"bufio"
 	"os"
 	"regexp"
 	"strings"
@@ -145,17 +144,21 @@ func systemdUnit() string {
 	return os.Getenv("INVOCATION_ID")
 }
 
+// cgroupLines returns the lines of /proc/self/cgroup. Graceful on
+// non-Linux / missing file (returns nil).
+func cgroupLines() []string {
+	data, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return nil
+	}
+	return strings.Split(string(data), "\n")
+}
+
 // cgroupContains reports whether /proc/self/cgroup contains the given
 // substring. Graceful on non-Linux / missing file (returns false).
 func cgroupContains(s string) bool {
-	f, err := os.Open("/proc/self/cgroup")
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if strings.Contains(sc.Text(), s) {
+	for _, line := range cgroupLines() {
+		if strings.Contains(line, s) {
 			return true
 		}
 	}
@@ -170,14 +173,8 @@ var containerIDRegex = regexp.MustCompile(`([0-9a-f]{64})`)
 // containerIDFromCgroup scans /proc/self/cgroup for a 64-char hex container
 // ID. Returns the first match or "".
 func containerIDFromCgroup() string {
-	f, err := os.Open("/proc/self/cgroup")
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		if m := containerIDRegex.FindString(sc.Text()); m != "" {
+	for _, line := range cgroupLines() {
+		if m := containerIDRegex.FindString(line); m != "" {
 			return m
 		}
 	}

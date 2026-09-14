@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/golusoris/golusoris/core/errors"
 )
 
 const (
@@ -35,7 +37,7 @@ func Wake(mac string) error {
 }
 
 // WakeTo sends a magic packet to the given UDP addr (e.g. "192.168.1.255:9").
-func WakeTo(mac, addr string) error {
+func WakeTo(mac, addr string) (err error) {
 	pkt, err := buildPacket(mac)
 	if err != nil {
 		return err
@@ -44,9 +46,9 @@ func WakeTo(mac, addr string) error {
 	if err != nil {
 		return fmt.Errorf("wol: dial %s: %w", addr, err)
 	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.Write(pkt); err != nil {
-		return fmt.Errorf("wol: write: %w", err)
+	defer errors.CloseInto(conn, &err, "wol: close udp conn")
+	if _, werr := conn.Write(pkt); werr != nil {
+		return fmt.Errorf("wol: write: %w", werr)
 	}
 	return nil
 }
