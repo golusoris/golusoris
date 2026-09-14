@@ -7,4 +7,4 @@
   svc := tracking.New(store, secret, logger) // or nil → slog.Default()
   ```
 
-- `notify/*` senders, `notify/bounce`, `notify/inbound`, `webhooks/out` and `realtime/webrtc` now surface HTTP body / peer-connection close errors via `core/errors.CloseInto` / `CloseJoin` (a close failure is returned when nothing else failed); `webhooks/out` no longer panics when `crypto/rand` fails — `Dispatch` returns the error.
+- `notify/*` senders, `notify/bounce`, `notify/inbound` and `realtime/webrtc` now surface HTTP body / peer-connection close errors via `core/errors.CloseInto` / `CloseJoin` (a close failure is returned when nothing else failed). `webhooks/out` logs a response-body close failure instead — the endpoint already acknowledged the delivery, so it is never retried for that — and no longer panics when `crypto/rand` fails: `Dispatch` returns the error.
