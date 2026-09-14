@@ -55,7 +55,7 @@ require (
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hekmon/transmissionrpc/v3 v3.0.0
 	github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/knadh/koanf/parsers/json v1.0.0
 	github.com/knadh/koanf/parsers/yaml v1.1.0
