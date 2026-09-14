@@ -1,3 +1,21 @@
-# SemVer lockfile
 version: 1
-pinned_version: "v1.0.0"
+pinned_version: v1.0.0
+digest: sha256:1694cd28e68d71e8a7a7bec2c5d4cd6eb83ca5eef20df27e03b0d9b3b23178f7
+generated_at: ""
+profiles:
+    - id: framework
+      version: v1.0.0
+      digest: sha256:6056f2fb33dc1c88a7a700a0229ab410559ec1cf1522da97fcfae57aa27635e5
+facets:
+    - id: security:high
+      version: v1.0.0
+      digest: sha256:34de9dc4fe2b7da48c152c2e7457891ebc41ace8e671fd1db0f49e1fafcb567f
+    - id: api:public-contract
+      version: v1.0.0
+      digest: sha256:19963be9ae6292bc4ea0dcb44cbbc5f903886209387d33fbeb3bed8af9cde486
+    - id: docs:seo-portal
+      version: v1.0.0
+      digest: sha256:3381e1b7ab5cfb1029fa1b96cd84c7d3d5a890bc2d1f340a7b4e8b5bf61e2256
+    - id: agent:sandboxed
+      version: v1.0.0
+      digest: sha256:1a89a7a93d8f054d03edd203bb15006431468641d59ac61999b1997fa0a3233f
