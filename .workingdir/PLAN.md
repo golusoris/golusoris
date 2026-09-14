@@ -177,7 +177,7 @@ Heavy / CGO / native-dep packages (`media/*`, `ocr/`, `pdf/`, `hw/*`, `science/*
 
 ```go
 fx.New(
-  golusoris.Core,            // core/config + core/log + core/errors + core/clock + core/id + core/validate + core/crypto + i18n
+  golusoris.Core,            // core/config + core/log + core/clock + core/id + core/validate + core/crypto
   golusoris.DB,              // pgx pool + migrations + sqlc
   golusoris.OTel,            // tracer + meter + logs + OTLP
   golusoris.HTTP,            // server + standard middleware + Scalar docs
@@ -380,7 +380,7 @@ Lurkarr migration: out-of-scope. Framework converges to subdo/revenge/arca conve
 | `pdf/` | PDF generation (HTML→PDF) | chromedp/chromedp |
 | `pdf/parse/` | PDF parsing (text/metadata/pages) | pdfcpu/pdfcpu |
 | `markdown/` | Markdown rendering (GFM) | yuin/goldmark |
-| `htmltmpl/` | type-safe HTML templates | a-h/templ |
+| `htmltmpl/` | type-safe HTML templates (stdlib `html/template`, ADR-0014) | stdlib |
 | `jsonschema/` | JSON Schema validation (external schemas) | santhosh-tekuri/jsonschema |
 | `hash/` | content hashing (xxhash, blake3, sha256) helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch w/ debounce | fsnotify/fsnotify |
