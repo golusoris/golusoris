@@ -8,6 +8,10 @@ set -euo pipefail
 
 need_tool go "https://go.dev/dl/"
 cd "$(git rev-parse --show-toplevel)"
+# git exports GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE to hooks; tests that run
+# git themselves (core/gitx) would otherwise operate on THIS repository
+# instead of their temp dirs. Drop the hook environment before go test.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR
 
 for m in . core; do
   note "$m: go build"
