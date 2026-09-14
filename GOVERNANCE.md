@@ -13,8 +13,8 @@ framework for Go services — is governed.
 
 golusoris ships foundational building blocks (config, logging, clock, DB, HTTP,
 jobs, cache, auth, observability, …) as independent `fx` modules that apps
-compose à la carte. The framework's binding constraints are encoded in
-[`.workingdir/PLAN.md` §2](.workingdir/PLAN.md):
+compose à la carte. The framework's binding constraints (tracked day-to-day in
+the maintainers' private, git-ignored `.workingdir/PLAN.md`, per HISS-17) are:
 
 - Power-of-10 (Go-adapted) hard gates, SEI CERT for Go, Google Go Style.
 - Zero lint / zero gosec / zero govulncheck, race-clean, on every merged commit.

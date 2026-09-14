@@ -9,7 +9,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Check [PLAN.md](../.workingdir/PLAN.md) first — the feature may already be scheduled.
+        Search existing issues first — the feature may already be scheduled.
         New modules follow the [wire-fx-module skill](../.claude/skills/wire-fx-module/).
 
   - type: dropdown
@@ -52,6 +52,6 @@ body:
     attributes:
       label: Pre-flight
       options:
-        - label: I searched existing issues and the PLAN.md module catalog.
+        - label: I searched existing issues and the README.md module catalog.
           required: true
         - label: The proposed dependency has been weighed against awesome-go alternatives.
