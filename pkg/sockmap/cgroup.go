@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+//go:build linux
+
 package sockmap
 
 import (
@@ -10,6 +12,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 // cgroupV2Mount is the unified-hierarchy mount point. The SOCK_OPS attach
@@ -63,12 +67,12 @@ func requireCgroupV2() error {
 // selfCgroupV2 parses the cgroup v2 path of the current process from
 // /proc/self/cgroup. On a unified hierarchy the relevant line has the form
 // "0::<path>".
-func selfCgroupV2() (string, error) {
+func selfCgroupV2() (path string, err error) {
 	f, err := os.Open("/proc/self/cgroup")
 	if err != nil {
 		return "", fmt.Errorf("sockmap: cgroup: open /proc/self/cgroup: %w", err)
 	}
-	defer func() { _ = f.Close() }()
+	defer gerr.CloseInto(f, &err, "sockmap: cgroup: close /proc/self/cgroup")
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
 		line := sc.Text()

@@ -21,6 +21,7 @@ sd_notify + watchdog for processes run as systemd units. Zero deps (unixgram to 
   Restart=on-failure
   ```
 
+- Linux-only by nature: `NOTIFY_SOCKET` is a unixgram socket that only systemd creates. The package compiles everywhere and stays a no-op off-Linux; `TestNotifyWritesToSocket` (the only test that binds a unixgram socket) is `t.Skip`ped on Windows.
 - The watchdog ticker fires at WATCHDOG_USEC / 2 (the systemd-recommended rate). If pets fail, systemd kills + restarts per unit policy — that's the desired failure mode.
 
 ## Don't

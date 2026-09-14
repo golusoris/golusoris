@@ -369,6 +369,19 @@ If it recurs, deparallelize those tests — likely runner resource contention, n
 
 ## Session log (recent)
 
+- 2026-09-14: **portability: build + test green on Windows** (branch `hiss/portability`).
+  - `storage/scan`: clamd backend (`baruwa-enterprise/clamd`, unix-only
+    syscalls) constrained to `//go:build unix`; `clamd_stub.go` on `!unix`
+    keeps the exported API and fails closed with new `scan.ErrUnsupported`
+    (wraps `errors.ErrUnsupported`). Unit tests split by tag, stub tests added.
+  - `pkg/sockmap/cgroup.go` is `//go:build linux` (only `loader_linux.go`
+    uses it; `unused` fired on Windows) and its deferred close now goes
+    through `gerr.CloseInto`.
+  - `scripts/hooks/pre-push.sh` drops the storage/scan exclusion: root
+    `go build ./...` / `go vet ./...` pass on every OS.
+  - Audited tests for unix sockets / file locks / `$HOME`: only the three
+    already fixed (k8s/client, storage, systemd) touched the host.
+
 - 2026-09-14: **lefthook git-hook gate** landed (`lefthook.yml` + `scripts/hooks/`).
   - pre-commit (parallel): gofumpt / gci / golangci-lint / go vet on the
     staged packages, `standardsctl compile-context --verify`, `reuse lint`,

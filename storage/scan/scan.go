@@ -26,6 +26,7 @@ package scan
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 )
 
@@ -42,6 +43,10 @@ var (
 	// configured max_size (mirrors clamd StreamMaxLength) and is rejected
 	// before a connection is dialed.
 	ErrTooLarge = errors.New("storage/scan: stream exceeds max size")
+	// ErrUnsupported wraps errors.ErrUnsupported: the clamd backend needs unix
+	// sockets/syscalls and is compiled only on unix; on other platforms (Windows)
+	// construction fails with this error and only the noop backend is available.
+	ErrUnsupported = fmt.Errorf("storage/scan: clamd backend is unix-only: %w", errors.ErrUnsupported)
 )
 
 // Verdict is the typed outcome of a scan.
