@@ -40,7 +40,6 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     # Lint timeout sizing (measured 2026-09-14 on the PR #447 tip, cold caches):
     # a full `golangci-lint run` of the root module (171 pkgs) costs ~810 CPU-s
@@ -73,7 +72,6 @@ jobs:
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     # Measured with gosec v2.27.1 (171 root + 16 core pkgs) on a 32-core box:
     # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
@@ -122,7 +120,6 @@ jobs:
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     # 20: whichever cache-using job finishes first pays the full setup-go
     # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
@@ -149,7 +146,6 @@ jobs:
   # mutable `stable` selector.
   test:
     name: Test (race + coverage)
-    if: github.actor != 'renovate[bot]'
     runs-on: ${{ matrix.os }}
     # 30: the Docker-backed suite took 13.5 min on a cold ARC runner before the
     # pre-pull step existed; keep headroom above the 10 min per-module go test
@@ -257,7 +253,6 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     # 20: whichever cache-using job finishes first pays the full setup-go
     # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
@@ -480,7 +475,10 @@ jobs:
   # its own required check.
   ci-success:
     name: CI success
-    if: always() && github.actor != 'renovate[bot]'
+    # Runs for renovate[bot] too: the gating jobs above now run on
+    # dependency PRs, and a skipped aggregator would satisfy the required
+    # check vacuously. Skipped needs (e.g. reuse) are still tolerated.
+    if: always()
     needs: [lint, gosec, vuln, test, build, reuse]
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 2
