@@ -55,7 +55,7 @@ func NewMonitor(ctx context.Context) (*Monitor, error) {
 	ch := make(chan Event, 64)
 	go func() {
 		defer close(ch)
-		for {
+		for ctx.Err() == nil {
 			select {
 			case dev, ok := <-devCh:
 				if !ok {
