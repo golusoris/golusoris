@@ -54,16 +54,49 @@ func (b *xslogBridge) WithGroup(name string) xslog.Handler {
 	return &xslogBridge{h: b.h.WithGroup(name)}
 }
 
-// convAttr converts an x/exp/slog Attr to a stdlib one, recursing into groups.
+const (
+	// convAttrMaxDepth caps nested group depth; deeper groups are kept as an
+	// opaque value instead of being descended into (HISS-02).
+	convAttrMaxDepth = 64
+	// convAttrMaxSteps caps the total attributes processed for one top-level
+	// attr (HISS-02); a group larger than this is returned partially converted.
+	convAttrMaxSteps = 1 << 16
+)
+
+// convFrame is one open group while convAttr flattens a nested tree.
+type convFrame struct {
+	key  string
+	rest []xslog.Attr // children still to convert
+	done []any        // converted children, in order
+}
+
+// convAttr converts an x/exp/slog Attr to a stdlib one, descending into groups
+// with an explicit frame stack instead of recursion (HISS-01).
 func convAttr(a xslog.Attr) slog.Attr {
 	v := a.Value.Resolve()
-	if v.Kind() == xslog.KindGroup {
-		group := v.Group()
-		conv := make([]any, 0, len(group))
-		for _, ga := range group {
-			conv = append(conv, convAttr(ga))
-		}
-		return slog.Group(a.Key, conv...)
+	if v.Kind() != xslog.KindGroup {
+		return slog.Attr{Key: a.Key, Value: slog.AnyValue(v.Any())}
 	}
-	return slog.Attr{Key: a.Key, Value: slog.AnyValue(v.Any())}
+	stack := []convFrame{{key: a.Key, rest: v.Group(), done: make([]any, 0, len(v.Group()))}}
+	for range convAttrMaxSteps {
+		top := &stack[len(stack)-1]
+		if len(top.rest) == 0 { // group complete: fold it into its parent
+			g := slog.Group(top.key, top.done...)
+			stack = stack[:len(stack)-1]
+			if len(stack) == 0 {
+				return g
+			}
+			stack[len(stack)-1].done = append(stack[len(stack)-1].done, g)
+			continue
+		}
+		child := top.rest[0]
+		top.rest = top.rest[1:]
+		cv := child.Value.Resolve()
+		if cv.Kind() == xslog.KindGroup && len(stack) < convAttrMaxDepth {
+			stack = append(stack, convFrame{key: child.Key, rest: cv.Group(), done: make([]any, 0, len(cv.Group()))})
+			continue
+		}
+		top.done = append(top.done, slog.Attr{Key: child.Key, Value: slog.AnyValue(cv.Any())})
+	}
+	return slog.Group(stack[0].key, stack[0].done...)
 }
