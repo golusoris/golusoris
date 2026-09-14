@@ -189,7 +189,11 @@ func (c *Consumer) run(ctx context.Context) {
 		c.logger.ErrorContext(ctx, "cdc: connect", "err", err)
 		return
 	}
-	defer func() { _ = conn.Close(ctx) }()
+	defer func() {
+		if cerr := conn.Close(ctx); cerr != nil {
+			c.logger.WarnContext(ctx, "cdc: close replication conn", "err", cerr)
+		}
+	}()
 
 	startLSN, ok := c.runSetup(ctx, conn)
 	if !ok {
@@ -214,7 +218,7 @@ func (c *Consumer) runSetup(ctx context.Context, conn *pgconn.PgConn) (pglogrepl
 		"xlogpos", sysident.XLogPos,
 	)
 
-	if err := c.ensureSlot(ctx, conn, sysident.XLogPos); err != nil {
+	if err := c.ensureSlot(ctx, conn); err != nil {
 		c.logger.ErrorContext(ctx, "cdc: ensure slot", "err", err)
 		return 0, false
 	}
@@ -243,7 +247,7 @@ func (c *Consumer) runLoop(ctx context.Context, conn *pgconn.PgConn, startLSN pg
 	nextStandby := c.clk.Now().Add(standbyInterval)
 	clientXLogPos := startLSN
 
-	for {
+	for ctx.Err() == nil {
 		if c.clk.Now().After(nextStandby) {
 			ssu := pglogrepl.StandbyStatusUpdate{WALWritePosition: clientXLogPos}
 			if err := pglogrepl.SendStandbyStatusUpdate(ctx, conn, ssu); err != nil {
@@ -410,7 +414,7 @@ func (c *Consumer) connect(ctx context.Context) (*pgconn.PgConn, error) {
 }
 
 // ensureSlot creates the replication slot if it does not already exist.
-func (c *Consumer) ensureSlot(ctx context.Context, conn *pgconn.PgConn, startLSN pglogrepl.LSN) error {
+func (c *Consumer) ensureSlot(ctx context.Context, conn *pgconn.PgConn) error {
 	_, err := pglogrepl.CreateReplicationSlot(
 		ctx, conn, c.cfg.Slot, outputPlugin,
 		pglogrepl.CreateReplicationSlotOptions{Temporary: false},
@@ -423,7 +427,6 @@ func (c *Consumer) ensureSlot(ctx context.Context, conn *pgconn.PgConn, startLSN
 		}
 		return fmt.Errorf("cdc: create slot: %w", err)
 	}
-	_ = startLSN
 	c.logger.InfoContext(ctx, "cdc: created replication slot", "slot", c.cfg.Slot)
 	return nil
 }

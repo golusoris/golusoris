@@ -211,8 +211,11 @@ var Module = fx.Module(
 				}
 				return m.Up()
 			},
-			OnStop: func(_ context.Context) error {
-				_ = m.Close() // best-effort; closing migrate also closes its DB
+			OnStop: func(ctx context.Context) error {
+				// Best-effort: closing migrate also closes its DB; never fail fx stop on it.
+				if cerr := m.Close(); cerr != nil {
+					logger.WarnContext(ctx, "db/migrate: close", slog.String("error", cerr.Error()))
+				}
 				return nil
 			},
 		})

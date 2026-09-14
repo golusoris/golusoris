@@ -139,8 +139,8 @@ func TestConsumer_EnsureSlotIdempotent(t *testing.T) {
 	t.Cleanup(func() { _ = conn.Close(ctx) })
 
 	// First ensureSlot creates it; second must be a no-op (42710 swallowed).
-	require.NoError(t, c.ensureSlot(ctx, conn, 0))
-	require.NoError(t, c.ensureSlot(ctx, conn, 0))
+	require.NoError(t, c.ensureSlot(ctx, conn))
+	require.NoError(t, c.ensureSlot(ctx, conn))
 }
 
 type testWriter struct{ t *testing.T }
