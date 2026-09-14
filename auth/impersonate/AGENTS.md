@@ -10,7 +10,7 @@ Audited admin-as-user impersonation with a one-click revert.
 
 ## Surface
 
-- `impersonate.Middleware(opts)` — injects `Principal{Current, Original}` into the request context.
+- `impersonate.Middleware(opts)` → `(func(http.Handler) http.Handler, error)` — injects `Principal{Current, Original}` into the request context; errors when `SessionGet`/`SessionSet` are nil.
 - `impersonate.Begin(w, r, opts, targetUserID)` — start (no nesting allowed).
 - Header `X-Impersonating` is set on every response while impersonating; UI renders a banner.
 - Query `?exit_impersonation=1` reverts via `SessionSet`.

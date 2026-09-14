@@ -41,7 +41,8 @@ func TestLoadOptions_appliesDefaultsOnEmpty(t *testing.T) {
 // of 32 bytes yields 43 chars with an unreserved alphabet.
 func TestPKCEVerifier_isRFC7636Compliant(t *testing.T) {
 	t.Parallel()
-	v := pkceVerifier()
+	v, err := pkceVerifier()
+	require.NoError(t, err)
 	require.Len(t, v, 43, "RFC 7636: 43 chars from 32 random bytes")
 	decoded, err := base64.RawURLEncoding.DecodeString(v)
 	require.NoError(t, err)
@@ -52,7 +53,9 @@ func TestPKCEVerifier_unique(t *testing.T) {
 	t.Parallel()
 	seen := make(map[string]struct{}, 32)
 	for range 32 {
-		seen[pkceVerifier()] = struct{}{}
+		v, err := pkceVerifier()
+		require.NoError(t, err)
+		seen[v] = struct{}{}
 	}
 	require.Len(t, seen, 32, "verifiers must be unique across 32 calls")
 }

@@ -15,11 +15,18 @@ import (
 	"github.com/golusoris/golusoris/auth/magiclink"
 )
 
+func TestNew_EmptySecret(t *testing.T) {
+	t.Parallel()
+	_, err := magiclink.New(magiclink.NewMemoryStore(), nil, nil, 0)
+	require.Error(t, err)
+}
+
 func TestService_HappyPath(t *testing.T) {
 	t.Parallel()
 
 	clk := clockwork.NewFakeClock()
-	svc := magiclink.New(magiclink.NewMemoryStore(), clk, []byte("k"), 5*time.Minute)
+	svc, err := magiclink.New(magiclink.NewMemoryStore(), clk, []byte("k"), 5*time.Minute)
+	require.NoError(t, err)
 
 	tok, err := svc.Issue(context.Background(), "alice@example.com")
 	require.NoError(t, err)
@@ -36,7 +43,8 @@ func TestService_Expiry(t *testing.T) {
 	t.Parallel()
 
 	clk := clockwork.NewFakeClock()
-	svc := magiclink.New(magiclink.NewMemoryStore(), clk, []byte("k"), 1*time.Minute)
+	svc, err := magiclink.New(magiclink.NewMemoryStore(), clk, []byte("k"), 1*time.Minute)
+	require.NoError(t, err)
 
 	tok, err := svc.Issue(context.Background(), "bob@example.com")
 	require.NoError(t, err)
@@ -48,7 +56,8 @@ func TestService_Expiry(t *testing.T) {
 
 func TestService_RejectsEmptyEmail(t *testing.T) {
 	t.Parallel()
-	svc := magiclink.New(magiclink.NewMemoryStore(), nil, []byte("k"), 0)
-	_, err := svc.Issue(context.Background(), "  ")
+	svc, err := magiclink.New(magiclink.NewMemoryStore(), nil, []byte("k"), 0)
+	require.NoError(t, err)
+	_, err = svc.Issue(context.Background(), "  ")
 	require.Error(t, err)
 }

@@ -87,7 +87,7 @@ type response struct {
 // Verify posts the token to the provider and returns nil on success.
 // Failures wrap gerr.CodeUnauthorized and include the provider's
 // error-codes list.
-func (v *httpVerifier) Verify(ctx context.Context, token, remoteIP string) error {
+func (v *httpVerifier) Verify(ctx context.Context, token, remoteIP string) (err error) {
 	if token == "" {
 		return gerr.Unauthorized("captcha: missing token")
 	}
@@ -102,11 +102,11 @@ func (v *httpVerifier) Verify(ctx context.Context, token, remoteIP string) error
 		return fmt.Errorf("captcha: build request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := v.client.Do(req)
+	resp, err := v.client.Do(req) //nolint:bodyclose // closed by the deferred gerr.CloseInto below
 	if err != nil {
 		return fmt.Errorf("captcha: request: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "captcha: close response body")
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
 	if readErr != nil {
 		return fmt.Errorf("captcha: read body: %w", readErr)

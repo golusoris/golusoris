@@ -17,11 +17,18 @@ import (
 	"github.com/golusoris/golusoris/auth/recovery"
 )
 
+func TestNew_EmptySecret(t *testing.T) {
+	t.Parallel()
+	_, err := recovery.New(newMemCodeStore(), nil, nil, nil)
+	require.Error(t, err)
+}
+
 func TestService_RecoveryCodes(t *testing.T) {
 	t.Parallel()
 
 	cs := newMemCodeStore()
-	svc := recovery.New(cs, nil, nil, []byte("k"))
+	svc, err := recovery.New(cs, nil, nil, []byte("k"))
+	require.NoError(t, err)
 
 	codes, err := svc.IssueCodes(context.Background(), "u-1", 5)
 	require.NoError(t, err)
@@ -40,7 +47,8 @@ func TestService_ResetToken(t *testing.T) {
 
 	clk := clockwork.NewFakeClock()
 	ts := newMemTokenStore()
-	svc := recovery.New(nil, ts, clk, []byte("k"))
+	svc, err := recovery.New(nil, ts, clk, []byte("k"))
+	require.NoError(t, err)
 
 	raw, err := svc.IssueResetToken(context.Background(), "u-2", 5*time.Minute)
 	require.NoError(t, err)
@@ -59,7 +67,8 @@ func TestService_ResetTokenExpires(t *testing.T) {
 
 	clk := clockwork.NewFakeClock()
 	ts := newMemTokenStore()
-	svc := recovery.New(nil, ts, clk, []byte("k"))
+	svc, err := recovery.New(nil, ts, clk, []byte("k"))
+	require.NoError(t, err)
 
 	raw, err := svc.IssueResetToken(context.Background(), "u-3", 5*time.Minute)
 	require.NoError(t, err)

@@ -116,16 +116,19 @@ func newProvider(opts Options, logger *slog.Logger) (*Provider, error) {
 
 // AuthURL returns the IdP authorization URL and the PKCE verifier.
 // Store verifier in the session before redirecting; pass it to
-// [Exchange] on callback.
-func (p *Provider) AuthURL(state string) (url, verifier string) {
-	verifier = pkceVerifier()
+// [Exchange] on callback. Fails only when the OS entropy source does.
+func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
+	verifier, err = pkceVerifier()
+	if err != nil {
+		return "", "", err
+	}
 	challenge := pkceChallenge(verifier)
 	url = p.cfg.AuthCodeURL(state,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	)
-	return url, verifier
+	return url, verifier, nil
 }
 
 // Exchange trades an authorization code for tokens. verifier must
@@ -187,10 +190,12 @@ var Module = fx.Module("golusoris.auth.oidc",
 
 // --- PKCE helpers ---
 
-func pkceVerifier() string {
+func pkceVerifier() (string, error) {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("auth/oidc: pkce verifier: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func pkceChallenge(verifier string) string {

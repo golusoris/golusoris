@@ -13,10 +13,10 @@ creation; caller must transmit it to the client immediately.
 ## Usage
 
 ```go
-svc := apikey.New(store, apikey.Options{
+svc, err := apikey.New(store, apikey.Options{
     Prefix:     "sk",
     HMACSecret: []byte(secret),
-})
+}) // err when HMACSecret is empty
 
 raw, key, err := svc.Issue(ctx, userID, []string{"read", "write"})
 // Store `raw` — it's shown once and not recoverable.

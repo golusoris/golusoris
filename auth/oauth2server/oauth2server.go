@@ -96,10 +96,10 @@ type Options struct {
 // Server implements the OAuth2 endpoints.
 type Server struct{ opts Options }
 
-// New constructs a Server. Panics on invalid configuration.
-func New(opts Options) *Server {
+// New constructs a Server. Returns an error on invalid configuration.
+func New(opts Options) (*Server, error) {
 	if opts.Issuer == "" || opts.Clients == nil || opts.Codes == nil || opts.Signer == nil || opts.Authenticate == nil {
-		panic("oauth2server: Issuer, Clients, Codes, Signer, Authenticate required")
+		return nil, errors.New("oauth2server: Issuer, Clients, Codes, Signer, Authenticate required")
 	}
 	if opts.Clock == nil {
 		opts.Clock = clockwork.NewRealClock()
@@ -110,7 +110,7 @@ func New(opts Options) *Server {
 	if opts.CodeTTL == 0 {
 		opts.CodeTTL = 60 * time.Second
 	}
-	return &Server{opts: opts}
+	return &Server{opts: opts}, nil
 }
 
 // Routes returns an http.Handler exposing /authorize and /token.
@@ -163,38 +163,48 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, err := randomB64(24)
+	code, err := s.issueCode(r.Context(), AuthRequest{
+		ClientID:            clientID,
+		UserID:              userID,
+		Scope:               q.Get("scope"),
+		RedirectURI:         redirect,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: method,
+	})
 	if err != nil {
 		http.Error(w, "internal", http.StatusInternalServerError)
 		return
 	}
-	now := s.opts.Clock.Now()
-	saveErr := s.opts.Codes.Save(r.Context(), Code{
-		Value: code,
-		Req: AuthRequest{
-			ClientID:            clientID,
-			UserID:              userID,
-			Scope:               q.Get("scope"),
-			RedirectURI:         redirect,
-			CodeChallenge:       codeChallenge,
-			CodeChallengeMethod: method,
-			IssuedAt:            now,
-			ExpiresAt:           now.Add(s.opts.CodeTTL),
-		},
-	})
-	if saveErr != nil {
-		http.Error(w, "internal", http.StatusInternalServerError)
-		return
-	}
+	redirectWithCode(w, r, redirect, code, q.Get("state"))
+}
 
-	u, parseErr := url.Parse(redirect)
-	if parseErr != nil {
+// issueCode mints a single-use authorization code for req, stamps its
+// validity window, and persists it.
+func (s *Server) issueCode(ctx context.Context, req AuthRequest) (string, error) {
+	code, err := randomB64(24)
+	if err != nil {
+		return "", err
+	}
+	now := s.opts.Clock.Now()
+	req.IssuedAt = now
+	req.ExpiresAt = now.Add(s.opts.CodeTTL)
+	if saveErr := s.opts.Codes.Save(ctx, Code{Value: code, Req: req}); saveErr != nil {
+		return "", fmt.Errorf("oauth2server: save code: %w", saveErr)
+	}
+	return code, nil
+}
+
+// redirectWithCode sends the client back to the registered redirect URI
+// with the code (and state, when supplied) appended.
+func redirectWithCode(w http.ResponseWriter, r *http.Request, redirect, code, state string) {
+	u, err := url.Parse(redirect)
+	if err != nil {
 		http.Error(w, "bad redirect_uri", http.StatusBadRequest)
 		return
 	}
 	v := u.Query()
 	v.Set("code", code)
-	if state := q.Get("state"); state != "" {
+	if state != "" {
 		v.Set("state", state)
 	}
 	u.RawQuery = v.Encode()
@@ -249,30 +259,40 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	resp, err := s.mintAccessToken(client.ID, code.Req)
+	if err != nil {
+		writeTokenErr(w, http.StatusInternalServerError, "server_error", "sign")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// mintAccessToken signs a bearer JWT for the consented authorization request.
+func (s *Server) mintAccessToken(clientID string, req AuthRequest) (tokenResponse, error) {
+	jti, err := randomB64(16)
+	if err != nil {
+		return tokenResponse{}, err
+	}
 	now := s.opts.Clock.Now()
-	jti, _ := randomB64(16)
 	claims := jwt.RegisteredClaims{
 		Issuer:    s.opts.Issuer,
-		Subject:   code.Req.UserID,
-		Audience:  []string{client.ID},
+		Subject:   req.UserID,
+		Audience:  []string{clientID},
 		IssuedAt:  gojwt.NewNumericDate(now),
 		ExpiresAt: gojwt.NewNumericDate(now.Add(s.opts.AccessTTL)),
 		ID:        jti,
 	}
 	tok, err := s.opts.Signer.Sign(claims)
 	if err != nil {
-		writeTokenErr(w, http.StatusInternalServerError, "server_error", "sign")
-		return
+		return tokenResponse{}, fmt.Errorf("oauth2server: sign: %w", err)
 	}
-	resp := tokenResponse{
+	return tokenResponse{
 		AccessToken: tok,
 		TokenType:   "Bearer",
 		ExpiresIn:   int(s.opts.AccessTTL.Seconds()),
-		Scope:       code.Req.Scope,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	_ = json.NewEncoder(w).Encode(resp) //nolint:gosec // G117: access_token is intentionally marshaled in OAuth response body // #nosec G117
+		Scope:       req.Scope,
+	}, nil
 }
 
 type tokenResponse struct {
@@ -288,9 +308,15 @@ type tokenErr struct {
 }
 
 func writeTokenErr(w http.ResponseWriter, status int, code, desc string) {
+	writeJSON(w, status, tokenErr{Error: code, ErrorDescription: desc})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(tokenErr{Error: code, ErrorDescription: desc})
+	if err := json.NewEncoder(w).Encode(v); err != nil { //nolint:gosec // G117: access_token is intentionally marshaled in OAuth response body // #nosec G117
+		return // status + headers already sent; nothing more to report to the client
+	}
 }
 
 func verifyPKCE(challenge, method, verifier string) bool {

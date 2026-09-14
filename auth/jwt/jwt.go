@@ -61,12 +61,12 @@ type Signer struct {
 }
 
 // NewHMACSigner returns a Signer using the given HMAC algorithm and
-// secret. Panics if secret is empty.
-func NewHMACSigner(alg jwt.SigningMethod, secret []byte, ttl time.Duration) *Signer {
+// secret. Returns an error if secret is empty.
+func NewHMACSigner(alg jwt.SigningMethod, secret []byte, ttl time.Duration) (*Signer, error) {
 	if len(secret) == 0 {
-		panic("jwt: HMAC secret must not be empty")
+		return nil, errors.New("jwt: HMAC secret must not be empty")
 	}
-	return &Signer{alg: alg, key: secret, pub: secret, ttl: ttl}
+	return &Signer{alg: alg, key: secret, pub: secret, ttl: ttl}, nil
 }
 
 // Sign creates a signed JWT string for the given claims. If claims
