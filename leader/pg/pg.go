@@ -68,10 +68,12 @@ func DefaultOptions() Options {
 // FNV-64a is fast + stable; collisions across different apps are
 // harmless (they'd contend on the same lock, which is a caller-level
 // config error — unique names per elector are the contract).
-func keyFor(name string) int64 {
+func keyFor(name string) (int64, error) {
 	h := fnv.New64a()
-	_, _ = h.Write([]byte(name))
-	return int64(h.Sum64()) // #nosec G115 -- intentional bit-reuse for pg int8 advisory key
+	if _, err := h.Write([]byte(name)); err != nil {
+		return 0, fmt.Errorf("leader/pg: hash name: %w", err)
+	}
+	return int64(h.Sum64()), nil // #nosec G115 -- intentional bit-reuse for pg int8 advisory key
 }
 
 // Run blocks until ctx is canceled, running the pg-advisory-lock
@@ -91,7 +93,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 			identity = "unknown"
 		}
 	}
-	key := keyFor(opts.Name)
+	key, err := keyFor(opts.Name)
+	if err != nil {
+		return err
+	}
 
 	// Dedicate one connection so the advisory lock stays held.
 	conn, err := pool.Acquire(ctx)
@@ -100,7 +105,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 	}
 	defer conn.Release()
 
-	for {
+	for ctx.Err() == nil {
 		got, acqErr := tryLock(ctx, conn.Conn(), key)
 		if acqErr != nil {
 			return fmt.Errorf("leader/pg: try lock: %w", acqErr)
@@ -129,6 +134,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 		case <-clk.After(opts.PG.Retry):
 		}
 	}
+	return nil
 }
 
 func tryLock(ctx context.Context, conn *pgx.Conn, key int64) (bool, error) {

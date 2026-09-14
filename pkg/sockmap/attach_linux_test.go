@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -46,7 +45,7 @@ func TestFullAttach(t *testing.T) {
 		},
 		log:  slog.New(slog.DiscardHandler),
 		prov: DefaultObjectProvider(),
-		m:    newMetrics(prometheus.NewRegistry()),
+		m:    testMetrics(t),
 	}
 
 	ctx := context.Background()

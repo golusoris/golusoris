@@ -39,7 +39,14 @@ func TestWithDefaults_preserves(t *testing.T) {
 
 func TestKeyFor_stable(t *testing.T) {
 	t.Parallel()
-	a, b := keyFor("foo"), keyFor("foo")
+	a, err := keyFor("foo")
+	if err != nil {
+		t.Fatalf("keyFor: %v", err)
+	}
+	b, err := keyFor("foo")
+	if err != nil {
+		t.Fatalf("keyFor: %v", err)
+	}
 	if a != b {
 		t.Fatalf("want keyFor to be deterministic; got %d and %d", a, b)
 	}
@@ -47,7 +54,15 @@ func TestKeyFor_stable(t *testing.T) {
 
 func TestKeyFor_different(t *testing.T) {
 	t.Parallel()
-	if keyFor("foo") == keyFor("bar") {
+	foo, err := keyFor("foo")
+	if err != nil {
+		t.Fatalf("keyFor: %v", err)
+	}
+	bar, err := keyFor("bar")
+	if err != nil {
+		t.Fatalf("keyFor: %v", err)
+	}
+	if foo == bar {
 		t.Fatal("want different keys for different names")
 	}
 }

@@ -158,7 +158,8 @@ func TestLoadOptions_PartialConfigRestoresDefaults(t *testing.T) {
 func TestProvideMetrics(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	m := provideMetrics(metricsParams{Registry: reg})
+	m, err := provideMetrics(metricsParams{Registry: reg})
+	require.NoError(t, err)
 	require.NotNil(t, m)
 	m.RedirectedBytes.Add(7)
 	mfs, err := reg.Gather()
@@ -175,7 +176,8 @@ func TestProvideMetrics(t *testing.T) {
 
 //nolint:paralleltest // touches the global prometheus default registerer; must not run in parallel
 func TestProvideMetrics_NilRegistryUsesDefault(t *testing.T) {
-	m := provideMetrics(metricsParams{Registry: nil})
+	m, err := provideMetrics(metricsParams{Registry: nil})
+	require.NoError(t, err)
 	require.NotNil(t, m.ActiveSockets)
 }
 
@@ -208,13 +210,15 @@ func TestActivationCount(t *testing.T) {
 func TestNewMetrics_RegistersOnce(t *testing.T) {
 	t.Parallel()
 	reg := prometheus.NewRegistry()
-	m := newMetrics(reg)
+	m, err := newMetrics(reg)
+	require.NoError(t, err)
 	require.NotNil(t, m.RedirectedBytes)
 	require.NotNil(t, m.ActiveSockets)
 	require.NotNil(t, m.RedirectErrors)
 
-	// Re-registering on the same registry must not panic (duplicate-tolerant).
-	require.NotPanics(t, func() { _ = newMetrics(reg) })
+	// Re-registering on the same registry must not fail (duplicate-tolerant).
+	_, err = newMetrics(reg)
+	require.NoError(t, err)
 
 	mfs, err := reg.Gather()
 	require.NoError(t, err)

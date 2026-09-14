@@ -109,7 +109,7 @@ func TestSockhashLifecycle(t *testing.T) {
 			MinKernelMinor: minKernelMinorDefault,
 		},
 		log: slog.New(slog.DiscardHandler),
-		m:   newMetrics(prometheus.NewRegistry()),
+		m:   testMetrics(t),
 	}
 
 	require.NoError(t, s.loadSockhash(nil))
@@ -159,7 +159,7 @@ func TestStartStop_NoProvider(t *testing.T) {
 			MinKernelMinor: minKernelMinorDefault,
 		},
 		log: slog.New(slog.DiscardHandler),
-		m:   newMetrics(prometheus.NewRegistry()),
+		m:   testMetrics(t),
 	}
 
 	// Registered before Start → inserted during start's pending loop.
@@ -188,7 +188,7 @@ func TestStart_KernelGuard(t *testing.T) {
 	s := &Sockmap{
 		opts: Options{Enabled: true, MinKernelMajor: 99, MinKernelMinor: 0},
 		log:  slog.New(slog.DiscardHandler),
-		m:    newMetrics(prometheus.NewRegistry()),
+		m:    testMetrics(t),
 	}
 	require.Error(t, s.start(context.Background()))
 }
@@ -258,11 +258,24 @@ func sockhashKeyCount(t *testing.T, m *ebpf.Map) int {
 		return 0
 	}
 	count := 1
-	for {
+	for range maxSockhashWalk {
 		cur = next
 		if err := m.NextKey(&cur, &next); err != nil {
 			return count
 		}
 		count++
 	}
+	return count
+}
+
+// maxSockhashWalk bounds the key walk; test maps hold at most 16 entries.
+const maxSockhashWalk = 1 << 10
+
+// testMetrics builds a fresh, private *Metrics for tests that construct a
+// Sockmap by hand.
+func testMetrics(t *testing.T) *Metrics {
+	t.Helper()
+	m, err := newMetrics(prometheus.NewRegistry())
+	require.NoError(t, err)
+	return m
 }
