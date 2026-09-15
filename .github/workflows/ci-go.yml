@@ -188,6 +188,10 @@ jobs:
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
         with:
           sarif_file: ${{ inputs.working-directory }}/gosec.sarif
+          # One category per module: uploads that share a category on the same
+          # commit replace each other, which breaks callers that fan this
+          # workflow out over a module matrix.
+          category: gosec${{ inputs.working-directory != '.' && format('/{0}', inputs.working-directory) || '' }}
         continue-on-error: true
 
   # ── Vulnerability check ───────────────────────────────────────────────────
@@ -283,11 +287,20 @@ jobs:
             echo "::error::Coverage ${COVERAGE}% is below required ${{ inputs.coverage-threshold }}%"
             exit 1
           fi
+      - name: Derive a per-module artifact name
+        id: artifact
+        shell: bash
+        run: |
+          slug=$(printf '%s' "${{ inputs.working-directory }}" | tr '/.' '--' | sed -e 's/^-*//' -e 's/-*$//')
+          if [ -n "$slug" ]; then echo "name=coverage-$slug" >> "$GITHUB_OUTPUT"; else echo "name=coverage" >> "$GITHUB_OUTPUT"; fi
       - name: Upload coverage artifact
         if: matrix.primary
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: coverage
+          # Artifact names must be unique per run: a caller that fans this
+          # workflow out over a module matrix would otherwise collide on
+          # "coverage" and every upload after the first would fail.
+          name: ${{ steps.artifact.outputs.name }}
           path: ${{ inputs.working-directory }}/coverage.out
           retention-days: 7
 
