@@ -5,11 +5,11 @@
 # HISS-20 enforcement-coverage replay: proves that .semgrep.yml actually
 # decides the invariants the coverage catalogue claims, in BOTH directions.
 #
-#   .config/hiss/testdata/HISS-NN/go/positive/*.go  MUST report, from a rule
+#   .config/hiss/semgrep/testdata/HISS-NN/go/positive/*.go  MUST report, from a rule
 #                                                   this file maps to HISS-NN
-#   .config/hiss/testdata/HISS-NN/go/negative/*.go  MUST stay silent — the
+#   .config/hiss/semgrep/testdata/HISS-NN/go/negative/*.go  MUST stay silent — the
 #                                                   legitimate shape
-#   .config/hiss/testdata/HISS-NN/go/gap/*.go       MUST stay silent — a
+#   .config/hiss/semgrep/testdata/HISS-NN/go/gap/*.go       MUST stay silent — a
 #                                                   violating shape the rule
 #                                                   declares it does not decide
 #
@@ -20,7 +20,7 @@
 # a gap fixture starts reporting, the comment that declared it must be corrected.
 #
 # The corpus is scanned from a temporary copy because the rules exclude
-# .config/hiss/testdata/ — the positive and gap fixtures are violations by
+# .config/hiss/semgrep/testdata/ — the positive fixtures are violations by
 # construction and must not fail the repository's own semgrep gate, nor the
 # registry-ruleset gate in .github/workflows/security-scan.yml, which excludes
 # the same directory. It runs single-job: the corpus is a couple of dozen tiny
@@ -30,7 +30,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-corpus="$root/.config/hiss/testdata"
+corpus="$root/.config/hiss/semgrep/testdata"
 
 # SEMGREP_CMD lets a caller point at a pinned interpreter that is not on PATH,
 # e.g. SEMGREP_CMD="pipx run semgrep==1.166.0" (the pin CI's semgrep job uses).

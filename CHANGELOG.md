@@ -695,6 +695,16 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 
 - `db/sqlite`: embedded SQLite fx module over modernc.org/sqlite (pure Go, WAL + foreign keys on by default; config prefix `db.sqlite`).
 
+- **HISS-20 enforcement coverage catalogue**: `.config/hiss/coverage.yaml` declares, for each
+  of the 20 HISS invariants and each language this repository actually contains (Go, Python,
+  C), what enforces it here, what does not, and the measurement behind the claim. 73 fixtures
+  under `.config/hiss/testdata/` back the claims, and `praetorctl hiss coverage --verify`
+  replays them in both directions — a claim of detection must fire on its `positive/`
+  fixtures, a claim of absence must stay silent on its `gap/` ones. Wired into
+  `make verify-all` (target `hiss-coverage`) and the lefthook pre-commit governance block next
+  to `hiss-audit`. Four invariants are now recorded as having no enforcement here at all
+  (HISS-03, HISS-06, HISS-08/Go, HISS-18) and two as manual (HISS-14, HISS-17).
+
 - lefthook git-hook gate (`lefthook.yml` + `scripts/hooks/`): pre-commit runs gofumpt, gci, golangci-lint and go vet on the staged packages plus `standardsctl compile-context --verify`, `reuse lint` and `gitleaks`; commit-msg enforces Conventional Commits and the DCO `Signed-off-by:` trailer; pre-push runs `go build` + `go test -short` in root and `core/`. Tools missing from PATH skip with a message. Install: `go install github.com/evilmartians/lefthook@latest && lefthook install`.
 
 - Praetor governance adopted: `.standards.yaml`, HISS-16 debt baseline, compiled vendor agent context (`CLAUDE.md` is now generated from the `## Claude Code` section of `AGENTS.md`), `make verify-all` universal gate, root `Makefile`.
@@ -709,6 +719,148 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
 
 - **BREAKING**: Go toolchain floor raised to 1.27.0; every dependency fast-forwarded across root, core, and all sub-modules (k8s.io/* v0.37, controller-runtime v0.25, riverui v0.19, casbin v3).
 - `notify/apns2`: the default HTTP client now enables HTTP/2 through `http.Transport.Protocols` (Go 1.24+) instead of the deprecated `golang.org/x/net/http2.ConfigureTransport`; the negotiated ALPN set (h2, http/1.1) is unchanged and `golang.org/x/net` is no longer a direct dependency.
+
+- **auth/** — HISS burn-down: constructors that panicked on missing configuration now return an error, `crypto/rand` failures are surfaced instead of ignored, and HTTP response bodies close through `core/errors.CloseInto`. Callers must handle the new error return:
+
+  ```go
+  // before
+  svc := apikey.New(store, apikey.Options{HMACSecret: secret})
+  signer := jwt.NewHMACSigner(jwt.HS256, secret, time.Hour)
+  svc := magiclink.New(store, clk, secret, ttl)
+  svc := recovery.New(codes, tokens, clk, secret)
+  srv := oauth2server.New(opts)
+  mw := impersonate.Middleware(opts)
+  url, verifier := provider.AuthURL(state)
+
+  // after
+  svc, err := apikey.New(store, apikey.Options{HMACSecret: secret})       // error on empty HMACSecret
+  signer, err := jwt.NewHMACSigner(jwt.HS256, secret, time.Hour)          // error on empty secret
+  svc, err := magiclink.New(store, clk, secret, ttl)                      // error on empty secret
+  svc, err := recovery.New(codes, tokens, clk, secret)                    // error on empty secret
+  srv, err := oauth2server.New(opts)                                      // error on missing Issuer/Clients/Codes/Signer/Authenticate
+  mw, err := impersonate.Middleware(opts)                                 // error on nil SessionGet/SessionSet
+  url, verifier, err := provider.AuthURL(state)                           // error only when the OS entropy source fails
+  ```
+
+  `auth/session.Manager.Load` now returns an error (instead of a session with an empty ID) when generating a fresh session ID fails, and `session.MemoryStore` reports JSON round-trip failures. `auth/oauth2server` `/token` answers `server_error` when the JWT `jti` cannot be generated.
+
+- **BREAKING** (`core/id`): `Generator.NewUUID` no longer panics when the system random source fails; it returns the error. Before: `func (Generator) NewUUID() uuid.UUID` — after: `func (Generator) NewUUID() (uuid.UUID, error)`.
+
+  ```go
+  // before
+  u := g.NewUUID()
+  // after
+  u, err := g.NewUUID()
+  if err != nil { return err }
+  ```
+
+- **BREAKING** (`payments/subs`): `Options.IDGen` now returns an error, which `Service.Start` surfaces. Before: `IDGen func() string` — after: `IDGen func() (string, error)`.
+- `core/config`: `Options.Logger *slog.Logger` added — receives file-watch / SIGHUP reload failures (nil = `slog.Default()`); a failed watch registration now fails the fx `OnStart` hook instead of being dropped.
+- `core/mcp`: the stdio stdout-redirect `Close` now reports a drain failure; a refused `fx.Shutdowner.Shutdown` is logged.
+- `core/codec/yaml`: `ReadFile` / `WriteFile` surface close and temp-file removal failures instead of discarding them.
+
+- HISS burn-down (group `httpx`: `apidocs`, `grpc`, `httpx/*`, `idempotency`, `tenancy`) — no more blank-identifier discards or production `panic`s; `grpc.newServer` split into helpers.
+  - **BREAKING** `tenancy`: `MustFromContext` (panicked) is replaced by `RequireFromContext`, which returns the new sentinel `ErrMissingTenant`.
+
+    ```go
+    // before
+    t := tenancy.MustFromContext(ctx) // panics when no tenant
+
+    // after
+    t, err := tenancy.RequireFromContext(ctx)
+    if errors.Is(err, tenancy.ErrMissingTenant) { /* handler mounted outside Middleware */ }
+    ```
+
+  - `idempotency.Options` gains `Logger *slog.Logger` (nil → `slog.Default()`); `Store.Save` failures and replay write errors are now logged instead of silently dropped. `idempotency.Module` wires the fx `*slog.Logger` automatically.
+
+    ```go
+    // before
+    idempotency.Middleware(store, idempotency.Options{TTL: time.Hour})
+
+    // after (optional — nil Logger keeps the old call shape working)
+    idempotency.Middleware(store, idempotency.Options{TTL: time.Hour, Logger: logger})
+    ```
+
+  - `httpx/client.Drain` now logs drain/close failures at Debug on `slog.Default()` (signature unchanged).
+  - `httpx/extclient`: a failed response-body close now surfaces as the call error when the request otherwise succeeded.
+  - `httpx/geofence.Module`: the fx `OnStop` hook returns the mmdb reader's close error instead of swallowing it.
+  - `apidocs` `/mcp` tool proxy: a failed response-body read or close is reported as an `IsError` tool result instead of being dropped (a short read previously produced a silently truncated reply).
+
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
+
+- **BREAKING**: `markdown.RenderString` returns an error instead of panicking on
+  a goldmark failure (HISS-07 burn-down).
+
+  ```go
+  // before
+  html := markdown.RenderString(src) // panicked on error
+  // after
+  html, err := markdown.RenderString(src)
+  ```
+
+- **BREAKING**: `media/3d` `(*App).Run` returns the first frame render error
+  instead of discarding it; the render loop still runs until the window closes.
+
+  ```go
+  // before
+  app.Run(scene)
+  // after
+  err := app.Run(scene)
+  ```
+
+- **docs/epub**: `(*Book).WriteToWriter` now reports a temp-file close or
+  remove failure (previously silently discarded); signature unchanged.
+- **docs/xlsx**, **pdf/parse**, **media/img/pipeline**: `ReadRows`, `InfoFile`
+  and the image handler surface close/write failures instead of discarding
+  them; signatures unchanged.
+
+- **BREAKING**: `notify/tracking.New` takes a `*slog.Logger` so `Store.Record` failures in the pixel/click handlers are logged instead of discarded (HISS-07 burn-down, group notify). A nil logger falls back to `slog.Default()`.
+
+  ```go
+  // before
+  svc := tracking.New(store, secret)
+  // after
+  svc := tracking.New(store, secret, logger) // or nil → slog.Default()
+  ```
+
+- `notify/*` senders, `notify/bounce`, `notify/inbound` and `realtime/webrtc` now surface HTTP body / peer-connection close errors via `core/errors.CloseInto` / `CloseJoin` (a close failure is returned when nothing else failed). `webhooks/out` logs a response-body close failure instead — the endpoint already acknowledged the delivery, so it is never retried for that — and no longer panics when `crypto/rand` fails: `Dispatch` returns the error.
+
+- **BREAKING**: `k8s/metrics/prom` `Mount` and `MountFor` now return `error` instead of silently recovering from Prometheus registration panics. "Already registered" is still tolerated; any other registration failure is surfaced. HISS-07 burn-down (group `runtime`).
+
+  ```go
+  // before
+  prom.Mount(r, checks)
+  prom.MountFor(mux, promReg, checks)
+
+  // after
+  if err := prom.Mount(r, checks); err != nil { return err }
+  if err := prom.MountFor(mux, promReg, checks); err != nil { return err }
+  ```
+
+- **BREAKING** (`money`): `Money.Add` / `Money.Sub` return `(Money, error)` instead of panicking on a currency mismatch; new sentinel `money.ErrCurrencyMismatch` (HISS-07).
+
+  ```go
+  // before
+  total := price.Add(tax) // panics if currencies differ
+  // after
+  total, err := price.Add(tax)
+  if errors.Is(err, money.ErrCurrencyMismatch) { /* … */ }
+  ```
+
+- **BREAKING** (`plugin`): `Registry.Register` returns `error` (`plugin.ErrDuplicate` on a repeat key) instead of panicking; `Registry.MustGet` is replaced by `Registry.Lookup(key) (T, error)` (`plugin.ErrNotRegistered` on a miss). `MustRegister` and `Get` are unchanged (HISS-07).
+
+  ```go
+  // before
+  Providers.Register("stripe", impl) // panics on duplicate
+  p := Providers.MustGet("stripe")   // panics on miss
+  // after
+  if err := Providers.Register("stripe", impl); err != nil { return err }
+  p, err := Providers.Lookup("stripe")
+  ```
 
 ### Security
 

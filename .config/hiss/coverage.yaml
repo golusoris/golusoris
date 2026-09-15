@@ -1,0 +1,550 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Declared enforcement evidence for the HISS invariants in THIS repository (HISS-20).
+#
+# Every claim here is replayed against .config/hiss/testdata by `praetorctl hiss coverage
+# --verify`, which runs in `make verify-all` (target: hiss-coverage) and in the lefthook
+# pre-commit governance block next to hiss-audit. A claim is only as good as the fixture that
+# demonstrates it.
+#
+# The check runs in BOTH directions. A state claiming detection must report each of its
+# positive fixtures; a state claiming none must leave its gap fixtures undetected. So the
+# catalogue fails when it becomes too optimistic AND when it becomes too pessimistic: the day
+# a rule gains coverage, the gap fixture it was supposed to miss fires and this file must be
+# updated to say so.
+#
+# States:
+#   enforced       every shape the corpus describes is reported
+#   partial        some shapes reported; gap/ names the rest
+#   unsupported    nothing reported for this language; gap/ records what goes undetected
+#   not_applicable the axiom does not apply to this language
+#   manual         upheld by review, not by a runnable check -- never report it as a gate
+#
+# `runner` names the tool that decides the rule. An omitted runner means the HISS scanner
+# (`praetorctl audit`), whose verdicts the verifier replays directly. Any other value is a
+# DELEGATED claim: the fixtures are still replayed, but against the opposite expectation,
+# because what the verifier can check for a tool it does not run is the ATTRIBUTION, not the
+# enforcement. If the scanner reports a fixture credited to golangci-lint, the attribution is
+# wrong. The measurement that backs a delegated claim is in its rationale, taken from running
+# that tool against that fixture; nothing here is asserted from reading a config file alone.
+#
+# Four claims (HISS-11, HISS-12, HISS-16, HISS-20) carry no positive fixture. For three of
+# them the mechanism decides a repository-global property -- go.sum and pinned action digests,
+# one canonical AGENTS.md, this catalogue -- that no single file can exhibit; HISS-12 has none
+# for a different and equally deliberate reason, recorded in its rationale. Each still names
+# its mechanism and records a measured gap. An absent claim is honest; an unbacked one is the
+# defect this mechanism exists to prevent. Note that a delegated claim's missing positive
+# bucket is NOT flagged by the verifier -- only the attribution is replayed for a delegated
+# claim -- so the reason for each absence is written down here instead.
+#
+# Languages are declared only where this repository has such code: 689 tracked .go files,
+# 3 .py files (.config/agent/hooks/block_evasion.py, .config/lefthook/scripts/checkpoint.py,
+# .config/lefthook/scripts/common.py) and 1 .c file (pkg/sockmap/bpf/sockmap.bpf.c). All
+# three extensions are read by `praetorctl audit`; no Rust, TypeScript or Svelte source
+# exists here, so no entry is declared for them.
+#
+# To update a claim when a rule gains or loses coverage, see AGENTS.md, section
+# "Updating the HISS-20 enforcement coverage catalogue".
+version: 1
+rules:
+  - id: HISS-01
+    title: Acyclic Control Flow
+    coverage:
+      - language: go
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss go_ast.go checkSelfRecursion and the goto branch),
+          reached by the lefthook pre-commit job hiss-audit, the lefthook pre-push job audit
+          and the Makefile target audit inside make verify-all.
+        rationale: >-
+          Direct self-recursion and goto are reported. positive/direct-recursion.go and
+          positive/goto-jump.go both raise HISS-01; negative/iterative-factorial.go does not.
+          gap/mutual-recursion.go is a real cycle -- IsEven calls IsOdd calls IsEven -- and
+          goes unreported, because deciding it needs a whole-program call graph that the
+          per-file scanner does not build. No other gate in this repository looks at the call
+          graph at all.
+      - language: c
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss rules.go native goto matcher), same three entry
+          points as Go. The single .c file in the tree, pkg/sockmap/bpf/sockmap.bpf.c, is in
+          the scanner's file scope.
+        rationale: >-
+          Only goto is reported: positive/goto-cleanup.c raises HISS-01.
+          gap/direct-recursion.c is the same cycle the Go scanner reports and the native line
+          matcher does not decide recursion at all, so it passes unreported.
+      - language: python
+        state: unsupported
+        mechanism: >-
+          none. The Python side of internal/hiss implements HISS-02 (while True), HISS-04
+          (function length), HISS-07 (bare except) and HISS-08 (eval/exec) and no control-flow
+          rule; no other gate in this repository reads a .py file for structure.
+        rationale: >-
+          positive/ is empty because no mechanism reports a Python call-graph cycle.
+          gap/recursive-walk.py recurses into every child node and goes undetected.
+  - id: HISS-02
+    title: Bounded Loops and I/O Timeouts
+    coverage:
+      - language: go
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss go_ast.go, `for {}` / `for ;;`) for the loop half;
+          for the I/O half, the .semgrep.yml rules http-client-must-set-timeout,
+          no-http-default-client and no-http-listenandserve run by the CI job "Custom SAST
+          (semgrep)", plus the noctx, contextcheck and fatcontext linters in .golangci.yml.
+        rationale: >-
+          positive/unbounded-for.go raises HISS-02; negative/bounded-for.go, which counts to a
+          named constant, does not. gap/condition-without-scalar-bound.go is the honest limit
+          of the loop half: `for !done` has no scalar upper bound, which is what the axiom
+          demands, but the scanner reports only a loop whose condition is absent. The I/O half
+          is reported by semgrep and golangci-lint rather than by the scanner. The
+          ci.yml semgrep job is continue-on-error and advises; security-scan.yml's
+          "Semgrep analysis" job runs on pull_request without it and gates.
+      - language: c
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go nativeUnboundedLoop).
+        rationale: >-
+          positive/unbounded-while.c raises HISS-02 and negative/bounded-for.c does not. The
+          I/O-timeout half of the axiom has no native check anywhere in this repository.
+      - language: python
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go pythonWhileTrue).
+        rationale: >-
+          positive/while-true.py raises HISS-02 and negative/bounded-range.py does not.
+          gap/while-one.py is the identical unbounded loop written `while 1:` and is matched by
+          nothing. The I/O-timeout half has no Python check.
+  - id: HISS-03
+    title: Zero Frame Malloc
+    coverage:
+      - language: go
+        state: unsupported
+        mechanism: >-
+          none. core/id/bench_test.go, core/crypto/bench_test.go and cache/memory/bench_test.go
+          call b.ReportAllocs(), which prints an allocation count and asserts nothing; no gate
+          reads those numbers, there is no testing.AllocsPerRun assertion anywhere in the tree
+          and no benchmark-regression job in .github/workflows/.
+        rationale: >-
+          positive/ is empty because no mechanism reports an allocation.
+          gap/hot-path-allocation.go allocates a fresh slice per call on a hot path and is
+          reported by nothing.
+  - id: HISS-04
+    title: Complexity Bounds
+    coverage:
+      - language: go
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss go_ast.go checkFuncLOC) against
+          .standards.yaml overrides.complexity.max_func_loc = 75, plus gocyclo
+          (min-complexity 10), gocognit (15), funlen (60 lines / 50 statements) and cyclop (18)
+          in .golangci.yml, run by the CI job "Lint", make ci-all and the lefthook pre-commit
+          job golangci-lint.
+        rationale: >-
+          The scanner decides function length only: positive/overlong-function.go (90
+          statements) raises HISS-04 and negative/short-function.go does not.
+          gap/high-cyclomatic-function.go is 30 lines and therefore invisible to the scanner,
+          while golangci-lint with this repository's .golangci.yml reports "cyclomatic
+          complexity 12 of func `Classify` is high (> 10) (gocyclo)". The cyclomatic, cognitive
+          and statement caps are golangci-lint's, so they are held as gaps here rather than
+          counted as scanner coverage. The two caps also differ on purpose: golangci-lint's
+          funlen is stricter (60) than the audit's max_func_loc (75).
+      - language: c
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go braceTracker).
+        rationale: >-
+          Function length is decided by brace tracking: positive/overlong-function.c raises
+          HISS-04 and negative/short-function.c does not. The three other caps have no native
+          check, and no C compiler runs in any gate.
+      - language: python
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go python indentation tracker).
+        rationale: >-
+          Function length is decided by indentation: positive/overlong-function.py raises
+          HISS-04 and negative/short-function.py does not. The three other caps have no Python
+          check.
+  - id: HISS-05
+    title: Variable Scoping
+    coverage:
+      - language: go
+        state: partial
+        runner: golangci-lint
+        mechanism: >-
+          .golangci.yml with govet `enable-all: true` (so the shadow analyzer is on), revive's
+          redefines-builtin-id rule, the predeclared and reassign linters and importas, run by
+          the CI job "Lint", by make ci-all and by the lefthook pre-commit job golangci-lint.
+          internal/hiss implements no HISS-05 rule.
+        rationale: >-
+          Measured with golangci-lint 2.13.2 and this repository's .golangci.yml verbatim.
+          positive/shadowed-error.go -> 'shadow: declaration of "err" shadows declaration at
+          line 13 (govet)'. positive/redefined-builtin.go -> 'redefines-builtin-id:
+          redefinition of the built-in function len (revive)'. negative/distinct-scopes.go ->
+          "0 issues.". gap/package-level-mutable-state.go is mutable state at the widest scope
+          in the package and also produced "0 issues.": gochecknoglobals is not in the enable
+          list, so nothing in this repository decides package-scoped mutable state.
+  - id: HISS-06
+    title: Bounded Concurrency
+    coverage:
+      - language: go
+        state: unsupported
+        mechanism: >-
+          none in praetorctl: internal/hiss carries no Go HISS-06 rule, and `go test -race`
+          decides a different property (a correctly synchronised unbounded fan-out is
+          race-free and still unbounded). The invariant is enforced here by .semgrep.yml
+          no-unbounded-goroutine-in-loop, whose own corpus lives in .config/hiss/semgrep/testdata and
+          is replayed in both directions by `make hiss-fixtures`.
+        rationale: >-
+          gap/unrelated-send-before-spawn.go and gap/counted-loop-len-in-variable.go are the
+          shapes nothing reports: a send on an unrelated channel before the spawn, which the
+          semgrep rule accepts as an acquire, and a loop bounded by a variable holding
+          len(xs), which it cannot tell from a constant bound. The nine shapes the semgrep
+          rule does report are positives of that corpus, not of this one, because this file
+          records what praetorctl's scanner decides.
+  - id: HISS-07
+    title: Checked Errors
+    coverage:
+      - language: go
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss go_ast.go checkBlankAssign, checkPanic and
+          checkEmptyErrBranch), plus errcheck, errorlint, nilerr, nilnil, nilnesserr and
+          wrapcheck in .golangci.yml.
+        rationale: >-
+          positive/discarded-error.go (`_ = os.Remove(path)`), positive/empty-error-branch.go
+          and positive/panic-in-production.go each raise HISS-07;
+          negative/propagated-error.go does not. gap/unchecked-call-statement.go calls
+          os.Remove and binds nothing: deciding that the dropped result IS an error needs type
+          information the syntax scanner does not build, and golangci-lint reports it as
+          'Error return value of `os.Remove` is not checked (errcheck)' in the same gate.
+      - language: python
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go bare-except matcher).
+        rationale: >-
+          positive/bare-except.py raises HISS-07 and negative/explicit-except.py, which names
+          the one exception it handles, does not. Errors discarded by other means -- an
+          `except Exception: pass`, a swallowed return code -- are not decided by a line
+          scanner and no Python linter runs in this repository.
+  - id: HISS-08
+    title: Static Determinism
+    coverage:
+      - language: go
+        state: unsupported
+        mechanism: >-
+          none in praetorctl: internal/hiss implements HISS-08 for Python and C only. The
+          invariant is enforced here by .semgrep.yml no-dynamic-code-loading and
+          no-dynamic-exec-command, whose corpus lives in .config/hiss/semgrep/testdata and is replayed
+          in both directions by `make hiss-fixtures`.
+        rationale: >-
+          gap/command-name-from-environment.go is the shape nothing reports: the command name
+          comes from an environment variable held in a plain variable, and both semgrep rules
+          match interpreter literals and call-site assembly rather than taint. plugin.Open,
+          plugin.Lookup, reflect.MakeFunc and the interpreter and assembled-name spellings
+          are positives of the semgrep corpus. There are zero dynamic-loading call sites in
+          the tree today.
+      - language: python
+        state: partial
+        mechanism: praetorctl audit (internal/hiss rules.go hasBannedCall for eval and exec).
+        rationale: >-
+          positive/dynamic-eval.py raises HISS-08 and negative/static-dispatch.py, which
+          dispatches through a closed table, does not. gap/os-system.py hands a string built at
+          run time to /bin/sh, which is the same axiom violation for a different interpreter,
+          and the matcher knows only the two builtin names.
+      - language: c
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss rules.go hasBannedCall for gets, strcpy and sprintf).
+        rationale: >-
+          positive/banned-strcpy.c raises HISS-08 and negative/bounded-copy.c, which uses
+          snprintf, does not. gap/dlopen-unverified.c maps an unpinned, unverified shared
+          object into the process at run time and is not decided by a rule that matches three
+          string primitives.
+  - id: HISS-09
+    title: Reference Safety
+    coverage:
+      - language: go
+        state: partial
+        mechanism: >-
+          praetorctl audit (internal/hiss go_ast.go checkUnsafe), with .semgrep.yml
+          unsafe-requires-safety-proof covering the import form and the aliased import;
+          its corpus lives in .config/hiss/semgrep/testdata.
+        rationale: >-
+          The scanner reports an unproven unsafe.Pointer, unproven Slice and String
+          conversions, an unproven import, a usage with no proof at all and a proof detached
+          from the code by a blank line; negative/proven-pointer.go, which states the proof
+          directly above, is not reported. It misses `import raw "unsafe"`, because it
+          matches a selector spelled `unsafe`; the semgrep rule reports that alias and is
+          what closes the gap here. Whether a proof is truthful is decided by review, and
+          there are zero `unsafe` imports in the tree today.
+      - language: c
+        state: unsupported
+        mechanism: >-
+          none. internal/hiss implements HISS-09 for Go and Rust only, and no C compiler,
+          clang-tidy run or sanitizer executes in any gate (.clang-tidy exists at the root but
+          nothing invokes it).
+        rationale: >-
+          positive/ is empty because no mechanism reports an unproven native memory operation.
+          gap/raw-pointer-arithmetic.c dereferences base+offset with no bound and no proof and
+          is reported by nothing.
+  - id: HISS-10
+    title: Zero-Warning Cascade
+    coverage:
+      - language: go
+        state: partial
+        runner: golangci-lint
+        mechanism: >-
+          golangci-lint v2 with this repository's .golangci.yml (69 linters enabled, default
+          none), reached by the CI job "Lint", by make ci-all inside make verify-all and by the
+          lefthook pre-commit jobs golangci-lint and govet; the gofumpt, gci and goimports
+          formatters are part of the same config and are also enforced by the lefthook
+          pre-commit jobs gofumpt and gci. internal/hiss implements no HISS-10 rule.
+        rationale: >-
+          Measured with golangci-lint 2.13.2 and this repository's config verbatim. 3/3
+          positives reported: 'ineffectual assignment to sum (ineffassign)', 'func helper is
+          unused (unused)', 'printf: fmt.Sprintf format %d has arg name of wrong type string
+          (govet)'. negative/clean-and-formatted.go produced "0 issues.".
+          gap/unexplained-nolint.go carries a bare `//nolint:errcheck` with no reason and also
+          produced "0 issues.", because nolintlint is enabled with require-explanation and
+          require-specific unset. The scope gap is larger than the fixture: MODULES in the
+          Makefile is `. core`, so the 22 nested modules (pdf/, ocr/, web3/*, science/*,
+          media/*, hw/*, deploy/*, container/registry, k8s/nri, testutil/pact) are linted by
+          neither the CI job nor make ci-all.
+      - language: python
+        state: unsupported
+        mechanism: >-
+          none. No ruff, flake8, mypy, pylint or black config or invocation exists in the
+          Makefile, .github/workflows/, lefthook.yml or scripts/hooks/. lefthook executes
+          .config/lefthook/scripts/checkpoint.py as an agent-checkpoint job but never lints it.
+        rationale: >-
+          positive/ is empty because no mechanism reports a Python warning.
+          gap/unused-import.py imports json and never uses it -- flake8 F401 -- and nothing in
+          this repository looks at it.
+      - language: c
+        state: unsupported
+        mechanism: >-
+          none. No gcc, clang or clang-tidy invocation exists in the Makefile,
+          .github/workflows/ or any lefthook hook. pkg/sockmap/bpf/sockmap.bpf.o is checked in
+          pre-built (bpf2go style) precisely so that no gate needs a C toolchain, so the one .c
+          file in the tree is never compiled by CI.
+        rationale: >-
+          positive/ is empty because no mechanism reports a C warning. gap/unused-variable.c is
+          a real `gcc -Wall` [-Wunused-variable] and is reported by nothing here.
+  - id: HISS-11
+    title: Hermetic Supply Chain
+    coverage:
+      - language: go
+        state: partial
+        runner: ci
+        mechanism: >-
+          go.sum verification by the Go toolchain, reached by make build-all and make ci-all;
+          gomoddirectives (replace-allow-list empty, exclude-forbidden) and gomodguard_v2 in
+          .golangci.yml; the CI job "Dependency review" (fails on high/critical advisories and
+          copyleft licences entering the tree); renovate.json extending
+          helpers:pinGitHubActionDigests with pinDigest enabled; sbom.yml (SPDX SBOM plus
+          Sigstore-keyless attestations on every tag); verify-provenance.yml (cosign verify
+          plus gh attestation verify); scorecard.yml. .standards.yaml declares
+          supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
+          checks as configuration.
+        rationale: >-
+          No positive fixture exists because every mechanism above decides a repository-global
+          property -- the lockfile, the pinned digest, the signed attestation -- that no single
+          source file can exhibit; stating that is more useful than inventing a fixture that
+          would prove nothing. Two real gaps are recorded instead.
+          gap/go-generate-floating-tool.go fetches a codegen tool at @latest from a
+          //go:generate line: no gate pins go:generate tool versions.
+          gap/unpinned-action.yml is a workflow step on a mutable tag; Renovate rewrites that
+          shape in .github/workflows/, but nothing FAILS on it, so one introduced by hand
+          between Renovate runs merges unreported.
+  - id: HISS-12
+    title: Secret Leak Prevention
+    coverage:
+      - language: go
+        state: partial
+        runner: gitleaks
+        mechanism: >-
+          gitleaks 8.30.1 with this repository's .gitleaks.toml, run over the FULL history by
+          the CI job "Secret scan (gitleaks)" (`gitleaks git . -c .gitleaks.toml --redact
+          --no-banner --verbose`, version-pinned by an explicit `test "$(gitleaks version)" =
+          "8.30.1"`) and over the staged diff by the lefthook pre-commit job gitleaks
+          (scripts/hooks/gitleaks.sh). GitHub native secret scanning and push protection sit in
+          front of both.
+        rationale: >-
+          There is deliberately no positive fixture. A corpus of credential-shaped strings is
+          how one would demonstrate that this rule fires, and this repository's .gitleaks.toml
+          allowlists by EXACT VALUE rather than by path, on purpose, so that "any real secret
+          in a test file [is] still detected". Adding the corpus would force either a
+          permanent failure of the repository's own secret gate on every push -- the CI job
+          scans all history -- or a path exemption that would blind the scanner to a real
+          credential committed under it. The absence is the honest claim; the mechanism is
+          named and the gap is measured. gap/split-literal-token.go assembles a GitHub-PAT
+          shaped credential from three concatenated literals; scanned as a real git repository
+          with this repository's config, gitleaks reported "no leaks found", while the
+          compiler reassembles the credential verbatim.
+  - id: HISS-13
+    title: Monotonic Debt Ratchet
+    coverage:
+      - language: go
+        state: partial
+        runner: baseline
+        mechanism: >-
+          .standards-baseline.json (total_infractions 0) evaluated by praetorctl audit, reached
+          by the lefthook pre-commit job hiss-audit, the lefthook pre-push job audit and the
+          Makefile target audit inside make verify-all. The ratchet's reach is exactly the HISS
+          scanner's rule set; no other tool's findings feed the baseline.
+        rationale: >-
+          Replayed by staging each fixture as a scanned package in this worktree and running
+          praetorctl audit. positive/new-goto-debt.go -> "[FAIL] HISS invariant violations
+          introduced (1 total infractions, 1 new unbaselined, 0 in touched files): [HISS-01]
+          ... Legacy non-DAG control flow jump (goto) (new)". negative/clean-addition.go ->
+          "[PASS] HISS invariant scan verified: 0 active violations within 0 baselined limit".
+          gap/cyclomatic-debt.go is real HISS-04 debt -- golangci-lint reports 'cyclomatic
+          complexity 12 of func `Classify` is high (> 10) (gocyclo)' -- and the same audit run
+          reported "0 active violations", because golangci-lint findings never reach
+          .standards-baseline.json.
+  - id: HISS-14
+    title: Append-Only ABI
+    coverage:
+      - language: go
+        state: manual
+        runner: ci
+        mechanism: >-
+          Review, plus two conventions that record the intent without deciding the change: the
+          "Breaking change" checkbox in .github/PULL_REQUEST_TEMPLATE.md, which asks for a
+          `Migration:` section, and the Conventional-Commits `!` / `BREAKING CHANGE:` footer
+          checked for SHAPE by scripts/hooks/commit-msg.sh and the CI job "PR title
+          (Conventional Commits)" and consumed by release-please for the version bump. The CI
+          job "API compatibility (apidiff)" is explicitly INFORMATIONAL: every apidiff failure
+          in it is downgraded to `::warning::` and the gating form is commented out until v1.0.
+        rationale: >-
+          Nothing in this repository fails a build on a breaking API change, and nothing checks
+          that a `Migration:` footer is present -- scripts/hooks/commit-msg.sh checks only the
+          Conventional-Commits subject and the DCO trailer. positive/ is empty because no
+          mechanism reports the removal. gap/removed-exported-func.go deletes a published
+          symbol and gap/narrowed-exported-signature.go prepends a required context.Context to
+          one; both break every importer and both can land with an ordinary `fix(api):`
+          subject.
+  - id: HISS-15
+    title: 3D Test Discipline
+    coverage:
+      - language: go
+        state: partial
+        runner: ci
+        mechanism: >-
+          The CI job "Test (race + coverage)" step "Check coverage threshold (70%)", fed by
+          `go test -race -covermode=atomic -coverprofile`, plus `go test -race -count=1` in
+          make ci-all and the lefthook pre-push job build-test, plus the 3D-testing checkbox in
+          .github/PULL_REQUEST_TEMPLATE.md (a self-attestation, not a measurement).
+        rationale: >-
+          Measured with go test -covermode=atomic against each fixture package.
+          positive/untested-public-func.go exports Clamp with no sibling test and measured
+          "coverage: 0.0% of statements", far below the 70% floor. negative/clamp.go plus
+          clamp_test.go -- one table with positive, negative and boundary rows -- measured
+          100.0% and passes, so the floor is not over-strict. The gap pair is the honest limit:
+          gap/double.go is branchless and gap/double_test.go asserts only Double(21) == 42, yet
+          the pair measures 100.0% statement coverage. A missing dimension is invisible to a
+          statement-coverage floor, and the floor is an aggregate over the whole module, so it
+          cannot decide any individual function either.
+      - language: python
+        state: unsupported
+        mechanism: >-
+          none. No pytest, unittest invocation, coverage tool or test file exists for the three
+          .py files in the tree; make verify-all never executes them and neither does CI.
+        rationale: >-
+          positive/ is empty because nothing mechanical decides this rule for Python.
+          gap/untested-public-function.py is a public interface with no test of any dimension.
+  - id: HISS-16
+    title: Context Integrity
+    coverage:
+      - language: go
+        state: partial
+        runner: compile-context
+        mechanism: >-
+          `standardsctl compile-context --verify`, reached by the Makefile target
+          compile-context-verify inside make verify-all and by the lefthook pre-commit job
+          context-check. AGENTS.md is the single canonical source; CLAUDE.md, .cursor/,
+          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/ are generated
+          from it and must never be edited by hand.
+        rationale: >-
+          No positive fixture exists because the mechanism compares one canonical document
+          against its generated vendor copies -- a repository-global property no single file
+          can exhibit. The verification is that `make compile-context-verify` exits 0, which
+          praetorctl audit reports as "[PASS] Cross-agent context targets (Claude, Cursor,
+          Copilot, Windsurf, Gemini, Codex) verified in sync".
+          gap/nested-agents-context.md records the limit: a nested AGENTS.md further down the
+          tree is neither an input nor a target of compile-context, so it can contradict the
+          canonical source indefinitely; the repository already contains such files,
+          pkg/sockmap/AGENTS.md among them.
+  - id: HISS-17
+    title: State Ledger Discipline
+    coverage:
+      - language: go
+        state: manual
+        runner: state
+        mechanism: >-
+          The lefthook post-commit job state-sync (`praetorctl state sync .`), which maintains
+          the git-ignored .workingdir/ ledger (BACKLOG.md, BUGS.md, OPEN.md, QUESTIONS.md,
+          STATE.md, evidence/). Verified to run here: it printed "Synchronized state for .
+          (feat/hiss20-coverage, clean, bugs: 0, questions: 0)" and created the directory.
+        rationale: >-
+          It is a recorder, not a gate, and is therefore declared manual rather than partial: it
+          runs AFTER the commit is already made, a non-zero exit cannot reject anything, and
+          .workingdir/ is listed twice in .gitignore, so CI never sees the ledger and cannot
+          check it against the branch. Whether the ledger is accurate is upheld by whoever
+          writes it. No fixture is declared, because no source file can exhibit the state of a
+          ledger.
+  - id: HISS-18
+    title: Diff-Aware CI Efficiency
+    coverage:
+      - language: go
+        state: unsupported
+        mechanism: >-
+          none for the Go pipeline. .github/workflows/ci.yml triggers on every pull_request and
+          every push to main with no `paths:` filter and no changed-files job selection, so all
+          15 jobs run for a README-only change. Only docs.yml carries a paths filter. The
+          efficiency measures that do exist -- concurrency with cancel-in-progress,
+          `if: github.actor != 'renovate[bot]'` on most jobs, and the setup-go build/module
+          cache -- shorten a run without selecting jobs by diff.
+        rationale: >-
+          No fixture is declared, because the rule is about which jobs a workflow runs and no
+          source file can exhibit that. The gap is the whole claim and it is stated above
+          rather than implied: the Go jobs are not diff-aware at all.
+  - id: HISS-19
+    title: Reuse Before Writing
+    coverage:
+      - language: go
+        state: partial
+        runner: dedupe
+        mechanism: >-
+          `standardsctl dedupe scan .`, reached by the Makefile target dedupe-scan inside make
+          verify-all, plus the lefthook post-commit job dedupe-cadence
+          (`praetorctl dedupe cadence --threshold=20 --record .`), which records rather than
+          gates.
+        rationale: >-
+          Measured by running the scan over a module holding just the fixtures. The positive
+          pair reported "Duplicate Function Blocks (1): 12 lines ... duplicated-block-a.go:12
+          in NormalizeName() / duplicated-block-b.go:12 in NormalizeLabel()", scored 85.0% and
+          exited non-zero. gap/renamed-clone.go performs exactly the same normalisation with
+          every local renamed and the two guards reordered; scanned next to
+          duplicated-block-a.go it scored 100.0% and passed, so a rename plus a reorder defeats
+          the comparison.
+  - id: HISS-20
+    title: Enforcement Coverage Catalogue
+    coverage:
+      - language: go
+        state: partial
+        runner: hiss-coverage
+        mechanism: >-
+          This file, replayed against .config/hiss/testdata by `praetorctl hiss coverage
+          --verify` via the Makefile target hiss-coverage inside make verify-all and the
+          lefthook pre-commit job hiss-coverage, next to hiss-audit.
+        rationale: >-
+          No positive fixture exists because the corpus IS this rule's evidence: the meta-rule
+          is satisfied exactly when the other nineteen claims survive their own fixtures, and a
+          file demonstrating "an undeclared mechanism" would be a copy of this catalogue rather
+          than a source file. partial, not enforced, for two measured reasons. First, of the 33
+          claims declared here only 22 are replayed by the verifier; the other 11 name a tool
+          it does not run, so for those it checks the attribution and the rationale carries the
+          measurement instead. Second, four claims (HISS-11, HISS-12, HISS-16 and HISS-20
+          itself) are backed by a named mechanism and a measured gap but by no positive
+          fixture, and a delegated claim's missing positive bucket is not flagged by the
+          verifier at all -- which is exactly why each absence is argued in its own rationale
+          rather than left to be inferred.
