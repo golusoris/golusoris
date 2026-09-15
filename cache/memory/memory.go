@@ -72,7 +72,8 @@ func newCache(opts Options, logger *slog.Logger) (*Cache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cache/memory: build: %w", err)
 	}
-	logger.Debug("cache/memory: started",
+	logger.Debug(
+		"cache/memory: started",
 		slog.Int("max_size", opts.MaxSize),
 		slog.Duration("ttl", opts.TTL),
 	)
@@ -94,7 +95,8 @@ func NewForTest(maxSize int, ttl time.Duration) (*Cache, error) {
 }
 
 // Module provides *memory.Cache to the fx graph.
-var Module = fx.Module("golusoris.cache.memory",
+var Module = fx.Module(
+	"golusoris.cache.memory",
 	fx.Provide(loadOptions),
 	fx.Provide(newCache),
 	fx.Invoke(func(lc fx.Lifecycle, c *Cache) {

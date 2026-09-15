@@ -443,7 +443,8 @@ func TestModule_ProvidesClient(t *testing.T) {
 	})
 
 	var resolved *Client
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		Module,

@@ -62,7 +62,8 @@ func newLogger(_ Options, store Store, clk clock.Clock, logger *slog.Logger) *Lo
 
 // Module provides *audit.Logger to the fx graph. The default Store is an
 // in-memory [MemoryStore]; override it with fx.Decorate for durable storage.
-var Module = fx.Module("golusoris.audit",
+var Module = fx.Module(
+	"golusoris.audit",
 	fx.Provide(loadOptions),
 	fx.Provide(func() Store { return NewMemoryStore() }), //nolint:gocritic // explicit return type aids fx
 	fx.Provide(newLogger),

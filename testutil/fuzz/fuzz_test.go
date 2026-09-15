@@ -13,7 +13,8 @@ import (
 
 func TestRoundTrip_string(t *testing.T) {
 	t.Parallel()
-	fuzz.RoundTrip(t, "hello",
+	fuzz.RoundTrip(
+		t, "hello",
 		func(s string) ([]byte, error) { return json.Marshal(s) },
 		func(b []byte) (string, error) {
 			var v string
@@ -27,7 +28,8 @@ func TestRoundTrip_struct(t *testing.T) {
 	type point struct {
 		X, Y int
 	}
-	fuzz.RoundTrip(t, point{X: 3, Y: 7},
+	fuzz.RoundTrip(
+		t, point{X: 3, Y: 7},
 		func(p point) ([]byte, error) { return json.Marshal(p) },
 		func(b []byte) (point, error) {
 			var v point

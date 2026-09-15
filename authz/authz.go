@@ -85,7 +85,8 @@ func (e *Enforcer) Enforce(sub, obj, act string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("authz: enforce: %w", err)
 	}
-	e.logger.Debug("authz: enforce",
+	e.logger.Debug(
+		"authz: enforce",
 		slog.String("sub", sub), slog.String("obj", obj),
 		slog.String("act", act), slog.Bool("ok", ok),
 	)
@@ -147,7 +148,8 @@ func newEnforcer(opts Options, logger *slog.Logger) (*Enforcer, error) {
 
 // Module provides *authz.Enforcer. Requires Options to be supplied
 // externally via fx.Supply or fx.Provide.
-var Module = fx.Module("golusoris.authz",
+var Module = fx.Module(
+	"golusoris.authz",
 	fx.Provide(newEnforcer),
 )
 

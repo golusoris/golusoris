@@ -32,7 +32,8 @@ func TestModule_DefaultBackendNoop(t *testing.T) {
 
 	var client *flags.Client
 	var provider flags.Provider
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		flags.Module,
@@ -66,7 +67,8 @@ func TestModule_MemoryBackend(t *testing.T) {
 	cfg := newTestConfig(t)
 
 	var provider flags.Provider
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		// Override Options to select the memory backend without touching config files.

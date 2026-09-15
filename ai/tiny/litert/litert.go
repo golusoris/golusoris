@@ -185,7 +185,8 @@ func (t *Trainer) buildEnv(job tiny.Job) map[string]string {
 // runContainer invokes the Runner and drains its output into structured
 // logs whether or not Run errored.
 func (t *Trainer) runContainer(ctx context.Context, job tiny.Job, inputDir, outputDir string) error {
-	t.opts.Logger.InfoContext(ctx, "ai/tiny/litert: training start",
+	t.opts.Logger.InfoContext(
+		ctx, "ai/tiny/litert: training start",
 		slog.String("job", job.Name),
 		slog.String("modality", string(job.Dataset.Modality)),
 		slog.String("runner", t.opts.Runner.Name()),

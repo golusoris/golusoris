@@ -110,7 +110,8 @@ func newRegistry(p registryParams) (*Registry, error) {
 		}
 		clients[name] = c
 	}
-	p.Logger.Debug("httpx/extclient: started",
+	p.Logger.Debug(
+		"httpx/extclient: started",
 		slog.Int("services", len(clients)),
 		slog.Bool("cache", p.Cache != nil),
 	)
@@ -118,7 +119,8 @@ func newRegistry(p registryParams) (*Registry, error) {
 }
 
 // Module provides a *Registry to the fx graph.
-var Module = fx.Module("golusoris.httpx.extclient",
+var Module = fx.Module(
+	"golusoris.httpx.extclient",
 	fx.Provide(loadOptions),
 	fx.Provide(newRegistry),
 )

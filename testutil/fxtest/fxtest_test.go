@@ -17,7 +17,8 @@ func TestNew_startsAndStops(t *testing.T) {
 	t.Parallel()
 	started := false
 
-	gfxtest.New(t,
+	gfxtest.New(
+		t,
 		fx.Invoke(func(lc fx.Lifecycle) {
 			lc.Append(fx.Hook{
 				OnStart: func(_ context.Context) error {
@@ -38,7 +39,8 @@ func TestPopulate(t *testing.T) {
 	type Dep struct{ Value string }
 
 	var dep *Dep
-	gfxtest.New(t,
+	gfxtest.New(
+		t,
 		fx.Provide(func() *Dep { return &Dep{Value: "hello"} }),
 		gfxtest.Populate(&dep),
 	)

@@ -51,7 +51,8 @@ func newSecret(opts Options, logger *slog.Logger) (Secret, error) {
 		if opts.File.Dir == "" {
 			return nil, errors.New("secrets: file backend requires secrets.file.dir")
 		}
-		logger.Debug("secrets: started",
+		logger.Debug(
+			"secrets: started",
 			slog.String("backend", "file"),
 			slog.String("dir", opts.File.Dir),
 		)
@@ -71,7 +72,8 @@ func newSecret(opts Options, logger *slog.Logger) (Secret, error) {
 //	)
 //
 // Config key prefix: secrets.* (e.g. secrets.backend, secrets.file.dir).
-var Module = fx.Module("golusoris.secrets",
+var Module = fx.Module(
+	"golusoris.secrets",
 	fx.Provide(loadOptions),
 	fx.Provide(newSecret),
 )

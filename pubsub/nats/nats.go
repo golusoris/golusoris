@@ -42,7 +42,8 @@ type Client struct {
 // Module is the fx module that provides a *Client.
 //
 //	fx.New(nats.Module)
-var Module = fx.Module("golusoris.nats",
+var Module = fx.Module(
+	"golusoris.nats",
 	fx.Provide(newFromConfig),
 )
 

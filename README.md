@@ -6,12 +6,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # golusoris
 
-[![HISS-16 Compliant](https://img.shields.io/badge/Standards-HISS--16%20Compliant-brightgreen)](AGENTS.md)
+[![HISS-16/17/18/19 Compliant](https://img.shields.io/badge/Standards-Praetor%20HISS--16%2F17%2F18%2F19-brightgreen)](AGENTS.md)
 
+[![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver)](https://github.com/golusoris/golusoris/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
 [![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
 [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
+[![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
+[![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
+[![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
 [![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
@@ -20,7 +24,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and SLSA L3 supply-chain standards.
 
-**Documentation:** the full rendered docs site lives at **[golusoris.github.io/golusoris](https://golusoris.github.io/golusoris/)**.
+**Documentation:** the mkdocs source renders from [`docs/`](docs/index.md); the GitHub Pages deploy of that site is not live yet, so browse the Markdown in-repo for now.
 
 ---
 
@@ -299,6 +303,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 |---|---|---|
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy | google/go-containerregistry |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bioinformatics — FASTA parser, rev-complement, GC content | biogo/biogo |
@@ -331,6 +336,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/snapshot/` | golden-file / snapshot testing | gkampitakis/go-snaps |
 | `testutil/factory/` | deterministic gofakeit test data factories | brianvoe/gofakeit |
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
+| `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
 | `testutil/prop/` | property-based testing (own go.mod) | leanovate/gopter |
@@ -386,12 +392,22 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 
 ## Status
 
-Pre-1.0, actively developed. Latest tagged release: **v0.7.0** (MIT);
-`v0.8.0` is prepared in `CHANGELOG.md` and the release-please manifest but
-not yet tagged. This branch prepares **v0.9.0**: the lean `core/` sub-module (ADR-0017), the
-EUPL-1.2 relicense (ADR-0018) and praetor HISS-16 governance (ADR-0019), on a
-Go 1.27 toolchain floor. Breaking changes between minor versions are called
-out in the commit `Migration:` footer and in `docs/migrations/` — start with
+Pre-1.0, actively developed. Latest tagged release: **v0.10.2** (root
+module); the `core/` sub-module is at **core/v0.9.1**. Code has been
+licensed under the [European Union Public Licence 1.2](LICENSE)
+(`EUPL-1.2`) since the v0.9.0 relicense (ADR-0018) — v0.7.0 and earlier were
+MIT; documentation is `CC-BY-SA-4.0`. GitHub immutable releases are enabled,
+starting with [v0.10.1](https://github.com/golusoris/golusoris/releases/tag/v0.10.1):
+`release.yml` runs goreleaser to publish archives, checksums, per-archive
+SPDX SBOMs, cosign keyless signatures and SLSA build-provenance
+attestations on every tag, and `sbom.yml` additionally attests source-tree
+SPDX and CycloneDX SBOMs. Governance runs on the
+[praetor](https://github.com/cordanaLLM/praetor) HISS-16 lattice
+(ADR-0019) — Context Integrity, plus HISS-17 (State Ledger Discipline),
+HISS-18 (Diff-Aware CI) and HISS-19 (Reuse Before Writing); see
+[AGENTS.md](AGENTS.md) for the full standard. Breaking changes between
+minor versions are called out in the commit `Migration:` footer and in
+`docs/migrations/` — start with
 [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path
 move (`config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`,
 `version`, `clikit`, `mcp` → `core/…`). Every module in the catalog above is
@@ -423,8 +439,11 @@ If golusoris saves you time, a coffee helps ☕
 
 ## Standards & Governance
 
-This repository conforms to High-Integrity Systems Standards (HISS-16)
-and modernized NASA JPL Power-of-10 rules.
+This repository conforms to the [praetor](https://github.com/cordanaLLM/praetor)
+High-Integrity Systems Standards lattice — HISS-16 (Context Integrity), HISS-17
+(State Ledger Discipline), HISS-18 (Diff-Aware CI Efficiency) and HISS-19
+(Reuse Before Writing) — plus modernized NASA JPL Power-of-10 rules; see
+[AGENTS.md](AGENTS.md) for the full invariant table.
 
 | Gate | Command | Description |
 | :--- | :--- | :--- |
