@@ -4,7 +4,7 @@ go 1.27.1
 
 require (
 	github.com/davidbyttow/govips/v2 v2.18.0
-	github.com/golusoris/golusoris v0.9.0
+	github.com/golusoris/golusoris v0.10.1
 	github.com/golusoris/golusoris/core v0.9.0
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
