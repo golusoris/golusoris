@@ -29,7 +29,8 @@ var knownModules = map[string]struct {
 
 // AddCmd returns the `golusoris add <module>` command.
 func AddCmd() *cobra.Command {
-	return clikit.Command("add", "Show how to add a golusoris module to an existing app",
+	return clikit.Command(
+		"add", "Show how to add a golusoris module to an existing app",
 		clikit.WithRunE(func(_ *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				fmt.Println("Available modules:")

@@ -39,7 +39,8 @@ func TestWebhookSink_Send(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	sink := outboxcdc.NewWebhookSink(srv.URL,
+	sink := outboxcdc.NewWebhookSink(
+		srv.URL,
 		outboxcdc.WithWebhookSecret("mysecret"),
 	)
 

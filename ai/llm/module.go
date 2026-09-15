@@ -43,7 +43,8 @@ func newClient(opts Options) Client {
 //	fx.New(golusoris.Core, llm.Module) // provides llm.Client
 //
 // Requires [config] (via golusoris.Core). Config key prefix: ai.llm.*.
-var Module = fx.Module("golusoris.ai.llm",
+var Module = fx.Module(
+	"golusoris.ai.llm",
 	fx.Provide(loadOptions),
 	fx.Provide(newClient),
 )

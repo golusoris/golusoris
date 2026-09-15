@@ -45,7 +45,8 @@ type Record = kgo.Record
 // Module is the fx module that provides a *Client.
 //
 //	fx.New(kafka.Module)
-var Module = fx.Module("golusoris.kafka",
+var Module = fx.Module(
+	"golusoris.kafka",
 	fx.Provide(newFromConfig),
 )
 

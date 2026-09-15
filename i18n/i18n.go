@@ -54,6 +54,7 @@ func (b *Bundle) LocalizerFromRequest(r *http.Request) *i18n.Localizer {
 
 // Module provides a default [*Bundle] (English default). Apps load catalogs
 // in their own fx.Invoke after this module.
-var Module = fx.Module("golusoris.i18n",
+var Module = fx.Module(
+	"golusoris.i18n",
 	fx.Provide(func() *Bundle { return New(language.English) }),
 )

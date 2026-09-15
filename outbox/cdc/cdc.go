@@ -92,7 +92,8 @@ type Drainer struct {
 
 // Module provides *Drainer into the fx graph.
 // Requires *config.Config, *dbcdc.Consumer, []Sink (fx.Group "cdc_sinks"), *slog.Logger.
-var Module = fx.Module("golusoris.outbox.cdc",
+var Module = fx.Module(
+	"golusoris.outbox.cdc",
 	fx.Provide(loadConfig),
 	fx.Provide(newDrainer),
 )

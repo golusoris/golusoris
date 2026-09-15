@@ -19,7 +19,8 @@ func TestRoot_execute_version(t *testing.T) {
 	var buf bytes.Buffer
 	root := clikit.New("testapp", "test application")
 	root.AddCommand(
-		clikit.Command("version", "print version",
+		clikit.Command(
+			"version", "print version",
 			clikit.WithRunE(func(cmd *cobra.Command, _ []string) error {
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "v1.2.3")
 				return nil
@@ -41,7 +42,8 @@ func TestCommand_withFx_startError(t *testing.T) {
 	// fx.New with an option that provides a broken value causes app.Err() != nil.
 	// We verify the command returns that error cleanly.
 	type badDep struct{}
-	cmd := clikit.Command("bad", "triggers fx error",
+	cmd := clikit.Command(
+		"bad", "triggers fx error",
 		clikit.WithFx(
 		// Provide two values of the same type → fx constructor conflict
 		// This is the simplest way to produce app.Err() without importing

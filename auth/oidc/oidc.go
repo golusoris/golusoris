@@ -123,7 +123,8 @@ func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
 		return "", "", err
 	}
 	challenge := pkceChallenge(verifier)
-	url = p.cfg.AuthCodeURL(state,
+	url = p.cfg.AuthCodeURL(
+		state,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
@@ -134,7 +135,8 @@ func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
 // Exchange trades an authorization code for tokens. verifier must
 // match the one returned by [AuthURL] for this session.
 func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSet, error) {
-	tok, err := p.cfg.Exchange(ctx, code,
+	tok, err := p.cfg.Exchange(
+		ctx, code,
 		oauth2.SetAuthURLParam("code_verifier", verifier),
 	)
 	if err != nil {
@@ -183,7 +185,8 @@ func (p *Provider) UserInfo(ctx context.Context, accessToken string) (UserInfo, 
 
 // Module provides *oidc.Provider to the fx graph.
 // Requires [Core] for config + log.
-var Module = fx.Module("golusoris.auth.oidc",
+var Module = fx.Module(
+	"golusoris.auth.oidc",
 	fx.Provide(loadOptions),
 	fx.Provide(newProvider),
 )

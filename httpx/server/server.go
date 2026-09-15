@@ -162,7 +162,8 @@ type serverParams struct {
 // graph (see [httpx/router.Module]). If a *tls.Config is provided
 // (optionally, via one of the httpx/autotls sub-modules), the server
 // listens over TLS.
-var Module = fx.Module("golusoris.httpx.server",
+var Module = fx.Module(
+	"golusoris.httpx.server",
 	fx.Provide(loadOptions),
 	fx.Provide(func(p serverParams) *http.Server {
 		srv := New(p.Handler, p.Opts)
@@ -180,7 +181,8 @@ var Module = fx.Module("golusoris.httpx.server",
 					ln = tls.NewListener(rawLn, p.TLSConfig)
 					scheme = "https"
 				}
-				p.Logger.InfoContext(ctx, "httpx/server: listening",
+				p.Logger.InfoContext(
+					ctx, "httpx/server: listening",
 					slog.String("addr", ln.Addr().String()),
 					slog.String("scheme", scheme),
 				)

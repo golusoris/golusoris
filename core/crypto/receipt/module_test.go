@@ -36,7 +36,8 @@ func TestModuleUsesConfiguredSeed(t *testing.T) {
 	t.Parallel()
 	cfg := cfgFromYAML(t, "crypto:\n  receipt:\n    seed: "+hex.EncodeToString(fixedSeed)+"\n")
 	var s *receipt.Signer
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Supply(cfg, slog.New(slog.DiscardHandler)),
 		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		receipt.Module,
@@ -56,7 +57,8 @@ func TestModuleFallsBackToEphemeralKey(t *testing.T) {
 	t.Parallel()
 	cfg := cfgFromYAML(t, "app:\n  name: x\n")
 	var s *receipt.Signer
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Supply(cfg, slog.New(slog.DiscardHandler)),
 		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		receipt.Module,

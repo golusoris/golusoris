@@ -89,6 +89,7 @@ func Mount(r chi.Router, opts Options) error {
 
 // Module mounts the apidocs handlers on the injected chi.Router during fx
 // Start. Fails the app's startup if Options.Spec is missing/unparseable.
-var Module = fx.Module("golusoris.apidocs",
+var Module = fx.Module(
+	"golusoris.apidocs",
 	fx.Invoke(Mount),
 )
