@@ -102,33 +102,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 	if from == "" {
 		from = s.opts.From
 	}
-
-	form := url.Values{}
-	form.Set("from", from)
-	for _, to := range msg.To {
-		form.Add("to", to)
-	}
-	for _, cc := range msg.CC {
-		form.Add("cc", cc)
-	}
-	for _, bcc := range msg.BCC {
-		form.Add("bcc", bcc)
-	}
-	form.Set("subject", msg.Subject)
-	if msg.HTML != "" {
-		form.Set("html", msg.HTML)
-	}
-	if msg.Text != "" {
-		form.Set("text", msg.Text)
-	}
-	if s.opts.ReplyTo != "" {
-		form.Set("h:Reply-To", s.opts.ReplyTo)
-	}
-	// Mailgun stores Metadata keys as v:<key> user-variables, queryable
-	// in their event logs.
-	for k, v := range msg.Metadata {
-		form.Set("v:"+k, v)
-	}
+	form := buildForm(msg, from, s.opts.ReplyTo)
 
 	target := strings.TrimRight(s.endpoint, "/") + "/" + s.opts.Domain + "/messages"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewBufferString(form.Encode()))
@@ -148,4 +122,36 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 		return fmt.Errorf("notify/mailgun: status %d: %s", resp.StatusCode, respBody)
 	}
 	return nil
+}
+
+// buildForm maps a notify.Message to Mailgun's form-encoded /messages
+// fields, including the h:Reply-To header field and the v:<key>
+// user-variables Mailgun stores Metadata under (queryable in their
+// event logs).
+func buildForm(msg notify.Message, from, replyTo string) url.Values {
+	form := url.Values{}
+	form.Set("from", from)
+	for _, to := range msg.To {
+		form.Add("to", to)
+	}
+	for _, cc := range msg.CC {
+		form.Add("cc", cc)
+	}
+	for _, bcc := range msg.BCC {
+		form.Add("bcc", bcc)
+	}
+	form.Set("subject", msg.Subject)
+	if msg.HTML != "" {
+		form.Set("html", msg.HTML)
+	}
+	if msg.Text != "" {
+		form.Set("text", msg.Text)
+	}
+	if replyTo != "" {
+		form.Set("h:Reply-To", replyTo)
+	}
+	for k, v := range msg.Metadata {
+		form.Set("v:"+k, v)
+	}
+	return form
 }

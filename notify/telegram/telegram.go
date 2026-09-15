@@ -96,28 +96,11 @@ func (s *Sender) Name() string { return "telegram" }
 // order: msg.To[0] → opts.ChatID. Body text is msg.Body, falling back
 // to Subject+"\n"+Text.
 func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
-	chat := s.opts.ChatID
-	if len(msg.To) > 0 && msg.To[0] != "" {
-		chat = msg.To[0]
-	}
+	chat := resolveChat(s.opts.ChatID, msg)
 	if chat == "" {
 		return errors.New("notify/telegram: chat_id is required (msg.To[0] or Options.ChatID)")
 	}
-
-	text := msg.Body
-	if text == "" {
-		var b strings.Builder
-		if msg.Subject != "" {
-			b.WriteString(msg.Subject)
-		}
-		if msg.Text != "" {
-			if b.Len() > 0 {
-				b.WriteString("\n\n")
-			}
-			b.WriteString(msg.Text)
-		}
-		text = b.String()
-	}
+	text := resolveText(msg)
 	if text == "" {
 		return errors.New("notify/telegram: body required (Message.Body or Subject/Text)")
 	}
@@ -151,6 +134,34 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 		return fmt.Errorf("notify/telegram: status %d: %s", resp.StatusCode, respBody)
 	}
 	return nil
+}
+
+// resolveChat picks the target chat in priority order: msg.To[0], then
+// the sender's default ChatID.
+func resolveChat(defaultChatID string, msg notify.Message) string {
+	if len(msg.To) > 0 && msg.To[0] != "" {
+		return msg.To[0]
+	}
+	return defaultChatID
+}
+
+// resolveText picks the message body: msg.Body verbatim, or else
+// Subject and Text joined with a blank line (whichever are set).
+func resolveText(msg notify.Message) string {
+	if msg.Body != "" {
+		return msg.Body
+	}
+	var b strings.Builder
+	if msg.Subject != "" {
+		b.WriteString(msg.Subject)
+	}
+	if msg.Text != "" {
+		if b.Len() > 0 {
+			b.WriteString("\n\n")
+		}
+		b.WriteString(msg.Text)
+	}
+	return b.String()
 }
 
 type telegramPayload struct {
