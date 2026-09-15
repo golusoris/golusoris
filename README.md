@@ -6,12 +6,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # golusoris
 
-[![HISS-16 Compliant](https://img.shields.io/badge/Standards-HISS--16%20Compliant-brightgreen)](AGENTS.md)
+[![HISS-16/17/18/19 Compliant](https://img.shields.io/badge/Standards-Praetor%20HISS--16%2F17%2F18%2F19-brightgreen)](AGENTS.md)
 
+[![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver)](https://github.com/golusoris/golusoris/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
 [![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
 [![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
 [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
+[![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
+[![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
+[![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
 [![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
@@ -20,7 +24,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and SLSA L3 supply-chain standards.
 
-**Documentation:** the full rendered docs site lives at **[golusoris.github.io/golusoris](https://golusoris.github.io/golusoris/)**.
+**Documentation:** the mkdocs source renders from [`docs/`](docs/index.md); the GitHub Pages deploy of that site is not live yet, so browse the Markdown in-repo for now.
 
 ---
 
@@ -103,7 +107,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river | custom on pgx |
-| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / Webhook sinks | uses db/cdc |
+| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks | uses db/cdc |
 
 ### HTTP / API
 
@@ -183,6 +187,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
+| `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
@@ -231,9 +236,9 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `storage/` | `Bucket` interface + local FS backend | custom |
 | `storage/presign/` | S3 direct-browser upload helpers | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
-| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection | code.dny.dev/ssrf + stdlib |
+| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
-| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
+| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create + recursive dir copy | mholt/archives + otiai10/copy |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |
 | `media/img/` | image resize + convert + optimize (CGO sub-module) | davidbyttow/govips/v2 |
 | `media/img/pipeline/` | on-demand resize + HMAC signed-URL serving (chi handler) | stdlib crypto/hmac |
@@ -247,7 +252,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
 | `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + go-sprout |
-| `jsonschema/` | JSON Schema 2020-12 validation | santhosh-tekuri/jsonschema |
+| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types | santhosh-tekuri/jsonschema + invopop/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
 | `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |
@@ -285,6 +290,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
+| `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `net/wol/` | Wake-on-LAN magic-packet sender (stdlib only) | custom |
@@ -387,12 +393,22 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 
 ## Status
 
-Pre-1.0, actively developed. Latest tagged release: **v0.7.0** (MIT);
-`v0.8.0` is prepared in `CHANGELOG.md` and the release-please manifest but
-not yet tagged. This branch prepares **v0.9.0**: the lean `core/` sub-module (ADR-0017), the
-EUPL-1.2 relicense (ADR-0018) and praetor HISS-16 governance (ADR-0019), on a
-Go 1.27 toolchain floor. Breaking changes between minor versions are called
-out in the commit `Migration:` footer and in `docs/migrations/` — start with
+Pre-1.0, actively developed. Latest tagged release: **v0.10.2** (root
+module); the `core/` sub-module is at **core/v0.9.1**. Code has been
+licensed under the [European Union Public Licence 1.2](LICENSE)
+(`EUPL-1.2`) since the v0.9.0 relicense (ADR-0018) — v0.7.0 and earlier were
+MIT; documentation is `CC-BY-SA-4.0`. GitHub immutable releases are enabled,
+starting with [v0.10.1](https://github.com/golusoris/golusoris/releases/tag/v0.10.1):
+`release.yml` runs goreleaser to publish archives, checksums, per-archive
+SPDX SBOMs, cosign keyless signatures and SLSA build-provenance
+attestations on every tag, and `sbom.yml` additionally attests source-tree
+SPDX and CycloneDX SBOMs. Governance runs on the
+[praetor](https://github.com/cordanaLLM/praetor) HISS-16 lattice
+(ADR-0019) — Context Integrity, plus HISS-17 (State Ledger Discipline),
+HISS-18 (Diff-Aware CI) and HISS-19 (Reuse Before Writing); see
+[AGENTS.md](AGENTS.md) for the full standard. Breaking changes between
+minor versions are called out in the commit `Migration:` footer and in
+`docs/migrations/` — start with
 [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path
 move (`config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`,
 `version`, `clikit`, `mcp` → `core/…`). Every module in the catalog above is
@@ -424,8 +440,11 @@ If golusoris saves you time, a coffee helps ☕
 
 ## Standards & Governance
 
-This repository conforms to High-Integrity Systems Standards (HISS-16)
-and modernized NASA JPL Power-of-10 rules.
+This repository conforms to the [praetor](https://github.com/cordanaLLM/praetor)
+High-Integrity Systems Standards lattice — HISS-16 (Context Integrity), HISS-17
+(State Ledger Discipline), HISS-18 (Diff-Aware CI Efficiency) and HISS-19
+(Reuse Before Writing) — plus modernized NASA JPL Power-of-10 rules; see
+[AGENTS.md](AGENTS.md) for the full invariant table.
 
 | Gate | Command | Description |
 | :--- | :--- | :--- |

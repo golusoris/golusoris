@@ -17,7 +17,7 @@ latency, no poll interval, no `SELECT ... FOR UPDATE` contention.
 fx.New(
     golusoris.Core, golusoris.DB,
     cdc.Module,                       // provides *cdc.Drainer
-    fx.Supply(cdc.NewKafkaSink(kc, "events")), // or NewNATSSink(...)
+    fx.Supply(cdc.NewKafkaSink(kc, "events")), // or NewNATSSink(...), NewGCPSink(...)
 )
 ```
 
@@ -26,7 +26,7 @@ fx.New(
 - **Config**: `DefaultConfig()`; prefix `outbox.cdc`.
 
 ```go
-type Sink interface { Send(ctx, []Message) error }   // KafkaSink, NATSSink provided
+type Sink interface { Send(ctx, []Message) error }   // KafkaSink, NATSSink, GCPSink provided
 ```
 
 ## Notes

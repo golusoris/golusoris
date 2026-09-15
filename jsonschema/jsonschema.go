@@ -3,7 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package jsonschema validates JSON documents against JSON Schema (draft
-// 2020-12 by default) via santhosh-tekuri/jsonschema/v6.
+// 2020-12 by default) via santhosh-tekuri/jsonschema/v6, and generates JSON
+// Schema documents from Go types via invopop/jsonschema.
 //
 // It is a stateless utility — no fx wiring. Compile a schema once, validate
 // many payloads:
@@ -15,6 +16,13 @@
 //	}
 //
 // The compiled [Schema] is safe for concurrent use by multiple goroutines.
+//
+// [Generate] derives a schema document from a Go type by reflection, and
+// [RoundTrip] closes the loop — generate, then validate a sample of that
+// same type against its own generated schema:
+//
+//	doc, err := jsonschema.Generate(User{})       // schema document from the Go type
+//	err = jsonschema.RoundTrip(User{Name: "ada"}) // generate + validate in one call
 package jsonschema
 
 import (

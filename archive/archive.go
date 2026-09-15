@@ -3,16 +3,21 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package archive provides extraction and creation of compressed archives
-// (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives.
+// (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives, plus a
+// recursive directory copy via otiai10/copy.
 //
 // Picks: mholt/archives v0.1.5 — the only Go library handling all common
 // archive formats in one API. No CGO required for zip/tar/gz/bz2/xz/zst.
 // RAR and 7z read-only (nwaples/rardecode, bodgit/sevenzip — both pure Go).
+// otiai10/copy v1.14.1 — pure-Go recursive directory copy with the
+// symlink/permission/skip hooks CopyDir builds on (docs/FLEET_GO_DEMAND.md
+// sprint item 2).
 //
 // Usage:
 //
 //	err := archive.Extract(ctx, "backup.tar.gz", "/var/restore")
 //	err = archive.Create(ctx, "bundle.zip", []string{"/var/www"})
+//	err = archive.CopyDir(ctx, "/var/www", "/var/www.bak", archive.CopyOptions{})
 package archive
 
 import (
