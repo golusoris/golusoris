@@ -233,7 +233,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection | code.dny.dev/ssrf + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
-| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
+| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create + recursive dir copy | mholt/archives + otiai10/copy |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |
 | `media/img/` | image resize + convert + optimize (CGO sub-module) | davidbyttow/govips/v2 |
 | `media/img/pipeline/` | on-demand resize + HMAC signed-URL serving (chi handler) | stdlib crypto/hmac |

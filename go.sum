@@ -103,12 +103,8 @@ github.com/aws/aws-sdk-go-v2 v1.47.0 h1:0jsHallhJCeaU0Ko48c/3FK1ctOQ7NpzggxriJOQ
 github.com/aws/aws-sdk-go-v2 v1.47.0/go.mod h1:bttEH6JqnUL8LepvDVfdrds/fZ5bCIxzpe3abyUrhDU=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20 h1:GPRlPwz40I2B2VrBEASOA3Bi77NyeqejNLkifosX0rs=
 github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.20/go.mod h1:g7PNzKcsOKWb4fkSRBA7BZVAS6Y8IcxzN+nRohhQ1Q8=
-github.com/aws/aws-sdk-go-v2/config v1.33.4 h1:FzvkXKSzwqHni4U7nDigHg4jjtqMpVUuHgmZfSoJVQ0=
-github.com/aws/aws-sdk-go-v2/config v1.33.4/go.mod h1:VZqGZnZsCWVfK/iGPptJIyNIX3XEX6iQU2Rel4sLrr8=
 github.com/aws/aws-sdk-go-v2/config v1.33.5 h1:UA1dmokBFOLFoOyVBhO6HjM6edy0MIk5AZSkJVcksQw=
 github.com/aws/aws-sdk-go-v2/config v1.33.5/go.mod h1:Dop8axzz0xx38GExIYWXdeyc8QQ7Cr+nPsxpD/LYy4U=
-github.com/aws/aws-sdk-go-v2/credentials v1.20.4 h1:hTvrJJseKbvw32kmiE0G+u/9ZqpqscjDrTigHIXP2qs=
-github.com/aws/aws-sdk-go-v2/credentials v1.20.4/go.mod h1:gWp9O1ZBWwpcIrgV+mVHk4gZUurAEDkgypu/OXOlIaw=
 github.com/aws/aws-sdk-go-v2/credentials v1.20.5 h1:wklUVvHMc9xTQ3rcp49/ISpiMnhbCicJcA6n6S8m7J8=
 github.com/aws/aws-sdk-go-v2/credentials v1.20.5/go.mod h1:fyEdrn6ccLFOkoK84j5bQyGTxp9zPt5l2XMhxf4DVZs=
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.0 h1:AM4hHjww+PSFtt6E+UrBrPlZkWsePCLEt9AjkfQX+yM=
@@ -135,8 +131,6 @@ github.com/aws/aws-sdk-go-v2/service/sso v1.38.0 h1:JGeeBcMlhg1xtOXYpeCaTQBZObtX
 github.com/aws/aws-sdk-go-v2/service/sso v1.38.0/go.mod h1:XwteswG9EOMRFm73UT0t+MbTwyLxMrEXkU6e+v92Lzo=
 github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.0 h1:obhahQXDEdVEv8y5bTKXR30LVaxYe1kyYM0L7l2Iq+k=
 github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.0/go.mod h1:6twZZ/aXHNy1vXUO8koUbp++MYzMASkOgEBdkbJYmO0=
-github.com/aws/aws-sdk-go-v2/service/sts v1.50.0 h1:khXV3+K5D3f4e8xtplaRdSFn1bEg3gj5EBHQvbCOZbQ=
-github.com/aws/aws-sdk-go-v2/service/sts v1.50.0/go.mod h1:/8JRcdTt//hG0Q4BTmGbuOplT7ABe+5rdtqUHqXvYIM=
 github.com/aws/aws-sdk-go-v2/service/sts v1.51.0 h1:Zpnqa6XtrNzXZnwbdCqHOXpXhMsa01ql/pcRQ1sb4hk=
 github.com/aws/aws-sdk-go-v2/service/sts v1.51.0/go.mod h1:/8JRcdTt//hG0Q4BTmGbuOplT7ABe+5rdtqUHqXvYIM=
 github.com/aws/smithy-go v1.28.1 h1:R/nXH00c8qcfCzQVELtRw+eLQWtzv+VAIEFJ1/xxXlQ=
@@ -437,8 +431,6 @@ github.com/golusoris/goenvoy/arr/v2 v2.1.0 h1:zUzG6zLH49JBII8zxAYUwoTa/a/nX7Qc8g
 github.com/golusoris/goenvoy/arr/v2 v2.1.0/go.mod h1:sLkd48dAGp87Z3hqeg6mcHBXHEU6mtzupet2Z2ar82I=
 github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=
 github.com/golusoris/goenvoy/metadata v1.3.1/go.mod h1:VDXGvMyayQDRBpacFqT9pZAHactFkqkHPFQLxgvu2Ao=
-github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260901054136-7f150740b77f h1:ky6bUDMwM/R8+U+ER21oJJUKaVZrT+fr5u3OhZ3DzmI=
-github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260901054136-7f150740b77f/go.mod h1:jpOcLbMCvhSx9neCm9k4vzubA1ttOY1zbdPzgBJyIQw=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315 h1:syiw6CpnTplsatjbm6CwtOwrl99USMMfV1mxW4dQrfE=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315/go.mod h1:jpOcLbMCvhSx9neCm9k4vzubA1ttOY1zbdPzgBJyIQw=
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1 h1:20r3nBYNbJOSaZlURRGVd9WBVC0hFErirdWJdhCJwyg=
@@ -753,6 +745,10 @@ github.com/opencontainers/image-spec v1.1.1 h1:y0fUlFfIZhPF1W537XOLg0/fcx6zcHCJw
 github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgrGnAve2nCC8+7h8Q0M=
 github.com/oschwald/maxminddb-golang/v2 v2.6.0 h1:pRlHCdJmc+4uxMOSthmKDt5HOw3JTX8TJZlhyP5ew0w=
 github.com/oschwald/maxminddb-golang/v2 v2.6.0/go.mod h1:sjqpB3z2BZrMduDp9TAUTCkZDoT3nDhixUc4Dge2qRQ=
+github.com/otiai10/copy v1.14.1 h1:5/7E6qsUMBaH5AnQ0sSLzzTg1oTECmcCmT6lvF45Na8=
+github.com/otiai10/copy v1.14.1/go.mod h1:oQwrEDDOci3IM8dJF0d8+jnbfPDllW6vUjNc3DoZm9I=
+github.com/otiai10/mint v1.6.3 h1:87qsV/aw1F5as1eH1zS/yqHY85ANKVMgkDrf9rcxbQs=
+github.com/otiai10/mint v1.6.3/go.mod h1:MJm72SBthJjz8qhefc4z1PYEieWmy8Bku7CjcAqyUSM=
 github.com/pascaldekloe/goe v0.0.0-20180627143212-57f6aae5913c/go.mod h1:lzWF7FIEvWOWxwDKqyGYQf6ZUaNfKdP144TG7ZOy1lc=
 github.com/paulmach/orb v0.13.0 h1:r7n7mQGGF+cj/CbcivEj9J3HGK+XR+yXnvzRdq9saIw=
 github.com/paulmach/orb v0.13.0/go.mod h1:6scRWINywA2Jf05dcjOfLfxrUIMECvTSG2MVbRLxu/k=
