@@ -55,7 +55,7 @@ the stdlib `log` package.
 - **Neutral / follow-ups**: The `slogLogger` adapter is required (gonertia's
   `Logger` is `Printf`/`Println`, not slog). Asset versioning stays
   checksum-based to avoid any `time.Now` in the request path
-  ([clock rule](../../clock/AGENTS.md)). `httpx/inertia` stays decoupled from
+  ([clock rule](https://github.com/golusoris/golusoris/blob/main/core/clock/AGENTS.md)). `httpx/inertia` stays decoupled from
   `httpx/vite` — version derivation goes through gonertia's manifest-checksum
   option, not a `vite.Manifest` dependency. An in-process SSR manager, if added,
   registers `OnStart`/`OnStop` fx hooks, never `init()`.

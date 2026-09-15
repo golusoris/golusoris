@@ -75,8 +75,10 @@ The framework publishes reusable **GitHub Actions** workflows under
 `.github/workflows/`. Call `ci-go.yml` via `workflow_call` from your app. It
 runs, as separate jobs: Conventional-Commits PR-title check, lint
 (golangci-lint), security (gosec, SARIF upload), vulnerabilities (govulncheck),
-test (`-race` on Linux + macOS with a coverage-threshold gate), build, OpenAPI
-spectral lint, and apidiff.
+test (`-race` with a coverage-threshold gate — Linux by default via the
+`runs-on` input; the job's steps also branch for a macOS leg, skipping
+Docker-requiring packages, for a caller that wraps this workflow in its own
+`runs-on` matrix), build, OpenAPI spectral lint, and apidiff.
 
 ```yaml
 # myapp/.github/workflows/ci.yml
@@ -103,8 +105,35 @@ jobs:
     secrets: inherit
 ```
 
+Pin `@main` to a specific commit before relying on this in production — see
+"Pinning the reusable-workflow reference" below.
+
 Coverage is **not** a separate workflow — it's the `coverage-threshold` input
 on the test job (set `0` to skip the gate).
+
+### Calling `ci-go.yml` for more than one module
+
+If your app is also a multi-module repo, invoke `ci-go.yml` once per module
+(each `uses:` gets its own `working-directory`). The workflow is matrix-safe
+for this since [#498](https://github.com/golusoris/golusoris/pull/498): the
+coverage artifact is named `coverage-<working-directory-slug>` (or plain
+`coverage` at the repo root) instead of a fixed `coverage`, and the gosec
+SARIF upload is tagged with a `gosec[/<working-directory>]` code-scanning
+category — both derived from `working-directory`, so two calls in the same
+run no longer collide on the artifact name or overwrite each other's SARIF
+upload.
+
+### Pinning the reusable-workflow reference
+
+The example above uses `@main` for readability. The app template this
+framework ships under [`template/`](../template/) pins the same calls to a
+full commit SHA with a version comment instead —
+[`template/.github/workflows/ci.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/ci.yml)
+and [`release.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/release.yml) both reference
+`golusoris/golusoris/.github/workflows/<workflow>.yml@380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`.
+Do the same in a real app: pin to a released tag's commit SHA (and bump it
+deliberately) rather than floating on `@main`, so an unreviewed change to
+this repository's default branch cannot silently change your CI.
 
 Common inputs (all optional except where noted; see the `workflow_call` block
 at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
@@ -201,6 +230,6 @@ pre-commit:
       run: make ci
 ```
 
-The framework's own [`lefthook.yml`](../lefthook.yml) + `scripts/hooks/` is a
+The framework's own [`lefthook.yml`](https://github.com/golusoris/golusoris/blob/main/lefthook.yml) + `scripts/hooks/` is a
 finer-grained template (staged-package lint, commit-msg Conventional Commits +
 DCO, pre-push build + `go test -short`) that apps can copy verbatim.
