@@ -173,8 +173,11 @@ release pull request against `main` on every push, following
 the root module and the `core/` sub-module
 ([ADR-0017](docs/adr/0017-lean-core-submodule.md)) as separate components;
 the workflow runs with `skip-github-release: true`, so it only prepares the
-PR and changelog. Once that PR is merged, the `vX.Y.Z` and `core/vX.Y.Z`
-tags are pushed explicitly, on the same commit. The project is pre-1.0:
+PR and changelog. Once that PR is merged, the `vX.Y.Z` tag is pushed
+explicitly on the merge commit; `core/vX.Y.Z` is pushed alongside it only when
+the `core/` sub-module changed in that release, so the two tags share a commit
+only in that case (v0.10.0 and core/v0.9.1 do, v0.10.1 has no core tag). The
+project is pre-1.0:
 breaking changes are permitted between minor versions and called out in the
 commit `Migration:` footer and the changelog.
 
