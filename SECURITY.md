@@ -64,7 +64,7 @@ runners — `runs-on: arc-cauda-golusoris-golusoris` — with pinned action SHAs
 - **OpenSSF Scorecard** as a manual (`workflow_dispatch`) and reusable
   (`workflow_call`) workflow — not triggered on every push, so results are
   not continuously published to the OpenSSF API
-- praetor **HISS-16** governance audit (`standardsctl audit`, ratcheting
+- praetor **HISS-20 lattice** governance audit (`standardsctl audit`, ratcheting
   baseline at zero infractions in `.standards-baseline.json`) and
   `standardsctl gate run` (stages 1–3) through `make verify-all` — both are
   local / lefthook gates today rather than CI jobs; gate's stage 4 (flavor

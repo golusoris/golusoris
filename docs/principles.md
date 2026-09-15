@@ -101,6 +101,7 @@ Frameworks can't claim compliance — apps can, built on compliant scaffolding. 
 
 | Standard | Jurisdiction | Purpose | Enforcement |
 |---|---|---|---|
+| **praetor HISS-20 lattice** | cordanaLLM fleet | Twenty deterministic engineering invariants (HISS-01 to HISS-20): Power-of-10 control flow, complexity, error and warning hygiene, plus supply chain, secrets, debt ratchet, ABI, and the agentic-fleet rows | [`AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/AGENTS.md) carries the table and the per-invariant gate; `standardsctl audit` + `make verify-all` run them (ADR-0019) |
 | **SLSA Level 3** | OpenSSF (global) | Supply-chain provenance, immutable builds, SBOM, signed artifacts | `.github/workflows/release-go.yml` (cosign + syft + slsa-framework) |
 | **OWASP ASVS Level 2** | OWASP (global) | App verification checklist (auth, session, crypto, API, config) | `SECURITY.md` declares compliance; CI runs OWASP ZAP against example apps |
 | **NIST SSDF (SP 800-218)** | US | Secure Software Development Framework | OpenSSF Scorecard covers most items; CI publishes Scorecard badge |
