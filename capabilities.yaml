@@ -929,6 +929,11 @@ packages:
     capabilities: [test.factory]
     description: "Package factory provides test data factories backed by brianvoe/gofakeit."
     replaces: [github.com/brianvoe/gofakeit/v7]
+  - import: github.com/golusoris/golusoris/testutil/fixture
+    domain: test
+    capabilities: [test.fixture]
+    description: "Package fixture loads typed test fixtures from testdata CSV files into slices of structs, backed by jszwec/csvutil."
+    replaces: [github.com/jszwec/csvutil]
   - import: github.com/golusoris/golusoris/testutil/fuzz
     domain: test
     capabilities: [test.fuzz]
