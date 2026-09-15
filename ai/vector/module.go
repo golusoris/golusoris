@@ -20,7 +20,8 @@ import (
 // Requires a *pgxpool.Pool (via golusoris.DB). It provides no new type — it
 // configures the existing pool. Use the package's SimilaritySearch / From
 // helpers directly once registered.
-var Module = fx.Module("golusoris.ai.vector",
+var Module = fx.Module(
+	"golusoris.ai.vector",
 	fx.Invoke(func(lc fx.Lifecycle, pool *pgxpool.Pool) {
 		lc.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {

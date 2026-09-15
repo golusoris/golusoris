@@ -32,7 +32,8 @@ func newTestClient(t *testing.T, broker string, group string) *kafka.Client {
 		kgo.AllowAutoTopicCreation(),
 	}
 	if group != "" {
-		opts = append(opts,
+		opts = append(
+			opts,
 			kgo.ConsumerGroup(group),
 			// New consumer groups have no committed offset; start from the
 			// earliest available record so tests that produce-then-consume

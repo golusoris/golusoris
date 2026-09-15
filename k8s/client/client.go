@@ -150,7 +150,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // Module provides *Resolved, *rest.Config, and a kubernetes.Interface
 // (clientset) via fx. Apps can inject any of the three.
-var Module = fx.Module("golusoris.k8s.client",
+var Module = fx.Module(
+	"golusoris.k8s.client",
 	fx.Provide(loadOptions),
 	fx.Provide(New),
 	fx.Provide(func(r *Resolved) *rest.Config { return r.Config }),

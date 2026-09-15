@@ -101,7 +101,8 @@ func (n *Notifier) Send(ctx context.Context, msg Message) error {
 	var last error
 	for _, s := range n.senders {
 		if err := s.Send(ctx, msg); err != nil {
-			n.logger.WarnContext(ctx, "notify: sender failed",
+			n.logger.WarnContext(
+				ctx, "notify: sender failed",
 				slog.String("sender", s.Name()),
 				slog.String("error", err.Error()),
 			)
@@ -119,7 +120,8 @@ func (n *Notifier) Multi(ctx context.Context, msg Message) []error {
 	var errs []error
 	for _, s := range n.senders {
 		if err := s.Send(ctx, msg); err != nil {
-			n.logger.WarnContext(ctx, "notify: sender failed",
+			n.logger.WarnContext(
+				ctx, "notify: sender failed",
 				slog.String("sender", s.Name()),
 				slog.String("error", err.Error()),
 			)

@@ -46,6 +46,7 @@ func (defaultGen) NewKSUID() ksuid.KSUID {
 func New() Generator { return defaultGen{} }
 
 // Module provides the default generator via fx.
-var Module = fx.Module("golusoris.id",
+var Module = fx.Module(
+	"golusoris.id",
 	fx.Provide(New),
 )

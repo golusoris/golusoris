@@ -48,7 +48,8 @@ type DB struct {
 // Module is the fx module that provides a *DB.
 //
 //	fx.New(clickhouse.Module)
-var Module = fx.Module("golusoris.db.clickhouse",
+var Module = fx.Module(
+	"golusoris.db.clickhouse",
 	fx.Provide(newFromConfig),
 )
 

@@ -40,7 +40,8 @@ import (
 //
 //	notify.sender = "smtp"   # default sender backend (only "smtp" is built-in)
 //	notify.smtp.host = "..." # SMTP sender config (see [SMTPOptions])
-var Module = fx.Module("golusoris.notify",
+var Module = fx.Module(
+	"golusoris.notify",
 	fx.Provide(loadOptions),
 	fx.Provide(newNotifier),
 )

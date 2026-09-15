@@ -188,7 +188,8 @@ func (t *Trainer) buildEnv(job tiny.Job) map[string]string {
 // logs whether or not Run errored — failure output is often more useful
 // than success output.
 func (t *Trainer) runContainer(ctx context.Context, job tiny.Job, inputDir, outputDir string) error {
-	t.opts.Logger.InfoContext(ctx, "ai/tiny/gemma: training start",
+	t.opts.Logger.InfoContext(
+		ctx, "ai/tiny/gemma: training start",
 		slog.String("job", job.Name),
 		slog.String("base", job.BaseModel),
 		slog.String("runner", t.opts.Runner.Name()),

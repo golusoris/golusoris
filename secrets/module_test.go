@@ -85,7 +85,8 @@ func TestModule_StartsAndStops(t *testing.T) {
 		t.Fatalf("config.New: %v", err)
 	}
 
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		Module,

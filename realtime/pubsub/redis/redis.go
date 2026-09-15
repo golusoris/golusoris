@@ -87,7 +87,8 @@ func encode(data any) (string, error) {
 
 // Module provides a [pubsub.Bus] backed by Redis. Requires a rueidis.Client
 // (golusoris.CacheRedis) and [Core] for the logger.
-var Module = fx.Module("golusoris.realtime.pubsub.redis",
+var Module = fx.Module(
+	"golusoris.realtime.pubsub.redis",
 	fx.Provide(func(c rueidis.Client, logger *slog.Logger) pubsub.Bus {
 		return New(c, logger)
 	}),

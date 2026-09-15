@@ -87,7 +87,8 @@ func newMiddleware(store Store, cfg Config, logger *slog.Logger) middleware.Midd
 
 // Module provides idempotency.Store (default in-memory) and a configured
 // httpx/middleware.Middleware to the fx graph.
-var Module = fx.Module("golusoris.idempotency",
+var Module = fx.Module(
+	"golusoris.idempotency",
 	fx.Provide(loadOptions),
 	fx.Provide(newStore),
 	fx.Provide(newMiddleware),

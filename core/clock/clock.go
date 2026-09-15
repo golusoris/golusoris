@@ -24,7 +24,8 @@ type Clock = clockwork.Clock
 
 // Module provides a real wall clock. Tests can override with
 // fx.Replace(clock.NewFake()).
-var Module = fx.Module("golusoris.clock",
+var Module = fx.Module(
+	"golusoris.clock",
 	fx.Provide(func() Clock { return clockwork.NewRealClock() }), //nolint:gocritic // explicit return type aids fx
 )
 

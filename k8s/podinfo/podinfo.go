@@ -66,6 +66,7 @@ func New() PodInfo {
 }
 
 // Module provides PodInfo via fx.
-var Module = fx.Module("golusoris.k8s.podinfo",
+var Module = fx.Module(
+	"golusoris.k8s.podinfo",
 	fx.Provide(New),
 )

@@ -128,7 +128,8 @@ func TestParseMIME_roundtrip(t *testing.T) {
 			"Subject: =?UTF-8?B?SGVsbG8gV29ybGQ=?=\r\n" +
 			"Date: Tue, 14 Apr 2026 10:00:00 +0000\r\n" +
 			"\r\n" +
-			"body contents\r\n")
+			"body contents\r\n",
+	)
 	m, err := inbound.ParseMIME(raw)
 	require.NoError(t, err)
 	require.Equal(t, "Hello World", m.Subject)
