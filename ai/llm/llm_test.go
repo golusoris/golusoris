@@ -90,6 +90,32 @@ func TestStream(t *testing.T) {
 	}
 }
 
+// TestStream_httpError exercises the streamRequest status-check path: a
+// non-200 response must surface as a single terminal Err chunk, and must
+// not hang the caller waiting for content.
+func TestStream_httpError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte("rate limited"))
+	}))
+	defer srv.Close()
+
+	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "test"})
+	ch := client.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
+
+	first, ok := <-ch
+	if !ok || first.Err == nil {
+		t.Fatalf("first = %+v ok=%v, want a non-nil Err", first, ok)
+	}
+	if !strings.Contains(first.Err.Error(), "429") {
+		t.Fatalf("err = %v, want it to mention HTTP 429", first.Err)
+	}
+	if _, open := <-ch; open {
+		t.Fatal("channel must be closed after the terminal Err chunk")
+	}
+}
+
 func TestEmbed(t *testing.T) {
 	t.Parallel()
 	srv := fakeOpenAI(t)

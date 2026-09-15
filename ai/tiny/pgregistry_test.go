@@ -133,6 +133,26 @@ func TestPGRegistry_SaveModel_assignsMonotonicVersion(t *testing.T) {
 	require.Equal(t, 1, m4.Version)
 }
 
+// TestPGRegistry_SaveModel_explicitVersionCollisionIsError pins the
+// documented contrast in [tiny.PGRegistry.SaveModel]: a caller-pinned
+// (non-zero) Version is never retried, so a collision on it must surface
+// as a genuine error instead of silently reassigning a version.
+func TestPGRegistry_SaveModel_explicitVersionCollisionIsError(t *testing.T) {
+	t.Parallel()
+	reg, _ := newPGRegistry(t)
+	ctx := context.Background()
+
+	pinned := sampleModel("intent", "acme")
+	pinned.Version = 5
+	require.NoError(t, reg.SaveModel(ctx, pinned))
+
+	dup := sampleModel("intent", "acme")
+	dup.Version = 5
+	err := reg.SaveModel(ctx, dup)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "insert model")
+}
+
 func TestPGRegistry_GetModel_byRefAndLatest(t *testing.T) {
 	t.Parallel()
 	reg, _ := newPGRegistry(t)
