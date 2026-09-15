@@ -166,6 +166,72 @@ func TestNewWithLogs(t *testing.T) {
 	}
 }
 
+// badEndpoint contains a NUL byte, which the OTLP gRPC exporters' target
+// parsing (a dns:/// URL) rejects synchronously at construction time — the
+// one deterministic way to force buildTracerProvider / buildMeterProvider /
+// buildLoggerProvider to fail without a live network dependency.
+const badEndpoint = "bad\x00host"
+
+// TestNewWithInvalidEndpoint_TracesErrors is the negative case for
+// wireTracer: a trace-exporter construction failure must propagate out of
+// New as a non-nil error with nil Providers.
+func TestNewWithInvalidEndpoint_TracesErrors(t *testing.T) {
+	t.Parallel()
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: badEndpoint,
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Traces: true},
+	})
+	if err == nil {
+		t.Fatal("New: expected error for invalid trace endpoint, got nil")
+	}
+	if providers != nil {
+		t.Errorf("New: expected nil Providers on error, got %+v", providers)
+	}
+}
+
+// TestNewWithInvalidEndpoint_MetricsErrors is the negative case for
+// wireMeter: a metric-exporter construction failure must propagate out of
+// New as a non-nil error with nil Providers.
+func TestNewWithInvalidEndpoint_MetricsErrors(t *testing.T) {
+	t.Parallel()
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: badEndpoint,
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Metrics: true},
+	})
+	if err == nil {
+		t.Fatal("New: expected error for invalid metric endpoint, got nil")
+	}
+	if providers != nil {
+		t.Errorf("New: expected nil Providers on error, got %+v", providers)
+	}
+}
+
+// TestNewWithInvalidEndpoint_LogsErrors is the negative case for wireLogger:
+// a log-exporter construction failure must propagate out of New as a
+// non-nil error with nil Providers.
+func TestNewWithInvalidEndpoint_LogsErrors(t *testing.T) {
+	t.Parallel()
+	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
+		Enabled:  true,
+		Insecure: true,
+		Endpoint: badEndpoint,
+		Service:  golusoris_otel.ServiceOptions{Name: "test"},
+		Export:   golusoris_otel.ExportOptions{Logs: true},
+	})
+	if err == nil {
+		t.Fatal("New: expected error for invalid log endpoint, got nil")
+	}
+	if providers != nil {
+		t.Errorf("New: expected nil Providers on error, got %+v", providers)
+	}
+}
+
 func TestModuleWithSlogBridge_coversHandler(t *testing.T) { //nolint:paralleltest // modifies global slog.Default
 	// Not parallel: modifies global slog default.
 	prev := slog.Default()
