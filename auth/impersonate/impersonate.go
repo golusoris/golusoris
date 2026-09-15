@@ -75,30 +75,57 @@ func Middleware(opts Options) (func(http.Handler) http.Handler, error) {
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			cur, orig, ok := opts.SessionGet(r)
-			if !ok {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			if r.URL.Query().Get(QueryParamExit) != "" && orig != "" {
-				if err := opts.SessionSet(w, r, orig, ""); err != nil {
-					http.Error(w, "session error", http.StatusInternalServerError)
-					return
-				}
-				if opts.OnExit != nil {
-					opts.OnExit(orig, cur)
-				}
-				cur, orig = orig, ""
-			}
-
-			if orig != "" {
-				w.Header().Set(HeaderImpersonating, cur)
-			}
-			ctx := WithContext(r.Context(), Principal{Current: cur, Original: orig})
-			next.ServeHTTP(w, r.WithContext(ctx))
+			handleImpersonation(w, r, next, opts)
 		})
 	}, nil
+}
+
+// handleImpersonation resolves the session's current/original principal for
+// r, applies the exit-impersonation flow when requested, and forwards the
+// request to next with the resulting Principal attached to its context. It
+// writes the response itself (without calling next) when there is no
+// session to attach, or when reverting the session fails.
+func handleImpersonation(w http.ResponseWriter, r *http.Request, next http.Handler, opts Options) {
+	cur, orig, ok := opts.SessionGet(r)
+	if !ok {
+		next.ServeHTTP(w, r)
+		return
+	}
+
+	if exitRequested(r, orig) {
+		var reverted bool
+		cur, orig, reverted = revertImpersonation(w, r, opts, cur, orig)
+		if !reverted {
+			return
+		}
+	}
+
+	if orig != "" {
+		w.Header().Set(HeaderImpersonating, cur)
+	}
+	ctx := WithContext(r.Context(), Principal{Current: cur, Original: orig})
+	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// exitRequested reports whether r asks to revert an active impersonation.
+func exitRequested(r *http.Request, orig string) bool {
+	return r.URL.Query().Get(QueryParamExit) != "" && orig != ""
+}
+
+// revertImpersonation persists the reverted (orig, "") session pair,
+// notifies opts.OnExit, and returns the new (current, original) pair. The
+// third return value is false when SessionSet failed and a 500 has already
+// been written to w — the caller must stop processing the request without
+// calling next.
+func revertImpersonation(w http.ResponseWriter, r *http.Request, opts Options, cur, orig string) (newCur, newOrig string, ok bool) {
+	if err := opts.SessionSet(w, r, orig, ""); err != nil {
+		http.Error(w, "session error", http.StatusInternalServerError)
+		return cur, orig, false
+	}
+	if opts.OnExit != nil {
+		opts.OnExit(orig, cur)
+	}
+	return orig, "", true
 }
 
 // Begin starts an impersonation: replaces the current principal with
