@@ -161,4 +161,4 @@ issue #429 and its per-area tasks #432–#434.
 - PRs: #484 (drop retired CodeQL job, restore Scorecard), #487 (`runs-on`/`working-directory` inputs for `ci-go.yml`), #488 (praetor agent harness), #492 (skip container-backed testutil helpers under `-short`), #493 (devcontainer regeneration, HISS-01 recursion), #494 (canonical `.golangci.yml`/`.gosec.json` paths, inline `#nosec`), #495 (praetor lefthook adoption, `.workingdir/` untracked), #496 (release v0.10.0), #498 (`ci-go.yml` module-matrix fix), #499 (release v0.10.1), #500 (template pin corrected to v0.10.1), #503 (HISS baseline burned down to 0), #506 (release v0.10.2), #508 (source-tree SBOM attestations), #509 (branch ruleset declaration)
 - Upstream: cordanaLLM/praetor#36 (flavor misdetection for a `go.mod` + `cmd/` library)
 - Epic: #429; tasks #432, #433, #434
-- HISS-17/HISS-18/HISS-19 specifications: <https://standards.cordana.ai/standards/>
+- HISS-17/HISS-18/HISS-19 specifications: <https://github.com/cordanaLLM/praetor/blob/main/docs/wiki/HISS-Matrix.md>
