@@ -105,6 +105,24 @@ func TestSignaler_Handler_rejectsEmptyBody(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// TestSignaler_Handler_negotiationFailure proves a request that clears
+// validation and body-reading but fails inside Answer (here: an
+// unparseable ICE server URL, rejected before any PeerConnection is
+// created) is reported as a negotiation failure (400), distinct from the
+// empty-body (also 400) and method/content-type cases above.
+func TestSignaler_Handler_negotiationFailure(t *testing.T) {
+	t.Parallel()
+	s := webrtc.NewSignaler(webrtc.Options{
+		ICEServers: []pionwebrtc.ICEServer{{URLs: []string{"not-a-valid-ice-url"}}},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/whip", strings.NewReader("v=0\r\n"))
+	req.Header.Set("Content-Type", "application/sdp")
+	s.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Contains(t, rec.Body.String(), "negotiation failed")
+}
+
 func TestSignaler_Handler_endToEnd(t *testing.T) {
 	t.Parallel()
 	// Spin up the Signaler's HTTP handler, POST an offer, validate the

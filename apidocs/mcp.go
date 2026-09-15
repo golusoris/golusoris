@@ -73,27 +73,9 @@ func proxyHandler(opts Options, tool Tool) mcp.ToolHandler {
 		if opts.BaseURL == "" {
 			return toolError("apidocs: BaseURL is unset; tool calls disabled"), nil
 		}
-		path, body, contentType, err := buildCall(&tool, req.Params.Arguments)
-		if err != nil {
-			return toolError(err.Error()), nil
-		}
-		//   1) toolPathRE rejects anything outside a tight URL-safe charset —
-		//      user args are url.PathEscape'd in buildCall so malformed input
-		//      indicates a bug, not a benign edge case.
-		//   2) safeResolveURL pins the result's scheme+host to opts.BaseURL.
-		if !toolPathRE.MatchString(path) {
-			return toolError("apidocs: tool path contains disallowed characters"), nil
-		}
-		callURL, err := safeResolveURL(opts.BaseURL, path)
-		if err != nil {
-			return toolError(err.Error()), nil
-		}
-		httpReq, err := http.NewRequestWithContext(ctx, tool.method, callURL, body)
-		if err != nil {
-			return toolError("build request: " + err.Error()), nil
-		}
-		if contentType != "" {
-			httpReq.Header.Set("Content-Type", contentType)
+		httpReq, errRes := buildProxyRequest(ctx, opts, tool, req.Params.Arguments)
+		if errRes != nil {
+			return errRes, nil
 		}
 
 		resp, err := opts.HTTPClient.Do(httpReq)
@@ -121,6 +103,38 @@ func proxyHandler(opts Options, tool Tool) mcp.ToolHandler {
 			IsError: resp.StatusCode >= 400,
 		}, nil
 	}
+}
+
+// buildProxyRequest resolves and builds the outbound *http.Request for a
+// tools/call invocation. On failure it returns a nil request and an IsError
+// tool result describing why the request couldn't be built — never a Go
+// error, so the go-sdk reports it as a tool failure rather than a
+// JSON-RPC protocol error.
+//
+//  1. toolPathRE rejects anything outside a tight URL-safe charset — user
+//     args are url.PathEscape'd in buildCall so malformed input indicates a
+//     bug, not a benign edge case.
+//  2. safeResolveURL pins the result's scheme+host to opts.BaseURL.
+func buildProxyRequest(ctx context.Context, opts Options, tool Tool, args json.RawMessage) (*http.Request, *mcp.CallToolResult) {
+	path, body, contentType, err := buildCall(&tool, args)
+	if err != nil {
+		return nil, toolError(err.Error())
+	}
+	if !toolPathRE.MatchString(path) {
+		return nil, toolError("apidocs: tool path contains disallowed characters")
+	}
+	callURL, err := safeResolveURL(opts.BaseURL, path)
+	if err != nil {
+		return nil, toolError(err.Error())
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, tool.method, callURL, body)
+	if err != nil {
+		return nil, toolError("build request: " + err.Error())
+	}
+	if contentType != "" {
+		httpReq.Header.Set("Content-Type", contentType)
+	}
+	return httpReq, nil
 }
 
 // toolError reports a tool-level failure as an MCP IsError result (visible to
