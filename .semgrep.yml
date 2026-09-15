@@ -11,6 +11,14 @@
 # Deliberately NOT duplicated here (golangci-lint already gates them — see
 # .golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
 # math/rand (forbidigo), stdlib log (depguard), pkg/errors (gomodguard).
+#
+# The rules tagged HISS-NN below are enforcement for a named invariant, and each
+# carries a positive/negative fixture corpus under .config/hiss/testdata/HISS-NN
+# replayed by `make hiss-fixtures` (scripts/hiss/semgrep-fixtures.sh). That
+# corpus is excluded from this ruleset's own scan — the positive fixtures are
+# violations by construction — so the replay scans a temporary copy instead.
+# Every comment block states what its rule decides AND what it does not: an
+# absent claim is honest, an unbacked one is the defect the corpus prevents.
 rules:
   # ── HTTP client must carry a timeout ────────────────────────────────────────
   # A timeout-less *http.Client inherits no deadline and can hang a goroutine
@@ -94,3 +102,156 @@ rules:
     pattern-either:
       - pattern: ioutil.$F(...)
       - pattern: import "io/ioutil"
+
+  # ── HISS-09 · unsafe needs an adjacent // SAFETY: proof ─────────────────────
+  # The tree imports `unsafe` nowhere today. This rule keeps the escape hatch
+  # open but priced: a reinterpretation of memory is admissible only when the
+  # line directly above it states why it holds. A proof separated by a blank
+  # line no longer covers the statement, so it is reported too. Comments and
+  # string literals that merely name the package are not matched (a regex is
+  # used rather than an AST pattern because semgrep's Go parser discards the
+  # comments the proof lives in).
+  - id: unsafe-requires-safety-proof
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Importing unsafe, or reinterpreting memory with unsafe.Pointer/Slice/
+      String/Add, requires a `// SAFETY:` line directly above it stating the
+      precondition that makes it sound. Add the proof, or use a safe conversion.
+    paths:
+      exclude:
+        - "/.config/hiss/testdata/"
+    pattern-either:
+      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K[ \t]*(?:import[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*[ \t]+|_[ \t]+|\.[ \t]+)?"unsafe"[ \t]*$'
+      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K(?![ \t]*//)[^\n]*\bunsafe\.(?:Pointer|Slice|String|SliceData|StringData|Add)\b'
+
+  # ── HISS-08 · no dynamic code loading ───────────────────────────────────────
+  # plugin.Open maps a shared object chosen at run time into the process, and
+  # reflect.MakeFunc synthesises a callee the compiler never saw: both put code
+  # outside the build graph, so neither the SBOM, the provenance attestation nor
+  # the call-graph analysis describes what actually runs. Register
+  # implementations statically (an interface plus an fx provider).
+  - id: no-dynamic-code-loading
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Dynamic code loading is banned — plugin.Open/Lookup maps an unattested
+      object into the process and reflect.MakeFunc builds a callee no compiler
+      saw. Register the implementation statically (interface + fx provider).
+    paths:
+      exclude:
+        - "/.config/hiss/testdata/"
+    pattern-either:
+      - pattern: import "plugin"
+      - pattern: plugin.Open(...)
+      - pattern: plugin.Lookup(...)
+      - pattern: reflect.MakeFunc(...)
+
+  # ── HISS-08 · exec must name a fixed binary ─────────────────────────────────
+  # A shell interpreter turns its argument into code, and a command name built
+  # by concatenation or fmt.Sprintf at the call site picks the executable at run
+  # time. Both defeat static determinism. Resolve the binary once — a literal,
+  # or a constructor-configured field — and pass arguments as a slice.
+  #
+  # Known gap (deliberate, not an oversight): a command name held in a plain
+  # variable or struct field is NOT reported, because that is the shape every
+  # legitimate call site in the tree uses (core/gitx r.bin, hw/fssnap name,
+  # ai/tiny dockerPath, testutil/mutation binPath — each with its own documented
+  # `#nosec G204`). Deciding whether such a value is constant needs
+  # whole-program dataflow this rule does not have; the coverage catalogue
+  # records it as a gap rather than claiming coverage the rule does not have.
+  - id: no-dynamic-exec-command
+    languages: [go]
+    severity: ERROR
+    message: >-
+      os/exec must name a fixed binary. A shell (`sh -c`) interprets its
+      argument as code, and a name assembled with + or fmt.Sprintf picks the
+      executable at run time. Resolve the binary once and pass args as a slice.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "/.config/hiss/testdata/"
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command($NAME, ...)
+          - pattern: exec.CommandContext($CTX, $NAME, ...)
+      - metavariable-pattern:
+          metavariable: $NAME
+          pattern-either:
+            - pattern: $A + $B
+            - pattern: fmt.Sprintf(...)
+            - pattern: '"sh"'
+            - pattern: '"bash"'
+            - pattern: '"zsh"'
+            - pattern: '"/bin/sh"'
+            - pattern: '"/bin/bash"'
+            - pattern: '"/usr/bin/env"'
+            - pattern: '"cmd"'
+            - pattern: '"cmd.exe"'
+            - pattern: '"powershell"'
+            - pattern: '"powershell.exe"'
+
+  # ── HISS-06 · no input-proportional goroutine fan-out ───────────────────────
+  # A `go` statement inside a loop over the input spawns one goroutine per
+  # element, so the live goroutine count is set by the caller, not by the
+  # program — the classic way a well-behaved service turns a large page of rows
+  # into thousands of concurrent connections. Acquire a bound before spawning:
+  # errgroup.SetLimit, a buffered semaphore channel, or semaphore.Acquire.
+  #
+  # Scoped to input-proportional loops (`range`, and `i < len(x)`) on purpose: a
+  # fixed worker count (`for i := 0; i < workers; i++`) is bounded by
+  # construction and is the shape the negative fixture pins. A counted loop
+  # whose bound is a variable that happens to hold len(x) is a known gap.
+  - id: no-unbounded-goroutine-in-loop
+    languages: [go]
+    severity: ERROR
+    message: >-
+      This spawns one goroutine per input element, so the live goroutine count
+      follows the caller's data instead of a bound. Acquire a slot before the
+      `go` — errgroup.SetLimit, a buffered semaphore channel, or
+      semaphore.Weighted.Acquire.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "/.config/hiss/testdata/"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              for $K, $V := range $XS {
+                ...
+                go $F(...)
+                ...
+              }
+          - pattern: |
+              for $V := range $XS {
+                ...
+                go $F(...)
+                ...
+              }
+          - pattern: |
+              for range $XS {
+                ...
+                go $F(...)
+                ...
+              }
+          - pattern: |
+              for $I := 0; $I < len($XS); $I++ {
+                ...
+                go $F(...)
+                ...
+              }
+      - pattern-not-inside: |
+          $G.SetLimit(...)
+          ...
+      - pattern-not: |
+          for ... {
+            ...
+            $SEM <- $TOK
+            ...
+          }
+      - pattern-not: |
+          for ... {
+            ...
+            $SEM.Acquire(...)
+            ...
+          }
