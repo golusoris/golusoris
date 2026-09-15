@@ -18,6 +18,7 @@ modules:
   - github.com/golusoris/golusoris/hw/gpio
   - github.com/golusoris/golusoris/hw/robotics
   - github.com/golusoris/golusoris/hw/udev
+  - github.com/golusoris/golusoris/k8s/nri
   - github.com/golusoris/golusoris/media/3d
   - github.com/golusoris/golusoris/media/audio
   - github.com/golusoris/golusoris/media/av
@@ -572,6 +573,12 @@ packages:
     capabilities: [telemetry.prometheus]
     description: "Package prom mounts a Prometheus /metrics endpoint and exposes the check registry's per-check status as Gauges so Prometheus alerting can fire on individual dep"
     replaces: [github.com/go-chi/chi/v5, github.com/prometheus/client_golang, github.com/prometheus/client_model]
+  - import: github.com/golusoris/golusoris/k8s/nri
+    module: github.com/golusoris/golusoris/k8s/nri
+    domain: k8s
+    capabilities: [k8s.nri]
+    description: "Package nri is a small, typed scaffold over [github.com/containerd/nri]'s plugin stub: register a plugin under a configurable name/index, implement only the pod"
+    replaces: [github.com/containerd/nri]
   - import: github.com/golusoris/golusoris/k8s/operator
     domain: k8s
     capabilities: [k8s.operator, telemetry.logr]
