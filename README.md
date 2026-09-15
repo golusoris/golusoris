@@ -299,6 +299,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 |---|---|---|
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy | google/go-containerregistry |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bioinformatics — FASTA parser, rev-complement, GC content | biogo/biogo |
