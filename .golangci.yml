@@ -95,12 +95,12 @@ linters:
 
         SPDX-License-Identifier: EUPL-1.2
     gocyclo:
-      min-complexity: 18
+      min-complexity: 10 # HISS-04 cap, same as praetor's audit
     funlen:
-      lines: 120
-      statements: 60
+      lines: 60 # HISS-04 cap, same as praetor's audit
+      statements: 50
     gocognit:
-      min-complexity: 30
+      min-complexity: 15 # HISS-04 cap, same as praetor's audit
     cyclop:
       max-complexity: 18
     gosec:
