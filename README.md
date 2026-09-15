@@ -331,6 +331,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/snapshot/` | golden-file / snapshot testing | gkampitakis/go-snaps |
 | `testutil/factory/` | deterministic gofakeit test data factories | brianvoe/gofakeit |
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
+| `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
 | `testutil/prop/` | property-based testing (own go.mod) | leanovate/gopter |
