@@ -23,23 +23,32 @@ flowchart LR
     GATE -- No --> DISTILL["SARIF Diagnostic Distillation (<= 1500 tokens)"]
 ```
 
-## Core Directives & Invariants (Modernized NASA JPL Power-of-10)
+## Core Directives & Invariants — the praetor HISS-20 lattice (modernized NASA JPL Power-of-10)
 
-| Invariant | Scope | NASA Rule | Enforcement Mechanism | Failure Action |
+Twenty invariants. The last column names the gate that actually runs **in this repository** — not praetor's generic gate. Where nothing runs here, the row says so.
+
+| Invariant | Scope | NASA Rule | Rule | Gate in this repository |
 | :--- | :--- | :--- | :--- | :--- |
-| **HISS-01** | Control Flow | Rule 1 | Recursion strictly prohibited; call graph must be DAG; zero `goto`. | Immediate build failure |
-| **HISS-02** | Loops & I/O | Rule 2 | Scalar upper bound on all loops; explicit `context.Context` timeout on all I/O. | Semgrep / AST error |
-| **HISS-03** | Memory | Rule 3 | Zero dynamic heap allocation (`malloc` / `free`) in hot simulation/tick loops. | Allocation audit sweep |
-| **HISS-04** | Complexity | Rule 4 | Function length $\le 60$ LOC, McCabe Cyclomatic $\le 10$, Statements $\le 50$. | AST sweep blocker |
-| **HISS-07** | Error Handling | Rule 7 | Zero `.unwrap()` / `.expect()`; all errors handled or wrapped with context. | Linter / Compiler error |
-| **HISS-08** | Determinism | Rule 8 | Zero dynamic execution (`eval` / `exec`); zero banned unsafe libc (`gets` / `strcpy` / `sprintf`). | AST / Linter error |
-| **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proofs for all pointer arithmetic and `unsafe` blocks. | AST check blocker |
-| **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Exit code 1 |
-| **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for all public interfaces. | CI coverage gate |
-| **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled via `standardsctl compile-context`. | Pre-commit blocker |
-| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` is the private, git-ignored live ledger: keep OPEN/BACKLOG/BUGS/QUESTIONS current via `standardsctl state task`, `state bug`, `state question`. | `standardsctl state sync --verify` |
-| **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only the gates the diff touches; docs- and state-only changes skip the heavy suites. | `standardsctl ci filter` |
-| **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation — extend or call what exists, configuration formats included. | `standardsctl dedupe scan` |
+| **HISS-01** | Control Flow | Rule 1 | Recursion strictly prohibited; call graph must be a DAG; zero `goto`. | `standardsctl audit` HISS scan (direct self-recursion + `goto`); mutual/indirect recursion is not decided |
+| **HISS-02** | Loops & I/O | Rule 2 | Scalar upper bound on all loops; explicit `context.Context` timeout on all I/O. | I/O half gates: `.golangci.yml` `noctx` / `contextcheck` / `fatcontext` / `containedctx` via the required `Lint` check (`.semgrep.yml` `http-client-must-set-timeout` only advises, its job is `continue-on-error`). Loop-bound half is review-enforced for Go: praetor's HISS-02 scanner implements C, Rust and Python only |
+| **HISS-03** | Memory | Rule 3 | No steady-state heap churn in hot paths; preallocate and pool instead. | `b.ReportAllocs()` benchmarks in `core/id`, `core/crypto`, `cache/memory`; no repo-wide allocation gate runs them in CI — review-enforced |
+| **HISS-04** | Complexity | Rule 4 | Cyclomatic $\le 10$, cognitive $\le 15$, function $\le 60$ LOC, $\le 50$ statements. | `.golangci.yml` `gocyclo` / `gocognit` / `funlen` + `standardsctl audit` (effective policy `max_func_loc=60`) |
+| **HISS-05** | Scoping | Rule 6 | Declare every binding at its smallest lexical scope; no shadowing, no ad-hoc import aliases. | `.golangci.yml` `govet` with `enable-all` (includes `shadow`), plus `predeclared` and `importas` |
+| **HISS-06** | Concurrency | — | Every goroutine fan-out carries an explicit upper bound (river `MaxWorkers`, semaphore channel). | CI `test` job `go test -race` + lefthook pre-push `build-test`; no static guard against an unbounded `go func` in a loop |
+| **HISS-07** | Error Handling | Rule 7 | Every error handled or wrapped with context; no discarded returns. | `.golangci.yml` `errcheck` / `wrapcheck` / `errorlint` / `nilerr` via CI `lint` + lefthook pre-commit `golangci-lint` |
+| **HISS-08** | Determinism | Rule 8 | No dynamic execution or dynamic code loading; no unsafe libc equivalents. | Zero `plugin.Open` / `reflect.MakeFunc` call sites in tree; `gosec` (blocking) and `.semgrep.yml` (advisory) run in CI, but no rule pins dynamic loading yet |
+| **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proof for every `unsafe` block and pointer cast. | `gosec` G103 (`.gosec.json`, no exclusions, blocking in CI); zero `unsafe` imports in tree today; the proof text itself is review-enforced |
+| **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Required `Lint` check (`golangci-lint`, root + `core/`, `govet` with `enable-all`); required `Build` check runs `go vet ./...` in `core/`; lefthook pre-commit `gofumpt` / `gci` / `govet` / `golangci-lint` |
+| **HISS-11** | Supply Chain | — | Digest-pinned dependencies, SLSA 3 provenance, cosign signatures, SBOM per release. | Every workflow `uses:` is digest-pinned; `sbom.yml` (SPDX + CycloneDX attestations), `release.yml` (cosign keyless + SLSA), `verify-provenance.yml`, `scorecard.yml`, and the `.standards.lock` digest check in `standardsctl audit` |
+| **HISS-12** | Secrets | — | Zero credentials in the working tree or in git history. | lefthook pre-commit `gitleaks` blocks the commit; CI `Secret scan (gitleaks)` scans full history with `.gitleaks.toml` but is not among the five required checks, so it reports rather than blocks a merge |
+| **HISS-13** | Debt Ratchet | — | Total infractions may never increase; the baseline only ratchets down. | `.standards-baseline.json` (0 today) enforced by `standardsctl audit` in lefthook pre-commit `hiss-audit`, pre-push `audit`, and `make verify-all` |
+| **HISS-14** | Public ABI | — | Public contracts are append-only; a break carries a `Migration:` footer. | CI `apidiff` vs previous tag — **informational pre-1.0** (see the commented `-incompatible` gate in `ci.yml`); the `Migration:` footer is a PR-template checklist item, not an automated gate |
+| **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for all public interfaces. | Required `Test (race + coverage)` check: `go test -race` on root and `core/`, one merged profile gated at 70% (the 85% figure in docs/principles.md is a target for security-critical packages, not a gate); the 3D shape itself is review-enforced |
+| **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled, never hand-edited; compiled target $< 300$ LOC. | `standardsctl compile-context --verify` in lefthook pre-commit `context-check` and `make verify-all` |
+| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` is the private, git-ignored live ledger: keep OPEN/BACKLOG/BUGS/QUESTIONS current via `standardsctl state task`, `state bug`, `state question`. | `standardsctl state sync .` in the lefthook post-commit hook |
+| **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only the gates the diff touches; docs- and state-only changes skip the heavy suites. | **Not wired here** — `ci.yml` has no `standardsctl ci filter` step and no `paths:` filter, so every PR runs the full matrix |
+| **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation — extend or call what exists, configuration formats included. | `standardsctl dedupe scan .` (`make dedupe-scan`, part of `verify-all`) + lefthook post-commit `dedupe cadence --threshold=20` |
+| **HISS-20** | Enforcement Coverage | Fleet | Every enforcement claim above is backed by a fixture corpus replayed in both directions. | **Not declared here** — there is no `.config/hiss/coverage.yaml`, so `standardsctl hiss coverage --verify` reports enforcement evidence undeclared for every invariant |
 
 ## Operational Rules
 

@@ -52,7 +52,7 @@ reuse-lint: ## REUSE / SPDX compliance (LICENSING.md)
 	$(REUSE) lint
 
 .PHONY: audit
-audit: ## praetor HISS-16 governance audit
+audit: ## praetor HISS-20 lattice governance audit
 	$(STANDARDSCTL) audit
 
 .PHONY: compile-context
