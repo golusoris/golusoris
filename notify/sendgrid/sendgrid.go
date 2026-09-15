@@ -80,14 +80,28 @@ func (s *Sender) Name() string { return "sendgrid" }
 
 // Send implements [notify.Sender]. Maps notify.Message to the SendGrid
 // v3 mail/send request body.
-func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
+func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
+	if err := validateMessage(msg); err != nil {
+		return err
+	}
+	return s.post(ctx, s.buildPayload(msg))
+}
+
+// validateMessage rejects a [notify.Message] SendGrid cannot deliver: it
+// needs at least one recipient and a non-empty HTML or text body.
+func validateMessage(msg notify.Message) error {
 	if len(msg.To) == 0 {
 		return errors.New("notify/sendgrid: at least one recipient required")
 	}
 	if msg.HTML == "" && msg.Text == "" {
 		return errors.New("notify/sendgrid: html or text body required")
 	}
+	return nil
+}
 
+// buildPayload maps msg onto the SendGrid v3 mail/send request body,
+// applying s's configured From/FromName/ReplyTo defaults.
+func (s *Sender) buildPayload(msg notify.Message) sgPayload {
 	fromEmail := msg.From
 	fromName := s.opts.FromName
 	if fromEmail == "" {
@@ -127,7 +141,11 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 			Filename: a.Name,
 		})
 	}
+	return payload
+}
 
+// post marshals payload and delivers it to the SendGrid v3 mail/send endpoint.
+func (s *Sender) post(ctx context.Context, payload sgPayload) (err error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("notify/sendgrid: marshal: %w", err)

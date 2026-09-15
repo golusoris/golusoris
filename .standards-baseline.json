@@ -1,69 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-09-14T21:23:20Z",
+  "generated_at": "2026-09-15T00:43:36Z",
   "repository": "",
   "commit_sha": "",
-  "total_infractions": 8,
-  "infractions": [
-    {
-      "rule_id": "HISS-02",
-      "file_path": "cache/twotier/module.go",
-      "line_number": 99,
-      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
-      "fingerprint": "cache/twotier/module.go:99:HISS-02"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "db/cdc/cdc.go",
-      "line_number": 324,
-      "symbol": "dispatch",
-      "message": "Function 'dispatch' (82 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
-      "fingerprint": "db/cdc/cdc.go:324:HISS-04"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "deploy/multiregion/region.go",
-      "line_number": 256,
-      "symbol": "newRegionService",
-      "message": "Function 'newRegionService' (66 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
-      "fingerprint": "deploy/multiregion/region.go:256:HISS-04"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "media/audio/analyze.go",
-      "line_number": 62,
-      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
-      "fingerprint": "media/audio/analyze.go:62:HISS-02"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "media/audio/analyze.go",
-      "line_number": 102,
-      "message": "Unbounded for loop without an exit condition (for {} / for ;; )",
-      "fingerprint": "media/audio/analyze.go:102:HISS-02"
-    },
-    {
-      "rule_id": "HISS-07",
-      "file_path": "notify/apns2/apns2.go",
-      "line_number": 256,
-      "message": "Legacy unchecked error assignment",
-      "fingerprint": "notify/apns2/apns2.go:256:HISS-07"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "notify/sendgrid/sendgrid.go",
-      "line_number": 83,
-      "symbol": "Send",
-      "message": "Function 'Send' (70 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
-      "fingerprint": "notify/sendgrid/sendgrid.go:83:HISS-04"
-    },
-    {
-      "rule_id": "HISS-04",
-      "file_path": "testutil/river/river.go",
-      "line_number": 65,
-      "symbol": "Start",
-      "message": "Function 'Start' (65 LOC) exceeds HISS-04 / NASA Rule 4 limit of 60 LOC",
-      "fingerprint": "testutil/river/river.go:65:HISS-04"
-    }
-  ]
+  "total_infractions": 0,
+  "infractions": []
 }

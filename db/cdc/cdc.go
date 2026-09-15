@@ -336,70 +336,109 @@ func (c *Consumer) dispatch(
 	switch m := walMsg.(type) {
 	case *pglogrepl.RelationMessage:
 		relations[m.RelationID] = m
-
 	case *pglogrepl.InsertMessage:
-		rel, ok := relations[m.RelationID]
-		if !ok {
-			break
-		}
-		ev := Event{
-			Schema: rel.Namespace,
-			Table:  rel.RelationName,
-			Op:     OpInsert,
-			New:    tupleToMap(m.Tuple, rel),
-			LSN:    xld.WALStart,
-		}
-		return c.handler(ctx, ev)
-
+		return c.dispatchInsert(ctx, m, relations, xld.WALStart)
 	case *pglogrepl.UpdateMessage:
-		rel, ok := relations[m.RelationID]
-		if !ok {
-			break
-		}
-		ev := Event{
-			Schema: rel.Namespace,
-			Table:  rel.RelationName,
-			Op:     OpUpdate,
-			Old:    tupleToMap(m.OldTuple, rel),
-			New:    tupleToMap(m.NewTuple, rel),
-			LSN:    xld.WALStart,
-		}
-		return c.handler(ctx, ev)
-
+		return c.dispatchUpdate(ctx, m, relations, xld.WALStart)
 	case *pglogrepl.DeleteMessage:
-		rel, ok := relations[m.RelationID]
-		if !ok {
-			break
-		}
-		ev := Event{
-			Schema: rel.Namespace,
-			Table:  rel.RelationName,
-			Op:     OpDelete,
-			Old:    tupleToMap(m.OldTuple, rel),
-			LSN:    xld.WALStart,
-		}
-		return c.handler(ctx, ev)
-
+		return c.dispatchDelete(ctx, m, relations, xld.WALStart)
 	case *pglogrepl.TruncateMessage:
-		for _, relID := range m.RelationIDs {
-			rel, ok := relations[relID]
-			if !ok {
-				continue
-			}
-			ev := Event{
-				Schema: rel.Namespace,
-				Table:  rel.RelationName,
-				Op:     OpTruncate,
-				LSN:    xld.WALStart,
-			}
-			if err := c.handler(ctx, ev); err != nil {
-				return err
-			}
-		}
-
+		return c.dispatchTruncate(ctx, m, relations, xld.WALStart)
 	case *pglogrepl.CommitMessage:
 		// Advance confirmed LSN on commit.
 		*clientXLogPos = m.CommitLSN
+	}
+	return nil
+}
+
+// dispatchInsert builds an INSERT [Event] from m and delivers it to the
+// handler. A message for an unknown relation (no prior RelationMessage seen)
+// is silently dropped, matching dispatch's pre-extraction behavior.
+func (c *Consumer) dispatchInsert(
+	ctx context.Context,
+	m *pglogrepl.InsertMessage,
+	relations map[uint32]*pglogrepl.RelationMessage,
+	lsn pglogrepl.LSN,
+) error {
+	rel, ok := relations[m.RelationID]
+	if !ok {
+		return nil
+	}
+	return c.handler(ctx, Event{
+		Schema: rel.Namespace,
+		Table:  rel.RelationName,
+		Op:     OpInsert,
+		New:    tupleToMap(m.Tuple, rel),
+		LSN:    lsn,
+	})
+}
+
+// dispatchUpdate builds an UPDATE [Event] from m and delivers it to the
+// handler. A message for an unknown relation is silently dropped.
+func (c *Consumer) dispatchUpdate(
+	ctx context.Context,
+	m *pglogrepl.UpdateMessage,
+	relations map[uint32]*pglogrepl.RelationMessage,
+	lsn pglogrepl.LSN,
+) error {
+	rel, ok := relations[m.RelationID]
+	if !ok {
+		return nil
+	}
+	return c.handler(ctx, Event{
+		Schema: rel.Namespace,
+		Table:  rel.RelationName,
+		Op:     OpUpdate,
+		Old:    tupleToMap(m.OldTuple, rel),
+		New:    tupleToMap(m.NewTuple, rel),
+		LSN:    lsn,
+	})
+}
+
+// dispatchDelete builds a DELETE [Event] from m and delivers it to the
+// handler. A message for an unknown relation is silently dropped.
+func (c *Consumer) dispatchDelete(
+	ctx context.Context,
+	m *pglogrepl.DeleteMessage,
+	relations map[uint32]*pglogrepl.RelationMessage,
+	lsn pglogrepl.LSN,
+) error {
+	rel, ok := relations[m.RelationID]
+	if !ok {
+		return nil
+	}
+	return c.handler(ctx, Event{
+		Schema: rel.Namespace,
+		Table:  rel.RelationName,
+		Op:     OpDelete,
+		Old:    tupleToMap(m.OldTuple, rel),
+		LSN:    lsn,
+	})
+}
+
+// dispatchTruncate delivers one TRUNCATE [Event] per relation ID in m that is
+// known (has a prior RelationMessage); unknown IDs are skipped. It stops and
+// returns on the first handler error, leaving any remaining relation IDs
+// undelivered for this message.
+func (c *Consumer) dispatchTruncate(
+	ctx context.Context,
+	m *pglogrepl.TruncateMessage,
+	relations map[uint32]*pglogrepl.RelationMessage,
+	lsn pglogrepl.LSN,
+) error {
+	for _, relID := range m.RelationIDs {
+		rel, ok := relations[relID]
+		if !ok {
+			continue
+		}
+		if err := c.handler(ctx, Event{
+			Schema: rel.Namespace,
+			Table:  rel.RelationName,
+			Op:     OpTruncate,
+			LSN:    lsn,
+		}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

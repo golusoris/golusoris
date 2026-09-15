@@ -262,14 +262,37 @@ func newRegionService(
 	cfg regionConfig,
 	opt pulumi.ResourceOption,
 ) error {
-	execRole, err := newRegionExecRole(ctx, name, opt)
+	taskDef, err := newRegionTaskDefinition(ctx, name, cfg, opt)
 	if err != nil {
 		return err
 	}
 
+	cluster, err := ecs.NewCluster(ctx, name+"-cluster", &ecs.ClusterArgs{
+		Name: pulumi.String(name + "-cluster"),
+	}, opt)
+	if err != nil {
+		return fmt.Errorf("pulumi: create cluster %s: %w", name, err)
+	}
+
+	return newRegionFargateService(ctx, name, subnets, taskSG, tg, cfg, taskDef, cluster, opt)
+}
+
+// newRegionTaskDefinition builds the Fargate task definition (rootless ARM64,
+// 256 CPU units / 512 MiB) that runs cfg's container under name.
+func newRegionTaskDefinition(
+	ctx *pulumi.Context,
+	name string,
+	cfg regionConfig,
+	opt pulumi.ResourceOption,
+) (*ecs.TaskDefinition, error) {
+	execRole, err := newRegionExecRole(ctx, name, opt)
+	if err != nil {
+		return nil, err
+	}
+
 	containers, err := regionContainer(name, cfg)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	taskDef, err := ecs.NewTaskDefinition(ctx, name+"-task", &ecs.TaskDefinitionArgs{
@@ -287,17 +310,25 @@ func newRegionService(
 		Tags:                 pulumi.StringMap{"Name": pulumi.String(name + "-task")},
 	}, opt)
 	if err != nil {
-		return fmt.Errorf("pulumi: create task definition %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create task definition %s: %w", name, err)
 	}
+	return taskDef, nil
+}
 
-	cluster, err := ecs.NewCluster(ctx, name+"-cluster", &ecs.ClusterArgs{
-		Name: pulumi.String(name + "-cluster"),
-	}, opt)
-	if err != nil {
-		return fmt.Errorf("pulumi: create cluster %s: %w", name, err)
-	}
-
-	_, err = ecs.NewService(ctx, name+"-svc", &ecs.ServiceArgs{
+// newRegionFargateService registers the Fargate service (2 desired tasks,
+// public IP assigned) with the ALB target group tg.
+func newRegionFargateService(
+	ctx *pulumi.Context,
+	name string,
+	subnets []*ec2.Subnet,
+	taskSG *ec2.SecurityGroup,
+	tg *lb.TargetGroup,
+	cfg regionConfig,
+	taskDef *ecs.TaskDefinition,
+	cluster *ecs.Cluster,
+	opt pulumi.ResourceOption,
+) error {
+	_, err := ecs.NewService(ctx, name+"-svc", &ecs.ServiceArgs{
 		Cluster:        cluster.Arn,
 		TaskDefinition: taskDef.Arn,
 		DesiredCount:   pulumi.Int(2),

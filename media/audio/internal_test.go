@@ -5,10 +5,59 @@
 package audio
 
 import (
+	"context"
 	"math"
 	"testing"
 	"time"
 )
+
+// stalledStream never advances or terminates: read always returns 0 frames
+// and a nil error. It exercises the HISS-02 chunk bound in
+// streamMono/loudness that guards against a decoder stuck without EOF.
+type stalledStream struct {
+	ch int
+}
+
+func (s stalledStream) info() Info                  { return Info{Channels: s.ch, SampleRate: 48000} }
+func (stalledStream) read(_ []float32) (int, error) { return 0, nil }
+
+func TestDecodeChunkLimit(t *testing.T) {
+	t.Parallel()
+	if got := decodeChunkLimit(0); got != decodeChunkNoLimitGuard {
+		t.Errorf("decodeChunkLimit(0) = %d, want %d", got, decodeChunkNoLimitGuard)
+	}
+	if got := decodeChunkLimit(-5); got != decodeChunkNoLimitGuard {
+		t.Errorf("decodeChunkLimit(-5) = %d, want %d", got, decodeChunkNoLimitGuard)
+	}
+	if got := decodeChunkLimit(10); got != 11 {
+		t.Errorf("decodeChunkLimit(10) = %d, want 11", got)
+	}
+}
+
+// TestStreamMono_BoundedAgainstStalledDecoder is the boundary case (HISS-02):
+// a decoder that never returns frames, EOF, or an error must not spin
+// streamMono forever.
+func TestStreamMono_BoundedAgainstStalledDecoder(t *testing.T) {
+	t.Parallel()
+	a := &analyzer{}
+	st := stalledStream{ch: 1}
+	read := make([]float32, decodeChunkFrames)
+	err := a.streamMono(context.Background(), st, read, 1, 3, func(int64, float32) {})
+	if err == nil {
+		t.Fatal("streamMono() = nil, want bound-exceeded error")
+	}
+}
+
+// TestLoudness_BoundedAgainstStalledDecoder is the boundary case (HISS-02)
+// for the loudness loop's independent chunk-bound copy.
+func TestLoudness_BoundedAgainstStalledDecoder(t *testing.T) {
+	t.Parallel()
+	a := &analyzer{opts: Options{MaxDecodedBytes: 4}} // maxFrames = 4/(1*4) = 1
+	st := stalledStream{ch: 1}
+	if _, err := a.loudness(context.Background(), st); err == nil {
+		t.Fatal("loudness() = nil, want bound-exceeded error")
+	}
+}
 
 func TestOptionsWithDefaults(t *testing.T) {
 	t.Parallel()
