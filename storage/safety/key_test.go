@@ -47,6 +47,7 @@ func TestCleanKey(t *testing.T) {
 		{"dot only", ".", "", true},
 		{"dotdot only", "..", "", true},
 		{"del char", "a\x7fb", "", true},
+		{"trailing dotdot (not a lone dot) ok", "file..", "file..", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,6 +88,20 @@ func TestCleanKey_OverLength(t *testing.T) {
 	}
 	if _, err := safety.CleanKey(long, 0); err != nil {
 		t.Fatalf("maxLen=0 disables length check, got %v", err)
+	}
+}
+
+// TestCleanKey_LengthBoundary is the exact edge of the length check: a key
+// whose length equals maxLen must pass, one byte longer must fail.
+func TestCleanKey_LengthBoundary(t *testing.T) {
+	t.Parallel()
+	exact := strings.Repeat("a", 10)
+	if _, err := safety.CleanKey(exact, 10); err != nil {
+		t.Fatalf("key of length == maxLen: want nil, got %v", err)
+	}
+	overByOne := strings.Repeat("a", 11)
+	if _, err := safety.CleanKey(overByOne, 10); !errors.Is(err, safety.ErrUnsafeKey) {
+		t.Fatalf("key of length == maxLen+1: want ErrUnsafeKey, got %v", err)
 	}
 }
 

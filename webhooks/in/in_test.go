@@ -119,6 +119,65 @@ func TestStripe_oldTimestamp(t *testing.T) {
 	}
 }
 
+// TestStripe_malformedHeader covers the parseStripeSignatureHeader boundary
+// where required keys ("t", "v1") are absent from an otherwise well-formed
+// header.
+func TestStripe_malformedHeader(t *testing.T) {
+	t.Parallel()
+	handler := in.Stripe("whsec_test")(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
+	req.Header.Set("Stripe-Signature", "foo=bar,baz") // no t=, no v1=
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+// TestStripe_wrongSignature is the negative case for anyHMACMatches: a
+// well-formed, fresh header whose v1 digest simply does not match.
+func TestStripe_wrongSignature(t *testing.T) {
+	t.Parallel()
+	const secret = "whsec_test"
+	body := `{"type":"charge.succeeded"}`
+	ts := time.Now().Unix()
+	handler := in.Stripe(secret)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Stripe-Signature", fmt.Sprintf("t=%d,v1=%s", ts, "deadbeef"))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+// TestStripe_secondSignatureMatches covers anyHMACMatches scanning past a
+// non-matching v1 entry (e.g. during a Stripe signing-secret rotation, which
+// sends multiple v1 values) to find one that does.
+func TestStripe_secondSignatureMatches(t *testing.T) {
+	t.Parallel()
+	const secret = "whsec_test"
+	body := `{"type":"charge.succeeded"}`
+	ts := time.Now().Unix()
+	valid := stripeSig(secret, body, ts) // "t=<ts>,v1=<mac>"
+	_, correctMac, _ := strings.Cut(valid, "v1=")
+	header := fmt.Sprintf("t=%d,v1=deadbeef,v1=%s", ts, correctMac) // wrong sig first, correct one second
+
+	handler := in.Stripe(secret)(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Stripe-Signature", header)
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rw.Code)
+	}
+}
+
 // --- Slack ---
 
 func slackSig(secret, body string, ts int64) string {

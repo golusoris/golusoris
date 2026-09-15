@@ -38,30 +38,50 @@ func Orientation(jpegBytes []byte) (int, error) {
 // findAPP1 returns the payload of the first APP1 segment carrying an "Exif\0\0"
 // header, scanning JPEG marker segments without decoding pixel data.
 func findAPP1(b []byte) ([]byte, error) {
-	if len(b) < 2 || b[0] != 0xFF || b[1] != markerSOI {
+	if !hasSOIMarker(b) {
 		return nil, ErrNoOrientation
 	}
-	i := 2
-	for i+4 <= len(b) {
-		if b[i] != 0xFF {
+	for i := 2; i+4 <= len(b); {
+		marker, payload, next, ok := readSegment(b, i)
+		if !ok || marker == markerSOS {
 			return nil, ErrNoOrientation
 		}
-		marker := b[i+1]
-		if marker == markerSOS {
-			return nil, ErrNoOrientation
+		if exif, found := exifPayload(marker, payload); found {
+			return exif, nil
 		}
-		segLen := int(binary.BigEndian.Uint16(b[i+2 : i+4]))
-		if segLen < 2 || i+2+segLen > len(b) {
-			return nil, ErrNoOrientation
-		}
-		payload := b[i+4 : i+2+segLen]
-		if marker == markerAPP1 && len(payload) >= 6 &&
-			string(payload[:6]) == "Exif\x00\x00" {
-			return payload[6:], nil
-		}
-		i += 2 + segLen
+		i = next
 	}
 	return nil, ErrNoOrientation
+}
+
+// hasSOIMarker reports whether b starts with the JPEG Start-Of-Image marker.
+func hasSOIMarker(b []byte) bool {
+	return len(b) >= 2 && b[0] == 0xFF && b[1] == markerSOI
+}
+
+// readSegment reads one marker segment starting at offset i, returning its
+// marker byte, payload, and the offset of the following segment. ok is false
+// when the segment is malformed (missing marker prefix or an out-of-range
+// length); the caller has already verified i+4 <= len(b).
+func readSegment(b []byte, i int) (marker byte, payload []byte, next int, ok bool) {
+	if b[i] != 0xFF {
+		return 0, nil, 0, false
+	}
+	marker = b[i+1]
+	segLen := int(binary.BigEndian.Uint16(b[i+2 : i+4]))
+	if segLen < 2 || i+2+segLen > len(b) {
+		return 0, nil, 0, false
+	}
+	return marker, b[i+4 : i+2+segLen], i + 2 + segLen, true
+}
+
+// exifPayload reports whether payload is an APP1 segment carrying the
+// "Exif\0\0" header, returning the TIFF block that follows it.
+func exifPayload(marker byte, payload []byte) ([]byte, bool) {
+	if marker != markerAPP1 || len(payload) < 6 || string(payload[:6]) != "Exif\x00\x00" {
+		return nil, false
+	}
+	return payload[6:], true
 }
 
 // parseOrientation walks the TIFF header + IFD0 of an EXIF payload to find the
