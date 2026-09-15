@@ -183,6 +183,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
+| `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
