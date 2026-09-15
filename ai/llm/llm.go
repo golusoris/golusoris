@@ -226,55 +226,89 @@ func (c *OpenAIClient) Stream(ctx context.Context, messages []Message, opts ...O
 	o := c.applyOpts(opts)
 	go func() {
 		defer close(ch)
-		body, err := json.Marshal(chatRequest(o.Model, messages, o, true))
-		if err != nil {
-			ch <- Chunk{Err: fmt.Errorf("llm: marshal: %w", err)}
-			return
+		resp, err := c.streamRequest(ctx, o, messages)
+		if resp != nil {
+			defer resp.Body.Close() //nolint:errcheck // best-effort close; the stream has already been fully read (or the error already reported)
 		}
-		req, err := c.newRequest(ctx, "/chat/completions", body)
 		if err != nil {
 			ch <- Chunk{Err: err}
 			return
 		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			ch <- Chunk{Err: fmt.Errorf("llm: request: %w", err)}
-			return
-		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		if resp.StatusCode != http.StatusOK {
-			raw, _ := io.ReadAll(resp.Body)
-			ch <- Chunk{Err: fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, raw)}
-			return
-		}
-
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
-			}
-			data := strings.TrimPrefix(line, "data: ")
-			if data == "[DONE]" {
-				return
-			}
-			var ev struct {
-				Choices []struct {
-					Delta struct {
-						Content string `json:"content"`
-					} `json:"delta"`
-				} `json:"choices"`
-			}
-			if err := json.Unmarshal([]byte(data), &ev); err != nil {
-				continue
-			}
-			if len(ev.Choices) > 0 && ev.Choices[0].Delta.Content != "" {
-				ch <- Chunk{Content: ev.Choices[0].Delta.Content}
-			}
-		}
+		emitSSEChunks(resp.Body, ch)
 	}()
 	return ch
+}
+
+// streamRequest issues the streaming chat/completions call and validates
+// the response status. resp is non-nil whenever a body was obtained
+// (including the HTTP-status-error case) so the caller can always close
+// it; it is nil only when the request could not be sent at all.
+func (c *OpenAIClient) streamRequest(ctx context.Context, o Settings, messages []Message) (*http.Response, error) {
+	body, err := json.Marshal(chatRequest(o.Model, messages, o, true))
+	if err != nil {
+		return nil, fmt.Errorf("llm: marshal: %w", err)
+	}
+	req, err := c.newRequest(ctx, "/chat/completions", body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("llm: request: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(resp.Body)
+		return resp, fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, raw)
+	}
+	return resp, nil
+}
+
+// emitSSEChunks scans an OpenAI-format SSE body line by line, forwarding
+// each non-empty content delta on ch, until the stream ends or a
+// "[DONE]" sentinel line is seen.
+func emitSSEChunks(body io.Reader, ch chan<- Chunk) {
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		content, done, ok := parseSSELine(scanner.Text())
+		if done {
+			return
+		}
+		if !ok {
+			continue
+		}
+		if content != "" {
+			ch <- Chunk{Content: content}
+		}
+	}
+}
+
+// parseSSELine parses one line of an OpenAI-format SSE stream. done is
+// true for the "[DONE]" sentinel line. ok is false for lines the caller
+// should skip: anything that isn't a "data: " line, or a data line whose
+// JSON payload doesn't decode. When ok is true, content is the delta
+// text (possibly empty).
+func parseSSELine(line string) (content string, done, ok bool) {
+	if !strings.HasPrefix(line, "data: ") {
+		return "", false, false
+	}
+	data := strings.TrimPrefix(line, "data: ")
+	if data == "[DONE]" {
+		return "", true, false
+	}
+	var ev struct {
+		Choices []struct {
+			Delta struct {
+				Content string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+	}
+	if err := json.Unmarshal([]byte(data), &ev); err != nil {
+		return "", false, false
+	}
+	if len(ev.Choices) == 0 {
+		return "", false, true
+	}
+	return ev.Choices[0].Delta.Content, false, true
 }
 
 // Embed implements [Client]. Returns a 1536-dim vector for text-embedding-3-small

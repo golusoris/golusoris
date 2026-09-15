@@ -74,9 +74,25 @@ func Stripe(secret string) func(http.Handler) http.Handler {
 }
 
 func verifyStripe(body []byte, header, secret string) error {
-	// Stripe-Signature: t=<timestamp>,v1=<hmac1>[,v1=<hmac2>]
-	var ts string
-	var sigs []string
+	ts, sigs := parseStripeSignatureHeader(header)
+	if ts == "" || len(sigs) == 0 {
+		return ErrInvalidSignature
+	}
+	if err := checkStripeTimestamp(ts); err != nil {
+		return err
+	}
+	payload := ts + "." + string(body)
+	mac := hmacSHA256([]byte(secret), []byte(payload))
+	if anyHMACMatches(mac, sigs) {
+		return nil
+	}
+	return ErrInvalidSignature
+}
+
+// parseStripeSignatureHeader parses a Stripe-Signature header of the form
+// "t=<timestamp>,v1=<hmac1>[,v1=<hmac2>]", ignoring unrecognized keys and
+// malformed (non "k=v") segments.
+func parseStripeSignatureHeader(header string) (ts string, sigs []string) {
 	for _, part := range strings.Split(header, ",") {
 		k, v, ok := strings.Cut(part, "=")
 		if !ok {
@@ -89,21 +105,26 @@ func verifyStripe(body []byte, header, secret string) error {
 			sigs = append(sigs, v)
 		}
 	}
-	if ts == "" || len(sigs) == 0 {
-		return ErrInvalidSignature
-	}
-	// Reject timestamps older than 5 minutes.
+	return ts, sigs
+}
+
+// checkStripeTimestamp rejects a missing/unparseable timestamp or one older
+// than 5 minutes, guarding against replay of a captured signature.
+func checkStripeTimestamp(ts string) error {
 	if t, err := parseUnix(ts); err != nil || time.Since(t) > 5*time.Minute {
 		return fmt.Errorf("%w: timestamp too old or invalid", ErrInvalidSignature)
 	}
-	payload := ts + "." + string(body)
-	mac := hmacSHA256([]byte(secret), []byte(payload))
+	return nil
+}
+
+// anyHMACMatches reports whether mac constant-time-matches any of sigs.
+func anyHMACMatches(mac string, sigs []string) bool {
 	for _, sig := range sigs {
 		if hmac.Equal([]byte(mac), []byte(sig)) {
-			return nil
+			return true
 		}
 	}
-	return ErrInvalidSignature
+	return false
 }
 
 // GitHub returns middleware that verifies the X-Hub-Signature-256

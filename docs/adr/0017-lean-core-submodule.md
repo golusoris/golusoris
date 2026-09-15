@@ -67,6 +67,6 @@ Release procedure: tag `core/vX.Y.Z` and `vX.Y.Z` on the same commit
 
 ## References
 
-- [`core/AGENTS.md`](../../core/AGENTS.md) · [`capabilities.yaml`](../../capabilities.yaml)
+- [`core/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/core/AGENTS.md) · [`capabilities.yaml`](https://github.com/golusoris/golusoris/blob/main/capabilities.yaml)
 - [ADR-0019](0019-praetor-governance-and-capability-contract.md)
 - OpenTelemetry-Go layout (`sdk/`, `exporters/*` as sub-modules) — the same shape.

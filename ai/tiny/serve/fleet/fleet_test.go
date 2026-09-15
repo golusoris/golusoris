@@ -300,6 +300,25 @@ func TestWorker_unknownModelRetries(t *testing.T) {
 	require.False(t, isCancel(err), "unknown model is transient ⇒ retry, not cancel")
 }
 
+// TestWorker_nilPredictorRetries pins resolvePredictor's guard against a
+// factory that returns a nil predictor with a nil error — a programming
+// bug in the factory, but transient from river's point of view (it isn't
+// tied to this particular job's payload), so it retries rather than
+// permanently cancels.
+func TestWorker_nilPredictorRetries(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	var nilPred tiny.Predictor // deliberately unset: simulates the factory bug under test
+	badFactory := func(tiny.Model) (tiny.Predictor, error) { return nilPred, nil }
+	w, err := fleet.NewWorker(reg, badFactory, &captureSink{},
+		[]fleet.Capability{"cpu"}, 0, 0, nil)
+	require.NoError(t, err)
+
+	err = w.Work(context.Background(), newJob(fleet.PredictArgs{Ref: ref, Capability: "cpu"}))
+	require.ErrorContains(t, err, "nil predictor")
+	require.False(t, isCancel(err), "nil predictor is a factory bug, not a job-specific cancel")
+}
+
 func TestWorker_predictErrorRetries(t *testing.T) {
 	t.Parallel()
 	reg, ref := seedRegistry(t)

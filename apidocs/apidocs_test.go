@@ -233,6 +233,26 @@ func TestMCPToolsCallPostsBody(t *testing.T) {
 	}
 }
 
+// TestMCPToolsCallBaseURLUnset proves tools/call is disabled (IsError, not a
+// protocol error) when Options.BaseURL was never configured.
+func TestMCPToolsCallBaseURLUnset(t *testing.T) {
+	t.Parallel()
+	cs := mcpSession(t, "")
+	res, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+		Name:      "getEcho",
+		Arguments: map[string]any{"id": "abc"},
+	})
+	if err != nil {
+		t.Fatalf("call tool: unexpected protocol error: %v", err)
+	}
+	if !res.IsError {
+		t.Errorf("IsError=false, want tool error: %+v", res.Content)
+	}
+	if !resultContains(res, "BaseURL is unset") {
+		t.Errorf("result content = %+v", res.Content)
+	}
+}
+
 // roundTripperFunc adapts a func to http.RoundTripper.
 type roundTripperFunc func(*http.Request) (*http.Response, error)
 

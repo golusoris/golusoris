@@ -46,43 +46,89 @@ type WalkOptions struct {
 // Walk calls fn for every .go file under root, in lexical order, honouring
 // ctx cancellation and the file budget. Directories starting with "." or "_"
 // are skipped, matching the go tool's own package discovery.
+//
+// Iterative by construction: it drives stdlib's filepath.WalkDir (itself an
+// explicit-stack walk, not recursive call-per-directory) through a named
+// callback rather than recursing per directory, matching astx's no-recursion
+// rule for AST tooling.
 func Walk(ctx context.Context, root string, opts WalkOptions, fn func(path string) error) error {
-	budget := opts.MaxFiles
-	if budget <= 0 {
-		budget = DefaultMaxFiles
+	w := &walker{
+		ctxErr: ctx.Err, // bound method value, not a stored context.Context (containedctx)
+		root:   root,
+		opts:   opts,
+		fn:     fn,
+		budget: walkBudget(opts.MaxFiles),
+		skip:   walkSkipSet(opts.SkipDirs),
 	}
-	skip := make(map[string]bool, len(defaultSkipDirs)+len(opts.SkipDirs))
+	if err := filepath.WalkDir(root, w.visit); err != nil {
+		return fmt.Errorf("astx: walk %s: %w", root, err)
+	}
+	return nil
+}
+
+// walker carries one Walk call's state across filepath.WalkDir callbacks —
+// giving the callback a name and fields instead of a nested closure is what
+// pulls Walk itself under the HISS-04 cognitive-complexity cap.
+type walker struct {
+	ctxErr func() error // bound from a context.Context; see Walk
+	root   string
+	opts   WalkOptions
+	fn     func(path string) error
+	budget int
+	skip   map[string]bool
+	seen   int
+}
+
+// walkBudget resolves the effective file-count budget: maxFiles when
+// positive, else DefaultMaxFiles.
+func walkBudget(maxFiles int) int {
+	if maxFiles <= 0 {
+		return DefaultMaxFiles
+	}
+	return maxFiles
+}
+
+// walkSkipSet merges the default skip-dir set with the caller's additions
+// into a fresh map (defaultSkipDirs itself is never mutated).
+func walkSkipSet(extra []string) map[string]bool {
+	skip := make(map[string]bool, len(defaultSkipDirs)+len(extra))
 	for k := range defaultSkipDirs {
 		skip[k] = true
 	}
-	for _, d := range opts.SkipDirs {
+	for _, d := range extra {
 		skip[d] = true
 	}
-	seen := 0
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if path != root && shouldSkipDir(d.Name(), skip) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !isGoSource(d.Name(), opts.IncludeTests) {
-			return nil
-		}
-		seen++
-		if seen > budget {
-			return fmt.Errorf("%w: more than %d", ErrTooManyFiles, budget)
-		}
-		return fn(path)
-	})
-	if err != nil {
-		return fmt.Errorf("astx: walk %s: %w", root, err)
+	return skip
+}
+
+// visit is the filepath.WalkDir callback: it applies ctx cancellation, the
+// directory skip-list, the *.go / _test.go filter, and the file budget,
+// in that order, matching Walk's original behaviour.
+func (w *walker) visit(path string, d fs.DirEntry, walkErr error) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	if err := w.ctxErr(); err != nil {
+		return err
+	}
+	if d.IsDir() {
+		return w.visitDir(path, d)
+	}
+	if !isGoSource(d.Name(), w.opts.IncludeTests) {
+		return nil
+	}
+	w.seen++
+	if w.seen > w.budget {
+		return fmt.Errorf("%w: more than %d", ErrTooManyFiles, w.budget)
+	}
+	return w.fn(path)
+}
+
+// visitDir decides whether to descend into or skip a directory entry: the
+// walk root itself is never skipped, even if its name would otherwise match.
+func (w *walker) visitDir(path string, d fs.DirEntry) error {
+	if path != w.root && shouldSkipDir(d.Name(), w.skip) {
+		return filepath.SkipDir
 	}
 	return nil
 }

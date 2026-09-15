@@ -193,6 +193,103 @@ func TestStart_KernelGuard(t *testing.T) {
 	require.Error(t, s.start(context.Background()))
 }
 
+// TestTeardownLocked_AllNilIsNoop is the boundary case for the whole
+// teardown sequence: a Sockmap with every BPF handle at its zero value (no
+// Start ever ran) must tear down without touching any of them, and without
+// panicking. This is the path every unprivileged / no-provider environment
+// actually exercises.
+func TestTeardownLocked_AllNilIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{
+		log: slog.New(slog.DiscardHandler),
+	}
+	s.mu.Lock()
+	s.teardownLocked()
+	s.mu.Unlock()
+	require.Empty(t, s.keys)
+	require.Nil(t, s.sockOps)
+	require.Nil(t, s.coll)
+	require.Nil(t, s.sockhash)
+	require.False(t, s.skMsgAttd)
+}
+
+// TestDeleteSockhashEntries_NoKeysIsNoop is the boundary case: an empty key
+// slice must never dereference s.sockhash, so this is safe even with a nil
+// sockhash (as it is before Start ever ran).
+func TestDeleteSockhashEntries_NoKeysIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler)}
+	s.deleteSockhashEntries() // must not panic despite s.sockhash == nil
+	require.Empty(t, s.keys)
+}
+
+// TestResetActiveSocketsMetric_NilIsNoop is the boundary case: no Metrics
+// wired must not panic.
+func TestResetActiveSocketsMetric_NilIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler)}
+	s.resetActiveSocketsMetric()
+}
+
+// TestResetActiveSocketsMetric_ZeroesGauge is the positive case: a non-zero
+// gauge is reset to 0.
+func TestResetActiveSocketsMetric_ZeroesGauge(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler), m: testMetrics(t)}
+	s.m.ActiveSockets.Set(5)
+	require.Equal(t, 5.0, testutilGauge(t, s.m.ActiveSockets))
+	s.resetActiveSocketsMetric()
+	require.Equal(t, 0.0, testutilGauge(t, s.m.ActiveSockets))
+}
+
+// TestCloseSockOpsLink_NilIsNoop is the boundary case: no SOCK_OPS link
+// attached must not panic and must leave sockOps nil.
+func TestCloseSockOpsLink_NilIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler)}
+	s.closeSockOpsLink()
+	require.Nil(t, s.sockOps)
+}
+
+// TestDetachSkMsgLocked_NotAttachedIsNoop is the negative case: skMsgAttd is
+// false, so the guard must short-circuit before touching sockhash/coll —
+// exercised here with both nil, which would otherwise panic.
+func TestDetachSkMsgLocked_NotAttachedIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler), skMsgAttd: false}
+	s.detachSkMsgLocked()
+	require.False(t, s.skMsgAttd)
+}
+
+// TestDetachSkMsgLocked_AttachedButNoSockhashIsNoop is the boundary case:
+// skMsgAttd is true but the sockhash was never created, so the guard must
+// still short-circuit — and, matching the pre-refactor behaviour, the flag
+// is left unchanged rather than cleared, since the detach never ran.
+func TestDetachSkMsgLocked_AttachedButNoSockhashIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler), skMsgAttd: true}
+	s.detachSkMsgLocked()
+	require.True(t, s.skMsgAttd, "guard must leave skMsgAttd untouched when sockhash is nil")
+}
+
+// TestCloseCollectionLocked_NilIsNoop is the boundary case: no collection
+// loaded must not panic.
+func TestCloseCollectionLocked_NilIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler)}
+	s.closeCollectionLocked()
+	require.Nil(t, s.coll)
+}
+
+// TestCloseSockhashLocked_NilIsNoop is the boundary case: no sockhash
+// created must not panic.
+func TestCloseSockhashLocked_NilIsNoop(t *testing.T) {
+	t.Parallel()
+	s := &Sockmap{log: slog.New(slog.DiscardHandler)}
+	s.closeSockhashLocked()
+	require.Nil(t, s.sockhash)
+}
+
 // requireBPF skips unless the test can load eBPF maps (privileged + bpffs).
 // Mirrors the testcontainers SkipIfProviderIsNotHealthy pattern: the test is
 // inert without the capability rather than failing.

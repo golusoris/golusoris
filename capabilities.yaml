@@ -18,6 +18,7 @@ modules:
   - github.com/golusoris/golusoris/hw/gpio
   - github.com/golusoris/golusoris/hw/robotics
   - github.com/golusoris/golusoris/hw/udev
+  - github.com/golusoris/golusoris/k8s/nri
   - github.com/golusoris/golusoris/media/3d
   - github.com/golusoris/golusoris/media/audio
   - github.com/golusoris/golusoris/media/av
@@ -173,9 +174,9 @@ packages:
     replaces: [github.com/getkin/kin-openapi, github.com/go-chi/chi/v5, github.com/modelcontextprotocol/go-sdk, github.com/swaggo/gin-swagger, github.com/swaggo/swag]
   - import: github.com/golusoris/golusoris/archive
     domain: files
-    capabilities: [files.archive]
-    description: "Package archive provides extraction and creation of compressed archives (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives."
-    replaces: [github.com/mholt/archives]
+    capabilities: [files.archive, files.dircopy]
+    description: "Package archive provides extraction and creation of compressed archives (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives, plus a recursive directory copy via otiai10/copy."
+    replaces: [github.com/mholt/archives, github.com/otiai10/copy]
   - import: github.com/golusoris/golusoris/audit
     domain: saas
     capabilities: [saas.audit]
@@ -572,6 +573,12 @@ packages:
     capabilities: [telemetry.prometheus]
     description: "Package prom mounts a Prometheus /metrics endpoint and exposes the check registry's per-check status as Gauges so Prometheus alerting can fire on individual dep"
     replaces: [github.com/go-chi/chi/v5, github.com/prometheus/client_golang, github.com/prometheus/client_model]
+  - import: github.com/golusoris/golusoris/k8s/nri
+    module: github.com/golusoris/golusoris/k8s/nri
+    domain: k8s
+    capabilities: [k8s.nri]
+    description: "Package nri is a small, typed scaffold over [github.com/containerd/nri]'s plugin stub: register a plugin under a configurable name/index, implement only the pod"
+    replaces: [github.com/containerd/nri]
   - import: github.com/golusoris/golusoris/k8s/operator
     domain: k8s
     capabilities: [k8s.operator, telemetry.logr]
@@ -825,6 +832,11 @@ packages:
     domain: plugin
     capabilities: [plugin.registry]
     description: "Package plugin provides a type-safe, in-process extension-point registry."
+  - import: github.com/golusoris/golusoris/pubsub/gcp
+    domain: pubsub
+    capabilities: [pubsub.gcp]
+    description: "Package gcp provides an fx-wired Google Cloud Pub/Sub client via cloud.google.com/go/pubsub/v2."
+    replaces: [cloud.google.com/go/pubsub/v2]
   - import: github.com/golusoris/golusoris/pubsub/kafka
     domain: pubsub
     capabilities: [pubsub.kafka]
@@ -949,6 +961,10 @@ packages:
     domain: test
     capabilities: [test.fxtest]
     description: "Package fxtest provides helpers for testing fx applications."
+  - import: github.com/golusoris/golusoris/testutil/ginkgofx
+    domain: test
+    capabilities: [test.ginkgofx]
+    description: "Package ginkgofx wires an fx application into a Ginkgo spec suite's BeforeSuite/AfterSuite (or BeforeEach/AfterEach) lifecycle, bounded by explicit context timeouts."
   - import: github.com/golusoris/golusoris/testutil/kafka
     domain: test
     capabilities: [test.kafka]

@@ -61,9 +61,26 @@ func (s *SMTPSender) Name() string { return "smtp" }
 // Send implements [Sender].
 func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 	m := mail.NewMsg()
+	if err := applyRecipients(m, msg, s.opts.From); err != nil {
+		return err
+	}
+	applyBody(m, msg)
+	if err := attachFiles(m, msg.Attachments); err != nil {
+		return err
+	}
+	if err := s.client.DialAndSend(m); err != nil {
+		return fmt.Errorf("notify/smtp: send: %w", err)
+	}
+	return nil
+}
+
+// applyRecipients sets From/To/Cc/Bcc on m, defaulting From to
+// defaultFrom when msg.From is empty. Cc/Bcc are set only when
+// present — go-mail rejects an empty address list.
+func applyRecipients(m *mail.Msg, msg Message, defaultFrom string) error {
 	from := msg.From
 	if from == "" {
-		from = s.opts.From
+		from = defaultFrom
 	}
 	if err := m.From(from); err != nil {
 		return fmt.Errorf("notify/smtp: from: %w", err)
@@ -81,6 +98,13 @@ func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 			return fmt.Errorf("notify/smtp: bcc: %w", err)
 		}
 	}
+	return nil
+}
+
+// applyBody sets the subject and HTML/plain-text bodies. When both are
+// set, HTML is the primary body and Text is attached as the
+// plain-text alternative part.
+func applyBody(m *mail.Msg, msg Message) {
 	m.Subject(msg.Subject)
 	if msg.HTML != "" {
 		m.SetBodyString(mail.TypeTextHTML, msg.HTML)
@@ -88,13 +112,14 @@ func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 	if msg.Text != "" {
 		m.AddAlternativeString(mail.TypeTextPlain, msg.Text)
 	}
-	for _, a := range msg.Attachments {
+}
+
+// attachFiles adds each attachment to m, base64-encoded.
+func attachFiles(m *mail.Msg, attachments []Attachment) error {
+	for _, a := range attachments {
 		if err := m.AttachReader(a.Name, bytes.NewReader(a.Data), mail.WithFileEncoding(mail.EncodingB64)); err != nil {
 			return fmt.Errorf("notify/smtp: attach %q: %w", a.Name, err)
 		}
-	}
-	if err := s.client.DialAndSend(m); err != nil {
-		return fmt.Errorf("notify/smtp: send: %w", err)
 	}
 	return nil
 }

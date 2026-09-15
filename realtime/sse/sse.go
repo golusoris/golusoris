@@ -103,10 +103,7 @@ func (h *Hub) Handler() http.Handler {
 			http.Error(w, "streaming not supported", http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Header().Set("Connection", "keep-alive")
-		w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering
+		setSSEHeaders(w)
 
 		c := &client{
 			ch:     make(chan Event, h.bufSize),
@@ -115,26 +112,50 @@ func (h *Hub) Handler() http.Handler {
 		h.add(c)
 		defer h.remove(c)
 
-		for r.Context().Err() == nil {
-			select {
-			case <-r.Context().Done():
+		h.stream(r.Context(), w, fl, c)
+	})
+}
+
+// setSSEHeaders sets the response headers required for an SSE stream.
+func setSSEHeaders(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering
+}
+
+// stream pumps events from c to w until ctx is done, c's channel is closed,
+// or a write to w fails.
+func (h *Hub) stream(ctx context.Context, w http.ResponseWriter, fl http.Flusher, c *client) {
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case ev, ok := <-c.ch:
+			if !ok {
 				return
-			case ev, ok := <-c.ch:
-				if !ok {
-					return
-				}
-				b, err := ev.format()
-				if err != nil {
-					h.logger.WarnContext(r.Context(), "sse: format event", slog.String("error", err.Error()))
-					continue
-				}
-				if _, writeErr := w.Write(b); writeErr != nil {
-					return
-				}
-				fl.Flush()
+			}
+			if !h.writeEvent(ctx, w, fl, ev) {
+				return
 			}
 		}
-	})
+	}
+}
+
+// writeEvent formats and writes a single event to w, flushing on success.
+// It returns false when the stream should stop (a write failure); a format
+// error is logged and skipped, not fatal to the stream.
+func (h *Hub) writeEvent(ctx context.Context, w http.ResponseWriter, fl http.Flusher, ev Event) bool {
+	b, err := ev.format()
+	if err != nil {
+		h.logger.WarnContext(ctx, "sse: format event", slog.String("error", err.Error()))
+		return true
+	}
+	if _, writeErr := w.Write(b); writeErr != nil {
+		return false
+	}
+	fl.Flush()
+	return true
 }
 
 // Publish sends ev to all currently connected clients. Slow clients

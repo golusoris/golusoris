@@ -95,22 +95,9 @@ type Sender struct {
 
 // NewSender returns an FCM sender.
 func NewSender(opts Options) (*Sender, error) {
-	var sa ServiceAccount
-	switch {
-	case opts.ServiceAccount != nil:
-		sa = *opts.ServiceAccount
-	case len(opts.ServiceAccountJSON) > 0:
-		if err := json.Unmarshal(opts.ServiceAccountJSON, &sa); err != nil {
-			return nil, fmt.Errorf("notify/fcm: parse service account JSON: %w", err)
-		}
-	default:
-		return nil, errors.New("notify/fcm: ServiceAccountJSON or ServiceAccount required")
-	}
-	if sa.ProjectID == "" || sa.ClientEmail == "" || sa.PrivateKey == "" {
-		return nil, errors.New("notify/fcm: service account missing project_id / client_email / private_key")
-	}
-	if sa.TokenURI == "" {
-		sa.TokenURI = DefaultTokenURI
+	sa, err := resolveServiceAccount(opts)
+	if err != nil {
+		return nil, err
 	}
 	scope := opts.Scope
 	if scope == "" {
@@ -129,6 +116,40 @@ func NewSender(opts Options) (*Sender, error) {
 		clk = clockwork.NewRealClock()
 	}
 	return &Sender{sa: sa, scope: scope, endpoint: endpoint, hc: hc, clock: clk}, nil
+}
+
+// resolveServiceAccount picks the account from Options (either
+// pre-parsed or raw JSON) and validates the fields the OAuth2
+// JWT-bearer flow requires.
+func resolveServiceAccount(opts Options) (ServiceAccount, error) {
+	sa, err := serviceAccountFrom(opts)
+	if err != nil {
+		return ServiceAccount{}, err
+	}
+	if sa.ProjectID == "" || sa.ClientEmail == "" || sa.PrivateKey == "" {
+		return ServiceAccount{}, errors.New("notify/fcm: service account missing project_id / client_email / private_key")
+	}
+	if sa.TokenURI == "" {
+		sa.TokenURI = DefaultTokenURI
+	}
+	return sa, nil
+}
+
+// serviceAccountFrom implements the "exactly one of ServiceAccount or
+// ServiceAccountJSON" contract documented on [Options].
+func serviceAccountFrom(opts Options) (ServiceAccount, error) {
+	switch {
+	case opts.ServiceAccount != nil:
+		return *opts.ServiceAccount, nil
+	case len(opts.ServiceAccountJSON) > 0:
+		var sa ServiceAccount
+		if err := json.Unmarshal(opts.ServiceAccountJSON, &sa); err != nil {
+			return ServiceAccount{}, fmt.Errorf("notify/fcm: parse service account JSON: %w", err)
+		}
+		return sa, nil
+	default:
+		return ServiceAccount{}, errors.New("notify/fcm: ServiceAccountJSON or ServiceAccount required")
+	}
 }
 
 // Name implements [notify.Sender].

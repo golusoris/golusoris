@@ -317,6 +317,185 @@ func TestFinishUpload_BucketPutError(t *testing.T) {
 	}
 }
 
+func TestBucketUpload_ResolveKey(t *testing.T) {
+	t.Parallel()
+
+	t.Run("valid key is sanitized", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{
+			store: &bucketStore{keyFn: func(tusd.FileInfo) (string, error) { return "/uploads/x", nil }},
+			id:    "x",
+		}
+		got, err := u.resolveKey(tusd.FileInfo{})
+		if err != nil {
+			t.Fatalf("resolveKey: %v", err)
+		}
+		if got != "uploads/x" {
+			t.Fatalf("key = %q, want %q", got, "uploads/x")
+		}
+	})
+
+	t.Run("keyFn error propagates", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{
+			store: &bucketStore{keyFn: func(tusd.FileInfo) (string, error) { return "", errBoom }},
+			id:    "x",
+		}
+		if _, err := u.resolveKey(tusd.FileInfo{}); !errors.Is(err, errBoom) {
+			t.Fatalf("err = %v, want errBoom", err)
+		}
+	})
+
+	t.Run("traversal key rejected by sanitizeKey", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{
+			store: &bucketStore{keyFn: func(tusd.FileInfo) (string, error) { return "../escape", nil }},
+			id:    "x",
+		}
+		if _, err := u.resolveKey(tusd.FileInfo{}); err == nil {
+			t.Fatal("expected sanitizeKey to reject a traversal key")
+		}
+	})
+}
+
+// closeErrReader wraps an io.Reader, returning a fixed error from Close — it
+// drives putAndClose's close-error handling independently of the Put result.
+type closeErrReader struct {
+	io.Reader
+	closeErr error
+}
+
+func (c closeErrReader) Close() error { return c.closeErr }
+
+func TestBucketUpload_PutAndClose(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		bucket, err := storage.NewLocalBucket(t.TempDir())
+		if err != nil {
+			t.Fatalf("NewLocalBucket: %v", err)
+		}
+		u := &bucketUpload{store: &bucketStore{bucket: bucket}, id: "x"}
+		rc := closeErrReader{Reader: strings.NewReader("data")}
+		obj, err := u.putAndClose(context.Background(), "k", rc, tusd.FileInfo{})
+		if err != nil {
+			t.Fatalf("putAndClose: %v", err)
+		}
+		if obj.Size != 4 {
+			t.Fatalf("obj.Size = %d, want 4", obj.Size)
+		}
+	})
+
+	t.Run("put error takes precedence over a close error", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{store: &bucketStore{bucket: failBucket{}}, id: "x"}
+		rc := closeErrReader{Reader: strings.NewReader("data"), closeErr: errors.New("close boom")}
+		if _, err := u.putAndClose(context.Background(), "k", rc, tusd.FileInfo{}); !errors.Is(err, errBoom) {
+			t.Fatalf("err = %v, want errBoom (Put's error, not the close error)", err)
+		}
+	})
+
+	t.Run("close error surfaces when put succeeds", func(t *testing.T) {
+		t.Parallel()
+		bucket, err := storage.NewLocalBucket(t.TempDir())
+		if err != nil {
+			t.Fatalf("NewLocalBucket: %v", err)
+		}
+		u := &bucketUpload{store: &bucketStore{bucket: bucket}, id: "x"}
+		wantErr := errors.New("close boom")
+		rc := closeErrReader{Reader: strings.NewReader("data"), closeErr: wantErr}
+		if _, err = u.putAndClose(context.Background(), "k", rc, tusd.FileInfo{}); !errors.Is(err, wantErr) {
+			t.Fatalf("err = %v, want %v", err, wantErr)
+		}
+	})
+}
+
+// termEntry is a scratchEntry whose Terminate result is configurable; the
+// other methods are unused by the cleanupScratch tests that construct it.
+type termEntry struct{ err error }
+
+func (termEntry) WriteChunk(context.Context, int64, io.Reader) (int64, error) { return 0, nil }
+func (termEntry) GetInfo(context.Context) (tusd.FileInfo, error)              { return tusd.FileInfo{}, nil }
+
+func (termEntry) GetReader(context.Context) (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(nil)), nil
+}
+
+func (termEntry) DeclareLength(context.Context, int64) error { return nil }
+func (e termEntry) Terminate(context.Context) error          { return e.err }
+
+func TestBucketUpload_CleanupScratch(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success is silent", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		u := &bucketUpload{
+			store: &bucketStore{log: slog.New(slog.NewTextHandler(&buf, nil))},
+			entry: termEntry{},
+			id:    "x",
+		}
+		u.cleanupScratch(context.Background())
+		if buf.Len() != 0 {
+			t.Errorf("unexpected log output on success: %s", buf.String())
+		}
+	})
+
+	t.Run("terminate error is logged, not returned", func(t *testing.T) {
+		t.Parallel()
+		var buf bytes.Buffer
+		u := &bucketUpload{
+			store: &bucketStore{log: slog.New(slog.NewTextHandler(&buf, nil))},
+			entry: termEntry{err: errBoom},
+			id:    "x",
+		}
+		u.cleanupScratch(context.Background()) // no return value: must not panic
+		if !strings.Contains(buf.String(), "scratch cleanup failed") {
+			t.Errorf("expected a cleanup-failed log entry, got %q", buf.String())
+		}
+	})
+}
+
+func TestBucketUpload_NotifyFinish(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil hook is a no-op", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{store: &bucketStore{onFinish: nil}, id: "x"}
+		if err := u.notifyFinish(context.Background(), CompletedUpload{ID: "x"}); err != nil {
+			t.Fatalf("notifyFinish: %v", err)
+		}
+	})
+
+	t.Run("hook success receives the completed value", func(t *testing.T) {
+		t.Parallel()
+		var got CompletedUpload
+		u := &bucketUpload{store: &bucketStore{onFinish: func(_ context.Context, c CompletedUpload) error {
+			got = c
+			return nil
+		}}, id: "x"}
+		want := CompletedUpload{ID: "x", Key: "k", Size: 5}
+		if err := u.notifyFinish(context.Background(), want); err != nil {
+			t.Fatalf("notifyFinish: %v", err)
+		}
+		if got.ID != want.ID || got.Key != want.Key || got.Size != want.Size {
+			t.Fatalf("hook received %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("hook error is wrapped", func(t *testing.T) {
+		t.Parallel()
+		u := &bucketUpload{store: &bucketStore{onFinish: func(context.Context, CompletedUpload) error {
+			return errBoom
+		}}, id: "x"}
+		err := u.notifyFinish(context.Background(), CompletedUpload{})
+		if !errors.Is(err, errBoom) {
+			t.Fatalf("err = %v, want wrapped errBoom", err)
+		}
+	})
+}
+
 func TestScratch_GetReaderAndWriteOnRemoved(t *testing.T) {
 	t.Parallel()
 	scratch, err := newLocalScratch(t.TempDir())

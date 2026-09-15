@@ -172,6 +172,35 @@ type ListFilter struct {
 // ErrNotFound is returned by [Registry] when a lookup misses.
 var ErrNotFound = errors.New("ai/tiny: not found")
 
+// validateModelForSave checks the fields every [Registry] implementation's
+// SaveModel needs before assigning defaults or persisting.
+func validateModelForSave(m *Model) error {
+	if m == nil {
+		return errors.New("ai/tiny: nil model")
+	}
+	if m.Name == "" {
+		return errors.New("ai/tiny: model.Name required")
+	}
+	return nil
+}
+
+// ensureModelDefaults assigns ID and CreatedAt on m when unset, using gen
+// for a fresh UUID and clk for the current time — shared by every
+// [Registry] implementation's SaveModel ([MemoryRegistry], [PGRegistry]).
+func ensureModelDefaults(gen id.Generator, clk clockwork.Clock, m *Model) error {
+	if m.ID == "" {
+		u, err := gen.NewUUID()
+		if err != nil {
+			return fmt.Errorf("ai/tiny: model id: %w", err)
+		}
+		m.ID = u.String()
+	}
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = clk.Now().UTC()
+	}
+	return nil
+}
+
 // Registry persists [Job] and [Model] records. Implementations must
 // assign Model.Version monotonically per (TenantID, Name).
 type Registry interface {
@@ -240,35 +269,31 @@ func (r *MemoryRegistry) GetJob(_ context.Context, jobID string) (Job, error) {
 // SaveModel assigns ID + Version + CreatedAt as needed and stores m.
 // Version is allocated as (max existing version for (TenantID, Name)) + 1.
 func (r *MemoryRegistry) SaveModel(_ context.Context, m *Model) error {
-	if m == nil {
-		return errors.New("ai/tiny: nil model")
-	}
-	if m.Name == "" {
-		return errors.New("ai/tiny: model.Name required")
+	if err := validateModelForSave(m); err != nil {
+		return err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if m.ID == "" {
-		u, err := r.idGen.NewUUID()
-		if err != nil {
-			return fmt.Errorf("ai/tiny: model id: %w", err)
-		}
-		m.ID = u.String()
-	}
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = r.clk.Now().UTC()
+	if err := ensureModelDefaults(r.idGen, r.clk, m); err != nil {
+		return err
 	}
 	if m.Version == 0 {
-		maxV := 0
-		for _, existing := range r.models {
-			if existing.TenantID == m.TenantID && existing.Name == m.Name && existing.Version > maxV {
-				maxV = existing.Version
-			}
-		}
-		m.Version = maxV + 1
+		m.Version = r.nextVersionLocked(m.TenantID, m.Name)
 	}
 	r.models[m.ID] = *m
 	return nil
+}
+
+// nextVersionLocked returns max(version)+1 for (tenantID, name) among the
+// in-memory models. Callers must hold r.mu (read or write).
+func (r *MemoryRegistry) nextVersionLocked(tenantID, name string) int {
+	maxV := 0
+	for _, existing := range r.models {
+		if existing.TenantID == tenantID && existing.Name == name && existing.Version > maxV {
+			maxV = existing.Version
+		}
+	}
+	return maxV + 1
 }
 
 // GetModel looks up a model by Ref. Version 0 resolves to the latest.
@@ -312,28 +337,40 @@ func (r *MemoryRegistry) List(_ context.Context, f ListFilter) ([]Model, error) 
 	r.mu.RLock()
 	out := make([]Model, 0, len(r.models))
 	for _, m := range r.models {
-		if f.TenantID != "" && m.TenantID != f.TenantID {
-			continue
+		if matchesFilter(m, f) {
+			out = append(out, m)
 		}
-		if f.Name != "" && m.Name != f.Name {
-			continue
-		}
-		if f.TaskKind != "" && m.TaskKind != f.TaskKind {
-			continue
-		}
-		out = append(out, m)
 	}
 	r.mu.RUnlock()
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].CreatedAt.Equal(out[j].CreatedAt) {
-			return out[i].CreatedAt.After(out[j].CreatedAt)
-		}
-		return out[i].Version > out[j].Version
-	})
+	sort.Slice(out, func(i, j int) bool { return modelSortsBefore(out[i], out[j]) })
 	if f.Limit > 0 && len(out) > f.Limit {
 		out = out[:f.Limit]
 	}
 	return out, nil
+}
+
+// matchesFilter reports whether m satisfies every non-empty field of f.
+func matchesFilter(m Model, f ListFilter) bool {
+	if f.TenantID != "" && m.TenantID != f.TenantID {
+		return false
+	}
+	if f.Name != "" && m.Name != f.Name {
+		return false
+	}
+	if f.TaskKind != "" && m.TaskKind != f.TaskKind {
+		return false
+	}
+	return true
+}
+
+// modelSortsBefore orders models by CreatedAt desc, then Version desc —
+// the ordering [MemoryRegistry.List] promises (mirroring the SQL
+// ORDER BY in PGRegistry.List).
+func modelSortsBefore(a, b Model) bool {
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.Version > b.Version
 }
 
 // ValidateJob performs cheap schema checks on j before handing it to a

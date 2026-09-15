@@ -37,7 +37,7 @@ flowchart LR
 | **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Exit code 1 |
 | **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for all public interfaces. | CI coverage gate |
 | **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled via `standardsctl compile-context`. | Pre-commit blocker |
-| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` is the live ledger: keep OPEN/BACKLOG/BUGS/QUESTIONS current via `standardsctl state task`, `state bug`, `state question`. | `standardsctl state sync --verify` |
+| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` is the private, git-ignored live ledger: keep OPEN/BACKLOG/BUGS/QUESTIONS current via `standardsctl state task`, `state bug`, `state question`. | `standardsctl state sync --verify` |
 | **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only the gates the diff touches; docs- and state-only changes skip the heavy suites. | `standardsctl ci filter` |
 | **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation — extend or call what exists, configuration formats included. | `standardsctl dedupe scan` |
 
@@ -67,17 +67,20 @@ flowchart LR
 
 ## Primary Verification Commands
 
+`praetorctl` (alias `standardsctl`) ships as a prebuilt CLI and must be on `PATH` — this repo has no local `cmd/standardsctl` package to `go run`. lefthook already runs the governance checks below automatically (pre-commit `context-check` + `hiss-audit`, post-commit `state-sync`, pre-push `audit`); rerun them by hand after editing this file:
+
 ```bash
 # Fast local test suite
 go test -v -race ./...
 
-# Recompile and verify cross-agent context outputs
+# Regenerate vendor agent-context files after editing AGENTS.md, then verify
+standardsctl compile-context
 standardsctl compile-context --verify
 
-# Audit repository against declared HISS-16 standards
+# Audit repository against declared HISS invariants (Makefile alias: make audit)
 standardsctl audit
 
-# Run all formatting, linting, and security gates
+# Run every formatting, linting, security, and governance gate (Makefile: make verify-all)
 make verify-all
 ```
 
@@ -166,14 +169,14 @@ Hooks: see [`.claude/hooks/README.md`](.claude/hooks/README.md).
 - When changing public API: write the `Migration:` footer in the commit body, with before/after Go snippets.
 - When adding a dependency: state which awesome-go alternatives you considered and why this one wins.
 
-### Project principles — read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) first
+### Project principles — read [docs/principles.md](docs/principles.md) first
 
-Read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) and [docs/principles.md](docs/principles.md) — the Power-of-10/CERT/style/compliance contract — before any change.
+Read [docs/principles.md](docs/principles.md) — the Power-of-10/CERT/style/compliance contract — before any change. Day-to-day planning state lives separately in the private, git-ignored `.workingdir/` ledger (HISS-17); it never carries the coding contract itself.
 
 ### Working agreements (for AI agents)
 
 - **Decisions go through `AskUserQuestion`.** Any clarifying question or multi-option choice uses the popup, never prose options — even binary ones. (#25)
-- **State hygiene — update [.workingdir/STATE.md](.workingdir/STATE.md) immediately** after each bug is fixed, confirmed, or ruled out; don't batch to session end, or the next session re-investigates closed work. (#26)
+- **State hygiene — record every bug fixed, confirmed, or ruled out immediately** via `praetorctl state bug resolve` (private, git-ignored `.workingdir/BUGS.md` ledger, HISS-17); don't batch to session end, or the next session re-investigates closed work. (#26)
 - **Deep-dive deliverables.** A research/hardening PR ships the full set — per-module `AGENTS.md`, a decision/benchmark digest, and a STATE.md delta — not a config-only change. (#28)
 
 ### Don't
@@ -184,13 +187,15 @@ Read [.workingdir/PLAN.md §2](.workingdir/PLAN.md) and [docs/principles.md](doc
 
 ### Project state
 
-- See [.workingdir/PLAN.md](.workingdir/PLAN.md) for the full plan and [.workingdir/STATE.md](.workingdir/STATE.md) for the current status + decision log.
+- Session plan, status, and decision log live in the private, git-ignored `.workingdir/` ledger (HISS-17: `PLAN.md`, `STATE.md`, `BACKLOG.md`, `BUGS.md`, `QUESTIONS.md`) — never linked from tracked files, never staged (not even with `--force`).
+- Fresh checkout: `praetorctl state init --if-absent` (preserves any ledger already present).
+- After work: `praetorctl state sync .` — also runs automatically as the lefthook `post-commit` hook.
 
 ### Every commit: keep docs in sync
 
 On each commit touching new/changed modules:
 
-- Update [.workingdir/STATE.md](.workingdir/STATE.md) session log with the commit summary.
+- Let `praetorctl state sync .` (lefthook `post-commit`) fold the commit into the private `.workingdir/STATE.md` session log.
 - Update [README.md](README.md) "Landed so far" list when a step completes.
 - Update [AGENTS.md](AGENTS.md) layout tree when adding new top-level packages.
 - Write per-subpackage `AGENTS.md` for any new module.

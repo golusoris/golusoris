@@ -5,6 +5,7 @@
 package impersonate_test
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,6 +96,55 @@ func TestMiddleware_ExitFlow(t *testing.T) {
 	require.True(t, exitCalled)
 	require.Equal(t, "admin", sess.current)
 	require.Empty(t, sess.original)
+}
+
+func TestMiddleware_ExitFlow_SessionSetFails(t *testing.T) {
+	t.Parallel()
+
+	exitCalled := false
+	nextCalled := false
+	mw, err := impersonate.Middleware(impersonate.Options{
+		SessionGet: func(_ *http.Request) (string, string, bool) { return "target", "admin", true },
+		SessionSet: func(_ http.ResponseWriter, _ *http.Request, _, _ string) error {
+			return errors.New("store unavailable")
+		},
+		OnExit: func(_, _ string) { exitCalled = true },
+	})
+	require.NoError(t, err)
+	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) { nextCalled = true }))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/?exit_impersonation=1", nil)
+	h.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	require.False(t, exitCalled, "OnExit must not fire when the session store failed")
+	require.False(t, nextCalled, "next must not be called when the revert failed")
+}
+
+func TestMiddleware_ExitParamIgnoredWhenNotImpersonating(t *testing.T) {
+	t.Parallel()
+
+	mw, err := impersonate.Middleware(impersonate.Options{
+		SessionGet: func(_ *http.Request) (string, string, bool) { return "solo", "", true },
+		SessionSet: func(_ http.ResponseWriter, _ *http.Request, _, _ string) error {
+			t.Fatal("SessionSet must not be called when there is no active impersonation to exit")
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		p := impersonate.FromContext(r.Context())
+		require.Equal(t, "solo", p.Current)
+		require.Empty(t, p.Original)
+	}))
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/?exit_impersonation=1", nil)
+	h.ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Empty(t, w.Header().Get(impersonate.HeaderImpersonating))
 }
 
 func TestBegin_RejectsNesting(t *testing.T) {

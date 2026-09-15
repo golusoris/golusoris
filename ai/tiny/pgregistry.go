@@ -133,27 +133,24 @@ func (r *PGRegistry) GetJob(ctx context.Context, jobID string) (Job, error) {
 // A caller-supplied non-zero Version is inserted as-is and never retried —
 // a collision there is a genuine duplicate, surfaced to the caller.
 func (r *PGRegistry) SaveModel(ctx context.Context, m *Model) error {
-	if m == nil {
-		return errors.New("ai/tiny: nil model")
+	if err := validateModelForSave(m); err != nil {
+		return err
 	}
-	if m.Name == "" {
-		return errors.New("ai/tiny: model.Name required")
-	}
-	if m.ID == "" {
-		u, err := r.idGen.NewUUID()
-		if err != nil {
-			return fmt.Errorf("ai/tiny: model id: %w", err)
-		}
-		m.ID = u.String()
-	}
-	if m.CreatedAt.IsZero() {
-		m.CreatedAt = r.clk.Now().UTC()
+	if err := ensureModelDefaults(r.idGen, r.clk, m); err != nil {
+		return err
 	}
 	labels, metrics, metadata, err := marshalModelJSON(m)
 	if err != nil {
 		return err
 	}
-	explicitVersion := m.Version != 0
+	return r.saveModelWithRetry(ctx, m, labels, metrics, metadata, m.Version != 0)
+}
+
+// saveModelWithRetry inserts m, retrying auto-assigned versions on a
+// unique-index collision (see [PGRegistry.SaveModel] doc). explicitVersion
+// disables both the auto-assign and the retry: a caller-pinned version
+// that collides is a genuine duplicate, surfaced as-is.
+func (r *PGRegistry) saveModelWithRetry(ctx context.Context, m *Model, labels, metrics, metadata []byte, explicitVersion bool) error {
 	for range maxVersionRetries {
 		if !explicitVersion {
 			next, vErr := r.nextVersion(ctx, m.TenantID, m.Name)

@@ -114,9 +114,9 @@ func TestMemoryRegistry_list_filtersAndSorts(t *testing.T) {
 	t.Parallel()
 	r := tiny.NewMemoryRegistry()
 	ctx := t.Context()
-	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "a", URI: "u", TaskKind: tiny.TaskClassify, Format: tiny.FormatTFLite}))
-	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "a", URI: "u", TaskKind: tiny.TaskClassify, Format: tiny.FormatTFLite}))
-	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "b", URI: "u", TaskKind: tiny.TaskGenerate, Format: tiny.FormatGGUF}))
+	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "a", TenantID: "acme", URI: "u", TaskKind: tiny.TaskClassify, Format: tiny.FormatTFLite}))
+	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "a", TenantID: "acme", URI: "u", TaskKind: tiny.TaskClassify, Format: tiny.FormatTFLite}))
+	require.NoError(t, r.SaveModel(ctx, &tiny.Model{Name: "b", TenantID: "globex", URI: "u", TaskKind: tiny.TaskGenerate, Format: tiny.FormatGGUF}))
 
 	all, err := r.List(ctx, tiny.ListFilter{})
 	require.NoError(t, err)
@@ -130,6 +130,16 @@ func TestMemoryRegistry_list_filtersAndSorts(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, named, 1)
 	require.Equal(t, "b", named[0].Name)
+
+	// Boundary: TenantID filter matches its tenant only.
+	acme, err := r.List(ctx, tiny.ListFilter{TenantID: "acme"})
+	require.NoError(t, err)
+	require.Len(t, acme, 2)
+
+	// Negative: an unknown tenant matches nothing.
+	none, err := r.List(ctx, tiny.ListFilter{TenantID: "nope"})
+	require.NoError(t, err)
+	require.Empty(t, none)
 
 	capped, err := r.List(ctx, tiny.ListFilter{Limit: 1})
 	require.NoError(t, err)

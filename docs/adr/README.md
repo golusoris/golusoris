@@ -43,6 +43,7 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0017](0017-lean-core-submodule.md) | `core/` is a separate, lean Go module | Accepted | modules, dependencies, governance, breaking-change |
 | [ADR-0018](0018-eupl-relicense-and-reuse.md) | Relicense to EUPL-1.2 + CC-BY-SA-4.0, REUSE, DCO | Accepted | licensing, compliance, governance |
 | [ADR-0019](0019-praetor-governance-and-capability-contract.md) | Adopt praetor governance; publish `capabilities.yaml` | Accepted | governance, agents, tooling, fleet |
+| [ADR-0020](0020-praetor-conformance-and-release-hardening.md) | Second-wave praetor conformance and release hardening | Proposed | governance, ci, security, releases, praetor |
 
 ## Backfill policy
 
