@@ -27,27 +27,56 @@ the maintainers' private, git-ignored `.workingdir/PLAN.md`, per HISS-17) are:
 
 These are non-negotiable: a change that regresses a hard gate does not merge.
 
-### 1.1 Governance harness — praetor HISS-16
+### 1.1 Governance harness — the praetor HISS lattice
 
 Since v0.9.0 the contract is machine-enforced by
 [cordanallm/praetor](https://github.com/cordanallm/praetor)
-([ADR-0019](docs/adr/0019-praetor-governance-and-capability-contract.md)):
+([ADR-0019](docs/adr/0019-praetor-governance-and-capability-contract.md)),
+which layers four fleet-wide invariants on top of the numbered Power-of-10
+gates in [`AGENTS.md`](AGENTS.md):
 
-- [`AGENTS.md`](AGENTS.md) is the **single canonical agent harness**. Every
-  vendor context file (`CLAUDE.md`, `.cursor/`, `.gemini/`, `.codex/`,
-  `.windsurfrules`, IDE configs) is compiled from it by
-  `standardsctl compile-context` and verified by the lefthook pre-commit
-  hook and `make verify-all` — never edited by hand (HISS-16, Context
-  Integrity).
-- `standardsctl audit` scores the tree against the HISS invariants (the
-  modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
-  baseline in `.standards-baseline.json`; a change may not regress it.
-- [`capabilities.yaml`](capabilities.yaml) is the machine-readable capability
-  contract that praetor `needs` resolves fleet demand against; the root
-  `capabilities_test.go` guards it against tree drift.
-- `make verify-all` runs build, lint, tests, the capability drift guard,
-  `compile-context --verify`, `audit` and `reuse lint` — the one gate every
-  maintainer and agent runs before concluding a change.
+- **HISS-16 (Context Integrity)**: [`AGENTS.md`](AGENTS.md) is the **single
+  canonical agent harness**. Every vendor context file (`CLAUDE.md`,
+  `.cursor/`, `.gemini/`, `.codex/`, `.windsurfrules`, IDE configs) is
+  compiled from it by `standardsctl compile-context` and verified by the
+  lefthook pre-commit hook and `make verify-all` — never edited by hand.
+- **HISS-17 (State Ledger Discipline)**: the private `.workingdir/` ledger
+  (§1 above) is kept current with `standardsctl state task`, `state bug`
+  and `state question`; the lefthook post-commit hook runs
+  `standardsctl state sync` after every commit.
+- **HISS-18 (Diff-Aware CI Efficiency)**: `standardsctl ci filter` scopes a
+  change's gates to what its diff actually touches, so a docs- or
+  state-only change skips the heavy build/test suites.
+- **HISS-19 (Reuse Before Writing)**: `standardsctl dedupe scan` (wired as
+  `make dedupe-scan` and the lefthook post-commit `dedupe-cadence` job)
+  flags a second implementation of a behavior — including a second
+  configuration format — that already exists elsewhere in the tree.
+
+`standardsctl audit` scores the tree against the HISS invariants (the
+modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
+baseline in `.standards-baseline.json`; a change may not regress it.
+`standardsctl gate run` runs praetor's four-stage conformance gate
+(lockfile digests, the HISS scan, a security pass, flavor conformance);
+stages 1-3 pass on `main` today, but stage 4 is held back because praetor
+misclassifies this library as a `go-service` and demands artifacts a
+library does not carry (a `Dockerfile`, an `on:`-less `security.yml`) —
+tracked upstream as
+[cordanaLLM/praetor#36](https://github.com/cordanaLLM/praetor/issues/36).
+[`capabilities.yaml`](capabilities.yaml) is the machine-readable capability
+contract that praetor `needs` resolves fleet demand against; the root
+`capabilities_test.go` guards it against tree drift.
+
+The hook ladder runs through
+[lefthook](https://github.com/evilmartians/lefthook) with praetor's
+configuration ([`lefthook.yml`](lefthook.yml)): pre-commit (formatting,
+lint, `compile-context --verify`, `audit`, `reuse lint`, `gitleaks`),
+commit-msg (Conventional Commits + DCO), post-commit (`state sync`,
+`dedupe cadence`), and pre-push (build + `go test -short`, `govulncheck`,
+`audit`) — the pre-push `gate` and `flavor-audit` jobs stay held back for
+the same praetor#36 reason as above. [`make verify-all`](Makefile) runs the
+equivalent build, lint, test, capability-drift, `compile-context --verify`,
+`audit`, `dedupe-scan` and `reuse lint` gates in one command — the one
+command every maintainer and agent runs before concluding a change.
 
 ## 2. Roles
 
@@ -100,11 +129,33 @@ Every PR must satisfy:
 
 - Conventional Commits (`type(scope): subject`).
 - DCO `Signed-off-by:` trailer on every commit.
-- The framework's required status checks — `CI success` (lint, gosec,
-  govulncheck, race tests, build, `reuse lint`) and the PR-title check — plus
-  the advisory jobs (apidiff, Semgrep, gitleaks, DCO, changelog fragments;
-  CodeQL was retired on 2026-08-28). `main` is
-  host-protected with `enforce_admins` on — no bypass, including for the BDFL.
+- The status checks GitHub requires on `main` today (classic branch
+  protection, `strict` — the branch must be up to date — with linear
+  history required): **CI success** (lint, gosec, govulncheck, race tests,
+  build, `reuse lint`), **PR title (Conventional Commits)**, and
+  **Analyze (go)** — the required job of GitHub's CodeQL default setup,
+  which replaced the self-hosted `codeql.yml` workflow on 2026-08-28. The
+  advisory jobs (apidiff, Semgrep, gitleaks, DCO, changelog fragments) run
+  alongside but are not required checks.
+
+praetor's target protection is declared, not yet enforced, as a GitHub
+ruleset in [`.github/rulesets/main.json`](.github/rulesets/main.json)
+(#509): per-job required checks (`Build`, `Security (gosec)`, `Lint`,
+`Test (race + coverage)`, `Vulnerabilities (govulncheck)`), required
+signed commits, and a pull-request rule under **`review_mode:
+single_maintainer`** ([`.standards.yaml`](.standards.yaml)). That mode
+keeps the framework's declared `required_approving_reviewers: 1` on
+record but renders it as `0` required approvals with no code-owner review
+today, because the project has one maintainer who cannot approve their own
+PR; switching to independent review once a second maintainer or an
+approving review bot exists is then a config change, not a rewrite.
+
+Classic protection does not set `enforce_admins`, so the BDFL can merge a
+PR past a required check that never ran. That bypass is reserved for one
+situation — the self-hosted ARC runner fleet
+(`arc-cauda-golusoris-golusoris`) is unavailable and cannot produce the
+check — and the merge must carry a comment on the PR naming the check that
+could not run and why, before the merge happens.
 
 ### 3.3 Disagreements
 
@@ -114,19 +165,38 @@ in the ADR's `## References` section.
 
 ## 4. Releases
 
-Releases are automated by [release-please](.github/workflows/release-please.yml)
-on pushes to `main`, following [SemVer](https://semver.org) and
-[Keep a Changelog](https://keepachangelog.com). The root module and the
-`core/` sub-module ([ADR-0017](docs/adr/0017-lean-core-submodule.md)) are
-tagged together (`vX.Y.Z` + `core/vX.Y.Z`). The project is pre-1.0:
+[release-please](.github/workflows/release-please.yml) opens and updates a
+release pull request against `main` on every push, following
+[SemVer](https://semver.org) and
+[Keep a Changelog](https://keepachangelog.com). Its manifest
+([`.release-please-manifest.json`](.release-please-manifest.json)) tracks
+the root module and the `core/` sub-module
+([ADR-0017](docs/adr/0017-lean-core-submodule.md)) as separate components;
+the workflow runs with `skip-github-release: true`, so it only prepares the
+PR and changelog. Once that PR is merged, the `vX.Y.Z` and `core/vX.Y.Z`
+tags are pushed explicitly, on the same commit. The project is pre-1.0:
 breaking changes are permitted between minor versions and called out in the
 commit `Migration:` footer and the changelog.
 
-Every tagged release ships SPDX SBOMs (syft), cosign keyless signatures, and
-SLSA build provenance (`actions/attest-build-provenance`). Downstream apps can
-gate deploys on these via the reusable
-[`verify-provenance.yml`](.github/workflows/verify-provenance.yml) workflow. See
-[`SECURITY.md`](SECURITY.md) for the full supply-chain guarantees.
+Pushing the root `vX.Y.Z` tag triggers
+[`release.yml`](.github/workflows/release.yml) (goreleaser): multi-arch
+archives for `cmd/golusoris` and `cmd/golusoris-mcp`, a checksum manifest,
+per-archive SPDX SBOMs (syft), cosign keyless signatures, and SLSA build
+provenance (`actions/attest-build-provenance`); and
+[`sbom.yml`](.github/workflows/sbom.yml), which additionally attests
+source-tree SPDX and CycloneDX SBOMs of the tagged commit
+(`actions/attest-sbom`) and uploads them as workflow artifacts. Releases on
+this repository are immutable (enabled from `v0.10.1` onward): once
+published, a release's tag, assets and metadata cannot be edited or
+deleted. Only the root tag ever produces a GitHub Release — `core/vX.Y.Z`
+is a Go-module version tag with no Release object of its own — so GitHub's
+"latest release" marker, and the `.../releases/latest` API endpoint that
+downstream apps and CI resolve against, always track the root module.
+
+Downstream apps can gate deploys on the provenance attestations via the
+reusable [`verify-provenance.yml`](.github/workflows/verify-provenance.yml)
+workflow. See [`SECURITY.md`](SECURITY.md) for the full supply-chain
+guarantees.
 
 ## 5. Security
 
