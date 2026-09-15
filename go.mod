@@ -114,7 +114,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.22.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/sdk v1.49.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.57.0
