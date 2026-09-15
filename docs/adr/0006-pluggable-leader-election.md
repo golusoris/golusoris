@@ -46,5 +46,5 @@ Both backends share a `leader.Callbacks` struct (`OnNewLeader`, `OnStartedLeadin
 
 ## References
 
-- [`leader/pg/pg.go`](../../leader/pg/pg.go) — pg backend.
+- [`leader/pg/pg.go`](https://github.com/golusoris/golusoris/blob/main/leader/pg/pg.go) — pg backend.
 - [`leader/k8s/`](../../leader/k8s/) — k8s backend.

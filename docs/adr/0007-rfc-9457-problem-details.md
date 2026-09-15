@@ -39,7 +39,7 @@ The framework's `errors/` package maps `gerr.Code` → `(status, type-URI, title
 
 - **Positive**: Standard `application/problem+json` parses with off-the-shelf libraries in every language. `type` URI gives an extensible namespace for app-specific error codes (`https://golusoris.dev/errors/validation`). Audit logs can index by `type` for trend analysis.
 - **Negative**: Slightly more verbose than `{code, message}`. Apps migrating from existing services must update their clients (one-time cost, documented in migration notes).
-- **Follow-ups**: Document the framework's standard `type` URIs in [`docs/architecture/error-codes.md`](../architecture/error-codes.md) (TBD). Add a `gerr → ProblemDetails` table to `errors/AGENTS.md`.
+- **Follow-ups**: Document the framework's standard `type` URIs in `docs/architecture/error-codes.md` (TBD, not yet written). Add a `gerr → ProblemDetails` table to `errors/AGENTS.md`.
 
 ## References
 

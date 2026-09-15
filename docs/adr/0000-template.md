@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0000: <short, declarative title>
 
-- **Status**: Proposed | Accepted | Deprecated | Superseded by [ADR-NNNN](NNNN-title.md)
+- **Status**: Proposed | Accepted | Deprecated | Superseded by `ADR-NNNN`
 - **Date**: YYYY-MM-DD
 - **Deciders**: <names / handles>
 - **Tags**: <comma-separated, e.g. `db`, `http`, `security`>
