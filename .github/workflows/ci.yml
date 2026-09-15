@@ -435,6 +435,14 @@ jobs:
             --metrics=off \
             --disable-version-check \
             --oss-only
+      # HISS-20 enforcement coverage: replay .config/hiss/testdata against the
+      # same ruleset, in both directions. A rule that stops firing on its
+      # positive fixtures, or starts matching the legitimate shape its negative
+      # fixtures pin, fails here instead of quietly degrading the catalogue.
+      - name: Replay the HISS enforcement-coverage corpus
+        env:
+          SEMGREP_CMD: pipx run semgrep==1.166.0
+        run: bash scripts/hiss/semgrep-fixtures.sh
 
   # ── Changelog fragments (render --check) ─────────────────────────────────────
   # Validates the per-PR changelog.d/ fragments and that the rendered body

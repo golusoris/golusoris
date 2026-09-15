@@ -26,10 +26,21 @@ var ErrAllBackendsFailed = errors.New("search: all backends failed")
 // (wrapping [ErrAllBackendsFailed]); a partial failure still yields the hits
 // from the backends that succeeded. Set [Options.FailFast] to instead fail the
 // whole query as soon as any backend errors.
+//
+// The fan-out is bounded: at most [DefaultMaxFanOut] backends are queried at
+// once, or as many as [WithMaxFanOut] allows. Registering more backends
+// therefore lengthens the query, it does not widen the concurrency.
 type MultiSearcher struct {
-	backends []Searcher
-	failFast bool
+	backends  []Searcher
+	failFast  bool
+	maxFanOut int
 }
+
+// DefaultMaxFanOut is how many backends a [MultiSearcher] queries at once when
+// [WithMaxFanOut] is not given. The fan-out is bounded on purpose (HISS-06):
+// without a ceiling the live goroutine — and therefore open-connection — count
+// would be whatever len(backends) happens to be at the call site.
+const DefaultMaxFanOut = 8
 
 // MultiOption configures a [MultiSearcher].
 type MultiOption func(*MultiSearcher)
@@ -38,6 +49,17 @@ type MultiOption func(*MultiSearcher)
 // of tolerating partial failure. Off by default (error-tolerant).
 func WithFailFast() MultiOption {
 	return func(m *MultiSearcher) { m.failFast = true }
+}
+
+// WithMaxFanOut bounds how many backends are queried concurrently. n <= 0 is
+// ignored, keeping [DefaultMaxFanOut]. A value above the backend count costs
+// nothing: the pool is clamped to the number of backends.
+func WithMaxFanOut(n int) MultiOption {
+	return func(m *MultiSearcher) {
+		if n > 0 {
+			m.maxFanOut = n
+		}
+	}
 }
 
 // NewMultiSearcher returns a [MultiSearcher] over backends. nil backends are
@@ -50,7 +72,7 @@ func NewMultiSearcher(backends []Searcher, opts ...MultiOption) *MultiSearcher {
 			kept = append(kept, b)
 		}
 	}
-	m := &MultiSearcher{backends: kept}
+	m := &MultiSearcher{backends: kept, maxFanOut: DefaultMaxFanOut}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -111,11 +133,17 @@ func (m *MultiSearcher) fanOut(ctx context.Context, collection string, q Query) 
 	}
 
 	out := make([]backendResult, len(m.backends))
+	// Bounded fan-out (HISS-06): the send blocks the spawning loop once the
+	// pool is full, so at most fanOutLimit backends are in flight regardless
+	// of how many backends the caller registered.
+	sem := make(chan struct{}, m.fanOutLimit())
 	var wg sync.WaitGroup
 	wg.Add(len(m.backends))
 	for i, b := range m.backends {
+		sem <- struct{}{}
 		go func() {
 			defer wg.Done()
+			defer func() { <-sem }()
 			res, err := b.Search(fanCtx, collection, q)
 			out[i] = backendResult{idx: i, results: res, err: err}
 			if err != nil && m.failFast && cancel != nil {
@@ -133,6 +161,23 @@ func (m *MultiSearcher) fanOut(ctx context.Context, collection string, q Query) 
 		}
 	}
 	return out
+}
+
+// fanOutLimit is the size of the fan-out semaphore: the configured bound,
+// clamped to at least one slot and to at most the number of backends (a pool
+// larger than the work it gates only wastes a channel buffer).
+func (m *MultiSearcher) fanOutLimit() int {
+	limit := m.maxFanOut
+	if limit <= 0 {
+		limit = DefaultMaxFanOut
+	}
+	if limit > len(m.backends) {
+		limit = len(m.backends)
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	return limit
 }
 
 // hitMerger deduplicates hits by document ID, keeping the highest-scoring hit

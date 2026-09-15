@@ -11,6 +11,19 @@
 # Deliberately NOT duplicated here (golangci-lint already gates them — see
 # .golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
 # math/rand (forbidigo), stdlib log (depguard), pkg/errors (gomodguard).
+#
+# The rules tagged HISS-NN below are enforcement for a named invariant, and each
+# carries a positive/negative/gap fixture corpus under
+# .config/hiss/testdata/HISS-NN replayed by `make hiss-fixtures`
+# (scripts/hiss/semgrep-fixtures.sh). That corpus is excluded from this
+# ruleset's own scan — the positive and gap fixtures are violations by
+# construction — so the replay scans a temporary copy instead; the registry
+# rulesets in .github/workflows/security-scan.yml exclude the same directory,
+# which is what keeps that gating job off fixtures that are wrong on purpose.
+# Every comment block states what its rule decides AND what it does not, and
+# each "does not" is pinned by a gap/ fixture that fails the replay the day the
+# rule outgrows it: an absent claim is honest, an unbacked one is the defect the
+# corpus prevents.
 rules:
   # ── HTTP client must carry a timeout ────────────────────────────────────────
   # A timeout-less *http.Client inherits no deadline and can hang a goroutine
@@ -94,3 +107,237 @@ rules:
     pattern-either:
       - pattern: ioutil.$F(...)
       - pattern: import "io/ioutil"
+
+  # ── HISS-09 · unsafe needs an adjacent // SAFETY: proof ─────────────────────
+  # The tree imports `unsafe` nowhere today. This rule keeps the escape hatch
+  # open but priced: a reinterpretation of memory is admissible only when the
+  # line directly above it states why it holds. A proof separated by a blank
+  # line no longer covers the statement, so it is reported too. Comments and
+  # string literals that merely name the package are not matched (a regex is
+  # used rather than an AST pattern because semgrep's Go parser discards the
+  # comments the proof lives in).
+  - id: unsafe-requires-safety-proof
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Importing unsafe, or reinterpreting memory with unsafe.Pointer/Slice/
+      String/Add, requires a `// SAFETY:` line directly above it stating the
+      precondition that makes it sound. Add the proof, or use a safe conversion.
+    paths:
+      exclude:
+        - "/.config/hiss/testdata/"
+    pattern-either:
+      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K[ \t]*(?:import[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*[ \t]+|_[ \t]+|\.[ \t]+)?"unsafe"[ \t]*$'
+      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K(?![ \t]*//)[^\n]*\bunsafe\.(?:Pointer|Slice|String|SliceData|StringData|Add)\b'
+
+  # ── HISS-08 · no dynamic code loading ───────────────────────────────────────
+  # plugin.Open maps a shared object chosen at run time into the process, and
+  # reflect.MakeFunc synthesises a callee the compiler never saw: both put code
+  # outside the build graph, so neither the SBOM, the provenance attestation nor
+  # the call-graph analysis describes what actually runs. Register
+  # implementations statically (an interface plus an fx provider).
+  - id: no-dynamic-code-loading
+    languages: [go]
+    severity: ERROR
+    message: >-
+      Dynamic code loading is banned — plugin.Open/Lookup maps an unattested
+      object into the process and reflect.MakeFunc builds a callee no compiler
+      saw. Register the implementation statically (interface + fx provider).
+    paths:
+      exclude:
+        - "/.config/hiss/testdata/"
+    pattern-either:
+      - pattern: import "plugin"
+      - pattern: plugin.Open(...)
+      - pattern: plugin.Lookup(...)
+      - pattern: reflect.MakeFunc(...)
+
+  # ── HISS-08 · exec must name a fixed binary ─────────────────────────────────
+  # A shell interpreter turns its argument into code, and a command name built
+  # by concatenation or fmt.Sprintf at the call site picks the executable at run
+  # time. Both defeat static determinism. Resolve the binary once — a literal,
+  # or a constructor-configured field — and pass arguments as a slice.
+  #
+  # The interpreter half is a closed list of literal names, spelled bare and at
+  # the paths a real system puts them (`/bin/bash` and `/usr/bin/bash` are both
+  # listed: on Arch and Fedora /bin is a symlink, so the second is the real
+  # path). It reaches a name held in a constant too — semgrep propagates
+  # `const shell = "/bin/sh"` into the call, which the positive fixture
+  # constant-shell-name.go pins so a future rewrite cannot silently lose it.
+  #
+  # Known gap (deliberate, not an oversight): a command name held in a plain
+  # variable or struct field is NOT reported, because that is the shape every
+  # legitimate call site in the tree uses (core/gitx r.bin, hw/fssnap name,
+  # ai/tiny dockerPath, testutil/mutation binPath — each with its own documented
+  # `#nosec G204`). Deciding whether such a value is constant needs
+  # whole-program dataflow this rule does not have, so the shape is pinned under
+  # gap/ (command-name-from-environment.go) rather than claimed as coverage.
+  - id: no-dynamic-exec-command
+    languages: [go]
+    severity: ERROR
+    message: >-
+      os/exec must name a fixed binary. A shell (`sh -c`) interprets its
+      argument as code, and a name assembled with + or fmt.Sprintf picks the
+      executable at run time. Resolve the binary once and pass args as a slice.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "/.config/hiss/testdata/"
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command($NAME, ...)
+          - pattern: exec.CommandContext($CTX, $NAME, ...)
+      - metavariable-pattern:
+          metavariable: $NAME
+          pattern-either:
+            - pattern: $A + $B
+            - pattern: fmt.Sprintf(...)
+            - pattern: '"sh"'
+            - pattern: '"bash"'
+            - pattern: '"zsh"'
+            - pattern: '"dash"'
+            - pattern: '"ash"'
+            - pattern: '"ksh"'
+            - pattern: '"fish"'
+            - pattern: '"env"'
+            - pattern: '"cmd"'
+            - pattern: '"cmd.exe"'
+            - pattern: '"powershell"'
+            - pattern: '"powershell.exe"'
+            - pattern: '"pwsh"'
+            - pattern: '"pwsh.exe"'
+            - pattern: '"/bin/sh"'
+            - pattern: '"/bin/bash"'
+            - pattern: '"/bin/zsh"'
+            - pattern: '"/bin/dash"'
+            - pattern: '"/bin/ash"'
+            - pattern: '"/bin/ksh"'
+            - pattern: '"/bin/fish"'
+            - pattern: '"/bin/env"'
+            - pattern: '"/usr/bin/sh"'
+            - pattern: '"/usr/bin/bash"'
+            - pattern: '"/usr/bin/zsh"'
+            - pattern: '"/usr/bin/dash"'
+            - pattern: '"/usr/bin/ash"'
+            - pattern: '"/usr/bin/ksh"'
+            - pattern: '"/usr/bin/fish"'
+            - pattern: '"/usr/bin/env"'
+            - pattern: '"/usr/bin/pwsh"'
+            - pattern: '"/usr/local/bin/pwsh"'
+
+  # ── HISS-06 · no input-proportional goroutine fan-out ───────────────────────
+  # A spawn inside a loop over the input starts one goroutine per element, so
+  # the live goroutine count is set by the caller, not by the program — the
+  # classic way a well-behaved service turns a large page of rows into
+  # thousands of concurrent connections.
+  #
+  # What the rule decides, exactly — two spawn shapes, each with its own escape,
+  # in input-proportional loops only (`range`, and `i < len(x)`):
+  #
+  #   (A) a `go` statement is reported unless a channel send (`$SEM <- $TOK`) or
+  #       a `$SEM.Acquire(...)` appears in the same loop BEFORE the `go`. The
+  #       order is part of the pattern: a send or an acquire that runs inside
+  #       the spawned goroutine, or anywhere after the spawn, does not bound the
+  #       spawn and does not suppress the report — the commonest such shape,
+  #       `go func() { out <- work(it) }()`, is a positive fixture.
+  #   (B) a `$G.Go(...)` call (errgroup.Group, sync.WaitGroup) is reported unless
+  #       `$G.SetLimit(...)` — the same receiver, unified by the pattern — is
+  #       called in an enclosing scope. A `SetLimit` on anything else (a
+  #       rate.Limiter, a second group) does not disarm it; positive fixtures
+  #       pin both. `SetLimit` never suppresses shape (A): it bounds `g.Go`, not
+  #       a bare `go` statement.
+  #
+  # Declared gaps, pinned by fixtures under gap/ so that the day a gap closes the
+  # replay fails and this comment must be corrected:
+  #   - a counted loop whose bound is a variable that happens to hold len(x);
+  #   - a send on an unrelated channel that precedes the spawn, which escapes
+  #     (A) even though it bounds nothing — deciding that a channel is a
+  #     semaphore needs dataflow this rule does not have.
+  # A fixed worker count (`for i := 0; i < workers; i++`) is bounded by
+  # construction and is a negative fixture, not a gap.
+  - id: no-unbounded-goroutine-in-loop
+    languages: [go]
+    severity: ERROR
+    message: >-
+      This spawns one goroutine per input element, so the live goroutine count
+      follows the caller's data instead of a bound. Acquire a slot before the
+      spawn — a buffered semaphore channel or semaphore.Weighted.Acquire ahead
+      of the `go`, or errgroup.Group.SetLimit on the group you call Go on.
+    paths:
+      exclude:
+        - "*_test.go"
+        - "/.config/hiss/testdata/"
+    pattern-either:
+      # (A) a bare `go` statement, bounded only by a slot taken before it.
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  for $K, $V := range $XS {
+                    ...
+                    go $F(...)
+                    ...
+                  }
+              - pattern: |
+                  for $V := range $XS {
+                    ...
+                    go $F(...)
+                    ...
+                  }
+              - pattern: |
+                  for range $XS {
+                    ...
+                    go $F(...)
+                    ...
+                  }
+              - pattern: |
+                  for $I := 0; $I < len($XS); $I++ {
+                    ...
+                    go $F(...)
+                    ...
+                  }
+          - pattern-not: |
+              for ... {
+                ...
+                $SEM <- $TOK
+                ...
+                go $F(...)
+                ...
+              }
+          - pattern-not: |
+              for ... {
+                ...
+                $SEM.Acquire(...)
+                ...
+                go $F(...)
+                ...
+              }
+      # (B) a group spawn, bounded only by SetLimit on that same group.
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  for $K, $V := range $XS {
+                    ...
+                    $G.Go(...)
+                    ...
+                  }
+              - pattern: |
+                  for $V := range $XS {
+                    ...
+                    $G.Go(...)
+                    ...
+                  }
+              - pattern: |
+                  for range $XS {
+                    ...
+                    $G.Go(...)
+                    ...
+                  }
+              - pattern: |
+                  for $I := 0; $I < len($XS); $I++ {
+                    ...
+                    $G.Go(...)
+                    ...
+                  }
+          - pattern-not-inside: |
+              $G.SetLimit(...)
+              ...

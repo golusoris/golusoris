@@ -67,6 +67,10 @@ compile-context-verify: ## assert vendor agent-context files match AGENTS.md
 capabilities-check: ## capabilities.yaml ↔ tree drift guard
 	$(GO) test -count=1 -run 'TestCapabilities' .
 
+.PHONY: hiss-fixtures
+hiss-fixtures: ## HISS-20 replay: .semgrep.yml vs the .config/hiss/testdata corpus
+	bash scripts/hiss/semgrep-fixtures.sh
+
 .PHONY: dedupe-scan
 dedupe-scan: ## praetor HISS-19 duplicate-block gate (Reuse Before Writing)
 	$(STANDARDSCTL) dedupe scan .
@@ -83,5 +87,5 @@ docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see
 	@for m in $(UPSTREAM_CORE_MODULES); do printf '  %-45s %s (core/)\n' "$$m" "$$(cd core && $(GO) list -m -f '{{.Version}}' $$m)"; done
 
 .PHONY: verify-all
-verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan reuse-lint ## the universal verification gate
+verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan hiss-fixtures reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
