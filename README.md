@@ -285,6 +285,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
+| `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `net/wol/` | Wake-on-LAN magic-packet sender (stdlib only) | custom |
