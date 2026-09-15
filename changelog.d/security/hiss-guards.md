@@ -3,7 +3,9 @@
   `unsafe.Pointer` / `Slice` / `String` conversions now require an adjacent
   `// SAFETY:` proof (HISS-09), `plugin.Open` / `plugin.Lookup` /
   `reflect.MakeFunc` and shell-interpreter or string-assembled `os/exec` command
-  names are refused (HISS-08), and a `go` statement inside a loop over the input
-  is refused unless a bound is acquired first (HISS-06). Each rule ships a
-  positive/negative fixture corpus under `.config/hiss/testdata/`, replayed in
-  both directions by `make hiss-fixtures` and in the CI semgrep lane.
+  names are refused (HISS-08), and a spawn inside a loop over the input — a `go`
+  statement, or `Go` on an errgroup — is refused unless the bound is taken
+  before it: a semaphore send or `Acquire` ahead of the `go`, or `SetLimit` on
+  that same group (HISS-06). Each rule ships a positive/negative/gap fixture
+  corpus under `.config/hiss/testdata/`, replayed in all three directions by
+  `make hiss-fixtures` and in the CI semgrep lane.

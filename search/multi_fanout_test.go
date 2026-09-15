@@ -18,9 +18,11 @@ import (
 const hold = 5 * time.Millisecond
 
 // concurrencyProbe records how many probeSearcher calls were ever in flight at
-// the same moment. The peak is an upper-bound observation: the semaphore in
-// MultiSearcher.fanOut guarantees it can never exceed the configured limit,
-// whatever the scheduler does.
+// the same moment. The peak is decided in both directions: the semaphore in
+// MultiSearcher.fanOut guarantees it can never exceed the configured limit
+// whatever the scheduler does, and every admitted backend parks in time.Sleep
+// rather than spinning, so a fan-out that admits two backends is observed as a
+// peak of two on any scheduler — including GOMAXPROCS=1.
 type concurrencyProbe struct {
 	mu       sync.Mutex
 	inFlight int
@@ -80,20 +82,36 @@ func runFanOut(t *testing.T, probe *concurrencyProbe, m *search.MultiSearcher) (
 	return probe.snapshot()
 }
 
-// Positive: an explicit bound caps the live backends while still querying all.
+// Positive: an explicit bound caps the live backends while still querying all,
+// and the fan-out actually fills that bound. Both directions are asserted: an
+// implementation that ignored the limit fails the ceiling on every attempt, and
+// one that regressed to querying the backends one after another never reaches
+// it. The ceiling is a guarantee of the semaphore and is checked on each
+// attempt; reaching it is a scheduling observation, so a stalled attempt is
+// retried rather than failed.
 func TestMultiSearcher_MaxFanOutCapsConcurrency(t *testing.T) {
 	t.Parallel()
 
-	const backends, limit = 8, 2
-	probe, list := probeBackends(t, backends)
-	calls, peak := runFanOut(t, probe, search.NewMultiSearcher(list, search.WithMaxFanOut(limit)))
+	const backends, limit, attempts = 8, 2, 5
+	peak := 0
+	for attempt := 1; attempt <= attempts; attempt++ {
+		probe, list := probeBackends(t, backends)
+		calls, got := runFanOut(t, probe, search.NewMultiSearcher(list, search.WithMaxFanOut(limit)))
 
-	if calls != backends {
-		t.Fatalf("calls = %d, want %d — every backend must still be queried", calls, backends)
+		if calls != backends {
+			t.Fatalf("attempt %d: calls = %d, want %d — every backend must still be queried", attempt, calls, backends)
+		}
+		if got > limit {
+			t.Fatalf("attempt %d: peak concurrency = %d, want <= %d", attempt, got, limit)
+		}
+		if got > peak {
+			peak = got
+		}
+		if peak == limit {
+			return
+		}
 	}
-	if peak > limit {
-		t.Fatalf("peak concurrency = %d, want <= %d", peak, limit)
-	}
+	t.Fatalf("peak concurrency = %d over %d attempts, want %d — the fan-out must run its backends concurrently, not serially", peak, attempts, limit)
 }
 
 // Boundary: with no option the default ceiling applies, below the backend count.

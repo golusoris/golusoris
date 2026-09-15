@@ -49,6 +49,15 @@ jobs:
           # The dind daemon cannot bind-mount this workspace: separate containers,
           # separate filesystems. Stream the tree in over stdin rather than
           # reaching for a -v that would mount an empty directory.
+          #
+          # .config/hiss/testdata is excluded because it is a corpus of
+          # deliberate violations: the HISS-20 enforcement-coverage fixtures
+          # (plugin.Open, unsafe.Pointer, `sh -c`, unbounded fan-out) exist to
+          # prove .semgrep.yml reports them, and the registry rulesets would
+          # report them too — turning this gating job red on fixtures that are
+          # correct by construction. They are replayed against .semgrep.yml,
+          # in both directions, by scripts/hiss/semgrep-fixtures.sh
+          # (`make hiss-fixtures`), which scans them from a temporary copy.
           tar -cf - --exclude=.git . \
             | docker run --rm -i semgrep/semgrep:1.144.0@sha256:10301f060aacf84078f9704fb1ba3a321df4ac46b009fd29c1c66880d1db8e77 \
                 sh -ec 'mkdir -p /src && tar -xf - -C /src && \
@@ -56,4 +65,5 @@ jobs:
                     --config p/golang \
                     --config p/javascript \
                     --config p/security-audit \
+                    --exclude .config/hiss/testdata \
                     --error --metrics=off --quiet /src'
