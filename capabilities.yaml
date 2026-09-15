@@ -825,6 +825,11 @@ packages:
     domain: plugin
     capabilities: [plugin.registry]
     description: "Package plugin provides a type-safe, in-process extension-point registry."
+  - import: github.com/golusoris/golusoris/pubsub/gcp
+    domain: pubsub
+    capabilities: [pubsub.gcp]
+    description: "Package gcp provides an fx-wired Google Cloud Pub/Sub client via cloud.google.com/go/pubsub/v2."
+    replaces: [cloud.google.com/go/pubsub/v2]
   - import: github.com/golusoris/golusoris/pubsub/kafka
     domain: pubsub
     capabilities: [pubsub.kafka]

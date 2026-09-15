@@ -107,7 +107,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river | custom on pgx |
-| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / Webhook sinks | uses db/cdc |
+| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks | uses db/cdc |
 
 ### HTTP / API
 
@@ -289,6 +289,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
+| `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `net/wol/` | Wake-on-LAN magic-packet sender (stdlib only) | custom |
