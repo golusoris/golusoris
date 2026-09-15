@@ -12,7 +12,7 @@ on:
 
 jobs:
   release:
-    uses: golusoris/golusoris/.github/workflows/release-go.yml@1d6cb261f2c901fd6a3f59c0b8b5641336ca3763 # v0.9.0
+    uses: golusoris/golusoris/.github/workflows/release-go.yml@380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1
     with:
       image-name: ghcr.io/${{ github.repository }}
     secrets: inherit
