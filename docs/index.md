@@ -27,6 +27,7 @@ All modules read their config from environment variables (prefix `APP_`) via koa
 
 ## Documentation map
 
+- **[Contributing](../CONTRIBUTING.md)** — Conventional Commits, DCO sign-off, CI gates, local dev commands, git hooks, and the release process.
 - **[Principles](principles.md)** — the framework's coding & compliance contract (Power-of-10, SEI CERT, Google Go Style, RFC 9457, SLSA L3).
 - **[Architecture Decisions](adr/README.md)** — Nygard-format ADRs, one per decision.
 - **[Architecture](architecture/README.md)** — C4 diagrams for the system.
