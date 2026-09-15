@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"testing"
 
 	"github.com/golusoris/golusoris/storage/safety"
@@ -197,22 +198,64 @@ func (p *panicOnReadReader) Read([]byte) (int, error) {
 	return 0, nil
 }
 
+// noLenReader wraps an io.Reader without exposing Len(), forcing Detect's
+// allocation hint back to the full maxHeaderBytes bound instead of a
+// reader-reported remaining length — the path a real network body (an
+// http.Response.Body implements neither Len() nor any other way to report
+// its remaining size up front) takes.
+type noLenReader struct{ r io.Reader }
+
+func (n *noLenReader) Read(p []byte) (int, error) { return n.r.Read(p) }
+
+// TestDetect_ReaderWithoutLenHint proves Detect still sniffs correctly when r
+// does not implement the internal lenReader hint interface, i.e. when the
+// allocation falls back to the full bound rather than a reader-reported
+// length.
+func TestDetect_ReaderWithoutLenHint(t *testing.T) {
+	t.Parallel()
+	got, err := safety.Detect(context.Background(), &noLenReader{r: bytes.NewReader(pngFixture)}, 0)
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if !got.Matched || got.MIME != "image/png" {
+		t.Fatalf("Detect = %+v, want matched image/png", got)
+	}
+}
+
 func TestCheckDeclaredType(t *testing.T) {
 	t.Parallel()
 	png := safety.Detection{MIME: "image/png", Extension: "png", Category: safety.CategoryImage, Matched: true}
 	unknown := safety.Detection{Category: safety.CategoryUnknown}
 
 	tests := []struct {
-		name     string
-		got      safety.Detection
-		declared string
-		wantErr  bool
+		name        string
+		got         safety.Detection
+		declared    string
+		wantErr     bool
+		wantInvalid bool // also want errors.Is(err, ErrDeclaredTypeInvalid)
 	}{
-		{"matches", png, "image/png", false},
-		{"matches with params", png, "image/png; charset=binary", false},
-		{"mismatch", png, "application/pdf", true},
-		{"empty declared is a no-op", png, "", false},
-		{"unmatched detection is a no-op", unknown, "image/png", false},
+		{name: "matches", got: png, declared: "image/png"},
+		{name: "matches with params", got: png, declared: "image/png; charset=binary"},
+		{name: "matches with case difference", got: png, declared: "IMAGE/PNG"},
+		{name: "matches with case difference and params", got: png, declared: "Image/PNG; Charset=Binary"},
+		{name: "mismatch", got: png, declared: "application/pdf", wantErr: true},
+		{
+			// A parameter attribute with no "=value" fails mime.ParseMediaType.
+			// This must be an explicit, documented mismatch decision
+			// (ErrDeclaredTypeInvalid), not a raw-string comparison fallback.
+			name: "malformed declaration is an explicit mismatch", got: png,
+			declared: "image/png; charset", wantErr: true, wantInvalid: true,
+		},
+		{
+			// Same malformed shape, but the base type itself does not even
+			// match got.MIME — still reported via the invalid-declaration
+			// path, not the ordinary mismatch path, since the type could not
+			// be parsed out of the declaration at all.
+			name: "malformed declaration with unrelated base type", got: png,
+			declared: "application/pdf; charset", wantErr: true, wantInvalid: true,
+		},
+		{name: "empty declared is a no-op", got: png, declared: ""},
+		{name: "unmatched detection is a no-op", got: unknown, declared: "image/png"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -220,6 +263,12 @@ func TestCheckDeclaredType(t *testing.T) {
 			err := safety.CheckDeclaredType(tt.got, tt.declared)
 			if tt.wantErr && !errors.Is(err, safety.ErrTypeMismatch) {
 				t.Fatalf("err = %v, want ErrTypeMismatch", err)
+			}
+			if tt.wantInvalid && !errors.Is(err, safety.ErrDeclaredTypeInvalid) {
+				t.Fatalf("err = %v, want also ErrDeclaredTypeInvalid", err)
+			}
+			if !tt.wantInvalid && errors.Is(err, safety.ErrDeclaredTypeInvalid) {
+				t.Fatalf("err = %v, want NOT ErrDeclaredTypeInvalid", err)
 			}
 			if !tt.wantErr && err != nil {
 				t.Fatalf("err = %v, want nil", err)

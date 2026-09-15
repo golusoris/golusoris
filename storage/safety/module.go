@@ -108,8 +108,12 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
-// Module provides safety.Stripper and safety.Fetcher to the fx graph. CleanKey
-// and MustBeLocal are pure package functions usable without injection.
+// Module provides safety.Stripper and safety.Fetcher to the fx graph. CleanKey,
+// MustBeLocal, Detect, DetectBytes, and CheckDeclaredType are pure package
+// functions usable without injection — magic-byte detection is an in-memory
+// byte match with no dial and no decode, so it needs no fx.Provide of its own;
+// a caller that wants DetectOptions.MaxHeaderBytes from config can still read
+// it off the fx-provided Options.Detect.
 var Module = fx.Module(
 	"golusoris.storage.safety",
 	fx.Provide(loadOptions),

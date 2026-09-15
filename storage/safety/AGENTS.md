@@ -50,7 +50,7 @@ type Detection struct {
 
 Sentinel errors: `ErrUnsupportedType`, `ErrImageTooLarge` (strip);
 `ErrBlockedAddress`, `ErrTooLarge`, `ErrBadScheme` (fetch); `ErrUnsafeKey` (keys);
-`ErrEmptyInput`, `ErrTypeMismatch` (detect).
+`ErrEmptyInput`, `ErrTypeMismatch`, `ErrDeclaredTypeInvalid` (detect).
 
 ## Why these choices (per concern)
 
@@ -109,7 +109,18 @@ Sentinel errors: `ErrUnsupportedType`, `ErrImageTooLarge` (strip);
   detection stays byte-for-byte identical to the underlying library.
 - **`CheckDeclaredType` only ever flags an actual disagreement.** An empty
   declared type or an unmatched `Detection` (many valid formats — JSON, plain
-  text, SVG — carry no magic number) returns `nil`, not a guess.
+  text, SVG — carry no magic number) returns `nil`, not a guess. A declared
+  type that fails `mime.ParseMediaType` (e.g. a trailing `; charset` parameter
+  with no value) is an explicit mismatch (`ErrDeclaredTypeInvalid`, wrapped in
+  `ErrTypeMismatch`), not a raw-string comparison fallback — an unparseable
+  declaration cannot be trusted to carry the type it claims. Comparison
+  otherwise ignores parameters and is case-insensitive.
+- **`Detect`'s buffer allocation follows the reader, not just the bound.** It
+  grows to the smaller of `maxHeaderBytes` and `r`'s own remaining length when
+  `r` reports one (`*bytes.Reader`, `*strings.Reader`, `*bytes.Buffer`); the
+  *read* itself stays hard-capped at `maxHeaderBytes` via `io.LimitReader`
+  regardless, so a `Reader` with no known length (a network body) is never
+  drained past the bound even though it gets no allocation-size hint.
 - Config keys live under `storage.safety.*` (see `module.go`).
 - No `init()`, no `fx.Lifecycle`: the guard + client hold no goroutines or open
   connections at rest. A future IANA-prefix-refresh ticker would wire via
