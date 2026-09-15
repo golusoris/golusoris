@@ -53,6 +53,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hekmon/transmissionrpc/v3 v3.0.0
+	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
@@ -156,12 +157,14 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.38.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.0 // indirect
+	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.5 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
 	github.com/boombuler/barcode v1.1.0 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/caddyserver/zerossl v0.1.5 // indirect
 	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
@@ -297,6 +300,7 @@ require (
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
 	github.com/pion/datachannel v1.6.2 // indirect
@@ -375,6 +379,7 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	go.yaml.in/yaml/v4 v4.0.0-rc.2 // indirect
 	go4.org v0.0.0-20260112195520-a5071408f32f // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
