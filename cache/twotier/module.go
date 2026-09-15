@@ -87,6 +87,36 @@ func (r redisL2) Del(ctx context.Context, key string) error {
 // scanCount bounds work per SCAN round-trip (a hint, not a hard page size).
 const scanCount = 256
 
+// maxScanRounds bounds the cursor-paged SCAN loop in DelPrefix (HISS-02): a
+// well-behaved Redis server always returns cursor 0 within a handful of
+// rounds relative to keyspace size, so this is a generous ceiling that never
+// trips in practice; it exists to fail closed instead of looping forever
+// against a server that keeps cycling non-zero cursors.
+const maxScanRounds = 1_000_000
+
+// scanRoundFunc performs one paginated round starting at cursor and returns
+// the next cursor to resume from (0 means the scan is complete).
+type scanRoundFunc func(cursor uint64) (nextCursor uint64, err error)
+
+// runBoundedScan drives fn from cursor 0 until it reports completion (a
+// returned cursor of 0) or maxRounds is exceeded, whichever comes first
+// (HISS-02: scalar loop bound). Extracted from DelPrefix so the bound itself
+// is unit-testable without a Redis server.
+func runBoundedScan(maxRounds int, fn scanRoundFunc) error {
+	cursor := uint64(0)
+	for range maxRounds {
+		next, err := fn(cursor)
+		if err != nil {
+			return err
+		}
+		if next == 0 {
+			return nil
+		}
+		cursor = next
+	}
+	return fmt.Errorf("cache/twotier: exceeded %d scan rounds without completing", maxRounds)
+}
+
 // DelPrefix removes every key matching "<prefix>*" via cursor-paged SCAN, then
 // UNLINKs the matched keys per page (UNLINK reclaims memory off the main
 // thread, unlike DEL). An empty prefix is rejected to avoid scanning the whole
@@ -96,25 +126,24 @@ func (r redisL2) DelPrefix(ctx context.Context, prefix string) error {
 		return errors.New("cache/twotier: refusing to scan-delete an empty prefix")
 	}
 	match := prefix + "*"
-	for cursor := uint64(0); ; {
-		entry, err := r.client.Do(ctx,
+	return runBoundedScan(maxScanRounds, func(cursor uint64) (uint64, error) {
+		entry, err := r.client.Do(
+			ctx,
 			r.client.B().Scan().Cursor(cursor).Match(match).Count(scanCount).Build(),
 		).AsScanEntry()
 		if err != nil {
-			return fmt.Errorf("cache/twotier: redis scan %q: %w", match, err)
+			return 0, fmt.Errorf("cache/twotier: redis scan %q: %w", match, err)
 		}
 		if len(entry.Elements) > 0 {
-			if derr := r.client.Do(ctx,
+			if derr := r.client.Do(
+				ctx,
 				r.client.B().Unlink().Key(entry.Elements...).Build(),
 			).Error(); derr != nil {
-				return fmt.Errorf("cache/twotier: redis unlink: %w", derr)
+				return 0, fmt.Errorf("cache/twotier: redis unlink: %w", derr)
 			}
 		}
-		cursor = entry.Cursor
-		if cursor == 0 {
-			return nil
-		}
-	}
+		return entry.Cursor, nil
+	})
 }
 
 // newTwoTier wires a [TwoTier] from the L1 cache, the Redis client, and config.
@@ -127,7 +156,8 @@ func newTwoTier(opts Options, l1 *memory.Cache, client rueidis.Client, logger *s
 		l2TTL:  opts.L2TTL,
 		group:  singleflight.New[string, []byte](),
 	}
-	logger.Debug("cache/twotier: started",
+	logger.Debug(
+		"cache/twotier: started",
 		slog.Duration("l1_ttl", opts.L1TTL),
 		slog.Duration("l2_ttl", opts.L2TTL),
 	)
@@ -137,7 +167,8 @@ func newTwoTier(opts Options, l1 *memory.Cache, client rueidis.Client, logger *s
 // Module provides *twotier.TwoTier to the fx graph. It requires *memory.Cache
 // (golusoris.CacheMemory) and rueidis.Client (golusoris.CacheRedis) plus
 // config + log from golusoris.Core.
-var Module = fx.Module("golusoris.cache.twotier",
+var Module = fx.Module(
+	"golusoris.cache.twotier",
 	fx.Provide(loadOptions),
 	fx.Provide(newTwoTier),
 )

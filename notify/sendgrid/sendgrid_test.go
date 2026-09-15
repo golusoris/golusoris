@@ -72,3 +72,23 @@ func TestSender_RejectsMissingRequired(t *testing.T) {
 	_, err = sendgrid.NewSender(sendgrid.Options{APIKey: "k"})
 	require.Error(t, err)
 }
+
+// TestSender_SurfacesServerError is the boundary case for the extracted
+// post() helper: a non-2xx SendGrid response must surface as an error that
+// includes the status code and body, distinct from the validation errors
+// above and from the happy path.
+func TestSender_SurfacesServerError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"errors":[{"message":"bad key"}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	s, err := sendgrid.NewSender(sendgrid.Options{APIKey: "bad-key", From: "x@y.com", Endpoint: srv.URL})
+	require.NoError(t, err)
+	err = s.Send(context.Background(), notify.Message{To: []string{"a@b.com"}, Subject: "x", Text: "hi"})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "401")
+	require.Contains(t, err.Error(), "bad key")
+}

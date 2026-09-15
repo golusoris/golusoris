@@ -19,6 +19,26 @@ const decodeChunkFrames = 8192
 // ctxCheckMask bounds how often loops poll ctx.Err() (every 64 chunks).
 const ctxCheckMask = 0x3F
 
+// decodeChunkNoLimitGuard is the decode-chunk ceiling when no byte budget is
+// configured (maxFrames <= 0). It is generous but finite: real callers always
+// go through [Options.withDefaults], which normalizes MaxDecodedBytes to a
+// positive value, so this branch is a defensive fallback rather than an
+// expected path.
+const decodeChunkNoLimitGuard = 1 << 32
+
+// decodeChunkLimit bounds the decode read loop in streamMono/loudness
+// (HISS-02). A well-behaved decoder either advances frameIdx or reports
+// EOF/error on every read, so exhausting the maxFrames byte budget takes at
+// most maxFrames+1 chunks in the pathological case of one frame per read;
+// this also catches a decoder stuck returning zero frames without EOF, which
+// would otherwise spin the loop forever.
+func decodeChunkLimit(maxFrames int64) int64 {
+	if maxFrames <= 0 {
+		return decodeChunkNoLimitGuard
+	}
+	return maxFrames + 1
+}
+
 // waveform mono-mixes the stream and reduces it to buckets min/max peaks.
 func (a *analyzer) waveform(ctx context.Context, st pcmStream, buckets int) (PeakSet, error) {
 	info := st.info()
@@ -59,7 +79,8 @@ func (a *analyzer) streamMono(
 	fn func(frameIdx int64, mono float32),
 ) error {
 	var frameIdx int64
-	for chunk := 0; ; chunk++ {
+	limit := decodeChunkLimit(maxFrames)
+	for chunk := range limit {
 		if chunk&ctxCheckMask == 0 {
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("audio: waveform: %w", err)
@@ -81,6 +102,7 @@ func (a *analyzer) streamMono(
 			return err // already wrapped by the decoder
 		}
 	}
+	return fmt.Errorf("audio: waveform: exceeded %d decode chunks without EOF", limit)
 }
 
 // loudness resamples the stream to 48k stereo and runs EBU R128.
@@ -99,7 +121,9 @@ func (a *analyzer) loudness(ctx context.Context, st pcmStream) (Loudness, error)
 	maxFrames := a.opts.MaxDecodedBytes / int64(bytesPerFrame(ch))
 
 	var frameIdx int64
-	for chunk := 0; ; chunk++ {
+	limit := decodeChunkLimit(maxFrames)
+	reachedEOF := false
+	for chunk := range limit {
 		if chunk&ctxCheckMask == 0 {
 			if cerr := ctx.Err(); cerr != nil {
 				return Loudness{}, fmt.Errorf("audio: loudness: %w", cerr)
@@ -116,10 +140,14 @@ func (a *analyzer) loudness(ctx context.Context, st pcmStream) (Loudness, error)
 		}
 		if rerr != nil {
 			if errors.Is(rerr, io.EOF) {
+				reachedEOF = true
 				break
 			}
 			return Loudness{}, rerr
 		}
+	}
+	if !reachedEOF {
+		return Loudness{}, fmt.Errorf("audio: loudness: exceeded %d decode chunks without EOF", limit)
 	}
 	meter.WriteFloat32(rs.flush())
 	meter.Finalize()

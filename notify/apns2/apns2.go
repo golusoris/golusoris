@@ -45,6 +45,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jonboulle/clockwork"
 
+	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -248,12 +249,12 @@ func (s *Sender) newDeviceRequest(
 	return req, nil
 }
 
-func (s *Sender) do(req *http.Request, device string) error {
-	resp, err := s.hc.Do(req) //nolint:gosec // G107 SSRF: device path segment is caller-controlled; callers are trusted (their app's stored tokens) // #nosec G704
+func (s *Sender) do(req *http.Request, device string) (err error) {
+	resp, err := s.hc.Do(req) //nolint:gosec,bodyclose // G107 SSRF: device path segment is caller-controlled, callers are trusted (their app's stored tokens); body closed via gerr.CloseInto below // #nosec G704
 	if err != nil {
 		return fmt.Errorf("notify/apns2: post: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer gerr.CloseInto(resp.Body, &err, "notify/apns2: close response body")
 	if resp.StatusCode == http.StatusOK {
 		return nil
 	}

@@ -61,23 +61,44 @@ type Harness struct {
 	Client  *jobs.Client
 }
 
+// withDefaults returns a copy of o with zero timeouts replaced by defaults.
+func (o Options) withDefaults() Options {
+	if o.JobTimeout == 0 {
+		o.JobTimeout = 5 * time.Second
+	}
+	if o.StartTimeout == 0 {
+		o.StartTimeout = 10 * time.Second
+	}
+	return o
+}
+
 // Start boots the harness. Tears everything down via t.Cleanup.
 func Start(t *testing.T, opts Options) *Harness {
 	t.Helper()
-	if opts.JobTimeout == 0 {
-		opts.JobTimeout = 5 * time.Second
-	}
-	if opts.StartTimeout == 0 {
-		opts.StartTimeout = 10 * time.Second
-	}
+	opts = opts.withDefaults()
 
 	pool := pgtest.Start(t)
+	applyRiverMigrations(t, pool, opts.StartTimeout)
 
-	// Migration ctx is short-lived, scoped to this function only.
-	migCtx, migCancel := context.WithTimeout(context.Background(), opts.StartTimeout)
+	workers := jobs.NewWorkers()
+	if opts.Register != nil {
+		opts.Register(workers)
+	}
+
+	client := newJobsClient(t, pool, opts, workers)
+	startHarness(t, client, opts)
+
+	return &Harness{Pool: pool, Workers: workers, Client: client}
+}
+
+// applyRiverMigrations runs river's own schema migrations against pool,
+// bounded by timeout.
+func applyRiverMigrations(t *testing.T, pool *pgxpool.Pool, timeout time.Duration) {
+	t.Helper()
+	// Migration ctx is short-lived, scoped to this call only.
+	migCtx, migCancel := context.WithTimeout(context.Background(), timeout)
 	defer migCancel()
 
-	// Apply river's own migrations.
 	driver := riverpgxv5.New(pool)
 	migrator, err := rivermigrate.New(driver, nil)
 	if err != nil {
@@ -86,12 +107,11 @@ func Start(t *testing.T, opts Options) *Harness {
 	if _, migErr := migrator.Migrate(migCtx, rivermigrate.DirectionUp, nil); migErr != nil {
 		t.Fatalf("testutil/river: migrate: %v", migErr)
 	}
+}
 
-	workers := jobs.NewWorkers()
-	if opts.Register != nil {
-		opts.Register(workers)
-	}
-
+// newJobsClient builds the jobs.Client wired to pool with opts and workers.
+func newJobsClient(t *testing.T, pool *pgxpool.Pool, opts Options, workers *jobs.Workers) *jobs.Client {
+	t.Helper()
 	logger := slog.New(slog.DiscardHandler)
 	client, err := jobs.New(pool, jobs.Options{
 		Enabled:  true,
@@ -102,30 +122,34 @@ func Start(t *testing.T, opts Options) *Harness {
 	if err != nil {
 		t.Fatalf("testutil/river: new client: %v", err)
 	}
+	return client
+}
 
-	// Only Start when workers are registered — otherwise it's insert-only.
-	// Start ctx must outlive this function: river uses it as the parent
-	// for its long-running pollers. Tie cancellation to t.Cleanup.
-	if opts.Register != nil {
-		startCtx, startCancel := context.WithCancel(context.Background())
-		if err := client.Start(startCtx); err != nil {
-			startCancel()
-			t.Fatalf("testutil/river: start: %v", err)
-		}
-		if opts.Observer != nil {
-			t.Cleanup(jobs.Observe(client, opts.Observer))
-		}
-		t.Cleanup(func() {
-			stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer stopCancel()
-			if serr := client.Stop(stopCtx); serr != nil {
-				t.Logf("testutil/river: stop client: %v", serr)
-			}
-			startCancel()
-		})
+// startHarness starts client's pollers when workers are registered — a
+// harness with no workers is insert-only and needs no Start. Start ctx must
+// outlive this call: river uses it as the parent for its long-running
+// pollers, so cancellation and Stop are tied to t.Cleanup instead.
+func startHarness(t *testing.T, client *jobs.Client, opts Options) {
+	t.Helper()
+	if opts.Register == nil {
+		return
 	}
-
-	return &Harness{Pool: pool, Workers: workers, Client: client}
+	startCtx, startCancel := context.WithCancel(context.Background())
+	if err := client.Start(startCtx); err != nil {
+		startCancel()
+		t.Fatalf("testutil/river: start: %v", err)
+	}
+	if opts.Observer != nil {
+		t.Cleanup(jobs.Observe(client, opts.Observer))
+	}
+	t.Cleanup(func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		if serr := client.Stop(stopCtx); serr != nil {
+			t.Logf("testutil/river: stop client: %v", serr)
+		}
+		startCancel()
+	})
 }
 
 // WaitForJob polls the river jobs table until a job matching kind reaches
