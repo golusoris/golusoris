@@ -15,6 +15,7 @@
 // Sink implementations provided:
 //   - [KafkaSink] — publishes to a Kafka topic via [pubsub/kafka.Client]
 //   - [NATSSink]  — publishes to a NATS subject via [pubsub/nats.Client]
+//   - [GCPSink]   — publishes to a GCP Pub/Sub topic via [pubsub/gcp.Client]
 //   - [WebhookSink] — HTTP POST to a URL (no external dep)
 //
 // Usage:
@@ -48,6 +49,7 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	dbcdc "github.com/golusoris/golusoris/db/cdc"
 	"github.com/golusoris/golusoris/outbox"
+	"github.com/golusoris/golusoris/pubsub/gcp"
 	"github.com/golusoris/golusoris/pubsub/kafka"
 	"github.com/golusoris/golusoris/pubsub/nats"
 )
@@ -92,7 +94,8 @@ type Drainer struct {
 
 // Module provides *Drainer into the fx graph.
 // Requires *config.Config, *dbcdc.Consumer, []Sink (fx.Group "cdc_sinks"), *slog.Logger.
-var Module = fx.Module("golusoris.outbox.cdc",
+var Module = fx.Module(
+	"golusoris.outbox.cdc",
 	fx.Provide(loadConfig),
 	fx.Provide(newDrainer),
 )
@@ -212,6 +215,32 @@ func (s *NATSSink) Send(_ context.Context, ev outbox.Event) error {
 	}
 	if err := s.client.Publish(s.subject, data); err != nil {
 		return fmt.Errorf("nats sink: publish: %w", err)
+	}
+	return nil
+}
+
+// GCPSink publishes outbox events to a Google Cloud Pub/Sub topic as JSON,
+// with the event kind carried as a message attribute (mirroring the AGENTS.md
+// usage example in pubsub/gcp).
+type GCPSink struct {
+	client  *gcp.Client
+	topicID string
+}
+
+// NewGCPSink returns a Sink that publishes events to topicID via client.
+func NewGCPSink(client *gcp.Client, topicID string) *GCPSink {
+	return &GCPSink{client: client, topicID: topicID}
+}
+
+// Send implements [Sink].
+func (s *GCPSink) Send(ctx context.Context, ev outbox.Event) error {
+	data, err := json.Marshal(ev)
+	if err != nil {
+		return fmt.Errorf("gcp sink: marshal: %w", err)
+	}
+	attrs := map[string]string{"kind": ev.Kind}
+	if _, err := s.client.Publish(ctx, s.topicID, data, attrs); err != nil {
+		return fmt.Errorf("gcp sink: publish: %w", err)
 	}
 	return nil
 }

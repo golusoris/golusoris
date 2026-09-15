@@ -103,7 +103,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river | custom on pgx |
-| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / Webhook sinks | uses db/cdc |
+| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks | uses db/cdc |
 
 ### HTTP / API
 

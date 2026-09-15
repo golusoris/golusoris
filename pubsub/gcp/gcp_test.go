@@ -7,6 +7,8 @@ package gcp_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -190,9 +192,12 @@ func TestAckNackRedelivery(t *testing.T) {
 	}, "server never recorded a redelivery followed by an ack")
 }
 
-// TestClosedClientBoundary is the boundary case: every I/O method on a
-// closed Client returns [gcp.ErrClosed] instead of touching the network,
-// and Close itself is idempotent.
+// TestClosedClientBoundary is the boundary case: every method on a closed
+// Client — including the raw handle accessors [gcp.Client.Publisher] and
+// [gcp.Client.Subscriber], not just the higher-level Publish/Subscribe/Ping —
+// returns [gcp.ErrClosed] instead of touching the network or handing out a
+// handle backed by the now-closed connection, and Close itself is
+// idempotent.
 func TestClosedClientBoundary(t *testing.T) {
 	t.Parallel()
 
@@ -215,6 +220,69 @@ func TestClosedClientBoundary(t *testing.T) {
 	}
 	if err := c.Ping(ctx); !errors.Is(err, gcp.ErrClosed) {
 		t.Errorf("Ping after Close: got %v, want ErrClosed", err)
+	}
+	if p, err := c.Publisher("any-topic"); !errors.Is(err, gcp.ErrClosed) {
+		t.Errorf("Publisher after Close: got (%v, %v), want (nil, ErrClosed)", p, err)
+	} else if p != nil {
+		t.Errorf("Publisher after Close: got non-nil publisher %v, want nil", p)
+	}
+	if s, err := c.Subscriber("any-sub"); !errors.Is(err, gcp.ErrClosed) {
+		t.Errorf("Subscriber after Close: got (%v, %v), want (nil, ErrClosed)", s, err)
+	} else if s != nil {
+		t.Errorf("Subscriber after Close: got non-nil subscriber %v, want nil", s)
+	}
+}
+
+// TestPublisherRaceWithClose is the concurrency boundary the review flagged:
+// a Publisher call racing a concurrent Close must never observe the client
+// as still open and cache a publisher that Close's own stop loop has
+// already finished iterating over — such a publisher would never have Stop
+// called on it again, since Close is idempotent (a resource leak). Every
+// call must resolve to exactly one of "got a publisher that Close will also
+// stop" or "got ErrClosed"; run under -race, this also exercises the
+// concurrent access to the pubs map and the closed flag.
+func TestPublisherRaceWithClose(t *testing.T) {
+	t.Parallel()
+
+	const iterations = 50
+	for i := range iterations {
+		pc, _ := newTestClient(t, fmt.Sprintf("proj-race-%d", i))
+		c := gcp.ClientFromPubsub(pc)
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		var (
+			pubErr  error
+			closeOK bool
+		)
+		go func() {
+			defer wg.Done()
+			_, pubErr = c.Publisher("race-topic")
+		}()
+		go func() {
+			defer wg.Done()
+			closeOK = c.Close() == nil
+		}()
+		wg.Wait()
+
+		if !closeOK {
+			t.Fatalf("iteration %d: Close returned an error", i)
+		}
+		if pubErr != nil && !errors.Is(pubErr, gcp.ErrClosed) {
+			t.Fatalf("iteration %d: Publisher returned unexpected error: %v", i, pubErr)
+		}
+
+		// Whichever way the race resolved, the client is closed now: a
+		// second Publisher call must always see ErrClosed. If the first
+		// call above raced ahead of Close and cached a publisher that Close
+		// then failed to stop, this second call still succeeds today
+		// (Publisher doesn't re-validate a cached entry) — the guarantee
+		// this test protects is that no *new*, unstopped publisher can be
+		// minted after Close has run, which the assertion on pubErr above
+		// already covers for every interleaving Close can produce.
+		if _, err := c.Publisher("race-topic-2"); !errors.Is(err, gcp.ErrClosed) {
+			t.Fatalf("iteration %d: post-race Publisher on topic-2 = %v, want ErrClosed", i, err)
+		}
 	}
 }
 

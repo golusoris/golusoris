@@ -5,8 +5,11 @@
 package gcp
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"testing"
+	"time"
 
 	"go.uber.org/fx/fxtest"
 
@@ -44,5 +47,51 @@ func TestClientFromPubsub_DefaultLogger(t *testing.T) {
 	}
 	if c.pubs == nil {
 		t.Fatal("expected initialized publisher cache")
+	}
+}
+
+// TestBoundedWait_ReturnsUnderlyingError is the positive case: when fn
+// finishes before ctx is done, boundedWait returns exactly fn's result.
+func TestBoundedWait_ReturnsUnderlyingError(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("boom")
+	err := boundedWait(context.Background(), func() error { return wantErr })
+	if !errors.Is(err, wantErr) {
+		t.Errorf("boundedWait = %v, want %v", err, wantErr)
+	}
+
+	if err := boundedWait(context.Background(), func() error { return nil }); err != nil {
+		t.Errorf("boundedWait with a succeeding fn = %v, want nil", err)
+	}
+}
+
+// TestBoundedWait_HonoursDeadline is the negative/boundary case this finding
+// is about: OnStop's real bug was discarding its context entirely (`func(_
+// context.Context) error`), so a Close that hung would hang Stop forever
+// too, regardless of any deadline the caller (fx, bounded by StopTimeout)
+// had set. boundedWait must return promptly once ctx is done even while fn
+// is still running.
+func TestBoundedWait_HonoursDeadline(t *testing.T) {
+	t.Parallel()
+
+	block := make(chan struct{})
+	t.Cleanup(func() { close(block) }) // let the leftover goroutine finish
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	err := boundedWait(ctx, func() error {
+		<-block // simulate Close hanging (e.g. an unreachable broker)
+		return nil
+	})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("boundedWait = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed > time.Second {
+		t.Errorf("boundedWait took %v, want it to return promptly at the ~20ms deadline", elapsed)
 	}
 }

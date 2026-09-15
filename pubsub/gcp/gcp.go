@@ -28,6 +28,7 @@ import (
 	"log/slog"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	pubsub "cloud.google.com/go/pubsub/v2"
 	"cloud.google.com/go/pubsub/v2/apiv1/pubsubpb"
@@ -39,6 +40,15 @@ import (
 
 // ErrClosed is returned by [Client] methods called after [Client.Close].
 var ErrClosed = errors.New("gcp: client closed")
+
+// clientInitTimeout bounds [pubsub.NewClient] during construction. Fx does
+// not itself apply any timeout here — see the comment on that call — so this
+// mirrors fx's own [fx.DefaultTimeout] as a reasonable, self-contained bound.
+const clientInitTimeout = 15 * time.Second
+
+// closeTimeout bounds how long OnStop waits for [Client.Close] to flush
+// cached publishers and close the underlying connection before giving up.
+const closeTimeout = 10 * time.Second
 
 // Config holds Google Cloud Pub/Sub connection settings.
 type Config struct {
@@ -85,10 +95,16 @@ func newFromConfig(p params) (*Client, error) {
 		return nil, errors.New("gcp: project_id required")
 	}
 
-	// Bounded init: a background context is fine here — client construction
-	// only sets up auth/transport (no RPC), and fx applies its own start
-	// timeout around this provider. Mirrors storage.newBucket's S3 client.
-	pc, err := pubsub.NewClient(context.Background(), cfg.ProjectID)
+	// fx does not wrap Provide-time constructors like this one in any
+	// timeout — only lifecycle hooks (OnStart/OnStop) run under
+	// app.StartTimeout/StopTimeout (see fx.App.Stop and its withTimeout
+	// helper; constructors run synchronously inside fx.New, before Start is
+	// ever called). So a background context here would let a stuck
+	// credential or metadata-server lookup hang application startup
+	// forever; clientInitTimeout bounds it ourselves instead.
+	initCtx, cancel := context.WithTimeout(context.Background(), clientInitTimeout)
+	defer cancel()
+	pc, err := pubsub.NewClient(initCtx, cfg.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("gcp: new client: %w", err)
 	}
@@ -104,8 +120,17 @@ func newFromConfig(p params) (*Client, error) {
 			}
 			return nil
 		},
-		OnStop: func(_ context.Context) error {
-			return c.Close()
+		OnStop: func(ctx context.Context) error {
+			// Close (and the Publisher.Stop/pubsub.Client.Close calls
+			// inside it) take no context of their own, so honour the one fx
+			// gives us via boundedWait instead of blocking Stop
+			// indefinitely if the broker is unreachable.
+			stopCtx, stopCancel := context.WithTimeout(ctx, closeTimeout)
+			defer stopCancel()
+			if err := boundedWait(stopCtx, c.Close); err != nil {
+				return fmt.Errorf("gcp: close: %w", err)
+			}
+			return nil
 		},
 	})
 
@@ -122,25 +147,34 @@ func ClientFromPubsub(pc *pubsub.Client) *Client {
 
 // Publisher returns a cached [pubsub.Publisher] for topicID, creating one on
 // first use. The Client owns the publisher's lifecycle — callers must not
-// call Stop on it directly; use [Client.Close] instead.
-func (c *Client) Publisher(topicID string) *pubsub.Publisher {
+// call Stop on it directly; use [Client.Close] instead. It returns
+// [ErrClosed] once the Client has been closed, so a caller can never be
+// handed (or have cached) a publisher backed by an already-closed
+// connection: the closed check and the pubs-map mutation share c.mu with
+// Close's own stop loop, so the two can't interleave and leak an
+// unstopped publisher.
+func (c *Client) Publisher(topicID string) (*pubsub.Publisher, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed.Load() {
+		return nil, ErrClosed
+	}
 	if p, ok := c.pubs[topicID]; ok {
-		return p
+		return p, nil
 	}
 	p := c.c.Publisher(topicID)
 	c.pubs[topicID] = p
-	return p
+	return p, nil
 }
 
 // Publish publishes data with the given attributes to topicID and blocks
 // until the broker acknowledges it or ctx is done.
 func (c *Client) Publish(ctx context.Context, topicID string, data []byte, attrs map[string]string) (string, error) {
-	if c.closed.Load() {
-		return "", ErrClosed
+	p, err := c.Publisher(topicID)
+	if err != nil {
+		return "", err
 	}
-	result := c.Publisher(topicID).Publish(ctx, &pubsub.Message{Data: data, Attributes: attrs})
+	result := p.Publish(ctx, &pubsub.Message{Data: data, Attributes: attrs})
 	id, err := result.Get(ctx)
 	if err != nil {
 		return "", fmt.Errorf("gcp: publish to %s: %w", topicID, err)
@@ -148,17 +182,25 @@ func (c *Client) Publish(ctx context.Context, topicID string, data []byte, attrs
 	return id, nil
 }
 
-// Subscriber returns a [pubsub.Subscriber] for subID.
-func (c *Client) Subscriber(subID string) *pubsub.Subscriber { return c.c.Subscriber(subID) }
+// Subscriber returns a [pubsub.Subscriber] for subID. It returns [ErrClosed]
+// once the Client has been closed, so a caller can never be handed a
+// subscriber bound to an already-closed connection.
+func (c *Client) Subscriber(subID string) (*pubsub.Subscriber, error) {
+	if c.closed.Load() {
+		return nil, ErrClosed
+	}
+	return c.c.Subscriber(subID), nil
+}
 
 // Subscribe pulls messages from subID and delivers each to fn until ctx is
 // cancelled or an unrecoverable error occurs. fn must Ack or Nack every
 // message it receives.
 func (c *Client) Subscribe(ctx context.Context, subID string, fn func(context.Context, *Message)) error {
-	if c.closed.Load() {
-		return ErrClosed
+	s, err := c.Subscriber(subID)
+	if err != nil {
+		return err
 	}
-	if err := c.Subscriber(subID).Receive(ctx, fn); err != nil {
+	if err := s.Receive(ctx, fn); err != nil {
 		return fmt.Errorf("gcp: subscribe %s: %w", subID, err)
 	}
 	return nil
@@ -200,3 +242,21 @@ func (c *Client) Close() error {
 // Pubsub returns the underlying *pubsub.Client for advanced use (topic and
 // subscription admin, batching/retry tuning, etc.).
 func (c *Client) Pubsub() *pubsub.Client { return c.c }
+
+// boundedWait runs fn in the background and returns its result, or ctx.Err()
+// if ctx's deadline passes first. It exists for operations like
+// [pubsub.Client.Close] that take no context of their own: without it, a
+// caller honoring ctx (e.g. an fx OnStop hook bounded by the stop deadline)
+// would still block past that deadline waiting for fn. fn keeps running
+// after a timeout — there is no way to force-cancel it — so this only bounds
+// the wait, not the work itself.
+func boundedWait(ctx context.Context, fn func() error) error {
+	done := make(chan error, 1)
+	go func() { done <- fn() }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
