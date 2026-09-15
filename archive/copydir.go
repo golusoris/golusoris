@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,8 +45,20 @@ type CopyOptions struct {
 	OnSymlink SymlinkPolicy
 
 	// PreservePermissions copies each entry's exact source file mode onto its
-	// copy. When false, new entries get the process's default (umask-masked)
-	// mode instead of the source's mode.
+	// copy, including a source directory that lacks the owner-write bit (for
+	// example a vendored or extracted read-only tree). A directory is always
+	// created writable first and chmoded to its final mode only once its
+	// contents are copied, so a read-only source directory does not block
+	// its own population.
+	//
+	// When false (the default), CopyDir does not mirror the source mode at
+	// all: every directory is created at the ordinary umask-masked "new
+	// directory" mode (as plain os.MkdirAll(dest, 0o777) would give it) and
+	// every file keeps whatever mode os.Create gave it, regardless of the
+	// source entry's mode. This guarantees the copy is always usable — the
+	// caller can read and write into it — even when src contains read-only
+	// files or directories; it deliberately does not replicate a restrictive
+	// source mode onto the copy.
 	PreservePermissions bool
 
 	// Skip is called once for every entry under src — never for src itself —
@@ -65,6 +78,13 @@ type CopyOptions struct {
 // directory into itself and checks ctx for cancellation before starting and
 // again before each entry, so a cancelled ctx stops the copy between entries
 // rather than only at the next disk error.
+//
+// CopyDir does not roll back on failure: a cancelled ctx, an exceeded
+// MaxEntries, a Skip error, or an I/O error (for example a permission
+// failure) all stop the copy where it stands and return a non-nil error,
+// leaving whatever was already written in place under dst. Callers that need
+// an all-or-nothing copy should copy into a fresh temporary directory next
+// to dst and rename it into place only once CopyDir returns nil.
 func CopyDir(ctx context.Context, src, dst string, opts CopyOptions) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -135,7 +155,33 @@ func permissionControl(preserve bool) dircopy.PermissionControlFunc {
 	if preserve {
 		return dircopy.PerservePermission
 	}
-	return dircopy.DoNothing
+	return nonPreservingPermissionControl
+}
+
+// nonPreservingPermissionControl implements PreservePermissions=false. It
+// deliberately does not use the library's own dircopy.DoNothing: DoNothing
+// creates each destination directory via os.MkdirAll(dest, srcinfo.Mode()),
+// which mirrors the *source* directory's mode onto dest immediately, before
+// any of its contents are copied. When a source directory itself lacks the
+// owner-write bit (an extracted archive, a vendored tree, or anything else
+// checked out read-only — a routine input, not an edge case), that leaves
+// the freshly created destination directory just as unwritable, so copying
+// the very entries it is about to receive fails with a permission error
+// partway through, aborting the whole copy with part of the tree already on
+// disk. Preservation is what PreservePermissions is for; the non-preserving
+// default must instead give every directory the same ordinary,
+// umask-masked "new directory" mode a plain os.MkdirAll(dest, 0o777) would
+// (independent of the source's mode), so the copy always succeeds and the
+// result is always usable. Files are left untouched, as DoNothing already
+// does: os.Create in the library's fcopy gives every new file the process's
+// standard umask-masked mode regardless of the source file's mode.
+var nonPreservingPermissionControl dircopy.PermissionControlFunc = func(srcinfo fs.FileInfo, dest string) (func(*error), error) {
+	if srcinfo.IsDir() {
+		if err := os.MkdirAll(dest, 0o777); err != nil {
+			return func(*error) {}, fmt.Errorf("archive: mkdir %s: %w", dest, err)
+		}
+	}
+	return func(*error) {}, nil
 }
 
 // rejectSelfCopy errors if dst is src, or lies inside src — copying a

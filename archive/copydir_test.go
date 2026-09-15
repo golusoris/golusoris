@@ -123,6 +123,46 @@ func TestCopyDir_PermissionsNotPreservedByDefault(t *testing.T) {
 	}
 }
 
+// TestCopyDir_DefaultOptionsUsableOnReadOnlyDir guards the BLOCKING fix: a
+// source directory that itself lacks the owner-write bit (e.g. an extracted
+// archive or a vendored read-only tree) must still copy cleanly under the
+// default (non-preserving) options, and the resulting copy must remain
+// writable — a fresh entry must be creatable inside it. Before the fix,
+// PreservePermissions=false mirrored the source directory's exact mode onto
+// dst via the copy library's DoNothing permission control, which made dst's
+// "readonly" directory read-only before its own contents were copied,
+// failing with "permission denied" and leaving a partial tree.
+func TestCopyDir_DefaultOptionsUsableOnReadOnlyDir(t *testing.T) {
+	t.Parallel()
+	src := t.TempDir()
+	writeFile(t, src, "readonly/leaf.txt", "secret", 0o640)
+	ro := filepath.Join(src, "readonly")
+	if err := os.Chmod(ro, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		// Restore write so t.TempDir's own cleanup can remove the tree.
+		_ = os.Chmod(ro, 0o750)
+	})
+
+	dst := filepath.Join(t.TempDir(), "out")
+	if err := archive.CopyDir(t.Context(), src, dst, archive.CopyOptions{}); err != nil {
+		t.Fatalf("CopyDir with default options on a read-only source dir: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dst, "readonly", "leaf.txt"))
+	if err != nil || string(got) != "secret" {
+		t.Fatalf("leaf.txt not copied: err=%v got=%q", err, got)
+	}
+
+	// Subsequent write into the copied tree: the default (non-preserving)
+	// copy must be a usable copy, not a read-only trap.
+	newFile := filepath.Join(dst, "readonly", "new.txt")
+	if err := os.WriteFile(newFile, []byte("added"), 0o640); err != nil {
+		t.Fatalf("write into copied tree: %v", err)
+	}
+}
+
 func TestCopyDir_SkipPredicate(t *testing.T) {
 	t.Parallel()
 	src := t.TempDir()
