@@ -128,20 +128,12 @@ type Sender struct {
 
 // NewSender returns an APNs sender.
 func NewSender(opts Options) (*Sender, error) {
-	if opts.KeyID == "" || opts.TeamID == "" || opts.Topic == "" || len(opts.P8Key) == 0 {
-		return nil, errors.New("notify/apns2: KeyID, TeamID, Topic and P8Key are required")
+	if err := validateOptions(opts); err != nil {
+		return nil, err
 	}
-	block, _ := pem.Decode(opts.P8Key)
-	if block == nil {
-		return nil, errors.New("notify/apns2: P8Key is not valid PEM")
-	}
-	anyKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	key, err := parseP8Key(opts.P8Key)
 	if err != nil {
-		return nil, fmt.Errorf("notify/apns2: parse p8: %w", err)
-	}
-	key, ok := anyKey.(*ecdsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("notify/apns2: p8 key is not ECDSA")
+		return nil, err
 	}
 	host := SandboxHost
 	if opts.Production {
@@ -149,17 +141,7 @@ func NewSender(opts Options) (*Sender, error) {
 	}
 	hc := opts.HTTPClient
 	if hc == nil {
-		// APNs requires HTTP/2. Transport.Protocols (Go 1.24+) replaces the
-		// deprecated x/net http2.ConfigureTransport and offers the same ALPN
-		// set it registered: h2 preferred, HTTP/1.1 as fallback.
-		protocols := new(http.Protocols)
-		protocols.SetHTTP1(true)
-		protocols.SetHTTP2(true)
-		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
-			Protocols:       protocols,
-		}
-		hc = &http.Client{Transport: tr, Timeout: 15 * time.Second}
+		hc = defaultHTTPClient()
 	}
 	if opts.DefaultPushType == "" {
 		opts.DefaultPushType = PushTypeAlert
@@ -174,6 +156,49 @@ func NewSender(opts Options) (*Sender, error) {
 	return &Sender{opts: opts, key: key, host: host, hc: hc, clock: clk}, nil
 }
 
+// validateOptions checks the fields NewSender cannot default: an APNs
+// sender is unusable without a key ID, team ID, topic and signing key.
+func validateOptions(opts Options) error {
+	if opts.KeyID == "" || opts.TeamID == "" || opts.Topic == "" || len(opts.P8Key) == 0 {
+		return errors.New("notify/apns2: KeyID, TeamID, Topic and P8Key are required")
+	}
+	return nil
+}
+
+// parseP8Key decodes the PEM-encoded PKCS8 .p8 key Apple issues and
+// asserts it is the ECDSA P-256 key APNs' ES256 JWT signing requires.
+func parseP8Key(p8Key []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(p8Key)
+	if block == nil {
+		return nil, errors.New("notify/apns2: P8Key is not valid PEM")
+	}
+	anyKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("notify/apns2: parse p8: %w", err)
+	}
+	key, ok := anyKey.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("notify/apns2: p8 key is not ECDSA")
+	}
+	return key, nil
+}
+
+// defaultHTTPClient builds the client NewSender uses when the caller
+// doesn't supply one. APNs requires HTTP/2. Transport.Protocols (Go
+// 1.24+) replaces the deprecated x/net http2.ConfigureTransport and
+// offers the same ALPN set it registered: h2 preferred, HTTP/1.1 as
+// fallback.
+func defaultHTTPClient() *http.Client {
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetHTTP2(true)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
+		Protocols:       protocols,
+	}
+	return &http.Client{Transport: tr, Timeout: 15 * time.Second}
+}
+
 // Name implements [notify.Sender].
 func (s *Sender) Name() string { return "apns2" }
 
@@ -183,12 +208,9 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 	if len(msg.To) == 0 {
 		return errors.New("notify/apns2: at least one device token required")
 	}
-	body := msg.Body
-	if body == "" {
-		body = msg.Text
-	}
-	if msg.Subject == "" && body == "" {
-		return errors.New("notify/apns2: subject or body required")
+	body, err := resolveBody(msg)
+	if err != nil {
+		return err
 	}
 
 	token, err := s.authJWT()
@@ -201,21 +223,49 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 		return err
 	}
 
+	pushType, priority := s.resolvePushMeta(msg.Metadata)
+	return s.sendToDevices(ctx, msg.To, payload, token, pushType, priority, msg.Metadata)
+}
+
+// resolveBody picks the alert body (falling back from Body to Text)
+// and enforces that a notification carries a title or a body.
+func resolveBody(msg notify.Message) (string, error) {
+	body := msg.Body
+	if body == "" {
+		body = msg.Text
+	}
+	if msg.Subject == "" && body == "" {
+		return "", errors.New("notify/apns2: subject or body required")
+	}
+	return body, nil
+}
+
+// resolvePushMeta applies per-message overrides (msg.Metadata) on top
+// of the sender's push-type and priority defaults.
+func (s *Sender) resolvePushMeta(metadata map[string]string) (PushType, Priority) {
 	pushType := s.opts.DefaultPushType
-	if v := msg.Metadata["apns-push-type"]; v != "" {
+	if v := metadata["apns-push-type"]; v != "" {
 		pushType = PushType(v)
 	}
 	priority := s.opts.DefaultPriority
-	if v := msg.Metadata["apns-priority"]; v != "" {
+	if v := metadata["apns-priority"]; v != "" {
 		if p, perr := strconv.Atoi(v); perr == nil {
 			priority = Priority(p)
 		}
 	}
+	return pushType, priority
+}
 
-	for _, device := range msg.To {
-		req, rerr := s.newDeviceRequest(ctx, device, payload, token, pushType, priority, msg.Metadata)
-		if rerr != nil {
-			return rerr
+// sendToDevices posts payload to each device token in turn, per the
+// APNs single-token-per-request spec, stopping at the first failure.
+func (s *Sender) sendToDevices(
+	ctx context.Context, devices []string, payload []byte, token string,
+	pushType PushType, priority Priority, metadata map[string]string,
+) error {
+	for _, device := range devices {
+		req, err := s.newDeviceRequest(ctx, device, payload, token, pushType, priority, metadata)
+		if err != nil {
+			return err
 		}
 		if err := s.do(req, device); err != nil {
 			return err

@@ -73,50 +73,71 @@ func SES(h HandlerFunc) http.Handler {
 			http.Error(w, "body error", http.StatusBadRequest)
 			return
 		}
-		var env snsEnvelope
-		if jerr := json.Unmarshal(body, &env); jerr != nil {
-			http.Error(w, "invalid json", http.StatusBadRequest)
-			return
-		}
-		switch env.Type {
-		case "SubscriptionConfirmation":
-			w.WriteHeader(http.StatusOK)
-			return
-		case "Notification":
-		default:
-			http.Error(w, "unknown sns type", http.StatusBadRequest)
-			return
-		}
-		var n sesInbound
-		if jerr := json.Unmarshal([]byte(env.Message), &n); jerr != nil {
-			http.Error(w, "invalid ses message", http.StatusBadRequest)
-			return
-		}
-		if n.Content == "" {
-			// S3-action: no inline content. App must fetch from S3 —
-			// still fire the event with what we have so apps can log it.
-			h(r.Context(), Email{
-				MessageID:  n.Mail.MessageID,
-				From:       firstString(n.Mail.Source),
-				To:         n.Mail.Destination,
-				ReceivedAt: n.Mail.Timestamp,
-				Provider:   "ses",
-			})
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		m, err := ParseMIME([]byte(n.Content))
+		n, ok, err := decodeSESNotification(body)
 		if err != nil {
-			http.Error(w, "mime parse: "+err.Error(), http.StatusBadRequest)
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		m.Provider = "ses"
-		if m.MessageID == "" {
-			m.MessageID = n.Mail.MessageID
+		if !ok {
+			// SubscriptionConfirmation — nothing to deliver, just ack.
+			w.WriteHeader(http.StatusOK)
+			return
 		}
-		h(r.Context(), m)
+		email, err := sesEmailFromNotification(n)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		h(r.Context(), email)
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+// decodeSESNotification unwraps the SNS envelope and, for a delivery
+// notification, the embedded SES payload. ok is false only for a
+// SubscriptionConfirmation, which callers ack with 200 and no further
+// work — it carries no SES payload to decode.
+func decodeSESNotification(body []byte) (n sesInbound, ok bool, err error) {
+	var env snsEnvelope
+	if jerr := json.Unmarshal(body, &env); jerr != nil {
+		return sesInbound{}, false, errors.New("invalid json")
+	}
+	switch env.Type {
+	case "SubscriptionConfirmation":
+		return sesInbound{}, false, nil
+	case "Notification":
+	default:
+		return sesInbound{}, false, errors.New("unknown sns type")
+	}
+	if jerr := json.Unmarshal([]byte(env.Message), &n); jerr != nil {
+		return sesInbound{}, false, errors.New("invalid ses message")
+	}
+	return n, true, nil
+}
+
+// sesEmailFromNotification normalizes a decoded SES notification to
+// [Email]. When the rule action is "S3" (no inline content), it
+// returns the envelope fields only — apps must fetch the body from S3
+// themselves.
+func sesEmailFromNotification(n sesInbound) (Email, error) {
+	if n.Content == "" {
+		return Email{
+			MessageID:  n.Mail.MessageID,
+			From:       firstString(n.Mail.Source),
+			To:         n.Mail.Destination,
+			ReceivedAt: n.Mail.Timestamp,
+			Provider:   "ses",
+		}, nil
+	}
+	m, err := ParseMIME([]byte(n.Content))
+	if err != nil {
+		return Email{}, fmt.Errorf("mime parse: %w", err)
+	}
+	m.Provider = "ses"
+	if m.MessageID == "" {
+		m.MessageID = n.Mail.MessageID
+	}
+	return m, nil
 }
 
 // Postmark returns an http.Handler for Postmark inbound email webhooks.
