@@ -79,6 +79,7 @@ func formatErrors(err error) string {
 }
 
 // Module provides a *Validator via fx.
-var Module = fx.Module("golusoris.validate",
+var Module = fx.Module(
+	"golusoris.validate",
 	fx.Provide(New),
 )

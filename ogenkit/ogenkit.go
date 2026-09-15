@@ -81,7 +81,8 @@ func SlogMiddleware(logger *slog.Logger) ogenmw.Middleware {
 		if err != nil {
 			level = slog.LevelError
 		}
-		logger.LogAttrs(req.Context, level, "ogen.operation",
+		logger.LogAttrs(
+			req.Context, level, "ogen.operation",
 			slog.String("operation_id", req.OperationID),
 			slog.String("operation_name", req.OperationName),
 		)
@@ -96,7 +97,8 @@ func RecoverMiddleware(logger *slog.Logger) ogenmw.Middleware {
 	return func(req ogenmw.Request, next ogenmw.Next) (resp ogenmw.Response, err error) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				logger.ErrorContext(req.Context, "ogenkit: panic recovered",
+				logger.ErrorContext(
+					req.Context, "ogenkit: panic recovered",
 					slog.Any("panic", rec),
 					slog.String("operation_id", req.OperationID),
 					slog.String("stack", string(debug.Stack())),

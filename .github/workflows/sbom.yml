@@ -1,0 +1,76 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Source-tree SBOMs for every release tag (praetor supply-chain policy:
+# slsa_level 3, enforce_cosign, require_sbom). The release workflow already
+# emits per-archive SPDX SBOMs through goreleaser and attests them; this
+# workflow adds source-tree SBOMs in SPDX and CycloneDX and publishes them as
+# GitHub attestations (Sigstore keyless, SLSA-3 provenance semantics) plus
+# workflow artifacts. Nothing is uploaded to the release itself: releases are
+# immutable, so assets cannot be added after publication.
+name: SBOM
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sbom-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sbom:
+    name: Source SBOM & attestation
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write       # Sigstore keyless signing of the attestations
+      attestations: write   # actions/attest-sbom
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Package the tagged source tree (attestation subject)
+        run: git archive --format=tar.gz --prefix="golusoris-${GITHUB_REF_NAME}/" -o "golusoris-${GITHUB_REF_NAME}-src.tar.gz" HEAD
+      - name: Generate SPDX SBOM (source tree)
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Generate CycloneDX SBOM (source tree)
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Attest SPDX SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
+          sbom-path: sbom.spdx.json
+      - name: Attest CycloneDX SBOM
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
+          sbom-path: sbom.cdx.json
+      - name: Upload SBOMs as workflow artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: sbom-${{ github.ref_name }}
+          path: |
+            sbom.spdx.json
+            sbom.cdx.json
+            golusoris-${{ github.ref_name }}-src.tar.gz
+          retention-days: 90

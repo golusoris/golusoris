@@ -182,6 +182,7 @@ func containerIDFromCgroup() string {
 }
 
 // Module provides [Info] via fx.
-var Module = fx.Module("golusoris.container.runtime",
+var Module = fx.Module(
+	"golusoris.container.runtime",
 	fx.Provide(Detect),
 )

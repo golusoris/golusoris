@@ -28,7 +28,8 @@ import (
 //	)
 //
 // Config key prefix: flags.* — e.g. flags.backend.
-var Module = fx.Module("golusoris.flags",
+var Module = fx.Module(
+	"golusoris.flags",
 	fx.Provide(loadOptions),
 	fx.Provide(newProvider),
 	fx.Provide(New),

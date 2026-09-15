@@ -94,7 +94,8 @@ func New(opts Options) *http.Client {
 	}
 
 	// Innermost: stdlib transport wrapped by otelhttp.
-	base := otelhttp.NewTransport(http.DefaultTransport,
+	base := otelhttp.NewTransport(
+		http.DefaultTransport,
 		otelhttp.WithTracerProvider(tp),
 	)
 
@@ -120,7 +121,8 @@ func New(opts Options) *http.Client {
 				return c.ConsecutiveFailures >= opts.Breaker.Max
 			},
 			OnStateChange: func(n string, from, to gobreaker.State) {
-				logger.Warn("httpx/client: breaker state change",
+				logger.Warn(
+					"httpx/client: breaker state change",
 					slog.String("name", n),
 					slog.String("from", from.String()),
 					slog.String("to", to.String()),

@@ -97,7 +97,8 @@ func (c Config) withDefaults() Config {
 
 // Module provides the SMTP server into the fx graph.
 // Requires *config.Config, smtp.Backend, and *slog.Logger.
-var Module = fx.Module("golusoris.net.smtpserver",
+var Module = fx.Module(
+	"golusoris.net.smtpserver",
 	fx.Provide(loadConfig),
 	fx.Invoke(startServer),
 )

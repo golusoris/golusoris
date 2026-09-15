@@ -151,7 +151,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // Module wires the k8s-Lease elector into fx. Requires *rest.Config in
 // the graph (from k8s/client). `leader.enabled=false` skips wiring.
 func Module(cb leader.Callbacks) fx.Option {
-	return fx.Module("golusoris.leader.k8s",
+	return fx.Module(
+		"golusoris.leader.k8s",
 		fx.Provide(loadOptions),
 		fx.Invoke(func(lc fx.Lifecycle, opts Options, restCfg *rest.Config, logger *slog.Logger) error {
 			if !opts.Enabled {
