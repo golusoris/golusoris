@@ -251,7 +251,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
 | `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + go-sprout |
-| `jsonschema/` | JSON Schema 2020-12 validation | santhosh-tekuri/jsonschema |
+| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types | santhosh-tekuri/jsonschema + invopop/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
 | `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |
