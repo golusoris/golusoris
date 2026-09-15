@@ -16,6 +16,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
 [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
 [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
+[![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg)](https://golusoris.github.io/golusoris/)
 [![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
@@ -24,7 +25,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and SLSA L3 supply-chain standards.
 
-**Documentation:** the mkdocs source renders from [`docs/`](docs/index.md); the GitHub Pages deploy of that site is not live yet, so browse the Markdown in-repo for now.
+**Documentation:** <https://golusoris.github.io/golusoris/> — the mkdocs site built from
+[`docs/`](docs/index.md) on every push to `main` by
+[`docs.yml`](.github/workflows/docs.yml).
 
 ---
 
