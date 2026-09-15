@@ -173,9 +173,9 @@ packages:
     replaces: [github.com/getkin/kin-openapi, github.com/go-chi/chi/v5, github.com/modelcontextprotocol/go-sdk, github.com/swaggo/gin-swagger, github.com/swaggo/swag]
   - import: github.com/golusoris/golusoris/archive
     domain: files
-    capabilities: [files.archive]
-    description: "Package archive provides extraction and creation of compressed archives (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives."
-    replaces: [github.com/mholt/archives]
+    capabilities: [files.archive, files.dircopy]
+    description: "Package archive provides extraction and creation of compressed archives (zip, tar.gz, tar.bz2, tar.xz, tar.zst, 7z, rar) via mholt/archives, plus a recursive directory copy via otiai10/copy."
+    replaces: [github.com/mholt/archives, github.com/otiai10/copy]
   - import: github.com/golusoris/golusoris/audit
     domain: saas
     capabilities: [saas.audit]

@@ -70,6 +70,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ogen-go/ogen v1.24.0
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
+	github.com/otiai10/copy v1.14.1
 	github.com/pgvector/pgvector-go v0.4.1
 	github.com/pgvector/pgvector-go/pgx v0.4.1
 	github.com/pion/webrtc/v4 v4.2.20
@@ -298,6 +299,7 @@ require (
 	github.com/oasdiff/yaml3 v0.0.14 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/paulmach/orb v0.13.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
