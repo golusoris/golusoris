@@ -961,6 +961,10 @@ packages:
     domain: test
     capabilities: [test.fxtest]
     description: "Package fxtest provides helpers for testing fx applications."
+  - import: github.com/golusoris/golusoris/testutil/ginkgofx
+    domain: test
+    capabilities: [test.ginkgofx]
+    description: "Package ginkgofx wires an fx application into a Ginkgo spec suite's BeforeSuite/AfterSuite (or BeforeEach/AfterEach) lifecycle, bounded by explicit context timeouts."
   - import: github.com/golusoris/golusoris/testutil/kafka
     domain: test
     capabilities: [test.kafka]
