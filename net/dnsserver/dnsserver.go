@@ -68,7 +68,8 @@ func (c Config) withDefaults() Config {
 
 // Module provides *dns.ServeMux into the fx graph and starts the server.
 // Requires *config.Config and *slog.Logger.
-var Module = fx.Module("golusoris.net.dnsserver",
+var Module = fx.Module(
+	"golusoris.net.dnsserver",
 	fx.Provide(loadConfig),
 	fx.Provide(newServeMux),
 	fx.Invoke(register),

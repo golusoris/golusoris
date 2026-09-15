@@ -17,7 +17,8 @@ func Recover(logger *slog.Logger) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			defer func() { //nolint:contextcheck // r.Context() is captured from the request closure
 				if rec := recover(); rec != nil {
-					logger.ErrorContext(r.Context(), "httpx: panic recovered",
+					logger.ErrorContext(
+						r.Context(), "httpx: panic recovered",
 						slog.Any("panic", rec),
 						slog.String("method", r.Method),
 						slog.String("path", r.URL.Path),

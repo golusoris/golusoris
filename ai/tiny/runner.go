@@ -85,7 +85,8 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) error {
 	for k, v := range spec.Env {
 		args = append(args, "-e", k+"="+v)
 	}
-	args = append(args,
+	args = append(
+		args,
 		"-v", spec.InputDir+":/work/input:ro",
 		"-v", spec.OutputDir+":/work/output:rw",
 		spec.Image,

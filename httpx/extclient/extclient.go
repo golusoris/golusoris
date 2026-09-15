@@ -245,7 +245,8 @@ func (c *Client) doJSON(
 		return nil, fmt.Errorf("extclient: read body: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		c.logger.WarnContext(ctx, "extclient: non-2xx response",
+		c.logger.WarnContext(
+			ctx, "extclient: non-2xx response",
 			slog.String("name", c.name),
 			slog.String("method", method),
 			slog.Int("status", resp.StatusCode),

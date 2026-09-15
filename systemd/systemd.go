@@ -100,7 +100,8 @@ func Pet() error { return Notify("WATCHDOG=1") }
 // Module wires sd_notify into fx: READY=1 on Start, STOPPING=1 on Stop,
 // and WATCHDOG=1 on a ticker honoring WATCHDOG_USEC. No-op when the
 // process isn't running under systemd.
-var Module = fx.Module("golusoris.systemd",
+var Module = fx.Module(
+	"golusoris.systemd",
 	fx.Invoke(func(lc fx.Lifecycle, clk clock.Clock, logger *slog.Logger) {
 		if !Available() {
 			return

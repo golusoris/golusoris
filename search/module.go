@@ -110,7 +110,8 @@ func newBackend(opts Options, logger *slog.Logger) (Backend, error) {
 }
 
 // Module provides search.Backend to the fx graph (memory backend by default).
-var Module = fx.Module("golusoris.search",
+var Module = fx.Module(
+	"golusoris.search",
 	fx.Provide(loadOptions),
 	fx.Provide(newBackend),
 )

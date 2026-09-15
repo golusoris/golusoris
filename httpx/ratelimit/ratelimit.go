@@ -55,7 +55,8 @@ func New(opts Options) (middleware.Middleware, error) {
 		return nil, fmt.Errorf("httpx/ratelimit: parse rate %q: %w", opts.Rate, err)
 	}
 	store := memory.NewStore()
-	lim := limiter.New(store, rate,
+	lim := limiter.New(
+		store, rate,
 		limiter.WithTrustForwardHeader(opts.TrustXFF),
 	)
 	return func(next http.Handler) http.Handler {
@@ -88,6 +89,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 // Module provides a rate-limit [middleware.Middleware].
-var Module = fx.Module("golusoris.httpx.ratelimit",
+var Module = fx.Module(
+	"golusoris.httpx.ratelimit",
 	fx.Provide(loadOptions, New),
 )

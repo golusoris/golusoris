@@ -51,7 +51,8 @@ func Logger(logger *slog.Logger, clk clock.Clock) Middleware {
 			case rec.status >= http.StatusBadRequest:
 				level = slog.LevelWarn
 			}
-			logger.LogAttrs(r.Context(), level, "http",
+			logger.LogAttrs(
+				r.Context(), level, "http",
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", statusOrDefault(rec.status)),

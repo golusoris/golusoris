@@ -82,7 +82,8 @@ func (c Config) withDefaults() Config {
 
 // Module provides a genqlient [graphql.Client] into the fx graph.
 // Requires *config.Config.
-var Module = fx.Module("golusoris.graphql.client",
+var Module = fx.Module(
+	"golusoris.graphql.client",
 	fx.Provide(loadConfig),
 	fx.Provide(newClient),
 )

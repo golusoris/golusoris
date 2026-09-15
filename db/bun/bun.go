@@ -63,7 +63,8 @@ func New(pool *pgxpool.Pool, opts Options, logger *slog.Logger) *bun.DB {
 
 // Module provides a [*bun.DB] built over the db/pgx [*pgxpool.Pool]. Requires
 // [golusoris.DB] (the pool) + [golusoris.Core] (config + log) in the graph.
-var Module = fx.Module("golusoris.db.bun",
+var Module = fx.Module(
+	"golusoris.db.bun",
 	fx.Provide(loadOptions),
 	fx.Provide(New),
 )

@@ -28,7 +28,8 @@ func TestModule_ProvidesLogger(t *testing.T) {
 	}
 
 	var got *audit.Logger
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		clock.Module,

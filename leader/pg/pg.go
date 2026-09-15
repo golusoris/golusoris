@@ -165,7 +165,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // *pgxpool.Pool in the graph (from db/pgx). `leader.enabled=false`
 // skips wiring entirely.
 func Module(cb leader.Callbacks) fx.Option {
-	return fx.Module("golusoris.leader.pg",
+	return fx.Module(
+		"golusoris.leader.pg",
 		fx.Provide(loadOptions),
 		fx.Invoke(func(lc fx.Lifecycle, opts Options, pool *pgxpool.Pool, clk clock.Clock, logger *slog.Logger) {
 			if !opts.Enabled {
