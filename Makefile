@@ -71,6 +71,10 @@ capabilities-check: ## capabilities.yaml ↔ tree drift guard
 dedupe-scan: ## praetor HISS-19 duplicate-block gate (Reuse Before Writing)
 	$(STANDARDSCTL) dedupe scan .
 
+.PHONY: hiss-coverage
+hiss-coverage: ## praetor HISS-20 enforcement-coverage catalogue (.config/hiss/coverage.yaml)
+	$(STANDARDSCTL) hiss coverage --verify
+
 .PHONY: docs-upstream
 docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see docs/upstream/README.md)
 	@echo "docs/upstream refresh recipe (one dependency at a time):"
@@ -83,5 +87,5 @@ docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see
 	@for m in $(UPSTREAM_CORE_MODULES); do printf '  %-45s %s (core/)\n' "$$m" "$$(cd core && $(GO) list -m -f '{{.Version}}' $$m)"; done
 
 .PHONY: verify-all
-verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan reuse-lint ## the universal verification gate
+verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan hiss-coverage reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."

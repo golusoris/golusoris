@@ -40,6 +40,7 @@ flowchart LR
 | **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` is the private, git-ignored live ledger: keep OPEN/BACKLOG/BUGS/QUESTIONS current via `standardsctl state task`, `state bug`, `state question`. | `standardsctl state sync --verify` |
 | **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only the gates the diff touches; docs- and state-only changes skip the heavy suites. | `standardsctl ci filter` |
 | **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation — extend or call what exists, configuration formats included. | `standardsctl dedupe scan` |
+| **HISS-20** | Enforcement Coverage | Fleet | `.config/hiss/coverage.yaml` declares, per invariant and per language, what actually enforces it here and what does not; `.config/hiss/testdata/` backs every claim. | `standardsctl hiss coverage --verify` |
 
 ## Operational Rules
 
@@ -80,9 +81,40 @@ standardsctl compile-context --verify
 # Audit repository against declared HISS invariants (Makefile alias: make audit)
 standardsctl audit
 
+# Verify the HISS-20 enforcement-coverage claims (Makefile: make hiss-coverage)
+standardsctl hiss coverage --verify
+
 # Run every formatting, linting, security, and governance gate (Makefile: make verify-all)
 make verify-all
 ```
+
+### Updating the HISS-20 enforcement coverage catalogue
+
+`.config/hiss/coverage.yaml` states what enforces each invariant **in this repository**, and
+`praetorctl hiss coverage --verify` replays `.config/hiss/testdata/` against it in both
+directions: a state claiming detection must report its `positive/` fixtures, and a state
+claiming none must leave its `gap/` fixtures unreported. So the gate fails when a claim
+becomes too optimistic *and* when it becomes too pessimistic.
+
+When a rule gains or loses coverage — a new semgrep rule, a linter added to `.golangci.yml`,
+a CI job promoted out of `continue-on-error` — the catalogue changes in the same PR as the
+mechanism:
+
+1. Move the fixture that now fires from `gap/` to `positive/`, or add one under
+   `.config/hiss/testdata/HISS-NN/<language>/{positive,negative,gap}/` if none exists. Keep
+   negatives too: a rule that reports legitimate code is the defect that gets rules disabled.
+2. Update the claim's `state`, and name the new decider in `mechanism` — the golangci linter,
+   the `.semgrep.yml` rule id, the ci.yml job name, the lefthook job or the Makefile target,
+   not a generic "linting".
+3. Put the **measurement** in `rationale`: run the named tool against the fixture and quote
+   what it printed. A claim asserted from reading a config file is the defect HISS-20 exists
+   to catch.
+4. Set `runner` to the deciding tool when it is not the HISS scanner. An omitted `runner`
+   means `praetorctl audit`, whose verdicts the verifier replays directly; any other value
+   makes the claim delegated, and the verifier then checks the attribution rather than the
+   enforcement.
+5. Re-run `make hiss-coverage`. Removing coverage follows the same steps in reverse — never
+   weaken a fixture to make a stale claim pass.
 
 ---
 
