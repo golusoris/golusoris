@@ -85,14 +85,8 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 	if opts.Name == "" {
 		return errors.New("leader/pg: leader.name is required when enabled")
 	}
-	identity := opts.Identity
-	if identity == "" {
-		if h, err := os.Hostname(); err == nil {
-			identity = h
-		} else {
-			identity = "unknown"
-		}
-	}
+	identity := resolveIdentity(opts.Identity)
+
 	key, err := keyFor(opts.Name)
 	if err != nil {
 		return err
@@ -111,20 +105,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 			return fmt.Errorf("leader/pg: try lock: %w", acqErr)
 		}
 		if got {
-			if cb.OnNewLeader != nil {
-				cb.OnNewLeader(identity)
-			}
-			leaderCtx, cancel := context.WithCancel(ctx)
-			if cb.OnStartedLeading != nil {
-				cb.OnStartedLeading(leaderCtx)
-			}
-			// Hold until ctx cancellation. The lock releases when conn
-			// is released (deferred above).
-			<-ctx.Done()
-			cancel()
-			if cb.OnStoppedLeading != nil {
-				cb.OnStoppedLeading()
-			}
+			// The lock is held until ctx cancellation and releases when
+			// conn is released (deferred above).
+			lead(ctx, identity, cb)
 			return nil
 		}
 		// Not leader: wait + retry.
@@ -135,6 +118,34 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 		}
 	}
 	return nil
+}
+
+// resolveIdentity returns identity when set, else the local hostname,
+// falling back to "unknown" when the hostname cannot be determined.
+func resolveIdentity(identity string) string {
+	if identity != "" {
+		return identity
+	}
+	if h, err := os.Hostname(); err == nil {
+		return h
+	}
+	return "unknown"
+}
+
+// lead runs the leadership callbacks and blocks until ctx is cancelled.
+func lead(ctx context.Context, identity string, cb leader.Callbacks) {
+	if cb.OnNewLeader != nil {
+		cb.OnNewLeader(identity)
+	}
+	leaderCtx, cancel := context.WithCancel(ctx)
+	if cb.OnStartedLeading != nil {
+		cb.OnStartedLeading(leaderCtx)
+	}
+	<-ctx.Done()
+	cancel()
+	if cb.OnStoppedLeading != nil {
+		cb.OnStoppedLeading()
+	}
 }
 
 func tryLock(ctx context.Context, conn *pgx.Conn, key int64) (bool, error) {

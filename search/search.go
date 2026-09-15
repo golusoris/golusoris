@@ -196,16 +196,12 @@ func (m *MemorySearcher) Search(_ context.Context, collection string, q Query) (
 	}
 
 	total := int64(len(hits))
-
-	// Apply offset + limit.
-	if q.Offset > 0 && q.Offset < len(hits) {
-		hits = hits[q.Offset:]
-	} else if q.Offset >= len(hits) {
-		hits = nil
-	}
-	if q.Limit > 0 && len(hits) > q.Limit {
-		hits = hits[:q.Limit]
-	}
+	// paginate (defined in multi.go, shared by MultiSearcher's merge path) is
+	// equivalent to this method's prior inline offset/limit slicing for every
+	// hits value reachable here: hits starts nil and is only ever grown by
+	// append above, so it is never a non-nil empty slice — the one case
+	// where the two offset=0 branches would otherwise diverge.
+	hits = paginate(hits, q.Offset, q.Limit)
 
 	return Results{Hits: hits, Total: total}, nil
 }

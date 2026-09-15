@@ -149,6 +149,24 @@ func (b *Backend) Delete(ctx context.Context, collection string, ids []string) e
 
 // Search implements [search.Searcher].
 func (b *Backend) Search(ctx context.Context, collection string, q search.Query) (search.Results, error) {
+	v := buildSearchParams(q)
+
+	path := "/collections/" + url.PathEscape(collection) + "/documents/search?" + v.Encode()
+	var out typesenseSearchResponse
+	if err := b.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return search.Results{}, err
+	}
+	return search.Results{
+		Hits:  hitsFromTypesense(out.Hits),
+		Total: int64(out.Found),
+		Page:  out.Page,
+		Took:  out.SearchTimeMs,
+	}, nil
+}
+
+// buildSearchParams translates a [search.Query] into Typesense's
+// documents/search query parameters.
+func buildSearchParams(q search.Query) url.Values {
 	v := url.Values{}
 	if q.Q == "" {
 		v.Set("q", "*")
@@ -177,14 +195,14 @@ func (b *Backend) Search(ctx context.Context, collection string, q search.Query)
 		// Typesense uses page (1-indexed) not offset.
 		v.Set("page", strconv.Itoa(q.Offset/nonZero(q.Limit, 10)+1))
 	}
+	return v
+}
 
-	path := "/collections/" + url.PathEscape(collection) + "/documents/search?" + v.Encode()
-	var out typesenseSearchResponse
-	if err := b.do(ctx, http.MethodGet, path, nil, &out); err != nil {
-		return search.Results{}, err
-	}
-	hits := make([]search.Hit, 0, len(out.Hits))
-	for _, h := range out.Hits {
+// hitsFromTypesense converts Typesense's raw hit list into [search.Hit]s,
+// keeping only non-empty highlight snippets.
+func hitsFromTypesense(in []typesenseHit) []search.Hit {
+	hits := make([]search.Hit, 0, len(in))
+	for _, h := range in {
 		hl := map[string]string{}
 		for _, hg := range h.Highlights {
 			if hg.Snippet != "" {
@@ -197,12 +215,7 @@ func (b *Backend) Search(ctx context.Context, collection string, q search.Query)
 			Highlight: hl,
 		})
 	}
-	return search.Results{
-		Hits:  hits,
-		Total: int64(out.Found),
-		Page:  out.Page,
-		Took:  out.SearchTimeMs,
-	}, nil
+	return hits
 }
 
 func (b *Backend) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -292,16 +305,18 @@ func nonZero(a, fallback int) int {
 	return a
 }
 
+type typesenseHit struct {
+	Document   search.Document `json:"document"`
+	TextMatch  float64         `json:"text_match"`
+	Highlights []struct {
+		Field   string `json:"field"`
+		Snippet string `json:"snippet"`
+	} `json:"highlights"`
+}
+
 type typesenseSearchResponse struct {
-	Found        int `json:"found"`
-	Page         int `json:"page"`
-	SearchTimeMs int `json:"search_time_ms"`
-	Hits         []struct {
-		Document   search.Document `json:"document"`
-		TextMatch  float64         `json:"text_match"`
-		Highlights []struct {
-			Field   string `json:"field"`
-			Snippet string `json:"snippet"`
-		} `json:"highlights"`
-	} `json:"hits"`
+	Found        int            `json:"found"`
+	Page         int            `json:"page"`
+	SearchTimeMs int            `json:"search_time_ms"`
+	Hits         []typesenseHit `json:"hits"`
 }

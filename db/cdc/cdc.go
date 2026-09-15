@@ -248,33 +248,88 @@ func (c *Consumer) runLoop(ctx context.Context, conn *pgconn.PgConn, startLSN pg
 	clientXLogPos := startLSN
 
 	for ctx.Err() == nil {
-		if c.clk.Now().After(nextStandby) {
-			ssu := pglogrepl.StandbyStatusUpdate{WALWritePosition: clientXLogPos}
-			if err := pglogrepl.SendStandbyStatusUpdate(ctx, conn, ssu); err != nil {
-				c.logger.ErrorContext(ctx, "cdc: standby status update", "err", err)
-				return
-			}
-			nextStandby = c.clk.Now().Add(standbyInterval)
-		}
-
-		recvCtx, cancel := context.WithDeadline(ctx, c.clk.Now().Add(standbyInterval))
-		rawMsg, err := conn.ReceiveMessage(recvCtx)
-		cancel()
-		if err != nil {
-			if pgconn.Timeout(err) {
-				continue
-			}
-			if ctx.Err() != nil {
-				return // graceful shutdown
-			}
-			c.logger.ErrorContext(ctx, "cdc: receive message", "err", err)
+		if c.maybeSendStandby(ctx, conn, clientXLogPos, &nextStandby, standbyInterval) {
 			return
 		}
 
-		if stop := c.handleMessage(ctx, rawMsg, relations, &clientXLogPos, &nextStandby); stop {
+		rawMsg, timedOut, stop := c.receiveNext(ctx, conn, standbyInterval)
+		if stop {
+			return
+		}
+		if timedOut {
+			continue
+		}
+
+		if c.handleMessage(ctx, rawMsg, relations, &clientXLogPos, &nextStandby) {
 			return
 		}
 	}
+}
+
+// maybeSendStandby sends a standby status update reporting clientXLogPos when
+// nextStandby has elapsed, advancing nextStandby on success. Returns true if
+// the loop should stop because the send failed.
+func (c *Consumer) maybeSendStandby(
+	ctx context.Context,
+	conn *pgconn.PgConn,
+	clientXLogPos pglogrepl.LSN,
+	nextStandby *time.Time,
+	interval time.Duration,
+) bool {
+	if !c.clk.Now().After(*nextStandby) {
+		return false
+	}
+	ssu := pglogrepl.StandbyStatusUpdate{WALWritePosition: clientXLogPos}
+	err := pglogrepl.SendStandbyStatusUpdate(ctx, conn, ssu)
+	return c.afterStandbySend(ctx, err, nextStandby, interval)
+}
+
+// afterStandbySend interprets the result of a standby status update send: on
+// error it logs and reports the loop should stop; on success it re-arms
+// nextStandby for the next interval.
+func (c *Consumer) afterStandbySend(ctx context.Context, err error, nextStandby *time.Time, interval time.Duration) bool {
+	if err != nil {
+		c.logger.ErrorContext(ctx, "cdc: standby status update", "err", err)
+		return true
+	}
+	*nextStandby = c.clk.Now().Add(interval)
+	return false
+}
+
+// receiveNext reads one raw WAL message bounded by a deadline of timeout
+// from now. timedOut reports a deadline expiry (caller should keep looping);
+// stop reports a fatal or shutdown condition (caller should return).
+func (c *Consumer) receiveNext(
+	ctx context.Context,
+	conn *pgconn.PgConn,
+	timeout time.Duration,
+) (rawMsg pgproto3.BackendMessage, timedOut, stop bool) {
+	recvCtx, cancel := context.WithDeadline(ctx, c.clk.Now().Add(timeout))
+	rawMsg, err := conn.ReceiveMessage(recvCtx)
+	cancel()
+	return c.classifyReceive(ctx, rawMsg, err)
+}
+
+// classifyReceive interprets the outcome of a ReceiveMessage call: a nil err
+// passes rawMsg through; a deadline-timeout error asks the caller to retry;
+// any other error asks the caller to stop — silently on graceful shutdown
+// (ctx already cancelled), logged otherwise.
+func (c *Consumer) classifyReceive(
+	ctx context.Context,
+	rawMsg pgproto3.BackendMessage,
+	err error,
+) (pgproto3.BackendMessage, bool, bool) {
+	if err == nil {
+		return rawMsg, false, false
+	}
+	if pgconn.Timeout(err) {
+		return nil, true, false
+	}
+	if ctx.Err() != nil {
+		return nil, false, true // graceful shutdown
+	}
+	c.logger.ErrorContext(ctx, "cdc: receive message", "err", err)
+	return nil, false, true
 }
 
 // handleMessage processes a single raw WAL message. Returns true if the loop should stop.

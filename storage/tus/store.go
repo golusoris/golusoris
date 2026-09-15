@@ -183,11 +183,7 @@ func (u *bucketUpload) FinishUpload(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("tus: get info for %s: %w", u.id, err)
 	}
-	key, err := u.store.keyFn(info)
-	if err != nil {
-		return err
-	}
-	key, err = sanitizeKey(key)
+	key, err := u.resolveKey(info)
 	if err != nil {
 		return err
 	}
@@ -195,21 +191,54 @@ func (u *bucketUpload) FinishUpload(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("tus: get reader for %s: %w", u.id, err)
 	}
+	obj, err := u.putAndClose(ctx, key, rc, info)
+	if err != nil {
+		return fmt.Errorf("tus: persist upload %s: %w", u.id, err)
+	}
+	u.cleanupScratch(ctx)
+	return u.notifyFinish(ctx, CompletedUpload{
+		ID: u.id, Key: obj.Key, Size: obj.Size, MetaData: map[string]string(info.MetaData),
+	})
+}
+
+// resolveKey derives the final storage key for info via the store's KeyFunc,
+// then applies the sanitizeKey traversal/absolute-path guard.
+func (u *bucketUpload) resolveKey(info tusd.FileInfo) (string, error) {
+	key, err := u.store.keyFn(info)
+	if err != nil {
+		return "", err
+	}
+	return sanitizeKey(key)
+}
+
+// putAndClose streams rc into the bucket under key, always closing rc. A
+// close error is only surfaced when the Put itself succeeded, matching
+// FinishUpload's prior inline ordering (Put's own error takes precedence).
+func (u *bucketUpload) putAndClose(
+	ctx context.Context, key string, rc io.ReadCloser, info tusd.FileInfo,
+) (storage.Object, error) {
 	obj, putErr := u.store.bucket.Put(ctx, key, rc, putOptions(info))
 	if closeErr := rc.Close(); closeErr != nil && putErr == nil {
 		putErr = closeErr
 	}
-	if putErr != nil {
-		return fmt.Errorf("tus: persist upload %s: %w", u.id, putErr)
-	}
+	return obj, putErr
+}
+
+// cleanupScratch removes the now-persisted scratch entry, logging (but not
+// failing FinishUpload on) any error — the object is already durable.
+func (u *bucketUpload) cleanupScratch(ctx context.Context) {
 	if termErr := u.entry.Terminate(ctx); termErr != nil {
 		u.store.log.WarnContext(ctx, "tus: scratch cleanup failed", "id", u.id, "err", termErr)
 	}
-	completed := CompletedUpload{ID: u.id, Key: obj.Key, Size: obj.Size, MetaData: map[string]string(info.MetaData)}
-	if u.store.onFinish != nil {
-		if hookErr := u.store.onFinish(ctx, completed); hookErr != nil {
-			return fmt.Errorf("tus: completion hook for %s: %w", u.id, hookErr)
-		}
+}
+
+// notifyFinish invokes the store's completion hook, if one is configured.
+func (u *bucketUpload) notifyFinish(ctx context.Context, completed CompletedUpload) error {
+	if u.store.onFinish == nil {
+		return nil
+	}
+	if err := u.store.onFinish(ctx, completed); err != nil {
+		return fmt.Errorf("tus: completion hook for %s: %w", u.id, err)
 	}
 	return nil
 }

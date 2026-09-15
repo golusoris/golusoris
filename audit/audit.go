@@ -160,22 +160,7 @@ func (s *MemoryStore) List(_ context.Context, f Filter) ([]Event, error) {
 	// Iterate newest-first.
 	for i := len(s.events) - 1; i >= 0; i-- {
 		e := s.events[i]
-		if f.Actor != "" && e.Actor != f.Actor {
-			continue
-		}
-		if f.Action != "" && e.Action != f.Action {
-			continue
-		}
-		if f.Target != "" && e.Target != f.Target {
-			continue
-		}
-		if f.TenantID != "" && e.TenantID != f.TenantID {
-			continue
-		}
-		if !f.After.IsZero() && !e.CreatedAt.After(f.After) {
-			continue
-		}
-		if !f.Before.IsZero() && !e.CreatedAt.Before(f.Before) {
+		if !matchesFilter(e, f) {
 			continue
 		}
 		out = append(out, e)
@@ -184,6 +169,42 @@ func (s *MemoryStore) List(_ context.Context, f Filter) ([]Event, error) {
 		}
 	}
 	return out, nil
+}
+
+// matchesFilter reports whether e satisfies every non-zero-value criterion
+// of f. A zero-value field (empty string, zero time) is unconstrained.
+func matchesFilter(e Event, f Filter) bool {
+	return matchesIdentity(e, f) && matchesTimeRange(e, f)
+}
+
+// matchesIdentity checks f's non-empty Actor/Action/Target/TenantID filters
+// against e.
+func matchesIdentity(e Event, f Filter) bool {
+	if f.Actor != "" && e.Actor != f.Actor {
+		return false
+	}
+	if f.Action != "" && e.Action != f.Action {
+		return false
+	}
+	if f.Target != "" && e.Target != f.Target {
+		return false
+	}
+	if f.TenantID != "" && e.TenantID != f.TenantID {
+		return false
+	}
+	return true
+}
+
+// matchesTimeRange checks e.CreatedAt against f's non-zero After/Before
+// bounds.
+func matchesTimeRange(e Event, f Filter) bool {
+	if !f.After.IsZero() && !e.CreatedAt.After(f.After) {
+		return false
+	}
+	if !f.Before.IsZero() && !e.CreatedAt.Before(f.Before) {
+		return false
+	}
+	return true
 }
 
 // All returns all stored events in insertion order (for test assertions).
