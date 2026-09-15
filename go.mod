@@ -48,7 +48,7 @@ require (
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1
-	github.com/golusoris/golusoris/core v0.9.1
+	github.com/golusoris/golusoris/core v0.9.2
 	github.com/google/uuid v1.6.0
 	github.com/grafana/pyroscope-go v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4

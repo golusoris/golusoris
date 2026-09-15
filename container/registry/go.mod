@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/container/registry
 go 1.27.1
 
 require (
-	github.com/golusoris/golusoris/core v0.9.1
+	github.com/golusoris/golusoris/core v0.9.2
 	github.com/google/go-containerregistry v0.22.1
 	go.uber.org/fx v1.24.0
 )
