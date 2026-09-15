@@ -121,6 +121,49 @@ func TestCleanServiceName(t *testing.T) {
 	}
 }
 
+// TestSkipOTel_disabled is the master-switch case: Enabled=false always
+// skips, regardless of endpoint/env.
+func TestSkipOTel_disabled(t *testing.T) {
+	t.Parallel()
+	if !skipOTel(Options{Enabled: false, Endpoint: "127.0.0.1:1"}) {
+		t.Error("skipOTel(Enabled: false) = false, want true")
+	}
+}
+
+// TestSkipOTel_sdkDisabledEnv proves the OTEL_SDK_DISABLED kill switch skips
+// even with an endpoint configured.
+func TestSkipOTel_sdkDisabledEnv(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel().
+	t.Setenv("OTEL_SDK_DISABLED", "true")
+	if !skipOTel(Options{Enabled: true, Endpoint: "127.0.0.1:1"}) {
+		t.Error("skipOTel with OTEL_SDK_DISABLED=true = false, want true")
+	}
+}
+
+// TestSkipOTel_noEndpoint is the boundary case: enabled, no kill switch, but
+// no OTLP endpoint configured anywhere — the 12-factor default.
+func TestSkipOTel_noEndpoint(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel().
+	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_METRICS_ENDPOINT", "")
+	t.Setenv("OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "")
+	t.Setenv("OTEL_SDK_DISABLED", "")
+	if !skipOTel(Options{Enabled: true, Endpoint: ""}) {
+		t.Error("skipOTel with no endpoint = false, want true")
+	}
+}
+
+// TestSkipOTel_configured is the negative case: none of the skip conditions
+// hold, so New should proceed to build real providers.
+func TestSkipOTel_configured(t *testing.T) {
+	// t.Setenv is incompatible with t.Parallel().
+	t.Setenv("OTEL_SDK_DISABLED", "")
+	if skipOTel(Options{Enabled: true, Endpoint: "127.0.0.1:1"}) {
+		t.Error("skipOTel with enabled+endpoint = true, want false")
+	}
+}
+
 func TestLoadOptions_disabledSkipsServiceNameCheck(t *testing.T) {
 	// t.Setenv is incompatible with t.Parallel()
 	t.Setenv("TEST_OTEL2_OTEL_ENABLED", "false")

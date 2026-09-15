@@ -174,13 +174,7 @@ func selectAsset(rel ghRelease, opts Options) (string, error) {
 
 // fetchChecksum looks for a *_checksums.txt asset and extracts the SHA-256 for assetURL.
 func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, assetURL string) (sum string, err error) {
-	var checksumURL string
-	for _, a := range rel.Assets {
-		if strings.HasSuffix(a.Name, "_checksums.txt") || strings.HasSuffix(a.Name, "checksums.txt") {
-			checksumURL = a.BrowserDownloadURL
-			break
-		}
-	}
+	checksumURL := findChecksumAssetURL(rel.Assets)
 	if checksumURL == "" {
 		return "", nil
 	}
@@ -202,13 +196,31 @@ func fetchChecksum(ctx context.Context, client *http.Client, rel ghRelease, asse
 
 	// goreleaser format: "<sha256>  <filename>\n"
 	assetName := assetURL[strings.LastIndex(assetURL, "/")+1:]
+	return parseChecksum(data, assetName), nil
+}
+
+// findChecksumAssetURL returns the download URL of the release's
+// *_checksums.txt asset, or "" when none is present.
+func findChecksumAssetURL(assets []ghAsset) string {
+	for _, a := range assets {
+		if strings.HasSuffix(a.Name, "_checksums.txt") || strings.HasSuffix(a.Name, "checksums.txt") {
+			return a.BrowserDownloadURL
+		}
+	}
+	return ""
+}
+
+// parseChecksum extracts the SHA-256 for assetName from a goreleaser-format
+// checksums file ("<sha256>  <filename>\n" per line), or "" when assetName
+// has no matching line.
+func parseChecksum(data []byte, assetName string) string {
 	for _, line := range strings.Split(string(data), "\n") {
 		parts := strings.Fields(line)
 		if len(parts) == 2 && strings.EqualFold(parts[1], assetName) {
-			return parts[0], nil
+			return parts[0]
 		}
 	}
-	return "", nil
+	return ""
 }
 
 func fetchAsset(ctx context.Context, client *http.Client, url string) (io.ReadCloser, error) {

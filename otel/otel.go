@@ -142,7 +142,7 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 //   - no OTLP endpoint is configured via otel.endpoint or the standard
 //     OTEL_EXPORTER_OTLP_*_ENDPOINT env vars (12-factor default).
 func New(ctx context.Context, opts Options) (*Providers, error) {
-	if !opts.Enabled || sdkDisabled() || !exporterConfigured(opts) {
+	if skipOTel(opts) {
 		return &Providers{}, nil
 	}
 	res, err := buildResource(ctx, opts)
@@ -151,30 +151,14 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	}
 
 	providers := &Providers{}
-
-	if opts.Export.Traces {
-		p, perr := buildTracerProvider(ctx, res, opts)
-		if perr != nil {
-			return nil, perr
-		}
-		providers.Tracer = p
-		otelapi.SetTracerProvider(p)
+	if err := wireTracer(ctx, res, opts, providers); err != nil {
+		return nil, err
 	}
-	if opts.Export.Metrics {
-		p, perr := buildMeterProvider(ctx, res, opts)
-		if perr != nil {
-			return nil, perr
-		}
-		providers.Meter = p
-		otelapi.SetMeterProvider(p)
+	if err := wireMeter(ctx, res, opts, providers); err != nil {
+		return nil, err
 	}
-	if opts.Export.Logs {
-		p, perr := buildLoggerProvider(ctx, res, opts)
-		if perr != nil {
-			return nil, perr
-		}
-		providers.Logger = p
-		global.SetLoggerProvider(p)
+	if err := wireLogger(ctx, res, opts, providers); err != nil {
+		return nil, err
 	}
 
 	otelapi.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
@@ -183,6 +167,57 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	))
 
 	return providers, nil
+}
+
+// skipOTel reports whether New must degrade to a silent no-op — see New's
+// doc comment for the three conditions.
+func skipOTel(opts Options) bool {
+	return !opts.Enabled || sdkDisabled() || !exporterConfigured(opts)
+}
+
+// wireTracer builds and registers the tracer provider when trace export is
+// enabled; a no-op otherwise.
+func wireTracer(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+	if !opts.Export.Traces {
+		return nil
+	}
+	p, err := buildTracerProvider(ctx, res, opts)
+	if err != nil {
+		return err
+	}
+	providers.Tracer = p
+	otelapi.SetTracerProvider(p)
+	return nil
+}
+
+// wireMeter builds and registers the meter provider when metric export is
+// enabled; a no-op otherwise.
+func wireMeter(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+	if !opts.Export.Metrics {
+		return nil
+	}
+	p, err := buildMeterProvider(ctx, res, opts)
+	if err != nil {
+		return err
+	}
+	providers.Meter = p
+	otelapi.SetMeterProvider(p)
+	return nil
+}
+
+// wireLogger builds and registers the logger provider when log export is
+// enabled; a no-op otherwise.
+func wireLogger(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+	if !opts.Export.Logs {
+		return nil
+	}
+	p, err := buildLoggerProvider(ctx, res, opts)
+	if err != nil {
+		return err
+	}
+	providers.Logger = p
+	global.SetLoggerProvider(p)
+	return nil
 }
 
 func buildResource(ctx context.Context, opts Options) (*resource.Resource, error) {

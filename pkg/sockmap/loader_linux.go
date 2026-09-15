@@ -335,6 +335,19 @@ func (s *Sockmap) stop(ctx context.Context) error {
 // errors are logged, not returned, so shutdown always completes. Caller holds
 // s.mu.
 func (s *Sockmap) teardownLocked() {
+	s.deleteSockhashEntries()
+	s.keys = nil
+	s.resetActiveSocketsMetric()
+	s.closeSockOpsLink()
+	s.detachSkMsgLocked()
+	s.closeCollectionLocked()
+	s.closeSockhashLocked()
+}
+
+// deleteSockhashEntries removes every key we inserted from the sockhash.
+// Best-effort: a missing key (already gone) is expected and not logged;
+// any other delete error is logged, not returned. Caller holds s.mu.
+func (s *Sockmap) deleteSockhashEntries() {
 	for i := range s.keys {
 		key := s.keys[i]
 		if err := s.sockhash.Delete(&key); err != nil && !errors.Is(err, ebpf.ErrKeyNotExist) {
@@ -344,41 +357,69 @@ func (s *Sockmap) teardownLocked() {
 				slog.String("error", err.Error()))
 		}
 	}
-	s.keys = nil
+}
+
+// resetActiveSocketsMetric zeroes the active-sockets gauge, when metrics are
+// wired. Caller holds s.mu.
+func (s *Sockmap) resetActiveSocketsMetric() {
 	if s.m != nil {
 		s.m.ActiveSockets.Set(0)
 	}
-	if s.sockOps != nil {
-		if err := s.sockOps.Close(); err != nil {
-			s.log.Warn("sockmap: close SOCK_OPS link", slog.String("error", err.Error()))
+}
+
+// closeSockOpsLink closes and clears the SOCK_OPS cgroup link, when attached.
+// Caller holds s.mu.
+func (s *Sockmap) closeSockOpsLink() {
+	if s.sockOps == nil {
+		return
+	}
+	if err := s.sockOps.Close(); err != nil {
+		s.log.Warn("sockmap: close SOCK_OPS link", slog.String("error", err.Error()))
+	}
+	s.sockOps = nil
+}
+
+// detachSkMsgLocked detaches the SK_MSG verdict program from the sockhash,
+// when it was attached and both the sockhash and collection are still live.
+// Caller holds s.mu.
+func (s *Sockmap) detachSkMsgLocked() {
+	if !s.skMsgAttd || s.sockhash == nil || s.coll == nil {
+		return
+	}
+	if prog := s.coll.Programs[s.opts.SkMsgProg]; prog != nil {
+		err := link.RawDetachProgram(link.RawDetachProgramOptions{
+			Target:  s.sockhash.FD(),
+			Program: prog,
+			Attach:  ebpf.AttachSkMsgVerdict,
+		})
+		if err != nil {
+			s.log.Warn("sockmap: detach SK_MSG program", slog.String("error", err.Error()))
 		}
-		s.sockOps = nil
 	}
-	if s.skMsgAttd && s.sockhash != nil && s.coll != nil {
-		if prog := s.coll.Programs[s.opts.SkMsgProg]; prog != nil {
-			err := link.RawDetachProgram(link.RawDetachProgramOptions{
-				Target:  s.sockhash.FD(),
-				Program: prog,
-				Attach:  ebpf.AttachSkMsgVerdict,
-			})
-			if err != nil {
-				s.log.Warn("sockmap: detach SK_MSG program", slog.String("error", err.Error()))
-			}
-		}
-		s.skMsgAttd = false
+	s.skMsgAttd = false
+}
+
+// closeCollectionLocked closes and clears the loaded BPF collection, when
+// present. Caller holds s.mu.
+func (s *Sockmap) closeCollectionLocked() {
+	if s.coll == nil {
+		return
 	}
-	if s.coll != nil {
-		s.coll.Close()
-		s.coll = nil
+	s.coll.Close()
+	s.coll = nil
+}
+
+// closeSockhashLocked closes our handle to the sockhash, when present. The
+// pin keeps the map alive for the external loader (it is a client of the
+// same pinned sockhash). Caller holds s.mu.
+func (s *Sockmap) closeSockhashLocked() {
+	if s.sockhash == nil {
+		return
 	}
-	if s.sockhash != nil {
-		// Close our handle; the pin keeps the map alive for the external
-		// loader (it is a client of the same pinned sockhash).
-		if err := s.sockhash.Close(); err != nil {
-			s.log.Warn("sockmap: close sockhash handle", slog.String("error", err.Error()))
-		}
-		s.sockhash = nil
+	if err := s.sockhash.Close(); err != nil {
+		s.log.Warn("sockmap: close sockhash handle", slog.String("error", err.Error()))
 	}
+	s.sockhash = nil
 }
 
 // sockFDAndKey returns the socket FD (as uint32, the sockhash value type) and
