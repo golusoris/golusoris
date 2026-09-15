@@ -5,12 +5,18 @@
 package cdc
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgx/v5/pgproto3"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 )
 
@@ -230,6 +236,86 @@ func TestDispatchDelete(t *testing.T) {
 			t.Fatalf("dispatchDelete() error = %v, want %v", err, wantErr)
 		}
 	})
+}
+
+func TestAfterStandbySend_success(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	c := &Consumer{logger: slog.New(slog.NewTextHandler(&buf, nil)), clk: clock.NewFake()}
+	var next time.Time
+	if stop := c.afterStandbySend(context.Background(), nil, &next, 5*time.Second); stop {
+		t.Fatal("afterStandbySend(nil err) should not stop the loop")
+	}
+	if want := c.clk.Now().Add(5 * time.Second); !next.Equal(want) {
+		t.Errorf("nextStandby = %v, want %v", next, want)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("unexpected log output on success: %s", buf.String())
+	}
+}
+
+func TestAfterStandbySend_error(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	c := &Consumer{logger: slog.New(slog.NewTextHandler(&buf, nil)), clk: clock.NewFake()}
+	before := c.clk.Now()
+	next := before
+	if stop := c.afterStandbySend(context.Background(), errors.New("boom"), &next, 5*time.Second); !stop {
+		t.Fatal("afterStandbySend(err) should stop the loop")
+	}
+	if !next.Equal(before) {
+		t.Errorf("nextStandby should be unchanged on error: got %v, want %v", next, before)
+	}
+	if !strings.Contains(buf.String(), "standby status update") {
+		t.Errorf("expected an error log entry, got %q", buf.String())
+	}
+}
+
+func TestClassifyReceive_success(t *testing.T) {
+	t.Parallel()
+	c := &Consumer{logger: slog.New(slog.DiscardHandler)}
+	want := &pgproto3.CopyData{Data: []byte("x")}
+	got, timedOut, stop := c.classifyReceive(context.Background(), want, nil)
+	if got != want {
+		t.Errorf("rawMsg = %v, want passthrough of %v", got, want)
+	}
+	if timedOut || stop {
+		t.Errorf("timedOut=%v stop=%v, want both false on success", timedOut, stop)
+	}
+}
+
+func TestClassifyReceive_gracefulShutdown(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	c := &Consumer{logger: slog.New(slog.NewTextHandler(&buf, nil))}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // ctx already done: a receive error here is a graceful shutdown, not a fault.
+	_, timedOut, stop := c.classifyReceive(ctx, nil, errors.New("use of closed network connection"))
+	if timedOut {
+		t.Error("timedOut = true, want false")
+	}
+	if !stop {
+		t.Error("stop = false, want true (graceful shutdown)")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("graceful shutdown must not log an error, got %q", buf.String())
+	}
+}
+
+func TestClassifyReceive_fatalError(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	c := &Consumer{logger: slog.New(slog.NewTextHandler(&buf, nil))}
+	_, timedOut, stop := c.classifyReceive(context.Background(), nil, errors.New("connection reset by peer"))
+	if timedOut {
+		t.Error("timedOut = true, want false")
+	}
+	if !stop {
+		t.Error("stop = false, want true")
+	}
+	if !strings.Contains(buf.String(), "receive message") {
+		t.Errorf("expected the error to be logged, got %q", buf.String())
+	}
 }
 
 func TestDispatchTruncate(t *testing.T) {
