@@ -7,6 +7,7 @@ package nri
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -266,5 +267,189 @@ func TestPluginStopContainerTimeout(t *testing.T) {
 	}
 	if elapsed >= 150*time.Millisecond {
 		t.Fatalf("StopContainer took %s, want well under the wedged hook's 200ms sleep (bounded by a 20ms timeout)", elapsed)
+	}
+	if !strings.Contains(err.Error(), "StopContainer") {
+		t.Errorf("error = %q, want it to name the hook (StopContainer)", err)
+	}
+	if strings.Contains(err.Error(), "cancel") {
+		t.Errorf("error = %q, a plain timeout should not claim the caller cancelled", err)
+	}
+}
+
+// TestPluginStopContainerCallerCancellation covers the caller-cancellation
+// half of bounded's ctx.Done() branch: when the caller's own context is
+// cancelled — not the per-call timeout expiring — the error must say so
+// instead of claiming the hook "exceeded timeout" (which would be
+// misleading: the hook was never given the chance to run that long).
+func TestPluginStopContainerCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	p := &plugin{
+		// A long timeout that would never itself fire during this test —
+		// isolates the assertion to caller cancellation.
+		timeout: 10 * time.Second,
+		hooks: Hooks{
+			StopContainer: func(context.Context, *api.PodSandbox, *api.Container) ([]*api.ContainerUpdate, error) {
+				time.Sleep(200 * time.Millisecond)
+				return nil, nil
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, err := p.StopContainer(ctx, &api.PodSandbox{}, &api.Container{})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("StopContainer error = %v, want wrapping context.Canceled", err)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("StopContainer error = %v, must not also present as a DeadlineExceeded timeout", err)
+	}
+	if strings.Contains(err.Error(), "timeout") {
+		t.Errorf("error = %q, should not claim a timeout when the caller cancelled", err)
+	}
+	if elapsed >= 150*time.Millisecond {
+		t.Fatalf("StopContainer took %s, want well under the wedged hook's 200ms sleep (bounded by caller cancellation)", elapsed)
+	}
+}
+
+// TestPluginHookPanicRecovers is the regression test for bounded running a
+// hook in a bare goroutine with no recover: before the fix, any one of these
+// panics would crash the whole plugin process (an NRI plugin runs as its own
+// OS process, so there is no outer recover to catch it) instead of just
+// failing the one containerd request that triggered it.
+func TestPluginHookPanicRecovers(t *testing.T) {
+	t.Parallel()
+
+	t.Run("CreateContainer", func(t *testing.T) {
+		t.Parallel()
+		p := &plugin{
+			timeout: time.Second,
+			hooks: Hooks{
+				CreateContainer: func(context.Context, *api.PodSandbox, *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+					panic("boom: create")
+				},
+			},
+		}
+		_, _, err := p.CreateContainer(context.Background(), &api.PodSandbox{}, &api.Container{})
+		assertPanicRecovered(t, err, "CreateContainer", "boom: create")
+	})
+
+	t.Run("StartContainer", func(t *testing.T) {
+		t.Parallel()
+		p := &plugin{
+			timeout: time.Second,
+			hooks: Hooks{
+				StartContainer: func(context.Context, *api.PodSandbox, *api.Container) error {
+					panic("boom: start")
+				},
+			},
+		}
+		err := p.StartContainer(context.Background(), &api.PodSandbox{}, &api.Container{})
+		assertPanicRecovered(t, err, "StartContainer", "boom: start")
+	})
+
+	t.Run("StopContainer", func(t *testing.T) {
+		t.Parallel()
+		p := &plugin{
+			timeout: time.Second,
+			hooks: Hooks{
+				StopContainer: func(context.Context, *api.PodSandbox, *api.Container) ([]*api.ContainerUpdate, error) {
+					panic("boom: stop")
+				},
+			},
+		}
+		_, err := p.StopContainer(context.Background(), &api.PodSandbox{}, &api.Container{})
+		assertPanicRecovered(t, err, "StopContainer", "boom: stop")
+	})
+
+	t.Run("RemovePodSandbox", func(t *testing.T) {
+		t.Parallel()
+		p := &plugin{
+			timeout: time.Second,
+			hooks: Hooks{
+				RemovePodSandbox: func(context.Context, *api.PodSandbox) error {
+					panic("boom: remove")
+				},
+			},
+		}
+		err := p.RemovePodSandbox(context.Background(), &api.PodSandbox{})
+		assertPanicRecovered(t, err, "RemovePodSandbox", "boom: remove")
+	})
+}
+
+// assertPanicRecovered checks that a hook panic came back as an error naming
+// both the hook and the panic value, rather than crashing the test binary
+// (which is exactly what would happen without bounded's recover — there
+// would be no error to assert on at all).
+func assertPanicRecovered(t *testing.T, err error, hookName, panicMsg string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("want an error recovered from the panic, got nil")
+	}
+	if !strings.Contains(err.Error(), hookName) {
+		t.Errorf("error = %q, want it to name the hook (%s)", err, hookName)
+	}
+	if !strings.Contains(err.Error(), "panicked") {
+		t.Errorf("error = %q, want it to say the hook panicked", err)
+	}
+	if !strings.Contains(err.Error(), panicMsg) {
+		t.Errorf("error = %q, want it to include the panic value (%s)", err, panicMsg)
+	}
+}
+
+// --- RemovePodSandbox ---------------------------------------------------
+
+// TestPluginRemovePodSandboxRoundTrip mirrors the other three hooks' round-
+// trip tests — RemovePodSandbox had none, leaving it at 0% coverage.
+func TestPluginRemovePodSandboxRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	wantPod := &api.PodSandbox{Id: "pod-1"}
+
+	var gotPod *api.PodSandbox
+	p := &plugin{
+		timeout: time.Second,
+		hooks: Hooks{
+			RemovePodSandbox: func(_ context.Context, pod *api.PodSandbox) error {
+				gotPod = pod
+				return nil
+			},
+		},
+	}
+
+	if err := p.RemovePodSandbox(context.Background(), wantPod); err != nil {
+		t.Fatalf("RemovePodSandbox: %v", err)
+	}
+	if gotPod != wantPod {
+		t.Error("pod was not forwarded to the hook unchanged")
+	}
+}
+
+// TestPluginRemovePodSandboxErrorPropagates covers RemovePodSandbox's error
+// path, matching TestPluginStartContainerErrorPropagates.
+func TestPluginRemovePodSandboxErrorPropagates(t *testing.T) {
+	t.Parallel()
+
+	wantErr := errors.New("remove pod sandbox: boom")
+	p := &plugin{
+		timeout: time.Second,
+		hooks: Hooks{
+			RemovePodSandbox: func(context.Context, *api.PodSandbox) error {
+				return wantErr
+			},
+		},
+	}
+
+	err := p.RemovePodSandbox(context.Background(), &api.PodSandbox{})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("RemovePodSandbox error = %v, want wrapping %v", err, wantErr)
 	}
 }

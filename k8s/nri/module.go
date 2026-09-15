@@ -58,13 +58,18 @@ func newPlugin(opts Options, hooks Hooks) (*Registration, error) {
 
 // runPlugin starts the plugin on fx Start in its own goroutine (Run blocks
 // until the context is cancelled or the connection drops) and stops it on fx
-// Stop. A plugin exit before shutdown triggers an app-wide shutdown, mirroring
+// Stop, waiting for that goroutine to actually exit before OnStop returns —
+// bounded by the OnStop context fx supplies, so a wedged Run cannot hang
+// shutdown past fx's own stop timeout (HISS-02: context timeout on all I/O).
+// A plugin exit before shutdown triggers an app-wide shutdown, mirroring
 // k8s/operator's runManager.
 func runPlugin(lc fx.Lifecycle, reg *Registration, logger *slog.Logger, sd fx.Shutdowner) {
 	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
 			go func() {
+				defer close(done)
 				if err := reg.Stub.Run(ctx); err != nil && ctx.Err() == nil {
 					logger.Error("nri: plugin exited", slog.Any("err", err))
 					if serr := sd.Shutdown(); serr != nil {
@@ -74,9 +79,14 @@ func runPlugin(lc fx.Lifecycle, reg *Registration, logger *slog.Logger, sd fx.Sh
 			}()
 			return nil
 		},
-		OnStop: func(context.Context) error {
+		OnStop: func(stopCtx context.Context) error {
 			cancel()
-			return nil
+			select {
+			case <-done:
+				return nil
+			case <-stopCtx.Done():
+				return fmt.Errorf("nri: plugin did not stop before the OnStop context expired: %w", stopCtx.Err())
+			}
 		},
 	})
 }

@@ -115,14 +115,27 @@ type boundedResult[T any] struct {
 }
 
 // bounded runs fn under a child context cancelled after timeout, returning a
-// wrapped [context.DeadlineExceeded] if fn has not returned by then (HISS-02:
-// context timeout on all I/O). The zero value of T is returned on timeout.
-func bounded[T any](ctx context.Context, timeout time.Duration, fn func(context.Context) (T, error)) (T, error) {
+// wrapped [context.DeadlineExceeded] if fn has not returned by then, or a
+// wrapped [context.Canceled] if ctx itself was cancelled by the caller before
+// the timeout elapsed (HISS-02: context timeout on all I/O). hook names the
+// calling hook (e.g. "CreateContainer") so a timeout, cancellation, or panic
+// error identifies which callback misbehaved. fn runs in its own goroutine
+// that recovers any panic and reports it as an error instead of crashing the
+// plugin process — an NRI plugin runs as its own OS process, so an unrecovered
+// panic in a hook would take the whole plugin down, not just this request.
+// The zero value of T is returned on timeout, cancellation, or panic.
+func bounded[T any](ctx context.Context, timeout time.Duration, hook string, fn func(context.Context) (T, error)) (T, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	done := make(chan boundedResult[T], 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				var zero T
+				done <- boundedResult[T]{val: zero, err: fmt.Errorf("nri: hook %s panicked: %v", hook, r)}
+			}
+		}()
 		val, err := fn(ctx)
 		done <- boundedResult[T]{val: val, err: err}
 	}()
@@ -130,7 +143,10 @@ func bounded[T any](ctx context.Context, timeout time.Duration, fn func(context.
 	select {
 	case <-ctx.Done():
 		var zero T
-		return zero, fmt.Errorf("nri: hook exceeded %s timeout: %w", timeout, ctx.Err())
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return zero, fmt.Errorf("nri: hook %s: caller context cancelled: %w", hook, ctx.Err())
+		}
+		return zero, fmt.Errorf("nri: hook %s exceeded %s timeout: %w", hook, timeout, ctx.Err())
 	case r := <-done:
 		return r.val, r.err
 	}
@@ -145,7 +161,7 @@ type createResult struct {
 
 // CreateContainer implements [nristub.CreateContainerInterface].
 func (p *plugin) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	r, err := bounded(ctx, p.timeout, func(ctx context.Context) (createResult, error) {
+	r, err := bounded(ctx, p.timeout, "CreateContainer", func(ctx context.Context) (createResult, error) {
 		adjust, updates, err := p.hooks.CreateContainer(ctx, pod, ctr)
 		return createResult{adjust: adjust, updates: updates}, err
 	})
@@ -154,7 +170,7 @@ func (p *plugin) CreateContainer(ctx context.Context, pod *api.PodSandbox, ctr *
 
 // StartContainer implements [nristub.StartContainerInterface].
 func (p *plugin) StartContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	_, err := bounded(ctx, p.timeout, func(ctx context.Context) (struct{}, error) {
+	_, err := bounded(ctx, p.timeout, "StartContainer", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, p.hooks.StartContainer(ctx, pod, ctr)
 	})
 	return err
@@ -162,14 +178,14 @@ func (p *plugin) StartContainer(ctx context.Context, pod *api.PodSandbox, ctr *a
 
 // StopContainer implements [nristub.StopContainerInterface].
 func (p *plugin) StopContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) ([]*api.ContainerUpdate, error) {
-	return bounded(ctx, p.timeout, func(ctx context.Context) ([]*api.ContainerUpdate, error) {
+	return bounded(ctx, p.timeout, "StopContainer", func(ctx context.Context) ([]*api.ContainerUpdate, error) {
 		return p.hooks.StopContainer(ctx, pod, ctr)
 	})
 }
 
 // RemovePodSandbox implements [nristub.RemovePodInterface].
 func (p *plugin) RemovePodSandbox(ctx context.Context, pod *api.PodSandbox) error {
-	_, err := bounded(ctx, p.timeout, func(ctx context.Context) (struct{}, error) {
+	_, err := bounded(ctx, p.timeout, "RemovePodSandbox", func(ctx context.Context) (struct{}, error) {
 		return struct{}{}, p.hooks.RemovePodSandbox(ctx, pod)
 	})
 	return err
