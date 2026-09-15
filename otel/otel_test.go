@@ -189,7 +189,8 @@ func TestModuleWithSlogBridge_coversHandler(t *testing.T) { //nolint:paralleltes
 	// Boot ModuleWithSlogBridge via fx to construct the fanoutHandler and
 	// cover Enabled / Handle / WithAttrs / WithGroup.
 	// Use a discard logger to avoid recursive slog→defaultHandler→slog deadlock.
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *golusoris_otel.Providers { return providers }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		fx.Provide(func() golusoris_otel.Options {
@@ -361,7 +362,8 @@ func TestModuleNoEndpointWiresCleanly(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prevSlog) })
 
 	var providers *golusoris_otel.Providers
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		config.Module,
 		log.Module,
 		golusoris_otel.Module,

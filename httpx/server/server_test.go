@@ -129,7 +129,8 @@ func TestModule_StartsAndStops(t *testing.T) {
 		t.Fatalf("config.New: %v", cfgErr)
 	}
 
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() http.Handler { return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}) }),
 		server.Module,

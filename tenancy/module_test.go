@@ -38,7 +38,8 @@ func TestModule_DefaultsHeaderExtractor(t *testing.T) {
 
 	var mw middleware.Middleware
 	var store tenancy.Store
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return newConfig(t) }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		tenancy.Module,
@@ -103,7 +104,8 @@ func TestModule_SubdomainExtractor(t *testing.T) {
 
 	var mw middleware.Middleware
 	var store tenancy.Store
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		tenancy.Module,

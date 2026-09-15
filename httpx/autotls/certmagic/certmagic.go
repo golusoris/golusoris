@@ -61,6 +61,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 // Module provides a *tls.Config via certmagic.
-var Module = fx.Module("golusoris.httpx.autotls.certmagic",
+var Module = fx.Module(
+	"golusoris.httpx.autotls.certmagic",
 	fx.Provide(loadOptions, New),
 )

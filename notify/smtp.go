@@ -41,7 +41,8 @@ func NewSMTPSender(opts SMTPOptions) (*SMTPSender, error) {
 	if !opts.TLS {
 		tlsPolicy = mail.NoTLS
 	}
-	c, err := mail.NewClient(opts.Host,
+	c, err := mail.NewClient(
+		opts.Host,
 		mail.WithPort(opts.Port),
 		mail.WithSMTPAuth(mail.SMTPAuthPlain),
 		mail.WithUsername(opts.Username),

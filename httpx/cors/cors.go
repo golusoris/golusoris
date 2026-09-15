@@ -72,6 +72,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // Module provides a CORS [middleware.Middleware]. Apps attach it to their
 // chi router via fx.Invoke, typically near the top of the stack so
 // preflight OPTIONS short-circuit before auth + rate-limit.
-var Module = fx.Module("golusoris.httpx.cors",
+var Module = fx.Module(
+	"golusoris.httpx.cors",
 	fx.Provide(loadOptions, New),
 )

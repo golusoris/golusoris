@@ -88,7 +88,8 @@ func (c Config) withDefaults() Config {
 
 // Module wires a Temporal client (and optional worker) into fx.
 // Requires *config.Config and *slog.Logger in the graph.
-var Module = fx.Module("golusoris.workflow",
+var Module = fx.Module(
+	"golusoris.workflow",
 	fx.Provide(loadConfig),
 	fx.Provide(newClient),
 	fx.Provide(newWorker),

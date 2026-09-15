@@ -177,7 +177,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // Module provides a geofence [middleware.Middleware] + the open [Reader] so
 // apps can close it on shutdown. Opens the mmdb during fx provide; if the
 // file is missing + no policy is set, the module is a no-op.
-var Module = fx.Module("golusoris.httpx.geofence",
+var Module = fx.Module(
+	"golusoris.httpx.geofence",
 	fx.Provide(
 		loadOptions,
 		func(lc fx.Lifecycle, opts Options) (middleware.Middleware, error) {

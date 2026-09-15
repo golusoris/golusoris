@@ -95,6 +95,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 // Module provides a CSRF [middleware.Middleware].
-var Module = fx.Module("golusoris.httpx.csrf",
+var Module = fx.Module(
+	"golusoris.httpx.csrf",
 	fx.Provide(loadOptions, New),
 )

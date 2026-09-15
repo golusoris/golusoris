@@ -36,7 +36,8 @@ import (
 //	tenancy.extractor    # "header" (default) or "subdomain"
 //	tenancy.header       # header name when extractor=header (default "X-Tenant-ID")
 //	tenancy.base_domain  # base domain when extractor=subdomain (e.g. "example.com")
-var Module = fx.Module("golusoris.tenancy",
+var Module = fx.Module(
+	"golusoris.tenancy",
 	fx.Provide(loadOptions),
 	fx.Provide(newMemoryStore),
 	fx.Provide(newExtractor),
