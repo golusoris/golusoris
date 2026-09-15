@@ -147,56 +147,102 @@ func (s *Signaler) Answer(ctx context.Context, offerSDP string) (answerSDP strin
 // SDP. Returns 201 Created with the answer SDP.
 func (s *Signaler) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if ct := r.Header.Get("Content-Type"); ct != "" && ct != "application/sdp" {
-			http.Error(w, "expected Content-Type application/sdp", http.StatusUnsupportedMediaType)
+		if !validateOfferRequest(w, r) {
 			return
 		}
 		ctx := r.Context()
-		r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
-		defer func() {
-			if cerr := r.Body.Close(); cerr != nil {
-				s.logger.DebugContext(ctx, "webrtc: close request body", slog.String("error", cerr.Error()))
-			}
-		}()
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			http.Error(w, "read offer: "+err.Error(), http.StatusBadRequest)
+		body, ok := s.readOfferBody(w, r)
+		if !ok {
 			return
 		}
-		if len(body) == 0 {
-			http.Error(w, "empty offer", http.StatusBadRequest)
+		answer, pc, ok := s.negotiate(ctx, w, string(body))
+		if !ok {
 			return
 		}
-		answer, pc, err := s.Answer(ctx, string(body))
-		if err != nil {
-			s.logger.WarnContext(ctx, "webrtc: answer failed", slog.String("error", err.Error()))
-			http.Error(w, "negotiation failed", http.StatusBadRequest)
-			return
-		}
-		// Close the PC when it fails — caller tracks data channels /
-		// tracks via OnConnect; there's no explicit teardown URL in the
-		// one-shot handler.
-		// The callback outlives the request, so detach cancellation but keep
-		// the request's trace/log values.
-		bg := context.WithoutCancel(ctx)
-		pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
-			if state == pionwebrtc.PeerConnectionStateFailed ||
-				state == pionwebrtc.PeerConnectionStateClosed ||
-				state == pionwebrtc.PeerConnectionStateDisconnected {
-				if cerr := pc.Close(); cerr != nil {
-					s.logger.DebugContext(bg, "webrtc: close peer connection", slog.String("state", state.String()), slog.String("error", cerr.Error()))
-				}
-			}
-		})
+		s.attachTeardown(ctx, pc)
+		s.writeAnswer(ctx, w, answer)
+	})
+}
 
-		w.Header().Set("Content-Type", "application/sdp")
-		w.WriteHeader(http.StatusCreated)
-		if _, werr := w.Write([]byte(answer)); werr != nil {
-			s.logger.WarnContext(ctx, "webrtc: write answer", slog.String("error", werr.Error()))
+// validateOfferRequest checks the request method and Content-Type, writing
+// an error response and returning false when either is unacceptable.
+func validateOfferRequest(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return false
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "" && ct != "application/sdp" {
+		http.Error(w, "expected Content-Type application/sdp", http.StatusUnsupportedMediaType)
+		return false
+	}
+	return true
+}
+
+// readOfferBody reads and size-limits the SDP offer body. It writes an
+// error response and returns ok=false on a read failure or an empty body.
+// The request body is always closed before returning.
+func (s *Signaler) readOfferBody(w http.ResponseWriter, r *http.Request) (body []byte, ok bool) {
+	ctx := r.Context()
+	r.Body = http.MaxBytesReader(w, r.Body, s.maxBodyBytes)
+	defer func() {
+		if cerr := r.Body.Close(); cerr != nil {
+			s.logger.DebugContext(ctx, "webrtc: close request body", slog.String("error", cerr.Error()))
+		}
+	}()
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "read offer: "+err.Error(), http.StatusBadRequest)
+		return nil, false
+	}
+	if len(body) == 0 {
+		http.Error(w, "empty offer", http.StatusBadRequest)
+		return nil, false
+	}
+	return body, true
+}
+
+// negotiate runs the offer/answer exchange, writing an error response and
+// returning ok=false when it fails.
+func (s *Signaler) negotiate(ctx context.Context, w http.ResponseWriter, offerSDP string) (answerSDP string, pc *pionwebrtc.PeerConnection, ok bool) {
+	answerSDP, pc, err := s.Answer(ctx, offerSDP)
+	if err != nil {
+		s.logger.WarnContext(ctx, "webrtc: answer failed", slog.String("error", err.Error()))
+		http.Error(w, "negotiation failed", http.StatusBadRequest)
+		return "", nil, false
+	}
+	return answerSDP, pc, true
+}
+
+// attachTeardown closes pc once it reaches a terminal connection state.
+// Close the PC when it fails — caller tracks data channels / tracks via
+// OnConnect; there's no explicit teardown URL in the one-shot handler.
+// The callback outlives the request, so detach cancellation but keep the
+// request's trace/log values.
+func (s *Signaler) attachTeardown(ctx context.Context, pc *pionwebrtc.PeerConnection) {
+	bg := context.WithoutCancel(ctx)
+	pc.OnConnectionStateChange(func(state pionwebrtc.PeerConnectionState) {
+		if !isTerminalConnectionState(state) {
+			return
+		}
+		if cerr := pc.Close(); cerr != nil {
+			s.logger.DebugContext(bg, "webrtc: close peer connection", slog.String("state", state.String()), slog.String("error", cerr.Error()))
 		}
 	})
+}
+
+// isTerminalConnectionState reports whether state marks the end of a peer
+// connection's life (no further negotiation or data will occur on it).
+func isTerminalConnectionState(state pionwebrtc.PeerConnectionState) bool {
+	return state == pionwebrtc.PeerConnectionStateFailed ||
+		state == pionwebrtc.PeerConnectionStateClosed ||
+		state == pionwebrtc.PeerConnectionStateDisconnected
+}
+
+// writeAnswer writes the SDP answer as the HTTP response.
+func (s *Signaler) writeAnswer(ctx context.Context, w http.ResponseWriter, answer string) {
+	w.Header().Set("Content-Type", "application/sdp")
+	w.WriteHeader(http.StatusCreated)
+	if _, werr := w.Write([]byte(answer)); werr != nil {
+		s.logger.WarnContext(ctx, "webrtc: write answer", slog.String("error", werr.Error()))
+	}
 }

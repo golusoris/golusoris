@@ -75,54 +75,83 @@ func Middleware(store Store, opts Options) func(http.Handler) http.Handler {
 	opts.defaults()
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Only enforce on non-safe methods.
-			switch r.Method {
-			case http.MethodGet, http.MethodHead, http.MethodOptions:
+			if isSafeMethod(r.Method) {
 				next.ServeHTTP(w, r)
 				return
 			}
-
 			key := r.Header.Get(opts.Header)
 			if key == "" {
-				if opts.Required {
-					http.Error(w, "missing "+opts.Header, http.StatusBadRequest)
-					return
-				}
-				next.ServeHTTP(w, r)
+				handleMissingKey(w, r, next, opts)
 				return
 			}
-
-			// Check cache.
-			cached, found, err := store.Find(r.Context(), key)
-			if err != nil {
-				http.Error(w, "idempotency: store error", http.StatusInternalServerError)
-				return
-			}
-			if found {
-				replay(r.Context(), w, cached, opts.Logger)
-				return
-			}
-
-			// Capture the response.
-			rec := &responseRecorder{header: make(http.Header), code: http.StatusOK}
-			next.ServeHTTP(rec, r)
-
-			resp := CachedResponse{
-				StatusCode: rec.code,
-				Header:     rec.header,
-				Body:       rec.body.Bytes(),
-			}
-			// Only cache successful (2xx) and client-error (4xx) responses —
-			// don't cache 5xx so transient failures can be retried.
-			if resp.StatusCode < 500 {
-				if err := store.Save(r.Context(), key, resp, opts.TTL); err != nil {
-					opts.Logger.WarnContext(r.Context(), "idempotency: save response", slog.Any("err", err))
-				}
-			}
-
-			// Write captured response to the real ResponseWriter.
-			replay(r.Context(), w, resp, opts.Logger)
+			serveWithKey(w, r, next, store, opts, key)
 		})
+	}
+}
+
+// isSafeMethod reports whether method is exempt from idempotency
+// enforcement (GET, HEAD, OPTIONS).
+func isSafeMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
+// handleMissingKey handles a non-safe-method request that carries no
+// idempotency key: reject it when the header is Required, otherwise pass it
+// straight through.
+func handleMissingKey(w http.ResponseWriter, r *http.Request, next http.Handler, opts Options) {
+	if opts.Required {
+		http.Error(w, "missing "+opts.Header, http.StatusBadRequest)
+		return
+	}
+	next.ServeHTTP(w, r)
+}
+
+// serveWithKey serves a request that carries an idempotency key: replay a
+// cached response when one already exists for key, otherwise capture next's
+// response, cache it when appropriate, and write it out.
+func serveWithKey(w http.ResponseWriter, r *http.Request, next http.Handler, store Store, opts Options, key string) {
+	cached, found, err := store.Find(r.Context(), key)
+	if err != nil {
+		http.Error(w, "idempotency: store error", http.StatusInternalServerError)
+		return
+	}
+	if found {
+		replay(r.Context(), w, cached, opts.Logger)
+		return
+	}
+
+	resp := captureResponse(next, r)
+	saveIfCacheable(r.Context(), store, key, resp, opts)
+	replay(r.Context(), w, resp, opts.Logger)
+}
+
+// captureResponse runs next against an in-memory recorder and returns the
+// captured response.
+func captureResponse(next http.Handler, r *http.Request) CachedResponse {
+	rec := &responseRecorder{header: make(http.Header), code: http.StatusOK}
+	next.ServeHTTP(rec, r)
+	return CachedResponse{
+		StatusCode: rec.code,
+		Header:     rec.header,
+		Body:       rec.body.Bytes(),
+	}
+}
+
+// saveIfCacheable stores resp under key unless it is a 5xx — those are left
+// uncached so transient failures can be retried. A save failure is logged,
+// not returned: the response has already been produced and must still reach
+// the caller.
+func saveIfCacheable(ctx context.Context, store Store, key string, resp CachedResponse, opts Options) {
+	if resp.StatusCode >= 500 {
+		return
+	}
+	if err := store.Save(ctx, key, resp, opts.TTL); err != nil {
+		opts.Logger.WarnContext(ctx, "idempotency: save response", slog.Any("err", err))
 	}
 }
 

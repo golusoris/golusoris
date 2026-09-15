@@ -29,20 +29,37 @@ func TrustProxy(opts TrustProxyOptions) Middleware {
 	nets := parseCIDRs(opts.TrustedCIDRs)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if len(nets) > 0 && peerInNets(r.RemoteAddr, nets) {
-				if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-					// First entry is the original client.
-					if idx := strings.IndexByte(xff, ','); idx > 0 {
-						xff = strings.TrimSpace(xff[:idx])
-					}
-					if xff != "" {
-						r.RemoteAddr = xff
-					}
-				}
-			}
+			rewriteRemoteAddrFromXFF(r, nets)
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// rewriteRemoteAddrFromXFF rewrites r.RemoteAddr from the first
+// X-Forwarded-For entry, but only when the direct peer's address is in nets.
+// It is a no-op when nets is empty, the peer is untrusted, the request
+// carries no X-Forwarded-For header, or the derived entry is empty.
+func rewriteRemoteAddrFromXFF(r *http.Request, nets []*net.IPNet) {
+	if len(nets) == 0 || !peerInNets(r.RemoteAddr, nets) {
+		return
+	}
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff == "" {
+		return
+	}
+	if first := firstForwardedEntry(xff); first != "" {
+		r.RemoteAddr = first
+	}
+}
+
+// firstForwardedEntry returns the first (original client) entry of an
+// X-Forwarded-For header value. When there is no comma-separated list, or
+// the header starts with a comma, the value is returned unchanged.
+func firstForwardedEntry(xff string) string {
+	if idx := strings.IndexByte(xff, ','); idx > 0 {
+		return strings.TrimSpace(xff[:idx])
+	}
+	return xff
 }
 
 func parseCIDRs(cidrs []string) []*net.IPNet {

@@ -31,6 +31,18 @@ func (s failingStore) Save(context.Context, string, idempotency.CachedResponse, 
 	return s.err
 }
 
+// findFailingStore fails every Find with err; Save is never expected to be
+// reached from these tests.
+type findFailingStore struct{ err error }
+
+func (s findFailingStore) Find(context.Context, string) (idempotency.CachedResponse, bool, error) {
+	return idempotency.CachedResponse{}, false, s.err
+}
+
+func (findFailingStore) Save(context.Context, string, idempotency.CachedResponse, time.Duration) error {
+	return nil
+}
+
 func handler(body string, code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(code)
@@ -180,6 +192,32 @@ func TestMiddleware_5xxNotCached(t *testing.T) {
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("5xx should not be cached: got %d calls", calls.Load())
+	}
+}
+
+// TestMiddleware_findFailure proves a Store.Find error is reported as a 500
+// and never reaches the wrapped handler.
+func TestMiddleware_findFailure(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	h := idempotency.Middleware(
+		findFailingStore{err: errors.New("store unavailable")},
+		idempotency.Options{},
+	)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Idempotency-Key", "key-1")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rw.Code, http.StatusInternalServerError)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("handler should not be called on store error, got %d calls", calls.Load())
 	}
 }
 
