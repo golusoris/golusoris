@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # golusoris
 
-[![HISS-16/17/18/19 Compliant](https://img.shields.io/badge/Standards-Praetor%20HISS--16%2F17%2F18%2F19-brightgreen)](AGENTS.md)
+[![HISS-20 lattice](https://img.shields.io/badge/Standards-Praetor%20HISS--20%20lattice-brightgreen)](AGENTS.md)
 
 [![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver)](https://github.com/golusoris/golusoris/releases)
 [![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
@@ -16,6 +16,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
 [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
 [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
+[![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg)](https://golusoris.github.io/golusoris/)
 [![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
@@ -24,7 +25,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and SLSA L3 supply-chain standards.
 
-**Documentation:** the mkdocs source renders from [`docs/`](docs/index.md); the GitHub Pages deploy of that site is not live yet, so browse the Markdown in-repo for now.
+**Documentation:** <https://golusoris.github.io/golusoris/> — the mkdocs site built from
+[`docs/`](docs/index.md) on every push to `main` by
+[`docs.yml`](.github/workflows/docs.yml).
 
 ---
 
@@ -404,12 +407,12 @@ starting with [v0.10.1](https://github.com/golusoris/golusoris/releases/tag/v0.1
 SPDX SBOMs, cosign keyless signatures and SLSA build-provenance
 attestations on every tag, and `sbom.yml` additionally attests source-tree
 SPDX and CycloneDX SBOMs. Governance runs on the
-[praetor](https://github.com/cordanaLLM/praetor) HISS-16 lattice
-(ADR-0019) — Context Integrity, plus HISS-17 (State Ledger Discipline),
-HISS-18 (Diff-Aware CI) and HISS-19 (Reuse Before Writing); see
-[AGENTS.md](AGENTS.md) for the full standard. Breaking changes between
-minor versions are called out in the commit `Migration:` footer and in
-`docs/migrations/` — start with
+[praetor](https://github.com/cordanaLLM/praetor) HISS-20 lattice
+(ADR-0019) — twenty invariants, from Acyclic Control Flow (HISS-01) to the
+Enforcement Coverage Catalogue (HISS-20); see [AGENTS.md](AGENTS.md) for the
+full table and the gate that enforces each one in this repository.
+Breaking changes between minor versions are called out in the commit
+`Migration:` footer and in `docs/migrations/` — start with
 [docs/migrations/v0.9.0.md](docs/migrations/v0.9.0.md) for the import-path
 move (`config`, `log`, `clock`, `errors`, `crypto`, `id`, `validate`,
 `version`, `clikit`, `mcp` → `core/…`). Every module in the catalog above is
@@ -441,11 +444,14 @@ If golusoris saves you time, a coffee helps ☕
 
 ## Standards & Governance
 
-This repository conforms to the [praetor](https://github.com/cordanaLLM/praetor)
-High-Integrity Systems Standards lattice — HISS-16 (Context Integrity), HISS-17
-(State Ledger Discipline), HISS-18 (Diff-Aware CI Efficiency) and HISS-19
-(Reuse Before Writing) — plus modernized NASA JPL Power-of-10 rules; see
-[AGENTS.md](AGENTS.md) for the full invariant table.
+This repository tracks the [praetor](https://github.com/cordanaLLM/praetor)
+High-Integrity Systems Standards lattice — **HISS-20**: twenty invariants
+spanning the modernized NASA JPL Power-of-10 rules (HISS-01 to HISS-15) and the
+fleet rows HISS-16 to HISS-20 (Context Integrity, State Ledger Discipline,
+Diff-Aware CI Efficiency, Reuse Before Writing, Enforcement Coverage). See
+[AGENTS.md](AGENTS.md) for the full table: it names the gate that enforces each
+invariant here, and marks the two rows (HISS-18, HISS-20) that are not wired in
+this repository yet.
 
 | Gate | Command | Description |
 | :--- | :--- | :--- |

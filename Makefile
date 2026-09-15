@@ -52,7 +52,7 @@ reuse-lint: ## REUSE / SPDX compliance (LICENSING.md)
 	$(REUSE) lint
 
 .PHONY: audit
-audit: ## praetor HISS-16 governance audit
+audit: ## praetor HISS-20 lattice governance audit
 	$(STANDARDSCTL) audit
 
 .PHONY: compile-context
@@ -66,6 +66,10 @@ compile-context-verify: ## assert vendor agent-context files match AGENTS.md
 .PHONY: capabilities-check
 capabilities-check: ## capabilities.yaml ↔ tree drift guard
 	$(GO) test -count=1 -run 'TestCapabilities' .
+
+.PHONY: hiss-fixtures
+hiss-fixtures: ## HISS-20 replay: .semgrep.yml vs the .config/hiss/testdata corpus
+	bash scripts/hiss/semgrep-fixtures.sh
 
 .PHONY: dedupe-scan
 dedupe-scan: ## praetor HISS-19 duplicate-block gate (Reuse Before Writing)
@@ -87,5 +91,5 @@ docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see
 	@for m in $(UPSTREAM_CORE_MODULES); do printf '  %-45s %s (core/)\n' "$$m" "$$(cd core && $(GO) list -m -f '{{.Version}}' $$m)"; done
 
 .PHONY: verify-all
-verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan hiss-coverage reuse-lint ## the universal verification gate
+verify-all: build-all ci-all capabilities-check compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."

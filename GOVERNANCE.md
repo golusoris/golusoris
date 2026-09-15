@@ -27,13 +27,15 @@ the maintainers' private, git-ignored `.workingdir/PLAN.md`, per HISS-17) are:
 
 These are non-negotiable: a change that regresses a hard gate does not merge.
 
-### 1.1 Governance harness — the praetor HISS lattice
+### 1.1 Governance harness — the praetor HISS-20 lattice
 
 Since v0.9.0 the contract is machine-enforced by
 [cordanallm/praetor](https://github.com/cordanallm/praetor)
 ([ADR-0019](docs/adr/0019-praetor-governance-and-capability-contract.md)),
-which layers four fleet-wide invariants on top of the numbered Power-of-10
-gates in [`AGENTS.md`](AGENTS.md):
+which layers five fleet-wide invariants (HISS-16 to HISS-20) on top of the
+fifteen numbered Power-of-10 gates (HISS-01 to HISS-15) in
+[`AGENTS.md`](AGENTS.md) — twenty invariants in all, each row there naming the
+gate that enforces it in this repository:
 
 - **HISS-16 (Context Integrity)**: [`AGENTS.md`](AGENTS.md) is the **single
   canonical agent harness**. Every vendor context file (`CLAUDE.md`,
@@ -44,13 +46,19 @@ gates in [`AGENTS.md`](AGENTS.md):
   (§1 above) is kept current with `standardsctl state task`, `state bug`
   and `state question`; the lefthook post-commit hook runs
   `standardsctl state sync` after every commit.
-- **HISS-18 (Diff-Aware CI Efficiency)**: `standardsctl ci filter` scopes a
-  change's gates to what its diff actually touches, so a docs- or
-  state-only change skips the heavy build/test suites.
+- **HISS-18 (Diff-Aware CI Efficiency)**: praetor's `standardsctl ci filter`
+  scopes a change's gates to what its diff actually touches. **It is not wired
+  here**: `.github/workflows/ci.yml` has no filter step and no `paths:`
+  restriction, so every pull request still runs the full matrix.
 - **HISS-19 (Reuse Before Writing)**: `standardsctl dedupe scan` (wired as
   `make dedupe-scan` and the lefthook post-commit `dedupe-cadence` job)
   flags a second implementation of a behavior — including a second
   configuration format — that already exists elsewhere in the tree.
+- **HISS-20 (Enforcement Coverage Catalogue)**: a repository declares, per rule
+  and per language, what its gates actually detect, and `standardsctl hiss
+  coverage --verify` replays that claim against a fixture corpus in both
+  directions. **Not declared here yet**: there is no `.config/hiss/coverage.yaml`,
+  so enforcement evidence is undeclared for every invariant.
 
 `standardsctl audit` scores the tree against the HISS invariants (the
 modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
