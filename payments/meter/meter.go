@@ -110,7 +110,8 @@ func (r *Recorder) Record(ctx context.Context, e Event) error {
 	}
 	err := r.store.Insert(ctx, e)
 	if errors.Is(err, ErrDuplicate) {
-		r.logger.DebugContext(ctx, "meter: duplicate event ignored",
+		r.logger.DebugContext(
+			ctx, "meter: duplicate event ignored",
 			slog.String("id", e.ID),
 			slog.String("customer", e.CustomerID),
 		)

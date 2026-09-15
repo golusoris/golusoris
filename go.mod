@@ -47,7 +47,7 @@ require (
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1
-	github.com/golusoris/golusoris/core v0.9.0
+	github.com/golusoris/golusoris/core v0.9.1
 	github.com/google/uuid v1.6.0
 	github.com/grafana/pyroscope-go v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
@@ -56,6 +56,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
+	github.com/jszwec/csvutil v1.10.0
 	github.com/leanovate/gopter v0.2.11
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
@@ -75,7 +76,7 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/redis/rueidis v1.0.77
+	github.com/redis/rueidis v1.0.78
 	github.com/riverqueue/river v0.47.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.47.0
 	github.com/riverqueue/river/rivertype v0.47.0
@@ -93,7 +94,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.44.0
 	github.com/tsenart/vegeta/v12 v12.13.0
 	github.com/tus/tusd/v2 v2.10.0
-	github.com/twmb/franz-go v1.21.6
+	github.com/twmb/franz-go v1.21.7
 	github.com/ulule/limiter/v3 v3.11.2
 	github.com/uptrace/bun v1.2.18
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
@@ -115,7 +116,7 @@ require (
 	go.opentelemetry.io/otel/sdk/log v0.22.0
 	go.opentelemetry.io/otel/sdk/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/sdk v1.49.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.57.0

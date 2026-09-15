@@ -85,7 +85,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // Module starts the profiler during fx Start (when enabled) and stops it
 // during fx Stop. No-op when profiling.enabled=false.
-var Module = fx.Module("golusoris.observability.profiling",
+var Module = fx.Module(
+	"golusoris.observability.profiling",
 	fx.Provide(loadOptions),
 	fx.Invoke(func(lc fx.Lifecycle, opts Options, logger *slog.Logger) error {
 		profiler, err := Start(opts)
@@ -93,7 +94,8 @@ var Module = fx.Module("golusoris.observability.profiling",
 			return err
 		}
 		if profiler != nil {
-			logger.Info("profiling: started",
+			logger.Info(
+				"profiling: started",
 				slog.String("app", opts.App),
 				slog.String("server", opts.Server),
 			)

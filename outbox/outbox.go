@@ -69,7 +69,8 @@ func Add(ctx context.Context, tx pgx.Tx, kind string, payload any) error {
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(ctx,
+	_, err = tx.Exec(
+		ctx,
 		`INSERT INTO golusoris_outbox (kind, payload) VALUES ($1, $2)`,
 		kind, raw,
 	)

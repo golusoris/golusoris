@@ -42,6 +42,7 @@ func (d *Decoder) Decode(dst any, src url.Values) error {
 func (d *Decoder) Raw() *gpform.Decoder { return d.d }
 
 // Module provides a *Decoder.
-var Module = fx.Module("golusoris.httpx.form",
+var Module = fx.Module(
+	"golusoris.httpx.form",
 	fx.Provide(New),
 )

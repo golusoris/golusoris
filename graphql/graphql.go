@@ -96,7 +96,8 @@ func (c Config) withDefaults() Config {
 
 // Module provides a configured *handler.Server and mounts it on a chi.Router.
 // Requires a graphql.ExecutableSchema, chi.Router, and *config.Config in the fx graph.
-var Module = fx.Module("golusoris.graphql",
+var Module = fx.Module(
+	"golusoris.graphql",
 	fx.Provide(loadConfig),
 	fx.Provide(newServer),
 	fx.Invoke(mountRoutes),

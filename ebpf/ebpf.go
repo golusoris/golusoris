@@ -79,7 +79,8 @@ func (r *Registry) Register(name string, fn Loader) {
 
 // Module provides *Registry into the fx graph and loads the eBPF collection
 // on fx Start.  Requires an ObjectProvider and *slog.Logger.
-var Module = fx.Module("golusoris.ebpf",
+var Module = fx.Module(
+	"golusoris.ebpf",
 	fx.Provide(newRegistry),
 	fx.Invoke(startLoader),
 )

@@ -47,7 +47,8 @@ func TestAssert_passesOnGoodMetrics(t *testing.T) {
 	})
 
 	// All responses are 200 OK — checks should pass.
-	load.Assert(t, metrics,
+	load.Assert(
+		t, metrics,
 		load.MaxErrorRate(0.05),
 		load.MaxP99(5*time.Second),
 	)

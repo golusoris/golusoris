@@ -21,7 +21,8 @@ func New() *chi.Mux { return chi.NewRouter() }
 
 // Module provides a *chi.Mux (as both chi.Router and http.Handler) so apps
 // can inject either interface. Mount routes via fx.Invoke.
-var Module = fx.Module("golusoris.httpx.router",
+var Module = fx.Module(
+	"golusoris.httpx.router",
 	fx.Provide(
 		New,
 		func(m *chi.Mux) chi.Router { return m },

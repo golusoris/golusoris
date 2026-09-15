@@ -136,7 +136,8 @@ func TestDrainerDispatchesToRiver(t *testing.T) {
 		return a, nil, nil
 	}
 
-	drainer := outbox.NewDrainer(rv.Pool, rv.Client, dispatcher,
+	drainer := outbox.NewDrainer(
+		rv.Pool, rv.Client, dispatcher,
 		slog.New(slog.DiscardHandler), clockwork.NewRealClock(),
 		outbox.DrainerOptions{Interval: 100 * time.Millisecond, Batch: 10},
 	)
@@ -175,7 +176,8 @@ func TestDispatcherNilArgsDropsEvent(t *testing.T) {
 	dispatcher := func(context.Context, outbox.Event) (river.JobArgs, *river.InsertOpts, error) {
 		return nil, nil, nil
 	}
-	drainer := outbox.NewDrainer(pool, nil, dispatcher,
+	drainer := outbox.NewDrainer(
+		pool, nil, dispatcher,
 		slog.New(slog.DiscardHandler), clockwork.NewRealClock(),
 		outbox.DrainerOptions{Interval: time.Hour, Batch: 10},
 	)

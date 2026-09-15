@@ -351,7 +351,8 @@ func (s *Service) ProcessDue(ctx context.Context, subIDs []string) error {
 // sweep on) a failure so one bad row cannot stall the scheduled job.
 func (s *Service) cancelDue(ctx context.Context, subID, reason string) {
 	if err := s.Cancel(ctx, subID, time.Time{}); err != nil {
-		s.logger.WarnContext(ctx, "subs: due cancel failed",
+		s.logger.WarnContext(
+			ctx, "subs: due cancel failed",
 			slog.String("id", subID),
 			slog.String("reason", reason),
 			slog.Any("err", err),
@@ -403,7 +404,8 @@ func (s *Service) transition(
 }
 
 func (s *Service) emit(ctx context.Context, sub *Subscription, from, to Status, at time.Time) {
-	s.logger.DebugContext(ctx, "subs: transition",
+	s.logger.DebugContext(
+		ctx, "subs: transition",
 		slog.String("id", sub.ID),
 		slog.String("from", string(from)),
 		slog.String("to", string(to)),
