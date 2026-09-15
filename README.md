@@ -107,7 +107,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river | custom on pgx |
-| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / Webhook sinks | uses db/cdc |
+| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks | uses db/cdc |
 
 ### HTTP / API
 
@@ -187,6 +187,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
+| `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
@@ -235,9 +236,9 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `storage/` | `Bucket` interface + local FS backend | custom |
 | `storage/presign/` | S3 direct-browser upload helpers | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
-| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection | code.dny.dev/ssrf + stdlib |
+| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
-| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
+| `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create + recursive dir copy | mholt/archives + otiai10/copy |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |
 | `media/img/` | image resize + convert + optimize (CGO sub-module) | davidbyttow/govips/v2 |
 | `media/img/pipeline/` | on-demand resize + HMAC signed-URL serving (chi handler) | stdlib crypto/hmac |
@@ -251,7 +252,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
 | `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + go-sprout |
-| `jsonschema/` | JSON Schema 2020-12 validation | santhosh-tekuri/jsonschema |
+| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types | santhosh-tekuri/jsonschema + invopop/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
 | `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |
@@ -289,6 +290,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
+| `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
 | `net/wol/` | Wake-on-LAN magic-packet sender (stdlib only) | custom |

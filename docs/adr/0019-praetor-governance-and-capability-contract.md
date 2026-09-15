@@ -26,7 +26,7 @@ that praetor's transpiler would have overwritten.
 
 ## Decision
 
-1. **Publish the contract.** Repo-root [`capabilities.yaml`](../../capabilities.yaml)
+1. **Publish the contract.** Repo-root [`capabilities.yaml`](https://github.com/golusoris/golusoris/blob/main/capabilities.yaml)
    (schema: [`core/capabilities`](../../core/capabilities/)) lists every
    importable package, its Go module, the capability keys it satisfies (the
    praetor taxonomy: `db.postgres`, `cache.redis`, `mcp.server`, …) and the
@@ -72,6 +72,6 @@ that praetor's transpiler would have overwritten.
 
 ## References
 
-- [ADR-0017](0017-lean-core-submodule.md) · [`core/capabilities/AGENTS.md`](../../core/capabilities/AGENTS.md)
+- [ADR-0017](0017-lean-core-submodule.md) · [`core/capabilities/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/core/capabilities/AGENTS.md)
 - praetor: `internal/needs/framework.go` (`capabilities.yaml` reader), `internal/compiler` (vendor sections)
 - HISS-16 specification: <https://standards.cordana.ai/standards/hiss-16/>

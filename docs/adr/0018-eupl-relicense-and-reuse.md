@@ -59,7 +59,7 @@ by the copyright holder, so a relicense needs no third-party consent.
 
 ## References
 
-- [`LICENSING.md`](../../LICENSING.md) · [`REUSE.toml`](../../REUSE.toml) · [`LICENSES/`](../../LICENSES/)
+- [`LICENSING.md`](https://github.com/golusoris/golusoris/blob/main/LICENSING.md) · [`REUSE.toml`](https://github.com/golusoris/golusoris/blob/main/REUSE.toml) · [`LICENSES/`](https://github.com/golusoris/golusoris/tree/main/LICENSES/)
 - EUPL-1.2 text and compatibility appendix: <https://joinup.ec.europa.eu/collection/eupl>
 - REUSE specification 3.3: <https://reuse.software/spec/>
 - Developer Certificate of Origin: <https://developercertificate.org/>

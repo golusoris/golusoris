@@ -42,5 +42,5 @@ We will use `github.com/riverqueue/river` as the background job system. The fram
 ## References
 
 - river pinned at v0.34.0 — see [`docs/upstream/river/`](../upstream/river/).
-- [`outbox/AGENTS.md`](../../outbox/AGENTS.md) — dispatcher contract.
-- [`jobs/AGENTS.md`](../../jobs/AGENTS.md) — worker registration patterns.
+- [`outbox/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/outbox/AGENTS.md) — dispatcher contract.
+- [`jobs/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/jobs/AGENTS.md) — worker registration patterns.
