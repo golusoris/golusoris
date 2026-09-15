@@ -223,36 +223,19 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		writeTokenErr(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code")
 		return
 	}
-	code, err := s.opts.Codes.Take(r.Context(), r.PostForm.Get("code"))
-	if err != nil {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_grant", "code not found")
+
+	code, terr := s.resolveCode(r)
+	if terr != nil {
+		writeTokenErr(w, terr.status, terr.code, terr.desc)
 		return
 	}
-	if s.opts.Clock.Now().After(code.Req.ExpiresAt) {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_grant", "code expired")
+
+	client, terr := s.authenticateClient(r)
+	if terr != nil {
+		writeTokenErr(w, terr.status, terr.code, terr.desc)
 		return
 	}
-	if r.PostForm.Get("redirect_uri") != code.Req.RedirectURI {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_grant", "redirect_uri mismatch")
-		return
-	}
-	clientID := r.PostForm.Get("client_id")
-	if clientID != code.Req.ClientID {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_client", "client mismatch")
-		return
-	}
-	client, err := s.opts.Clients.Get(r.Context(), clientID)
-	if err != nil {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_client", "unknown client")
-		return
-	}
-	if !client.PublicClient {
-		secret := r.PostForm.Get("client_secret")
-		if subtle.ConstantTimeCompare([]byte(secret), []byte(client.Secret)) != 1 {
-			writeTokenErr(w, http.StatusUnauthorized, "invalid_client", "bad secret")
-			return
-		}
-	}
+
 	verifier := r.PostForm.Get("code_verifier")
 	if !verifyPKCE(code.Req.CodeChallenge, code.Req.CodeChallengeMethod, verifier) {
 		writeTokenErr(w, http.StatusBadRequest, "invalid_grant", "PKCE verification failed")
@@ -266,6 +249,54 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// tokenErrInfo carries the status/error/description triple for a rejected
+// /token request, ready to hand to writeTokenErr.
+type tokenErrInfo struct {
+	status int
+	code   string
+	desc   string
+}
+
+// resolveCode looks up the authorization code named by the request's "code"
+// form value, and confirms it has not expired and was issued for the same
+// redirect_uri and client_id supplied on this request. The returned
+// *tokenErrInfo, when non-nil, is the exact error the caller should write.
+func (s *Server) resolveCode(r *http.Request) (Code, *tokenErrInfo) {
+	code, err := s.opts.Codes.Take(r.Context(), r.PostForm.Get("code"))
+	if err != nil {
+		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "code not found"}
+	}
+	if s.opts.Clock.Now().After(code.Req.ExpiresAt) {
+		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "code expired"}
+	}
+	if r.PostForm.Get("redirect_uri") != code.Req.RedirectURI {
+		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "redirect_uri mismatch"}
+	}
+	if r.PostForm.Get("client_id") != code.Req.ClientID {
+		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_client", desc: "client mismatch"}
+	}
+	return code, nil
+}
+
+// authenticateClient looks up the client named by the request's "client_id"
+// form value and, for confidential clients, verifies the client_secret. The
+// returned *tokenErrInfo, when non-nil, is the exact error the caller should
+// write.
+func (s *Server) authenticateClient(r *http.Request) (Client, *tokenErrInfo) {
+	clientID := r.PostForm.Get("client_id")
+	client, err := s.opts.Clients.Get(r.Context(), clientID)
+	if err != nil {
+		return Client{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_client", desc: "unknown client"}
+	}
+	if !client.PublicClient {
+		secret := r.PostForm.Get("client_secret")
+		if subtle.ConstantTimeCompare([]byte(secret), []byte(client.Secret)) != 1 {
+			return Client{}, &tokenErrInfo{status: http.StatusUnauthorized, code: "invalid_client", desc: "bad secret"}
+		}
+	}
+	return client, nil
 }
 
 // mintAccessToken signs a bearer JWT for the consented authorization request.

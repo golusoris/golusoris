@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -328,6 +329,142 @@ func TestGroupItem_InvalidPath(t *testing.T) {
 	resp, err := http.Get(srv.URL + "/Groups/")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+// TestUserItem_InvalidPath_NestedSegment covers the boundary case where the
+// path carries an id plus a further segment (e.g. a stray sub-resource),
+// which itemID must reject the same way as an empty id.
+func TestUserItem_InvalidPath_NestedSegment(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(newMemStore()))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/Users/abc/extra")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+// TestGroupItem_InvalidPath_NestedSegment is the Group-side counterpart of
+// TestUserItem_InvalidPath_NestedSegment.
+func TestGroupItem_InvalidPath_NestedSegment(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(newMemStore()))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/Groups/abc/extra")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+// genericErrStore wraps a memStore and forces every Get/Update/Delete verb
+// on both resources to fail with a generic (non-ErrNotFound) error, to
+// exercise the internal-error and generic-bad-request mapping branches of
+// userItemHandler / groupItemHandler.
+type genericErrStore struct {
+	*memStore
+	err error
+}
+
+func (s genericErrStore) GetUser(_ context.Context, _ string) (scim.User, error) {
+	return scim.User{}, s.err
+}
+
+func (s genericErrStore) UpdateUser(_ context.Context, _ scim.User) (scim.User, error) {
+	return scim.User{}, s.err
+}
+
+func (s genericErrStore) DeleteUser(_ context.Context, _ string) error {
+	return s.err
+}
+
+func (s genericErrStore) GetGroup(_ context.Context, _ string) (scim.Group, error) {
+	return scim.Group{}, s.err
+}
+
+func (s genericErrStore) UpdateGroup(_ context.Context, _ scim.Group) (scim.Group, error) {
+	return scim.Group{}, s.err
+}
+
+func (s genericErrStore) DeleteGroup(_ context.Context, _ string) error {
+	return s.err
+}
+
+func TestUserItem_GetStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/Users/any-id")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestUserItem_PutStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("constraint violated")}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Users/any-id", bytes.NewBufferString(`{"userName":"x"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/scim+json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestUserItem_DeleteStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/Users/any-id", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestGroupItem_GetStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
+	t.Cleanup(srv.Close)
+
+	resp, err := http.Get(srv.URL + "/Groups/any-id")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestGroupItem_PutStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("constraint violated")}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Groups/any-id", bytes.NewBufferString(`{"displayName":"x"}`))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/scim+json")
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestGroupItem_DeleteStoreError(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
+	t.Cleanup(srv.Close)
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/Groups/any-id", nil)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 }
 

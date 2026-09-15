@@ -163,55 +163,66 @@ func (h userListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type userItemHandler struct{ s Store }
 
 func (h userItemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/Users/")
-	if id == "" || strings.Contains(id, "/") {
-		writeErr(w, http.StatusBadRequest, "invalid id", "invalidPath")
+	id, ok := itemID(w, r, "/Users/")
+	if !ok {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		u, err := h.s.GetUser(r.Context(), id)
-		if errors.Is(err, ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "user not found", "")
-			return
-		}
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error(), "")
-			return
-		}
-		writeJSON(w, http.StatusOK, u)
+		h.handleGet(w, r, id)
 	case http.MethodPut:
-		var u User
-		if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
-			writeErr(w, http.StatusBadRequest, "invalid body", "invalidSyntax")
-			return
-		}
-		u.ID = id
-		ensureUserSchema(&u)
-		updated, err := h.s.UpdateUser(r.Context(), u)
-		if errors.Is(err, ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "user not found", "")
-			return
-		}
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error(), "")
-			return
-		}
-		writeJSON(w, http.StatusOK, updated)
+		h.handlePut(w, r, id)
 	case http.MethodDelete:
-		if err := h.s.DeleteUser(r.Context(), id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				writeErr(w, http.StatusNotFound, "user not found", "")
-				return
-			}
-			writeErr(w, http.StatusInternalServerError, err.Error(), "")
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		h.handleDelete(w, r, id)
 	default:
 		w.Header().Set("Allow", "GET, PUT, DELETE")
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed", "")
 	}
+}
+
+func (h userItemHandler) handleGet(w http.ResponseWriter, r *http.Request, id string) {
+	u, err := h.s.GetUser(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "user not found", "")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	writeJSON(w, http.StatusOK, u)
+}
+
+func (h userItemHandler) handlePut(w http.ResponseWriter, r *http.Request, id string) {
+	var u User
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body", "invalidSyntax")
+		return
+	}
+	u.ID = id
+	ensureUserSchema(&u)
+	updated, err := h.s.UpdateUser(r.Context(), u)
+	if errors.Is(err, ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "user not found", "")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h userItemHandler) handleDelete(w http.ResponseWriter, r *http.Request, id string) {
+	if err := h.s.DeleteUser(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "user not found", "")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // --- Groups (mirrors the Users handlers) ---
@@ -260,58 +271,81 @@ func (h groupListHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type groupItemHandler struct{ s Store }
 
 func (h groupItemHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(r.URL.Path, "/Groups/")
-	if id == "" || strings.Contains(id, "/") {
-		writeErr(w, http.StatusBadRequest, "invalid id", "invalidPath")
+	id, ok := itemID(w, r, "/Groups/")
+	if !ok {
 		return
 	}
 	switch r.Method {
 	case http.MethodGet:
-		g, err := h.s.GetGroup(r.Context(), id)
-		if errors.Is(err, ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "group not found", "")
-			return
-		}
-		if err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error(), "")
-			return
-		}
-		writeJSON(w, http.StatusOK, g)
+		h.handleGet(w, r, id)
 	case http.MethodPut:
-		var g Group
-		if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
-			writeErr(w, http.StatusBadRequest, "invalid body", "invalidSyntax")
-			return
-		}
-		g.ID = id
-		ensureGroupSchema(&g)
-		updated, err := h.s.UpdateGroup(r.Context(), g)
-		if errors.Is(err, ErrNotFound) {
-			writeErr(w, http.StatusNotFound, "group not found", "")
-			return
-		}
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, err.Error(), "")
-			return
-		}
-		writeJSON(w, http.StatusOK, updated)
+		h.handlePut(w, r, id)
 	case http.MethodDelete:
-		if err := h.s.DeleteGroup(r.Context(), id); err != nil {
-			if errors.Is(err, ErrNotFound) {
-				writeErr(w, http.StatusNotFound, "group not found", "")
-				return
-			}
-			writeErr(w, http.StatusInternalServerError, err.Error(), "")
-			return
-		}
-		w.WriteHeader(http.StatusNoContent)
+		h.handleDelete(w, r, id)
 	default:
 		w.Header().Set("Allow", "GET, PUT, DELETE")
 		writeErr(w, http.StatusMethodNotAllowed, "method not allowed", "")
 	}
 }
 
+func (h groupItemHandler) handleGet(w http.ResponseWriter, r *http.Request, id string) {
+	g, err := h.s.GetGroup(r.Context(), id)
+	if errors.Is(err, ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "group not found", "")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	writeJSON(w, http.StatusOK, g)
+}
+
+func (h groupItemHandler) handlePut(w http.ResponseWriter, r *http.Request, id string) {
+	var g Group
+	if err := json.NewDecoder(r.Body).Decode(&g); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid body", "invalidSyntax")
+		return
+	}
+	g.ID = id
+	ensureGroupSchema(&g)
+	updated, err := h.s.UpdateGroup(r.Context(), g)
+	if errors.Is(err, ErrNotFound) {
+		writeErr(w, http.StatusNotFound, "group not found", "")
+		return
+	}
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h groupItemHandler) handleDelete(w http.ResponseWriter, r *http.Request, id string) {
+	if err := h.s.DeleteGroup(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "group not found", "")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, err.Error(), "")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // --- helpers ---
+
+// itemID extracts the resource id from r.URL.Path by trimming prefix (e.g.
+// "/Users/") and rejects it — writing the SCIM invalidPath error to w and
+// returning ok=false — when it is empty or contains a further path segment.
+func itemID(w http.ResponseWriter, r *http.Request, prefix string) (id string, ok bool) {
+	id = strings.TrimPrefix(r.URL.Path, prefix)
+	if id == "" || strings.Contains(id, "/") {
+		writeErr(w, http.StatusBadRequest, "invalid id", "invalidPath")
+		return "", false
+	}
+	return id, true
+}
 
 func paging(r *http.Request) (start, count int) {
 	start = 1
