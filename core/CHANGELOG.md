@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.2](https://github.com/golusoris/golusoris/compare/core/v0.9.1...core/v0.9.2) (2026-09-15)
+
+
+### Code Refactoring
+
+* **otel,selfupdate,sockmap,astx:** reduce complexity below HISS-04 caps ([#536](https://github.com/golusoris/golusoris/issues/536)) ([9a6c96b](https://github.com/golusoris/golusoris/commit/9a6c96b736fca021e5ee66d3cda6d7a3e94bc217))
+
 ## [0.9.1](https://github.com/golusoris/golusoris/compare/core/v0.9.0...core/v0.9.1) (2026-09-14)
 
 
