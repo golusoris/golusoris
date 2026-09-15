@@ -128,8 +128,8 @@ upload.
 The example above uses `@main` for readability. The app template this
 framework ships under [`template/`](../template/) pins the same calls to a
 full commit SHA with a version comment instead —
-[`template/.github/workflows/ci.yml`](../template/.github/workflows/ci.yml)
-and [`release.yml`](../template/.github/workflows/release.yml) both reference
+[`template/.github/workflows/ci.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/ci.yml)
+and [`release.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/release.yml) both reference
 `golusoris/golusoris/.github/workflows/<workflow>.yml@380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`.
 Do the same in a real app: pin to a released tag's commit SHA (and bump it
 deliberately) rather than floating on `@main`, so an unreviewed change to
@@ -230,6 +230,6 @@ pre-commit:
       run: make ci
 ```
 
-The framework's own [`lefthook.yml`](../lefthook.yml) + `scripts/hooks/` is a
+The framework's own [`lefthook.yml`](https://github.com/golusoris/golusoris/blob/main/lefthook.yml) + `scripts/hooks/` is a
 finer-grained template (staged-package lint, commit-msg Conventional Commits +
 DCO, pre-push build + `go test -short`) that apps can copy verbatim.
