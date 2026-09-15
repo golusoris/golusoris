@@ -104,6 +104,47 @@ func TestOrientation_BadByteOrder(t *testing.T) {
 	}
 }
 
+// TestOrientation_SkipsNonExifSegments exercises the scan-past-non-Exif-
+// segment path: a JFIF APP0 segment precedes the Exif APP1 segment.
+func TestOrientation_SkipsNonExifSegments(t *testing.T) {
+	t.Parallel()
+	app0Payload := []byte("JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00")
+	app0Len := len(app0Payload) + 2
+	var jpg bytes.Buffer
+	jpg.Write([]byte{0xFF, 0xD8, 0xFF, 0xE0, byte(app0Len >> 8), byte(app0Len)})
+	jpg.Write(app0Payload)
+	jpg.Write(exifJPEG(6)[2:]) // strip the redundant SOI; append just the APP1 segment
+
+	got, err := exif.Orientation(jpg.Bytes())
+	if err != nil {
+		t.Fatalf("skips non-Exif segment: %v", err)
+	}
+	if got != 6 {
+		t.Fatalf("orientation = %d, want 6", got)
+	}
+}
+
+// TestOrientation_StopsAtSOS is the boundary where the scan reaches
+// Start-Of-Scan (image data) before any APP1 segment, and must give up
+// rather than read into pixel data.
+func TestOrientation_StopsAtSOS(t *testing.T) {
+	t.Parallel()
+	jpg := []byte{0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02}
+	if _, err := exif.Orientation(jpg); !errors.Is(err, exif.ErrNoOrientation) {
+		t.Fatalf("stops at SOS: err = %v; want ErrNoOrientation", err)
+	}
+}
+
+// TestOrientation_SegmentOverflow is the boundary where a segment's declared
+// length would read past the end of the buffer.
+func TestOrientation_SegmentOverflow(t *testing.T) {
+	t.Parallel()
+	jpg := []byte{0xFF, 0xD8, 0xFF, 0xE1, 0x00, 0xFF} // segLen=255, only 6 bytes present
+	if _, err := exif.Orientation(jpg); !errors.Is(err, exif.ErrNoOrientation) {
+		t.Fatalf("segment overflow: err = %v; want ErrNoOrientation", err)
+	}
+}
+
 func TestApply_NonRGBASource(t *testing.T) {
 	t.Parallel()
 	// image.Gray exercises the imageToRGBA conversion branch.

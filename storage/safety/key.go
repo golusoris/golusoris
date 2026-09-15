@@ -48,9 +48,27 @@ func lexicalReject(key string, maxLen int) error {
 	if key == "" {
 		return fmt.Errorf("%w: empty", ErrUnsafeKey)
 	}
+	if err := lexicalLengthReject(key, maxLen); err != nil {
+		return err
+	}
+	if err := lexicalCharReject(key); err != nil {
+		return err
+	}
+	return lexicalTrailingReject(key)
+}
+
+// lexicalLengthReject rejects keys longer than maxLen (0 disables the check).
+func lexicalLengthReject(key string, maxLen int) error {
 	if maxLen > 0 && len(key) > maxLen {
 		return fmt.Errorf("%w: length %d exceeds max %d", ErrUnsafeKey, len(key), maxLen)
 	}
+	return nil
+}
+
+// lexicalCharReject rejects individual bytes/runes that make a key unsafe
+// regardless of position: null bytes, backslashes, a leading "/", and ASCII
+// control characters.
+func lexicalCharReject(key string) error {
 	if strings.ContainsRune(key, '\x00') {
 		return fmt.Errorf("%w: null byte", ErrUnsafeKey)
 	}
@@ -63,8 +81,15 @@ func lexicalReject(key string, maxLen int) error {
 	if hasControlRune(key) {
 		return fmt.Errorf("%w: control character", ErrUnsafeKey)
 	}
-	// Trailing space/dot is silently stripped by Windows, an aliasing hazard.
-	if last := key[len(key)-1]; last == ' ' || last == '.' && !strings.HasSuffix(key, "..") {
+	return nil
+}
+
+// lexicalTrailingReject rejects a trailing space or a lone trailing dot
+// (but not a trailing ".."), which Windows silently strips — an aliasing
+// hazard if left unrejected.
+func lexicalTrailingReject(key string) error {
+	last := key[len(key)-1]
+	if last == ' ' || (last == '.' && !strings.HasSuffix(key, "..")) {
 		return fmt.Errorf("%w: trailing space or dot", ErrUnsafeKey)
 	}
 	return nil

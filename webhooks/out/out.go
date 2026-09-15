@@ -207,36 +207,64 @@ func (d *Dispatcher) deliver(ctx context.Context, ep Endpoint, del *Delivery) er
 	sig := sign([]byte(ep.Secret), del.Payload)
 
 	for del.Attempts < d.opts.MaxAttempts {
-		if del.Attempts > 0 {
-			if wait := d.opts.Backoff(del.Attempts - 1); wait > 0 {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case <-d.clk.After(wait):
-				}
-			}
+		if err := d.waitBeforeRetry(ctx, del.Attempts); err != nil {
+			return err
 		}
 
 		code, err := d.post(ctx, ep.URL, del.ID, del.Event, sig, del.Payload)
-		del.Attempts++
-		del.UpdatedAt = d.clk.Now()
-		del.StatusCode = code
-
-		if err == nil && code < 400 {
-			del.Status = StatusDelivered
-			del.Error = ""
-			d.saveDelivery(ctx, del)
+		if d.recordAttempt(ctx, del, code, err) {
 			return nil
 		}
-
-		if err != nil {
-			del.Error = err.Error()
-		} else {
-			del.Error = fmt.Sprintf("HTTP %d", code)
-		}
-		d.saveDelivery(ctx, del)
 	}
 
+	return d.deadLetter(ctx, del)
+}
+
+// waitBeforeRetry blocks for the backoff duration before a retry attempt
+// (attempts > 0); the first attempt (attempts == 0) never waits. It returns
+// ctx.Err() if the context is cancelled while waiting.
+func (d *Dispatcher) waitBeforeRetry(ctx context.Context, attempts int) error {
+	if attempts == 0 {
+		return nil
+	}
+	wait := d.opts.Backoff(attempts - 1)
+	if wait <= 0 {
+		return nil
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-d.clk.After(wait):
+		return nil
+	}
+}
+
+// recordAttempt updates del with the outcome of one delivery attempt,
+// persists it, and reports whether the delivery succeeded.
+func (d *Dispatcher) recordAttempt(ctx context.Context, del *Delivery, code int, err error) bool {
+	del.Attempts++
+	del.UpdatedAt = d.clk.Now()
+	del.StatusCode = code
+
+	if err == nil && code < 400 {
+		del.Status = StatusDelivered
+		del.Error = ""
+		d.saveDelivery(ctx, del)
+		return true
+	}
+
+	if err != nil {
+		del.Error = err.Error()
+	} else {
+		del.Error = fmt.Sprintf("HTTP %d", code)
+	}
+	d.saveDelivery(ctx, del)
+	return false
+}
+
+// deadLetter marks del as permanently failed after all retries are
+// exhausted and persists the final state.
+func (d *Dispatcher) deadLetter(ctx context.Context, del *Delivery) error {
 	del.Status = StatusFailed
 	del.UpdatedAt = d.clk.Now()
 	d.saveDelivery(ctx, del)
