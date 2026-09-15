@@ -54,21 +54,53 @@ func (*DockerRunner) Name() string { return "docker" }
 // Run executes `docker run --rm [--gpus N] -e ... -v IN:/work/input:ro
 // -v OUT:/work/output IMAGE`.
 func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) error {
+	if err := validateRunSpec(spec); err != nil {
+		return err
+	}
+	dockerPath := r.DockerPath
+	if dockerPath == "" {
+		dockerPath = "docker"
+	}
+	ctx, cancel := withRunTimeout(ctx, spec.Timeout)
+	defer cancel()
+
+	// #nosec G204 -- dockerPath is a constructor-configured binary path
+	// and args are composed from validated Options (Image / Pull / Network)
+	// + host-controlled InputDir/OutputDir, not untrusted input.
+	cmd := exec.CommandContext(ctx, dockerPath, buildDockerArgs(r, spec)...)
+	cmd.Stdout = spec.Logger
+	cmd.Stderr = spec.Logger
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("ai/tiny: docker run: %w", err)
+	}
+	return nil
+}
+
+// validateRunSpec checks the fields Run needs before building a docker
+// invocation.
+func validateRunSpec(spec RunSpec) error {
 	if spec.Image == "" {
 		return errors.New("ai/tiny: RunSpec.Image required")
 	}
 	if spec.InputDir == "" || spec.OutputDir == "" {
 		return errors.New("ai/tiny: RunSpec.InputDir/OutputDir required")
 	}
-	dockerPath := r.DockerPath
-	if dockerPath == "" {
-		dockerPath = "docker"
+	return nil
+}
+
+// withRunTimeout derives a child context bounded by timeout, or returns
+// ctx unchanged (with a no-op cancel) when timeout is 0 — the run then
+// bounds only on ctx's own deadline/cancellation.
+func withRunTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if timeout <= 0 {
+		return ctx, func() {}
 	}
-	if spec.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, spec.Timeout)
-		defer cancel()
-	}
+	return context.WithTimeout(ctx, timeout)
+}
+
+// buildDockerArgs assembles the `docker run` argument list for spec per
+// r's configured options.
+func buildDockerArgs(r *DockerRunner, spec RunSpec) []string {
 	args := []string{"run", "--rm"}
 	if r.Pull != "" {
 		args = append(args, "--pull", r.Pull)
@@ -85,22 +117,12 @@ func (r *DockerRunner) Run(ctx context.Context, spec RunSpec) error {
 	for k, v := range spec.Env {
 		args = append(args, "-e", k+"="+v)
 	}
-	args = append(
+	return append(
 		args,
 		"-v", spec.InputDir+":/work/input:ro",
 		"-v", spec.OutputDir+":/work/output:rw",
 		spec.Image,
 	)
-	// #nosec G204 -- dockerPath is a constructor-configured binary path
-	// and args are composed from validated Options (Image / Pull / Network)
-	// + host-controlled InputDir/OutputDir, not untrusted input.
-	cmd := exec.CommandContext(ctx, dockerPath, args...)
-	cmd.Stdout = spec.Logger
-	cmd.Stderr = spec.Logger
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("ai/tiny: docker run: %w", err)
-	}
-	return nil
 }
 
 // StubRunner is a test-only Runner. It invokes Fn in place of an
