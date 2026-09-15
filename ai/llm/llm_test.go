@@ -111,7 +111,8 @@ func TestOptions(t *testing.T) {
 	defer srv.Close()
 
 	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "default"})
-	_, err := client.Chat(context.Background(),
+	_, err := client.Chat(
+		context.Background(),
 		[]llm.Message{{Role: llm.RoleUser, Content: "hi"}},
 		llm.WithModel("override"),
 		llm.WithMaxTokens(100),

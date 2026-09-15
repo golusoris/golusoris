@@ -10,6 +10,7 @@
 version: 1
 framework: github.com/golusoris/golusoris
 modules:
+  - github.com/golusoris/golusoris/container/registry
   - github.com/golusoris/golusoris/core
   - github.com/golusoris/golusoris/deploy/multiregion
   - github.com/golusoris/golusoris/deploy/pulumi
@@ -276,6 +277,12 @@ packages:
     capabilities: [clikit.tui]
     description: "Package tui provides lightweight helpers for building terminal UIs with charmbracelet/bubbletea v2."
     replaces: [charm.land/bubbletea/v2]
+  - import: github.com/golusoris/golusoris/container/registry
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.image]
+    description: "Package registry wraps go-containerregistry's remote client: parse a reference, resolve a tag to its digest, fetch a manifest, list tags, and copy an image between registries."
+    replaces: [github.com/google/go-containerregistry]
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
     capabilities: [runtime.detect]
@@ -934,6 +941,11 @@ packages:
     capabilities: [test.factory]
     description: "Package factory provides test data factories backed by brianvoe/gofakeit."
     replaces: [github.com/brianvoe/gofakeit/v7]
+  - import: github.com/golusoris/golusoris/testutil/fixture
+    domain: test
+    capabilities: [test.fixture]
+    description: "Package fixture loads typed test fixtures from testdata CSV files into slices of structs, backed by jszwec/csvutil."
+    replaces: [github.com/jszwec/csvutil]
   - import: github.com/golusoris/golusoris/testutil/fuzz
     domain: test
     capabilities: [test.fuzz]

@@ -62,7 +62,8 @@ func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
 		if err != nil {
 			return nil, fmt.Errorf("storage: build local backend: %w", err)
 		}
-		logger.Debug("storage: started",
+		logger.Debug(
+			"storage: started",
 			slog.String("backend", "local"),
 			slog.String("path", opts.Local.Path),
 		)
@@ -74,7 +75,8 @@ func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
 		if err != nil {
 			return nil, fmt.Errorf("storage: build s3 backend: %w", err)
 		}
-		logger.Debug("storage: started",
+		logger.Debug(
+			"storage: started",
 			slog.String("backend", "s3"),
 			slog.String("bucket", opts.S3.Bucket),
 			slog.String("endpoint", opts.S3.Endpoint),
@@ -87,7 +89,8 @@ func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
 }
 
 // Module provides storage.Bucket to the fx graph.
-var Module = fx.Module("golusoris.storage",
+var Module = fx.Module(
+	"golusoris.storage",
 	fx.Provide(loadOptions),
 	fx.Provide(newBucket),
 )

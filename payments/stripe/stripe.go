@@ -145,7 +145,8 @@ func (c *Client) CreatePaymentIntent(ctx context.Context, amount int64, currency
 
 // Module provides *stripe.Client to the fx graph.
 // Requires config key prefix "payments.stripe".
-var Module = fx.Module("golusoris.payments.stripe",
+var Module = fx.Module(
+	"golusoris.payments.stripe",
 	fx.Provide(newFromConfig),
 )
 

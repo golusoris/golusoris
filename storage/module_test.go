@@ -34,7 +34,8 @@ func writeConfig(t *testing.T, body string) string {
 func bootBucket(t *testing.T, cfg *config.Config) storage.Bucket {
 	t.Helper()
 	var got storage.Bucket
-	app := fxtest.New(t,
+	app := fxtest.New(
+		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		storage.Module,

@@ -32,7 +32,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // Module provides a controller-runtime [manager.Manager] and runs it under the
 // fx lifecycle. Requires [golusoris.Core] for config + log. Apps register CRD
 // schemes via [ProvideScheme] and reconcilers via fx.Invoke against the Manager.
-var Module = fx.Module("golusoris.k8s.operator",
+var Module = fx.Module(
+	"golusoris.k8s.operator",
 	fx.Provide(loadOptions),
 	fx.Provide(newManager),
 	fx.Invoke(runManager),

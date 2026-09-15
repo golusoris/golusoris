@@ -72,7 +72,8 @@ func NewDrainer(pool *pgxpool.Pool, client *jobs.Client, dispatcher Dispatcher, 
 // immediately on entry so enqueued events clear fast without waiting a
 // full interval.
 func (d *Drainer) Run(ctx context.Context) error {
-	d.logger.InfoContext(ctx, "outbox/drainer: starting",
+	d.logger.InfoContext(
+		ctx, "outbox/drainer: starting",
 		slog.Duration("interval", d.opts.Interval),
 		slog.Int("batch", d.opts.Batch),
 	)
@@ -97,13 +98,15 @@ func (d *Drainer) drain(ctx context.Context) error {
 	}
 	for _, ev := range events {
 		if dispatchErr := d.dispatchOne(ctx, ev); dispatchErr != nil {
-			d.logger.WarnContext(ctx, "outbox/drainer: dispatch failed",
+			d.logger.WarnContext(
+				ctx, "outbox/drainer: dispatch failed",
 				slog.Int64("id", ev.ID),
 				slog.String("kind", ev.Kind),
 				slog.String("error", dispatchErr.Error()),
 			)
 			if failErr := MarkFailed(ctx, d.pool, ev.ID, dispatchErr); failErr != nil {
-				d.logger.WarnContext(ctx, "outbox/drainer: mark failed",
+				d.logger.WarnContext(
+					ctx, "outbox/drainer: mark failed",
 					slog.Int64("id", ev.ID),
 					slog.String("error", failErr.Error()),
 				)
@@ -111,7 +114,8 @@ func (d *Drainer) drain(ctx context.Context) error {
 			continue
 		}
 		if markErr := MarkDispatched(ctx, d.pool, ev.ID); markErr != nil {
-			d.logger.WarnContext(ctx, "outbox/drainer: mark dispatched",
+			d.logger.WarnContext(
+				ctx, "outbox/drainer: mark dispatched",
 				slog.Int64("id", ev.ID),
 				slog.String("error", markErr.Error()),
 			)
@@ -173,7 +177,8 @@ func loadDrainerOptions(cfg *config.Config) (DrainerOptions, error) {
 //
 // Simpler + more explicit: apps call outbox.NewDrainer manually inside
 // their leader callback and plumb their own lifecycle.
-var Module = fx.Module("golusoris.outbox",
+var Module = fx.Module(
+	"golusoris.outbox",
 	fx.Provide(loadDrainerOptions),
 	fx.Provide(NewDrainer),
 	fx.Invoke(func(lc fx.Lifecycle, d *Drainer, opts DrainerOptions) {

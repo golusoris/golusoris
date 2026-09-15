@@ -307,7 +307,8 @@ func parserFor(path string) koanf.Parser {
 // Module provides a [*Config] built from default Options (env-prefix "APP_",
 // no files). Apps can override by supplying their own [Options] before this
 // module via fx.Replace or fx.Decorate.
-var Module = fx.Module("golusoris.config",
+var Module = fx.Module(
+	"golusoris.config",
 	fx.Provide(func() Options {
 		return Options{
 			EnvPrefix: "APP_",

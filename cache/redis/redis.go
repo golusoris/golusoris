@@ -73,7 +73,8 @@ func newClient(opts Options, logger *slog.Logger) (rueidis.Client, error) {
 // Module provides rueidis.Client to the fx graph. Requires [Core] for
 // config + log. Redis must already be running at start time (no retry
 // logic — keep Redis always-available per Twelve-Factor §IV).
-var Module = fx.Module("golusoris.cache.redis",
+var Module = fx.Module(
+	"golusoris.cache.redis",
 	fx.Provide(loadOptions),
 	fx.Provide(newClient),
 	fx.Invoke(func(lc fx.Lifecycle, c rueidis.Client) {

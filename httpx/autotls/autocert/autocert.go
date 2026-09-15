@@ -67,6 +67,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // Module provides a *tls.Config via autocert. httpx/server picks it up
 // automatically (optional dependency; plaintext if absent).
-var Module = fx.Module("golusoris.httpx.autotls.autocert",
+var Module = fx.Module(
+	"golusoris.httpx.autotls.autocert",
 	fx.Provide(loadOptions, New),
 )
