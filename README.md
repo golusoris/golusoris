@@ -231,7 +231,7 @@ Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green.**
 | `storage/` | `Bucket` interface + local FS backend | custom |
 | `storage/presign/` | S3 direct-browser upload helpers | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
-| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection | code.dny.dev/ssrf + stdlib |
+| `storage/safety/` | EXIF strip (stdlib re-encode) + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
 | `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create | mholt/archives |
 | `media/av/` | FFmpeg probe + transcode (CGO sub-module) | asticode/go-astiav |

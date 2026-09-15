@@ -5,7 +5,9 @@
 // Package safety hardens user uploads before they reach a storage backend:
 // metadata stripping (EXIF/GPS/XMP/text chunks dropped via stdlib re-encode),
 // SSRF-guarded fetch-by-URL (dial-time IP validation re-run on every redirect
-// hop via code.dny.dev/ssrf), and path-traversal-safe object keys.
+// hop via code.dny.dev/ssrf), path-traversal-safe object keys, and magic-byte
+// content-type detection (github.com/h2non/filetype) with a declared-vs-sniffed
+// mismatch check.
 //
 // Security-critical (85% coverage gate). It is the only sanctioned fetch-by-URL
 // entry point — a default http.Client elsewhere bypasses the SSRF guard.
@@ -39,6 +41,8 @@ type Options struct {
 	Fetch FetchOptions `koanf:"fetch"`
 	// Keys configures object-key validation.
 	Keys KeyOptions `koanf:"keys"`
+	// Detect configures magic-byte content-type detection.
+	Detect DetectOptions `koanf:"detect"`
 }
 
 // StripOptions controls image metadata stripping.
@@ -91,7 +95,8 @@ func defaultOptions() Options {
 			AllowPrivate:   false,
 			MaxRedirects:   3,
 		},
-		Keys: KeyOptions{MaxLen: 1024},
+		Keys:   KeyOptions{MaxLen: 1024},
+		Detect: DetectOptions{MaxHeaderBytes: defaultHeaderBytes},
 	}
 }
 
