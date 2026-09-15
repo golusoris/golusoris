@@ -335,6 +335,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
 | `testutil/prop/` | property-based testing (own go.mod) | leanovate/gopter |
 | `testutil/pact/` | Pact contract testing (own go.mod) | pact-foundation/pact-go/v2 |
+| `testutil/ginkgofx/` | fx app lifecycle wired into Ginkgo BeforeSuite/AfterSuite (or BeforeEach/AfterEach) | onsi/ginkgo/v2 |
 
 ### CLI binaries
 
