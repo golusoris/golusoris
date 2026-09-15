@@ -941,7 +941,6 @@ packages:
     domain: test
     capabilities: [test.ginkgofx]
     description: "Package ginkgofx wires an fx application into a Ginkgo spec suite's BeforeSuite/AfterSuite (or BeforeEach/AfterEach) lifecycle, bounded by explicit context timeouts."
-    replaces: [github.com/onsi/ginkgo/v2]
   - import: github.com/golusoris/golusoris/testutil/kafka
     domain: test
     capabilities: [test.kafka]

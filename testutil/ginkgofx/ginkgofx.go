@@ -36,9 +36,17 @@
 //	    })
 //	})
 //
-// Call Setup (or SetupWithOptions) once per suite, at tree-construction
-// time — Ginkgo allows only one BeforeSuite/AfterSuite handler per suite,
-// same restriction as calling ginkgo.BeforeSuite directly.
+// Call Setup (or SetupWithOptions) once per suite, at the suite's true top
+// level — a package-level var initializer (as above) or an init func,
+// never nested inside a Describe/Context/When closure. Setup registers
+// Ginkgo's BeforeSuite/AfterSuite, and Ginkgo only accepts those
+// suite-level nodes while it is still in its top-level tree-construction
+// phase; a container's closure body isn't run until later, when RunSpecs
+// starts walking the tree, and by then Ginkgo rejects a nested
+// BeforeSuite/AfterSuite outright ("can only be called at the top level")
+// and exits the process — same restriction as calling ginkgo.BeforeSuite
+// directly. See ginkgofx_wrongpattern_test.go for that failure exercised
+// end to end.
 //
 // # Spec-scoped: a fresh app per It
 //
@@ -114,16 +122,25 @@ func Populate(targets ...any) fx.Option {
 
 // Setup registers BeforeSuite/AfterSuite hooks that start an fx app built
 // from opts before any spec runs, and stop it after every spec has run.
-// Call it at tree-construction time (top-level or inside a Describe),
-// before RunSpecs. fx.Populate targets in opts are resolved as soon as
-// fx.New(opts...) returns, before Start is even attempted, so specs may
-// reference them freely. It uses DefaultStartTimeout/DefaultStopTimeout;
-// use SetupWithOptions for other bounds.
+// Call it at the suite's true top level — e.g. a package-level
+// `var h = ginkgofx.Setup(...)` — never nested inside a
+// Describe/Context/When closure: BeforeSuite/AfterSuite are Ginkgo
+// suite-level nodes, only accepted while Ginkgo is still in its top-level
+// tree-construction phase, which ends the moment RunSpecs starts entering
+// containers. Calling Setup from inside a container registers it during
+// that later phase instead, and Ginkgo exits the process with "can only
+// be called at the top level" rather than silently misbehaving — see
+// ginkgofx_wrongpattern_test.go for that failure exercised end to end.
+// fx.Populate targets in opts are resolved as soon as fx.New(opts...)
+// returns, before Start is even attempted, so specs may reference them
+// freely. It uses DefaultStartTimeout/DefaultStopTimeout; use
+// SetupWithOptions for other bounds.
 func Setup(opts ...fx.Option) *Harness {
 	return SetupWithOptions(Options{}, opts...)
 }
 
-// SetupWithOptions is Setup with explicit Start/Stop timeouts.
+// SetupWithOptions is Setup with explicit Start/Stop timeouts — see Setup
+// for the top-level-only call requirement.
 func SetupWithOptions(o Options, opts ...fx.Option) *Harness {
 	o = o.withDefaults()
 	h := &Harness{}

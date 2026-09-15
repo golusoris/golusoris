@@ -45,9 +45,22 @@ err  = ginkgofx.StopApp(ctx, app, timeout)
 `SetupEach`/`SetupEachWithOptions` register `BeforeEach`/`AfterEach`. Ginkgo
 allows only one `BeforeSuite` and one `AfterSuite` handler per suite, so call
 `Setup`/`SetupWithOptions` at most once per suite (same restriction as
-`ginkgo.BeforeSuite` itself). A failed start/stop calls `ginkgo.Fail`, which
-panics to end the current spec — Ginkgo catches it, same as any other
-assertion failure.
+`ginkgo.BeforeSuite` itself), and **only from the suite's true top level**
+(a package-level `var`, as in the example above, or an `init` func) — never
+nested inside a `Describe`/`Context`/`When` closure. `BeforeSuite`/
+`AfterSuite` are Ginkgo suite-level nodes that may only be registered while
+Ginkgo is still in its top-level tree-construction phase; a container's
+closure body doesn't run until later, once `RunSpecs` starts walking the
+tree, and by then Ginkgo rejects a nested `BeforeSuite`/`AfterSuite`
+outright — it prints "can only be called at the top level" and exits the
+process, rather than silently misbehaving. `SetupEach`/`SetupEachWithOptions`
+have no such restriction: `BeforeEach`/`AfterEach` are ordinary container
+nodes, meant to be called from inside the `Describe`/`Context` they scope
+to (see below). `ginkgofx_wrongpattern_test.go` exercises the `Setup`
+failure mode end to end via a re-exec'd subprocess (Ginkgo's `os.Exit(1)`
+would otherwise tear down the whole package's test run). A failed
+start/stop calls `ginkgo.Fail`, which panics to end the current spec —
+Ginkgo catches it, same as any other assertion failure.
 
 ## Root module, not a nested go.mod
 
@@ -68,9 +81,24 @@ package that carries its own tests.
 
 - Don't call `Setup`/`SetupWithOptions` more than once per suite — Ginkgo
   only allows one `BeforeSuite`/`AfterSuite` handler.
+- Don't call `Setup`/`SetupWithOptions` from inside a `Describe`/`Context`/
+  `When` closure — they register Ginkgo's `BeforeSuite`/`AfterSuite`, which
+  Ginkgo only accepts at the suite's true top level; nesting them makes
+  Ginkgo exit the process with "can only be called at the top level"
+  instead of registering the hook.
 - Don't call `SetupEach` at package level when you mean to scope it to one
   `Describe` — register it inside that Describe's closure.
 - Don't rely on `fx.StartTimeout`/`fx.StopTimeout` fx options for the bound:
   `fx.App.Start`/`Stop` only honor those through `fx.App.Run`, not a direct
   `Start(ctx)`/`Stop(ctx)` call, so `Options.StartTimeout`/`StopTimeout` (via
   `context.WithTimeout`) are what actually bound these calls.
+
+## Naming: why this isn't `testutil/pact`
+
+`docs/FLEET_GO_DEMAND.md`'s sprint list (cluster table and "First sprint"
+list, item 3) names this sprint item `testutil/pact` as shorthand for "the
+ginkgo fx-aware BDD lifecycle wrapper." That name was never meant literally:
+`testutil/pact` already exists as an unrelated package (Pact consumer-driven
+contract testing, wrapping `pact-go`). This package landed as
+`testutil/ginkgofx` instead, named for what it actually wraps
+(`onsi/ginkgo`), to avoid colliding with that existing package.

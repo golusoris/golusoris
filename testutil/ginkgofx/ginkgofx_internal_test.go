@@ -7,14 +7,35 @@ package ginkgofx
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"go.uber.org/fx"
 )
 
+// cleanupHelperEnv gates TestStartApp_cleanup_helperFatals: set only in the
+// subprocess TestStartApp_cleanup_stopsAppDespiteMidTestFatal re-execs via
+// RunHelperProcess.
+const cleanupHelperEnv = "GINKGOFX_CLEANUP_HELPER"
+
+// cleanupHelperStoppedMarker is the exact line
+// TestStartApp_cleanup_helperFatals logs once its t.Cleanup-registered
+// StopApp call has run; TestStartApp_cleanup_stopsAppDespiteMidTestFatal
+// greps the helper's captured output for it.
+const cleanupHelperStoppedMarker = "cleanupHelper: StopApp ran"
+
 // TestStartApp_positive_stopsWithinTimeout covers a well-behaved OnStart
 // hook completing before the deadline.
+//
+// StopApp is registered via t.Cleanup immediately after a successful
+// Start, before any assertion that could t.Fatal — otherwise a failing
+// assertion between Start and a sequential Stop call would abort the test
+// (t.Fatal calls runtime.Goexit) and skip Stop entirely, leaking the app.
+// t.Cleanup runs regardless of how the test body exits, so the app is
+// always stopped. TestStartApp_cleanup_stopsAppDespiteMidTestFatal below
+// proves this mechanism actually holds.
 func TestStartApp_positive_startsWithinTimeout(t *testing.T) {
 	t.Parallel()
 	started := false
@@ -28,12 +49,75 @@ func TestStartApp_positive_startsWithinTimeout(t *testing.T) {
 	if err := StartApp(context.Background(), app, time.Second); err != nil {
 		t.Fatalf("StartApp: %v", err)
 	}
+	t.Cleanup(func() {
+		if err := StopApp(context.Background(), app, time.Second); err != nil {
+			t.Errorf("StopApp: %v", err)
+		}
+	})
+
 	if !started {
 		t.Fatal("OnStart was not called")
 	}
-	if err := StopApp(context.Background(), app, time.Second); err != nil {
-		t.Fatalf("StopApp: %v", err)
+}
+
+// TestStartApp_cleanup_stopsAppDespiteMidTestFatal is the regression test
+// for the leak TestStartApp_positive_startsWithinTimeout used to risk: a
+// mid-test t.Fatal firing after a successful StartApp must not skip
+// StopApp. It re-execs TestStartApp_cleanup_helperFatals in a subprocess
+// (via RunHelperProcess) rather than reproducing the Fatal inline, because
+// a real t.Fatal in an ordinary subtest here would mark this package's own
+// `go test` run as failed — exactly the outcome a regression test must not
+// cause. The helper deliberately fails after a successful Start; this test
+// asserts (a) it really did fail (sanity: we're exercising the right
+// path) and (b) its t.Cleanup-registered StopApp still logged
+// cleanupHelperStoppedMarker before exiting. Had Stop instead been
+// sequenced as a plain statement after other assertions (the old shape),
+// the helper's Fatal would end it via runtime.Goexit before ever reaching
+// that statement, and the marker would be absent.
+func TestStartApp_cleanup_stopsAppDespiteMidTestFatal(t *testing.T) {
+	t.Parallel()
+
+	out, err := RunHelperProcess(t, "TestStartApp_cleanup_helperFatals", cleanupHelperEnv)
+	if err == nil {
+		t.Fatalf("helper process unexpectedly succeeded (want its simulated Fatal to fail it); output:\n%s", out)
 	}
+	if !strings.Contains(string(out), cleanupHelperStoppedMarker) {
+		t.Fatalf("helper output missing %q (StopApp did not run via t.Cleanup after its mid-test Fatal); output:\n%s", cleanupHelperStoppedMarker, out)
+	}
+}
+
+// TestStartApp_cleanup_helperFatals is not a real test: it only runs when
+// re-exec'd by TestStartApp_cleanup_stopsAppDespiteMidTestFatal (via
+// cleanupHelperEnv). It reproduces
+// TestStartApp_positive_startsWithinTimeout's shape — StartApp, then
+// t.Cleanup(StopApp) registered immediately, then an assertion that can
+// fail the test — but forces the failing branch, logging
+// cleanupHelperStoppedMarker from inside the cleanup so the parent process
+// can confirm StopApp ran despite the Fatal below it.
+func TestStartApp_cleanup_helperFatals(t *testing.T) {
+	t.Parallel()
+	if os.Getenv(cleanupHelperEnv) == "" {
+		t.Skip("only runs as a re-exec'd child of TestStartApp_cleanup_stopsAppDespiteMidTestFatal")
+	}
+
+	app := fx.New(fx.Invoke(func(lc fx.Lifecycle) {
+		lc.Append(fx.Hook{OnStop: func(context.Context) error {
+			return nil
+		}})
+	}))
+
+	if err := StartApp(context.Background(), app, time.Second); err != nil {
+		t.Fatalf("StartApp: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := StopApp(context.Background(), app, time.Second); err != nil {
+			t.Errorf("StopApp: %v", err)
+			return
+		}
+		t.Log(cleanupHelperStoppedMarker)
+	})
+
+	t.Fatal("simulated mid-test failure after a successful StartApp")
 }
 
 // TestStartApp_negative_propagatesHookError covers a hook that fails

@@ -32,6 +32,12 @@ func newGreeter(lc fx.Lifecycle) *greeter {
 
 var g *greeter
 
+// h is declared as a package-level var — the suite's true top level — not
+// inside any Describe/Context closure. That placement is load-bearing, not
+// stylistic: Setup registers ginkgo.BeforeSuite/AfterSuite, which Ginkgo
+// only accepts during its top-level tree-construction phase; see
+// ginkgofx_wrongpattern_test.go for what happens when Setup is called from
+// inside a container instead.
 var h = ginkgofx.Setup(
 	fx.Provide(newGreeter),
 	ginkgofx.Populate(&g),
