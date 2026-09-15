@@ -51,6 +51,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/grafana/pyroscope-go v1.4.2
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
+	github.com/h2non/filetype v1.1.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/hekmon/transmissionrpc/v3 v3.0.0
 	github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce
