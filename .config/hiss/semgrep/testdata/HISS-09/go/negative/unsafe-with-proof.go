@@ -5,6 +5,7 @@
 // Package p reinterprets memory and proves the operation sound.
 package p
 
+// SAFETY: unsafe is imported only for the single proven conversion in Bytes.
 import "unsafe"
 
 // Bytes returns the string's backing array without copying it.

@@ -99,8 +99,9 @@ rules:
           named constant, does not. gap/condition-without-scalar-bound.go is the honest limit
           of the loop half: `for !done` has no scalar upper bound, which is what the axiom
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
-          is reported by semgrep and golangci-lint rather than by the scanner, and the CI
-          semgrep job is continue-on-error, so it advises rather than gates.
+          is reported by semgrep and golangci-lint rather than by the scanner. The
+          ci.yml semgrep job is continue-on-error and advises; security-scan.yml's
+          "Semgrep analysis" job runs on pull_request without it and gates.
       - language: c
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go nativeUnboundedLoop).
@@ -187,17 +188,18 @@ rules:
       - language: go
         state: unsupported
         mechanism: >-
-          none. `go test -race` (make ci-all, the CI job "Test (race + coverage)" and the
-          lefthook pre-push job build-test) reports data races, which is a different property:
-          a correctly synchronised unbounded fan-out is race-free and still unbounded. No
-          linter in .golangci.yml and no rule in .semgrep.yml decides goroutine count, and a
-          repository-wide grep for errgroup, SetLimit and semaphore over *.go returns nothing,
-          so not even the convention is present to key a rule on.
+          none in praetorctl: internal/hiss carries no Go HISS-06 rule, and `go test -race`
+          decides a different property (a correctly synchronised unbounded fan-out is
+          race-free and still unbounded). The invariant is enforced here by .semgrep.yml
+          no-unbounded-goroutine-in-loop, whose own corpus lives in .config/hiss/semgrep/testdata and
+          is replayed in both directions by `make hiss-fixtures`.
         rationale: >-
-          positive/ is empty because no mechanism reports an unbounded fan-out.
-          gap/unbounded-goroutine-in-loop.go starts one goroutine per input element with no
-          semaphore, no errgroup limit and no worker pool, and is reported by nothing.
-          negative/fixed-worker-pool.go is the bounded shape a future rule must not report.
+          gap/unrelated-send-before-spawn.go and gap/counted-loop-len-in-variable.go are the
+          shapes nothing reports: a send on an unrelated channel before the spawn, which the
+          semgrep rule accepts as an acquire, and a loop bounded by a variable holding
+          len(xs), which it cannot tell from a constant bound. The nine shapes the semgrep
+          rule does report are positives of that corpus, not of this one, because this file
+          records what praetorctl's scanner decides.
   - id: HISS-07
     title: Checked Errors
     coverage:
@@ -228,16 +230,17 @@ rules:
       - language: go
         state: unsupported
         mechanism: >-
-          none. There are zero dynamic-loading call sites in the tree today (no plugin.Open,
-          no reflect.MakeFunc), but nothing holds that line: internal/hiss carries no Go
-          HISS-08 rule, .semgrep.yml's five rules are all about HTTP and io/ioutil, and
-          forbidigo in .golangci.yml fences time.Now, fmt.Print* and math/rand -- none of which
-          is dynamic code loading.
+          none in praetorctl: internal/hiss implements HISS-08 for Python and C only. The
+          invariant is enforced here by .semgrep.yml no-dynamic-code-loading and
+          no-dynamic-exec-command, whose corpus lives in .config/hiss/semgrep/testdata and is replayed
+          in both directions by `make hiss-fixtures`.
         rationale: >-
-          positive/ is empty because no mechanism reports dynamic code loading in Go.
-          gap/plugin-open.go maps a shared object into the process and resolves a symbol by
-          name; gap/reflect-makefunc.go synthesises a function body at run time. Neither is
-          reported by anything in this repository.
+          gap/command-name-from-environment.go is the shape nothing reports: the command name
+          comes from an environment variable held in a plain variable, and both semgrep rules
+          match interpreter literals and call-site assembly rather than taint. plugin.Open,
+          plugin.Lookup, reflect.MakeFunc and the interpreter and assembled-name spellings
+          are positives of the semgrep corpus. There are zero dynamic-loading call sites in
+          the tree today.
       - language: python
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go hasBannedCall for eval and exec).
@@ -261,15 +264,17 @@ rules:
       - language: go
         state: partial
         mechanism: >-
-          praetorctl audit (internal/hiss go_ast.go checkUnsafe with a preceding `// SAFETY:`
-          proof on the enclosing statement).
+          praetorctl audit (internal/hiss go_ast.go checkUnsafe), with .semgrep.yml
+          unsafe-requires-safety-proof covering the import form and the aliased import;
+          its corpus lives in .config/hiss/semgrep/testdata.
         rationale: >-
-          positive/unsafe-without-proof.go raises HISS-09; negative/unsafe-with-proof.go, which
-          carries the proof immediately above the statement, does not. There are zero `unsafe`
-          imports in the tree today. gap/aliased-unsafe-import.go performs the identical
-          unproven operation through `import raw "unsafe"`: checkUnsafe matches a selector
-          whose package identifier is spelled `unsafe`, so an alias passes unreported. Whether
-          a proof is truthful is not decided by any check.
+          The scanner reports an unproven unsafe.Pointer, unproven Slice and String
+          conversions, an unproven import, a usage with no proof at all and a proof detached
+          from the code by a blank line; negative/proven-pointer.go, which states the proof
+          directly above, is not reported. It misses `import raw "unsafe"`, because it
+          matches a selector spelled `unsafe`; the semgrep rule reports that alias and is
+          what closes the gap here. Whether a proof is truthful is decided by review, and
+          there are zero `unsafe` imports in the tree today.
       - language: c
         state: unsupported
         mechanism: >-
