@@ -66,4 +66,5 @@ jobs:
                     --config p/javascript \
                     --config p/security-audit \
                     --exclude .config/hiss/testdata \
+                    --exclude .config/hiss/semgrep/testdata \
                     --error --metrics=off --quiet /src'

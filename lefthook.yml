@@ -61,6 +61,15 @@ pre-commit:
       run: if command -v praetorctl >/dev/null 2>&1; then praetorctl compile-context --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl compile-context --verify; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
     hiss-audit:
       run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS-16 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+    # hiss-coverage sits next to hiss-audit rather than in pre-push because it
+    # verifies the same kind of artefact at the same cost: .config/hiss/coverage.yaml
+    # is text, the replay needs no build, no network and no container, and it
+    # measured 39 ms over 73 fixtures. It also belongs BEFORE the commit — a claim
+    # that drifts out of step with the tree is only findable later by reading a
+    # commit that already asserts it, so catching the drift at pre-push would mean
+    # amending rather than fixing.
+    hiss-coverage:
+      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl hiss coverage --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl hiss coverage --verify; else echo HISS-20 governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
     reuse:
       run: bash scripts/hooks/reuse.sh
     gitleaks:

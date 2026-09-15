@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+#
+# A workflow step pinned to a mutable tag rather than a commit digest. Renovate
+# rewrites this shape in .github/workflows/ (helpers:pinGitHubActionDigests),
+# but no gate in this repository FAILS on it, so an unpinned step introduced by
+# hand between Renovate runs merges unreported.
+name: example
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4

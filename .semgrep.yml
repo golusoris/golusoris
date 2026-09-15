@@ -121,14 +121,17 @@ rules:
     severity: ERROR
     message: >-
       Importing unsafe, or reinterpreting memory with unsafe.Pointer/Slice/
-      String/Add, requires a `// SAFETY:` line directly above it stating the
-      precondition that makes it sound. Add the proof, or use a safe conversion.
+      String/Add, requires a `// SAFETY:` proof in the comment block directly
+      above it stating the precondition that makes it sound. The proof may span
+      several comment lines; a blank line between it and the code breaks the
+      block. Add the proof, or use a safe conversion.
     paths:
       exclude:
         - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
     pattern-either:
-      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K[ \t]*(?:import[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*[ \t]+|_[ \t]+|\.[ \t]+)?"unsafe"[ \t]*$'
-      - pattern-regex: '(?m)^(?![ \t]*//[ \t]*SAFETY:).*\n\K(?![ \t]*//)[^\n]*\bunsafe\.(?:Pointer|Slice|String|SliceData|StringData|Add)\b'
+      - pattern-regex: '(?m)^(?![ \t]*//)[^\n]*\n(?:[ \t]*//(?![ \t]*SAFETY:)[^\n]*\n)*\K[ \t]*(?:import[ \t]+)?(?:[A-Za-z_][A-Za-z0-9_]*[ \t]+|_[ \t]+|\.[ \t]+)?"unsafe"[ \t]*$'
+      - pattern-regex: '(?m)^(?![ \t]*//)[^\n]*\n(?:[ \t]*//(?![ \t]*SAFETY:)[^\n]*\n)*\K(?![ \t]*//)[^\n]*\bunsafe\.(?:Pointer|Slice|String|SliceData|StringData|Add)\b'
 
   # ── HISS-08 · no dynamic code loading ───────────────────────────────────────
   # plugin.Open maps a shared object chosen at run time into the process, and
@@ -146,6 +149,7 @@ rules:
     paths:
       exclude:
         - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
     pattern-either:
       - pattern: import "plugin"
       - pattern: plugin.Open(...)
@@ -183,6 +187,7 @@ rules:
       exclude:
         - "*_test.go"
         - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
     patterns:
       - pattern-either:
           - pattern: exec.Command($NAME, ...)
@@ -267,6 +272,7 @@ rules:
       exclude:
         - "*_test.go"
         - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
     pattern-either:
       # (A) a bare `go` statement, bounded only by a slot taken before it.
       - patterns:

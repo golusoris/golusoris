@@ -1,0 +1,101 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+"""A function past the HISS-04 length cap."""
+
+
+def accumulate(n):
+    """Ninety statements, well past the 75-line cap."""
+    total = 0
+    total += n * 1
+    total += n * 2
+    total += n * 3
+    total += n * 4
+    total += n * 5
+    total += n * 6
+    total += n * 7
+    total += n * 8
+    total += n * 9
+    total += n * 10
+    total += n * 11
+    total += n * 12
+    total += n * 13
+    total += n * 14
+    total += n * 15
+    total += n * 16
+    total += n * 17
+    total += n * 18
+    total += n * 19
+    total += n * 20
+    total += n * 21
+    total += n * 22
+    total += n * 23
+    total += n * 24
+    total += n * 25
+    total += n * 26
+    total += n * 27
+    total += n * 28
+    total += n * 29
+    total += n * 30
+    total += n * 31
+    total += n * 32
+    total += n * 33
+    total += n * 34
+    total += n * 35
+    total += n * 36
+    total += n * 37
+    total += n * 38
+    total += n * 39
+    total += n * 40
+    total += n * 41
+    total += n * 42
+    total += n * 43
+    total += n * 44
+    total += n * 45
+    total += n * 46
+    total += n * 47
+    total += n * 48
+    total += n * 49
+    total += n * 50
+    total += n * 51
+    total += n * 52
+    total += n * 53
+    total += n * 54
+    total += n * 55
+    total += n * 56
+    total += n * 57
+    total += n * 58
+    total += n * 59
+    total += n * 60
+    total += n * 61
+    total += n * 62
+    total += n * 63
+    total += n * 64
+    total += n * 65
+    total += n * 66
+    total += n * 67
+    total += n * 68
+    total += n * 69
+    total += n * 70
+    total += n * 71
+    total += n * 72
+    total += n * 73
+    total += n * 74
+    total += n * 75
+    total += n * 76
+    total += n * 77
+    total += n * 78
+    total += n * 79
+    total += n * 80
+    total += n * 81
+    total += n * 82
+    total += n * 83
+    total += n * 84
+    total += n * 85
+    total += n * 86
+    total += n * 87
+    total += n * 88
+    total += n * 89
+    total += n * 90
+    return total
