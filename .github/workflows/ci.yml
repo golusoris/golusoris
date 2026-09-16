@@ -211,56 +211,76 @@ jobs:
       - name: Verify Docker is reachable
         if: runner.os == 'Linux'
         run: docker info
-      # Every testcontainers-backed package pulls its image on first use. The
-      # ARC runner starts each job with an empty image cache ("Images: 0") and
-      # `go test ./...` launches all those packages at once, so the pulls
-      # compete for the Docker sidecar and container-start bounds expired
-      # mid-pull (PR #447). Pull the whole set up front, in parallel and
-      # bounded, so the test step starts warm.
-      - name: Pre-pull testcontainers images
+      # Testcontainers images are immutable and identical from job to job, so
+      # pulling them again every run is the actual defect -- the registry is
+      # slow and variable from this runner (measured 194-221 s per image on
+      # run 35084070175, 20-158 s on 35080875553), and seven images at two
+      # concurrent pulls is ~15 min of wall clock per job for bytes that never
+      # change. Cache the image set instead: `docker save` it once, restore and
+      # `docker load` it on every later run. The pull path below is now the
+      # cold-cache exception, not the steady state.
+      #
+      # The key is the manifest hash, so editing the image list repopulates the
+      # cache; the week stamp bounds how long a floating tag (postgres:17-alpine,
+      # clickhouse/clickhouse-server:24, ...) can stay frozen at whatever the
+      # cache holds, so upstream security rebuilds still land.
+      - name: Image cache key
         if: runner.os == 'Linux'
-        # Hard ceiling on the whole step, independent of the per-image
-        # arithmetic below: the batches must not be able to eat the job's
-        # budget and starve the test step (HISS-02 bounded I/O). A healthy run
-        # at the measured 194-221 s per pull is ~15 min over 4 batches; 30
-        # leaves room for a failed attempt in a couple of them.
+        id: tc-key
+        run: |
+          set -euo pipefail
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Cache testcontainers images
+        if: runner.os == 'Linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/testcontainers-images
+          key: tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-${{ steps.tc-key.outputs.week }}
+          # A stale week still beats a cold start: the images it holds load, and
+          # only the ones missing from it are pulled below.
+          restore-keys: |
+            tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-
+      - name: Load or pull testcontainers images
+        if: runner.os == 'Linux'
+        # Ceiling for the cold-cache path; a warm restore is a `docker load` of
+        # a local tarball and finishes in well under a minute (HISS-02).
         timeout-minutes: 30
         run: |
           set -euo pipefail
-          # Single source of truth for CI. Keep in sync with the default images
-          # in testutil/{pg,redis,nats,kafka,clickhouse} and the ryuk reaper that
-          # testcontainers-go v0.44.0 spawns (internal/config/config.go:
-          # ReaperDefaultImage). storage/scan's clamav image is behind the
-          # `integration` build tag, which this job does not set, so it is
-          # deliberately not listed.
-          IMAGES=(
-            postgres:17-alpine
-            timescale/timescaledb:2.30.0-pg17
-            redis:7-alpine
-            nats:2-alpine
-            clickhouse/clickhouse-server:24
-            redpandadata/redpanda:v24.3.1
-            testcontainers/ryuk:0.14.0
-          )
-          # Sizing is measured, not guessed. Registry throughput to this runner
-          # is poor and varies a lot between runs: successful pulls took
-          # 20-158 s on run 35080875553 and a near-uniform 194-221 s on run
-          # 35084070175. Two earlier attempts at this failed because the bound
-          # sat too close to the typical pull -- at 240 s, ordinary jitter
-          # pushed healthy 220 s pulls over the line and each cost a whole
-          # extra attempt.
-          #
-          # 420 s clears the worst observed healthy pull (221 s) by ~2x, so a
-          # progressing pull is never cut off. Concurrency stays at 2: all
-          # seven at once split the link so thinly that five expired together
-          # at the original 300 s bound, tiny images included.
-          #
-          # The floor this leaves is real and deliberate: 7 images / 2 at a
-          # time * ~220 s is ~15 min of pre-pull even with zero failures, on
-          # top of the ~13.5 min suite. That is the cost of pulling from a
-          # remote registry on every job. The durable fix is to serve these
-          # from the Harbor mirror (or bake them into the scale-set image),
-          # which is a cluster-repo change; until then these bounds hold.
+          CACHE_DIR="$HOME/.cache/testcontainers-images"
+          ARCHIVE="$CACHE_DIR/images.tar"
+          # HISS-02: scalar upper bound on the manifest loop.
+          MAX_IMAGES=32
+          mapfile -t IMAGES < <(grep -vE '^[[:space:]]*(#|$)' .github/testcontainers-images.txt)
+          if [ "${#IMAGES[@]}" -eq 0 ] || [ "${#IMAGES[@]}" -gt "$MAX_IMAGES" ]; then
+            echo "::error::.github/testcontainers-images.txt lists ${#IMAGES[@]} images; expected 1..${MAX_IMAGES}"
+            exit 1
+          fi
+
+          if [ -f "$ARCHIVE" ]; then
+            echo "Restoring $(du -h "$ARCHIVE" | cut -f1) of cached images"
+            docker load -i "$ARCHIVE"
+          else
+            echo "No image cache present; pulling the full set."
+          fi
+
+          # Pull only what the cache did not supply.
+          missing=()
+          for image in "${IMAGES[@]}"; do
+            docker image inspect "$image" >/dev/null 2>&1 || missing+=("$image")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "All ${#IMAGES[@]} images served from cache; nothing to pull."
+            docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
+            exit 0
+          fi
+          echo "Pulling ${#missing[@]} of ${#IMAGES[@]} images: ${missing[*]}"
+
+          # Bounds are measured, not guessed. All seven at once split the link
+          # so thinly that five expired together at a 300 s bound, tiny images
+          # included; two at a time each take ~220 s. 420 s clears the worst
+          # observed healthy pull by ~2x, so a progressing pull is never cut
+          # off, and the retry covers a wedged first contact with the registry.
           PULL_CONCURRENCY=2
           PULL_TIMEOUT_SECONDS=420  # per attempt; HISS-02 bounded I/O
           PULL_ATTEMPTS=3           # HISS-02 scalar retry bound
@@ -277,8 +297,8 @@ jobs:
           }
 
           failed=()
-          for ((i = 0; i < ${#IMAGES[@]}; i += PULL_CONCURRENCY)); do
-            batch=("${IMAGES[@]:i:PULL_CONCURRENCY}")
+          for ((i = 0; i < ${#missing[@]}; i += PULL_CONCURRENCY)); do
+            batch=("${missing[@]:i:PULL_CONCURRENCY}")
             pids=()
             for image in "${batch[@]}"; do
               pull_one "$image" &
@@ -294,9 +314,15 @@ jobs:
             for image in "${failed[@]}"; do
               echo "::error::docker pull failed after ${PULL_ATTEMPTS} attempts: ${image}"
             done
-            echo "::error::pre-pull incomplete — the test step would otherwise pull under contention"
+            echo "::error::pre-pull incomplete -- the test step would otherwise pull under contention"
             exit 1
           fi
+
+          # Re-save the whole set so the cache holds every image, not just the
+          # delta. docker save shares layers across images in one archive.
+          mkdir -p "$CACHE_DIR"
+          docker save -o "$ARCHIVE" "${IMAGES[@]}"
+          echo "Wrote $(du -h "$ARCHIVE" | cut -f1) image archive for the cache"
           docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
       # On macOS there is no Docker daemon; skip the testcontainers-backed
       # packages so the portability leg passes instead of failing on infra.
