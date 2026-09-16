@@ -186,10 +186,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # 30: the Docker-backed suite took 13.5 min on a cold ARC runner before the
     # pre-pull step existed; keep headroom above the 10 min per-module go test
-    # timeout plus the pre-pull. Raised to 50 when the pre-pull was throttled to
-    # two concurrent pulls and given its own 20 min ceiling: serialising the
-    # batches trades wall-clock for pulls that actually complete.
-    timeout-minutes: 50
+    # timeout plus the pre-pull. Now 60: the pre-pull owns up to 30 min of that
+    # (see its ceiling below) because serialising the batches trades wall-clock
+    # for pulls that actually complete, and the suite itself needs ~13.5 min.
+    # This shrinks back to ~20 once the images are served from the Harbor
+    # mirror or baked into the scale-set image.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -219,10 +221,10 @@ jobs:
         if: runner.os == 'Linux'
         # Hard ceiling on the whole step, independent of the per-image
         # arithmetic below: the batches must not be able to eat the job's
-        # budget and starve the test step (HISS-02 bounded I/O). Healthy run
-        # is ~5 min (4 batches at 20-158 s); 20 leaves room for a stalled
-        # attempt in more than one batch.
-        timeout-minutes: 20
+        # budget and starve the test step (HISS-02 bounded I/O). A healthy run
+        # at the measured 194-221 s per pull is ~15 min over 4 batches; 30
+        # leaves room for a failed attempt in a couple of them.
+        timeout-minutes: 30
         run: |
           set -euo pipefail
           # Single source of truth for CI. Keep in sync with the default images
@@ -240,22 +242,27 @@ jobs:
             redpandadata/redpanda:v24.3.1
             testcontainers/ryuk:0.14.0
           )
-          # What actually goes wrong here is a cold-start stall, not bandwidth.
-          # Measured on PR #554: the job's first two pulls both hung for a full
-          # 600 s and failed, then the SAME image pulled clean on the retry in
-          # 36 s; every pull after that first batch took 20-158 s. The daemon's
-          # first contact with the registry wedges, and only a fresh attempt
-          # clears it. So the retry is the cure and a long per-attempt bound is
-          # the disease -- it burns ten minutes before the thing that works
-          # gets to run. Short attempts, more of them.
+          # Sizing is measured, not guessed. Registry throughput to this runner
+          # is poor and varies a lot between runs: successful pulls took
+          # 20-158 s on run 35080875553 and a near-uniform 194-221 s on run
+          # 35084070175. Two earlier attempts at this failed because the bound
+          # sat too close to the typical pull -- at 240 s, ordinary jitter
+          # pushed healthy 220 s pulls over the line and each cost a whole
+          # extra attempt.
           #
-          # 240 s is ~1.5x the slowest observed healthy pull (timescaledb,
-          # 158 s), so a progressing pull is never cut off; a wedged one is
-          # abandoned in 4 min instead of 10. Concurrency stays at 2: seven at
-          # once split the link so thinly that five expired together at the old
-          # 300 s bound, tiny images included.
+          # 420 s clears the worst observed healthy pull (221 s) by ~2x, so a
+          # progressing pull is never cut off. Concurrency stays at 2: all
+          # seven at once split the link so thinly that five expired together
+          # at the original 300 s bound, tiny images included.
+          #
+          # The floor this leaves is real and deliberate: 7 images / 2 at a
+          # time * ~220 s is ~15 min of pre-pull even with zero failures, on
+          # top of the ~13.5 min suite. That is the cost of pulling from a
+          # remote registry on every job. The durable fix is to serve these
+          # from the Harbor mirror (or bake them into the scale-set image),
+          # which is a cluster-repo change; until then these bounds hold.
           PULL_CONCURRENCY=2
-          PULL_TIMEOUT_SECONDS=240  # per attempt; HISS-02 bounded I/O
+          PULL_TIMEOUT_SECONDS=420  # per attempt; HISS-02 bounded I/O
           PULL_ATTEMPTS=3           # HISS-02 scalar retry bound
 
           pull_one() {
