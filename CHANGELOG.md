@@ -801,12 +801,6 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
   - `httpx/geofence.Module`: the fx `OnStop` hook returns the mmdb reader's close error instead of swallowing it.
   - `apidocs` `/mcp` tool proxy: a failed response-body read or close is reported as an `IsError` tool result instead of being dropped (a short read previously produced a silently truncated reply).
 
-<!--
-SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
-
-SPDX-License-Identifier: CC-BY-SA-4.0
--->
-
 - **BREAKING**: `markdown.RenderString` returns an error instead of panicking on
   a goldmark failure (HISS-07 burn-down).
 

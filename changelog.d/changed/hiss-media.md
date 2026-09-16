@@ -1,9 +1,3 @@
-<!--
-SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
-
-SPDX-License-Identifier: CC-BY-SA-4.0
--->
-
 - **BREAKING**: `markdown.RenderString` returns an error instead of panicking on
   a goldmark failure (HISS-07 burn-down).
 
