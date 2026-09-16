@@ -329,8 +329,19 @@ jobs:
       - name: Run tests (Linux — full suite with Docker)
         if: runner.os == 'Linux'
         run: |
-          go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
-          (cd core && go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
+          # -p 4 bounds how many test binaries run at once. Go defaults it to
+          # GOMAXPROCS, which is 16 here because that is what the node reports,
+          # while the ARC job container is guaranteed 750m CPU with a 4-CPU
+          # burst limit. Sixteen of this tree's packages are testcontainers-
+          # backed, so the default let sixteen of them start Postgres,
+          # TimescaleDB, ClickHouse and Redpanda containers simultaneously on
+          # ~4 effective cores; testcontainers' readiness probe (60 s inside
+          # BasicWaitStrategies, independent of testutil's 3 min startTimeout)
+          # then expired with the container already logging "database system is
+          # ready to accept connections". Take the bound before the spawn --
+          # the same rule HISS-06 applies to application code.
+          go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+          (cd core && go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
           # One merged profile: the threshold below covers root + core together.
           tail -n +2 core/coverage.out >> coverage.out
       - name: Run tests (macOS — skip Docker-requiring packages)
