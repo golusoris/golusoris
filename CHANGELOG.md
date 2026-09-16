@@ -876,6 +876,8 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
   once, or as many as the new `search.WithMaxFanOut` option allows. Registering
   more backends lengthens a query rather than widening its concurrency.
 
+- `testutil/{pg,redis,nats,kafka,clickhouse}`: container helpers now boot at most 2 containers at a time per test binary, through the new internal `testutil/internal/startgate`. Parallel tests beyond that queue for a slot (bounded by the 10 min package test timeout) instead of all booting together. Previously a package whose `t.Parallel` tests each started a container launched them simultaneously; `ai/tiny` booted ten Postgres containers at once and none logged ready within testcontainers' 60 s wait on a CPU-capped CI runner. `go test -p` cannot prevent this, since it bounds packages, not the tests inside one. The `startTimeout` budget now starts only once a slot is held.
+
 ### Fixed
 
 - CI: `gosec` no longer scans the HISS rule fixtures under `.config/hiss/**/testdata/`. It expands `./...` with its own directory walk, so unlike the go tool it descended into dot-prefixed and `testdata` directories, and the fixtures redeclare symbols across files in one package and embed insecure patterns by design — 4 build errors and 27 false findings on every run. `-exclude-dir=testdata` is now applied in both the workflow and the Makefile. Two genuine findings the noise had buried (`archive` G301, `testutil/fixture` G304) are suppressed inline with reasons.

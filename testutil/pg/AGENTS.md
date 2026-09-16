@@ -17,7 +17,8 @@ genuine database. Docker is a hard requirement (no fake/mock fallback).
 - For TimescaleDB tests, use `pg.StartTimescale(t)` — it boots the pinned `timescale/timescaledb:2.30.0-pg17` image and `CREATE EXTENSION`s timescaledb before returning the pool.
 - Default image is `postgres:17-alpine`. Override via `Options.Image`.
 - Every start is bounded by `startTimeout` (3 min, image pull included) — sized for the cold-cache CI ARC runners where all container packages pull at once. Keep it a scalar constant (HISS-02).
-- Image tags are pinned; when you bump one, update the "Pre-pull testcontainers images" list in `.github/workflows/ci.yml` so CI still starts warm.
+- Image tags are pinned; when you bump one, update `.github/testcontainers-images.txt` — CI caches exactly that list, so a tag missing from it is pulled on every run.
+- Every helper takes a slot from `testutil/internal/startgate` before booting, so at most 2 containers start at once per test binary; parallel tests beyond that queue instead of timing out.
 
 ## Key surface
 
