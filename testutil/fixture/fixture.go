@@ -47,6 +47,7 @@ const MaxRows = 10_000
 // or field names), if a row fails to decode, or if the file has more than
 // MaxRows data rows.
 func Load[T any](path string) ([]T, error) {
+	// #nosec G304 -- path is a test's own testdata literal; this package is test tooling, never reached by a request path.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("fixture: read %s: %w", path, err)

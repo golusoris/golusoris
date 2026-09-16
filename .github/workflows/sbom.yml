@@ -25,8 +25,16 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # An SBOM attesting a commit nobody verified is a supply-chain claim with
+  # nothing behind it. Same gate as release.yml, same reason.
+  require-green-ci:
+    uses: ./.github/workflows/require-green-ci.yml
+    with:
+      ref: ${{ github.ref }}
+
   sbom:
     name: Source SBOM & attestation
+    needs: require-green-ci
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 20
     permissions:
@@ -55,12 +63,35 @@ jobs:
           output-file: sbom.cdx.json
           upload-artifact: false
           upload-release-assets: false
+      # Sigstore's public-good Rekor is intermittently slow: v0.12.0's SBOM run
+      # died on `FetchError: network timeout at
+      # https://rekor.sigstore.dev/api/v1/log/entries` -> `InternalError: error
+      # creating tlog entry`, with nothing wrong on our side. One retry each,
+      # expressed with native `outcome` conditions rather than a retry action,
+      # so no new dependency enters a path that signs artifacts. The retry step
+      # carries no continue-on-error, so a second failure still fails the job.
       - name: Attest SPDX SBOM
+        id: attest-spdx
+        continue-on-error: true
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
+          sbom-path: sbom.spdx.json
+      - name: Attest SPDX SBOM (retry)
+        if: steps.attest-spdx.outcome == 'failure'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
           sbom-path: sbom.spdx.json
       - name: Attest CycloneDX SBOM
+        id: attest-cdx
+        continue-on-error: true
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
+          sbom-path: sbom.cdx.json
+      - name: Attest CycloneDX SBOM (retry)
+        if: steps.attest-cdx.outcome == 'failure'
         uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz

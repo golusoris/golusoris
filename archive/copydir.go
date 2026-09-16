@@ -177,6 +177,7 @@ func permissionControl(preserve bool) dircopy.PermissionControlFunc {
 // standard umask-masked mode regardless of the source file's mode.
 var nonPreservingPermissionControl dircopy.PermissionControlFunc = func(srcinfo fs.FileInfo, dest string) (func(*error), error) {
 	if srcinfo.IsDir() {
+		// #nosec G301 -- 0o777 is the request, not the result: the process umask masks it down, which is the whole point of the non-preserving default documented above. Hard-coding 0o750 here would defeat it.
 		if err := os.MkdirAll(dest, 0o777); err != nil {
 			return func(*error) {}, fmt.Errorf("archive: mkdir %s: %w", dest, err)
 		}

@@ -23,6 +23,13 @@ MODULES := . core
 # targeted inline `// #nosec Gxxx -- reason` comments at each flagged line.
 GOSEC_CONFIG := $(CURDIR)/.gosec.json
 
+# gosec walks ./... itself instead of asking the go tool, so it descends into
+# the dot-prefixed and testdata directories the go tool skips -- notably the
+# .config/hiss/**/testdata HISS rule fixtures, which redeclare symbols and
+# embed insecure patterns by design. This restores the go tool's own rule and
+# is not expressible in .gosec.json, so it is a flag in all three call sites.
+GOSEC_EXCLUDE_DIRS := -exclude-dir=testdata
+
 # Dependencies with a docs/upstream/ snapshot, by the module that pins them.
 UPSTREAM_ROOT_MODULES := go.uber.org/fx github.com/jackc/pgx/v5 github.com/ogen-go/ogen github.com/riverqueue/river  github.com/maypok86/otter/v2 github.com/redis/rueidis github.com/casbin/casbin/v3 github.com/go-webauthn/webauthn  go.opentelemetry.io/otel github.com/golang-migrate/migrate/v4 k8s.io/client-go github.com/go-chi/chi/v5  github.com/yuin/goldmark github.com/prometheus/client_golang github.com/testcontainers/testcontainers-go
 UPSTREAM_CORE_MODULES := github.com/knadh/koanf/v2 github.com/go-playground/validator/v10 github.com/jonboulle/clockwork
@@ -36,7 +43,7 @@ ci-all: ## lint + sec + test in every gated module
 _ci-module:
 	$(GOLANGCI) run --config $(CURDIR)/.golangci.yml --timeout=30m ./...
 	$(GOVULNCHECK) ./...
-	$(GOSEC) -quiet -exclude-generated $(if $(filter .,$(MOD)),-conf $(GOSEC_CONFIG),) ./...
+	$(GOSEC) -quiet -exclude-generated $(GOSEC_EXCLUDE_DIRS) $(if $(filter .,$(MOD)),-conf $(GOSEC_CONFIG),) ./...
 	$(GO) test -race -count=1 -timeout=10m ./...
 
 .PHONY: build-all

@@ -1,0 +1,113 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# The release gate. Nothing that publishes an artifact for a tag may run
+# before this says the tagged commit carries a green CI.
+#
+# Why this exists: release.yml and sbom.yml trigger on `push: tags`, which
+# GitHub delivers the instant the tag lands, with no knowledge of any check.
+# The tag is created seconds after the release-please merge commit, so both
+# workflows used to start while main's CI was still running -- and finished
+# regardless of how it turned out. v0.12.0 shipped that way: `CI success` had
+# FAILED on 4b22fc0 (gosec red, Test red), and the release and SBOM workflows
+# neither knew nor cared.
+#
+# This is a reusable workflow, not a copy-pasted step, so the two publishers
+# share one implementation (HISS-19).
+#
+# It only works if main's CI is allowed to reach a conclusion -- see the
+# concurrency comment in ci.yml, which used to cancel every main run.
+name: require-green-ci
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Tag (or any ref) whose commit must carry a green check.
+        required: true
+        type: string
+      check-name:
+        description: The gating check run's name, as branch protection spells it.
+        required: false
+        default: CI success
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  require-green-ci:
+    name: Require green CI on the tagged commit
+    runs-on: arc-cauda-golusoris-golusoris
+    # Covers the 90 min poll below plus checkout.
+    timeout-minutes: 100
+    permissions:
+      contents: read
+      checks: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Require a green check on the tagged commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CHECK_NAME: ${{ inputs.check-name }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse HEAD)
+          echo "Gating ${REF} (${sha}) on check \"${CHECK_NAME}\""
+
+          # HISS-02: scalar bounds on the wait. The tag lands seconds after the
+          # merge commit, so the check is nearly always still running when we
+          # arrive -- waiting is the normal path, not the exception. Main's CI
+          # is slow on a starved ARC node (Lint alone is allowed 65 min), hence
+          # the generous ceiling. Finite, though: a tag that cannot show a
+          # green CI is not a release.
+          POLL_INTERVAL_SECONDS=30
+          POLL_ATTEMPTS=180          # 180 x 30 s = 90 min
+          # A queued workflow registers its check runs within seconds, but a
+          # busy scale set can delay that. Tolerate an absent check only this
+          # long; past it, "no check" means "unverified commit".
+          MISSING_GRACE_ATTEMPTS=20  # 10 min
+
+          for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
+            # gh's built-in --jq needs no external jq, which the ARC runner
+            # tool contract (release-tool-contract.yml) does not promise.
+            # A re-run attaches a second check run with the same name to the
+            # same commit, so take the most recently started one.
+            state=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=${CHECK_NAME// /%20}&per_page=100" \
+              --jq '[.check_runs[]] | sort_by(.started_at) | last
+                    | if . == null then "missing none"
+                      else "\(.status) \(.conclusion // "none")" end')
+            status=${state%% *}
+            conclusion=${state##* }
+
+            case "$status" in
+              completed)
+                if [ "$conclusion" = "success" ]; then
+                  echo "\"${CHECK_NAME}\" passed on ${sha}."
+                  exit 0
+                fi
+                echo "::error::\"${CHECK_NAME}\" concluded ${conclusion} on ${sha} — refusing to publish."
+                exit 1
+                ;;
+              missing)
+                if [ "$attempt" -gt "$MISSING_GRACE_ATTEMPTS" ]; then
+                  echo "::error::no \"${CHECK_NAME}\" check run on ${sha} — refusing to publish an unverified commit."
+                  exit 1
+                fi
+                echo "attempt ${attempt}/${POLL_ATTEMPTS}: no \"${CHECK_NAME}\" yet; waiting ${POLL_INTERVAL_SECONDS}s"
+                ;;
+              *)
+                echo "attempt ${attempt}/${POLL_ATTEMPTS}: \"${CHECK_NAME}\" is ${status}; waiting ${POLL_INTERVAL_SECONDS}s"
+                ;;
+            esac
+            sleep "$POLL_INTERVAL_SECONDS"
+          done
+
+          echo "::error::\"${CHECK_NAME}\" did not conclude on ${sha} within $((POLL_ATTEMPTS * POLL_INTERVAL_SECONDS / 60)) min — refusing to publish."
+          exit 1
