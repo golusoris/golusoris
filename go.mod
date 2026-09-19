@@ -98,7 +98,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redis v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.44.0
 	github.com/tsenart/vegeta/v12 v12.13.0
-	github.com/tus/tusd/v2 v2.10.0
+	github.com/tus/tusd/v2 v2.10.1
 	github.com/twmb/franz-go v1.21.7
 	github.com/ulule/limiter/v3 v3.11.2
 	github.com/uptrace/bun v1.2.18
