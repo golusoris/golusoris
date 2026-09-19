@@ -72,7 +72,7 @@ require (
 	github.com/nicksnyder/go-i18n/v2 v2.6.1
 	github.com/ogen-go/ogen v1.24.0
 	github.com/onsi/ginkgo/v2 v2.32.2
-	github.com/onsi/gomega v1.43.0
+	github.com/onsi/gomega v1.43.1
 	github.com/oschwald/maxminddb-golang/v2 v2.6.0
 	github.com/otiai10/copy v1.14.1
 	github.com/pgvector/pgvector-go v0.4.1
