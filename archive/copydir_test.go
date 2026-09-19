@@ -96,8 +96,17 @@ func TestCopyDir_NestedTreeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o400 {
-		t.Fatalf("PreservePermissions: got mode %v want 0400", info.Mode().Perm())
+	// Assert against the source, not a literal: Windows has no owner/group/
+	// other split, so os.Chmod there only toggles the read-only attribute and
+	// the 0400 written above reads back as 0444 on BOTH sides. Comparing the
+	// two modes states the invariant the option actually promises, and still
+	// pins the exact 0400 everywhere the platform can express it.
+	srcInfo, err := os.Stat(restricted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != srcInfo.Mode().Perm() {
+		t.Fatalf("PreservePermissions: got mode %v want %v", info.Mode().Perm(), srcInfo.Mode().Perm())
 	}
 }
 

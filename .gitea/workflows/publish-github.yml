@@ -44,6 +44,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           SOURCE_REF: ${{ github.ref }}
           VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$PUBLIC_GITHUB_TOKEN"
@@ -86,6 +87,44 @@ jobs:
           sha=$(git rev-parse "refs/tags/$tag^{commit}")
           git merge-base --is-ancestor "$sha" refs/remotes/origin/main
           git merge-base --is-ancestor "$sha" refs/remotes/public/main
+
+          # Ancestry is not validation. The branch path above forwards only
+          # what Gitea CI concluded green, but the tag path used to accept any
+          # commit already on main -- and main advances on the public forge
+          # directly, where an admin can merge past a red required check
+          # (enforce_admins). v0.12.0 was tagged 6 s after its merge commit
+          # with `CI success` failing, and nothing on either lane objected.
+          #
+          # node is the Actions runner's own dependency (it executes every JS
+          # action), so this adds no tool the image does not already carry --
+          # unlike curl or jq, which nothing else here uses.
+          status_check=$(mktemp)
+          trap 'rm -f "$askpass" "$status_check"' EXIT
+          cat > "$status_check" <<'NODE'
+          (async () => {
+            const [api, repo, sha, token] = process.argv.slice(2);
+            const res = await fetch(`${api}/repos/${repo}/commits/${sha}/status`, {
+              headers: { Authorization: `token ${token}`, Accept: "application/json" },
+              // HISS-02: no unbounded I/O.
+              signal: AbortSignal.timeout(30_000),
+            });
+            if (!res.ok) {
+              console.log(`::error::commit status lookup for ${sha} failed: HTTP ${res.status}`);
+              process.exit(1);
+            }
+            const body = await res.json();
+            if (body.state !== "success") {
+              console.log(`::error::CI state on ${sha} is "${body.state}" -- refusing to forward tag`);
+              process.exit(1);
+            }
+            console.log(`CI is green on ${sha}.`);
+          })().catch((err) => {
+            // process.argv[4], not sha: that binding lives inside the IIFE.
+            console.log(`::error::commit status lookup for ${process.argv[4]} failed: ${err.message}`);
+            process.exit(1);
+          });
+          NODE
+          node "$status_check" "$GITHUB_API_URL" "$GITHUB_REPOSITORY" "$sha" "$GITEA_TOKEN"
           if git ls-remote --exit-code --tags public "refs/tags/$tag" >/tmp/public-tag; then
             test "$(awk 'NR==1 {print $1}' /tmp/public-tag)" = "$(git rev-parse "refs/tags/$tag")"
           else

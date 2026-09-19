@@ -27,6 +27,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 // Defaults for the spawned container — kept small + deterministic.
@@ -92,6 +94,8 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	}
 	o = o.withDefaults()
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
@@ -159,6 +163,8 @@ func StartReplication(t *testing.T, opts ...Options) (*pgxpool.Pool, string) {
 		testcontainers.WithCmd("postgres", "-c", "wal_level=logical"),
 	}, o.Customizers...)
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
@@ -208,6 +214,8 @@ func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
 	}
 	o = o.withDefaults()
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
@@ -274,6 +282,8 @@ func DSN(t *testing.T, opts ...Options) string {
 	}
 	o = o.withDefaults()
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 

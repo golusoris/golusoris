@@ -14,9 +14,16 @@ on:
 permissions:
   contents: read
 
+# Superseding only makes sense per pull request: there `github.ref` is
+# refs/pull/N/merge, so each PR owns its group and a force-push cancels only
+# its own stale run. On `push` the same expression collapses to the single
+# group CI-refs/heads/main that EVERY main commit shares, so each merge
+# evicted the previous commit's run -- 60 consecutive main runs were cancelled
+# and main never once produced a CI verdict. Every commit on main must reach a
+# conclusion: it is the status the release gate reads.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # ── Conventional-commit PR title ────────────────────────────────────────────
@@ -123,15 +130,23 @@ jobs:
           # three cannot drift. Path-scoped suppressions were retired in favor of
           # targeted inline `// #nosec Gxxx -- reason` comments at each flagged
           # line (see git history for the exclusion list this replaced).
+          # gosec expands ./... with its own directory walk, which -- unlike the
+          # go tool -- descends into dot-prefixed and testdata directories. That
+          # pulled in .config/hiss/**/testdata: HISS rule fixtures that redeclare
+          # symbols across files in one package on purpose (4 build errors) and
+          # embed insecure patterns on purpose (27 findings). -exclude-dir
+          # restores the go tool's own rule. Keep in sync with the Makefile
+          # _ci-module target.
+          #
           # One root scan: `-out` writes the SARIF for code scanning, `-stdout
           # -verbose text` prints the findings to the log, and the exit code
           # still gates (gosec exits 1 on any unsuppressed issue or build error;
           # never add `-quiet`: it skips writing the SARIF when clean).
-          gosec -conf .gosec.json -exclude-generated \
+          gosec -conf .gosec.json -exclude-generated -exclude-dir=testdata \
             -fmt sarif -out gosec.sarif -stdout -verbose text ./...
           # core/ is a separate module (not reached by ./... above) and is held
           # to the full rule set with no exclusions.
-          (cd core && gosec -exclude-generated ./...)
+          (cd core && gosec -exclude-generated -exclude-dir=testdata ./...)
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
@@ -171,8 +186,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     # 30: the Docker-backed suite took 13.5 min on a cold ARC runner before the
     # pre-pull step existed; keep headroom above the 10 min per-module go test
-    # timeout plus the pre-pull.
-    timeout-minutes: 30
+    # timeout plus the pre-pull. Now 60: the pre-pull owns up to 30 min of that
+    # (see its ceiling below) because serialising the batches trades wall-clock
+    # for pulls that actually complete, and the suite itself needs ~13.5 min.
+    # This shrinks back to ~20 once the images are served from the Harbor
+    # mirror or baked into the scale-set image.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -192,56 +211,137 @@ jobs:
       - name: Verify Docker is reachable
         if: runner.os == 'Linux'
         run: docker info
-      # Every testcontainers-backed package pulls its image on first use. The
-      # ARC runner starts each job with an empty image cache ("Images: 0") and
-      # `go test ./...` launches all those packages at once, so the pulls
-      # compete for the Docker sidecar and container-start bounds expired
-      # mid-pull (PR #447). Pull the whole set up front, in parallel and
-      # bounded, so the test step starts warm.
-      - name: Pre-pull testcontainers images
+      # Testcontainers images are immutable and identical from job to job, so
+      # pulling them again every run is the actual defect -- the registry is
+      # slow and variable from this runner (measured 194-221 s per image on
+      # run 35084070175, 20-158 s on 35080875553), and seven images at two
+      # concurrent pulls is ~15 min of wall clock per job for bytes that never
+      # change. Cache the image set instead: `docker save` it once, restore and
+      # `docker load` it on every later run. The pull path below is now the
+      # cold-cache exception, not the steady state.
+      #
+      # The key is the manifest hash, so editing the image list repopulates the
+      # cache; the week stamp bounds how long a floating tag (postgres:17-alpine,
+      # clickhouse/clickhouse-server:24, ...) can stay frozen at whatever the
+      # cache holds, so upstream security rebuilds still land.
+      - name: Image cache key
         if: runner.os == 'Linux'
+        id: tc-key
         run: |
           set -euo pipefail
-          # Single source of truth for CI. Keep in sync with the default images
-          # in testutil/{pg,redis,nats,kafka,clickhouse} and the ryuk reaper that
-          # testcontainers-go v0.44.0 spawns (internal/config/config.go:
-          # ReaperDefaultImage). storage/scan's clamav image is behind the
-          # `integration` build tag, which this job does not set, so it is
-          # deliberately not listed.
-          IMAGES=(
-            postgres:17-alpine
-            timescale/timescaledb:2.30.0-pg17
-            redis:7-alpine
-            nats:2-alpine
-            clickhouse/clickhouse-server:24
-            redpandadata/redpanda:v24.3.1
-            testcontainers/ryuk:0.14.0
-          )
-          PULL_TIMEOUT_SECONDS=300  # per image; HISS-02 bounded I/O
-          pids=()
-          for image in "${IMAGES[@]}"; do
-            timeout "$PULL_TIMEOUT_SECONDS" docker pull --quiet "$image" &
-            pids+=("$!")
-          done
-          failed=0
-          for i in "${!pids[@]}"; do
-            if ! wait "${pids[$i]}"; then
-              echo "::error::docker pull failed or exceeded ${PULL_TIMEOUT_SECONDS}s: ${IMAGES[$i]}"
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
-            echo "::error::pre-pull incomplete — the test step would otherwise pull under contention"
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      - name: Cache testcontainers images
+        if: runner.os == 'Linux'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/testcontainers-images
+          key: tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-${{ steps.tc-key.outputs.week }}
+          # A stale week still beats a cold start: the images it holds load, and
+          # only the ones missing from it are pulled below.
+          restore-keys: |
+            tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-
+      - name: Load or pull testcontainers images
+        if: runner.os == 'Linux'
+        # Ceiling for the cold-cache path; a warm restore is a `docker load` of
+        # a local tarball and finishes in well under a minute (HISS-02).
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          CACHE_DIR="$HOME/.cache/testcontainers-images"
+          ARCHIVE="$CACHE_DIR/images.tar"
+          # HISS-02: scalar upper bound on the manifest loop.
+          MAX_IMAGES=32
+          mapfile -t IMAGES < <(grep -vE '^[[:space:]]*(#|$)' .github/testcontainers-images.txt)
+          if [ "${#IMAGES[@]}" -eq 0 ] || [ "${#IMAGES[@]}" -gt "$MAX_IMAGES" ]; then
+            echo "::error::.github/testcontainers-images.txt lists ${#IMAGES[@]} images; expected 1..${MAX_IMAGES}"
             exit 1
           fi
+
+          if [ -f "$ARCHIVE" ]; then
+            echo "Restoring $(du -h "$ARCHIVE" | cut -f1) of cached images"
+            docker load -i "$ARCHIVE"
+          else
+            echo "No image cache present; pulling the full set."
+          fi
+
+          # Pull only what the cache did not supply.
+          missing=()
+          for image in "${IMAGES[@]}"; do
+            docker image inspect "$image" >/dev/null 2>&1 || missing+=("$image")
+          done
+          if [ "${#missing[@]}" -eq 0 ]; then
+            echo "All ${#IMAGES[@]} images served from cache; nothing to pull."
+            docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
+            exit 0
+          fi
+          echo "Pulling ${#missing[@]} of ${#IMAGES[@]} images: ${missing[*]}"
+
+          # Bounds are measured, not guessed. All seven at once split the link
+          # so thinly that five expired together at a 300 s bound, tiny images
+          # included; two at a time each take ~220 s. 420 s clears the worst
+          # observed healthy pull by ~2x, so a progressing pull is never cut
+          # off, and the retry covers a wedged first contact with the registry.
+          PULL_CONCURRENCY=2
+          PULL_TIMEOUT_SECONDS=420  # per attempt; HISS-02 bounded I/O
+          PULL_ATTEMPTS=3           # HISS-02 scalar retry bound
+
+          pull_one() {
+            local image=$1 attempt
+            for ((attempt = 1; attempt <= PULL_ATTEMPTS; attempt++)); do
+              if timeout "$PULL_TIMEOUT_SECONDS" docker pull --quiet "$image"; then
+                return 0
+              fi
+              echo "::warning::docker pull ${image}: attempt ${attempt}/${PULL_ATTEMPTS} failed or exceeded ${PULL_TIMEOUT_SECONDS}s"
+            done
+            return 1
+          }
+
+          failed=()
+          for ((i = 0; i < ${#missing[@]}; i += PULL_CONCURRENCY)); do
+            batch=("${missing[@]:i:PULL_CONCURRENCY}")
+            pids=()
+            for image in "${batch[@]}"; do
+              pull_one "$image" &
+              pids+=("$!")
+            done
+            # Same order as `batch`, so index j names the image that failed.
+            for j in "${!pids[@]}"; do
+              wait "${pids[$j]}" || failed+=("${batch[$j]}")
+            done
+          done
+
+          if [ "${#failed[@]}" -ne 0 ]; then
+            for image in "${failed[@]}"; do
+              echo "::error::docker pull failed after ${PULL_ATTEMPTS} attempts: ${image}"
+            done
+            echo "::error::pre-pull incomplete -- the test step would otherwise pull under contention"
+            exit 1
+          fi
+
+          # Re-save the whole set so the cache holds every image, not just the
+          # delta. docker save shares layers across images in one archive.
+          mkdir -p "$CACHE_DIR"
+          docker save -o "$ARCHIVE" "${IMAGES[@]}"
+          echo "Wrote $(du -h "$ARCHIVE" | cut -f1) image archive for the cache"
           docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
       # On macOS there is no Docker daemon; skip the testcontainers-backed
       # packages so the portability leg passes instead of failing on infra.
       - name: Run tests (Linux — full suite with Docker)
         if: runner.os == 'Linux'
         run: |
-          go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
-          (cd core && go test -race -count=1 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
+          # -p 4 bounds how many test binaries run at once. Go defaults it to
+          # GOMAXPROCS, which is 16 here because that is what the node reports,
+          # while the ARC job container is guaranteed 750m CPU with a 4-CPU
+          # burst limit. Sixteen of this tree's packages are testcontainers-
+          # backed, so the default let sixteen of them start Postgres,
+          # TimescaleDB, ClickHouse and Redpanda containers simultaneously on
+          # ~4 effective cores; testcontainers' readiness probe (60 s inside
+          # BasicWaitStrategies, independent of testutil's 3 min startTimeout)
+          # then expired with the container already logging "database system is
+          # ready to accept connections". Take the bound before the spawn --
+          # the same rule HISS-06 applies to application code.
+          go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+          (cd core && go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
           # One merged profile: the threshold below covers root + core together.
           tail -n +2 core/coverage.out >> coverage.out
       - name: Run tests (macOS — skip Docker-requiring packages)

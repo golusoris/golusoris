@@ -24,6 +24,8 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 	redpandacontainer "github.com/testcontainers/testcontainers-go/modules/redpanda"
+
+	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
@@ -43,6 +45,8 @@ func Addr(t *testing.T) string {
 	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 

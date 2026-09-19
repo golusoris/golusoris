@@ -1,0 +1,18 @@
+# Testcontainers images the CI test job needs, one per line.
+#
+# Single source of truth. Keep in sync with the default images in
+# testutil/{pg,redis,nats,kafka,clickhouse} and the ryuk reaper that
+# testcontainers-go v0.44.0 spawns (internal/config/config.go:
+# ReaperDefaultImage). storage/scan's clamav image is behind the `integration`
+# build tag, which the CI test job does not set, so it is deliberately absent.
+#
+# This lives in its own file, not inline in ci.yml, because the CI image cache
+# is keyed on its hash: edit the list and the next run repopulates the cache.
+# Blank lines and #-comments are ignored.
+postgres:17-alpine
+timescale/timescaledb:2.30.0-pg17
+redis:7-alpine
+nats:2-alpine
+clickhouse/clickhouse-server:24
+redpandadata/redpanda:v24.3.1
+testcontainers/ryuk:0.14.0

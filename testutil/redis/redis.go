@@ -25,6 +25,8 @@ import (
 	"github.com/redis/rueidis"
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
+
+	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
@@ -44,6 +46,8 @@ func Start(t *testing.T) rueidis.Client {
 
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
@@ -88,6 +92,8 @@ func Addr(t *testing.T) string {
 	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 

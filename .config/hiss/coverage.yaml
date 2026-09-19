@@ -55,16 +55,22 @@ rules:
       - language: go
         state: partial
         mechanism: >-
-          praetorctl audit (internal/hiss go_ast.go checkSelfRecursion and the goto branch),
-          reached by the lefthook pre-commit job hiss-audit, the lefthook pre-push job audit
-          and the Makefile target audit inside make verify-all.
+          praetorctl audit (internal/hiss go_ast.go checkSelfRecursion and the goto branch,
+          plus go_callgraph.go, which builds each package's call graph after the walk and
+          reports its cycles), reached by the lefthook pre-commit job hiss-audit, the
+          lefthook pre-push job audit and the Makefile target audit inside make verify-all.
         rationale: >-
-          Direct self-recursion and goto are reported. positive/direct-recursion.go and
-          positive/goto-jump.go both raise HISS-01; negative/iterative-factorial.go does not.
-          gap/mutual-recursion.go is a real cycle -- IsEven calls IsOdd calls IsEven -- and
-          goes unreported, because deciding it needs a whole-program call graph that the
-          per-file scanner does not build. No other gate in this repository looks at the call
-          graph at all.
+          Direct self-recursion, goto and mutual recursion are reported.
+          positive/direct-recursion.go, positive/goto-jump.go and
+          positive/mutual-recursion.go all raise HISS-01; negative/iterative-factorial.go
+          does not. mutual-recursion.go moved out of gap/ when praetor cc0e7aa added the
+          call-graph pass: `praetorctl hiss coverage --verify` then failed with "[FAIL]
+          HISS-01/go gap/mutual-recursion.go: a fixture recorded as an undetected gap is now
+          reported; close the gap in the catalog", which is this entry's measurement.
+          The gap moved rather than vanished: gap/method-cycle.go carries the same cycle on a
+          method set -- Walker.Step calls Walker.Hop calls Walker.Step -- and goes unreported,
+          because a call through a receiver is not resolved to a call-graph node. No other
+          gate in this repository looks at the call graph at all.
       - language: c
         state: partial
         mechanism: >-

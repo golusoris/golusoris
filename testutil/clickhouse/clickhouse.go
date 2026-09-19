@@ -26,6 +26,8 @@ import (
 	chgo "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
@@ -45,6 +47,8 @@ func Start(t *testing.T) chgo.Conn {
 
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable
 
+	// Queue for a boot slot first, so startTimeout only counts the boot itself.
+	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 

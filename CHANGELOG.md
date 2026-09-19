@@ -801,12 +801,6 @@ Add `docs/ci-downstream.md` guide for consuming `tools/Makefile.shared` and reus
   - `httpx/geofence.Module`: the fx `OnStop` hook returns the mmdb reader's close error instead of swallowing it.
   - `apidocs` `/mcp` tool proxy: a failed response-body read or close is reported as an `IsError` tool result instead of being dropped (a short read previously produced a silently truncated reply).
 
-<!--
-SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
-
-SPDX-License-Identifier: CC-BY-SA-4.0
--->
-
 - **BREAKING**: `markdown.RenderString` returns an error instead of panicking on
   a goldmark failure (HISS-07 burn-down).
 
@@ -877,6 +871,22 @@ SPDX-License-Identifier: CC-BY-SA-4.0
   p, err := Providers.Lookup("stripe")
   ```
 
+- `search.MultiSearcher` now bounds its backend fan-out instead of spawning one
+  goroutine per registered backend: at most `search.DefaultMaxFanOut` (8) run at
+  once, or as many as the new `search.WithMaxFanOut` option allows. Registering
+  more backends lengthens a query rather than widening its concurrency.
+
+- `testutil/{pg,redis,nats,kafka,clickhouse}`: container helpers now boot at most 2 containers at a time per test binary, through the new internal `testutil/internal/startgate`. Parallel tests beyond that queue for a slot (bounded by the 10 min package test timeout) instead of all booting together. Previously a package whose `t.Parallel` tests each started a container launched them simultaneously; `ai/tiny` booted ten Postgres containers at once and none logged ready within testcontainers' 60 s wait on a CPU-capped CI runner. `go test -p` cannot prevent this, since it bounds packages, not the tests inside one. The `startTimeout` budget now starts only once a slot is held.
+
+### Fixed
+
+- CI: `gosec` no longer scans the HISS rule fixtures under `.config/hiss/**/testdata/`. It expands `./...` with its own directory walk, so unlike the go tool it descended into dot-prefixed and `testdata` directories, and the fixtures redeclare symbols across files in one package and embed insecure patterns by design — 4 build errors and 27 false findings on every run. `-exclude-dir=testdata` is now applied in both the workflow and the Makefile. Two genuine findings the noise had buried (`archive` G301, `testutil/fixture` G304) are suppressed inline with reasons.
+- CI: the test job no longer re-pulls the testcontainers images on every run. The images are immutable and identical from job to job, but the registry is slow and variable from the ARC runner (measured 194-221 s per image), so seven of them cost ~15 min of wall clock per job for bytes that never change. The set is now cached with `actions/cache` (`docker save` once, `docker load` thereafter), keyed on the new `.github/testcontainers-images.txt` manifest plus a week stamp so floating tags still refresh. Only images the cache does not supply are pulled, two at a time with a 420 s per-attempt bound and three attempts.
+- CI: the test job bounds how many test binaries run at once (`go test -p 4`). Go defaults `-p` to `GOMAXPROCS`, which the ARC node reports as 16 while the job container is guaranteed 750m CPU, so sixteen testcontainers-backed packages started their Postgres, TimescaleDB, ClickHouse and Redpanda containers simultaneously and testcontainers' 60 s readiness probe expired on containers that had already come up.
+- CI: `cancel-in-progress` is now scoped to pull requests. Keyed on `github.ref` it collapsed every `main` commit into one concurrency group on push, so each merge cancelled the previous commit's run and `main` never produced a CI verdict.
+- Release: `release` and `SBOM` no longer publish for a tag whose commit has not passed CI. Both now wait on the new `require-green-ci` reusable workflow, and the Gitea tag-forward checks the commit status rather than ancestry alone.
+- Release: SBOM attestation retries once, so an intermittent `rekor.sigstore.dev` timeout no longer fails the run.
+
 ### Security
 
 - Added a custom `.semgrep.yml` ruleset of golusoris-specific SAST invariants
@@ -892,6 +902,18 @@ Add comprehensive integration tests for OIDC and passkeys modules with fxtest to
 - CI: lint / gosec / govulncheck / test / build now cover the `core` module; new `dco` and `reuse` jobs; `goheader` lint enforces SPDX headers.
 
 - Raised every Go module directive to 1.26.7 so builds include the standard-library fixes required by `govulncheck`, including GO-2026-6218, GO-2026-6090, GO-2026-5972, GO-2026-5856, and GO-2026-5026.
+
+- Extended the custom `.semgrep.yml` ruleset with three enforcement rules for
+  invariants the tree previously upheld only by convention: `unsafe` imports and
+  `unsafe.Pointer` / `Slice` / `String` conversions now require an adjacent
+  `// SAFETY:` proof (HISS-09), `plugin.Open` / `plugin.Lookup` /
+  `reflect.MakeFunc` and shell-interpreter or string-assembled `os/exec` command
+  names are refused (HISS-08), and a spawn inside a loop over the input — a `go`
+  statement, or `Go` on an errgroup — is refused unless the bound is taken
+  before it: a semaphore send or `Acquire` ahead of the `go`, or `SetLimit` on
+  that same group (HISS-06). Each rule ships a positive/negative/gap fixture
+  corpus under `.config/hiss/testdata/`, replayed in all three directions by
+  `make hiss-fixtures` and in the CI semgrep lane.
 ## [0.1.0] — 2026-04-14
 
 First tagged release. Framework is usable via

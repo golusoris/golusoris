@@ -36,8 +36,18 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Nothing is built or published until the tagged commit shows a green
+  # `CI success`. Ancestry is not validation: the Gitea tag-forward checks only
+  # that the commit is an ancestor of main, and this workflow's `push: tags`
+  # trigger fires seconds later while main's CI is still running.
+  require-green-ci:
+    uses: ./.github/workflows/require-green-ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref }}
+
   goreleaser:
     name: GoReleaser
+    needs: require-green-ci
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 30
     permissions:
