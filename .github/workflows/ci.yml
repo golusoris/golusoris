@@ -82,12 +82,12 @@ jobs:
         with:
           # Pinned for reproducible CI — bumping golangci-lint (and adopting any
           # new linter findings) is a deliberate, reviewed change, not a float.
-          version: v2.13.2
+          version: v2.14.0
           args: --config=.golangci.yml --timeout=30m
       - name: Lint core module
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
-          version: v2.13.2
+          version: v2.14.0
           working-directory: core
           args: --config=../.golangci.yml --timeout=30m
 
@@ -149,7 +149,7 @@ jobs:
           (cd core && gosec -exclude-generated -exclude-dir=testdata ./...)
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           sarif_file: gosec.sarif
         continue-on-error: true   # SARIF upload requires Advanced Security (private repos)
