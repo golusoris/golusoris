@@ -14,7 +14,7 @@ require (
 	github.com/ClickHouse/clickhouse-go/v2 v2.48.0
 	github.com/Khan/genqlient v0.8.1
 	github.com/SherClockHolmes/webpush-go v1.4.0
-	github.com/autobrr/go-qbittorrent v1.18.0
+	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/autobrr/go-rtorrent v1.12.0
 	github.com/aws/aws-sdk-go-v2 v1.47.0
 	github.com/aws/aws-sdk-go-v2/config v1.33.5

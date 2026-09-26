@@ -111,6 +111,8 @@ github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmV
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/autobrr/go-qbittorrent v1.18.0 h1:iuVM9PAUfUPbkLvS/VcojEEKqxbzkJ3JlgDlLz3khVM=
 github.com/autobrr/go-qbittorrent v1.18.0/go.mod h1:spB3GP7xDu0btv59uUdxkLPEzoT+9xpx86QpJr4DUOw=
+github.com/autobrr/go-qbittorrent v1.19.0 h1:gjR34fXbfsoAzlZ0TXJ6u4ARZN31v1oxgmbLIqyohlg=
+github.com/autobrr/go-qbittorrent v1.19.0/go.mod h1:5uSG7nI6+dvhjvywkxzqooBAH1RDZxGtoRacDRfOtTQ=
 github.com/autobrr/go-rtorrent v1.12.0 h1:9ErIBHFWHWG2HP17USfS+7SAhjwgdYeMQNNvsMCPmcw=
 github.com/autobrr/go-rtorrent v1.12.0/go.mod h1:xEJQEUNU2GfFk8mzIb02lxNgnIJ9SDOgqKVXA4tQqvw=
 github.com/avast/retry-go v3.0.0+incompatible h1:4SOWQ7Qs+oroOTQOYnAHqelpCO0biHSxpiH9JdtuBj0=
