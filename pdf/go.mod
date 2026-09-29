@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/pdf
 go 1.27.1
 
 require (
-	github.com/chromedp/cdproto v0.0.0-20260912003405-686a5c723acc
+	github.com/chromedp/cdproto v0.0.0-20260922220944-a19bff23514f
 	github.com/chromedp/chromedp v0.16.0
 	github.com/pdfcpu/pdfcpu v0.15.0
 )
