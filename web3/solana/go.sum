@@ -54,6 +54,8 @@ github.com/shopspring/decimal v1.3.1 h1:2Usl1nmF/WZucqkFZhnfFYxxxu8LG21F6nPQBE5g
 github.com/shopspring/decimal v1.3.1/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=
 github.com/solana-foundation/solana-go/v2 v2.0.0 h1:5ZuwMHhVYcOJgcrytYsrkMAK4X/T33prhAQwP5RiiVA=
 github.com/solana-foundation/solana-go/v2 v2.0.0/go.mod h1:CWL+e1A3YUeqnnmFoWk1TMz2wcT2kymE8Veq9ZTEZEg=
+github.com/solana-foundation/solana-go/v2 v2.1.0 h1:DTg7m3Ziw75tj5u7nhUe5jK6mmVDiF8Mx1b6D0HVyPk=
+github.com/solana-foundation/solana-go/v2 v2.1.0/go.mod h1:0bKx9IOqP3DhvyNkoYuOjbMR2vDpaLCd27WvgXiANpM=
 github.com/streamingfast/logging v0.0.0-20230608130331-f22c91403091/go.mod h1:VlduQ80JcGJSargkRU4Sg9Xo63wZD/l8A5NC/Uo1/uU=
 github.com/streamingfast/logging v1.2.2 h1:hybYz/jtI+5PdGAAVLT+cGvSYo2Zi9dYpjTMRAvxjCQ=
 github.com/streamingfast/logging v1.2.2/go.mod h1:fJ5nP7ZSMB4MQQ6RM7cF+LiSQ43b5cVletcSUNL8z2M=
