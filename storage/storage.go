@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"net/url"
 	"os"
 	pathpkg "path"
 	"path/filepath"
@@ -34,6 +33,7 @@ import (
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/internal/dirsync"
+	"github.com/golusoris/golusoris/internal/fileuri"
 )
 
 var (
@@ -963,11 +963,11 @@ func (b *LocalBucket) URL(ctx context.Context, key string) (value string, err er
 	if err = checkLocalContext(ctx, "url after stat"); err != nil {
 		return "", err
 	}
-	path := filepath.ToSlash(filepath.Join(b.base, filepath.FromSlash(clean)))
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	value, err = fileuri.FromPath(filepath.Join(b.base, filepath.FromSlash(clean)))
+	if err != nil {
+		return "", fmt.Errorf("storage: local URL: %w", err)
 	}
-	return (&url.URL{Scheme: "file", Path: path}).String(), nil
+	return value, nil
 }
 
 func validateLocalURLTarget(root *os.Root, name string) error {
