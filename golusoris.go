@@ -14,24 +14,17 @@ import (
 	"github.com/golusoris/golusoris/audit"
 	"github.com/golusoris/golusoris/auth/oidc"
 	"github.com/golusoris/golusoris/authz"
+	"github.com/golusoris/golusoris/bootstrap"
 	cachemem "github.com/golusoris/golusoris/cache/memory"
 	cacheredis "github.com/golusoris/golusoris/cache/redis"
 	cachetwotier "github.com/golusoris/golusoris/cache/twotier"
-	"github.com/golusoris/golusoris/core/clock"
-	"github.com/golusoris/golusoris/core/config"
-	"github.com/golusoris/golusoris/core/crypto"
-	"github.com/golusoris/golusoris/core/id"
-	"github.com/golusoris/golusoris/core/log"
 	"github.com/golusoris/golusoris/core/mcp"
-	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/core/version"
 	dbbun "github.com/golusoris/golusoris/db/bun"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	"github.com/golusoris/golusoris/flags"
 	extclient "github.com/golusoris/golusoris/httpx/extclient"
-	"github.com/golusoris/golusoris/httpx/router"
-	"github.com/golusoris/golusoris/httpx/server"
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/jobs"
 	k8sclient "github.com/golusoris/golusoris/k8s/client"
@@ -45,20 +38,9 @@ import (
 	"github.com/golusoris/golusoris/tenancy"
 )
 
-// Core bundles the foundational modules every app needs:
-// config, log, clock, id, validate, crypto.
-//
-// errors/ and i18n/ are intentionally not in fx — errors is a pure package and
-// i18n is opt-in via [I18n].
-var Core = fx.Module(
-	"golusoris.core",
-	config.Module,
-	log.Module,
-	clock.Module,
-	id.Module,
-	validate.Module,
-	crypto.Module,
-)
+// Core bundles the foundational modules every app needs; it is
+// [bootstrap.Core], which services import without the rest of the framework.
+var Core = bootstrap.Core
 
 // DB bundles the database modules: pgx pool + golang-migrate runner.
 // Requires [Core] in the same fx graph for config, log, and clock.
@@ -81,18 +63,9 @@ var DBBun = fx.Module(
 	dbbun.Module,
 )
 
-// HTTP bundles the base HTTP stack: chi router + *http.Server with
-// slow-loris guards, body limits, and graceful shutdown. Apps add
-// middleware via fx.Invoke against the provided chi.Router.
-//
-// Individual httpx/middleware functions are not in fx (they're plain
-// net/http middleware); apps compose the stack they want and register it
-// via router.Use.
-var HTTP = fx.Module(
-	"golusoris.http",
-	router.Module,
-	server.Module,
-)
+// HTTP bundles the base HTTP stack (chi router + *http.Server); it is
+// [bootstrap.HTTP].
+var HTTP = bootstrap.HTTP
 
 // K8s bundles the Kubernetes runtime modules: podinfo (downward-API env
 // → typed PodInfo) + client (rest.Config + clientset, in-cluster or

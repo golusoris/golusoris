@@ -13,8 +13,9 @@
 //
 // This root package is the full-framework umbrella: importing it links every
 // subsystem its groupings reference, so the module graph and govulncheck see
-// all of them even when an app wires only [Core]. Services that need part of
-// the framework import the sub-packages' modules directly:
+// all of them even when an app wires only [Core]. New services start from
+// github.com/golusoris/golusoris/bootstrap, which holds the same Core and HTTP
+// groupings without the rest, and add the sub-packages' modules they need:
 //
 //	fx.New(
 //	    config.Module,   // github.com/golusoris/golusoris/core/config

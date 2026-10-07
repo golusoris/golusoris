@@ -125,6 +125,7 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `httpx/server/` | `*http.Server` with slow-loris guards, body limits, graceful shutdown | stdlib |
+| `bootstrap/` | lean service entry point: Core + HTTP groupings without the rest of the framework | — |
 | `httpx/router/` | chi router + http.Handler provided to fx graph | go-chi/chi |
 | `httpx/middleware/` | logger, recovery, request-id, OTel, secure-headers, compress, ETag, trust-proxy | composite |
 | `httpx/client/` | retry + circuit-breaker + OTel-instrumented HTTP client | sony/gobreaker |
