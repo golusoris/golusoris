@@ -29,7 +29,7 @@ jobs:
   # ── Conventional-commit PR title ────────────────────────────────────────────
   pr-title:
     name: PR title (Conventional Commits)
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]' && github.event_name == 'pull_request')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
@@ -49,6 +49,8 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
+    # Validation branch: only the Test job runs.
+    if: github.ref != 'refs/heads/test/testcontainers-3868'
     runs-on: arc-cauda-golusoris-golusoris
     # Lint timeout sizing (measured 2026-09-14 on the PR #447 tip, cold caches):
     # a full `golangci-lint run` of the root module (171 pkgs) costs ~810 CPU-s
@@ -94,6 +96,8 @@ jobs:
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
+    # Validation branch: only the Test job runs.
+    if: github.ref != 'refs/heads/test/testcontainers-3868'
     runs-on: arc-cauda-golusoris-golusoris
     # Measured with gosec v2.27.1 (171 root + 16 core pkgs) on a 32-core box:
     # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
@@ -157,6 +161,8 @@ jobs:
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
+    # Validation branch: only the Test job runs.
+    if: github.ref != 'refs/heads/test/testcontainers-3868'
     runs-on: arc-cauda-golusoris-golusoris
     # 20: whichever cache-using job finishes first pays the full setup-go
     # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
@@ -424,6 +430,8 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
+    # Validation branch: only the Test job runs.
+    if: github.ref != 'refs/heads/test/testcontainers-3868'
     runs-on: arc-cauda-golusoris-golusoris
     # 20: whichever cache-using job finishes first pays the full setup-go
     # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
@@ -445,7 +453,7 @@ jobs:
   # openapi-spec input to wire spectral for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
-    if: github.actor != 'renovate[bot]'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -471,7 +479,7 @@ jobs:
   # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
   apidiff:
     name: API compatibility (apidiff)
-    if: github.actor != 'renovate[bot]'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]')
     runs-on: arc-cauda-golusoris-golusoris
     # 20: whichever cache-using job finishes first pays the full setup-go
     # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
@@ -521,7 +529,7 @@ jobs:
   # high/critical advisories or copyleft (GPL/AGPL) licences entering the tree.
   dependency-review:
     name: Dependency review
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]' && github.event_name == 'pull_request')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     permissions:
@@ -543,7 +551,7 @@ jobs:
   # Scans the PR diff (and full history on push) for committed secrets.
   gitleaks:
     name: Secret scan (gitleaks)
-    if: github.actor != 'renovate[bot]'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -568,7 +576,7 @@ jobs:
   # blocking unrelated PRs. Promote to required once the ruleset has soaked.
   semgrep:
     name: Custom SAST (semgrep)
-    if: github.actor != 'renovate[bot]'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     continue-on-error: true
@@ -600,7 +608,7 @@ jobs:
   # locally to resync. See changelog.d/README.md.
   changelog:
     name: Changelog fragments (render --check)
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]' && github.event_name == 'pull_request')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     continue-on-error: true
@@ -613,7 +621,7 @@ jobs:
   # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
   dco:
     name: DCO sign-off
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]' && github.event_name == 'pull_request')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
@@ -637,7 +645,7 @@ jobs:
   # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
   reuse:
     name: Licensing (reuse lint)
-    if: github.actor != 'renovate[bot]'
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (github.actor != 'renovate[bot]')
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
@@ -657,7 +665,7 @@ jobs:
     # Runs for renovate[bot] too: the gating jobs above now run on
     # dependency PRs, and a skipped aggregator would satisfy the required
     # check vacuously. Skipped needs (e.g. reuse) are still tolerated.
-    if: always()
+    if: github.ref != 'refs/heads/test/testcontainers-3868' && (always())
     needs: [lint, gosec, vuln, test, build, reuse]
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 2
