@@ -431,6 +431,13 @@ func boundedWebhookClient(client *http.Client) *http.Client {
 	if bounded.Timeout <= 0 {
 		bounded.Timeout = defaultWebhookTimeout
 	}
+	// A nil Transport means the process-wide http.DefaultTransport, whose idle
+	// connections any other code may close mid-request; own a clone instead.
+	if bounded.Transport == nil {
+		if base, ok := http.DefaultTransport.(*http.Transport); ok {
+			bounded.Transport = base.Clone()
+		}
+	}
 	bounded.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}

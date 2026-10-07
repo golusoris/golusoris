@@ -418,3 +418,20 @@ func withRowValue(row map[string]string, key, value string) map[string]string {
 	row[key] = value
 	return row
 }
+
+func TestBoundedWebhookClientOwnsItsTransport(t *testing.T) {
+	t.Parallel()
+	for name, client := range map[string]*http.Client{
+		"nil client":               nil,
+		"client without transport": {Timeout: time.Second},
+	} {
+		bounded := boundedWebhookClient(client)
+		if bounded.Transport == nil || bounded.Transport == http.DefaultTransport {
+			t.Errorf("%s: transport = %v; want a clone of http.DefaultTransport", name, bounded.Transport)
+		}
+	}
+	custom := &http.Transport{}
+	if got := boundedWebhookClient(&http.Client{Transport: custom}).Transport; got != custom {
+		t.Errorf("caller transport replaced: got %v", got)
+	}
+}
