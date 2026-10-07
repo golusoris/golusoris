@@ -24,6 +24,9 @@
 //	jobs.retry.base           # exponential backoff base; 0 keeps River's attempt^4 policy
 //	jobs.retry.max            # backoff cap (default 1h when base is set)
 //	jobs.retry.jitter         # +/- fraction applied to each delay (0..1)
+//	jobs.tracing.enabled      # OpenTelemetry insert/work spans via otelriver (default false)
+//	jobs.tracing.propagate    # carry trace context in job metadata (default true)
+//	jobs.metrics.*            # queue-depth collector, see MetricsOptions and MetricsModule
 //
 // See [river]'s docs for full Config reference.
 package jobs
@@ -70,6 +73,10 @@ type Options struct {
 	Stop StopOptions `koanf:"stop"`
 	// Retry replaces River's default backoff when Retry.Base > 0.
 	Retry RetryOptions `koanf:"retry"`
+	// Tracing adds OpenTelemetry spans for insert and work.
+	Tracing TracingOptions `koanf:"tracing"`
+	// Metrics tunes the queue-depth collector built by [MetricsModule].
+	Metrics MetricsOptions `koanf:"metrics"`
 	// Observer, if set, receives job lifecycle signals for metrics (insert
 	// counters + completion/duration). Code-supplied (e.g. fx.Decorate), not
 	// from config.
@@ -117,6 +124,8 @@ func DefaultOptions() Options {
 		FetchCooldown:    100 * time.Millisecond,
 		RescueStuckAfter: time.Hour,
 		Stop:             StopOptions{Soft: defaultSoftStop, Hard: defaultHardStop},
+		Tracing:          TracingOptions{Propagate: true},
+		Metrics:          DefaultMetricsOptions(),
 	}
 }
 
@@ -240,6 +249,7 @@ func riverConfig(opts Options, workers *Workers, logger *slog.Logger) (*river.Co
 		RescueStuckJobsAfter:        opts.RescueStuckAfter,
 		CompletedJobRetentionPeriod: opts.CompletedJobRetention,
 		DiscardedJobRetentionPeriod: opts.DiscardedJobRetention,
+		Plugins:                     tracingPlugins(opts.Tracing),
 	}
 	if hasObserver(opts.Observer) {
 		cfg.Middleware = []rivertype.Middleware{&insertObserver{obs: opts.Observer}}

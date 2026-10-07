@@ -32,6 +32,19 @@ Background job queue backed by Postgres via [river].
  `jobs.JobCancel`) — no river import in app code.
 - `NewClient[TTx]` + `AppendLifecycle[TTx]` + `ObserveClient[TTx]` are
  driver-generic building blocks for driver packages (jobs/sqlite).
+- `jobs.MetricsModule` -> `*DepthCollector` on Prometheus: `river_queue_available`,
+ `river_queue_oldest_available_age_seconds`, `river_jobs{queue,state[,tenant]}`,
+ `river_depth_collector_up`. One grouped query per `jobs.metrics.cache_ttl`
+ (10s), bounded by `jobs.metrics.query_timeout` (2s) + `MaxDepthRows`.
+ Tenant label from `metadata[jobs.metrics.tenant_key]`; top `tenant_top_n`
+ (20) kept, rest `other`. Queues: configured always kept, rest top-N to
+ `max_queues` (64). Querier: graph `jobs.DepthQuerier` else Postgres pool.
+- `DepthCollector.QueueDepth` = available + running; unknown queue ->
+ `ErrUnknownQueue`. List scaled queues in `jobs.metrics.queues` so empty
+ queues stay known (scale-to-zero).
+- `jobs.tracing.enabled` adds otelriver (MPL-2.0, unmodified import) spans +
+ `river.*` metrics on global OTel providers; `jobs.tracing.propagate` puts
+ `traceparent` in job metadata.
 
 ## Subpackages
 

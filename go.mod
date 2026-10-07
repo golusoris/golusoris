@@ -85,8 +85,10 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/redis/rueidis v1.0.78
 	github.com/riverqueue/river v0.49.0
+	github.com/riverqueue/river/riverdriver v0.49.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.49.0
 	github.com/riverqueue/river/rivertype v0.49.0
+	github.com/riverqueue/rivercontrib/otelriver v0.12.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/romsar/gonertia/v3 v3.0.0
 	github.com/rs/cors v1.11.1
@@ -280,6 +282,7 @@ require (
 	github.com/knadh/koanf/v2 v2.3.6 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/libdns/libdns v1.1.1 // indirect
 	github.com/lmittmann/tint v1.2.1 // indirect
@@ -351,7 +354,6 @@ require (
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/riverqueue/apiframe v0.0.0-20260908014005-b546730aa405 // indirect
-	github.com/riverqueue/river/riverdriver v0.49.0 // indirect
 	github.com/riverqueue/river/rivershared v0.49.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
