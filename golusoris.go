@@ -2,17 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package golusoris is the top-level entry: it re-exports composable [fx.Module]
-// groupings so apps can compose only what they need.
-//
-//	fx.New(
-//	    golusoris.Core,
-//	    golusoris.DB,
-//	    golusoris.HTTP,
-//	).Run()
-//
-// Subpackages provide the actual implementations. The groupings here just
-// bundle commonly-used sets so app wiring stays terse.
+// The package documentation lives in doc.go.
+
 package golusoris
 
 import (
