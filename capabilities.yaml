@@ -604,6 +604,11 @@ packages:
     capabilities: [k8s.client]
     description: "Package client builds a *rest.Config + Kubernetes clientset with graceful fallback across deployment modes:"
     replaces: [k8s.io/api, k8s.io/apimachinery, k8s.io/client-go]
+  - import: github.com/golusoris/golusoris/k8s/dra
+    domain: k8s
+    capabilities: [k8s.dra]
+    description: "Package dra publishes the devices a node exposes as Kubernetes Dynamic Resource Allocation ResourceSlices (resource.k8s.io/v1, GA in Kubernetes 1.34), so th"
+    replaces: [k8s.io/dynamic-resource-allocation]
   - import: github.com/golusoris/golusoris/k8s/health
     domain: k8s
     capabilities: [k8s.health]

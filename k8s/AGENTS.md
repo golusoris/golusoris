@@ -15,6 +15,7 @@ Kubernetes-aware modules. All opt-in.
 | `k8s/metrics/prom` | Prometheus `/metrics` endpoint |
 | `k8s/client` | client-go wrapper, in-cluster + kubeconfig + workload identity |
 | `k8s/operator` | controller-runtime manager lifecycle + caller-supplied schemes |
+| `k8s/dra` | DRA ResourceSlice publisher (`resource.k8s.io/v1`) for node devices |
 | `k8s/nfd` | NFD local feature files (`features.d`) → node labels, expiring refresh |
 | `k8s/nri` | split-module containerd NRI plugin registration + bounded hooks |
 | `k8s/keda` | KEDA external scaler gRPC over jobs queue depth |
