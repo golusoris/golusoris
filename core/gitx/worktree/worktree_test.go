@@ -19,8 +19,9 @@ import (
 func TestNewIgnoresNilOption(t *testing.T) {
 	t.Parallel()
 	manager := worktree.New("/tmp/repository", nil)
-	if manager.Root() != "/tmp/repository" {
-		t.Fatalf("Root = %q, want /tmp/repository", manager.Root())
+	// New cleans the root with filepath.Clean, which uses \ on Windows.
+	if want := filepath.Clean("/tmp/repository"); manager.Root() != want {
+		t.Fatalf("Root = %q, want %q", manager.Root(), want)
 	}
 }
 
