@@ -324,6 +324,21 @@ jobs:
           docker save -o "$ARCHIVE" "${IMAGES[@]}"
           echo "Wrote $(du -h "$ARCHIVE" | cut -f1) image archive for the cache"
           docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
+      # Validation branch for testcontainers/testcontainers-go#3868: record
+      # every Ryuk lifecycle event with nanosecond timestamps.
+      - name: Record Ryuk lifecycle events
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tc3868"
+          nohup docker events \
+            --filter type=container \
+            --filter label=org.testcontainers.ryuk=true \
+            --filter event=create --filter event=start \
+            --filter event=die --filter event=destroy \
+            --format '{{.TimeNano}} {{.Action}} {{.Actor.ID}} exit={{index .Actor.Attributes "exitCode"}}' \
+            > "$RUNNER_TEMP/tc3868/ryuk-events.txt" 2>&1 &
+          echo "docker events recorder started (pid $!)"
       # On macOS there is no Docker daemon; skip the testcontainers-backed
       # packages so the portability leg passes instead of failing on infra.
       - name: Run tests (Linux — full suite with Docker)
@@ -340,7 +355,22 @@ jobs:
           # then expired with the container already logging "database system is
           # ready to accept connections". Take the bound before the spawn --
           # the same rule HISS-06 applies to application code.
-          go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
+          # Validation branch for testcontainers/testcontainers-go#3868: same
+          # invocation plus -json, so passing packages' reaper log lines and
+          # their timestamps are kept.
+          OUT="$RUNNER_TEMP/tc3868"
+          set +e
+          go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic -json ./... > "$OUT/test-root.jsonl"
+          rc=$?
+          set -e
+          sed -nE 's/.*"Action":"(pass|fail|skip)","Package":"([^"]+)","Elapsed":([0-9.]+)}$/\1 \2 \3s/p' "$OUT/test-root.jsonl"
+          if [ "$rc" -ne 0 ]; then
+            echo "::group::Output of failed tests"
+            grep -E '"Action":"fail"' "$OUT/test-root.jsonl" || true
+            grep -E '"Action":"output"' "$OUT/test-root.jsonl" | grep -E 'FAIL|reaper|Reaper|deadline|panic' | sed -E 's/.*"Package":"([^"]+)".*"Output":"(.*)"}$/\1: \2/' | head -n 400
+            echo "::endgroup::"
+            exit "$rc"
+          fi
           (cd core && go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
           # One merged profile: the threshold below covers root + core together.
           tail -n +2 core/coverage.out >> coverage.out
@@ -355,6 +385,25 @@ jobs:
           PKGS=$(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
           # shellcheck disable=SC2086
           go test -race -count=1 -timeout=10m $PKGS
+      - name: Ryuk timeline (testcontainers-go#3868 validation)
+        if: always() && runner.os == 'Linux'
+        run: |
+          OUT="$RUNNER_TEMP/tc3868"
+          sleep 2
+          echo "::group::Ryuk lifecycle events (unix ns, action, container, exit code)"
+          cat "$OUT/ryuk-events.txt" || true
+          echo "::endgroup::"
+          echo "::group::Reaper log lines from every package (go test -json time)"
+          grep -E '"Action":"output"' "$OUT/test-root.jsonl" | grep -E 'Reaper|reaper|testcontainers/ryuk|Connected to docker' | sed -E 's/^\{"Time":"([^"]+)".*"Package":"([^"]+)".*"Output":"(.*)"}$/\1 \2 \3/' || true
+          echo "::endgroup::"
+          ls -la "$OUT" || true
+      - name: Upload Ryuk timeline artifact
+        if: always() && runner.os == 'Linux'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tc3868-ryuk-timeline-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/tc3868/
+          retention-days: 30
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |

@@ -428,3 +428,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace github.com/testcontainers/testcontainers-go => github.com/skartikey/testcontainers-go v0.0.0-20260929110325-72158f4e2b43
