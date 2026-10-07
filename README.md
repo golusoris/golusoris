@@ -102,6 +102,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/gitx/` | bounded git runner + `worktree/` per-task worktrees | stdlib |
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
 | `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
+| `core/tlsx/` | file-backed TLS: cert/key/CA reloaded lazily on handshake, client-auth policy parsing; `tlsxtest/` issues throwaway test certificates | stdlib |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data

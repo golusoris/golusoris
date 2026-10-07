@@ -118,6 +118,16 @@ packages:
     capabilities: [mcp.server]
     description: "Package mcp wires a reusable Model Context Protocol (MCP) server into the fx lifecycle."
     replaces: [github.com/mark3labs/mcp-go, github.com/modelcontextprotocol/go-sdk]
+  - import: github.com/golusoris/golusoris/core/tlsx
+    module: github.com/golusoris/golusoris/core
+    domain: crypto
+    capabilities: [crypto.tls_files, crypto.tls_reload]
+    description: "Package tlsx builds crypto/tls configurations from PEM certificate, key, and CA files and reloads those files lazily during handshakes."
+  - import: github.com/golusoris/golusoris/core/tlsx/tlsxtest
+    module: github.com/golusoris/golusoris/core
+    domain: test
+    capabilities: [test.tls_certs]
+    description: "Package tlsxtest issues throwaway ECDSA certificates for TLS tests."
   - import: github.com/golusoris/golusoris/core/validate
     module: github.com/golusoris/golusoris/core
     domain: validate

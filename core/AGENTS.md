@@ -8,9 +8,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 **lean sub-module** every consumer can afford (ADR-0017): configuration,
 logging, clock, errors, crypto, ids, validation, build info, CLI kit, MCP
-server, YAML codec, execution receipts, git runner, Go-source analysis, and
-capability-contract schema. ~20 direct dependencies; no database, HTTP,
-cloud, or CGO code lives here — those stay in root module and import core.
+server, YAML codec, execution receipts, git runner, Go-source analysis,
+capability-contract schema, and file-backed TLS. ~20 direct dependencies; no
+database, HTTP, cloud, or CGO code lives here — those stay in root module and
+import core.
 
 ## Packages
 
@@ -32,6 +33,7 @@ cloud, or CGO code lives here — those stay in root module and import core.
 | `astx/` | `ast.analyzer`, `ast.rewrite` | source walker, import rewriter, func metrics, go.mod reader |
 | `capabilities/` | `needs.capabilities` | schema + loader for `capabilities.yaml` |
 | `drain/` | `lifecycle.drain` | stop-hook seam between servers and a readiness drain |
+| `tlsx/`, `tlsx/tlsxtest/` | `crypto.tls_files`, `crypto.tls_reload`, `test.tls_certs` | file-backed TLS, lazy rotation on handshake; test CA |
 
 ## Rules specific to core
 
