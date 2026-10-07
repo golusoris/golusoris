@@ -243,7 +243,7 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `tenancy/` | tenant context middleware, header + subdomain extractors | custom |
-| `idempotency/` | `Idempotency-Key` middleware; memory, Postgres, Redis, SQLite stores | custom + pgx + rueidis |
+| `idempotency/` | `Idempotency-Key` middleware + gRPC interceptor; memory, Postgres, Redis, SQLite stores | custom + pgx + rueidis |
 | `flags/` | typed feature flags with an OpenFeature-shaped provider interface | custom |
 | `audit/` | append-only audit event log with Diff + pluggable Store | custom |
 | `page/` | typed cursor + offset pagination for sqlc/ogen | custom |

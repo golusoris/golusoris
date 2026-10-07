@@ -524,8 +524,8 @@ packages:
     replaces: [github.com/nicksnyder/go-i18n/v2]
   - import: github.com/golusoris/golusoris/idempotency
     domain: http
-    capabilities: [http.idempotency]
-    description: "Package idempotency provides HTTP middleware that enforces the Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header)."
+    capabilities: [http.idempotency, grpc.idempotency]
+    description: "Package idempotency provides HTTP middleware and a gRPC unary interceptor that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header)."
     replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/integrations/goenvoy
     domain: integrations

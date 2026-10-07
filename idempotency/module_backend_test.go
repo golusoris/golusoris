@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
+	"google.golang.org/grpc"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
@@ -85,4 +86,17 @@ func TestModule_SweepDisabledAtZeroInterval(t *testing.T) {
 	app.RequireStart()
 	t.Cleanup(app.RequireStop)
 	require.Zero(t, cfg.Sweep.Interval)
+}
+
+func TestGRPCModule_ProvidesServerOption(t *testing.T) {
+	t.Parallel()
+	var options []grpc.ServerOption
+	app := fxtest.New(t, moduleOptions(
+		newConfig(t, "  ttl: 1h\n"),
+		idempotency.GRPCModule,
+		fx.Invoke(fx.Annotate(func(opts []grpc.ServerOption) { options = opts }, fx.ParamTags(`group:"grpc.serveropts"`))),
+	)...)
+	app.RequireStart()
+	t.Cleanup(app.RequireStop)
+	require.Len(t, options, 1)
 }

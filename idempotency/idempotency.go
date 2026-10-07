@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package idempotency provides HTTP middleware that enforces the
-// Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header).
+// Package idempotency provides HTTP middleware and a gRPC unary interceptor
+// that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header).
 // On the first request for a key the middleware reserves the scoped key,
 // captures a bounded response, and stores it. Completed retries replay the
-// response; concurrent retries fail with HTTP 409.
+// response; concurrent retries fail with HTTP 409 (gRPC Aborted).
 //
 // Usage:
 //

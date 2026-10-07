@@ -15,6 +15,7 @@
 //	    golusoris.Core,
 //	    golusoris.DB,                  // *pgxpool.Pool for idempotency.store=postgres
 //	    idempotency.Module,            // provides idempotency.Store + middleware.Middleware
+//	    idempotency.GRPCModule,        // optional: unary interceptor on the gRPC server
 //	    fx.Invoke(func(mw middleware.Middleware) { mux.Use(mw) }),
 //	)
 //
@@ -30,6 +31,8 @@
 //	idempotency.sweep.interval     # expired-key GC period, 0 disables (default 1m)
 //	idempotency.sweep.batch        # rows per sweep batch, max 10000 (default 1000)
 //	idempotency.sweep.timeout      # bound per sweep batch (default 10s)
+//	idempotency.grpc.metadata      # gRPC metadata key (default idempotency-key)
+//	idempotency.grpc.required      # reject unary RPCs without the key (default false)
 
 package idempotency
 
@@ -87,6 +90,8 @@ type Config struct {
 	Redis RedisConfig `koanf:"redis"`
 	// Sweep tunes expired-key garbage collection for memory, postgres and sqlite.
 	Sweep SweepConfig `koanf:"sweep"`
+	// GRPC tunes the interceptor installed by [GRPCModule].
+	GRPC GRPCConfig `koanf:"grpc"`
 }
 
 // RedisConfig tunes [RedisStore] under idempotency.redis.*.
@@ -105,6 +110,14 @@ type SweepConfig struct {
 	Timeout time.Duration `koanf:"timeout"`
 }
 
+// GRPCConfig tunes [UnaryServerInterceptor] under idempotency.grpc.*.
+type GRPCConfig struct {
+	// Metadata is the incoming metadata key (default [DefaultGRPCMetadata]).
+	Metadata string `koanf:"metadata"`
+	// Required rejects unary RPCs without the key.
+	Required bool `koanf:"required"`
+}
+
 func defaultOptions() Config {
 	return Config{
 		Required:        false,
@@ -115,6 +128,7 @@ func defaultOptions() Config {
 		Store:           StoreMemory,
 		Redis:           RedisConfig{Prefix: DefaultRedisPrefix},
 		Sweep:           SweepConfig{Interval: time.Minute, Batch: 1000, Timeout: 10 * time.Second},
+		GRPC:            GRPCConfig{Metadata: DefaultGRPCMetadata},
 	}
 }
 
