@@ -437,7 +437,7 @@ packages:
     replaces: [github.com/Khan/genqlient]
   - import: github.com/golusoris/golusoris/grpc
     domain: grpc
-    capabilities: [grpc.server, grpc.client, grpc.health, grpc.mtls]
+    capabilities: [grpc.server, grpc.client, grpc.health, grpc.mtls, grpc.retry]
     description: "Package grpc provides an fx-wired gRPC server and client connection factory with OpenTelemetry tracing, panic recovery, and structured logging built in."
     replaces: [github.com/grpc-ecosystem/go-grpc-middleware, github.com/grpc-ecosystem/go-grpc-middleware/v2, go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc, google.golang.org/grpc]
   - import: github.com/golusoris/golusoris/hash

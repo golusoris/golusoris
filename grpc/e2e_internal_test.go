@@ -75,11 +75,20 @@ var slowDesc = grpc.ServiceDesc{
 // startServer serves the framework options for cfg plus the Slow service on loopback.
 func startServer(t *testing.T, cfg Config) string {
 	t.Helper()
+	return startServerWith(t, cfg, nil)
+}
+
+// startServerWith also lets register add test services before serving.
+func startServerWith(t *testing.T, cfg Config, register func(*grpc.Server)) string {
+	t.Helper()
 	opts, err := frameworkServerOptions(cfg.withDefaults(), slog.New(slog.DiscardHandler), nil)
 	require.NoError(t, err)
 	srv := grpc.NewServer(opts...)
 	srv.RegisterService(&slowDesc, sleeper{})
 	registerHealth(srv, true, nil)
+	if register != nil {
+		register(srv)
+	}
 	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	go func() { _ = srv.Serve(ln) }()

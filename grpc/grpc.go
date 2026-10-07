@@ -39,6 +39,21 @@
 //	grpc.keepalive.timeout                   # ping ack timeout (default 20s)
 //	grpc.keepalive.min_time                  # min client ping interval (default 5m)
 //	grpc.keepalive.permit_without_stream     # allow client pings without RPCs
+//
+// Client keys (Module's *ConnFactory; zero = plaintext, no pings, no retries):
+//
+//	grpc.client.tls                  # TLS 1.3 to the server
+//	grpc.client.cert_file            # client certificate for mTLS (reloaded)
+//	grpc.client.key_file             # client key
+//	grpc.client.ca_file              # CA bundle that verifies the server
+//	grpc.client.server_name          # authority override for TLS verification
+//	grpc.client.keepalive.time       # ping after idle period (0 = off)
+//	grpc.client.keepalive.timeout    # ping ack timeout
+//	grpc.client.keepalive.permit_without_stream
+//	grpc.client.retry.max_attempts   # >1 retries UNAVAILABLE (grpc-go caps at 5)
+//	grpc.client.retry.initial_backoff     # default 100ms
+//	grpc.client.retry.max_backoff         # default 1s
+//	grpc.client.retry.backoff_multiplier  # default 2
 package grpc
 
 import (
@@ -91,6 +106,8 @@ type Config struct {
 	// *statuspage.Registry is in the graph. Off by default: apps that register
 	// their own health service would otherwise collide.
 	Health bool `koanf:"health"`
+	// Client configures the Module's *ConnFactory.
+	Client ClientConfig `koanf:"client"`
 }
 
 // DefaultConfig returns the opinionated default server config.
@@ -125,6 +142,10 @@ func CompoundKeys() []string {
 		"grpc.max_recv_size", "grpc.max_send_size",
 		"grpc.keepalive.max_connection_age", "grpc.keepalive.max_connection_age_grace",
 		"grpc.keepalive.min_time", "grpc.keepalive.permit_without_stream",
+		"grpc.client.cert_file", "grpc.client.key_file", "grpc.client.ca_file", "grpc.client.server_name",
+		"grpc.client.keepalive.permit_without_stream",
+		"grpc.client.retry.max_attempts", "grpc.client.retry.initial_backoff",
+		"grpc.client.retry.max_backoff", "grpc.client.retry.backoff_multiplier",
 	}
 }
 
@@ -314,10 +335,21 @@ func serverHook(srv *grpc.Server, hs *grpchealth.Server, cfg Config, logger *slo
 	}
 }
 
-func newConnFactory() *ConnFactory { return NewConnFactory() }
+// clientParams are the fx inputs to newConnFactory.
+type clientParams struct {
+	fx.In
+	Config Config
+	Logger *slog.Logger
+	Clock  clock.Clock `optional:"true"`
+}
+
+func newConnFactory(p clientParams) (*ConnFactory, error) {
+	return newClientFactory(p.Config.Client, p.Logger, p.Clock)
+}
 
 // NewConnFactory returns a ConnFactory with OTel and insecure credentials.
-// Override credentials with Dial(..., grpc.WithTransportCredentials(creds)).
+// Override credentials with Dial(..., grpc.WithTransportCredentials(creds)),
+// or build from config with [NewConnFactoryWithConfig].
 func NewConnFactory() *ConnFactory {
 	return &ConnFactory{
 		dialOpts: []grpc.DialOption{

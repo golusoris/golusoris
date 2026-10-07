@@ -5,9 +5,11 @@
 package grpc
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 
 	"google.golang.org/grpc/credentials"
 
@@ -34,3 +36,29 @@ func serverCredentials(cfg Config, logger *slog.Logger, clk clock.Clock) (creden
 	}
 	return credentials.NewTLS(reloader.ServerConfig(auth)), nil
 }
+
+// reloadingCreds rebuilds TLS credentials for each new client connection so a
+// rotated CA bundle reaches the next handshake; the client certificate already
+// follows the files through GetClientCertificate.
+type reloadingCreds struct {
+	reloader *tlsx.Reloader
+}
+
+func (c reloadingCreds) current() credentials.TransportCredentials {
+	return credentials.NewTLS(c.reloader.ClientConfig(""))
+}
+
+func (c reloadingCreds) ClientHandshake(ctx context.Context, authority string, raw net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	return c.current().ClientHandshake(ctx, authority, raw) //nolint:wrapcheck // grpc-go type-switches on Temporary/Timeout of this error
+}
+
+func (c reloadingCreds) ServerHandshake(raw net.Conn) (net.Conn, credentials.AuthInfo, error) {
+	return c.current().ServerHandshake(raw) //nolint:wrapcheck // same contract as ClientHandshake
+}
+
+func (c reloadingCreds) Info() credentials.ProtocolInfo { return c.current().Info() }
+
+func (c reloadingCreds) Clone() credentials.TransportCredentials { return c }
+
+// OverrideServerName is unused by grpc-go; use ClientConfig.ServerName.
+func (reloadingCreds) OverrideServerName(string) error { return nil }

@@ -19,6 +19,7 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 | `CompoundKeys()` | snake_case `grpc.*` keys for `config.Options.CompoundKeys`; env overrides need it |
 | `*grpc.Server` | The `google.golang.org/grpc` server, fx-provided; serves on fx Start, graceful-stops on fx Stop |
 | `*ConnFactory` | Client-side dialer with OTel propagation; `Dial(ctx, target, ...)` returns a `*grpc.ClientConn` |
+| `ClientConfig` | `grpc.client.*` — TLS/mTLS files, `server_name`, keepalive, retry; `NewConnFactoryWithConfig(cfg, logger)` |
 | `Module` | Provides `*grpc.Server` + `*ConnFactory`; requires `*config.Config` + `*slog.Logger` |
 
 ## Behaviour
@@ -31,7 +32,11 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 - Long RPCs (minutes): set `keepalive.max_connection_age` negative, or keep rotation and set `max_connection_age_grace` negative. App `ProvideServerOption(grpc.KeepaliveParams(...))` still overrides (appended last).
 - `k8s/health.Module` wired -> stop hook wrapped by its `core/drain.Gate`: `GracefulStop` starts after `health.drain.delay`; stop ctx expiry -> hard `Stop`.
 - `grpc.health=true` registers `grpc.health.v1`. Optional `*statuspage.Registry` in graph -> Check("") runs readiness-tagged checks (`health.Serving`); gate wired -> its `shutdown` check fails Check("") for whole drain window. fx Stop flips NOT_SERVING before `GracefulStop`. Off by default: app-registered health service would collide.
-- `ConnFactory` dials with insecure transport credentials by default — override per call with `grpc.WithTransportCredentials(...)`.
+- `NewConnFactory()` dials insecure. Module factory reads `grpc.client.*`; zero config = same insecure factory. Per-call `Dial(..., grpc.WithTransportCredentials(...))` still overrides.
+- Client TLS: `grpc.client.tls=true`; no files = system roots. Files reload per new connection (custom creds rebuild TLS config per handshake), so rotated client cert + CA bundle reach next dial. Files without `tls=true` fail construction.
+- `grpc.client.server_name` -> `grpc.WithAuthority`: TLS name check + `:authority`.
+- Client keepalive off unless `grpc.client.keepalive.time > 0`. Keep time >= server `keepalive.min_time` (5m) or server sends GOAWAY `too_many_pings`.
+- `grpc.client.retry.max_attempts > 1` installs default service config: all methods, retry `UNAVAILABLE`, backoff 100ms -> 1s x2. grpc-go caps attempts at 5. Resolver-supplied service config wins.
 
 ## Usage
 
