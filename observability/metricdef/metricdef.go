@@ -32,6 +32,10 @@ const (
 	KindGauge
 	// KindHistogram is a bucketed distribution exposed as _bucket/_sum/_count.
 	KindHistogram
+	// KindSummary is a client-side quantile summary (_sum/_count plus
+	// quantile series). Only External defs may use it — instrument new code
+	// with histograms.
+	KindSummary
 )
 
 // String returns the Prometheus type name.
@@ -43,6 +47,8 @@ func (k Kind) String() string {
 		return "gauge"
 	case KindHistogram:
 		return "histogram"
+	case KindSummary:
+		return "summary"
 	}
 	return fmt.Sprintf("Kind(%d)", int(k))
 }
@@ -78,13 +84,16 @@ type Def struct {
 	Limits map[string]LabelLimit
 	// External marks a metric another library emits (otelhttp, the Go
 	// collector). Generators and promcheck see it; Register refuses it.
+	// External defs are checked for syntax only — their names follow the
+	// emitter, not this package's conventions — and Help may be empty.
 	External bool
 }
 
 var (
-	metricNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-	labelNameRE  = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
-	unitRE       = regexp.MustCompile(`^[a-z][a-z0-9_]*[a-z0-9]$`)
+	metricNameRE   = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	externalNameRE = regexp.MustCompile(`^[a-zA-Z_:][a-zA-Z0-9_:]*$`)
+	labelNameRE    = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+	unitRE         = regexp.MustCompile(`^[a-z][a-z0-9_]*[a-z0-9]$`)
 )
 
 // reservedSuffixes collide with series that histograms, summaries or
@@ -98,10 +107,24 @@ var nonBaseUnits = []string{
 }
 
 // Validate reports every naming, label, bucket and limit violation of d.
+// External defs only need a syntactically valid name, kind and labels.
 func (d Def) Validate() error {
 	errs := []error{d.validateName(), d.validateUnit(), d.validateLabels(), d.validateBuckets(), d.validateLimits()}
+	if d.External {
+		errs = []error{d.validateExternal(), d.validateLabels(), d.validateLimits()}
+	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("metricdef: %s: %w", d.Name, err)
+	}
+	return nil
+}
+
+func (d Def) validateExternal() error {
+	if !externalNameRE.MatchString(d.Name) || strings.HasPrefix(d.Name, "__") {
+		return fmt.Errorf("invalid metric name %q", d.Name)
+	}
+	if d.Kind < KindCounter || d.Kind > KindSummary {
+		return fmt.Errorf("unknown kind %d", int(d.Kind))
 	}
 	return nil
 }
@@ -136,6 +159,8 @@ func (d Def) validateKindSuffix() error {
 		if counterName {
 			return fmt.Errorf("only counters end in _total, not %s", d.Kind)
 		}
+	case KindSummary:
+		return errors.New("summaries are only supported as External defs; use a histogram")
 	default:
 		return fmt.Errorf("unknown kind %d", int(d.Kind))
 	}
@@ -212,18 +237,26 @@ func (d Def) HasLabel(name string) bool {
 
 // Series returns the sample names d exposes in the classic text format.
 func (d Def) Series() []string {
-	if d.Kind == KindHistogram {
+	switch d.Kind {
+	case KindHistogram:
 		return []string{d.Name + "_bucket", d.Name + "_count", d.Name + "_sum"}
+	case KindSummary:
+		return []string{d.Name, d.Name + "_count", d.Name + "_sum"}
+	case KindCounter, KindGauge:
 	}
 	return []string{d.Name}
 }
 
 // SeriesLabels returns the labels valid on series (one of [Def.Series]):
-// d.Labels, plus "le" on a histogram's _bucket series.
+// d.Labels, plus "le" on a histogram's _bucket series and "quantile" on a
+// summary's quantile series.
 func (d Def) SeriesLabels(series string) []string {
 	labels := slices.Clone(d.Labels)
-	if d.Kind == KindHistogram && series == d.Name+"_bucket" {
+	switch {
+	case d.Kind == KindHistogram && series == d.Name+"_bucket":
 		labels = append(labels, "le")
+	case d.Kind == KindSummary && series == d.Name:
+		labels = append(labels, "quantile")
 	}
 	return labels
 }

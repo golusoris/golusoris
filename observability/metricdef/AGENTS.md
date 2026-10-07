@@ -13,7 +13,7 @@ One metric definition shared by services, dashboard generator (`observability/gr
 | Symbol | Purpose |
 |---|---|
 | `Def{Name, Help, Unit, Kind, Labels, Buckets, Limits, External}` | one metric; `Validate()` reports every violation |
-| `KindCounter` / `KindGauge` / `KindHistogram` | metric type |
+| `KindCounter` / `KindGauge` / `KindHistogram` / `KindSummary` | metric type; summary External-only (Go collector), instrument with histograms |
 | `LabelLimit{Allow}` / `LabelLimit{MaxDistinct}` | cardinality bound; rejected value -> `OtherValue` (`"other"`) |
 | `NewCatalog(defs...)` | validated immutable set; rejects duplicates + OpenMetrics family clash (`x_total` vs gauge `x`) |
 | `Catalog.Defs()` / `Lookup` / `LookupSeries` / `Series` / `Merge` | generator + checker reads; deep copies |
@@ -22,7 +22,7 @@ One metric definition shared by services, dashboard generator (`observability/gr
 | `Counter.Add(ctx, v, labels...)`, `Inc` | sampled span in ctx -> exemplar |
 | `Gauge.Set(v, labels...)`, `Add` | no exemplars (gauges carry none) |
 | `Histogram.Observe(ctx, v, labels...)` | exemplar via `prom.ObserveWithExemplar` |
-| `Def.Series()` / `Def.SeriesLabels(series)` | exposed sample names; `le` only on `_bucket` |
+| `Def.Series()` / `Def.SeriesLabels(series)` | exposed sample names; `le` only on `_bucket`, `quantile` only on summary base series |
 
 ## Naming rules (Validate)
 
@@ -32,6 +32,7 @@ One metric definition shared by services, dashboard generator (`observability/gr
 - labels valid, unique, no `__` prefix; `quantile` reserved; `le` reserved on histograms.
 - buckets only on histograms, finite, strictly increasing.
 - each `Limits` key = declared label; exactly one of `Allow` / positive `MaxDistinct`.
+- `External` defs: syntax only (name may hold colons, help optional, no suffix/unit rules, no family-clash check) — emitter owns naming. Exposed-series collisions still fail.
 
 ## Usage
 

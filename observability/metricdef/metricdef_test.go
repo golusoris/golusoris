@@ -171,3 +171,48 @@ func TestCatalogMerge(t *testing.T) {
 		t.Error("Merge accepted a duplicate def")
 	}
 }
+
+func TestExternalDefsFollowTheirEmitter(t *testing.T) {
+	t.Parallel()
+	gcPause := metricdef.Def{Name: "go_gc_duration_seconds", Kind: metricdef.KindSummary, External: true}
+	cat, err := metricdef.NewCatalog(
+		gcPause,
+		metricdef.Def{Name: "go_memstats_alloc_bytes", Kind: metricdef.KindGauge, External: true},
+		metricdef.Def{Name: "go_memstats_alloc_bytes_total", Kind: metricdef.KindCounter, External: true},
+		metricdef.Def{Name: "job:http_requests:rate5m", Kind: metricdef.KindGauge, External: true, Labels: []string{"job"}},
+	)
+	if err != nil {
+		t.Fatalf("external defs rejected: %v", err)
+	}
+	if d, ok := cat.LookupSeries("go_gc_duration_seconds_count"); !ok || d.Kind != metricdef.KindSummary {
+		t.Errorf("summary _count series not resolved: %+v", d)
+	}
+	if got := gcPause.SeriesLabels("go_gc_duration_seconds"); !slices.Equal(got, []string{"quantile"}) {
+		t.Errorf("summary quantile labels = %v", got)
+	}
+	if got := gcPause.SeriesLabels("go_gc_duration_seconds_sum"); len(got) != 0 {
+		t.Errorf("summary _sum labels = %v", got)
+	}
+	if metricdef.KindSummary.String() != "summary" {
+		t.Error("KindSummary.String")
+	}
+}
+
+func TestExternalAndSummaryRejects(t *testing.T) {
+	t.Parallel()
+	cases := map[string]metricdef.Def{
+		"summaries are only supported as External": {Name: "app_x_seconds", Help: "x", Kind: metricdef.KindSummary},
+		"invalid metric name":                      {Name: "__x", Kind: metricdef.KindGauge, External: true},
+		"unknown kind":                             {Name: "x", Kind: 9, External: true},
+		"invalid label name":                       {Name: "x", Kind: metricdef.KindGauge, External: true, Labels: []string{"a-b"}},
+	}
+	for want, d := range cases {
+		if err := d.Validate(); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: err = %v, want %q", d.Name, err, want)
+		}
+	}
+	_, err := metricdef.NewCatalog(jobSeconds, metricdef.Def{Name: "app_job_duration_seconds_count", Kind: metricdef.KindGauge, External: true})
+	if err == nil || !strings.Contains(err.Error(), "already exposed") {
+		t.Errorf("series collision: err = %v", err)
+	}
+}

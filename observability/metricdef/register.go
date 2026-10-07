@@ -198,6 +198,7 @@ func (h *Handles) add(d Def) (prometheus.Collector, error) {
 		vec := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: d.Name, Help: d.Help, Unit: d.Unit, Buckets: d.Buckets}, d.Labels)
 		h.histograms[d.Name] = &Histogram{vec: vec, guard: guard}
 		return vec, nil
+	case KindSummary:
 	}
 	return nil, fmt.Errorf("unknown kind %d", int(d.Kind))
 }

@@ -21,9 +21,10 @@ type Catalog struct {
 }
 
 // NewCatalog validates defs and rejects duplicate names, including
-// OpenMetrics family clashes (counter "x_total" is family "x", so it cannot
-// sit next to a gauge "x"). Classic series cannot collide otherwise:
-// [Def.Validate] reserves _bucket/_count/_sum and _total.
+// OpenMetrics family clashes between non-External defs (counter "x_total" is
+// family "x", so it cannot sit next to a gauge "x"). Classic series of
+// non-External defs cannot collide otherwise: [Def.Validate] reserves
+// _bucket/_count/_sum and _total.
 func NewCatalog(defs ...Def) (*Catalog, error) {
 	c := &Catalog{
 		defs:     make(map[string]Def, len(defs)),
@@ -48,16 +49,37 @@ func (c *Catalog) add(d Def) error {
 	if err := d.Validate(); err != nil {
 		return err
 	}
-	family := strings.TrimSuffix(d.Name, "_total")
-	if owner, dup := c.families[family]; dup {
-		return fmt.Errorf("metricdef: metric %q duplicates family %q of %q", d.Name, family, owner)
+	if _, dup := c.defs[d.Name]; dup {
+		return fmt.Errorf("metricdef: duplicate metric %q", d.Name)
 	}
-	c.families[family] = d.Name
+	if err := c.claimFamily(d); err != nil {
+		return err
+	}
+	for _, s := range d.Series() {
+		if owner, taken := c.series[s]; taken {
+			return fmt.Errorf("metricdef: series %q of %q is already exposed by %q", s, d.Name, owner)
+		}
+	}
 	for _, s := range d.Series() {
 		c.series[s] = d.Name
 	}
 	c.defs[d.Name] = d.clone()
 	c.names = append(c.names, d.Name)
+	return nil
+}
+
+// claimFamily rejects OpenMetrics family clashes between defs this catalog
+// owns; External emitters (the Go collector exposes go_memstats_alloc_bytes
+// and go_memstats_alloc_bytes_total) are taken as they are.
+func (c *Catalog) claimFamily(d Def) error {
+	if d.External {
+		return nil
+	}
+	family := strings.TrimSuffix(d.Name, "_total")
+	if owner, dup := c.families[family]; dup {
+		return fmt.Errorf("metricdef: metric %q duplicates family %q of %q", d.Name, family, owner)
+	}
+	c.families[family] = d.Name
 	return nil
 }
 
