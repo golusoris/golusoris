@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -120,6 +121,12 @@ EXPECTED = {
     ),
 }
 
+# Identities pinned more than once per file: TimescaleDB ships TSL and Apache-only (-oss) tags.
+EXPECTED_MULTIPLICITY = {
+    ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
+    (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
+}
+
 EXPECTED_DIGESTS = {
     "tonistiigi/binfmt",
     "fsfe/reuse",
@@ -211,7 +218,7 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
     paths = ("internal/testimages/images.go", ".github/testcontainers-images.txt")
     image_pins = {
         path: {
-            item["dep_name"]: (item["current_value"], item["current_digest"])
+            (item["dep_name"], item["current_value"], item["current_digest"])
             for item in found
             if item["path"] == path
         }
@@ -219,12 +226,10 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
     }
     go_images = image_pins[paths[0]]
     cache_images = image_pins[paths[1]]
-    if set(go_images) - set(cache_images) != CACHE_EXEMPT_IMAGES or set(cache_images) - set(go_images):
-        print("test-image authority sets differ beyond the declared cache exemptions", file=sys.stderr)
-        return False
-    drift = [name for name, pin in cache_images.items() if go_images[name] != pin]
-    if drift:
-        print(f"test-image authorities drift for {drift[0]}", file=sys.stderr)
+    go_only = {name for name, _, _ in go_images - cache_images}
+    if go_only != CACHE_EXEMPT_IMAGES or cache_images - go_images:
+        drift = sorted(map(str, cache_images - go_images)) + sorted(go_only ^ CACHE_EXEMPT_IMAGES)
+        print(f"test-image authorities differ beyond the declared cache exemptions: {drift[0]}", file=sys.stderr)
         return False
     return True
 
@@ -329,10 +334,13 @@ def test_private_job_image_authority(
 def test_pin_inventory(found: list[dict[str, str]]) -> bool:
     """Require the exact declared nonstandard dependency inventory."""
     actual = identities(found)
-    if actual != EXPECTED or len(found) != len(EXPECTED):
+    counts = Counter((item["path"], item["dep_name"], item["datasource"]) for item in found)
+    expected_counts = {identity: EXPECTED_MULTIPLICITY.get(identity, 1) for identity in EXPECTED}
+    if actual != EXPECTED or counts != expected_counts:
+        expected_total = sum(expected_counts.values())
         print(f"missing Renovate pins: {sorted(EXPECTED - actual)}", file=sys.stderr)
         print(f"unexpected Renovate pins: {sorted(actual - EXPECTED)}", file=sys.stderr)
-        print(f"extracted {len(found)} pins; expected {len(EXPECTED)}", file=sys.stderr)
+        print(f"extracted {len(found)} pins; expected {expected_total}", file=sys.stderr)
         return False
     return True
 

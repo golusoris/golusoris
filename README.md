@@ -116,7 +116,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `db/migrate/sqlite/` | the same runner for SQLite (pure-Go driver, pragmas of `db/sqlite`) | golang-migrate/migrate/v4 |
 | `db/sqlc/` | shared sqlc.yaml fragment + query helpers | sqlc-dev/sqlc |
 | `db/geo/` | Point EWKB scanner, EWKT value, and Haversine distance | custom on pgx |
-| `db/timescale/` | TimescaleDB hypertable creation, retention, compression helpers | custom on pgx |
+| `db/timescale/` | TimescaleDB edition detection (Apache vs community), hypertables + chunk interval, compression, retention, continuous aggregates, fx probe | custom on pgx |
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river; CloudEvents envelope (stable id, trace context, tenant) | custom on pgx |

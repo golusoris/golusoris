@@ -17,6 +17,8 @@ const (
 	Postgres = "postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
 	Timescale = "timescale/timescaledb:2.30.0-pg17@sha256:3113d12b78392c064aa7475caf7a52b447b29ddd4f9bfd23526733fcb03e3459"
+	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
+	TimescaleApache = "timescale/timescaledb:2.30.0-pg17-oss@sha256:9e655f215736939b7bb9c37efb6b157f278166e6239a46d2d0d5c79a8d0eb1d3"
 	// Redis is the default Redis integration-test image.
 	Redis = "redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7"
 	// NATS is the default NATS integration-test image.
