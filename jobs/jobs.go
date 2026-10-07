@@ -351,10 +351,12 @@ func provideClient(
 func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Options, logger *slog.Logger) {
 	opts = opts.withDefaults()
 	var obsCancel func()
+	runCtx, runCancel := riverRunContext()
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			if err := c.Start(ctx); err != nil {
-				return fmt.Errorf("jobs: start: %w", err)
+			if err := startDetached(ctx, runCtx, c); err != nil {
+				runCancel()
+				return err
 			}
 			if hasObserver(opts.Observer) {
 				obsCancel = ObserveClient(c, opts.Observer)
@@ -362,6 +364,7 @@ func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Option
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			defer runCancel()
 			if obsCancel != nil {
 				obsCancel()
 			}
@@ -371,4 +374,28 @@ func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Option
 			return nil
 		},
 	})
+}
+
+// riverRunContext returns the lifecycle-owned context River runs under, from
+// fx Start until OnStop. River derives its fetch and work contexts from the
+// Start context, and fx ends that context once start completes, which would
+// hard-stop River; the drain on OnStop bounds shutdown instead.
+func riverRunContext() (context.Context, context.CancelFunc) {
+	return context.WithCancel(context.Background())
+}
+
+// startDetached starts c under runCtx so River outlives the fx start context,
+// while startup itself stays bounded by startCtx.
+func startDetached[TTx any](startCtx, runCtx context.Context, c *river.Client[TTx]) error {
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.Start(runCtx) }()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			return fmt.Errorf("jobs: start: %w", err)
+		}
+		return nil
+	case <-startCtx.Done():
+		return fmt.Errorf("jobs: start: %w", startCtx.Err())
+	}
 }
