@@ -611,6 +611,10 @@ packages:
     capabilities: [validate.jsonschema]
     description: "Package jsonschema validates JSON documents against JSON Schema (draft 2020-12 by default) via santhosh-tekuri/jsonschema/v6."
     replaces: [github.com/santhosh-tekuri/jsonschema/v6]
+  - import: github.com/golusoris/golusoris/junit
+    domain: test
+    capabilities: [test.junit]
+    description: "Package junit writes JUnit XML reports so CI systems show a gate's failing case by name."
   - import: github.com/golusoris/golusoris/k8s/client
     domain: k8s
     capabilities: [k8s.client]

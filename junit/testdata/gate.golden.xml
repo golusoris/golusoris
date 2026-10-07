@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="vmafx" tests="3" failures="1" errors="0" time="3.750">
+  <testsuite name="score-gate" tests="3" failures="1" errors="0" skipped="1" time="3.750" timestamp="2026-10-07T10:30:00" hostname="runner-1">
+    <properties>
+      <property name="threshold" value="93.0"></property>
+      <property name="model" value="vmaf_v0.6.1"></property>
+    </properties>
+    <testcase name="clip-01" classname="vmaf" time="1.500"></testcase>
+    <testcase name="clip-02" classname="vmaf" time="2.250">
+      <failure message="VMAF 91.2 &lt; 93.0 \x1b[31m(red)\x1b[0m" type="threshold">frames: 240&#xA;worst frame: 117 &lt;score=71.4&gt; &amp; &#34;quoted&#34;</failure>
+    </testcase>
+    <testcase name="clip-03" classname="vmaf" time="0.000">
+      <skipped message="reference missing"></skipped>
+    </testcase>
+    <system-out>scored 2 of 3 clips</system-out>
+  </testsuite>
+</testsuites>

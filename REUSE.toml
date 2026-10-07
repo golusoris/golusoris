@@ -107,3 +107,10 @@ path = ["k8s/keda/internal/externalscalerpb/externalscaler.proto", "k8s/keda/int
 precedence = "override"
 SPDX-FileCopyrightText = "The KEDA Authors <https://github.com/kedacore/keda>"
 SPDX-License-Identifier = "Apache-2.0"
+
+# ── Vendored third-party test vectors and schemas ───────────────────────────
+[[annotations]]
+path = ["junit/testdata/junit-10.xsd"]
+precedence = "override"
+SPDX-FileCopyrightText = "2014 Gregory Boissinot <https://github.com/jenkinsci/xunit-plugin>"
+SPDX-License-Identifier = "MIT"
