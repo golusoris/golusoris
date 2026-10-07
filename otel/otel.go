@@ -26,6 +26,9 @@
 //	otel.export.traces       # enable trace export (default true)
 //	otel.export.metrics      # enable metric export (default true)
 //	otel.export.logs         # enable log export (default true)
+//	otel.logs.trace_ids      # stamp trace_id/span_id/trace_flags on slog
+//	                         # records with a span in context (default true;
+//	                         # needs otel.enabled)
 //
 // The module installs a no-op tracer/meter/logger — so app code using the
 // OTel API costs nothing and never touches the network — when any of these
@@ -43,7 +46,6 @@ import (
 	"sync"
 	"time"
 
-	"go.opentelemetry.io/contrib/bridges/otelslog"
 	otelapi "go.opentelemetry.io/otel"
 	otlplog "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -61,7 +63,11 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	corelog "github.com/golusoris/golusoris/core/log"
 )
+
+// providerBuildTimeout bounds resource detection and exporter construction.
+const providerBuildTimeout = 10 * time.Second
 
 // Options configures the OTel SDK.
 type Options struct {
@@ -71,6 +77,7 @@ type Options struct {
 	Service  ServiceOptions `koanf:"service"`
 	Sample   SampleOptions  `koanf:"sample"`
 	Export   ExportOptions  `koanf:"export"`
+	Logs     LogsOptions    `koanf:"logs"`
 }
 
 // ServiceOptions identifies the service in OTel resource attributes.
@@ -100,6 +107,7 @@ func DefaultOptions() Options {
 		Insecure: true,
 		Sample:   SampleOptions{Ratio: 1.0},
 		Export:   ExportOptions{Traces: true, Metrics: true, Logs: true},
+		Logs:     LogsOptions{TraceIDs: true},
 	}
 }
 
@@ -343,53 +351,61 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
-// ModuleWithSlogBridge adds the slog → OTel logs bridge to the default
-// slog logger. Apps that want every slog call also exported as an OTel log
-// record include this module (in addition to [Module]).
+// ModuleWithSlogBridge adds the slog → OTel logs bridge. With
+// [corelog.Module] in the graph the injected *slog.Logger (and therefore
+// slog.Default) fans every record out to the OTel logger provider; with an
+// app-supplied *slog.Logger only slog.Default gains the bridge. Apps that want
+// every slog call exported as an OTel log record include this module (in
+// addition to [Module]).
 //
 // Kept separate from [Module] because some apps use slog but route logs
 // through Sentry + stdout only, not OTel.
 var ModuleWithSlogBridge = fx.Module(
 	"golusoris.otel.slog_bridge",
-	fx.Invoke(func(providers *Providers, existing *slog.Logger, opts Options) {
-		if providers == nil || providers.Logger == nil {
-			return
-		}
-		// Fan out to the existing handler + the OTel bridge.
-		otelHandler := otelslog.NewHandler(
-			opts.Service.Name,
-			otelslog.WithLoggerProvider(providers.Logger),
-		)
-		slog.SetDefault(slog.New(&fanoutHandler{
-			Handlers: []slog.Handler{existing.Handler(), otelHandler},
-		}))
-	}),
+	fx.Provide(newBridgeState),
+	fx.Provide(corelog.AsMiddleware(bridgeMiddleware)),
+	fx.Invoke(installDefaultBridge),
 )
 
-// Module provides *Providers and wires lifecycle shutdown. Requires
-// config.Module + log.Module already present. The module degrades to a no-op
-// (empty Providers, global OTel stays no-op, no network) when otel.enabled is
-// false, OTEL_SDK_DISABLED=true, or no OTLP endpoint is configured — see [New].
+// Module provides *Providers, wires lifecycle shutdown, and contributes
+// [TraceHandler] to the core/log middleware group (otel.logs.trace_ids).
+// Requires config.Module + log.Module already present. The providers are
+// built at app start, so the OTel globals are live without an explicit
+// *Providers consumer. The module degrades to a no-op (empty Providers,
+// global OTel stays no-op, no network) when otel.enabled is false,
+// OTEL_SDK_DISABLED=true, or no OTLP endpoint is configured — see [New].
 var Module = fx.Module(
 	"golusoris.otel",
 	fx.Provide(loadOptions),
-	fx.Provide(func(lc fx.Lifecycle, opts Options, logger *slog.Logger) (*Providers, error) {
-		providers, err := New(context.Background(), opts)
-		if err != nil {
-			return nil, err
-		}
-		logger.Info(
-			"otel: configured",
-			slog.Bool("enabled", opts.Enabled),
-			slog.Bool("active", providers.Tracer != nil || providers.Meter != nil || providers.Logger != nil),
-			slog.String("endpoint", opts.Endpoint),
-			slog.String("service", opts.Service.Name),
-		)
-		lc.Append(fx.Hook{
-			OnStop: func(ctx context.Context) error {
-				return providers.Shutdown(ctx)
-			},
-		})
-		return providers, nil
-	}),
+	fx.Provide(newModuleProviders),
+	fx.Provide(corelog.AsMiddleware(traceMiddleware)),
+	fx.Invoke(logConfigured),
 )
+
+// newModuleProviders builds the providers without depending on *slog.Logger,
+// so log middleware can depend on *Providers without a cycle.
+func newModuleProviders(lc fx.Lifecycle, opts Options) (*Providers, error) {
+	// Exporters and resource detection use ctx only while constructing.
+	ctx, cancel := context.WithTimeout(context.Background(), providerBuildTimeout)
+	defer cancel()
+	providers, err := New(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			return providers.Shutdown(ctx)
+		},
+	})
+	return providers, nil
+}
+
+func logConfigured(logger *slog.Logger, opts Options, providers *Providers) {
+	logger.Info(
+		"otel: configured",
+		slog.Bool("enabled", opts.Enabled),
+		slog.Bool("active", providers.Tracer != nil || providers.Meter != nil || providers.Logger != nil),
+		slog.String("endpoint", opts.Endpoint),
+		slog.String("service", opts.Service.Name),
+	)
+}

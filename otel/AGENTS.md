@@ -17,9 +17,12 @@ Full OpenTelemetry SDK — tracer, meter, logger — with OTLP gRPC exporter.
 - Provider construction is atomic: globals change after every enabled signal builds. Partial failures shut down built providers.
 - Shutdown swaps still-owned global SDK providers for no-op providers before exporter teardown. Newer globals remain intact.
 
-## slog bridge
+## Logs
 
-`otel.ModuleWithSlogBridge` installs fanout slog handler that writes to both local handler (tint/JSON) and OTel logger provider. Apps that want every slog call exported as OTel log record include this module in addition to `otel.Module`.
+- `otel.Module` contributes `TraceHandler` to `core/log` middleware group: injected `*slog.Logger` (and `slog.Default`) stamps `trace_id`, `span_id`, `trace_flags` (consts `TraceIDKey`, `SpanIDKey`, `TraceFlagsKey`) on records whose ctx carries valid span. Config `otel.logs.trace_ids` (default true; effective only with `otel.enabled`). Env override needs `config.Options.CompoundKeys: []string{"otel.logs.trace_ids"}` -> `APP_OTEL_LOGS_TRACE_IDS`.
+- Use `*Context` slog calls; plain `Info` has no ctx -> no IDs. `WithGroup` nests trace keys under open group.
+- `otel.Module` invokes provider construction at start; globals go live without explicit `*Providers` consumer.
+- `otel.ModuleWithSlogBridge` contributes OTLP bridge (otelslog fan-out) to same group, ordered outside trace middleware: stdout gets trace keys, OTLP records keep native span context. With app-supplied `*slog.Logger` (no `core/log.Module`) only `slog.Default` gains bridge.
 
 ## Don't
 
