@@ -314,6 +314,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
+| `pubsub/cloudevents/` | CloudEvents 1.0 envelope — validation, JSON event format, binary-mode header codecs | custom (stdlib) |
 | `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
 | `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
