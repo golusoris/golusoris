@@ -193,6 +193,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
 | `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
 
 ### Kubernetes runtime
 

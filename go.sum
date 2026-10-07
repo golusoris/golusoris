@@ -520,6 +520,8 @@ github.com/googleapis/gax-go/v2 v2.24.0 h1:myMaPYyF9MecEmvQqMqomIwn9t/4KCZN9qnws
 github.com/googleapis/gax-go/v2 v2.24.0/go.mod h1:IaTHBDd7NHxSCiu0vEs8pQZu4dGZrWwuSoxCnk16OFM=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
 github.com/gopherjs/gopherjs v1.17.2/go.mod h1:pRRIvn/QzFLrKfvEz3qUuEhtE/zLCWfreZ6J5gM2i+k=
+github.com/grafana/grafana-foundation-sdk/go v0.0.20 h1:uuDTS9fHNfDeLU8q5279xTl6zxxgRsxHAv5y3MUZGgk=
+github.com/grafana/grafana-foundation-sdk/go v0.0.20/go.mod h1:48EA8jF85SrReYflLa39Sk34b6NpxwJPBwjF3TJgRpE=
 github.com/grafana/pyroscope-go v1.4.3 h1:XAfYZe5ie8eRTsKAMHQG60ESJjHBV5XUijk8vDvqalw=
 github.com/grafana/pyroscope-go v1.4.3/go.mod h1:enNhwzbML7+hMzJHTvKAIqTGqIaOOF1rgF+2au+NOwg=
 github.com/grafana/pyroscope-go/godeltaprof v0.1.12 h1:X6OemT2WcLtxdmNukEQuIp0c+efWVI/tBTd0oeWeDHI=
