@@ -374,9 +374,63 @@ def test_negative_controls(config: dict[str, object], contents: dict[str, str]) 
     return True
 
 
+def core_direct_requires(gomod: str) -> list[str]:
+    """Return the module paths core/go.mod requires directly, in file order."""
+    names: list[str] = []
+    in_block = False
+    for raw in gomod.splitlines():
+        line = raw.strip()
+        if line.startswith("require ("):
+            in_block = True
+            continue
+        if in_block and line == ")":
+            in_block = False
+            continue
+        if line.startswith("require ") and not line.endswith("("):
+            line = line.removeprefix("require ").strip()
+        elif not in_block:
+            continue
+        if line and not line.startswith("//") and "// indirect" not in line:
+            names.append(line.split()[0])
+    return names
+
+
+def core_indirect_rule_valid(config: dict[str, object], core_gomod: str) -> bool:
+    """Require the rule that bumps core's direct deps where other modules list them indirect."""
+    rules = [
+        rule
+        for rule in config.get("packageRules", [])
+        if rule.get("matchDepTypes") == ["indirect"] and "core/" in rule.get("description", "")
+    ]
+    if len(rules) != 1 or rules[0].get("enabled") is not True:
+        return False
+    if "gomodTidy" not in config.get("postUpdateOptions", []):
+        return False
+    return sorted(rules[0].get("matchPackageNames", [])) == sorted(core_direct_requires(core_gomod))
+
+
+def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
+    """Report drift between the core-indirect rule and core/go.mod, with negative controls."""
+    if not core_indirect_rule_valid(config, core_gomod):
+        print("renovate core-indirect rule differs from core/go.mod direct requirements "
+              "or gomodTidy is missing", file=sys.stderr)
+        return False
+    added_dependency = core_gomod.replace("require (\n", "require (\n\texample.com/new v1.0.0\n", 1)
+    if core_indirect_rule_valid(config, added_dependency):
+        print("negative control accepted a core dependency the rule does not name", file=sys.stderr)
+        return False
+    without_tidy = json.loads(json.dumps(config))
+    without_tidy["postUpdateOptions"] = []
+    if core_indirect_rule_valid(without_tidy, core_gomod):
+        print("negative control accepted the rule without gomodTidy", file=sys.stderr)
+        return False
+    return True
+
+
 def main() -> int:
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
+    core_gomod = (ROOT / "core/go.mod").read_text(encoding="utf-8")
     found = extract(config, contents)
     checks = (
         test_pin_inventory(found),
@@ -385,6 +439,7 @@ def main() -> int:
         test_trainer_manager_coverage(config),
         test_private_job_image_authority(config, contents),
         test_negative_controls(config, contents),
+        test_core_indirect_rule(config, core_gomod),
     )
     if not all(checks):
         return 1

@@ -13,6 +13,9 @@
   "gomod": {
     "enabled": true
   },
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "dockerfile": {
     "managerFilePatterns": [
       "/^tools/Dockerfile(?:\\.media)?\\.template$/",
@@ -521,6 +524,37 @@
       ],
       "rangeStrategy": "bump",
       "automerge": false
+    },
+    {
+      "description": "core/ is its own module; the root and the other modules that use it list core's direct requirements as indirect. Update those lines in the same branch so the consuming modules stay tidy. scripts/ci/renovate-policy-test.py keeps this list equal to core/go.mod's direct requirements.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchPackageNames": [
+        "github.com/alexedwards/argon2id",
+        "github.com/go-faster/errors",
+        "github.com/go-playground/validator/v10",
+        "github.com/go-viper/mapstructure/v2",
+        "github.com/google/uuid",
+        "github.com/jonboulle/clockwork",
+        "github.com/knadh/koanf/parsers/json",
+        "github.com/knadh/koanf/parsers/yaml",
+        "github.com/knadh/koanf/providers/env/v2",
+        "github.com/knadh/koanf/providers/file",
+        "github.com/knadh/koanf/v2",
+        "github.com/lmittmann/tint",
+        "github.com/mattn/go-isatty",
+        "github.com/modelcontextprotocol/go-sdk",
+        "github.com/segmentio/ksuid",
+        "github.com/spf13/cobra",
+        "go.uber.org/fx",
+        "go.yaml.in/yaml/v3",
+        "golang.org/x/mod"
+      ],
+      "enabled": true
     },
     {
       "description": "Permit direct remediation of the vulnerable transitive archive module.",
