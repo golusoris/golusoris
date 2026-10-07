@@ -9,9 +9,41 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// fakeToolEnv makes a copy of this test binary act as a failing CLI tool; a shell script has no Windows executable form.
+const fakeToolEnv = "GOLUSORIS_FSSNAP_FAKE_TOOL"
+
+func TestMain(m *testing.M) {
+	if os.Getenv(fakeToolEnv) == "1" {
+		_, _ = os.Stderr.WriteString("fixture diagnostic\n")
+		os.Exit(7)
+	}
+	os.Exit(m.Run())
+}
+
+// installFakeTool copies this test binary into dir under the executable name PATH lookup resolves for name.
+func installFakeTool(t *testing.T, dir string, name tool) {
+	t.Helper()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable(): %v", err)
+	}
+	binary, err := os.ReadFile(self)
+	if err != nil {
+		t.Fatalf("read test binary: %v", err)
+	}
+	file := string(name)
+	if runtime.GOOS == "windows" {
+		file += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(dir, file), binary, 0o700); err != nil {
+		t.Fatalf("write fake %s: %v", name, err)
+	}
+}
 
 func TestCommandRejectsExecutableOutsideAllowlist(t *testing.T) {
 	t.Parallel()
@@ -162,10 +194,8 @@ func TestBtrfsListArgsFilterBelowPath(t *testing.T) {
 
 func TestOutputIncludesToolStderr(t *testing.T) {
 	dir := t.TempDir()
-	toolPath := filepath.Join(dir, "zfs")
-	if err := os.WriteFile(toolPath, []byte("#!/bin/sh\nprintf '%s\\n' 'fixture diagnostic' >&2\nexit 7\n"), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	installFakeTool(t, dir, toolZFS)
+	t.Setenv(fakeToolEnv, "1")
 	t.Setenv("PATH", dir)
 
 	if _, err := output(context.Background(), toolZFS, "list"); err == nil ||
