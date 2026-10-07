@@ -66,4 +66,72 @@ expect_rejected \
 	'backup.image.repository must be a lowercase OCI repository without a tag or digest' \
 	"${backup_args[@]}" --set-string backup.image.repository=registry.example.test/platform/backup:latest
 
+# expect_render asserts one render contains (+text) or omits (-text) each fragment.
+expect_render() {
+	local label="$1"
+	shift
+	local -a render_args=()
+	while (($# > 0)) && [[ "$1" != -- ]]; do
+		render_args+=("$1")
+		shift
+	done
+	shift
+	local output
+	if ! output="$($helm_bin "${common_args[@]}" "${render_args[@]}" 2>&1)"; then
+		printf '%s failed to render: %s\n' "$label" "$output" >&2
+		exit 1
+	fi
+	local check fragment
+	for check in "$@"; do
+		fragment="${check:1}"
+		case "$check" in
+		+*) [[ "$output" == *"$fragment"* ]] || {
+			printf '%s is missing %q\n' "$label" "$fragment" >&2
+			exit 1
+		} ;;
+		-*) [[ "$output" != *"$fragment"* ]] || {
+			printf '%s unexpectedly contains %q\n' "$label" "$fragment" >&2
+			exit 1
+		} ;;
+		*)
+			printf '%s has a malformed check %q\n' "$label" "$check" >&2
+			exit 1
+			;;
+		esac
+	done
+}
+
+readonly prestop_sleep=$'preStop:\n              sleep:\n                seconds: 5'
+expect_render 'drain default: preStop sleep, no in-app wait' -- \
+	'+terminationGracePeriodSeconds: 30' "+$prestop_sleep" \
+	$'+name: APP_HEALTH_DRAIN_DELAY\n              value: "0s"' \
+	$'+name: APP_HTTP_TIMEOUTS_SHUTDOWN\n              value: "10s"'
+expect_render 'drain without preStop waits in the app' --set drain.preStop=false -- \
+	'-lifecycle:' $'+name: APP_HEALTH_DRAIN_DELAY\n              value: "5s"'
+expect_render 'drain delay zero renders no hook' --set drain.delaySeconds=0 -- \
+	'-lifecycle:' $'+name: APP_HEALTH_DRAIN_DELAY\n              value: "0s"'
+expect_render 'grace one second above the drain budget' --set terminationGracePeriodSeconds=16 -- \
+	'+terminationGracePeriodSeconds: 16'
+expect_render 'drain env prefix follows the app config prefix' --set-string drain.envPrefix=SVC_ -- \
+	'+name: SVC_HEALTH_DRAIN_DELAY' '+name: SVC_HTTP_TIMEOUTS_SHUTDOWN' '-APP_HEALTH_DRAIN_DELAY'
+
+readonly grace_error='terminationGracePeriodSeconds must be an integer greater than drain.delaySeconds + drain.shutdownSeconds (15)'
+expect_rejected 'grace equal to the drain budget' "$grace_error" \
+	"${common_args[@]}" --set terminationGracePeriodSeconds=15
+expect_rejected 'non-integer grace' "$grace_error" \
+	"${common_args[@]}" --set-string terminationGracePeriodSeconds=30s
+expect_rejected 'negative drain delay' 'drain.delaySeconds must be an integer from 0 to 9999' \
+	"${common_args[@]}" --set drain.delaySeconds=-1
+expect_rejected 'fractional drain delay' 'drain.delaySeconds must be an integer from 0 to 9999' \
+	"${common_args[@]}" --set drain.delaySeconds=2.5
+expect_rejected 'zero shutdown budget' 'drain.shutdownSeconds must be an integer from 1 to 9999' \
+	"${common_args[@]}" --set drain.shutdownSeconds=0
+expect_rejected 'string preStop flag' 'drain.preStop must be a boolean' \
+	"${common_args[@]}" --set-string drain.preStop=yes
+expect_rejected 'lowercase env prefix' 'drain.envPrefix must be empty or an uppercase prefix ending in _' \
+	"${common_args[@]}" --set-string drain.envPrefix=app_
+expect_rejected 'env override of the drain delay' \
+	'env.APP_HEALTH_DRAIN_DELAY is set by drain.*; configure drain.delaySeconds or drain.shutdownSeconds instead' \
+	"${common_args[@]}" --set-string env.APP_HEALTH_DRAIN_DELAY=1s
+
 printf 'helm chart positive, negative, and boundary tests passed\n'

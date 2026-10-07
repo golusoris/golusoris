@@ -384,7 +384,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Path | Purpose |
 | --- | --- |
-| `deploy/helm/` | base Helm chart — Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, backup CronJob |
+| `deploy/helm/` | base Helm chart — Deployment (preStop drain + validated termination grace), Service, HPA, PDB, NetworkPolicy, ServiceMonitor, backup CronJob |
 | `deploy/observability/` | PrometheusRule (5 alerts) + Grafana dashboard (request rate, error rate, P99 latency) |
 | `deploy/logging/` | Loki + Grafana Alloy config for structured log collection |
 | `deploy/terraform/` | Terraform modules — AWS RDS PostgreSQL and S3 bucket |
