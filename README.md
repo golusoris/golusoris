@@ -181,7 +181,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `cache/memory/` | typed in-memory L1 cache (TinyLFU eviction) | maypok86/otter/v2 |
 | `cache/redis/` | rueidis fx module, distributed locks, pub/sub | redis/rueidis |
 | `cache/singleflight/` | typed de-dupe for concurrent identical reads | golang.org/x/sync |
-| `cache/twotier/` | typed L1 memory + Redis L2 cache with bounded prefix invalidation | custom on memory + redis |
+| `cache/twotier/` | typed L1 memory + optional Redis L2 cache, bounded prefix invalidation, cross-replica L1 eviction | custom on memory + redis |
 
 ### Observability
 

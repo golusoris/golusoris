@@ -169,9 +169,12 @@ var CacheRedis = fx.Module(
 )
 
 // CacheTwoTier bundles the read-through two-tier cache: L1 in-process (otter)
-// + L2 redis, with single-flight load coalescing. Provides *twotier.TwoTier.
+// + L2 redis (cache.twotier.l2 = none for L1-only), with single-flight load
+// coalescing and optional cross-replica L1 invalidation. Provides
+// *twotier.TwoTier.
 //
-// Requires [CacheMemory] + [CacheRedis] in the same fx graph.
+// Requires [CacheMemory] in the same fx graph, plus [CacheRedis] unless
+// cache.twotier.l2 = none and a pubsub.Bus when invalidation is enabled.
 var CacheTwoTier = fx.Module(
 	"golusoris.cache.twotier",
 	cachetwotier.Module,

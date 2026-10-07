@@ -11,6 +11,8 @@ otter) → **L2** distributed ([cache/redis](../redis), rueidis) → origin load
 with [singleflight](../singleflight) de-duplication.
 
 read short-circuits at first tier that has key and back-fills faster tiers it skipped. write fans out to both tiers. Concurrent reads of same key share one loader call.
+`cache.twotier.l2 = none` drops L2 (standalone, no Redis); same typed API + singleflight.
+Optional cross-replica invalidation evicts peers' L1 on every Set / Delete / prefix invalidation.
 
 ## Usage
 
@@ -40,7 +42,11 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
 
 | Symbol | Purpose |
 | --- | --- |
-| `twotier.Module` | fx module — provides `*twotier.TwoTier` |
+| `twotier.Module` | fx module — provides `*twotier.TwoTier`; starts `Listen` on fx start |
+| `twotier.New(l1, opts, logger, ...Option)` | constructor; `WithRedis(client)` for `l2 = redis`, `WithBroadcaster(b)` for invalidation |
+| `Broadcaster` / `NewBusBroadcaster(bus, topic, logger)` | invalidation channel; bus adapter over `realtime/pubsub` (`pubsub/redis` reuses L2 server) |
+| `(*TwoTier).Listen()` | subscribe to peer notices; returns stop func |
+| `ErrBroadcast` | wraps failed broadcast; local tiers already changed |
 | `twotier.NewTyped[V](tt, prefix)` | Type-safe view with a key prefix |
 | `Typed.Get(ctx, k, loader)` | Read-through L1 → L2 → loader; back-fills tiers |
 | `Typed.Set(ctx, k, v)` | Write-through to both tiers |
@@ -62,6 +68,17 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
  reclaims memory off main thread. adapter refuses empty composed
  prefix to avoid scanning whole keyspace.
 
+## Cross-replica invalidation
+
+- Each mutation sends one `Invalidation{Origin, Kind: key|prefix, Key}` — never per-key fan-out
+  for a prefix. Receiver drops own origin, bumps epoch (fences in-flight loads), evicts L1 only;
+  L2 already holds sender's write. Notices run synchronously in bus subscriber goroutine.
+- Broadcast bounded by `invalidation.timeout`. Failure -> `Set` / `Delete` / `InvalidatePrefix`
+  return error wrapping `ErrBroadcast` (+ cause); local change stays.
+- Delivery at most once: lost, malformed or pre-subscription notice, or dropped Redis
+  subscription, leaves peer L1 stale until `l1_ttl`. Hence invalidation requires `l1_ttl > 0`.
+- `pubsub.CheckedBus` (`TryPublish`) surfaces publish errors; plain `Bus` is fire-and-forget.
+
 ## Values cross tiers as JSON
 
 L1 stores live Go value; L2 stores its JSON encoding (Redis is byte
@@ -80,15 +97,21 @@ no-ops, so call sites never branch on whether caching is configured.
 ```ini
 cache.twotier.l1_ttl = 1m   # positive value overrides L1 entry TTL; 0 inherits memory TTL
 cache.twotier.l2_ttl = 5m   # L2 TTL, 0 = no expiry
+cache.twotier.l2 = redis    # redis (needs rueidis.Client) | none (L1-only)
+cache.twotier.invalidation.enabled = false  # needs pubsub.Bus + l1_ttl > 0
+cache.twotier.invalidation.topic = golusoris.cache.twotier.invalidate
+cache.twotier.invalidation.timeout = 2s
 ```
 
-Negative TTLs fail module construction. Failed explicit Set/Delete leaves L1
+Negative TTLs, unknown `l2`, missing Redis client or bus fail module construction. Failed explicit Set/Delete leaves L1
 unchanged. Successful mutation fences older in-flight loader cache writes.
 
 ## Don't
 
-- Don't use real Redis in tests — L2 backend sits behind unexported `l2`
+- Don't use real Redis in unit tests — L2 backend sits behind unexported `l2`
  interface; stub it (see `twotier_test.go`) and use `memory.NewForTest` for L1.
+ Cross-replica Redis behaviour lives in `integration_test.go`.
+- Don't rely on invalidation for correctness beyond `l1_ttl` — notices can be lost.
 - Don't treat L2 outage as fatal — `Get` logs and falls through to  loader; only `Set`/`Delete` surface L2 errors (caller chose to write).
 - Don't store values that don't JSON-round-trip — L2 holds JSON, not  live object.
 - Don't cache by floating-point keys — keys are plain strings; format floats

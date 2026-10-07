@@ -41,6 +41,10 @@ type Bus interface {
 Wire interface into fx so backends are swappable without changing
 subscribers.
 
+`CheckedBus` adds `TryPublish(ctx, msg) error` for callers that must surface
+publish failures (cache/twotier invalidation). `LocalBus` and redis `Bus`
+implement it; type-assert, fall back to fire-and-forget `Publish`.
+
 ## Don't
 
 - Don't block in Handler — it blocks Publish caller.

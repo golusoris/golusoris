@@ -41,6 +41,17 @@ type Bus interface {
 	Subscribe(topic string, h Handler) (cancel func())
 }
 
+// CheckedBus is a [Bus] whose backend can report a failed publish. Callers
+// that must surface delivery failures type-assert a Bus to it.
+type CheckedBus interface {
+	Bus
+	// TryPublish sends msg like Publish but returns the backend error
+	// instead of logging it.
+	TryPublish(ctx context.Context, msg Message) error
+}
+
+var _ CheckedBus = (*LocalBus)(nil)
+
 // LocalBus is an in-process, goroutine-safe pub/sub bus. Suitable for
 // single-replica apps or as a dev fallback.
 type LocalBus struct {
@@ -92,4 +103,11 @@ func (b *LocalBus) Publish(_ context.Context, msg Message) {
 	for _, handler := range handlers {
 		handler(msg)
 	}
+}
+
+// TryPublish calls the handlers like [LocalBus.Publish]; in-process delivery
+// cannot fail, so it always returns nil.
+func (b *LocalBus) TryPublish(ctx context.Context, msg Message) error {
+	b.Publish(ctx, msg)
+	return nil
 }
