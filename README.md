@@ -209,6 +209,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `k8s/keda/` | KEDA external scaler gRPC over jobs queue depth (scale to zero) | google.golang.org/grpc, KEDA externalscaler.proto |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
 | `k8s/operator/` | controller-runtime manager fx module + application-supplied CRD schemes | sigs.k8s.io/controller-runtime |
+| `k8s/cnpg/` | CloudNativePG backup health check — last backup age, failed backup, WAL archiving (dynamic client, no CNPG import) | k8s.io/client-go |
 | `k8s/dra/` | DRA ResourceSlice publisher — node devices with attributes + capacity, update-on-change, cleanup on stop | k8s.io/dynamic-resource-allocation |
 | `k8s/nfd/` | Node Feature Discovery local feature files — atomic write, label validation, expiring refresh | k8s.io/apimachinery |
 | `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |

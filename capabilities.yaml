@@ -604,6 +604,10 @@ packages:
     capabilities: [k8s.client]
     description: "Package client builds a *rest.Config + Kubernetes clientset with graceful fallback across deployment modes:"
     replaces: [k8s.io/api, k8s.io/apimachinery, k8s.io/client-go]
+  - import: github.com/golusoris/golusoris/k8s/cnpg
+    domain: k8s
+    capabilities: [k8s.cnpg]
+    description: "Package cnpg reads CloudNativePG (CNPG) Cluster status through the dynamic client, without importing the CNPG module, and turns backup health into a statu"
   - import: github.com/golusoris/golusoris/k8s/dra
     domain: k8s
     capabilities: [k8s.dra]
