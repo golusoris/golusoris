@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"hash/crc32"
 	"io"
+	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -151,9 +152,7 @@ func putPresigned(ctx context.Context, t *testing.T, req storage.PresignedReques
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, values := range req.Header {
-		httpReq.Header[name] = values
-	}
+	maps.Copy(httpReq.Header, req.Header)
 	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(httpReq)
 	if err != nil {
 		t.Fatal(err)

@@ -43,6 +43,7 @@ func testPresignPut(t *testing.T, b storage.Bucket, p storage.PutPresigner, caps
 	t.Run("UploadReadableThroughGet", func(t *testing.T) { testPresignUpload(t, b, p) })
 	t.Run("TTLBounds", func(t *testing.T) { testPresignTTLBounds(t, p) })
 	t.Run("InvalidOptions", func(t *testing.T) { testPresignInvalidOptions(t, p) })
+	t.Run("LengthBoundOrRefused", func(t *testing.T) { testPresignLength(t, p) })
 	if caps.PresignEnforced {
 		t.Run("OtherKeyRejected", func(t *testing.T) { testPresignOtherKey(t, b, p) })
 		t.Run("ExpiredRejected", func(t *testing.T) { testPresignExpired(t, b, p) })
@@ -58,7 +59,7 @@ func testPresignUpload(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 	body := []byte("uploaded by an untrusted client")
 	meta := map[string]string{"job": "42"}
 	req, err := p.PresignPut(ctx, "presign/upload.bin", time.Minute, storage.PresignPutOptions{
-		ContentType: "video/mp4", ContentLength: int64(len(body)), Metadata: meta,
+		ContentType: "video/mp4", Metadata: meta,
 	})
 	if err != nil {
 		t.Fatalf("PresignPut: %v", err)
@@ -110,6 +111,17 @@ func testPresignInvalidOptions(t *testing.T, p storage.PutPresigner) {
 	}
 }
 
+// testPresignLength: a backend either binds an exact length or refuses it
+// loudly; silently dropping the constraint is a contract violation.
+func testPresignLength(t *testing.T, p storage.PutPresigner) {
+	t.Helper()
+	ctx := testContext(t)
+	_, err := p.PresignPut(ctx, "presign/length", time.Minute, storage.PresignPutOptions{ContentLength: 5})
+	if err != nil && !errors.Is(err, storage.ErrUnsupportedConstraint) {
+		t.Fatalf("PresignPut ContentLength = %v, want nil or ErrUnsupportedConstraint", err)
+	}
+}
+
 func testPresignOtherKey(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 	t.Helper()
 	ctx := testContext(t)
@@ -138,7 +150,11 @@ func testPresignExpired(t *testing.T, b storage.Bucket, p storage.PutPresigner) 
 	if err != nil {
 		t.Fatalf("PresignPut: %v", err)
 	}
-	time.Sleep(time.Until(req.Expires) + expiryGrace)
+	wait := time.Until(req.Expires)
+	if wait > storage.MinPresignTTL+expiryGrace {
+		t.Fatalf("Expires %s is %s away, want at most %s", req.Expires, wait, storage.MinPresignTTL+expiryGrace)
+	}
+	time.Sleep(wait + expiryGrace)
 	if status := sendPresigned(ctx, t, req.URL, req.Header, []byte("late")); status/100 == 2 {
 		t.Fatalf("expired presigned PUT status = %d, want rejection", status)
 	}

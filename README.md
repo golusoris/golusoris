@@ -259,7 +259,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `storage/` | `Bucket` interface + local FS and S3 backends; presigned GET/PUT, multipart upload, server-side copy, STS role/web-identity credentials | aws/aws-sdk-go-v2 |
+| `storage/` | `Bucket` interface + local FS and S3 backends; presigned GET/PUT, multipart upload, server-side copy, STS role/web-identity credentials (GCS + Azure Blob: own modules below) | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | Animation-safe raster metadata strip + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
@@ -344,6 +344,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `storage/gcs/` | Google Cloud Storage `storage.Bucket` — resumable upload, signed GET/PUT (key or IAM signBlob), server-side copy | cloud.google.com/go/storage |
+| `storage/azblob/` | Azure Blob Storage `storage.Bucket` — staged block upload, SAS (shared key or user delegation), server-side copy; workload / managed identity | Azure/azure-sdk-for-go azblob + azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bounded FASTA parser, rev-complement, GC content | stdlib |
@@ -414,9 +415,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 25 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 26 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 25 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 26 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
@@ -462,7 +463,7 @@ Breaking changes between minor versions are called out in the commit
 [docs/migrations/v0.13.0.md](docs/migrations/v0.13.0.md) for current API and
 secure-default changes. The [v0.9.0 guide](docs/migrations/v0.9.0.md) retains
 the earlier `core/…` import-path mapping. Every module in the catalog above is
-committed; CI gates all 25 discovered Go modules through the primary lane and
+committed; CI gates all 26 discovered Go modules through the primary lane and
 four deterministic module-sweep shards.
 
 ---

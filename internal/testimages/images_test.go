@@ -55,7 +55,7 @@ func TestWithPinnedReaper(t *testing.T) {
 
 func TestRepositoryPinsAreValid(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{Postgres, Timescale, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Ryuk, ClamAV} {
+	for _, image := range []string{Postgres, Timescale, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Azurite, Ryuk, ClamAV} {
 		if err := Validate(image); err != nil {
 			t.Errorf("Validate(%q) error = %v", image, err)
 		}

@@ -69,6 +69,7 @@ EXPECTED = {
     ("internal/testimages/images.go", "testcontainers/ryuk", "docker"),
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
     ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
+    ("internal/testimages/images.go", "mcr.microsoft.com/azure-storage/azurite", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -142,6 +143,7 @@ EXPECTED_DIGESTS = {
     "testcontainers/ryuk",
     "clamav/clamav",
     "fsouza/fake-gcs-server",
+    "mcr.microsoft.com/azure-storage/azurite",
     "mcr.microsoft.com/devcontainers/go",
 }
 
@@ -199,7 +201,9 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
 # Go-authority images the primary CI test job never runs, so its cache omits
 # them: ClamAV sits behind the `integration` build tag, and split-module
 # emulators run in the Module sweep job, which pulls on demand.
-CACHE_EXEMPT_IMAGES = frozenset({"clamav/clamav", "fsouza/fake-gcs-server"})
+CACHE_EXEMPT_IMAGES = frozenset(
+    {"clamav/clamav", "fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
+)
 
 
 def test_image_authorities_match(found: list[dict[str, str]]) -> bool:

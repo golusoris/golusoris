@@ -15,6 +15,7 @@ conformance suite. Docker required; `-short` or unhealthy Docker -> skip.
 | --- | --- | --- |
 | `StartS3(t)` | `VersityGW` (posix gateway, enforces SigV4 + presign expiry) | `S3Server{Endpoint, Region, AccessKey, SecretKey, Bucket}`; bucket pre-created; path-style only |
 | `StartGCS(t)` | `FakeGCSServer` (no signature/expiry checks) | `GCSServer{Endpoint, Bucket}`; `Endpoint` = JSON API base for `option.WithEndpoint`; public host + external URL set to mapped port (XML reads, signed URLs, resumable sessions) |
+| `StartAzurite(t)` | `Azurite` (verifies shared-key + SAS signature, expiry, permissions; not headers) | `AzureServer{ServiceURL, AccountName, AccountKey}`; random per-test account key; caller creates container |
 
 Fresh container per call; `t.Cleanup` terminates. Boots queue through
 `testutil/internal/startgate`. MinIO images no longer published -> VersityGW.

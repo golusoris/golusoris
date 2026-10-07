@@ -27,8 +27,8 @@ import (
 // Config keys live under the "storage" prefix.
 type Options struct {
 	// Backend selects the storage backend: "local" (default) or "s3"
-	// (S3/MinIO-compatible). GCS lives in the storage/gcs module, whose
-	// Module replaces this one.
+	// (S3/MinIO-compatible). GCS and Azure Blob live in the storage/gcs and
+	// storage/azblob modules, whose Modules replace this one.
 	Backend string `koanf:"backend"`
 	// Local configures the local-filesystem backend.
 	Local LocalOptions `koanf:"local"`

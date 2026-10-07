@@ -100,6 +100,15 @@ type Bucket interface {
 	URL(ctx context.Context, key string) (string, error)
 }
 
+// ExistsFromStat maps a Stat result to Exists semantics: [ErrNotFound]
+// becomes (false, nil), so backends without a cheaper probe share one rule.
+func ExistsFromStat(_ Object, err error) (bool, error) {
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // --- LocalBucket ---
 
 // LocalBucket stores objects as files under a base directory. Suitable for

@@ -27,6 +27,9 @@ var (
 	ErrPresignTTL = errors.New("storage: presign ttl out of range")
 	// ErrUnsupportedChecksum is returned when a backend cannot bind the requested checksum.
 	ErrUnsupportedChecksum = errors.New("storage: unsupported checksum")
+	// ErrUnsupportedConstraint is returned when a backend's signing scheme
+	// cannot enforce a requested presign constraint, such as upload length.
+	ErrUnsupportedConstraint = errors.New("storage: unsupported presign constraint")
 	// ErrCopySameKey is returned when a copy names one key as both source and destination.
 	ErrCopySameKey = errors.New("storage: copy source and destination are the same key")
 )
@@ -53,8 +56,9 @@ type Checksum struct {
 func (c Checksum) Base64() string { return base64.StdEncoding.EncodeToString(c.Value) }
 
 // PresignPutOptions constrains a presigned upload. Zero fields leave that
-// aspect unconstrained. Backends bind what their signing scheme can enforce;
-// see each backend's PresignPut documentation.
+// aspect unconstrained. Backends bind what their signing scheme can enforce
+// and return [ErrUnsupportedConstraint] or [ErrUnsupportedChecksum] for the
+// rest instead of dropping it; see each backend's PresignPut documentation.
 type PresignPutOptions struct {
 	// ContentType the uploader must send; empty accepts any content type.
 	ContentType string

@@ -242,11 +242,7 @@ func (b *Bucket) Delete(ctx context.Context, key string) error {
 
 // Exists implements [storage.Bucket].
 func (b *Bucket) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := b.Stat(ctx, key)
-	if errors.Is(err, storage.ErrNotFound) {
-		return false, nil
-	}
-	return err == nil, err
+	return storage.ExistsFromStat(b.Stat(ctx, key)) //nolint:wrapcheck // Stat already wrapped the error; the helper only maps ErrNotFound.
 }
 
 // Stat implements [storage.Bucket].
