@@ -141,9 +141,11 @@ func defaultIdentity() string {
 	return "unknown"
 }
 
-func loadOptions(cfg *config.Config) (Options, error) {
+func loadOptions(cfg *config.Config) (Options, error) { return loadOptionsAt(cfg, "leader") }
+
+func loadOptionsAt(cfg *config.Config, path string) (Options, error) {
 	opts := DefaultOptions()
-	if err := cfg.Unmarshal("leader", &opts); err != nil {
+	if err := cfg.Unmarshal(path, &opts); err != nil {
 		return Options{}, fmt.Errorf("leader/k8s: load options: %w", err)
 	}
 	return opts, nil
@@ -156,17 +158,47 @@ func Module(cb leader.Callbacks) fx.Option {
 		"golusoris.leader.k8s",
 		fx.Provide(loadOptions),
 		fx.Invoke(func(lc fx.Lifecycle, opts Options, restCfg *rest.Config, logger *slog.Logger) error {
-			if !opts.Enabled {
-				return nil
-			}
-			k, err := kubernetes.NewForConfig(restCfg)
-			if err != nil {
-				return fmt.Errorf("leader/k8s: kubernetes client: %w", err)
-			}
-			hook.RunUntilStop(lc, logger, "leader/k8s", func(ctx context.Context) error {
-				return Run(ctx, k, opts, cb)
-			})
-			return nil
+			return wire(lc, opts, restCfg, logger, "leader/k8s", cb)
 		}),
 	)
+}
+
+// NamedModule wires one more Lease election, keyed by key, alongside
+// [Module] or other NamedModules. Options load from leader.elections.<key>
+// (same keys as leader.*; each election needs its own Lease name) and a
+// *leader.Status tagged `name:"<key>"` reports its state. key must match
+// [a-z][a-z0-9]{0,62}.
+func NamedModule(key string, cb leader.Callbacks) fx.Option {
+	status, tag, err := hook.NamedStatus(key)
+	if err != nil {
+		return fx.Error(fmt.Errorf("leader/k8s: %w", err))
+	}
+	return fx.Module(
+		"golusoris.leader.k8s."+key,
+		status,
+		fx.Invoke(fx.Annotate(
+			func(lc fx.Lifecycle, cfg *config.Config, restCfg *rest.Config, logger *slog.Logger, st *leader.Status) error {
+				opts, loadErr := loadOptionsAt(cfg, hook.ConfigPath(key))
+				if loadErr != nil {
+					return loadErr
+				}
+				return wire(lc, opts, restCfg, logger, "leader/k8s["+key+"]", st.Observe(cb))
+			},
+			fx.ParamTags("", "", "", "", tag),
+		)),
+	)
+}
+
+func wire(lc fx.Lifecycle, opts Options, restCfg *rest.Config, logger *slog.Logger, name string, cb leader.Callbacks) error {
+	if !opts.Enabled {
+		return nil
+	}
+	k, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return fmt.Errorf("leader/k8s: kubernetes client: %w", err)
+	}
+	hook.RunUntilStop(lc, logger, name, func(ctx context.Context) error {
+		return Run(ctx, k, opts, cb)
+	})
+	return nil
 }

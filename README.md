@@ -214,7 +214,8 @@ checksum and patched-source hash, then fail closed on drift.
 | `k8s/nfd/` | Node Feature Discovery local feature files — atomic write, label validation, expiring refresh | k8s.io/apimachinery |
 | `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
-| `leader/` | pluggable leader-election interface + Callbacks | — |
+| `leader/` | pluggable leader-election interface + Callbacks + `Status.IsLeader()`; `NamedModule` per singleton task | — |
+| `leader/always/` | always-leader backend for standalone single-replica runs | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
 | `leader/pg/` | PostgreSQL advisory-lock backend | jackc/pgx/v5 |
 | `systemd/` | `sd_notify` + watchdog (no-op when `NOTIFY_SOCKET` unset) | stdlib |

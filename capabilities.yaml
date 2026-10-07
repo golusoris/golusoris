@@ -651,6 +651,10 @@ packages:
     domain: leader
     capabilities: [leader.election]
     description: "Package leader defines the pluggable interface for single-leader election across a replica set."
+  - import: github.com/golusoris/golusoris/leader/always
+    domain: leader
+    capabilities: [leader.always]
+    description: "Package always is the leader backend for standalone single-replica runs: the replica is leader from start to stop without any lock, so singleton tasks writte"
   - import: github.com/golusoris/golusoris/leader/k8s
     domain: leader
     capabilities: [leader.k8s]

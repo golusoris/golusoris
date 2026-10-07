@@ -6,14 +6,19 @@ package pg_test
 
 import (
 	"context"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/leader"
 	leaderpg "github.com/golusoris/golusoris/leader/pg"
 	"github.com/golusoris/golusoris/testutil/pg"
@@ -91,5 +96,42 @@ func TestTwoReplicasOneLeader(t *testing.T) {
 
 	if got := leaders.Load(); got != 1 {
 		t.Errorf("leaders = %d, want exactly 1", got)
+	}
+}
+
+func TestNamedModule_coexistsWithModule(t *testing.T) {
+	t.Parallel()
+	var got struct {
+		fx.In
+		Sched *leader.Status `name:"sched"`
+	}
+	path := filepath.Join(t.TempDir(), "cfg.yaml")
+	if err := os.WriteFile(path, []byte("leader:\n  elections:\n    sched:\n      name: sched\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.New(config.Options{Files: []string{path}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := fx.New(fx.NopLogger,
+		fx.Supply(cfg, slog.New(slog.DiscardHandler)),
+		fx.Provide(func() *pgxpool.Pool { return nil }, func() clock.Clock { return clock.NewFake() }),
+		leaderpg.Module(leader.Callbacks{}),
+		leaderpg.NamedModule("sched", leader.Callbacks{}),
+		fx.Populate(&got),
+	)
+	if err := app.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if got.Sched == nil || got.Sched.IsLeader() {
+		t.Fatalf("named status = %v, want non-nil and not leading", got.Sched)
+	}
+}
+
+func TestNamedModule_invalidKeyFails(t *testing.T) {
+	t.Parallel()
+	app := fx.New(fx.NopLogger, leaderpg.NamedModule("gc_sweep", leader.Callbacks{}))
+	if err := app.Err(); err == nil || !strings.Contains(err.Error(), "leader/pg: invalid election key") {
+		t.Fatalf("err = %v, want invalid election key", err)
 	}
 }
