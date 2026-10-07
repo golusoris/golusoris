@@ -24,6 +24,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"log/slog"
 	"net/http"
@@ -316,14 +317,14 @@ func fingerprintRequest(r *http.Request, limit int64) (string, error) {
 }
 
 func fingerprintPayload(contentType string, body []byte) (string, error) {
-	hash := sha256.New()
-	if err := writeHashPart(hash, []byte(contentType)); err != nil {
+	digest := sha256.New()
+	if err := writeHashPart(digest, []byte(contentType)); err != nil {
 		return "", fmt.Errorf("idempotency: hash content type: %w", err)
 	}
-	if err := writeHashPart(hash, body); err != nil {
+	if err := writeHashPart(digest, body); err != nil {
 		return "", fmt.Errorf("idempotency: hash request body: %w", err)
 	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
+	return hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 func scopedKey(r *http.Request, rawKey string, scope *ScopeFunc) (string, error) {
@@ -350,7 +351,7 @@ func scopedKey(r *http.Request, rawKey string, scope *ScopeFunc) (string, error)
 	if query := r.URL.Query().Encode(); query != "" {
 		target += "?" + query
 	}
-	hash := sha256.New()
+	digest := sha256.New()
 	for _, part := range []string{
 		strings.ToUpper(r.Method),
 		strings.ToLower(r.Host),
@@ -359,14 +360,15 @@ func scopedKey(r *http.Request, rawKey string, scope *ScopeFunc) (string, error)
 		extraScope,
 		rawKey,
 	} {
-		if err := writeHashPart(hash, []byte(part)); err != nil {
+		if err := writeHashPart(digest, []byte(part)); err != nil {
 			return "", fmt.Errorf("idempotency: hash scoped key: %w", err)
 		}
 	}
-	return "v1:" + hex.EncodeToString(hash.Sum(nil)), nil
+	return "v1:" + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
-func writeHashPart(dst io.Writer, value []byte) error {
+// Request-derived parts only ever feed a digest, never a response or log writer.
+func writeHashPart(dst hash.Hash, value []byte) error {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
 	if err := writeHashBytes(dst, size[:]); err != nil {
@@ -375,7 +377,7 @@ func writeHashPart(dst io.Writer, value []byte) error {
 	return writeHashBytes(dst, value)
 }
 
-func writeHashBytes(dst io.Writer, value []byte) error {
+func writeHashBytes(dst hash.Hash, value []byte) error {
 	written, err := dst.Write(value)
 	if err != nil {
 		return fmt.Errorf("write digest input: %w", err)

@@ -6,6 +6,9 @@ package idempotency
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 	"net/http"
@@ -152,6 +155,75 @@ func TestScopedKey_CanonicalizesHostAndQueryOrder(t *testing.T) {
 	if firstKey != secondKey {
 		t.Fatalf("canonical keys differ: %q != %q", firstKey, secondKey)
 	}
+}
+
+// Stored keys and fingerprints outlive a deploy, so the digest encoding is pinned.
+func TestScopedKey_DerivationIsStable(t *testing.T) {
+	t.Parallel()
+	request := httptest.NewRequest(http.MethodPost, "https://API.example/pay?b=2&a=1", nil)
+	got, err := scopedKey(request, "request-key", NewScopeFunc(func(*http.Request) (string, error) {
+		return "principal", nil
+	}))
+	if err != nil {
+		t.Fatalf("scopedKey: %v", err)
+	}
+	want := "v1:" + lengthPrefixedSHA256("POST", "api.example", "/pay?a=1&b=2", "", "principal", "request-key")
+	if got != want {
+		t.Fatalf("scopedKey = %q; want %q", got, want)
+	}
+}
+
+func TestScopedKey_LengthPrefixSeparatesAdjacentParts(t *testing.T) {
+	t.Parallel()
+	request := httptest.NewRequest(http.MethodPost, "https://api.example/pay", nil)
+	scopeA := NewScopeFunc(func(*http.Request) (string, error) { return "a", nil })
+	scopeAB := NewScopeFunc(func(*http.Request) (string, error) { return "ab", nil })
+	first, err := scopedKey(request, "bc", scopeA)
+	if err != nil {
+		t.Fatalf("scopedKey first: %v", err)
+	}
+	second, err := scopedKey(request, "c", scopeAB)
+	if err != nil {
+		t.Fatalf("scopedKey second: %v", err)
+	}
+	if first == second {
+		t.Fatalf("scope %q + key %q collided with scope %q + key %q", "a", "bc", "ab", "c")
+	}
+}
+
+func TestFingerprintPayload_DerivationIsStable(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		contentType string
+		body        []byte
+	}{
+		{name: "content type and body", contentType: "application/json", body: []byte(`{"amount":1}`)},
+		{name: "empty parts", contentType: "", body: nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := fingerprintPayload(tc.contentType, tc.body)
+			if err != nil {
+				t.Fatalf("fingerprintPayload: %v", err)
+			}
+			if want := lengthPrefixedSHA256(tc.contentType, string(tc.body)); got != want {
+				t.Fatalf("fingerprintPayload = %q; want %q", got, want)
+			}
+		})
+	}
+}
+
+// lengthPrefixedSHA256 is an independent oracle for the v1 digest encoding.
+func lengthPrefixedSHA256(parts ...string) string {
+	var encoded []byte
+	for _, part := range parts {
+		encoded = binary.BigEndian.AppendUint64(encoded, uint64(len(part)))
+		encoded = append(encoded, part...)
+	}
+	sum := sha256.Sum256(encoded)
+	return hex.EncodeToString(sum[:])
 }
 
 func TestOptionsDefaultsReplaceUnsafeNonPositiveBounds(t *testing.T) {
