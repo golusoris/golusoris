@@ -317,7 +317,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `pubsub/cloudevents/` | CloudEvents 1.0 envelope — validation, JSON event format, binary-mode header codecs | custom (stdlib) |
 | `pubsub/gcp/` | Google Cloud Pub/Sub publisher + subscriber | cloud.google.com/go/pubsub/v2 |
 | `pubsub/kafka/` | Kafka producer + consumer | twmb/franz-go |
-| `pubsub/nats/` | NATS JetStream | nats-io/nats.go |
+| `pubsub/nats/` | NATS JetStream — creds/NKey/TLS auth, CloudEvents publish with `Nats-Msg-Id` dedupe | nats-io/nats.go |
 | `net/wol/` | Wake-on-LAN magic-packet sender (stdlib only) | custom |
 | `net/dnsserver/` | Authoritative + recursive DNS server — UDP + TCP, `*dns.ServeMux` | miekg/dns |
 | `net/smtpserver/` | Inbound SMTP server, `HandlerBackend` callback API | emersion/go-smtp |

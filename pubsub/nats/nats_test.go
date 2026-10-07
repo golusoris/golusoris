@@ -13,10 +13,13 @@ import (
 	"time"
 
 	natsgo "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/pubsub/cloudevents"
 	"github.com/golusoris/golusoris/pubsub/nats"
 	natstestutil "github.com/golusoris/golusoris/testutil/nats"
 )
@@ -107,4 +110,54 @@ func TestIntegration_JetStreamAvailable(t *testing.T) {
 	if c.JetStream() == nil {
 		t.Fatal("expected non-nil JetStream context")
 	}
+}
+
+// TestIntegration_PublishCloudEventDedupes publishes one event twice per
+// content mode; JetStream stores it once and the stored message decodes back.
+func TestIntegration_PublishCloudEventDedupes(t *testing.T) {
+	t.Parallel()
+
+	url := natstestutil.Start(t)
+	c := bootClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stream, err := c.JetStream().CreateStream(ctx, jetstream.StreamConfig{
+		Name: "EVENTS", Subjects: []string{"events.>"}, Duplicates: time.Minute,
+	})
+	require.NoError(t, err)
+
+	for i, mode := range []cloudevents.Mode{cloudevents.ModeBinary, cloudevents.ModeStructured} {
+		ev := sampleEvent("evt-" + mode.String())
+		first, pubErr := c.PublishCloudEvent(ctx, "events.jobs."+mode.String(), ev, mode)
+		require.NoError(t, pubErr)
+		require.False(t, first.Duplicate)
+		again, pubErr := c.PublishCloudEvent(ctx, "events.jobs."+mode.String(), ev, mode)
+		require.NoError(t, pubErr)
+		require.True(t, again.Duplicate, "same event id must be dropped by Nats-Msg-Id")
+		require.Equal(t, first.Sequence, again.Sequence)
+
+		info, infoErr := stream.Info(ctx)
+		require.NoError(t, infoErr)
+		require.Equal(t, uint64(i+1), info.State.Msgs)
+
+		stored, getErr := stream.GetMsg(ctx, first.Sequence)
+		require.NoError(t, getErr)
+		require.Equal(t, ev.ID, stored.Header.Get(jetstream.MsgIDHeader))
+		back, decErr := nats.DecodeCloudEvent(stored.Header, stored.Data)
+		require.NoError(t, decErr)
+		requireSameEvent(t, ev, back)
+	}
+}
+
+// TestIntegration_PublishCloudEventWithoutStreamFails proves the publish waits
+// for a PubAck instead of reporting a fire-and-forget success.
+func TestIntegration_PublishCloudEventWithoutStreamFails(t *testing.T) {
+	t.Parallel()
+
+	url := natstestutil.Start(t)
+	c := bootClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	_, err := c.PublishCloudEvent(ctx, "unbound.subject", sampleEvent("evt-1"), cloudevents.ModeBinary)
+	require.ErrorIs(t, err, jetstream.ErrNoStreamResponse)
 }

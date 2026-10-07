@@ -197,8 +197,11 @@ func setIfNotEmpty(attrs map[string]string, name, value string) {
 
 // FromAttributes builds an event from canonical attribute strings, as read
 // from binary-mode protocol headers, plus its data, and validates it.
-// Attributes other than the core ones become extensions.
+// Attributes other than the core ones become extensions; empty data becomes nil.
 func FromAttributes(attrs map[string]string, data []byte) (Event, error) {
+	if len(data) == 0 {
+		data = nil
+	}
 	version, ok := attrs[AttrSpecVersion]
 	if !ok {
 		return Event{}, missing(AttrSpecVersion)

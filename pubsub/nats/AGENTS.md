@@ -20,6 +20,36 @@ Config keys (prefix `nats`):
 | --- | --- | --- |
 | `url` | `nats://localhost:4222` | Server URL |
 | `name` | `""` | Client name shown in NATS monitoring |
+| `creds` | `""` | JWT + NKey `.creds` file; re-read each connect |
+| `nkey` | `""` | NKey user seed file; excludes `creds` |
+| `tls.ca` / `tls.cert` / `tls.key` | `""` | PEM files; any set file enables TLS 1.2+ |
+| `acktimeout` | `5s` | JetStream PubAck wait in `PublishCloudEvent` |
+
+Leaf keys stay one word: env mapping splits every underscore
+(`APP_NATS_TLS_CA` -> `nats.tls.ca`).
+
+Reloading TLS: supply `*tls.Config` via
+`nats.ProvideTLSConfig(func(...) *tls.Config {...})` (fx name
+`golusoris.nats.tls`). Config is cloned. Combining it with `tls.*` files fails
+with `ErrConflictingTLS`; `creds` plus `nkey` fails with `ErrConflictingAuth`.
+
+## CloudEvents
+
+```go
+ack, err := client.PublishCloudEvent(ctx, "events.jobs", ev, cloudevents.ModeBinary)
+msg, err := nats.NewCloudEventMsg(subject, ev, cloudevents.ModeStructured)
+ev, err := nats.DecodeCloudEvent(msg.Headers(), msg.Data()) // jetstream.Msg or *nats.Msg
+```
+
+- `PublishCloudEvent`: JetStream publish, `Nats-Msg-Id` = `ev.ID`, waits for
+ PubAck within `acktimeout` or ctx deadline. Same id twice inside stream
+ `Duplicates` window -> stored once, `ack.Duplicate` true. Subject needs
+ bound stream; otherwise `jetstream.ErrNoStreamResponse`.
+- Binary mode: `ce-<attr>` headers, percent-encoded (binding 1.0.3-wip).
+ Structured mode: `Content-Type: application/cloudevents+json`.
+- Decode: header names case-insensitive. No `Content-Type` and no `ce-`
+ header -> payload read as structured JSON (binding 1.0.2 producers).
+ Missing `type`/`source` -> `*cloudevents.AttributeError` naming it.
 
 ## Core NATS (fire-and-forget)
 
@@ -72,6 +102,8 @@ for {
 | `TestIntegration_ConnectAndPing` | fx lifecycle connects; `Conn().IsConnected()` is true |
 | `TestIntegration_PublishSubscribe` | core pub/sub delivers one message end-to-end |
 | `TestIntegration_JetStreamAvailable` | `JetStream()` returns non-nil context |
+| `TestIntegration_PublishCloudEventDedupes` | same event id twice -> one stored message per mode; decodes back |
+| `TestIntegration_PublishCloudEventWithoutStreamFails` | no bound stream -> PubAck error, not silent success |
 
 Use `testutil/nats.Start(t)` in downstream tests to spin fresh container.
 
