@@ -19,6 +19,11 @@
 //	jobs.job.max_attempts     # default max attempts (default 25 = ~3 days retries)
 //	jobs.fetch_cooldown       # pg LISTEN cooldown (default 100ms)
 //	jobs.rescue_stuck_after   # rescue jobs stuck running for this long (default 1h)
+//	jobs.stop.soft            # graceful drain before job contexts are cancelled (default 10s)
+//	jobs.stop.hard            # wait for cancelled jobs after the soft phase (default 5s)
+//	jobs.retry.base           # exponential backoff base; 0 keeps River's attempt^4 policy
+//	jobs.retry.max            # backoff cap (default 1h when base is set)
+//	jobs.retry.jitter         # +/- fraction applied to each delay (0..1)
 //
 // See [river]'s docs for full Config reference.
 package jobs
@@ -34,10 +39,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivertype"
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/validate"
 )
@@ -59,10 +66,17 @@ type Options struct {
 	// jobs stay in the table before river prunes them (0 = river default).
 	CompletedJobRetention time.Duration `koanf:"completed_job_retention"`
 	DiscardedJobRetention time.Duration `koanf:"discarded_job_retention"`
+	// Stop bounds the two-phase drain on fx Stop (see [Drain]).
+	Stop StopOptions `koanf:"stop"`
+	// Retry replaces River's default backoff when Retry.Base > 0.
+	Retry RetryOptions `koanf:"retry"`
 	// Observer, if set, receives job lifecycle signals for metrics (insert
 	// counters + completion/duration). Code-supplied (e.g. fx.Decorate), not
 	// from config.
 	Observer Observer `koanf:"-"`
+	// Clock supplies "now" for retry scheduling (nil = wall clock). The fx
+	// [Module] injects clock.Clock from the graph when present.
+	Clock clock.Clock `koanf:"-"`
 }
 
 // QueueOptions groups queue-wide settings.
@@ -102,6 +116,7 @@ func DefaultOptions() Options {
 		Job:              JobOptions{Timeout: 30 * time.Second, MaxAttempts: 25},
 		FetchCooldown:    100 * time.Millisecond,
 		RescueStuckAfter: time.Hour,
+		Stop:             StopOptions{Soft: defaultSoftStop, Hard: defaultHardStop},
 	}
 }
 
@@ -154,7 +169,27 @@ func (o Options) withDefaults() Options {
 	if validate.IsNil(o.Observer) {
 		o.Observer = nil
 	}
+	if validate.IsNil(o.Clock) {
+		o.Clock = nil
+	}
+	o.Stop = o.Stop.withDefaults()
+	o.Retry = o.Retry.withDefaults()
 	return o
+}
+
+func (o Options) validate() error {
+	if err := o.Stop.validate(); err != nil {
+		return err
+	}
+	if err := o.Retry.validate(); err != nil {
+		return err
+	}
+	for name, qc := range o.Queue.Queues {
+		if qc.Max < 0 {
+			return fmt.Errorf("jobs: queue %q: max workers must not be negative", name)
+		}
+	}
+	return nil
 }
 
 func hasObserver(observer Observer) bool { return !validate.IsNil(observer) }
@@ -163,8 +198,37 @@ func hasObserver(observer Observer) bool { return !validate.IsNil(observer) }
 // registered) the client is insert-only — useful for producer-only
 // services that enqueue jobs for another service to work.
 func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger) (*Client, error) {
+	return NewClient(riverpgxv5.New(pool), opts, workers, logger)
+}
+
+// NewClient builds a River client over any River driver with the same
+// Options handling as [New]; driver packages such as jobs/sqlite build on it.
+func NewClient[TTx any](
+	driver riverdriver.Driver[TTx],
+	opts Options,
+	workers *Workers,
+	logger *slog.Logger,
+) (*river.Client[TTx], error) {
 	if logger == nil {
 		return nil, errors.New("jobs: nil logger")
+	}
+	if validate.IsNil(driver) {
+		return nil, errors.New("jobs: nil driver")
+	}
+	cfg, err := riverConfig(opts, workers, logger)
+	if err != nil {
+		return nil, err
+	}
+	c, err := river.NewClient(driver, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("jobs: new client: %w", err)
+	}
+	return c, nil
+}
+
+func riverConfig(opts Options, workers *Workers, logger *slog.Logger) (*river.Config, error) {
+	if err := opts.validate(); err != nil {
+		return nil, err
 	}
 	opts = opts.withDefaults()
 	cfg := &river.Config{
@@ -180,25 +244,27 @@ func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger
 	if hasObserver(opts.Observer) {
 		cfg.Middleware = []rivertype.Middleware{&insertObserver{obs: opts.Observer}}
 	}
+	if opts.Retry.enabled() {
+		policy, err := NewRetryPolicy(opts.Retry, opts.Clock)
+		if err != nil {
+			return nil, err
+		}
+		cfg.RetryPolicy = policy
+	}
 	if workers != nil {
-		queues := map[string]river.QueueConfig{
-			river.QueueDefault: {MaxWorkers: opts.Queue.Default.Max},
-		}
-		for name, qc := range opts.Queue.Queues {
-			if qc.Max < 0 {
-				return nil, fmt.Errorf("jobs: queue %q: max workers must not be negative", name)
-			}
-			maxWorkers := max(qc.Max, 1)
-			queues[name] = river.QueueConfig{MaxWorkers: maxWorkers}
-		}
-		cfg.Queues = queues
+		cfg.Queues = riverQueues(opts.Queue)
 		cfg.Workers = workers
 	}
-	c, err := river.NewClient(riverpgxv5.New(pool), cfg)
-	if err != nil {
-		return nil, fmt.Errorf("jobs: new client: %w", err)
+	return cfg, nil
+}
+
+func riverQueues(q QueueOptions) map[string]river.QueueConfig {
+	queues := make(map[string]river.QueueConfig, len(q.Queues)+1)
+	queues[river.QueueDefault] = river.QueueConfig{MaxWorkers: q.Default.Max}
+	for name, qc := range q.Queues {
+		queues[name] = river.QueueConfig{MaxWorkers: max(qc.Max, 1)}
 	}
-	return c, nil
+	return queues
 }
 
 func loadOptions(cfg *config.Config) (Options, error) {
@@ -222,8 +288,27 @@ var Module = fx.Module(
 	"golusoris.jobs",
 	fx.Provide(loadOptions),
 	fx.Provide(NewWorkers),
-	fx.Provide(provideClient),
+	fx.Provide(provideClientFx),
 )
+
+// clientParams lets fx inject an optional clock.Clock for retry scheduling.
+type clientParams struct {
+	fx.In
+	LC      fx.Lifecycle
+	Pool    *pgxpool.Pool
+	Opts    Options
+	Workers *Workers
+	Logger  *slog.Logger
+	Clock   clock.Clock `optional:"true"`
+}
+
+func provideClientFx(p clientParams) (*Client, error) {
+	opts := p.Opts
+	if validate.IsNil(opts.Clock) {
+		opts.Clock = p.Clock
+	}
+	return provideClient(p.LC, p.Pool, opts, p.Workers, p.Logger)
+}
 
 func provideClient(
 	lc fx.Lifecycle,
@@ -247,19 +332,22 @@ func provideClient(
 	if opts.ProducerOnly {
 		return c, nil
 	}
-	registerLifecycle(lc, c, opts.Observer)
+	AppendLifecycle(lc, c, opts, logger)
 	return c, nil
 }
 
-func registerLifecycle(lc fx.Lifecycle, c *Client, observer Observer) {
+// AppendLifecycle starts c on fx Start (subscribing opts.Observer) and drains
+// it with [Drain] on fx Stop, bounded by opts.Stop and the fx stop context.
+func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Options, logger *slog.Logger) {
+	opts = opts.withDefaults()
 	var obsCancel func()
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			if err := c.Start(ctx); err != nil {
 				return fmt.Errorf("jobs: start: %w", err)
 			}
-			if hasObserver(observer) {
-				obsCancel = Observe(c, observer)
+			if hasObserver(opts.Observer) {
+				obsCancel = ObserveClient(c, opts.Observer)
 			}
 			return nil
 		},
@@ -267,7 +355,7 @@ func registerLifecycle(lc fx.Lifecycle, c *Client, observer Observer) {
 			if obsCancel != nil {
 				obsCancel()
 			}
-			if err := c.Stop(ctx); err != nil {
+			if err := Drain(ctx, c, opts.Stop, logger); err != nil {
 				return fmt.Errorf("jobs: stop: %w", err)
 			}
 			return nil

@@ -21,6 +21,17 @@ Background job queue backed by Postgres via [river].
  queues extend via `fx.Decorate(...)` — keeping baseline small.
 - Retry + timeout defaults (25 attempts, 30s per job) match river's
  production conventions. Per-worker overrides go in Worker impl.
+- `jobs.retry.base > 0` swaps River's attempt^4 backoff for `RetryPolicy`:
+ base * 2^(n-1), capped by `jobs.retry.max`, +/- `jobs.retry.jitter`. "Now"
+ comes from `clock.Clock` (fx graph or `Options.Clock`).
+- fx Stop runs `Drain`: soft `Stop` for `jobs.stop.soft` (10s), then
+ `StopAndCancel` for `jobs.stop.hard` (5s), both bounded by fx stop ctx.
+ Workers must honour ctx cancellation or hard phase returns error.
+- Define + insert jobs via aliases (`jobs.JobArgs`, `jobs.Job[T]`,
+ `jobs.WorkerDefaults[T]`, `jobs.InsertOpts`, `jobs.UniqueOpts`,
+ `jobs.JobCancel`) — no river import in app code.
+- `NewClient[TTx]` + `AppendLifecycle[TTx]` + `ObserveClient[TTx]` are
+ driver-generic building blocks for driver packages (jobs/sqlite).
 
 ## Subpackages
 
