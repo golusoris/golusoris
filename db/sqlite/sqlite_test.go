@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -66,17 +67,39 @@ func TestOpenFileWALRoundTrip(t *testing.T) {
 
 func TestOpenPathWithURIDelimiters(t *testing.T) {
 	t.Parallel()
-	path := filepath.Join(t.TempDir(), "app?tenant#1.db")
-	db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path}, discard())
-	if err != nil {
-		t.Fatalf("Open: %v", err)
+	for _, tt := range []struct {
+		name, file     string
+		windowsInvalid bool
+	}{
+		{name: "fragment and escape", file: "app#tenant%3F1.db"},
+		{name: "query", file: "app?tenant#1.db", windowsInvalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.windowsInvalid && runtime.GOOS == "windows" {
+				t.Skip("Windows reserves '?' in file names; TestDSNEscapesURIDelimiters covers its encoding")
+			}
+			path := filepath.Join(t.TempDir(), tt.file)
+			db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path}, discard())
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			if _, err := db.ExecContext(t.Context(), "CREATE TABLE marker (id INTEGER)"); err != nil {
+				t.Fatalf("create marker: %v", err)
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("database path was not preserved: %v", err)
+			}
+		})
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(t.Context(), "CREATE TABLE marker (id INTEGER)"); err != nil {
-		t.Fatalf("create marker: %v", err)
-	}
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("database path was not preserved: %v", err)
+}
+
+func TestDSNEscapesURIDelimiters(t *testing.T) {
+	t.Parallel()
+	dsn := sqlite.Options{Path: "/data/app?tenant#1%3F.db"}.DSN()
+	if want := "file:/data/app%3Ftenant%231%253F.db?"; !strings.HasPrefix(dsn, want) {
+		t.Fatalf("DSN %q; want prefix %q", dsn, want)
 	}
 }
 
