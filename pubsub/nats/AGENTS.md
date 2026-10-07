@@ -21,6 +21,10 @@ Config keys (prefix `nats`):
 | `url` | `nats://localhost:4222` | Server URL |
 | `name` | `""` | Client name shown in NATS monitoring |
 
+## Readiness
+
+Opt-in `nats.ReadinessModule` -> registers `ReadinessCheck(conn, timeout, logger)` (name `nats`) on app `*statuspage.Registry`. Up = status CONNECTED + flush round trip within 1s; RECONNECTING/CLOSED -> `ErrNotConnected`.
+
 ## Core NATS (fire-and-forget)
 
 ```go

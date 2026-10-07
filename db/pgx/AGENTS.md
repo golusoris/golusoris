@@ -17,6 +17,10 @@ Provides `*pgxpool.Pool` as fx dependency. Reads config from `config.Config["db"
 - Retry attempts and delays positive; initial <= max; doubling saturates at max.
 - Nil and typed-nil custom tracers ignored before multitracer composition.
 
+## Readiness
+
+- Opt-in `pgx.ReadinessModule` -> registers `ReadinessCheck(pool, timeout, logger)` (name `postgres`, Ping within 1s) on app `*statuspage.Registry`. Exhausted pool -> Ping waits on acquire -> readiness fails.
+
 ## Pinned upstream
 
 - `jackc/pgx/v5` v5.11.0 — see `docs/upstream/pgx/`

@@ -27,6 +27,12 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 - Budget: `fx.StopTimeout` (default 15s) > drain delay + `http.timeouts.shutdown`. Helm `terminationGracePeriodSeconds` > preStop sleep + drain delay + shutdown.
 - `jobs` not wrapped: river `Stop(ctx)` bounded by stop ctx; no routed traffic.
 
+## Dependency readiness
+
+- `health.DependencyCheck(name, timeout, logger, probe)` -> readiness-tagged check; probe ctx bounded by timeout (<= 0 -> `DefaultDependencyTimeout` 1s, under registry 2s). Failure -> `ErrDependencyNotReady` ("timed out" or "failed"); cause logged only, never on `/status`.
+- Opt-in per dependency, owner package: `pgx.ReadinessModule` (Ping), `redis.ReadinessModule` (PING), `nats.ReadinessModule` (CONNECTED + flush). Each also exports `ReadinessCheck(...)`.
+- Shared dependency down -> every replica unready. Opt in only when pod can't serve without it.
+
 ## Probe semantics (k8s docs)
 
 - `livenessProbe` failure → kubelet restarts container.
