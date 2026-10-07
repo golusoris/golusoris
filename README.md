@@ -87,7 +87,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
+| `core/config/` | koanf v2 — env + file + YAML, Kubernetes secret dirs, `*_FILE` env indirection, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
 | `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
 | `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
 | `core/errors/` | typed error codes, HTTP status mapping, RFC 9457 responses | go-faster/errors |
