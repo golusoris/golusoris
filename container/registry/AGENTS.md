@@ -90,6 +90,14 @@ fx.Provide(func() authn.Keychain { return authn.NewMultiKeychain(ecrHelper, auth
 fx.Provide(func() http.RoundTripper { return myMTLSTransport }),
 ```
 
+## Credentials
+
+`container/registry/credentials` builds `authn.Keychain` chain: secret files
+-> opt-in cloud workload identity (`credentials/ecr`, `credentials/gar`,
+`credentials/acr`) -> `authn.DefaultKeychain`. `credentials.Module` provides
+keychain; `registry.Module` picks it up as optional dependency. Details:
+`credentials/AGENTS.md`.
+
 ## Why go-containerregistry
 
 Google's `go-containerregistry` is reference Go implementation of OCI

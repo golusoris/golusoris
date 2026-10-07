@@ -283,6 +283,28 @@ packages:
     capabilities: [registry.image, registry.artifact, registry.referrers]
     description: "Package registry wraps go-containerregistry's remote client: resolve, fetch manifests, list tags, copy images, and push, pull (digest-verified, size-capped) and list referrers of OCI 1.1 artifacts."
     replaces: [github.com/google/go-containerregistry]
+  - import: github.com/golusoris/golusoris/container/registry/credentials
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials]
+    description: "Package credentials resolves OCI registry credentials behind the registry authn.Keychain seam: secret files, cloud workload identity, docker config.json."
+  - import: github.com/golusoris/golusoris/container/registry/credentials/acr
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.acr]
+    description: "Package acr resolves Azure Container Registry credentials by exchanging a Microsoft Entra workload-identity token for an ACR refresh token."
+    replaces: [github.com/chrismellard/docker-credential-acr-env]
+  - import: github.com/golusoris/golusoris/container/registry/credentials/ecr
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.ecr]
+    description: "Package ecr resolves Amazon ECR credentials from the AWS default chain (IRSA, Pod Identity, IMDS) through GetAuthorizationToken."
+    replaces: [github.com/awslabs/amazon-ecr-credential-helper/ecr-login]
+  - import: github.com/golusoris/golusoris/container/registry/credentials/gar
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.gar]
+    description: "Package gar resolves Google Artifact Registry credentials from Application Default Credentials (GKE Workload Identity, federation, gcloud)."
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
     capabilities: [runtime.detect]

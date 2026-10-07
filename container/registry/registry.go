@@ -31,7 +31,9 @@
 // cloud credential helpers (ECR, GCR, ACR) when their `pkg/authn/*` blank
 // imports are wired by the app. Pass an explicit [authn.Keychain] to override
 // it — tests in this package use [authn.NewMultiKeychain]() (always resolves
-// to [authn.Anonymous]) against an unauthenticated registry.
+// to [authn.Anonymous]) against an unauthenticated registry. The
+// container/registry/credentials package builds a keychain from secret
+// files and ECR/GAR/ACR workload identity in front of the docker config.
 //
 // # Transport
 //
