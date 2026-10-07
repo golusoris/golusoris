@@ -17,6 +17,8 @@
 //   - [NATSSink]  — publishes to a NATS subject via [pubsub/nats.Client]
 //   - [GCPSink]   — publishes to a GCP Pub/Sub topic via [pubsub/gcp.Client]
 //   - [WebhookSink] — HTTP POST to a URL (no external dep)
+//   - [NATSCloudEventSink] — CloudEvents via JetStream, deduplicated by event id
+//   - [KafkaCloudEventSink] — CloudEvents records keyed by subject
 //
 // Usage:
 //
@@ -231,13 +233,9 @@ func rowToEvent(cols map[string]string) (outbox.Event, error) {
 
 func rowValuesToEvent(cols map[string]dbcdc.ColumnValue) (outbox.Event, error) {
 	var ev outbox.Event
-	idText, err := requiredTextColumn(cols, "id")
+	id, err := decodeRowID(cols)
 	if err != nil {
 		return ev, err
-	}
-	id, err := strconv.ParseInt(idText, 10, 64)
-	if err != nil || id <= 0 {
-		return ev, fmt.Errorf("id %q: must be a positive integer", idText)
 	}
 	ev.ID = id
 	ev.Kind, err = requiredTextColumn(cols, "kind")
@@ -265,7 +263,59 @@ func rowValuesToEvent(cols map[string]dbcdc.ColumnValue) (outbox.Event, error) {
 		return ev, fmt.Errorf("created_at %q: %w", createdAtText, err)
 	}
 	ev.CreatedAt = createdAt
+	if err = decodeEnvelopeColumns(cols, &ev); err != nil {
+		return ev, err
+	}
 	return ev, nil
+}
+
+func decodeRowID(cols map[string]dbcdc.ColumnValue) (int64, error) {
+	idText, err := requiredTextColumn(cols, "id")
+	if err != nil {
+		return 0, err
+	}
+	id, err := strconv.ParseInt(idText, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("id %q: must be a positive integer", idText)
+	}
+	return id, nil
+}
+
+// decodeEnvelopeColumns reads the CloudEvents columns, which rows written
+// before the 20261007000003 migration lack.
+func decodeEnvelopeColumns(cols map[string]dbcdc.ColumnValue, ev *outbox.Event) error {
+	targets := [...]struct {
+		name string
+		dst  *string
+	}{
+		{"event_id", &ev.EventID},
+		{"source", &ev.Source},
+		{"subject", &ev.Subject},
+		{"data_schema", &ev.DataSchema},
+		{"tenant", &ev.Tenant},
+		{"traceparent", &ev.TraceParent},
+		{"tracestate", &ev.TraceState},
+	}
+	for _, target := range targets {
+		value, err := optionalTextColumn(cols, target.name)
+		if err != nil {
+			return err
+		}
+		*target.dst = value
+	}
+	return nil
+}
+
+func optionalTextColumn(cols map[string]dbcdc.ColumnValue, name string) (string, error) {
+	value, ok := cols[name]
+	if !ok || value.Kind == dbcdc.ColumnValueNull {
+		return "", nil
+	}
+	text, ok := value.Text()
+	if !ok {
+		return "", fmt.Errorf("%s: expected text, got %s", name, value.Kind)
+	}
+	return text, nil
 }
 
 func requiredTextColumn(cols map[string]dbcdc.ColumnValue, name string) (string, error) {

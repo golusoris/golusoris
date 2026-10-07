@@ -117,8 +117,8 @@ checksum and patched-source hash, then fail closed on drift.
 | `db/timescale/` | TimescaleDB hypertable creation, retention, compression helpers | custom on pgx |
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
-| `outbox/` | transactional outbox — write events in same tx, drain via river | custom on pgx |
-| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks | uses db/cdc |
+| `outbox/` | transactional outbox — write events in same tx, drain via river; CloudEvents envelope (stable id, trace context, tenant) | custom on pgx |
+| `outbox/cdc/` | CDC-based outbox drain → Kafka / NATS / GCP / Webhook sinks; CloudEvents sinks for NATS JetStream + Kafka | uses db/cdc |
 
 ### HTTP / API
 
