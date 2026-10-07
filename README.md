@@ -198,7 +198,7 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `k8s/podinfo/` | downward-API env → fx-provided `PodInfo` | stdlib |
-| `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
+| `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry; shutdown gate fails readiness and drains before servers stop | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
 | `k8s/operator/` | controller-runtime manager fx module + application-supplied CRD schemes | sigs.k8s.io/controller-runtime |
