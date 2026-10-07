@@ -1058,21 +1058,27 @@ func TestVerifyLocalObjectAttributes_RestoresOffsetOnCancellation(t *testing.T) 
 func TestNewBucketBoundsS3Initialization(t *testing.T) {
 	t.Parallel()
 	const timeout = 10 * time.Millisecond
+	var deadline, called time.Time
 	factory := func(ctx context.Context, _ S3Options) (*S3Bucket, error) {
-		deadline, ok := ctx.Deadline()
+		called = time.Now()
+		d, ok := ctx.Deadline()
 		if !ok {
 			t.Fatal("S3 constructor context has no deadline")
 		}
-		remaining := time.Until(deadline)
-		if remaining <= 0 || remaining > timeout {
-			t.Fatalf("S3 constructor deadline remaining = %v; want 0..%v", remaining, timeout)
-		}
+		deadline = d
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}
+	// Bound the deadline by timestamps around the call, not by time left, so
+	// a slow scheduler cannot fail a correct constructor.
+	start := time.Now()
 	_, err := newBucketWithS3Factory(
 		Options{Backend: "s3"}, slog.New(slog.DiscardHandler), timeout, factory,
 	)
+	if deadline.Before(start.Add(timeout)) || deadline.After(called.Add(timeout)) {
+		t.Fatalf("S3 constructor deadline = start+%v; want within [start+%v, call+%v]",
+			deadline.Sub(start), timeout, timeout)
+	}
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("newBucketWithS3Factory error = %v; want context deadline", err)
 	}
