@@ -4,8 +4,10 @@
 
 // Package registry wraps [github.com/google/go-containerregistry] for
 // talking to OCI/Docker image registries: parsing references, resolving a
-// tag to its content digest, fetching a manifest, listing tags, and copying
-// an image (or index) between registries.
+// tag to its content digest, fetching a manifest, listing tags, copying an
+// image (or index) between registries, and pushing, pulling and listing
+// referrers of arbitrary OCI 1.1 artifacts (see [Client.PushArtifact],
+// [Client.PullArtifact], [Client.Referrers]).
 //
 // [Client] is deliberately thin — it configures auth and transport once and
 // forwards to [remote.Puller] / [remote.Pusher] for the actual registry
@@ -69,6 +71,23 @@ type Options struct {
 	UserAgent string `koanf:"user_agent"`
 	// Timeout bounds a single registry call. Zero uses [DefaultTimeout].
 	Timeout time.Duration `koanf:"timeout"`
+	// TransferTimeout bounds one artifact push, pull or blob fetch. Zero
+	// uses [DefaultTransferTimeout].
+	TransferTimeout time.Duration `koanf:"transfer_timeout"`
+	// MaxManifestBytes caps an artifact manifest. Zero uses
+	// [DefaultMaxManifestBytes].
+	MaxManifestBytes int64 `koanf:"max_manifest_bytes"`
+	// MaxBlobBytes caps one artifact blob on push and pull. Zero uses
+	// [DefaultMaxBlobBytes].
+	MaxBlobBytes int64 `koanf:"max_blob_bytes"`
+	// MaxTotalBytes caps the blob bytes one pull writes. Zero uses
+	// [DefaultMaxTotalBytes].
+	MaxTotalBytes int64 `koanf:"max_total_bytes"`
+	// MaxBlobs caps the blobs of one artifact. Zero uses [DefaultMaxBlobs].
+	MaxBlobs int `koanf:"max_blobs"`
+	// MaxReferrers caps the descriptors one referrers listing returns. Zero
+	// uses [DefaultMaxReferrers].
+	MaxReferrers int `koanf:"max_referrers"`
 }
 
 // Client talks to OCI/Docker image registries. The zero value is not usable;
@@ -79,6 +98,7 @@ type Client struct {
 	transport http.RoundTripper
 	userAgent string
 	timeout   time.Duration
+	limits    limits
 }
 
 // New builds a [Client]. keychain defaults to [authn.DefaultKeychain] when
@@ -99,7 +119,7 @@ func New(opts Options, keychain authn.Keychain, transport http.RoundTripper) *Cl
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Client{keychain: keychain, transport: transport, userAgent: ua, timeout: timeout}
+	return &Client{keychain: keychain, transport: transport, userAgent: ua, timeout: timeout, limits: newLimits(opts)}
 }
 
 // ParseReference parses a docker/OCI image reference string ("nginx",

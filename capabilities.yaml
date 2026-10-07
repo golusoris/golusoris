@@ -280,8 +280,8 @@ packages:
   - import: github.com/golusoris/golusoris/container/registry
     module: github.com/golusoris/golusoris/container/registry
     domain: registry
-    capabilities: [registry.image]
-    description: "Package registry wraps go-containerregistry's remote client: parse a reference, resolve a tag to its digest, fetch a manifest, list tags, and copy an image between registries."
+    capabilities: [registry.image, registry.artifact, registry.referrers]
+    description: "Package registry wraps go-containerregistry's remote client: resolve, fetch manifests, list tags, copy images, and push, pull (digest-verified, size-capped) and list referrers of OCI 1.1 artifacts."
     replaces: [github.com/google/go-containerregistry]
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
