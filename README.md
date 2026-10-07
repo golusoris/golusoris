@@ -194,6 +194,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
 | `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
 | `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
+| `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
 ### Kubernetes runtime
 

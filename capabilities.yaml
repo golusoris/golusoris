@@ -764,6 +764,11 @@ packages:
     capabilities: [telemetry.profiling]
     description: "Package profiling wires grafana/pyroscope-go for continuous in-process profiling."
     replaces: [github.com/grafana/pyroscope-go]
+  - import: github.com/golusoris/golusoris/observability/rules
+    domain: telemetry
+    capabilities: [telemetry.alerting, telemetry.slo]
+    description: "Package rules builds Prometheus alerting and recording rules — as a prometheus-operator PrometheusRule (monitoring.coreos.com/v1) or a plain rule file for"
+    replaces: [github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring]
   - import: github.com/golusoris/golusoris/observability/sentry
     domain: telemetry
     capabilities: [telemetry.sentry]

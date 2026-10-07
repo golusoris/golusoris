@@ -16,6 +16,7 @@ Sub-packages layering on top of `otel/`:
 | `observability/statuspage` | HTML + JSON `/status` page backed by shared check registry |
 | `observability/metricdef` | metric catalog: `Def` -> typed handles + generator/checker input |
 | `observability/grafana` | dashboard JSON generator over metricdef (Foundation SDK) |
+| `observability/rules` | PrometheusRule / rule-file builder, runbook required, SLO burn-rate alerts |
 
 ## Conventions
 
