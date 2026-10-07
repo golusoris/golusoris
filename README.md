@@ -109,7 +109,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `db/pgx/` | pgx pool fx module + startup retry + slow-query logger | jackc/pgx/v5 |
+| `db/pgx/` | pgx pool fx module + startup retry + slow-query logger; CloudNativePG password/cert files re-read per connection, read-only `ReadPool` | jackc/pgx/v5 |
 | `db/bun/` | bun ORM fx module over the shared pgx pool | uptrace/bun |
 | `db/sqlite/` | embedded SQLite (modernc, pure Go) fx module — WAL + foreign keys on by default | modernc.org/sqlite |
 | `db/migrate/` | golang-migrate v4 runner + fx lifecycle hook | golang-migrate/migrate/v4 |
