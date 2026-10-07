@@ -359,7 +359,10 @@ func provideClient(
 func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Options, logger *slog.Logger) {
 	opts = opts.withDefaults()
 	var obsCancel func()
-	runCtx, runCancel := riverRunContext()
+	// River derives its fetch and work contexts from the Start context and fx
+	// ends that one once start completes, so River runs under a lifecycle-owned
+	// context until OnStop; the drain on OnStop bounds shutdown.
+	runCtx, runCancel := context.WithCancel(context.Background())
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			if err := startDetached(ctx, runCtx, c); err != nil {
@@ -382,14 +385,6 @@ func AppendLifecycle[TTx any](lc fx.Lifecycle, c *river.Client[TTx], opts Option
 			return nil
 		},
 	})
-}
-
-// riverRunContext returns the lifecycle-owned context River runs under, from
-// fx Start until OnStop. River derives its fetch and work contexts from the
-// Start context, and fx ends that context once start completes, which would
-// hard-stop River; the drain on OnStop bounds shutdown instead.
-func riverRunContext() (context.Context, context.CancelFunc) {
-	return context.WithCancel(context.Background())
 }
 
 // startDetached starts c under runCtx so River outlives the fx start context,
