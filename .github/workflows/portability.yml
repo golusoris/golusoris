@@ -55,6 +55,16 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -B scripts/ci/portability_test.py
+      - name: Install cgo system libraries on Linux
+        # hw/udev links libudev; media/3d links OpenAL, Vorbis, GL and X11 (go-gl/glfw).
+        if: runner.os == 'Linux'
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          sudo apt-get update -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::Retries=3 \
+            libudev-dev libopenal-dev libvorbis-dev libgl-dev libx11-dev \
+            libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev
       - name: Install verified Pact FFI on Unix
         if: runner.os != 'Windows'
         run: |
