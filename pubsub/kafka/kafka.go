@@ -12,25 +12,68 @@
 //
 //	brokers: ["localhost:9092"]
 //	group:   "my-service"
-//	tls:     false
+//	tls:     false       # TLS with the system CA pool
+//	ca:      "ca.crt"    # PEM CA bundle; implies TLS
+//	sasl:
+//	  mechanism:    "SCRAM-SHA-512" # PLAIN, SCRAM-SHA-256, SCRAM-SHA-512
+//	  user:         "svc"
+//	  password:     ""              # or passwordfile
+//	  passwordfile: "/var/run/secrets/kafka/password"
+//
+// Leaf keys are single words because the env mapping splits on every
+// underscore (APP_KAFKA_SASL_PASSWORDFILE -> kafka.sasl.passwordfile).
 package kafka
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/sasl"
+	"github.com/twmb/franz-go/pkg/sasl/plain"
+	"github.com/twmb/franz-go/pkg/sasl/scram"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/internal/tlsfiles"
+)
+
+// SASL mechanism names accepted by SASLConfig.Mechanism, case-insensitively.
+const (
+	SASLPlain       = "PLAIN"
+	SASLScramSHA256 = "SCRAM-SHA-256"
+	SASLScramSHA512 = "SCRAM-SHA-512"
+)
+
+var (
+	// ErrUnsupportedSASLMechanism reports a mechanism other than PLAIN or SCRAM.
+	ErrUnsupportedSASLMechanism = errors.New("kafka: unsupported SASL mechanism")
+	// ErrSASLCredentials reports missing, duplicated, or orphaned SASL credentials.
+	ErrSASLCredentials = errors.New("kafka: invalid SASL credentials")
 )
 
 // Config holds Kafka connection settings.
 type Config struct {
-	Brokers []string `koanf:"brokers"` // e.g. ["localhost:9092"]
-	Group   string   `koanf:"group"`   // consumer group ID
-	TLS     bool     `koanf:"tls"`     // enable TLS (uses system CA pool)
+	Brokers []string   `koanf:"brokers"` // e.g. ["localhost:9092"]
+	Group   string     `koanf:"group"`   // consumer group ID
+	TLS     bool       `koanf:"tls"`     // enable TLS (uses system CA pool)
+	CA      string     `koanf:"ca"`      // PEM CA bundle verifying brokers; implies TLS
+	SASL    SASLConfig `koanf:"sasl"`
+}
+
+// SASLConfig selects SASL authentication. An empty Mechanism disables SASL.
+// Password and PasswordFile are mutually exclusive; the file is read once at
+// construction and trailing line breaks are trimmed.
+type SASLConfig struct {
+	Mechanism    string `koanf:"mechanism"`
+	User         string `koanf:"user"`
+	Password     string `koanf:"password"`
+	PasswordFile string `koanf:"passwordfile"`
 }
 
 // Client wraps a franz-go kgo.Client with helpers for producing and consuming.
@@ -66,12 +109,9 @@ func newFromConfig(p params) (*Client, error) {
 		cfg.Brokers = []string{"localhost:9092"}
 	}
 
-	opts := []kgo.Opt{
-		kgo.SeedBrokers(cfg.Brokers...),
-		kgo.WithLogger(kgo.BasicLogger(newSlogWriter(p.Logger), kgo.LogLevelInfo, nil)),
-	}
-	if cfg.Group != "" {
-		opts = append(opts, kgo.ConsumerGroup(cfg.Group))
+	opts, err := clientOptions(cfg, p.Logger)
+	if err != nil {
+		return nil, err
 	}
 
 	kc, err := kgo.NewClient(opts...)
@@ -96,6 +136,81 @@ func newFromConfig(p params) (*Client, error) {
 	})
 
 	return c, nil
+}
+
+func clientOptions(cfg Config, logger *slog.Logger) ([]kgo.Opt, error) {
+	opts := []kgo.Opt{
+		kgo.SeedBrokers(cfg.Brokers...),
+		kgo.WithLogger(kgo.BasicLogger(newSlogWriter(logger), kgo.LogLevelInfo, nil)),
+	}
+	if cfg.Group != "" {
+		opts = append(opts, kgo.ConsumerGroup(cfg.Group))
+	}
+	secure := cfg.TLS || cfg.CA != ""
+	if secure {
+		tlsCfg, err := tlsfiles.ClientConfig(tlsfiles.Files{CA: cfg.CA})
+		if err != nil {
+			return nil, fmt.Errorf("kafka: tls: %w", err)
+		}
+		opts = append(opts, kgo.DialTLSConfig(tlsCfg))
+	}
+	saslOpts, err := saslOptions(cfg.SASL)
+	if err != nil {
+		return nil, err
+	}
+	if !secure && strings.EqualFold(cfg.SASL.Mechanism, SASLPlain) {
+		logger.Warn("kafka: SASL PLAIN without TLS sends the password in clear text")
+	}
+	return append(opts, saslOpts...), nil
+}
+
+// saslOptions returns no option when SASL is disabled.
+func saslOptions(cfg SASLConfig) ([]kgo.Opt, error) {
+	if cfg.Mechanism == "" {
+		if cfg.User != "" || cfg.Password != "" || cfg.PasswordFile != "" {
+			return nil, fmt.Errorf("%w: credentials set without sasl.mechanism", ErrSASLCredentials)
+		}
+		return nil, nil
+	}
+	password, err := saslPassword(cfg)
+	if err != nil {
+		return nil, err
+	}
+	var mechanism sasl.Mechanism
+	switch strings.ToUpper(cfg.Mechanism) {
+	case SASLPlain:
+		mechanism = plain.Auth{User: cfg.User, Pass: password}.AsMechanism()
+	case SASLScramSHA256:
+		mechanism = scram.Auth{User: cfg.User, Pass: password}.AsSha256Mechanism()
+	case SASLScramSHA512:
+		mechanism = scram.Auth{User: cfg.User, Pass: password}.AsSha512Mechanism()
+	default:
+		return nil, fmt.Errorf("%w: %q", ErrUnsupportedSASLMechanism, cfg.Mechanism)
+	}
+	return []kgo.Opt{kgo.SASL(mechanism)}, nil
+}
+
+func saslPassword(cfg SASLConfig) (string, error) {
+	switch {
+	case cfg.User == "":
+		return "", fmt.Errorf("%w: sasl.user is required", ErrSASLCredentials)
+	case cfg.Password != "" && cfg.PasswordFile != "":
+		return "", fmt.Errorf("%w: sasl.password and sasl.passwordfile are mutually exclusive", ErrSASLCredentials)
+	case cfg.PasswordFile != "":
+		raw, err := os.ReadFile(filepath.Clean(cfg.PasswordFile))
+		if err != nil {
+			return "", fmt.Errorf("kafka: read sasl.passwordfile: %w", err)
+		}
+		password := strings.TrimRight(string(raw), "\r\n")
+		if password == "" {
+			return "", fmt.Errorf("%w: sasl.passwordfile is empty", ErrSASLCredentials)
+		}
+		return password, nil
+	case cfg.Password == "":
+		return "", fmt.Errorf("%w: sasl.password or sasl.passwordfile is required", ErrSASLCredentials)
+	default:
+		return cfg.Password, nil
+	}
 }
 
 // Produce sends records to Kafka. It blocks until all records are flushed or
