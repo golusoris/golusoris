@@ -34,6 +34,7 @@ func TestNewBasicAuthVerifier(t *testing.T) {
 		{name: "matching credentials", username: "postmark-user", password: strings.Repeat("p", 32)},
 		{name: "wrong username", username: "forged-user", password: strings.Repeat("p", 32), wantErr: true},
 		{name: "wrong password", username: "postmark-user", password: strings.Repeat("x", 32), wantErr: true},
+		{name: "prefix of the password", username: "postmark-user", password: strings.Repeat("p", 31), wantErr: true},
 		{name: "missing credentials", wantErr: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
