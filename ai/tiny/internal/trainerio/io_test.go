@@ -10,7 +10,6 @@ import (
 	"errors"
 	"io"
 	"math"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/golusoris/golusoris/internal/fileuri"
 	"github.com/golusoris/golusoris/storage"
 )
 
@@ -136,7 +136,7 @@ func TestStageDatasetCopiesLocalFileIntoContainerContract(t *testing.T) {
 	if err := os.WriteFile(source, []byte("{\"prompt\":\"p\",\"response\":\"r\"}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rawURI := (&url.URL{Scheme: "file", Path: source}).String()
+	rawURI := fileURI(t, source)
 	workDir, inputDir, outputDir, err := StageDataset(
 		context.Background(), "trainer-dataset-*",
 		map[string]any{"dataset_uri": rawURI}, datasetRoot, "tenant-a", rawURI, 64,
@@ -212,7 +212,7 @@ func TestStageDatasetRejectsInvalidAndOversizedSources(t *testing.T) {
 	if err := os.WriteFile(source, []byte("12345"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rawURI := (&url.URL{Scheme: "file", Path: source}).String()
+	rawURI := fileURI(t, source)
 	_, _, _, err := StageDataset(
 		context.Background(), "trainer-dataset-*",
 		map[string]any{"dataset_uri": rawURI}, datasetRoot, "tenant-a", rawURI, 4,
@@ -237,7 +237,7 @@ func TestStageDatasetRejectsSymlinkSource(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	rawURI := (&url.URL{Scheme: "file", Path: link}).String()
+	rawURI := fileURI(t, link)
 	_, _, _, err := StageDataset(
 		context.Background(), "trainer-dataset-*",
 		map[string]any{"dataset_uri": rawURI}, datasetRoot, "tenant-a", rawURI, 4,
@@ -261,7 +261,7 @@ func TestStageDatasetRejectsSymlinkTenantDirectory(t *testing.T) {
 	if err := os.Symlink(realTenant, filepath.Join(datasetRoot, "tenant-a")); err != nil {
 		t.Skipf("symlink unavailable: %v", err)
 	}
-	rawURI := (&url.URL{Scheme: "file", Path: filepath.Join(datasetRoot, "tenant-a", "dataset")}).String()
+	rawURI := fileURI(t, filepath.Join(datasetRoot, "tenant-a", "dataset"))
 	_, _, _, err := StageDataset(
 		context.Background(), "trainer-dataset-*", map[string]any{"dataset_uri": rawURI},
 		datasetRoot, "tenant-a", rawURI, 16,
@@ -294,10 +294,10 @@ func TestStageDatasetRejectsTenantEscapeAndNonRegularSources(t *testing.T) {
 		t.Skipf("symlink unavailable: %v", err)
 	}
 	tests := []string{
-		(&url.URL{Scheme: "file", Path: secret}).String(),
-		"file://" + filepath.ToSlash(filepath.Join(tenantA, "%2e%2e", "tenant-b", "secret")),
-		(&url.URL{Scheme: "file", Path: filepath.Join(link, "dataset")}).String(),
-		(&url.URL{Scheme: "file", Path: filepath.Join(tenantA, "real")}).String(),
+		fileURI(t, secret),
+		fileURI(t, tenantA) + "/%2e%2e/tenant-b/secret",
+		fileURI(t, filepath.Join(link, "dataset")),
+		fileURI(t, filepath.Join(tenantA, "real")),
 	}
 	for _, rawURI := range tests {
 		_, _, _, err := StageDataset(
@@ -313,7 +313,7 @@ func TestStageDatasetRejectsTenantEscapeAndNonRegularSources(t *testing.T) {
 		if output, commandErr := exec.Command(mkfifo, fifo).CombinedOutput(); commandErr != nil {
 			t.Fatalf("mkfifo: %v: %s", commandErr, output)
 		}
-		rawURI := (&url.URL{Scheme: "file", Path: fifo}).String()
+		rawURI := fileURI(t, fifo)
 		_, _, _, stageErr := StageDataset(
 			context.Background(), "trainer-dataset-*", map[string]any{"dataset_uri": rawURI},
 			datasetRoot, "tenant-a", rawURI, 16,
@@ -335,7 +335,7 @@ func TestStageDatasetUsesDefaultTenantDirectoryAtExactCap(t *testing.T) {
 	if err := os.WriteFile(dataset, []byte("1234"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	rawURI := (&url.URL{Scheme: "file", Path: dataset}).String()
+	rawURI := fileURI(t, dataset)
 	workDir, _, _, err := StageDataset(
 		context.Background(), "trainer-dataset-*", map[string]any{"dataset_uri": rawURI},
 		datasetRoot, "", rawURI, 4,
@@ -346,6 +346,15 @@ func TestStageDatasetUsesDefaultTenantDirectoryAtExactCap(t *testing.T) {
 	if err = Cleanup(workDir); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func fileURI(t *testing.T, path string) string {
+	t.Helper()
+	uri, err := fileuri.FromPath(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return uri
 }
 
 func canonicalTempDir(t *testing.T) string {

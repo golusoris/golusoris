@@ -27,6 +27,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/golusoris/golusoris/internal/fileuri"
 	"github.com/golusoris/golusoris/storage"
 )
 
@@ -440,10 +441,11 @@ func localDatasetPath(rawURI string) (string, error) {
 	if parsed.Host != "" && parsed.Host != "localhost" {
 		return "", errors.New("ai/tiny: file dataset URI host must be empty or localhost")
 	}
-	if !filepath.IsAbs(parsed.Path) {
+	localPath := fileuri.ToPath(parsed)
+	if !filepath.IsAbs(localPath) {
 		return "", errors.New("ai/tiny: file dataset URI path must be absolute")
 	}
-	return filepath.Clean(parsed.Path), nil
+	return filepath.Clean(localPath), nil
 }
 
 func tenantDatasetPath(canonicalRoot, tenantID, datasetPath string) (string, string, error) {

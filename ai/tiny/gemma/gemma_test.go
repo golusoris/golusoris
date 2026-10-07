@@ -11,7 +11,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +21,7 @@ import (
 	"github.com/golusoris/golusoris/ai/tiny"
 	"github.com/golusoris/golusoris/ai/tiny/gemma"
 	"github.com/golusoris/golusoris/ai/tiny/internal/trainerio"
+	"github.com/golusoris/golusoris/internal/fileuri"
 	"github.com/golusoris/golusoris/storage"
 )
 
@@ -101,13 +101,15 @@ func happyPathJob(t *testing.T) (tiny.Job, string) {
 	require.NoError(t, os.Mkdir(tenantRoot, 0o700))
 	dataset := filepath.Join(tenantRoot, "data.jsonl")
 	require.NoError(t, os.WriteFile(dataset, []byte("{\"prompt\":\"p\",\"response\":\"r\"}\n"), 0o600))
+	datasetURI, err := fileuri.FromPath(dataset)
+	require.NoError(t, err)
 	return tiny.Job{
 		ID:        "job-1",
 		Name:      "intent-finetune",
 		TenantID:  "tenant-a",
 		BaseModel: "gemma3:270m",
 		Dataset: tiny.Dataset{
-			URI:      (&url.URL{Scheme: "file", Path: dataset}).String(),
+			URI:      datasetURI,
 			Format:   "jsonl",
 			Modality: tiny.ModalityText,
 			TaskKind: tiny.TaskGenerate,

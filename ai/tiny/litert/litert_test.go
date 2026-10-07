@@ -11,7 +11,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -22,6 +21,7 @@ import (
 	"github.com/golusoris/golusoris/ai/tiny"
 	"github.com/golusoris/golusoris/ai/tiny/internal/trainerio"
 	"github.com/golusoris/golusoris/ai/tiny/litert"
+	"github.com/golusoris/golusoris/internal/fileuri"
 	"github.com/golusoris/golusoris/storage"
 )
 
@@ -464,11 +464,13 @@ func validJob(t *testing.T) (tiny.Job, string) {
 	require.NoError(t, os.Mkdir(tenantRoot, 0o700))
 	dataset := filepath.Join(tenantRoot, "images.tar")
 	require.NoError(t, os.WriteFile(dataset, []byte("bounded-image-archive"), 0o600))
+	datasetURI, err := fileuri.FromPath(dataset)
+	require.NoError(t, err)
 	return tiny.Job{
 		ID: "job-lt-1", Name: "pet-classifier", TenantID: "tenant-a",
 		BaseModel: litert.BaseImageMobileNetV2,
 		Dataset: tiny.Dataset{
-			URI: (&url.URL{Scheme: "file", Path: dataset}).String(), Format: "tar",
+			URI: datasetURI, Format: "tar",
 			Modality: tiny.ModalityImage, TaskKind: tiny.TaskClassify,
 		},
 	}, datasetRoot
