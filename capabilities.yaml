@@ -30,6 +30,7 @@ modules:
   - github.com/golusoris/golusoris/science/numerical
   - github.com/golusoris/golusoris/science/plot
   - github.com/golusoris/golusoris/testutil/pact
+  - github.com/golusoris/golusoris/testutil/promcheck
   - github.com/golusoris/golusoris/web3/evm
   - github.com/golusoris/golusoris/web3/solana
 packages:
@@ -1002,6 +1003,12 @@ packages:
     capabilities: [test.pact]
     description: "Package pact provides helpers for Pact consumer-driven contract testing."
     replaces: [github.com/pact-foundation/pact-go/v2]
+  - import: github.com/golusoris/golusoris/testutil/promcheck
+    module: github.com/golusoris/golusoris/testutil/promcheck
+    domain: test
+    capabilities: [test.promql, telemetry.query.check]
+    description: "Package promcheck fails tests when a dashboard panel, template variable, annotation or Prometheus rule queries a metric or label that nothing emits."
+    replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
     capabilities: [test.pg]

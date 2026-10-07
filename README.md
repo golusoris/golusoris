@@ -346,6 +346,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `media/game/` | Ebitengine 2D game loop scaffold | hajimehoshi/ebiten/v2 |
 | `media/3d/` | g3n 3D engine scaffold | g3n/engine |
 | `testutil/pact/` | Pact consumer-driven contract testing | pact-foundation/pact-go/v2 |
+| `testutil/promcheck/` | dashboard + rule queries vs emitted metrics gate (own go.mod) | prometheus/prometheus promql/parser |
 
 ### Misc utilities
 
