@@ -14,9 +14,17 @@ import subprocess
 import sys
 import threading
 import time
+import weakref
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
+
+import windows_job
+
+# Windows job objects that own each running child tree, keyed by its Popen.
+_WINDOWS_JOBS: weakref.WeakKeyDictionary[subprocess.Popen[bytes], windows_job.ProcessJob] = (
+    weakref.WeakKeyDictionary()
+)
 
 MAX_MODULES = 64
 MAX_PACKAGES_PER_MODULE = 512
@@ -88,7 +96,10 @@ class ProcessRunner:
             if os.name == "posix":
                 options["start_new_session"] = True
             elif os.name == "nt":
-                options["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+                # Suspended until it joins a job, so no descendant escapes the job.
+                options["creationflags"] = (
+                    subprocess.CREATE_NEW_PROCESS_GROUP | windows_job.CREATE_SUSPENDED
+                )
             process = subprocess.Popen(  # noqa: S603 - fixed Git/Go commands use runner PATH.
                 argv,
                 **options,
@@ -96,7 +107,14 @@ class ProcessRunner:
         except OSError as error:
             raise PortabilityError(f"command failed to start {argv!r}: {error}") from error
 
-        result = _collect_process_output(process, argv, timeout, max_output_bytes)
+        if os.name == "nt":
+            _adopt_windows_process(process, argv)
+        try:
+            result = _collect_process_output(process, argv, timeout, max_output_bytes)
+        finally:
+            job = _WINDOWS_JOBS.pop(process, None)
+            if job is not None:
+                job.close()
         if result.returncode != 0:
             detail = result.stderr.decode(errors="replace")[-4000:]
             raise PortabilityError(
@@ -256,9 +274,29 @@ def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> list[str
     return failures
 
 
+def _adopt_windows_process(process: subprocess.Popen[bytes], argv: tuple[str, ...]) -> None:
+    """Place the suspended child in a kill-on-close job, then let it run."""
+    try:
+        _WINDOWS_JOBS[process] = windows_job.ProcessJob(process.pid)
+    except OSError as error:
+        failures = _terminate_direct_process(process)
+        detail = f"; {'; '.join(failures)}" if failures else ""
+        raise PortabilityError(
+            f"command could not join a Windows job {argv!r}: {error}{detail}"
+        ) from error
+
+
 def _terminate_windows_process_tree(process: subprocess.Popen[bytes]) -> list[str]:
-    """Use taskkill's tree mode, then retain a direct-child fallback."""
+    """End the child's job, or fall back to taskkill's tree mode, then the direct child."""
     failures: list[str] = []
+    job = _WINDOWS_JOBS.get(process)
+    if job is not None:
+        try:
+            job.terminate()
+        except OSError as error:
+            failures.append(f"terminate job: {error}")
+        failures.extend(_terminate_direct_process(process))
+        return failures
     try:
         result = subprocess.run(  # noqa: S603 - fixed Windows tree-kill utility.
             ("taskkill", "/PID", str(process.pid), "/T", "/F"),  # noqa: S607 - Windows provides taskkill on PATH.
