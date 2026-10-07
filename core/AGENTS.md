@@ -8,10 +8,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 **lean sub-module** every consumer can afford (ADR-0017): configuration,
 logging, clock, errors, crypto, ids, validation, build info, CLI kit, MCP
-server, YAML codec, execution receipts, git runner, Go-source analysis,
-capability-contract schema, and file-backed TLS. ~20 direct dependencies; no
-database, HTTP, cloud, or CGO code lives here — those stay in root module and
-import core.
+server, YAML codec, JSON canonicaliser, execution receipts, git runner,
+Go-source analysis, capability-contract schema, and file-backed TLS. ~20
+direct dependencies; no database, HTTP, cloud, or CGO code lives here — those
+stay in root module and import core.
 
 ## Packages
 
@@ -19,6 +19,7 @@ import core.
 | --- | --- | --- |
 | `config/` | `config.loader`, `config.env`, `config.watch` | koanf v2: env + file + YAML, hot reload |
 | `codec/yaml/` | `config.yaml` | strict, bounded YAML codec; atomic `WriteFile` |
+| `codec/jcs/` | `json.canonical` | RFC 8785 JSON canonicalisation; iterative, `MaxDepth`-bounded |
 | `log/` | `telemetry.logging` | slog factory (tint / JSON) |
 | `clock/` | `time.clock` | injectable clock — `time.Now` is banned elsewhere |
 | `errors/` | `errors.typed`, `errors.problem_details` | typed errors → RFC 9457 status mapping |

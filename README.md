@@ -89,6 +89,7 @@ checksum and patched-source hash, then fail closed on drift.
 | --- | --- | --- |
 | `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
 | `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
+| `core/codec/jcs/` | RFC 8785 JSON canonicalisation for hashed/signed records — UTF-16 member order, ECMAScript numbers, refuses duplicate names, lone surrogates, invalid UTF-8 | stdlib |
 | `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
 | `core/errors/` | typed error codes, HTTP status mapping, RFC 9457 responses | go-faster/errors |
 | `core/crypto/` | argon2id passwords, AES-GCM helpers, bounded configured encryptor | alexedwards/argon2id |

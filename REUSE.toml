@@ -114,3 +114,9 @@ path = ["junit/testdata/junit-10.xsd"]
 precedence = "override"
 SPDX-FileCopyrightText = "2014 Gregory Boissinot <https://github.com/jenkinsci/xunit-plugin>"
 SPDX-License-Identifier = "MIT"
+
+[[annotations]]
+path = ["core/codec/jcs/testdata/cyberphone/**"]
+precedence = "override"
+SPDX-FileCopyrightText = ["2018 Anders Rundgren <https://github.com/cyberphone/json-canonicalization>", "2006-2021 WebPKI.org <http://webpki.org>"]
+SPDX-License-Identifier = "Apache-2.0"

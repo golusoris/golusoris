@@ -63,6 +63,12 @@ packages:
     capabilities: [time.clock]
     description: "Package clock exposes a mockable wall clock."
     replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/core/codec/jcs
+    module: github.com/golusoris/golusoris/core
+    domain: codec
+    capabilities: [json.canonical]
+    description: "Package jcs canonicalises JSON per RFC 8785, the JSON Canonicalization Scheme, so a digest or signature over a JSON document computed in one language verifies in another."
+    replaces: [github.com/gowebpki/jcs]
   - import: github.com/golusoris/golusoris/core/codec/yaml
     module: github.com/golusoris/golusoris/core
     domain: config
