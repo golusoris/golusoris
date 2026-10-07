@@ -165,7 +165,7 @@ State correction factually and move on.
 
 | Mistake | Fix |
 |---------|-----|
-| Performative agreement | State requirement or just act |
+| Performative agreement | State requirement or act |
 | Blind implementation | Verify against codebase first |
 | Batch without testing | One at a time, test each |
 | Assuming reviewer is right | Check if breaks things |

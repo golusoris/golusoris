@@ -421,7 +421,7 @@ File uploads must validate type, content, and size to prevent various attacks.
 | Null byte | `shell.php%00.jpg` | Sanitize filename, check for null bytes |
 | Double extension | `shell.jpg.php` | Only allow single extension |
 | MIME type spoofing | Set Content-Type to image/jpeg | Validate magic bytes |
-| Magic byte injection | Prepend valid magic bytes to malicious file | Check entire file structure, not just header |
+| Magic byte injection | Prepend valid magic bytes to malicious file | Check entire file structure, not only header |
 | Polyglot files | File valid as both JPEG and JavaScript | Parse file as expected type, reject if invalid |
 | SVG with JavaScript | `<svg onload="alert(1)">` | Sanitize SVG or disallow entirely |
 | XXE via file upload | Malicious DOCX, XLSX (which are XML) | Disable external entities in parser |

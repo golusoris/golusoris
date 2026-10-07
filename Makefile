@@ -171,7 +171,9 @@ compile-context-verify: ## assert vendor agent-context files match AGENTS.md
 
 .PHONY: caveman-context
 caveman-context: ## lint every canonical agent-facing context surface
-	@git ls-files -z --cached --others --exclude-standard -- '*AGENTS.md' '.agents/agents/*.md' '.agents/skills/*/SKILL.md' '.claude/skills/*.md' '.paperclip/harness.json' '.paperclip/rules.md' ':(exclude).claude/skills/**/README.md' | xargs -0 $(PRAETORCTL) caveman check
+	@# praetor caveman check takes at most 256 inputs and infers the message contract for nested
+	@# AGENTS.md; .paperclip/harness.json is linted by praetorctl audit through register.sources.
+	@git ls-files -z --cached --others --exclude-standard -- '*AGENTS.md' '.agents/agents/*.md' '.agents/skills/*/SKILL.md' '.claude/skills/*.md' ':(exclude).claude/skills/**/README.md' | xargs -0 -n 200 $(PRAETORCTL) caveman check --kind=context
 
 .PHONY: text-register-policy
 text-register-policy: ## verify required register skills and plugin projections
