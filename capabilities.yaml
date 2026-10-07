@@ -534,14 +534,19 @@ packages:
     replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/jobs
     domain: jobs
-    capabilities: [jobs.queue]
+    capabilities: [jobs.queue, jobs.metrics]
     description: "Package jobs wires a [river] client as an fx dependency so apps can enqueue + process background jobs backed by Postgres."
-    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype]
+    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype, github.com/riverqueue/rivercontrib/otelriver]
   - import: github.com/golusoris/golusoris/jobs/cron
     domain: jobs
     capabilities: [jobs.cron]
     description: "Package cron parses cron expressions (robfig/cron/v3) and registers them as river periodic jobs."
     replaces: [github.com/go-co-op/gocron, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/robfig/cron, github.com/robfig/cron/v3]
+  - import: github.com/golusoris/golusoris/jobs/sqlite
+    domain: jobs
+    capabilities: [jobs.queue_sqlite]
+    description: "Package sqlite runs the jobs queue on SQLite through River's riversqlite driver, for standalone single-binary deployments."
+    replaces: [github.com/riverqueue/river/riverdriver/riversqlite, github.com/riverqueue/river/rivermigrate]
   - import: github.com/golusoris/golusoris/jobs/ui
     domain: jobs
     capabilities: [jobs.ui]

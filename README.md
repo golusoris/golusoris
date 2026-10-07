@@ -169,7 +169,8 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `jobs/` | river client + worker registry + named queues + lifecycle observer | riverqueue/river |
+| `jobs/` | river client + worker registry + named queues + lifecycle observer + drain/retry + depth metrics | riverqueue/river, rivercontrib/otelriver |
+| `jobs/sqlite/` | River queue on SQLite for standalone single-binary mode | riverqueue/river/riverdriver/riversqlite |
 | `jobs/cron/` | cron expression parser / validator | robfig/cron/v3 |
 | `jobs/ui/` | auth-gated river job dashboard handler | riverqueue/riverui |
 | `jobs/workflow/` | Temporal workflow orchestration | go.temporal.io/sdk |

@@ -5,6 +5,10 @@
 package jobs
 
 import (
+	"context"
+	"database/sql"
+	"errors"
+
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -52,4 +56,30 @@ const (
 // JobCancel wraps err so River cancels the job permanently instead of retrying.
 func JobCancel(err error) error {
 	return river.JobCancel(err) //nolint:wrapcheck // River matches its own sentinel; wrapping would hide it
+}
+
+// ClientSQL is a River client over database/sql (jobs/sqlite).
+type ClientSQL = river.Client[*sql.Tx]
+
+// Inserter is the driver-agnostic enqueue surface: *Client and *ClientSQL
+// both satisfy it, and the fx modules provide one. Transactional inserts
+// (InsertTx/InsertManyTx) take the driver's own tx type, so they stay on the
+// concrete client.
+type Inserter interface {
+	Insert(ctx context.Context, args JobArgs, opts *InsertOpts) (*InsertResult, error)
+	InsertMany(ctx context.Context, params []InsertManyParams) ([]*InsertResult, error)
+}
+
+var (
+	_ Inserter = (*Client)(nil)
+	_ Inserter = (*ClientSQL)(nil)
+)
+
+// ProvideInserter exposes a module's client as an [Inserter]; it fails when
+// the client is nil (jobs.enabled=false). Driver modules provide it.
+func ProvideInserter[TTx any](c *river.Client[TTx]) (Inserter, error) {
+	if c == nil {
+		return nil, errors.New("jobs: inserter: jobs client disabled")
+	}
+	return c, nil
 }

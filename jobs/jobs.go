@@ -277,7 +277,14 @@ func riverQueues(q QueueOptions) map[string]river.QueueConfig {
 	return queues
 }
 
-func loadOptions(cfg *config.Config) (Options, error) {
+func loadOptions(cfg *config.Config) (Options, error) { return LoadOptions(cfg) }
+
+// LoadOptions reads the jobs.* config keys over [DefaultOptions]; driver
+// modules such as jobs/sqlite share it.
+func LoadOptions(cfg *config.Config) (Options, error) {
+	if cfg == nil {
+		return Options{}, errors.New("jobs: load options: nil config")
+	}
 	opts := DefaultOptions()
 	if err := cfg.Unmarshal("jobs", &opts); err != nil {
 		return Options{}, fmt.Errorf("jobs: load options: %w", err)
@@ -299,6 +306,7 @@ var Module = fx.Module(
 	fx.Provide(loadOptions),
 	fx.Provide(NewWorkers),
 	fx.Provide(provideClientFx),
+	fx.Provide(ProvideInserter[pgx.Tx]),
 )
 
 // clientParams lets fx inject an optional clock.Clock for retry scheduling.
