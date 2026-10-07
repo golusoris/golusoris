@@ -25,6 +25,11 @@ resolve_root() {
 	(cd "$2" && pwd)
 }
 
+# Exception (one file, Ruff only): Praetor's byte-locked figure-engine hook is not
+# Ruff-clean (cordanaLLM/praetor#845). After the expiry Ruff checks it again.
+readonly locked_figure_hook=tools/figures/mkdocs_hook.py
+readonly locked_figure_hook_expires=20261107
+
 collect_files() {
 	local root="$1"
 	local path
@@ -34,6 +39,12 @@ collect_files() {
 				continue
 			;;
 		esac
+		if [[ "$path" == "$locked_figure_hook" ]] &&
+			(($(date +%Y%m%d) <= locked_figure_hook_expires)); then
+			printf 'Ruff skips %s: exception until %s (cordanaLLM/praetor#845)\n' \
+				"$path" "$locked_figure_hook_expires" >&2
+			continue
+		fi
 		[[ -f "$root/$path" || -L "$root/$path" ]] || continue
 		if [[ -L "$root/$path" ]]; then
 			printf 'Ruff refuses symlink input: %s\n' "$path" >&2
