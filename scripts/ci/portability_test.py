@@ -261,6 +261,7 @@ class PortabilityDriverTest(unittest.TestCase):
             "python -B scripts/ci/pact_ffi.py --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
             "python -B scripts/ci/portability_test.py",
+            "run: bash scripts/ci/install-cgo-libs.sh",
             "python -B scripts/ci/portability.py",
             "first hosted green",
         )

@@ -16,16 +16,16 @@
 #     release:
 #       uses: golusoris/golusoris/.github/workflows/release-go.yml@<full-framework-commit-sha>
 #       with:
-#         runs-on: arc-cauda-golusoris-myapp
+#         image-name: ghcr.io/myorg/myapp
 name: release-go (reusable)
 
 on:
   workflow_call:
     inputs:
       runs-on:
-        description: Self-hosted runner-set label the caller's ARC scale set is registered under.
+        description: Runner label the release job runs on. Defaults to the GitHub-hosted ubuntu-24.04 image; pass a self-hosted runner-set label to run elsewhere.
         type: string
-        default: arc-cauda-golusoris-golusoris
+        default: ubuntu-24.04
       image-name:
         description: OCI image name (e.g. ghcr.io/myorg/myapp)
         type: string

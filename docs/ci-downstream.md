@@ -102,7 +102,7 @@ jobs:
   ci:
     uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
     with:
-      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
+      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
       working-directory: .                  # dir holding go.mod; "." for a root module
       go-version-file: go.mod
       coverage-threshold: 70          # 85 for security-critical packages
@@ -145,7 +145,7 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `runs-on` | `arc-cauda-golusoris-golusoris` | self-hosted runner-set label every job runs on; set to your own app's ARC label |
+| `runs-on` | `ubuntu-24.04` | runner label every job runs on: GitHub-hosted by default, or your own self-hosted runner-set label |
 | `working-directory` | `.` | directory holding your module's go.mod, relative to the repo root; set for apps whose module is not at the repo root |
 | `go-version-file` | `go.mod` | where the Go version is resolved from — **relative to the repo root**, not `working-directory` (see the input's own description in `ci-go.yml`); a non-root module must pass e.g. `<working-directory>/go.mod` |
 | `coverage-threshold` | `70` | minimum total coverage %; `0` skips the check |
@@ -155,7 +155,8 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 | `apidiff-base-ref` | *(empty)* | exact comparison base for apidiff; empty selects the previous root `vN` tag |
 | `needs-docker` | `true` | verify Docker before tests; set `false` if no testcontainers |
 | `container` | *(empty)* | image to run the Go jobs in (cgo/system-lib builds) |
-| `system-packages` | *(empty)* | Debian packages that the rootless ARC image must already contain |
+| `system-packages` | *(empty)* | Debian packages (`name` or `name=version`) every Go job needs |
+| `install-system-packages` | `true` | install `system-packages` with bounded `apt-get` calls before verifying them; set `false` on a self-hosted image that already contains them |
 | `openapi-spec` | *(empty)* | path to an OpenAPI spec for spectral lint; empty = skip |
 | `skip-apidiff` | `false` | set `true` for a first release with no prior tag |
 
@@ -186,7 +187,7 @@ jobs:
   release:
     uses: golusoris/golusoris/.github/workflows/release-go.yml@fedcba9876543210fedcba9876543210fedcba98
     with:
-      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
+      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
       image-name: ghcr.io/myorg/myapp     # required
       goreleaser-config: tools/.goreleaser.yml
 ```

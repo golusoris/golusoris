@@ -9,7 +9,7 @@
 #     ci:
 #       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
 #       with:
-#         runs-on: arc-cauda-golusoris-myapp
+#         runs-on: ubuntu-24.04
 #         working-directory: .
 #         go-version-file: go.mod
 #         coverage-threshold: 70
@@ -20,9 +20,9 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: Self-hosted runner-set label the caller's ARC scale set is registered under. Every job in this workflow runs on this label (the test job's matrix included).
+        description: Runner label every job in this workflow runs on (the test job's matrix included). Defaults to the GitHub-hosted ubuntu-24.04 image; pass a self-hosted runner-set label to run elsewhere.
         type: string
-        default: arc-cauda-golusoris-golusoris
+        default: ubuntu-24.04
       working-directory:
         description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses:` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
         type: string
@@ -76,9 +76,13 @@ on:
         type: string
         default: ""
       system-packages:
-        description: "Space-separated Debian packages that must already be pre-baked in the rootless ARC image (empty = none)."
+        description: "Space-separated Debian packages (`name` or `name=version`) every Go job needs (empty = none). Installed or only verified per `install-system-packages`."
         type: string
         default: ""
+      install-system-packages:
+        description: "Install `system-packages` with bounded apt-get calls (sudo on the runner, root in a `container`) before verifying them. Set false for a self-hosted image that already bakes them in; the jobs then only verify."
+        type: boolean
+        default: true
       coverage-threshold:
         description: Minimum coverage percentage (0 = skip check)
         type: number
@@ -148,14 +152,42 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -196,14 +228,42 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -243,14 +303,42 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -266,8 +354,8 @@ jobs:
           govulncheck ./...
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
-  # The repository-scoped Linux ARC scale set owns coverage, artifacts, and
-  # Docker-backed tests without hosted-runner billing.
+  # The Linux leg owns coverage, artifacts, and Docker-backed tests; the
+  # default hosted ubuntu-24.04 image ships the Docker daemon they need.
   test:
     name: Test (race + coverage)
     needs: build
@@ -288,14 +376,42 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' && runner.os == 'Linux' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' && runner.os == 'Linux' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -368,14 +484,42 @@ jobs:
         working-directory: ${{ inputs.working-directory }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}
@@ -465,14 +609,42 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - name: Verify pre-baked system packages
+      - name: Check out golusoris system-package script
+        if: ${{ inputs.system-packages != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: scripts/ci/verify-system-packages.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Provide system packages
         if: ${{ inputs.system-packages != '' }}
         shell: bash
         env:
           SYSTEM_PACKAGES: ${{ inputs.system-packages }}
+          INSTALL_SYSTEM_PACKAGES: ${{ inputs.install-system-packages }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
+          set -euo pipefail
+          ci_root="${GITHUB_WORKSPACE}/.golusoris-ci"
+          # go-apidiff refuses a dirty tree, so the helper checkout never outlives this step.
+          trap 'rm -rf "$ci_root"' EXIT
+          # The script must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           read -r -a packages <<< "$SYSTEM_PACKAGES"
-          "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh" "${packages[@]}"
+          mode=()
+          if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then
+            mode=(--install)
+          fi
+          bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ inputs.go-version-file }}

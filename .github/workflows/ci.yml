@@ -395,6 +395,10 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
+      # hw/udev and media/3d are cgo modules in this sweep; hosted images lack their headers.
+      - name: Install cgo system libraries
+        timeout-minutes: 10
+        run: bash scripts/ci/install-cgo-libs.sh
       - name: Install pinned analysis tools
         run: |
           set -euo pipefail
@@ -555,6 +559,10 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
+      # apidiff type-checks every module, including the cgo ones.
+      - name: Install cgo system libraries
+        timeout-minutes: 10
+        run: bash scripts/ci/install-cgo-libs.sh
       - name: Install apidiff
         run: |
           set -euo pipefail
