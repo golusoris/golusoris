@@ -95,6 +95,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/crypto/receipt/` | Ed25519 Exit-0 execution receipts (praetor-compatible) | stdlib |
 | `core/clock/` | mockable wall clock (real + fake) — `time.Now()` is banned outside this package | jonboulle/clockwork |
 | `core/id/` | UUIDv7 and KSUID generators | google/uuid · segmentio/ksuid |
+| `core/retry/` | `Do(ctx, fn, Policy, clock)`: capped exponential backoff, jitter, retryable predicate, context-bounded waits | stdlib |
 | `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
 | `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
 | `core/clikit/` | cobra + fx CLI builder (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
