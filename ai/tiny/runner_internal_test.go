@@ -358,9 +358,17 @@ func TestBuildDockerArgsNetworkDenyOverridesRunnerConfiguration(t *testing.T) {
 func TestDockerCommandEnvironmentPreservesAndSortsHostValues(t *testing.T) {
 	t.Setenv("TINY_REPLACED_SECRET", "old")
 	t.Setenv("TINY_UNCHANGED", "kept")
+	t.Setenv("TINY_PROGRAM_FILES", "prefix key")
+	t.Setenv("TINY_PROGRAM_FILES(X86)", "extended key")
 	env := dockerCommandEnvironment()
-	if !slices.IsSorted(env) {
-		t.Fatalf("command environment is not sorted: %q", env)
+	// Keys, not whole assignments: "ProgramFiles(x86)=" sorts before "ProgramFiles=" bytewise.
+	keys := make([]string, 0, len(env))
+	for _, assignment := range env {
+		key, _, _ := splitEnvironmentAssignment(assignment)
+		keys = append(keys, key)
+	}
+	if !slices.IsSorted(keys) {
+		t.Fatalf("command environment keys are not sorted: %q", keys)
 	}
 	want := map[string]string{
 		"TINY_REPLACED_SECRET": "old",
@@ -380,6 +388,32 @@ func TestDockerCommandEnvironmentPreservesAndSortsHostValues(t *testing.T) {
 		if seen[key] != 1 {
 			t.Fatalf("environment %q occurred %d times; want once", key, seen[key])
 		}
+	}
+}
+
+func TestSortedEnvironmentOrdersKeysAndKeepsWindowsDriveEntries(t *testing.T) {
+	t.Parallel()
+	got := sortedEnvironment([]string{
+		`ProgramFiles(x86)=C:\Program Files (x86)`,
+		`ProgramFiles=C:\Program Files`,
+		`=D:=D:\data`,
+		`=C:=C:\work`,
+		"PATH=old",
+		"PATH=new",
+		"EMPTY=",
+		"malformed",
+		"=",
+	})
+	want := []string{
+		`=C:=C:\work`,
+		`=D:=D:\data`,
+		"EMPTY=",
+		"PATH=new",
+		`ProgramFiles=C:\Program Files`,
+		`ProgramFiles(x86)=C:\Program Files (x86)`,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("sortedEnvironment = %q; want %q", got, want)
 	}
 }
 

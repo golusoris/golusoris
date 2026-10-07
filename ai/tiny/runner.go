@@ -433,9 +433,14 @@ func removeDockerRunIdentity(identity dockerRunIdentity) error {
 }
 
 func dockerCommandEnvironment() []string {
-	merged := make(map[string]string, len(os.Environ()))
-	for _, assignment := range os.Environ() {
-		key, value, found := strings.Cut(assignment, "=")
+	return sortedEnvironment(os.Environ())
+}
+
+// sortedEnvironment keeps the last value per key and orders assignments by key.
+func sortedEnvironment(assignments []string) []string {
+	merged := make(map[string]string, len(assignments))
+	for _, assignment := range assignments {
+		key, value, found := splitEnvironmentAssignment(assignment)
 		if found {
 			merged[key] = value
 		}
@@ -445,6 +450,16 @@ func dockerCommandEnvironment() []string {
 		out = append(out, key+"="+merged[key])
 	}
 	return out
+}
+
+// splitEnvironmentAssignment keeps one leading '=' in the key, as os/exec does,
+// so Windows per-drive entries such as "=C:=C:\work" stay distinct.
+func splitEnvironmentAssignment(assignment string) (key, value string, found bool) {
+	if rest, hidden := strings.CutPrefix(assignment, "="); hidden {
+		key, value, found = strings.Cut(rest, "=")
+		return "=" + key, value, found
+	}
+	return strings.Cut(assignment, "=")
 }
 
 func writeDockerEnvironmentFile(env map[string]string) (string, error) {
