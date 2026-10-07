@@ -6,8 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — storage/
 
-Bucket interface + local-filesystem and S3 backends. Planned cloud backends
-use same `Bucket` interface.
+Bucket interface + local-filesystem and S3 backends. Optional
+`Copier` (server-side copy) + `PutPresigner` (presigned upload) interfaces;
+type-assert before use.
 
 ## Bucket interface
 
@@ -21,14 +22,34 @@ type Bucket interface {
     List(ctx, ListOptions) ([]Object, error)
     URL(ctx, key) (string, error)
 }
+
+type Copier interface {
+    Copy(ctx, srcKey, dstKey) (Object, error) // ErrNotFound, ErrCopySameKey
+}
+
+type PutPresigner interface {
+    PresignPut(ctx, key, ttl, PresignPutOptions) (PresignedRequest, error)
+}
 ```
+
+Presign contract: `ValidatePresignPut` = one validator for every backend.
+TTL `MinPresignTTL` (1s) .. `MaxPresignTTL` (7d), else `ErrPresignTTL`.
+`PresignPutOptions`: zero field = unconstrained. `ContentType`,
+`ContentLength` (exact), `Metadata`, `Checksum{Algorithm, Value}` (raw
+digest; `sha256`/`crc32c`/`md5`). Unsupported algorithm ->
+`ErrUnsupportedChecksum`. `PresignedRequest.Header` = headers client sends
+verbatim; `Expires` = server-enforced deadline.
+
+Conformance: `testutil/objstore.RunConformance(t, bucket, Capabilities{...})`
+runs shared contract (round trip, empty object, stat/exists/delete, missing
+key, list bounds, unsafe keys, URL, Copy, PresignPut) for every backend.
 
 ## Backends
 
 | Backend | Notes |
 | --- | --- |
 | `NewLocalBucket(dir)` | Files on disk; `os.Root` confinement blocks traversal + symlink escape. Keys: canonical, <= 1024 bytes. Every new object gets a bounded sidecar bound to body size + SHA-256. `URL` returns `file://` |
-| `NewS3Bucket(ctx, S3Options)` | S3/MinIO via aws-sdk-go-v2. `URL` returns presigned GET. MinIO: set `Endpoint` + `PathStyle`. |
+| `NewS3Bucket(ctx, S3Options)` | S3/MinIO via aws-sdk-go-v2. `URL` returns presigned GET. Implements `Copier` + `PutPresigner`. MinIO: set `Endpoint` + `PathStyle`. |
 | GCS (planned) | `storage/gcs` sub-package |
 
 ## S3 backend
@@ -44,10 +65,35 @@ storage.s3.endpoint    = "http://localhost:9000"  # MinIO; omit for real S3
 storage.s3.access_key  = "..."   # empty = AWS default credential chain
 storage.s3.secret_key  = "..."
 storage.s3.path_style  = true    # required for MinIO
-storage.s3.presign_ttl = 15m     # URL() presigned-GET lifetime (default 15m)
+storage.s3.presign_ttl = 15m     # URL() presigned-GET lifetime (default 15m, max 7d)
+storage.s3.role_arn    = "arn:aws:iam::123456789012:role/app"   # optional
+storage.s3.web_identity_token_file = "/var/run/secrets/tokens/s3"  # needs role_arn
+storage.s3.role_session_name = "app"   # optional
+storage.s3.sts_endpoint      = ""      # optional STS override
+storage.s3.part_size           = 8388608   # 5 MiB..5 GiB (default 8 MiB)
+storage.s3.multipart_threshold = 16777216  # 5 MiB..5 GiB (default 16 MiB)
+storage.s3.concurrency         = 5         # 1..32 parallel parts per call
 ```
 
 Static credentials: both fields or neither; half-configured pair = error.
+Credentials: base = static keys or AWS default chain (env, IRSA, Pod
+Identity, IMDS). `role_arn` layers STS AssumeRole on base;
+`role_arn` + `web_identity_token_file` = AssumeRoleWithWebIdentity (no static
+keys). Token file re-read on every refresh: rotated projected tokens work.
+Credential cache refreshes before expiry.
+
+`Put`: aws transfermanager (`feature/s3/manager` deprecated upstream).
+Body < `multipart_threshold` -> one PutObject; else multipart, parts
+buffered, `concurrency` workers, failed upload aborted. Unseekable +
+unknown-length bodies OK; cap = 10000 x `part_size`. Peak buffer memory per
+Put = (`concurrency`+1) x `part_size`. Checksum policy follows SDK client
+config (`AWS_REQUEST_CHECKSUM_CALCULATION`).
+`Copy`: HeadObject -> source <= 5 GiB: one CopyObject; larger: multipart
+UploadPartCopy (1 GiB parts, `concurrency` bound, abort on failure). Every
+request pins source ETag (`x-amz-copy-source-if-match`): concurrent
+overwrite fails copy instead of mixing versions. Content type + metadata kept.
+`PresignPut`: SigV4 query-signed PUT. Content type, exact length, metadata,
+checksum (sha256/crc32c/md5) = signed headers; mismatch -> 403/400.
 `Put` snapshots caller metadata before AWS SDK entry.
 Fx construction gives AWS config loading a fixed 15-second deadline.
 

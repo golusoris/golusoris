@@ -25,6 +25,8 @@ const (
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
 	Redpanda = "redpandadata/redpanda:v24.3.1@sha256:f2f8bb89f1a0747cc6f86440cb3a0916e981e136e1d72392bab179f73492fb0f"
+	// VersityGW is the S3-compatible gateway that enforces SigV4 for storage tests.
+	VersityGW = "versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499"
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the opt-in malware-scanner integration-test image.

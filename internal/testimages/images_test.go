@@ -55,7 +55,7 @@ func TestWithPinnedReaper(t *testing.T) {
 
 func TestRepositoryPinsAreValid(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{Postgres, Timescale, Redis, NATS, ClickHouse, Redpanda, Ryuk, ClamAV} {
+	for _, image := range []string{Postgres, Timescale, Redis, NATS, ClickHouse, Redpanda, VersityGW, Ryuk, ClamAV} {
 		if err := Validate(image); err != nil {
 			t.Errorf("Validate(%q) error = %v", image, err)
 		}
@@ -90,6 +90,7 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 		NATS:       false,
 		ClickHouse: false,
 		Redpanda:   false,
+		VersityGW:  false,
 		Ryuk:       false,
 	}
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))

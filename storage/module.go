@@ -27,7 +27,7 @@ import (
 // Config keys live under the "storage" prefix.
 type Options struct {
 	// Backend selects the storage backend: "local" (default) or "s3"
-	// (S3/MinIO-compatible). GCS/Azure are future backends.
+	// (S3/MinIO-compatible).
 	Backend string `koanf:"backend"`
 	// Local configures the local-filesystem backend.
 	Local LocalOptions `koanf:"local"`

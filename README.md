@@ -259,7 +259,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `storage/` | `Bucket` interface + local FS and S3 backends with presigned GET support | aws/aws-sdk-go-v2 |
+| `storage/` | `Bucket` interface + local FS and S3 backends; presigned GET/PUT, multipart upload, server-side copy, STS role/web-identity credentials | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | Animation-safe raster metadata strip + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
@@ -374,6 +374,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
 | `testutil/kafka/` | testcontainers Redpanda/Kafka endpoint | testcontainers-go |
 | `testutil/nats/` | testcontainers NATS endpoint | testcontainers-go |
+| `testutil/objstore/` | testcontainers object-storage emulators + shared `storage.Bucket` conformance suite | testcontainers-go |
 | `testutil/river/` | in-process river test harness with real Postgres | riverqueue/river |
 | `testutil/fxtest/` | fx lifecycle helpers for unit tests | go.uber.org/fx/fxtest |
 | `testutil/snapshot/` | golden-file / snapshot testing | gkampitakis/go-snaps |
