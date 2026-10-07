@@ -282,7 +282,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
 | `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + FuncProvider |
-| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types | santhosh-tekuri/jsonschema + invopop/jsonschema |
+| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types; `GenerateConfig` emits Helm `values.schema.json` from koanf config structs | santhosh-tekuri/jsonschema + invopop/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
 | `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |
