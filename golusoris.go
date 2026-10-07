@@ -242,8 +242,9 @@ var Tenancy = fx.Module(
 	tenancy.Module,
 )
 
-// Idempotency bundles the Idempotency-Key middleware + Store
-// (MemoryStore by default; apps override via fx.Decorate).
+// Idempotency bundles the Idempotency-Key middleware + Store, selected by
+// idempotency.store (memory default; postgres, redis, sqlite share keys
+// across replicas or nodes; fx.Decorate still overrides).
 //
 // Requires [Core] for config + clock. Config key prefix: idempotency.*.
 var Idempotency = fx.Module(
