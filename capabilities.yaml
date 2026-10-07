@@ -312,6 +312,11 @@ packages:
     capabilities: [db.migrate]
     description: "Package migrate wraps golang-migrate v4 with golusoris conventions: an fx module that opens a migrate.Migrate against the configured DB and (opt-in) runs Up() d"
     replaces: [github.com/golang-migrate/migrate/v4]
+  - import: github.com/golusoris/golusoris/db/migrate/sqlite
+    domain: db
+    capabilities: [db.migrate.sqlite]
+    description: "Package sqlite runs db/migrate migrations against a SQLite database through golang-migrate's pure-Go sqlite driver (modernc.org/sqlite, the driver db/sqlite use"
+    replaces: [github.com/golang-migrate/migrate/v4]
   - import: github.com/golusoris/golusoris/db/pgx
     domain: db
     capabilities: [db.postgres]

@@ -46,8 +46,8 @@ fx.New(golusoris.Core, sqlite.Module, fx.Invoke(func(db *sql.DB) { … }))
 
 ## Don't
 
-- Don't run migrations here; wire `db/migrate` with sqlite driver source,
- or ship schema with `CREATE TABLE IF NOT EXISTS` in `fx.Invoke`.
+- Don't run migrations here; use `db/migrate/sqlite` (`Module` or `New`), or
+  ship schema with `CREATE TABLE IF NOT EXISTS` in an `fx.Invoke`.
 - Don't raise `max_open_conns` expecting write parallelism — SQLite has one
  writer; WAL only parallelises readers.
 - Don't use `:memory:` for anything but tests and throwaway caches.

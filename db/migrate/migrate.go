@@ -7,6 +7,11 @@
 // runs Up() during fx start. A Migrator handle is also provided so apps can
 // trigger migrations from CLI commands.
 //
+// Databases: PostgreSQL through [New] and [Module] (pgx/v5 driver); any other
+// golang-migrate driver the program registers through [Open]. SQLite lives in
+// the db/migrate/sqlite subpackage so that PostgreSQL-only programs do not link
+// a SQLite driver.
+//
 // Sources:
 //   - File path (default): set Options.Path to a directory of .sql files.
 //   - Embedded fs.FS: pass an [fs.FS] via [WithFS] when constructing Options
@@ -125,8 +130,8 @@ func (m *Migrator) Close() error {
 	return nil
 }
 
-// New constructs a Migrator. If opts.FS is set it takes precedence over Path.
-// dsn defaults to opts.DSN, falling back to pgxOpts.DSN.
+// New constructs a Migrator for PostgreSQL. If opts.FS is set it takes
+// precedence over Path. dsn defaults to opts.DSN, falling back to pgxOpts.DSN.
 func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
 	dsn := opts.DSN
 	if dsn == "" {
@@ -142,30 +147,34 @@ func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, e
 	if err != nil {
 		return nil, err
 	}
+	return Open(opts, dbURL, logger)
+}
 
-	var m *migrate.Migrate
-	switch {
-	case opts.FS != nil:
-		path := opts.Path
-		if path == "" {
-			path = "migrations"
-		}
+// Open constructs a Migrator for databaseURL, a golang-migrate database URL
+// whose driver the program has registered (pgx5:// is registered by this
+// package; db/migrate/sqlite registers sqlite://). If opts.FS is set it takes
+// precedence over Path; opts.DSN is not read.
+func Open(opts Options, databaseURL string, logger *slog.Logger) (*Migrator, error) {
+	path := opts.Path
+	if path == "" {
+		path = "migrations"
+	}
+	var (
+		m   *migrate.Migrate
+		err error
+	)
+	if opts.FS != nil {
 		src, ferr := iofs.New(opts.FS, path)
 		if ferr != nil {
 			return nil, fmt.Errorf("db/migrate: iofs source: %w", ferr)
 		}
-		m, err = migrate.NewWithSourceInstance("iofs", src, dbURL)
-	default:
-		path := opts.Path
-		if path == "" {
-			path = "migrations"
-		}
-		m, err = migrate.New(fileSourceURL(path), dbURL)
+		m, err = migrate.NewWithSourceInstance("iofs", src, databaseURL)
+	} else {
+		m, err = migrate.New(fileSourceURL(path), databaseURL)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db/migrate: open: %w", err)
 	}
-
 	return &Migrator{m: m, logger: logger}, nil
 }
 
@@ -187,8 +196,9 @@ func pgxToMigrateURL(dsn string) (string, error) {
 	return u.String(), nil
 }
 
-// loadOptions unmarshals "db.migrate" into Options.
-func loadOptions(cfg *config.Config) (Options, error) {
+// LoadOptions unmarshals "db.migrate" into Options. Modules for other
+// databases (db/migrate/sqlite) provide their Options through it.
+func LoadOptions(cfg *config.Config) (Options, error) {
 	var opts Options
 	if err := cfg.Unmarshal("db.migrate", &opts); err != nil {
 		return Options{}, fmt.Errorf("db/migrate: load options: %w", err)
@@ -196,36 +206,42 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
-// Module provides a *Migrator and (when db.migrate.auto=true) runs Up() on
-// fx Start. Requires [config.Module], [log.Module], and [dbpgx.Module] in the
-// same fx graph.
+// Bind ties m to the fx lifecycle: Up() on start when opts.Auto is set, and a
+// best-effort Close on stop that never fails the stop.
+func Bind(lc fx.Lifecycle, m *Migrator, opts Options, logger *slog.Logger) {
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			if !opts.Auto {
+				return nil
+			}
+			return m.Up()
+		},
+		OnStop: func(ctx context.Context) error {
+			// Best-effort: closing migrate also closes its DB; never fail fx stop on it.
+			if cerr := m.Close(); cerr != nil {
+				logger.WarnContext(ctx, "db/migrate: close", slog.String("error", cerr.Error()))
+			}
+			return nil
+		},
+	})
+}
+
+// Module provides a *Migrator for PostgreSQL and (when db.migrate.auto=true)
+// runs Up() on fx Start. Requires [config.Module], [log.Module], and
+// [dbpgx.Module] in the same fx graph.
 //
 // Apps embedding migrations should override Options via fx.Replace:
 //
 //	fx.Replace(migrate.Options{Auto: true}.WithFS(myEmbedFS))
 var Module = fx.Module(
 	"golusoris.db.migrate",
-	fx.Provide(loadOptions),
+	fx.Provide(LoadOptions),
 	fx.Provide(func(lc fx.Lifecycle, opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
 		m, err := New(opts, pgxOpts, logger)
 		if err != nil {
 			return nil, err
 		}
-		lc.Append(fx.Hook{
-			OnStart: func(_ context.Context) error {
-				if !opts.Auto {
-					return nil
-				}
-				return m.Up()
-			},
-			OnStop: func(ctx context.Context) error {
-				// Best-effort: closing migrate also closes its DB; never fail fx stop on it.
-				if cerr := m.Close(); cerr != nil {
-					logger.WarnContext(ctx, "db/migrate: close", slog.String("error", cerr.Error()))
-				}
-				return nil
-			},
-		})
+		Bind(lc, m, opts, logger)
 		return m, nil
 	}),
 )
