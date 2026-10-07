@@ -17,6 +17,14 @@ Full OpenTelemetry SDK — tracer, meter, logger — with OTLP gRPC exporter.
 - Provider construction is atomic: globals change after every enabled signal builds. Partial failures shut down built providers.
 - Shutdown swaps still-owned global SDK providers for no-op providers before exporter teardown. Newer globals remain intact.
 
+## Prometheus pull
+
+- `otel.export.prometheus=true` adds `go.opentelemetry.io/otel/exporters/prometheus` reader: every OTel instrument (otelhttp, otelgrpc, app meters) appears on app's Prometheus registry. Needs no OTLP endpoint; traces + logs still need one.
+- Registry: fx-provided `prometheus.Registerer` when present, else `prometheus.DefaultRegisterer`. Non-fx: `otel.NewWithRegisterer(ctx, opts, reg)`.
+- Naming = exporter default (underscore escaping, unit + `_total` suffixes): `http.server.request.duration` (s) -> `http_server_request_duration_seconds_{bucket,sum,count}`, attr `http.response.status_code` -> label `http_response_status_code`; series carry `otel_scope_*` labels; resource -> `target_info`.
+- Serve via `prom.OpenMetricsHandler(reg)`: sampled-span exemplars (`trace_id`, `span_id`) ride OpenMetrics only.
+- Collector stays registered after `Shutdown`; shut-down reader makes it silent.
+
 ## Logs
 
 - `otel.Module` contributes `TraceHandler` to `core/log` middleware group: injected `*slog.Logger` (and `slog.Default`) stamps `trace_id`, `span_id`, `trace_flags` (consts `TraceIDKey`, `SpanIDKey`, `TraceFlagsKey`) on records whose ctx carries valid span. Config `otel.logs.trace_ids` (default true; effective only with `otel.enabled`). Env override needs `config.Options.CompoundKeys: []string{"otel.logs.trace_ids"}` -> `APP_OTEL_LOGS_TRACE_IDS`.

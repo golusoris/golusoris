@@ -26,6 +26,8 @@
 //	otel.export.traces       # enable trace export (default true)
 //	otel.export.metrics      # enable metric export (default true)
 //	otel.export.logs         # enable log export (default true)
+//	otel.export.prometheus   # serve OTel metrics on the Prometheus registry
+//	                         # (default false; works without an OTLP endpoint)
 //	otel.logs.trace_ids      # stamp trace_id/span_id/trace_flags on slog
 //	                         # records with a span in context (default true;
 //	                         # needs otel.enabled)
@@ -34,8 +36,9 @@
 // OTel API costs nothing and never touches the network — when any of these
 // hold: otel.enabled=false (master switch), OTEL_SDK_DISABLED=true (standard
 // OTel kill switch), or no OTLP endpoint is configured (neither otel.endpoint
-// nor any OTEL_EXPORTER_OTLP_*_ENDPOINT env var is set). The last case is the
-// 12-factor default: no collector wired → silently no-op.
+// nor any OTEL_EXPORTER_OTLP_*_ENDPOINT env var is set) and
+// otel.export.prometheus is off. The endpoint case is the 12-factor default:
+// no collector wired → silently no-op.
 package otel
 
 import (
@@ -46,6 +49,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	otelapi "go.opentelemetry.io/otel"
 	otlplog "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -98,6 +102,10 @@ type ExportOptions struct {
 	Traces  bool `koanf:"traces"`
 	Metrics bool `koanf:"metrics"`
 	Logs    bool `koanf:"logs"`
+	// Prometheus adds a pull reader that serves every OTel instrument on the
+	// app's Prometheus registry, so /metrics shows them with exemplars. It
+	// needs no OTLP endpoint; traces and logs still do.
+	Prometheus bool `koanf:"prometheus"`
 }
 
 // DefaultOptions returns the opinionated defaults.
@@ -175,8 +183,18 @@ func (p *Providers) detachGlobals() {
 //   - opts.Enabled is false (master switch),
 //   - OTEL_SDK_DISABLED=true (standard OTel kill switch), or
 //   - no OTLP endpoint is configured via otel.endpoint or the standard
-//     OTEL_EXPORTER_OTLP_*_ENDPOINT env vars (12-factor default).
+//     OTEL_EXPORTER_OTLP_*_ENDPOINT env vars (12-factor default) and
+//     otel.export.prometheus is off.
+//
+// otel.export.prometheus registers on prometheus.DefaultRegisterer; use
+// [NewWithRegisterer] for another registry.
 func New(ctx context.Context, opts Options) (*Providers, error) {
+	return NewWithRegisterer(ctx, opts, prometheus.DefaultRegisterer)
+}
+
+// NewWithRegisterer is [New] with the registerer otel.export.prometheus
+// registers its collector on; nil means prometheus.DefaultRegisterer.
+func NewWithRegisterer(ctx context.Context, opts Options, reg prometheus.Registerer) (*Providers, error) {
 	if skipOTel(opts) {
 		return &Providers{}, nil
 	}
@@ -186,13 +204,7 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	}
 
 	providers := &Providers{}
-	if err := buildTracer(ctx, res, opts, providers); err != nil {
-		return nil, cleanupPartialProviders(ctx, providers, err)
-	}
-	if err := buildMeter(ctx, res, opts, providers); err != nil {
-		return nil, cleanupPartialProviders(ctx, providers, err)
-	}
-	if err := buildLogger(ctx, res, opts, providers); err != nil {
+	if err := buildProviders(ctx, res, opts, reg, providers); err != nil {
 		return nil, cleanupPartialProviders(ctx, providers, err)
 	}
 
@@ -229,12 +241,25 @@ func installGlobals(providers *Providers) {
 // skipOTel reports whether New must degrade to a silent no-op — see New's
 // doc comment for the three conditions.
 func skipOTel(opts Options) bool {
-	return !opts.Enabled || sdkDisabled() || !exporterConfigured(opts)
+	return !opts.Enabled || sdkDisabled() || (!exporterConfigured(opts) && !opts.Export.Prometheus)
+}
+
+// buildProviders builds every enabled signal; OTLP-backed signals only when an
+// endpoint is configured, the Prometheus pull reader regardless.
+func buildProviders(ctx context.Context, res *resource.Resource, opts Options, reg prometheus.Registerer, providers *Providers) error {
+	otlp := exporterConfigured(opts)
+	if err := buildTracer(ctx, res, opts, otlp, providers); err != nil {
+		return err
+	}
+	if err := buildMeter(ctx, res, opts, otlp, reg, providers); err != nil {
+		return err
+	}
+	return buildLogger(ctx, res, opts, otlp, providers)
 }
 
 // buildTracer builds the tracer provider when trace export is enabled.
-func buildTracer(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
-	if !opts.Export.Traces {
+func buildTracer(ctx context.Context, res *resource.Resource, opts Options, otlp bool, providers *Providers) error {
+	if !otlp || !opts.Export.Traces {
 		return nil
 	}
 	p, err := buildTracerProvider(ctx, res, opts)
@@ -245,22 +270,23 @@ func buildTracer(ctx context.Context, res *resource.Resource, opts Options, prov
 	return nil
 }
 
-// buildMeter builds the meter provider when metric export is enabled.
-func buildMeter(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
-	if !opts.Export.Metrics {
-		return nil
-	}
-	p, err := buildMeterProvider(ctx, res, opts)
+// buildMeter builds the meter provider when OTLP or Prometheus metric export
+// is enabled.
+func buildMeter(ctx context.Context, res *resource.Resource, opts Options, otlp bool, reg prometheus.Registerer, providers *Providers) error {
+	readers, err := meterReaders(ctx, opts, otlp, reg)
 	if err != nil {
 		return err
 	}
-	providers.Meter = p
+	if len(readers) == 0 {
+		return nil
+	}
+	providers.Meter = sdkmetric.NewMeterProvider(append(readers, sdkmetric.WithResource(res))...)
 	return nil
 }
 
 // buildLogger builds the logger provider when log export is enabled.
-func buildLogger(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
-	if !opts.Export.Logs {
+func buildLogger(ctx context.Context, res *resource.Resource, opts Options, otlp bool, providers *Providers) error {
+	if !otlp || !opts.Export.Logs {
 		return nil
 	}
 	p, err := buildLoggerProvider(ctx, res, opts)
@@ -310,15 +336,27 @@ func buildTracerProvider(ctx context.Context, res *resource.Resource, opts Optio
 	), nil
 }
 
-func buildMeterProvider(ctx context.Context, res *resource.Resource, opts Options) (*sdkmetric.MeterProvider, error) {
+// meterReaders builds the Prometheus pull reader first: it starts no
+// goroutine, so a later OTLP failure only has to shut it down.
+func meterReaders(ctx context.Context, opts Options, otlp bool, reg prometheus.Registerer) ([]sdkmetric.Option, error) {
+	readers := make([]sdkmetric.Option, 0, 3)
+	var pull sdkmetric.Reader
+	if opts.Export.Prometheus {
+		r, err := newPrometheusReader(ctx, reg)
+		if err != nil {
+			return nil, err
+		}
+		pull = r
+		readers = append(readers, sdkmetric.WithReader(r))
+	}
+	if !otlp || !opts.Export.Metrics {
+		return readers, nil
+	}
 	exp, err := otlpmetric.New(ctx, metricDialOpts(opts)...)
 	if err != nil {
-		return nil, fmt.Errorf("otel: metric exporter: %w", err)
+		return nil, errors.Join(fmt.Errorf("otel: metric exporter: %w", err), shutdownReader(ctx, pull))
 	}
-	return sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(15*time.Second))),
-		sdkmetric.WithResource(res),
-	), nil
+	return append(readers, sdkmetric.WithReader(sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(15*time.Second)))), nil
 }
 
 func buildLoggerProvider(ctx context.Context, res *resource.Resource, opts Options) (*sdklog.LoggerProvider, error) {
@@ -382,17 +420,27 @@ var Module = fx.Module(
 	fx.Invoke(logConfigured),
 )
 
+// moduleProvidersParams lets an app hand its own Prometheus registry to
+// otel.export.prometheus; without one the default registerer is used.
+type moduleProvidersParams struct {
+	fx.In
+
+	Lifecycle  fx.Lifecycle
+	Options    Options
+	Registerer prometheus.Registerer `optional:"true"`
+}
+
 // newModuleProviders builds the providers without depending on *slog.Logger,
 // so log middleware can depend on *Providers without a cycle.
-func newModuleProviders(lc fx.Lifecycle, opts Options) (*Providers, error) {
+func newModuleProviders(p moduleProvidersParams) (*Providers, error) {
 	// Exporters and resource detection use ctx only while constructing.
 	ctx, cancel := context.WithTimeout(context.Background(), providerBuildTimeout)
 	defer cancel()
-	providers, err := New(ctx, opts)
+	providers, err := NewWithRegisterer(ctx, p.Options, p.Registerer)
 	if err != nil {
 		return nil, err
 	}
-	lc.Append(fx.Hook{
+	p.Lifecycle.Append(fx.Hook{
 		OnStop: func(ctx context.Context) error {
 			return providers.Shutdown(ctx)
 		},

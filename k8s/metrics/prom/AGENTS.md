@@ -21,6 +21,12 @@ Prometheus `/metrics` endpoint with Go runtime + process collectors and gauge pe
  Custom Registry instances are supported via `prom.HandlerFor(reg)` —
  not exposed yet; add when needed.
 
+## Exemplars
+
+- `prom.OpenMetricsHandler(g)` = `promhttp.HandlerFor` with `EnableOpenMetrics`; only OpenMetrics carries exemplars. Classic-text scrapers unaffected. OpenMetrics renders integer `le`/`quantile` as `"1.0"`: Prometheus 3 normalises, Prometheus 2 sees new series once.
+- `prom.ObserveWithExemplar(ctx, obs, v)` attaches `trace_id`/`span_id` (`prom.TraceIDLabel`, `prom.SpanIDLabel`) when ctx span sampled + obs implements `prometheus.ExemplarObserver`; else plain `Observe`. `prom.ExemplarLabels(ctx)` returns labels or nil.
+- `Handler()` / `HandlerFor()` / `Mount*` keep classic negotiation (no silent format switch for existing scrapes).
+
 ## Don't
 
 - Don't use per-test `MustRegister` without recovery — global

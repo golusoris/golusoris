@@ -7,8 +7,10 @@ package otel
 import (
 	"context"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
 	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/resource"
 
@@ -25,7 +27,7 @@ func TestPartialProviderFailureNeverPublishesGlobals(t *testing.T) {
 		Sample:   SampleOptions{Ratio: 1},
 		Export:   ExportOptions{Traces: true},
 	}
-	if err := buildTracer(context.Background(), resource.Empty(), valid, providers); err != nil {
+	if err := buildTracer(context.Background(), resource.Empty(), valid, true, providers); err != nil {
 		t.Fatalf("buildTracer: %v", err)
 	}
 	if got := otelapi.GetTracerProvider(); got != previousTracer {
@@ -37,7 +39,7 @@ func TestPartialProviderFailureNeverPublishesGlobals(t *testing.T) {
 		Endpoint: "bad\x00host",
 		Export:   ExportOptions{Metrics: true},
 	}
-	buildErr := buildMeter(context.Background(), resource.Empty(), invalid, providers)
+	buildErr := buildMeter(context.Background(), resource.Empty(), invalid, true, nil, providers)
 	if buildErr == nil {
 		t.Fatal("buildMeter: expected invalid endpoint error")
 	}
@@ -215,5 +217,28 @@ func TestLoadOptions_disabledSkipsServiceNameCheck(t *testing.T) {
 	}
 	if opts.Enabled {
 		t.Error("Enabled = true, want false")
+	}
+}
+
+func TestPrometheusReaderShutDownWhenOTLPMetricExporterFails(t *testing.T) { //nolint:paralleltest // Swaps the global OTel error handler.
+	var handled atomic.Int32
+	prev := otelapi.GetErrorHandler()
+	otelapi.SetErrorHandler(otelapi.ErrorHandlerFunc(func(error) { handled.Add(1) }))
+	t.Cleanup(func() { otelapi.SetErrorHandler(prev) })
+
+	reg := prometheus.NewRegistry()
+	opts := Options{Insecure: true, Endpoint: "bad\x00host", Export: ExportOptions{Metrics: true, Prometheus: true}}
+	providers := &Providers{}
+	if err := buildMeter(context.Background(), resource.Empty(), opts, true, reg, providers); err == nil {
+		t.Fatal("buildMeter: expected invalid endpoint error")
+	}
+	if providers.Meter != nil {
+		t.Fatal("meter provider published after a failed build")
+	}
+	if _, err := reg.Gather(); err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	if n := handled.Load(); n != 0 {
+		t.Fatalf("orphaned OTel collector reported %d errors on one scrape", n)
 	}
 }

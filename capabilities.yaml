@@ -779,7 +779,7 @@ packages:
     domain: telemetry
     capabilities: [telemetry.otel]
     description: "Package otel wires OpenTelemetry — tracer, meter, and logger — with an OTLP gRPC exporter."
-    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
+    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/exporters/prometheus, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
   - import: github.com/golusoris/golusoris/outbox
     domain: outbox
     capabilities: [jobs.outbox]
