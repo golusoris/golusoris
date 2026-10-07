@@ -34,3 +34,4 @@ code paths that are already k8s-specific (client, Lease users).
 - Every module is opt-in. Apps not running on k8s skip them.
 - Health checks live on **shared** `statuspage.Registry` — `/livez` `/readyz` `/startupz` `/status` all read from one source.
 - Pod metadata: `core/log/` and `otel/` read env vars directly (lower in dep graph). Higher-level packages inject `podinfo.PodInfo` or `runtime.Info`.
+- CRD manifests apps deploy (KEDA `ScaledObject`, `TriggerAuthentication`, CNPG `Cluster`) belong in Helm, not Go types: deploy-time objects, no Go caller, and hand-copied CRD structs drift from upstream schema without validation. Helm renders pass kubeconform against pinned CRD schemas. KEDA external scaler side stays Go.
