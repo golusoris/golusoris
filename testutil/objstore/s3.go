@@ -44,7 +44,7 @@ const (
 	s3Port      = "7070/tcp"
 	s3Region    = "us-east-1"
 	s3AccessKey = "golusoris-test"
-	s3SecretKey = "golusoris-test-secret"
+	s3SecretKey = "golusoris-test-secret" // #nosec G101 -- root key of a throwaway local test container.
 	s3Bucket    = "conformance"
 )
 

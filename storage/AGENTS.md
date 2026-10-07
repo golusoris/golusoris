@@ -50,7 +50,7 @@ key, list bounds, unsafe keys, URL, Copy, PresignPut) for every backend.
 | --- | --- |
 | `NewLocalBucket(dir)` | Files on disk; `os.Root` confinement blocks traversal + symlink escape. Keys: canonical, <= 1024 bytes. Every new object gets a bounded sidecar bound to body size + SHA-256. `URL` returns `file://` |
 | `NewS3Bucket(ctx, S3Options)` | S3/MinIO via aws-sdk-go-v2. `URL` returns presigned GET. Implements `Copier` + `PutPresigner`. MinIO: set `Endpoint` + `PathStyle`. |
-| GCS (planned) | `storage/gcs` sub-package |
+| `gcs.New(ctx, gcs.Options, clock)` | Own module `storage/gcs`; `gcs.Module` replaces `storage.Module`. See `storage/gcs/AGENTS.md`. |
 
 ## S3 backend
 

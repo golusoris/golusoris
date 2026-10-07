@@ -321,7 +321,7 @@ func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
 
 // List implements [Bucket].
 func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error) {
-	limit, err := normalizeListLimit(opts.Limit)
+	limit, err := NormalizeListLimit(opts.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +332,7 @@ func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error)
 	if err = ctx.Err(); err != nil {
 		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
 	}
-	maxKeys := int32(limit) // #nosec G115 -- normalizeListLimit proves the value is within 1..1000.
+	maxKeys := int32(limit) // #nosec G115 -- NormalizeListLimit proves the value is within 1..1000.
 	in := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(b.bucket),
 		MaxKeys: aws.Int32(maxKeys),
@@ -395,7 +395,7 @@ func cleanS3Key(key string) (string, error) {
 }
 
 func cleanS3Prefix(prefix string) (string, error) {
-	clean, err := cleanListPrefix(prefix)
+	clean, err := CleanListPrefix(prefix)
 	if err != nil {
 		return "", fmt.Errorf("storage/s3: validate list prefix: %w", err)
 	}

@@ -2,7 +2,8 @@
 #
 # Cache manifest. Keep byte-identical references with internal/testimages.
 # storage/scan's ClamAV image is behind the `integration` build tag, which the
-# CI test job does not set, so it is deliberately absent.
+# CI test job does not set, so it is deliberately absent. Split-module emulator
+# images (storage/gcs) run in the Module sweep job and are absent too.
 #
 # This lives in its own file, not inline in ci.yml, because the CI image cache
 # is keyed on its hash: edit the list and the next run repopulates the cache.

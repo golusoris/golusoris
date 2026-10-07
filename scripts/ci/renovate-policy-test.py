@@ -68,6 +68,7 @@ EXPECTED = {
     ("internal/testimages/images.go", "versity/versitygw", "docker"),
     ("internal/testimages/images.go", "testcontainers/ryuk", "docker"),
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
+    ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -140,6 +141,7 @@ EXPECTED_DIGESTS = {
     "versity/versitygw",
     "testcontainers/ryuk",
     "clamav/clamav",
+    "fsouza/fake-gcs-server",
     "mcr.microsoft.com/devcontainers/go",
 }
 
@@ -194,6 +196,12 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
     return {(item["path"], item["dep_name"], item["datasource"]) for item in found}
 
 
+# Go-authority images the primary CI test job never runs, so its cache omits
+# them: ClamAV sits behind the `integration` build tag, and split-module
+# emulators run in the Module sweep job, which pulls on demand.
+CACHE_EXEMPT_IMAGES = frozenset({"clamav/clamav", "fsouza/fake-gcs-server"})
+
+
 def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
     """Require duplicated CI cache pins to match the Go authority exactly."""
     paths = ("internal/testimages/images.go", ".github/testcontainers-images.txt")
@@ -207,8 +215,8 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
     }
     go_images = image_pins[paths[0]]
     cache_images = image_pins[paths[1]]
-    if set(go_images) - set(cache_images) != {"clamav/clamav"} or set(cache_images) - set(go_images):
-        print("test-image authority sets differ beyond the declared ClamAV exception", file=sys.stderr)
+    if set(go_images) - set(cache_images) != CACHE_EXEMPT_IMAGES or set(cache_images) - set(go_images):
+        print("test-image authority sets differ beyond the declared cache exemptions", file=sys.stderr)
         return False
     drift = [name for name, pin in cache_images.items() if go_images[name] != pin]
     if drift:

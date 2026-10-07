@@ -49,7 +49,7 @@ checksum, source, and exception-authority drift.
 
 The blocking `CI success` aggregate in `.github/workflows/ci.yml` covers
 formatting; lint, gosec, govulncheck, tidiness, build/vet, API diff, and race
-tests across all 24 Go modules; Python and C gates; allocation budgets;
+tests across all 25 Go modules; Python and C gates; allocation budgets;
 documentation, shell, workflow, Terraform, and Kubernetes checks; Semgrep,
 Spectral, dependency review, gitleaks, DCO, and REUSE. DCO is not applicable to
 Renovate commits; dependency review and DCO are both skipped outside

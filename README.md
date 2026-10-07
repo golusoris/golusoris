@@ -343,6 +343,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
+| `storage/gcs/` | Google Cloud Storage `storage.Bucket` — resumable upload, signed GET/PUT (key or IAM signBlob), server-side copy | cloud.google.com/go/storage |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bounded FASTA parser, rev-complement, GC content | stdlib |
@@ -413,9 +414,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 24 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 25 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 24 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 25 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
@@ -461,7 +462,7 @@ Breaking changes between minor versions are called out in the commit
 [docs/migrations/v0.13.0.md](docs/migrations/v0.13.0.md) for current API and
 secure-default changes. The [v0.9.0 guide](docs/migrations/v0.9.0.md) retains
 the earlier `core/…` import-path mapping. Every module in the catalog above is
-committed; CI gates all 23 discovered Go modules through the primary lane and
+committed; CI gates all 25 discovered Go modules through the primary lane and
 four deterministic module-sweep shards.
 
 ---
