@@ -27,7 +27,7 @@ concurrency:
 jobs:
   build:
     name: Build mkdocs site
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -47,7 +47,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write

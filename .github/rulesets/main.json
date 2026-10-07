@@ -94,7 +94,7 @@
             "context": "Terraform modules"
           },
           {
-            "context": "Test (race + coverage) (arc-cauda-golusoris-golusoris, module)"
+            "context": "Test (race + coverage) (ubuntu-24.04, module)"
           },
           {
             "context": "Vulnerabilities (govulncheck)"

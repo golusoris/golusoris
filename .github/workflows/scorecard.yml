@@ -32,7 +32,7 @@ permissions:
 jobs:
   analysis:
     name: Scorecard Analysis
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read

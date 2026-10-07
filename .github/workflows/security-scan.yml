@@ -2,11 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Semgrep runs fully inside its pinned container through the ARC Docker sidecar.
-# The immutable cauda runner image supplies the verified Docker CLI and shares
-# /var/run/docker.sock with dind. Rulesets come from the public registry without
-# an account; `--config auto` is deliberately NOT used because it reports the
-# project URL.
+# Semgrep runs fully inside its pinned container on the hosted runner's native
+# Docker daemon. Rulesets come from the public registry without an account;
+# `--config auto` is deliberately NOT used because it reports the project URL.
 name: Security scan
 
 on:
@@ -29,17 +27,16 @@ jobs:
   semgrep:
     name: Semgrep analysis
     if: github.actor != 'renovate[bot]'
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Verify the pinned Docker sidecar contract
+      - name: Verify the Docker daemon
         shell: bash
         run: |
           set -euo pipefail
           command -v docker
-          test "${DOCKER_HOST:-}" = "unix:///var/run/docker.sock"
           docker info
 
       - name: Run Semgrep
@@ -47,9 +44,9 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          # The dind daemon cannot bind-mount this workspace: separate containers,
-          # separate filesystems. Stream the tree in over stdin rather than
-          # reaching for a -v that would mount an empty directory.
+          # Stream the tree in over stdin instead of bind-mounting the
+          # workspace: it skips .git and keeps working where the daemon does
+          # not share the runner filesystem (dind, remote DOCKER_HOST).
           #
           # .config/hiss/testdata is excluded because it is a corpus of
           # deliberate violations: the HISS-20 enforcement-coverage fixtures

@@ -31,7 +31,7 @@ concurrency:
 jobs:
   contracts:
     name: Python contracts
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -58,7 +58,7 @@ jobs:
   build-only:
     name: Build and smoke (${{ matrix.trainer }})
     needs: contracts
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -97,7 +97,7 @@ jobs:
     name: Verify publication controls
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: contracts
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Require explicit remote-control enablement
@@ -115,7 +115,7 @@ jobs:
     name: Publish (${{ matrix.trainer }})
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
     needs: [contracts, publish-policy]
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     environment: tiny-trainer-publish
     concurrency:

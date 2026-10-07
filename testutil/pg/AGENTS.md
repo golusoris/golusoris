@@ -16,7 +16,7 @@ Boots real Postgres container via testcontainers-go for tests that need genuine 
 - For TimescaleDB tests, use `pg.StartTimescale(t)` — immutable repository pin + `CREATE EXTENSION` before return.
 - Default PostgreSQL + TimescaleDB references: `internal/testimages` authority.
 - `Options.Image`: exact `tag@sha256:<64 lowercase hex>` required; mutable override fails before Docker access.
-- Every start is bounded by `startTimeout` (3 min, image pull included) — sized for cold-cache CI ARC runners where all container packages pull at once. Keep it scalar constant (HISS-02).
+- Every start is bounded by `startTimeout` (3 min, image pull included) — sized for cold-cache CI runners where all container packages pull at once. Keep it scalar constant (HISS-02).
 - Image updates: change `internal/testimages` + `.github/testcontainers-images.txt`; Renovate manager + parity test enforce both copies.
 - Ryuk: immutable repository pin; helper overrides testcontainers default.
 - Every helper takes slot from `testutil/internal/startgate` before booting, so at most 2 containers start at once per test binary; parallel tests beyond that queue instead of timing out.

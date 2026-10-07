@@ -39,7 +39,7 @@ permissions:
 jobs:
   require-green-ci:
     name: Require green CI on the tagged commit
-    runs-on: arc-cauda-golusoris-golusoris
+    runs-on: ubuntu-24.04
     # Covers the 90 min poll below plus checkout.
     timeout-minutes: 100
     permissions:
@@ -63,19 +63,19 @@ jobs:
           # HISS-02: scalar bounds on the wait. The tag lands seconds after the
           # merge commit, so the check is nearly always still running when we
           # arrive -- waiting is the normal path, not the exception. Main's CI
-          # is slow on a starved ARC node (Lint alone is allowed 65 min), hence
+          # is slow on cold runners (Lint alone is allowed 65 min), hence
           # the generous ceiling. Finite, though: a tag that cannot show a
           # green CI is not a release.
           POLL_INTERVAL_SECONDS=30
           POLL_ATTEMPTS=180          # 180 x 30 s = 90 min
           # A queued workflow registers its check runs within seconds, but a
-          # busy scale set can delay that. Tolerate an absent check only this
+          # busy runner queue can delay that. Tolerate an absent check only this
           # long; past it, "no check" means "unverified commit".
           MISSING_GRACE_ATTEMPTS=20  # 10 min
 
           for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
-            # gh's built-in --jq needs no external jq, which the ARC runner
-            # tool contract (release-tool-contract.yml) does not promise.
+            # gh's built-in --jq keeps the gate independent of a separate jq
+            # binary on the runner image.
             # A re-run attaches a second check run with the same name to the
             # same commit, so take the most recently started one.
             state=$(gh api \
