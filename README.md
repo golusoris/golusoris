@@ -192,6 +192,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
 
 ### Kubernetes runtime
 

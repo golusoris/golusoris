@@ -745,6 +745,10 @@ packages:
     capabilities: [notify.webpush]
     description: "Package webpush sends browser push notifications via the Web Push Protocol (RFC 8030 / draft-ietf-webpush-encryption-08)."
     replaces: [github.com/SherClockHolmes/webpush-go]
+  - import: github.com/golusoris/golusoris/observability/metricdef
+    domain: telemetry
+    capabilities: [telemetry.metrics.catalog]
+    description: "Package metricdef declares Prometheus metrics once — name, help, unit, kind, labels, buckets and label-cardinality bounds — so services register typed handles from"
   - import: github.com/golusoris/golusoris/observability/pprof
     domain: telemetry
     capabilities: [telemetry.pprof]
