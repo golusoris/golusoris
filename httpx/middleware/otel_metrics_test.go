@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -26,17 +27,7 @@ const (
 )
 
 func TestOTelEmitsStatusCodeAttributeRulesDependOn(t *testing.T) { //nolint:paralleltest // Swaps the global meter provider.
-	reader := sdkmetric.NewManualReader()
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	previous := otel.GetMeterProvider()
-	otel.SetMeterProvider(provider)
-	t.Cleanup(func() {
-		otel.SetMeterProvider(previous)
-		if err := provider.Shutdown(context.Background()); err != nil {
-			t.Errorf("shutdown meter provider: %v", err)
-		}
-	})
-
+	reader := withMeterReader(t)
 	handler := middleware.OTel("rules", nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
@@ -75,4 +66,71 @@ func durationAttributes(t *testing.T, collected metricdata.ResourceMetrics) attr
 	}
 	t.Fatalf("metric %s not emitted", serverDurationMetric)
 	return attribute.Set{}
+}
+
+// routeOf serves path through handler and returns the recorded http.route.
+func routeOf(t *testing.T, reader *sdkmetric.ManualReader, handler http.Handler, path string) (string, bool) {
+	t.Helper()
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil))
+	var collected metricdata.ResourceMetrics
+	if err := reader.Collect(t.Context(), &collected); err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	attrs := durationAttributes(t, collected)
+	route, ok := attrs.Value("http.route")
+	return route.AsString(), ok
+}
+
+func withMeterReader(t *testing.T) *sdkmetric.ManualReader {
+	t.Helper()
+	reader := sdkmetric.NewManualReader()
+	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+	previous := otel.GetMeterProvider()
+	otel.SetMeterProvider(provider)
+	t.Cleanup(func() {
+		otel.SetMeterProvider(previous)
+		if err := provider.Shutdown(context.Background()); err != nil {
+			t.Errorf("shutdown meter provider: %v", err)
+		}
+	})
+	return reader
+}
+
+type ctxKey struct{}
+
+// replacesRequest mimics auth/tenancy middleware that derives a new request.
+func replacesRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKey{}, "user")))
+	})
+}
+
+func TestOTelRecordsChiRoutePattern(t *testing.T) { //nolint:paralleltest // Swaps the global meter provider.
+	reader := withMeterReader(t)
+	r := chi.NewRouter()
+	r.Use(middleware.OTel("routes", nil), replacesRequest)
+	r.Get("/users/{id}", func(http.ResponseWriter, *http.Request) {})
+	if route, ok := routeOf(t, reader, r, "/users/42"); !ok || route != "/users/{id}" {
+		t.Fatalf("http.route = %q (present %t), want /users/{id}", route, ok)
+	}
+}
+
+func TestOTelOutsideChiRecordsNoRoute(t *testing.T) { //nolint:paralleltest // Swaps the global meter provider.
+	reader := withMeterReader(t)
+	r := chi.NewRouter()
+	r.Get("/users/{id}", func(http.ResponseWriter, *http.Request) {})
+	// Wrapping the mux from outside: chi builds its route context inside.
+	if route, ok := routeOf(t, reader, middleware.OTel("outside", nil)(r), "/users/42"); ok {
+		t.Fatalf("http.route = %q without a chi route context", route)
+	}
+}
+
+func TestOTelUnmatchedPathRecordsNoRoute(t *testing.T) { //nolint:paralleltest // Swaps the global meter provider.
+	reader := withMeterReader(t)
+	r := chi.NewRouter()
+	r.Use(middleware.OTel("routes", nil))
+	r.Get("/users/{id}", func(http.ResponseWriter, *http.Request) {})
+	if route, ok := routeOf(t, reader, r, "/nope"); ok {
+		t.Fatalf("404 recorded http.route %q", route)
+	}
 }
