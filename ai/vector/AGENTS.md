@@ -12,7 +12,7 @@ with pgx/v5.
 ## Core types
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Vector` | Alias for `pgvec.Vector` — use in pgx query params + sqlc structs |
 | `From([]float32)` | Convert embedding slice to `Vector` |
 | `Metric` | `Cosine` (`<=>`) · `L2` (`<->`) · `InnerProduct` (`<#>`) |

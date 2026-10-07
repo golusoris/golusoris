@@ -21,7 +21,7 @@ type Client interface {
 ## Options
 
 | Option | Effect |
-|---|---|
+| --- | --- |
 | `WithModel(name)` | Override default model for this call |
 | `WithMaxTokens(n)` | Cap output token budget |
 | `WithTemperature(t)` | Sampling temperature (0=deterministic, 1=creative) |
@@ -48,7 +48,7 @@ Constructor: `NewOpenAIClient(Config) (*OpenAIClient, error)`.
 HTTP bounds:
 
 | Config field | Zero-value default |
-|---|---:|
+| --- | ---: |
 | `Timeout` | 120s |
 | `MaxResponseBytes` | 4 MiB |
 | `MaxErrorBytes` | 64 KiB |

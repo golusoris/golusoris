@@ -13,7 +13,7 @@ key and replays it verbatim on subsequent requests, without re-invoking handler.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `CachedResponse` | Stored representation: StatusCode, Header, Body |
 | `Store` | Atomic fingerprinted `Claim` + token-bound `Commit` / `Release`; Redis or Postgres; `MemoryStore` for tests |
 | `Options` | Header, TTL, Required, 1 MiB request/response bounds, optional principal Scope from `NewScopeFunc`, Logger |

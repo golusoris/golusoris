@@ -17,7 +17,7 @@ fx.New(clickhouse.Module) // reads "db.clickhouse.*" from koanf config
 Config keys (prefix `db.clickhouse`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `addr` | `["localhost:9000"]` | ClickHouse server(s) |
 | `database` | `"default"` | Target database |
 | `username` | `"default"` | Auth username |

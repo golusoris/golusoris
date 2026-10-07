@@ -25,9 +25,9 @@ Background job queue backed by Postgres via [river].
 ## Subpackages
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `jobs/cron` | robfig/cron/v3 parser + `Register[T](client, expr, ctor)` helper |
-| `jobs/ui`   | River UI at configurable prefix with optional basic-auth |
+| `jobs/ui` | River UI at configurable prefix with optional basic-auth |
 
 ## Don't
 

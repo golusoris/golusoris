@@ -15,7 +15,7 @@ cloud, or CGO code lives here — those stay in root module and import core.
 ## Packages
 
 | Package | Capability keys | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `config/` | `config.loader`, `config.env`, `config.watch` | koanf v2: env + file + YAML, hot reload |
 | `codec/yaml/` | `config.yaml` | strict, bounded YAML codec; atomic `WriteFile` |
 | `log/` | `telemetry.logging` | slog factory (tint / JSON) |

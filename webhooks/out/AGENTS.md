@@ -12,7 +12,7 @@ dead-letter queue, and replay.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Endpoint` | Registered subscription: URL, secret, event filter, active flag |
 | `Delivery` | Delivery record: attempts, status, last HTTP code, error |
 | `Store` | Persistence interface — implement with Postgres, SQLite, or `memStore` for tests |

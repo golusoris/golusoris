@@ -19,7 +19,7 @@ non-Linux platforms module is no-op stub.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `ebpf.Module` | fx module — provides `*Registry`, loads collection on Start |
 | `ebpf.ObjectProvider` | `func() ([]byte, error)` returning compiled ELF bytes |
 | `ebpf.BytesProvider(b)` | provider that serves fixed bytes (from bpf2go) |

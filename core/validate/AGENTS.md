@@ -14,7 +14,7 @@ name (from `json` tag) rather than Go field name.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `validate.Module` | fx module — provides `*Validator` |
 | `validate.New()` | build `*Validator` directly (tests) |
 | `validate.IsNil(value)` | reject nil and typed-nil dependencies |

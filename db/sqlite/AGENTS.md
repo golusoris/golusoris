@@ -20,7 +20,7 @@ fx.New(golusoris.Core, sqlite.Module, fx.Invoke(func(db *sql.DB) { … }))
 ## Config keys (prefix `db.sqlite`)
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `path` | **required** | file path or `:memory:` |
 | `read_only` | `false` | open with `mode=ro` |
 | `busy_timeout` | `5s` | wait on locked database before `SQLITE_BUSY` |
@@ -32,7 +32,7 @@ fx.New(golusoris.Core, sqlite.Module, fx.Invoke(func(db *sql.DB) { … }))
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Open(ctx, Options, logger)` | open + ping; caller owns `*sql.DB` |
 | `Options.DSN()` | `file:…?_pragma=…` connection string |
 | `Module` | provides `*sql.DB`, closes on fx stop |

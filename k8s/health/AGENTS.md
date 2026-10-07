@@ -11,9 +11,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 ## Conventions
 
 - One Registry per app. Register checks once, tag for purpose:
- - `health.TagLiveness` — process not deadlocked. Cheap, almost-always-up. Examples: counter that increments per second; goroutine heartbeat.
- - `health.TagReadiness` — deps reachable. DB ping, cache ping, downstream API health.
- - `health.TagStartup` — one-time init complete. Migrations applied, caches warmed.
+- `health.TagLiveness` — process not deadlocked. Cheap, almost-always-up. Examples: counter that increments per second; goroutine heartbeat.
+- `health.TagReadiness` — deps reachable. DB ping, cache ping, downstream API health.
+- `health.TagStartup` — one-time init complete. Migrations applied, caches warmed.
 - Probe responses default to plain `ok\n` / `not ok\n` — k8s only inspects status code. `?verbose=1` returns JSON for human debugging.
 - Untagged checks appear on `/status` only; never on probes (prevents heavy diagnostics from blocking k8s).
 - Each check has 2s per-call timeout (statuspage default). Keep checks fast — long checks cascade into probe failures.

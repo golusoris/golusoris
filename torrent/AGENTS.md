@@ -36,7 +36,7 @@ states map onto it.
 ## Backends
 
 | Backend | Library | Wire | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `transmission` (default) | hekmon/transmissionrpc/v3 | JSON-RPC | 409 CSRF handshake handled by the lib; returns hash on add |
 | `qbittorrent` | autobrr/go-qbittorrent | WebAPI v2 | SID cookie login via fx `OnStart`; auto-relogin; pause/resume version-aware (2.11 stop/start rename) |
 | `rtorrent` | autobrr/go-rtorrent | XML-RPC | Mutations resolve the torrent by hash first; `Get` not-found = empty name |

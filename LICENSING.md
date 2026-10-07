@@ -14,7 +14,7 @@ licence of any file is machine-readable from its SPDX header or from
 ## Split by nature of material
 
 | Material | Licence | SPDX id |
-|---|---|---|
+| --- | --- | --- |
 | Go source, tests, generated code, Makefiles, CI workflows, deploy manifests, tooling configs | [European Union Public Licence 1.2](LICENSES/EUPL-1.2.txt) | `EUPL-1.2` |
 | Prose: `README.md`, `docs/**`, every `AGENTS.md`, `CLAUDE.md`, changelogs, governance texts | [Creative Commons Attribution-ShareAlike 4.0](LICENSES/CC-BY-SA-4.0.txt) | `CC-BY-SA-4.0` |
 | `CODE_OF_CONDUCT.md` (adapted Contributor Covenant v2.1) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) | `CC-BY-4.0` |

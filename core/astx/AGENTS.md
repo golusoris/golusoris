@@ -14,7 +14,7 @@ regexes over source text. Capability key: `ast.analyzer`.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Walk(ctx, root, WalkOptions, fn)` | every `.go` file (tests optional); skips `vendor`, `testdata`, `node_modules`, `.*`, `_*`; `MaxFiles` budget (50 000) |
 | `Imports(path)` · `IsThirdParty(path, module)` | import list; stdlib/self vs third-party split |
 | `Resolve(path, mapping)` | longest-prefix import rewrite at `/` boundaries |

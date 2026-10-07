@@ -17,7 +17,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 ## Levels we maintain
 
 | Level | File | Audience | When to update |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **L1 Context** | [`context.puml`](https://github.com/golusoris/golusoris/blob/main/docs/architecture/context.puml) | Anyone (PMs, ops, security) | A new external system / actor enters the picture. |
 | **L2 Container** | [`container.puml`](https://github.com/golusoris/golusoris/blob/main/docs/architecture/container.puml) | Engineers, ops | A new top-level package (db, http, jobs, …) lands. |
 | **L3 Component** | `component-<package>.puml` | Engineers working on that package | Internal architecture changes worth recording. |

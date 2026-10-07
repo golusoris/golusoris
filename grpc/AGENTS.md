@@ -12,7 +12,7 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Config` | Server config under `grpc.*` (env: `APP_GRPC_*`) — listen addr, TLS, message-size caps |
 | `*grpc.Server` | The `google.golang.org/grpc` server, fx-provided; serves on fx Start, graceful-stops on fx Stop |
 | `*ConnFactory` | Client-side dialer with OTel propagation; `Dial(ctx, target, ...)` returns a `*grpc.ClientConn` |
@@ -41,7 +41,7 @@ Proto stubs are generated with [buf](https://buf.build), not committed by hand.
 shared, version-pinned config lives under `tools/`:
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `tools/buf.gen.yaml` | Codegen plugins: `protocolbuffers/go` + `grpc/go`, `paths=source_relative`, output to `gen/go/`. Plugins are pinned to versions tracking the `protobuf` / `grpc` deps in go.mod. |
 | `tools/buf.yaml` | Module + `buf lint` (STANDARD) + `buf breaking` (FILE) config. |
 

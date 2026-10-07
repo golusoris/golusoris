@@ -17,7 +17,7 @@ We aim to acknowledge within 72 hours and provide a remediation plan within 7 da
 ## Supported versions
 
 | Version | Supported | Licence |
-|---|---|---|
+| --- | --- | --- |
 | `v0.12.x` (current root module) | yes — security fixes land here | EUPL-1.2 |
 | `core/v0.9.x` (current `core/` sub-module) | yes — security fixes land here | EUPL-1.2 |
 | `v0.8.0` and earlier | no | MIT |

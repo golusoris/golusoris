@@ -14,7 +14,7 @@ app-supplied CRD types, and runs `mgr.Start` under fx lifecycle.
 ## Key surface
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Module` | Provides `manager.Manager`, runs it on fx Start, stops on Stop |
 | `Options` | `metrics_addr`, `health_probe_addr`, `leader_election[_id]`, `graceful_shutdown` (koanf, prefix `operator`) |
 | `SchemeAdder` | `func(*runtime.Scheme) error` — a CRD's `AddToScheme` |

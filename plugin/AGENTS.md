@@ -14,7 +14,7 @@ no CGO, no subprocess, works on every GOOS.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `plugin.New[T](name)` | create named `*Registry[T]` (T is usually an interface) |
 | `Registry.Register(key, impl) error` | add impl; returns `ErrDuplicate` on repeat key |
 | `Registry.MustRegister(key, impl)` | add/replace (use in tests) |

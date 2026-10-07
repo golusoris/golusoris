@@ -38,7 +38,7 @@ past_due. Pause/Unpause round-trip between active and paused.
 ## Transitions
 
 | Method | From | To | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `Start(params)` | — | incomplete or trialing | `Trial>0` → trialing |
 | `Activate(id)` | incomplete, trialing, past_due | active | Clears TrialEndsAt, starts fresh period |
 | `Cancel(id, at)` | any non-canceled | canceled (now) or active (scheduled) | `at=zero` = immediate; future `at` = schedules `CancelAt` |

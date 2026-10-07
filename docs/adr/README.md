@@ -23,7 +23,7 @@ This directory captures every architectural decision worth preserving — pinned
 ## Index
 
 | ID | Title | Status | Tags |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [ADR-0001](0001-fx-over-wire-for-di.md) | fx over wire for dependency injection | Accepted | core, di |
 | [ADR-0002](0002-koanf-over-viper-for-config.md) | koanf over viper for configuration | Accepted | core, config |
 | [ADR-0003](0003-slog-over-zap-for-logging.md) | slog (stdlib) over zap for logging | Accepted | core, observability |

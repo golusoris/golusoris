@@ -12,7 +12,7 @@ providing locale negotiation from HTTP `Accept-Language` header and per-request 
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `i18n.Module` | fx module — provides default `*Bundle` (English) |
 | `i18n.New(defaultLang)` | build `*Bundle` with explicit default `language.Tag` |
 | `Bundle.LoadMessageFile(path)` | load catalog (e.g. `active.de.toml`) |

@@ -16,7 +16,7 @@ call bounded by context timeout automatically.
 ## Key surface
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Hooks` | `CreateContainer` / `StartContainer` / `StopContainer` / `RemovePodSandbox` callbacks — all four mandatory |
 | `Options` | `name`, `index`, `hook_timeout` (koanf, prefix `nri`) |
 | `ProvideHooks(hooks)` | `fx.Option` supplying `Hooks` to `Module` |

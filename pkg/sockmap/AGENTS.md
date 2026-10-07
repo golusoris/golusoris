@@ -22,7 +22,7 @@ changes golusoris defaults.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `sockmap.Module` | fx module — provides `*Sockmap` + `*Metrics`, wires load (Start) + pre-shutdown cleanup (Stop) |
 | `sockmap.ObjectProvider` | `func() ([]byte, error)` returning the compiled CO-RE BPF object |
 | `sockmap.DefaultObjectProvider` | serves the bundled SOCK_OPS + SK_MSG object (Linux) |

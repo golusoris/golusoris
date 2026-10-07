@@ -20,7 +20,7 @@ golusoris bump v0.5.0
 ## Subcommands
 
 | Command | Description |
-|---|---|
+| --- | --- |
 | `init <name>` | Scaffold new app directory with `go.mod` + `main.go` |
 | `add <module>` | Print how to add a module (db, http, otel, cache, jobs, auth-oidc, authz, k8s) |
 | `bump <version>` | Run `go get github.com/golusoris/golusoris@<version>` + `go mod tidy` |

@@ -124,7 +124,7 @@ issue #429 and its per-area tasks #432–#434.
 ## Alternatives considered
 
 | Option | Pros | Cons | Why not chosen |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Keep `.workingdir/` tracked, ask praetor to special-case golusoris | No git-history churn; state stays inspectable in-tree | HISS-17 is a fleet-wide invariant enforced by praetor's own Git metadata gate; a per-repo exception defeats "one behavior, one implementation" | Fleet-wide conformance (HISS-19) over a local carve-out |
 | Replace `lefthook.yml` wholesale with praetor's generated scaffold | Zero merge work, always in sync with praetor | Drops golusoris's stricter multi-module `govet.sh` and gofumpt-over-gofmt reasoning; silently loses coverage in the multi-module repository | Verified check-by-check merge, kept where golusoris's script covers strictly more |
 | Suppress the flavor mismatch (patch praetor's flavor detector locally, or fake the manifest) | `flavor-audit`/`gate` could stay enabled today | Masks a real upstream bug (praetor#36) instead of fixing it; a local patch on a fleet-wide tool re-diverges the fleet | Held back with an explicit re-enable condition tied to the upstream fix |

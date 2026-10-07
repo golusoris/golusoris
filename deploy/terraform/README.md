@@ -11,7 +11,7 @@ Reusable Terraform modules for the supporting infrastructure a golusoris app typ
 ## Modules
 
 | Module | Purpose | Providers |
-|---|---|---|
+| --- | --- | --- |
 | [`modules/bucket`](./modules/bucket) | Versioned object-store bucket + lifecycle rules | AWS S3 |
 | [`modules/postgres`](./modules/postgres) | Managed Postgres (single-instance or HA) | AWS RDS |
 

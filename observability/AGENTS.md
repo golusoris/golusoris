@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Sub-packages layering on top of `otel/`:
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `observability/sentry` | Sentry client + slog bridge (errors → events, warns → breadcrumbs) |
 | `observability/profiling` | Pyroscope in-process profiling |
 | `observability/pprof` | Auth-gated `/debug/pprof` handler |

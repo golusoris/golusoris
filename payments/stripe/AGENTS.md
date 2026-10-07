@@ -19,7 +19,7 @@ fx.New(stripe.Module) // requires "payments.stripe.secret_key" in config
 Config keys (koanf prefix `payments.stripe`):
 
 | Key | Purpose |
-|---|---|
+| --- | --- |
 | `secret_key` | Stripe secret API key (`sk_live_…` or `sk_test_…`) |
 | `webhook_secret` | Webhook endpoint secret (used by `webhooks/in.Stripe`) |
 

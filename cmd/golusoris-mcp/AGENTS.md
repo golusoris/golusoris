@@ -23,7 +23,7 @@ golusoris-mcp --transport http   # streamable-HTTP on :8899
 ## Tools exposed
 
 | Tool | Description |
-|---|---|
+| --- | --- |
 | `golusoris_init` | Scaffold new app |
 | `golusoris_add` | Show how to add module |
 | `golusoris_bump` | Show how to bump golusoris version |

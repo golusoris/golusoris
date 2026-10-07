@@ -14,7 +14,7 @@ symmetric encryption, and secure-random helpers. Stateless functions work direct
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `HashPassword(plain)` | argon2id hash with `DefaultPasswordParams`, returns PHC string |
 | `HashPasswordWith(plain, *argon2id.Params)` | hash with custom params |
 | `VerifyPassword(plain, hash)` | returns `(match, needsRehash, err)` |

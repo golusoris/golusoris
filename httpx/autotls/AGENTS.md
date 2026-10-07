@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Pluggable auto-TLS. Two implementations:
 
 | Sub-package | Backend | When to pick |
-|---|---|---|
+| --- | --- | --- |
 | `httpx/autotls/autocert` | x/crypto/acme/autocert | Lean, stdlib-ish, single-replica. |
 | `httpx/autotls/certmagic` | caddyserver/certmagic | On-demand issuance, distributed storage, DNS-01 providers. |
 

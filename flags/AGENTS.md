@@ -12,7 +12,7 @@ is straightforward.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Provider` | `Evaluate(ctx, key, default, evalCtx) (any, error)` + `Metadata()` |
 | `EvalContext` | `map[string]any` — targeting attributes (userID, tenantID, …) |
 | `Client` | `Bool / String / Int / Float` typed evaluators |

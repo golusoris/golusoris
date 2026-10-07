@@ -25,7 +25,7 @@ for ev := range w.Events() {
 ## Options
 
 | Field | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `Debounce` | 100ms | Wait after last event before emitting |
 | `BufferSize` | 16 | Events channel capacity; slow consumers drop events |
 

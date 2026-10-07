@@ -13,7 +13,7 @@ signing secret before routes are mounted.
 ## Providers
 
 | Function | Header verified | Algorithm |
-|---|---|---|
+| --- | --- | --- |
 | `Stripe(secret)` | `Stripe-Signature` | HMAC-SHA256 + 5-min timestamp replay guard |
 | `GitHub(secret)` | `X-Hub-Signature-256` | HMAC-SHA256 |
 | `GitHubLegacy(secret)` | `X-Hub-Signature` | HMAC-SHA1 (deprecated, prefer `GitHub`) |

@@ -17,7 +17,7 @@ are consistent.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `New(code, msg)` | construct coded `*Error` |
 | `Wrap(err, code, msg)` | attach code+message to cause (nil-in → nil-out) |
 | `NotFound/BadRequest/Unauthorized/Forbidden/Conflict/Validation/Internal/RateLimited(msg)` | sugar constructors |

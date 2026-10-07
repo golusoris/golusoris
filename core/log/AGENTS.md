@@ -18,7 +18,7 @@ configured handler.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `log.Module` | fx module — provides `*slog.Logger`, sets slog default |
 | `log.New(Options)` | build logger directly (tests, non-fx callers) |
 | `log.Options` | `Format`, `Level`, `Output`, `AddSource` (zero value usable) |

@@ -62,7 +62,7 @@ configuration expose constructors or options directly.
 The full contract is in [docs/principles.md](docs/principles.md). Short form:
 
 | # | Rule |
-|---|---|
+| --- | --- |
 | **Coding** | NASA/JPL Power of 10 adapted for Go — no `goto`, bounded loops, ≤60-line functions, every error checked, no unreviewed lint/gosec/reachable-vulnerability finding on merge |
 | **Security** | SEI CERT for Go — safe crypto, input validation at every boundary, no `unsafe` outside reviewed hot-paths |
 | **Style** | Google Go Style Guide (canonical) + Effective Go (secondary) |
@@ -86,7 +86,7 @@ checksum and patched-source hash, then fail closed on drift.
 `core/` is its own Go module (`github.com/golusoris/golusoris/core`, ADR-0017): ~20 direct dependencies, importable by governance tools and small CLIs without the root module's graph. The capability contract every package participates in lives in [`capabilities.yaml`](capabilities.yaml).
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
 | `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
 | `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
@@ -107,7 +107,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Database & data
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `db/pgx/` | pgx pool fx module + startup retry + slow-query logger | jackc/pgx/v5 |
 | `db/bun/` | bun ORM fx module over the shared pgx pool | uptrace/bun |
 | `db/sqlite/` | embedded SQLite (modernc, pure Go) fx module — WAL + foreign keys on by default | modernc.org/sqlite |
@@ -123,7 +123,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### HTTP / API
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `httpx/server/` | `*http.Server` with slow-loris guards, body limits, graceful shutdown | stdlib |
 | `httpx/router/` | chi router + http.Handler provided to fx graph | go-chi/chi |
 | `httpx/middleware/` | logger, recovery, request-id, OTel, secure-headers, compress, ETag, trust-proxy | composite |
@@ -148,7 +148,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Auth & identity
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `auth/oidc/` | OIDC + PKCE + session storage | coreos/go-oidc/v3 |
 | `auth/passkeys/` | WebAuthn + TOTP (MFA) | go-webauthn/webauthn + pquerna/otp |
 | `auth/jwt/` | HMAC JWT issuance, expiry, and validation | golang-jwt/jwt/v5 |
@@ -168,7 +168,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Background work
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `jobs/` | river client + worker registry + named queues + lifecycle observer | riverqueue/river |
 | `jobs/cron/` | cron expression parser / validator | robfig/cron/v3 |
 | `jobs/ui/` | auth-gated river job dashboard handler | riverqueue/riverui |
@@ -177,7 +177,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Caching
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `cache/memory/` | typed in-memory L1 cache (TinyLFU eviction) | maypok86/otter/v2 |
 | `cache/redis/` | rueidis fx module, distributed locks, pub/sub | redis/rueidis |
 | `cache/singleflight/` | typed de-dupe for concurrent identical reads | golang.org/x/sync |
@@ -186,7 +186,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Observability
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `otel/` | full OTel SDK — tracer + meter + logs + OTLP exporter | go.opentelemetry.io/otel |
 | `observability/sentry/` | Sentry fx module + slog event/breadcrumb bridge | getsentry/sentry-go |
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
@@ -196,7 +196,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Kubernetes runtime
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `k8s/podinfo/` | downward-API env → fx-provided `PodInfo` | stdlib |
 | `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
@@ -212,7 +212,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Notifications & realtime
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `notify/` | unified `Sender` + `Notifier` (first-success / fan-out) + SMTP | wneessen/go-mail |
 | `notify/resend/` `notify/postmark/` `notify/sendgrid/` `notify/mailgun/` | transactional email senders | raw HTTP |
 | `notify/twilio/` | SMS / WhatsApp via Twilio | raw HTTP |
@@ -234,14 +234,14 @@ checksum and patched-source hash, then fail closed on drift.
 ### Webhooks
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `webhooks/out/` | outbound delivery — HMAC sign + exponential retry + dead-letter + replay | custom |
 | `webhooks/in/` | inbound signature verification — Stripe, GitHub, Slack, generic HMAC | stdlib |
 
 ### SaaS primitives
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `tenancy/` | tenant context middleware, header + subdomain extractors | custom |
 | `idempotency/` | `Idempotency-Key` middleware with pluggable store | custom |
 | `flags/` | typed feature flags with an OpenFeature-shaped provider interface | custom |
@@ -251,7 +251,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Files / storage / media
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `storage/` | `Bucket` interface + local FS and S3 backends with presigned GET support | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | Animation-safe raster metadata strip + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
@@ -278,7 +278,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Search & AI
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `search/` | `Indexer`/`Searcher` interface + MemorySearcher | custom |
 | `search/meilisearch/` | Meilisearch index/search backend | meilisearch-go |
 | `search/typesense/` | Typesense index/search backend | typesense-go/v2 |
@@ -292,7 +292,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Commerce
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `payments/stripe/` | Stripe Checkout + Portal + Payment Intents + webhook verify | stripe/stripe-go |
 | `payments/subs/` | provider-agnostic subscription state machine | custom |
 | `payments/meter/` | usage metering with idempotency + billing export | custom |
@@ -302,7 +302,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Integrations
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `geoip/` | MaxMind GeoLite2 country / city / ASN lookups | oschwald/maxminddb-golang |
 | `secrets/` | `Secret` interface + env / file / static backends | custom |
 | `integrations/goenvoy/` | fx adapter for `github.com/golusoris/goenvoy` typed HTTP clients | github.com/golusoris/goenvoy |
@@ -310,7 +310,7 @@ checksum and patched-source hash, then fail closed on drift.
 ### Big alternative stacks (opt-in)
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
@@ -329,7 +329,7 @@ checksum and patched-source hash, then fail closed on drift.
 Heavy / CGO / native-dep packages each live in their own `go.mod` so the main framework's dep graph stays lean.
 
 | Sub-module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy | google/go-containerregistry |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
@@ -347,7 +347,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ### Misc utilities
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `clikit/tui/` | bubbletea `Run` / `RunInline` helpers (the CLI builder itself is `core/clikit/`) | charmbracelet/bubbletea |
 | `selfupdate/` | size-bounded binary self-update with authenticated publisher manifest and mandatory SHA-256 verification | minio/selfupdate |
 | `plugin/` | generic thread-safe extension-point `Registry[T]` | custom |
@@ -355,7 +355,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ### Testing utilities
 
 | Module | Purpose | Key dep |
-|---|---|---|
+| --- | --- | --- |
 | `testutil/pg/` | testcontainers PostgreSQL | testcontainers-go |
 | `testutil/redis/` | testcontainers Redis | testcontainers-go |
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
@@ -376,14 +376,14 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ### CLI binaries
 
 | Binary | Purpose |
-|---|---|
+| --- | --- |
 | `cmd/golusoris` | scaffolder: `golusoris init`, `add <module>`, `bump <version>` with codemods |
 | `cmd/golusoris-mcp` | MCP JSON-RPC server — exposes framework tools to MCP clients (Claude, Cursor, …) |
 
 ### Deploy artifacts
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `deploy/helm/` | base Helm chart — Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, backup CronJob |
 | `deploy/observability/` | PrometheusRule (5 alerts) + Grafana dashboard (request rate, error rate, P99 latency) |
 | `deploy/logging/` | Loki + Grafana Alloy config for structured log collection |

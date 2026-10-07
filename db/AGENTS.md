@@ -11,7 +11,7 @@ Database layer. Nine subpackages. `golusoris.DB` bundles `db/pgx` +
 through their own module or direct import.
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `db/pgx` | `*pgxpool.Pool` fx module with retry + slow-query tracer |
 | `db/migrate` | golang-migrate v4 runner with optional auto-up on fx Start |
 | `db/sqlc` | runtime helpers for sqlc-generated queries (WithTx, MapError) |

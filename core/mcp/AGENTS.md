@@ -17,7 +17,7 @@ standalone MCP server). Apps wire `mcp.Module` and register tools via fx.
 ## Key surface
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `mcp.Module` | Provides a tool-less `*mcp.Server` and runs the configured transport under the fx lifecycle |
 | `mcp.Server` (`= sdk.Server`) | App registers tools on this via `fx.Invoke` |
 | `mcp.AddTool` | Typed registration; schema inference, validation, unmarshal, output handling |

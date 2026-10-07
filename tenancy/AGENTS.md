@@ -12,7 +12,7 @@ from request (header, subdomain, JWT claim, …) and stored in context.
 ## Core types
 
 | Type/Func | Purpose |
-|---|---|
+| --- | --- |
 | `Tenant` | ID, Slug, Plan, Metadata |
 | `Store` | `FindByID` + `FindBySlug` — implement with Postgres |
 | `MemoryStore.Add` | Upsert by non-empty ID; lowercase unique slug; stale slug removed |

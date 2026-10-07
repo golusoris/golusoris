@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 HTTP stack. Opt-in via `golusoris.HTTP` (or individual modules).
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `httpx/server` | `*http.Server` fx module with timeouts, body limits, graceful shutdown |
 | `httpx/router` | chi router as `chi.Router` + `http.Handler` |
 | `httpx/middleware` | RequestID, Recover, Logger, OTel, SecureHeaders, TrustProxy, Compress, ETag |

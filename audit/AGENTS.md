@@ -12,7 +12,7 @@ optional before/after `Diff` and arbitrary `Metadata`.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Event` | Immutable audit record: Actor, Action, Target, Diff, Metadata, CreatedAt |
 | `Diff` | `map[string]FieldChange` — before/after per field |
 | `Filter` | Restricts `List` by Actor, Action, Target, TenantID, time bounds, Limit |

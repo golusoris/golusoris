@@ -14,7 +14,7 @@ hand-rolling per-binary version string.
 ## Key surface
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Info` | Typed build metadata (JSON-tagged) |
 | `Read()` | Assemble `Info` (ldflags → build-info fallback) |
 | `Info.String()` | Compact `version+revision[-dirty]` summary |

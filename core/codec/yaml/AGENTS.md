@@ -14,7 +14,7 @@ place to patch. Capability key: `config.yaml`.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Marshal(v)` / `Options.Marshal` | encode with 2-space indent (`Options.Indent` overrides) |
 | `Unmarshal(data, v)` | **strict** decode — unknown fields fail decode |
 | `UnmarshalLenient(data, v)` | forgiving decode |

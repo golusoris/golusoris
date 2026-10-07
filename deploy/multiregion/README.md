@@ -79,7 +79,7 @@ beside the copied program directory.
 ## Stack config
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `primaryRegion` | `us-east-1` | Aurora writer + active app stack |
 | `secondaryRegion` | `us-west-2` | Aurora read replica + passive app stack |
 | `domain` | *(required)* | Failover record set, e.g. `app.example.com` |

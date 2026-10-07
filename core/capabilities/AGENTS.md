@@ -33,7 +33,7 @@ Capability keys: `domain.name[.sub]`, lowercase — praetor taxonomy
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Parse(data)` · `Load(path)` | strict decode + `Validate()` |
 | `(*Index).Covers(key)` · `ByCapability()` · `Keys()` | demand resolution |
 | `(*Index).Lookup(import)` · `Replacements()` | import → package; legacy third-party module → last declared replacement |

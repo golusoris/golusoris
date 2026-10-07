@@ -17,7 +17,7 @@ time-sensitive logic is testable.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `clock.Clock` | Injected dependency (alias for `clockwork.Clock`) |
 | `clock.Module` | fx module — provides real wall clock |
 | `clock.NewFake()` | `*clockwork.FakeClock` for tests |

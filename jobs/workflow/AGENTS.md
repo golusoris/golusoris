@@ -20,12 +20,14 @@ Temporal workflow orchestration fx module.
 - **Worker vs. producer-only**: set `TaskQueue` to get started worker; omit it for insert-only services that call `client.ExecuteWorkflow`.
 - **Temporal Cloud**: set `TLS=true` + `APIKey=<your key>`. `Host` should be `<namespace>.tmprl.cloud:7233`.
 - **Register workflows + activities** in `fx.Invoke`:
+
   ```go
   fx.Invoke(func(w workflow.Worker) {
       w.RegisterWorkflow(MyWorkflow)
       w.RegisterActivity(MyActivities{})
   })
   ```
+
 - **Logging**: uses `log.NewStructuredLogger` (Temporal's official slog bridge — part of SDK).
 - **Lifecycle**: client is closed on fx Stop; worker is started on fx Start + stopped on fx Stop.
 - **Dial bound**: eager Temporal connection uses `ConnectTimeout` (default `5s`).

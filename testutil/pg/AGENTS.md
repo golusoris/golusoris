@@ -24,7 +24,7 @@ Boots real Postgres container via testcontainers-go for tests that need genuine 
 ## Key surface
 
 | Helper | Returns | Use when |
-|---|---|---|
+| --- | --- | --- |
 | `Start(t, …)` | `*pgxpool.Pool` | plain Postgres |
 | `DSN(t, …)` | `string` | you need the raw connection string |
 | `StartReplication(t, …)` | `(*pgxpool.Pool, string)` | logical replication / CDC |

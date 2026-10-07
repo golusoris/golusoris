@@ -9,11 +9,12 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Runtime-agnostic container + process concerns.
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `container/runtime` | Detect runtime (k8s/docker/podman/systemd/bare) + unified `Info` |
 | `container/registry` | OCI/Docker registry client (resolve, manifest, tags, copy) — own go.mod |
 
 Future additions (when needed):
+
 - `container/resources/` — cgroup-based CPU/memory quota inspection
 
 ## Conventions

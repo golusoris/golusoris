@@ -17,7 +17,7 @@ fx.New(nats.Module) // reads "nats.*" from koanf config
 Config keys (prefix `nats`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `url` | `nats://localhost:4222` | Server URL |
 | `name` | `""` | Client name shown in NATS monitoring |
 
@@ -68,7 +68,7 @@ for {
 `nats_test.go` contains testcontainers-backed tests (require Docker):
 
 | Test | What it asserts |
-|---|---|
+| --- | --- |
 | `TestIntegration_ConnectAndPing` | fx lifecycle connects; `Conn().IsConnected()` is true |
 | `TestIntegration_PublishSubscribe` | core pub/sub delivers one message end-to-end |
 | `TestIntegration_JetStreamAvailable` | `JetStream()` returns non-nil context |

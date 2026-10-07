@@ -39,7 +39,7 @@ fx.New(
 ## Config (env: `APP_INERTIA_*`)
 
 | Key | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `inertia.root_template` | `web/root.html` | HTML shell with `{{ .inertia }}` + `{{ .inertiaHead }}` |
 | `inertia.version` | `""` | Pins the asset version; empty -> derive from manifest |
 | `inertia.manifest_path` | `web/dist/.vite/manifest.json` | Vite manifest for checksum-based version |

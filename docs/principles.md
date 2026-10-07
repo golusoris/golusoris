@@ -19,7 +19,7 @@ NASA/JPL's _The Power of 10: Rules for Developing Safety-Critical Code_ (Gerard 
 Reference: <https://spinroot.com/gerard/pdf/P10.pdf>
 
 | # | Original rule | Go adaptation |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Restrict to simple control flow; no `goto`, `setjmp`, `longjmp`, recursion. | No `goto` or recursion; call graphs remain acyclic, including tree walks and parsers. Panic/recover only at trust boundaries (fx lifecycle, `http.Handler` recover, `ogenkit.RecoverMiddleware`). |
 | 2 | All loops must have a fixed upper bound, statically provable. | Every `for` that isn't `for range` over a bounded collection must have a bound visible in the loop head (counter, max attempts, ctx deadline). Long-running loops `select` on `ctx.Done()`. |
 | 3 | No dynamic memory allocation after initialization. | Soft: hot paths preallocate (`make([]T, 0, cap)`), reuse `sync.Pool` where profiles show churn. Startup-phase allocation is free; steady-state is watched. |
@@ -87,7 +87,7 @@ Reference: <https://github.com/joelparkerhenderson/architecture-decision-record>
 **Backfilled ADRs (all `Accepted`):**
 
 | ADR | Decision |
-|---|---|
+| --- | --- |
 | ADR-0001 | fx over wire for dependency injection |
 | ADR-0002 | koanf over viper for configuration |
 | ADR-0003 | slog as the canonical logger interface |
@@ -107,7 +107,7 @@ identify applicable requirements, test the assembled system, and retain their
 own evidence.
 
 | Reference | Evidence shipped here | Boundary |
-|---|---|---|
+| --- | --- | --- |
 | **praetor HISS-21 lattice** | `AGENTS.md` names each invariant and its repository gate; `praetorctl audit` and `make verify-all` run the declared checks | Engineering policy, not a certification |
 | **SLSA provenance model** | release workflows produce SBOMs, cosign signatures, and build-provenance attestations with `actions/attest-build-provenance` | No SLSA level or independent conformance is claimed |
 | **OWASP ASVS** | auth, input-validation, upload-safety, and HTTP-security modules provide reusable controls; CI runs gosec, govulncheck, Semgrep, and CodeQL | No ASVS verification or ZAP scan is bundled; applications own control mapping and dynamic testing |
@@ -134,7 +134,7 @@ References:
 ## 2.6 Wire protocols + API standards
 
 | Standard | Status | Where it's enforced |
-|---|---|---|
+| --- | --- | --- |
 | **RFC 9457 Problem Details for HTTP** | Adopted | `ogenkit` error handler emits `application/problem+json` with `type`/`title`/`status`/`detail`/`instance` |
 | **RFC 9110 HTTP Semantics** | Adopted | chi router + `httpx/middleware` follow status-code semantics (4xx client-fault, 5xx server-fault, 3xx redirects, 1xx expect-continue) |
 | **OpenAPI 3.1** | Pinned | ogen generates from 3.1 specs; apps' `openapi.yaml` lints via spectral (`tools/spectral.yaml`) |
@@ -152,7 +152,7 @@ References:
 ## 2.7 Tooling + formatting
 
 | Tool / Standard | Enforcement |
-|---|---|
+| --- | --- |
 | **EditorConfig** | `.editorconfig` at repo root; tabs/spaces/line endings consistent across editors |
 | **gofumpt** | Stricter gofmt — standalone v0.12.0 pin in `tools/tool-versions.env`, enforced by hooks and CI |
 | **gci** | Grouped imports: standard / external / `prefix(github.com/golusoris/golusoris)` |
@@ -167,7 +167,7 @@ References:
 ## 2.8 Testing standards
 
 | Practice | When it applies |
-|---|---|
+| --- | --- |
 | **Table-driven tests** | Any function with ≥2 distinct input/output pairs |
 | **`go test -race -count=1`** | Every CI run |
 | **Integration over mocks at system boundaries** | DB tests use `testutil/pg` (real Postgres via testcontainers); HTTP tests use `httptest`; mock only non-infrastructure dependencies |
@@ -181,7 +181,7 @@ References:
 ## 2.9 Deployment + configuration
 
 | Standard | Application |
-|---|---|
+| --- | --- |
 | **Twelve-Factor App** | Config from env, logs to stdout, stateless processes, declared dependencies (`go.mod`), port binding (`httpx/server`), disposability (fx shutdown hooks) |
 | **CNCF Cloud Native Principles** | K8s-native manifests (`deploy/helm/`) with downward API, PodDisruptionBudget, NetworkPolicy, and ServiceMonitor |
 | **OCI Image Spec** | Multi-arch via buildx (amd64 + arm64); Chainguard distroless base |
@@ -192,7 +192,7 @@ References:
 ## Quick reference: banned patterns
 
 | Pattern | Why | Alternative |
-|---|---|---|
+| --- | --- | --- |
 | `time.Now()` outside `clock/` | Breaks testability (non-deterministic) | `clock.Now()` via `clockwork.Clock` |
 | `fmt.Println` / `log.Printf` | Bypasses structured logging | `slog.InfoContext(ctx, ...)` via `github.com/golusoris/golusoris/core/log` |
 | `init()` side effects | Breaks fx lifecycle ordering | `fx.Provide` / `fx.Invoke` hooks |

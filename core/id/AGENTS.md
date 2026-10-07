@@ -18,7 +18,7 @@ Two flavors:
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `id.Generator` | interface: `NewUUID() (uuid.UUID, error)`, `NewKSUID() ksuid.KSUID` |
 | `id.New()` | the default generator |
 | `id.Module` | fx module — provides `Generator` |

@@ -38,7 +38,7 @@ include $(GOLUSORIS)/tools/Makefile.shared
 Targets after inclusion:
 
 | Target | What it runs |
-|---|---|
+| --- | --- |
 | `make ci` | `lint` + `sec` + `test` — the full local gate |
 | `make lint` | `golangci-lint run --config $(GOLANGCI_CONFIG)` (default `.golangci.yml`) |
 | `make sec` | `vuln` + `gosec` (`govulncheck` then `gosec -quiet`) |
@@ -144,7 +144,7 @@ Common inputs (all optional except where noted; see the `workflow_call` block
 at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 
 | Input | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `runs-on` | `arc-cauda-golusoris-golusoris` | self-hosted runner-set label every job runs on; set to your own app's ARC label |
 | `working-directory` | `.` | directory holding your module's go.mod, relative to the repo root; set for apps whose module is not at the repo root |
 | `go-version-file` | `go.mod` | where the Go version is resolved from — **relative to the repo root**, not `working-directory` (see the input's own description in `ci-go.yml`); a non-root module must pass e.g. `<working-directory>/go.mod` |
@@ -265,7 +265,7 @@ repository authority; `make tools-bootstrap` installs that complete pinned set.
 The reusable workflow installs its required subset from explicit inputs.
 
 | Tool | Repository pin | Install locally |
-|---|---|---|
+| --- | --- | --- |
 | `golangci-lint` | `v2.13.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2` |
 | `gosec` | `v2.29.0` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0` |
 | `govulncheck` | `v1.8.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.8.0` |

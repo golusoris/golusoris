@@ -26,7 +26,7 @@ type Bucket interface {
 ## Backends
 
 | Backend | Notes |
-|---|---|
+| --- | --- |
 | `NewLocalBucket(dir)` | Files on disk; `os.Root` confinement blocks traversal + symlink escape. Keys: canonical, <= 1024 bytes. Every new object gets a bounded sidecar bound to body size + SHA-256. `URL` returns `file://` |
 | `NewS3Bucket(ctx, S3Options)` | S3/MinIO via aws-sdk-go-v2. `URL` returns presigned GET. MinIO: set `Endpoint` + `PathStyle`. |
 | GCS (planned) | `storage/gcs` sub-package |

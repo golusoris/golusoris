@@ -9,7 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Kubernetes-aware modules. All opt-in.
 
 | Subpackage | Purpose |
-|---|---|
+| --- | --- |
 | `k8s/podinfo` | Downward-API env → typed `PodInfo` via fx (k8s-only view) |
 | `k8s/health` | `/livez` `/readyz` `/startupz` backed by `statuspage.Registry` |
 | `k8s/metrics/prom` | Prometheus `/metrics` endpoint |

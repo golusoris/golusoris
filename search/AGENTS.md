@@ -11,7 +11,7 @@ Provider-agnostic full-text and vector search abstraction.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Indexer` | `CreateCollection / DeleteCollection / Index / Delete` |
 | `Searcher` | `Search(ctx, collection, Query) Results` |
 | `Backend` | `Indexer + Searcher` combined |
@@ -25,7 +25,7 @@ Provider-agnostic full-text and vector search abstraction.
 ## Backends (subpackages)
 
 | Sub-package | Backend |
-|---|---|
+| --- | --- |
 | `search/typesense/` | typesense-go/v2 |
 | `search/meilisearch/` | meilisearch-go |
 | `search/pgfts/` | Postgres `tsvector` / `tsquery` |

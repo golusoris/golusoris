@@ -15,7 +15,7 @@ through standard in-cluster path on each platform. framework
 doesn't reach into cloud SDKs:
 
 | Platform | Mechanism | Notes |
-|---|---|---|
+| --- | --- | --- |
 | GKE Workload Identity | Metadata server exchanges SA token for Google identity | Pod sees normal SA token mount; cloud SDKs use metadata endpoint |
 | EKS IRSA | Projected SA token (`AWS_WEB_IDENTITY_TOKEN_FILE`) + `AWS_ROLE_ARN` | aws-sdk-go-v2 (`storage/`, `secrets/`) reads these env vars + projected token |
 | Azure AD WI | Projected SA token (`AZURE_FEDERATED_TOKEN_FILE`) | Azure SDK consumes them |

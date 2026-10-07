@@ -17,7 +17,7 @@ fx.New(kafka.Module) // reads "kafka.*" from koanf config
 Config keys (prefix `kafka`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `brokers` | `["localhost:9092"]` | Seed broker list |
 | `group` | `""` | Consumer group ID (omit for producer-only) |
 | `tls` | `false` | Enable TLS with system CA pool |

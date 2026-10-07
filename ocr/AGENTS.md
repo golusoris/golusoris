@@ -17,7 +17,7 @@ directly.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `ocr.NewReader(Options)` | build a `Reader` (stub until activated) |
 | `ocr.Reader` | `Read(ctx, bytes)`, `ReadFile(ctx, path)`, `Close()` |
 | `ocr.Options` | `Language` (`"eng"`, `"eng+fra"`), `TessdataPrefix`, `AllowList` |

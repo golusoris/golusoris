@@ -43,7 +43,7 @@ tune clamd `MaxThreads` / `MaxConnectionQueueLength` server-side.
 ## Config (prefix `storage.scan`)
 
 | Key | Default | Notes |
-|---|---|---|
+| --- | --- | --- |
 | `backend` | `clamd` | `clamd` \| `noop` |
 | `address` | `127.0.0.1:3310` | host:port (tcp) or socket path (unix) |
 | `network` | `tcp` | `tcp` \| `unix` |

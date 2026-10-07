@@ -12,7 +12,7 @@ borrows `*pgxpool.Pool` from `db/pgx` (via `stdlib.OpenDBFromPool`), so app can 
 ## Key surface
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Module` | Provides `*bun.DB` over the db/pgx pool |
 | `Options` | `verbose` (koanf, prefix `db.bun`) — install bun's debug query hook |
 | `New(pool, opts, logger)` | Validate dependencies; build the `*bun.DB` directly (tests, custom wiring) |

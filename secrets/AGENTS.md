@@ -12,7 +12,7 @@ No external dependencies — built on stdlib only.
 ## Backends
 
 | Constructor | Description |
-|---|---|
+| --- | --- |
 | `secrets.Env()` | Reads from `os.Getenv` |
 | `secrets.File(dir)` | Root-confined regular files, trimmed, at most 64 KiB |
 | `secrets.Static(map)` | Fixed map — for tests |

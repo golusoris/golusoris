@@ -9,9 +9,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Single-leader election with pluggable backends.
 
 | Subpackage | Backend | Pick when |
-|---|---|---|
+| --- | --- | --- |
 | `leader/k8s` | Kubernetes Lease (client-go) | Running on k8s; avoids adding pg dep to k8s-only apps |
-| `leader/pg`  | PostgreSQL advisory lock     | Anywhere else (Docker Compose, Swarm, Nomad, bare Linux, k8s without Lease RBAC). Needs a *pgxpool.Pool |
+| `leader/pg` | PostgreSQL advisory lock | Anywhere else (Docker Compose, Swarm, Nomad, bare Linux, k8s without Lease RBAC). Needs a *pgxpool.Pool |
 
 ## Conventions
 
@@ -25,7 +25,7 @@ Single-leader election with pluggable backends.
 ## Trade-offs
 
 | Concern | `leader/k8s` | `leader/pg` |
-|---|---|---|
+| --- | --- | --- |
 | External dep | k8s API + Lease RBAC | pg connection |
 | Failover speed | ~LeaseDuration (15s default) | TCP keepalive + advisory-lock retry (~2s) |
 | Setup | RBAC rolebinding | pg_try_advisory_lock — no schema |

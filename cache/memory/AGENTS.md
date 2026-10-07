@@ -23,7 +23,7 @@ func NewUserService(c *memory.Cache) *UserService {
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `memory.Module` | fx module — provides `*memory.Cache` |
 | `memory.Typed[K, V](c, prefix)` | Type-safe view with key prefix |
 | `TypedCache.Get(k)` | Returns `(V, bool)` — no allocation on miss |

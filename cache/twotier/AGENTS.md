@@ -39,7 +39,7 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `twotier.Module` | fx module — provides `*twotier.TwoTier` |
 | `twotier.NewTyped[V](tt, prefix)` | Type-safe view with a key prefix |
 | `Typed.Get(ctx, k, loader)` | Read-through L1 → L2 → loader; back-fills tiers |

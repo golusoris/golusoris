@@ -17,7 +17,7 @@ public key, signature. Canonical payload is wire-compatible with praetor
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `GenerateKey()` | fresh Ed25519 key pair (crypto/rand) |
 | `NewSigner(priv, clock)` · `NewSignerFromSeed(seed32, clock)` | signer; time is injected (`clock.Clock`), never `time.Now` |
 | `(*Signer).Sign(Run)` | returns `*Receipt`; refuses `ExitCode != 0` (`ErrNonZeroExit`) and empty commands |

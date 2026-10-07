@@ -66,7 +66,7 @@ pulumi up
 On success, the stack exports:
 
 | Output | Maps to app env var |
-|---|---|
+| --- | --- |
 | `dsn` | `APP_DB_DSN` |
 | `redisAddress` | `APP_CACHE_REDIS_ADDR` |
 | `redisURL` | Operator-facing `rediss://` URL |
@@ -79,7 +79,7 @@ Tear down with `pulumi destroy`.
 Set per stack via `pulumi config set golusoris-app:<key> <value>`. See [`Pulumi.dev.yaml`](./Pulumi.dev.yaml) / [`Pulumi.prod.yaml`](./Pulumi.prod.yaml) for examples.
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `region` | `us-east-1` | AWS region |
 | `dbInstanceClass` | `db.t4g.small` | RDS instance class |
 | `dbStorageGB` | `20` | RDS allocated storage (GiB) |

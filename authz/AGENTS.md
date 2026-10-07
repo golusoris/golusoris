@@ -37,7 +37,7 @@ g, bob, alice      // bob inherits alice's roles
 ## Models
 
 | Constant | Use case |
-|---|---|
+| --- | --- |
 | `authz.ModelRBAC` | Role-based, allow-only |
 | `authz.ModelRBACWithDeny` | Role-based with explicit deny |
 

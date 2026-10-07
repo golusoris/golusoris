@@ -32,11 +32,11 @@ Apple Push Notification service (HTTP/2 + token auth) sender for
  first non-success.
 - **Payload**: `{aps:{alert:{title,body}, ...}, <custom keys>...}`.
  Metadata keys are split:
- - `apns-push-type` / `apns-priority` / `apns-id` / `apns-collapse-id`
+- `apns-push-type` / `apns-priority` / `apns-id` / `apns-collapse-id`
  → request headers
- - `apns-sound` / `apns-badge` / `apns-thread-id` /
+- `apns-sound` / `apns-badge` / `apns-thread-id` /
  `apns-content-available` → aps fields
- - everything else → top-level custom payload keys
+- everything else → top-level custom payload keys
 - **Production vs sandbox**: `Options.Production=true` targets
  `api.push.apple.com`; false targets `api.sandbox.push.apple.com`.
  Match cert you used to build your app — sandbox tokens fail

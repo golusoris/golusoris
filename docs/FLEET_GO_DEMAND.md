@@ -154,7 +154,7 @@ Synthesis of 58 classified fleet-demand gaps (Task N14) against the pre-migratio
 ### By cluster (consumers desc, effort asc within cluster)
 
 | Cluster | Items | Real target package | Effort | Unblocks |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | auth-crypto | 7 | new `supplychain` + `auth/oauth2client` | L | VMAFx, 20-watts-was-enough |
 | cli-tui | 5 | `clikit/tui` (mostly non-goals) | S | VMAFx |
 | cloud-provider-sdk | 6 | `pubsub` (GCP backend) + new `container/registry` | M | VMAFx |

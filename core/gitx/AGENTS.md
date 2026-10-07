@@ -15,7 +15,7 @@ Capability key: `git.worktree`.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `New(dir, opts...)` | runner rooted at `dir`; `WithTimeout`, `WithBinary`, `WithMaxOutput` |
 | `(*Runner).Run(ctx, args...)` / `Output` | raw stdout bytes / trimmed string; stderr folded into the error |
 | `TopLevel` · `Head` · `Branch` · `RemoteURL(remote)` · `IsDirty` | common repository facts |

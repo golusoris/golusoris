@@ -35,7 +35,7 @@ f := factory.Random()
 `CreditCardNumber`, `Password`, `LoremIpsum`, `Number`, `Float64`, `Bool`,
 `Date`, `PhoneFormatted`, `Company`, `JobTitle`, `Username`, `Color`, etc.
 
-Full reference: https://pkg.go.dev/github.com/brianvoe/gofakeit/v7
+Full reference: <https://pkg.go.dev/github.com/brianvoe/gofakeit/v7>
 
 ## Don't
 
