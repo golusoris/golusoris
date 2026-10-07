@@ -328,22 +328,25 @@ rules:
           every discovered module.
       - language: markdown
         state: partial
-        runner: markdownlint-cli2
+        runner: praetor-docs-lint
         mechanism: >-
-          markdownlint-cli2 0.23.2 from tools/markdownlint/package-lock.json, installed by npm
-          ci with lifecycle scripts disabled and run with .markdownlint-cli2.jsonc; selection by
-          scripts/ci/markdownlint.sh covers tracked plus non-ignored untracked public Markdown.
-          Makefile target markdownlint runs inside make verify-all and required CI job
-          "Documentation lint (markdownlint-cli2)" feeds "CI success". Generated context,
-          release-generated changelogs, HISS fixtures and upstream/vendor snapshots use their
-          own authorities and are explicitly excluded.
+          Praetor's locked documentation gate tools/markdownlint/verify.mjs (byte-locked by
+          praetorctl audit): markdownlint 0.41.1 from tools/markdownlint/package-lock.json,
+          installed by npm ci with lifecycle scripts disabled, with the rules of
+          tools/markdownlint/markdownlint-cli2.yaml only; repository markdownlint config files
+          are ignored. Selection covers tracked plus non-ignored untracked public Markdown,
+          minus Praetor's built-in generated-context exclusions and the documentation.style_exclude
+          globs in .standards.yaml (docs/upstream snapshots, these HISS fixtures,
+          core/CHANGELOG.md). Make target docs-lint runs inside make verify-all; the
+          "Documentation Governance" job of .github/workflows/praetor-docs.yml and the Gitea CI
+          gate run the same script.
         rationale: >-
-          Measured with the pinned tool and repository config. positive/missing-heading-blank.md
-          reports MD022; negative/clean-document.md reports 0 issues; gap/long-prose-line.md
-          reports 0 issues because MD013 is deliberately disabled. The default selector linted
-          50 current public Markdown files with 0 issues, while
-          scripts/ci/markdownlint-policy_test.sh proves positive, negative, untracked,
-          generated/vendor/ignored exclusion and symlink-boundary behavior.
+          Measured with the gate's own lint child (node tools/markdownlint/verify.mjs --lint
+          <locked install> <fixture>) and with --only under default settings:
+          positive/missing-heading-blank.md reports "MD022/blanks-around-headings" and exits 1;
+          negative/clean-document.md and gap/long-prose-line.md exit 0 with no finding, the gap
+          because the locked config sets MD013 false. node tools/markdownlint/verify.mjs
+          --self-test replays Praetor's positive, negative, exclusion, symlink and bound fixtures.
       - language: mkdocs-markdown
         state: partial
         runner: mkdocs

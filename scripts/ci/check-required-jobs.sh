@@ -34,7 +34,6 @@ main() {
 	require_success test "${TEST:?}"
 	require_success build "${BUILD:?}"
 	require_success module-sweep "${MODULE_SWEEP:?}"
-	require_success markdownlint "${MARKDOWNLINT:?}"
 	require_success mkdocs "${MKDOCS:?}"
 	require_success allocation-budget "${ALLOCATION_BUDGET:?}"
 	require_success shellcheck "${SHELLCHECK:?}"

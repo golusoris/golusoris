@@ -17,7 +17,6 @@ run_policy() {
 		TEST="${TEST:-success}" \
 		BUILD="${BUILD:-success}" \
 		MODULE_SWEEP="${MODULE_SWEEP:-success}" \
-		MARKDOWNLINT="${MARKDOWNLINT:-success}" \
 		MKDOCS="${MKDOCS:-success}" \
 		ALLOCATION_BUDGET="${ALLOCATION_BUDGET:-success}" \
 		SHELLCHECK="${SHELLCHECK:-success}" \
@@ -52,7 +51,6 @@ run_policy >/dev/null
 ACTOR='renovate[bot]' DCO=skipped run_policy >/dev/null
 EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=skipped run_policy >/dev/null
 expect_failure env LINT=skipped bash "$0" --single
-expect_failure env MARKDOWNLINT=failure bash "$0" --single
 expect_failure env MKDOCS=skipped bash "$0" --single
 expect_failure env ALLOCATION_BUDGET=failure bash "$0" --single
 expect_failure env SHELLCHECK=failure bash "$0" --single

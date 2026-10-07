@@ -41,6 +41,19 @@ exceptions:
       reason: Release provenance is attested in the caller's build job (SLSA Build L2), not an isolated reusable workflow (L3); tracked in golusoris#619.
       expires: "2027-01-05"
 
+# Style-rule exclusions for the praetor documentation gate (make docs-lint); the
+# private-link rule still reads every Markdown file.
+documentation:
+    style_exclude:
+        # Pinned upstream snapshots; make docs-upstream-verify checks them byte for byte.
+        - "docs/upstream/**"
+        # HISS-20 fixtures carry deliberate violations; the README beside them stays styled.
+        - ".config/hiss/testdata/HISS-*/**"
+        # release-please generates it, as the built-in exclusion covers the root CHANGELOG.md.
+        - "core/CHANGELOG.md"
+        # Accepted ADR bodies are frozen (docs/adr/README.md), so the style gate must not edit them.
+        - "docs/adr/00{01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19}-*.md"
+
 # Framework archetype bounds (strictness can only be increased, never reduced).
 overrides:
     complexity:

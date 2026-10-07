@@ -109,7 +109,6 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test ## verify requi
 	@bash scripts/ci/helm-chart_test.sh
 	@bash scripts/ci/trivy-policy_test.sh
 	@bash scripts/ci/govulncheck-policy_test.sh
-	@bash scripts/ci/markdownlint-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
@@ -179,10 +178,6 @@ text-register-policy: ## verify required register skills and plugin projections
 	@bash scripts/ci/text-register-policy.sh .
 	@bash scripts/ci/text-register-policy_test.sh
 
-.PHONY: markdownlint
-markdownlint: ## lint repository-owned public Markdown with the pinned tool
-	@bash scripts/ci/markdownlint.sh
-
 .PHONY: semgrep-scan
 semgrep-scan: ## scan every repository-owned Go source with pinned custom Semgrep rules
 	@bash scripts/ci/semgrep-scan.sh
@@ -247,7 +242,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy markdownlint mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

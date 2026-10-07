@@ -59,7 +59,7 @@ second half of that comment to account.
 | --- | --- | --- |
 | Python | Ruff | `scripts/ci/python-lint-policy_test.sh` |
 | C | Clang + clang-tidy | `scripts/ci/c-quality-policy_test.sh` |
-| Markdown | `markdownlint-cli2` | `scripts/ci/markdownlint-policy_test.sh` |
+| Markdown | Praetor documentation gate (`tools/markdownlint/verify.mjs`) | Praetor's locked `node tools/markdownlint/verify.mjs --self-test` |
 | MkDocs Markdown | MkDocs strict build | `scripts/ci/mkdocs-build-policy_test.sh` |
 | Shell | ShellCheck | `scripts/ci/shellcheck-policy_test.sh` |
 | Workflow YAML | actionlint | `scripts/ci/actionlint-policy_test.sh` |

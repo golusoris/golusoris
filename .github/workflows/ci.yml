@@ -438,19 +438,7 @@ jobs:
           path: .coverage/split-${{ matrix.shard }}
           retention-days: 7
 
-  # ── Public documentation lint ───────────────────────────────────────────────
-  markdownlint:
-    name: Documentation lint (markdownlint-cli2)
-    runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24.21.0
-      - name: Lint repository-owned public Markdown
-        run: bash scripts/ci/markdownlint.sh
-
+  # ── Public documentation build ──────────────────────────────────────────────
   mkdocs:
     name: Documentation build (MkDocs)
     runs-on: arc-cauda-golusoris-golusoris
@@ -715,7 +703,6 @@ jobs:
       - test
       - build
       - module-sweep
-      - markdownlint
       - mkdocs
       - allocation-budget
       - shellcheck
@@ -743,7 +730,6 @@ jobs:
           TEST: ${{ needs.test.result }}
           BUILD: ${{ needs.build.result }}
           MODULE_SWEEP: ${{ needs.module-sweep.result }}
-          MARKDOWNLINT: ${{ needs.markdownlint.result }}
           MKDOCS: ${{ needs.mkdocs.result }}
           ALLOCATION_BUDGET: ${{ needs.allocation-budget.result }}
           SHELLCHECK: ${{ needs.shellcheck.result }}

@@ -64,9 +64,6 @@
             "context": "Lint"
           },
           {
-            "context": "Documentation lint (markdownlint-cli2)"
-          },
-          {
             "context": "Documentation build (MkDocs)"
           },
           {

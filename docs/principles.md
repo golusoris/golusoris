@@ -29,7 +29,7 @@ Reference: <https://spinroot.com/gerard/pdf/P10.pdf>
 | 7 | Check every return value; check every parameter. | `errcheck` + `wrapcheck` + `nilerr` on. Errors wrapped with context via `gerr.Wrap` or `fmt.Errorf("pkg: op: %w", err)`. Exported funcs validate inputs at the boundary. |
 | 8 | Preprocessor limited to simple macros. | N/A in Go. `go generate` directives stay simple + declarative. No build tags for behaviour switches in production paths. |
 | 9 | Pointers restricted; one dereference per expression; no function pointers. | Soft: no multi-hop `*foo.bar.baz` chains. Small interfaces (≤5 methods) only, defined where consumed. No `unsafe` outside explicitly-reviewed performance code. |
-| 10 | Compile at most pedantic warning level. | `.golangci.yml` gates Go; `.markdownlint-cli2.jsonc` gates public Markdown. Every merged commit has no unreviewed lint, gosec, or reachable govulncheck finding and is race-green. An exact vulnerability exception must bind the module checksum and patched-source hash and fail closed on drift. `//nolint` requires a justification comment and PR review. |
+| 10 | Compile at most pedantic warning level. | `.golangci.yml` gates Go; Praetor's `tools/markdownlint/markdownlint-cli2.yaml` gates public Markdown. Every merged commit has no unreviewed lint, gosec, or reachable govulncheck finding and is race-green. An exact vulnerability exception must bind the module checksum and patched-source hash and fail closed on drift. `//nolint` requires a justification comment and PR review. |
 
 **Hard gates** (CI blocks on violation): rules 1, 2, 4, 7, 10.  
 **Guidance** (cite rule ID in review): rules 3, 5, 6, 9.  

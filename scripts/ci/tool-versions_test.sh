@@ -380,50 +380,6 @@ if git -C "$repo_root" grep -nE '(pip(x|3)?[^[:cntrl:]]+(install|run)[^[:cntrl:]
 	exit 1
 fi
 
-markdownlint_package="$repo_root/tools/markdownlint/package.json"
-markdownlint_lock="$repo_root/tools/markdownlint/package-lock.json"
-markdownlint_version="$(jq -er '.dependencies["markdownlint-cli2"]' "$markdownlint_package")"
-smol_toml_version="$(jq -er '.overrides["smol-toml"]' "$markdownlint_package")"
-markdownlint_install_pattern="npm ci --prefix \"\$install_root\" --ignore-scripts --no-audit --no-fund"
-markdownlint_binary_pattern="\"\$install_root/node_modules/.bin/markdownlint-cli2\""
-if [[ "$markdownlint_version" != 0.23.2 ]] || \
-	[[ "$smol_toml_version" != 1.7.1 ]] || \
-	[[ "$(jq -er '.lockfileVersion' "$markdownlint_lock")" != 3 ]] || \
-	[[ "$(jq -er '.packages[""].dependencies["markdownlint-cli2"]' "$markdownlint_lock")" != "$markdownlint_version" ]] || \
-	[[ "$(jq -er '.packages["node_modules/markdownlint-cli2"].version' "$markdownlint_lock")" != "$markdownlint_version" ]] || \
-	[[ "$(jq -er '.packages["node_modules/smol-toml"].version' "$markdownlint_lock")" != "$smol_toml_version" ]] || \
-	! jq -e '.packages["node_modules/markdownlint-cli2"].integrity | startswith("sha512-")' \
-		"$markdownlint_lock" >/dev/null || \
-	! jq -e '.packages["node_modules/smol-toml"].integrity | startswith("sha512-")' \
-		"$markdownlint_lock" >/dev/null || \
-	! jq -e '[.packages | to_entries[] | select(.key | startswith("node_modules/")) | select(.value.link != true) | select((.value.integrity // "") == "")] | length == 0' \
-		"$markdownlint_lock" >/dev/null || \
-	! grep -Fq "/markdownlint-cli2/v${markdownlint_version}/schema/" \
-		"$repo_root/.markdownlint-cli2.jsonc"; then
-	printf 'Markdownlint package and lock authorities do not pin safe versions with integrity\n' >&2
-	exit 1
-fi
-if ! grep -Fq "$markdownlint_install_pattern" \
-	"$repo_root/scripts/ci/markdownlint.sh" || \
-	! grep -Fq "$markdownlint_binary_pattern" \
-		"$repo_root/scripts/ci/markdownlint.sh" || \
-	! grep -Fq 'scripts/ci/markdownlint.sh' "$repo_root/.github/workflows/ci.yml" || \
-	! grep -Fq 'scripts/ci/markdownlint.sh' "$repo_root/.gitea/workflows/ci.yml" || \
-	! grep -Fq 'markdownlint' "$repo_root/Makefile"; then
-	printf 'locked Markdownlint authority is not consumed by local and hosted gates\n' >&2
-	exit 1
-fi
-if git -C "$repo_root" grep -nE 'npx[^[:cntrl:]]*markdownlint-cli2|markdownlint-cli2@[0-9]' -- \
-	'.github/workflows/*.yml' '.gitea/workflows/*.yml' 'scripts/**/*.sh' 'Makefile' \
-	':(exclude)scripts/ci/tool-versions_test.sh'; then
-	printf 'tracked Markdownlint command bypasses the package lock\n' >&2
-	exit 1
-fi
-if [[ -e "$repo_root/.markdownlintignore" ]]; then
-	printf '.markdownlintignore is unsupported by markdownlint-cli2; use the wrapper policy\n' >&2
-	exit 1
-fi
-
 apidiff_workflows=(
 	"$repo_root/.github/workflows/ci.yml"
 	"$repo_root/.github/workflows/ci-go.yml"

@@ -86,9 +86,6 @@ Jobs that feed the **CI success** aggregate:
 - `module-sweep` — four deterministic shards apply the same lint, gosec,
   govulncheck, module-tidiness, build/vet, and race-test gates to every other
   discovered module
-- `markdownlint` — pinned structural lint over repository-owned public Markdown;
-  generated agent context, release changelogs, HISS fixtures, and vendored
-  upstream snapshots remain under their dedicated authorities
 - `mkdocs` — strict documentation-site build from immutable tooling
 - `allocation-budget` — measured byte/op and allocation/op ceilings for named
   hot paths
@@ -110,8 +107,13 @@ Jobs that feed the **CI success** aggregate:
   release tag; discovery and checker errors fail the aggregate, while detected
   incompatibilities remain informational before v1.0
 
-Two more gates run outside `ci.yml` and are not part of `ci-success`:
+Three more gates run outside `ci.yml` and are not part of `ci-success`:
 
+- **Documentation Governance**
+  ([`praetor-docs.yml`](.github/workflows/praetor-docs.yml)) — Praetor's
+  locked Markdown and figure gate (`make docs-lint docs-figures`) on push and
+  PR; `documentation.style_exclude` in `.standards.yaml` keeps pinned upstream
+  snapshots and HISS fixtures out of its style rules
 - **[`security-scan.yml`](.github/workflows/security-scan.yml)** — a second,
   broader Semgrep pass (public `p/golang`, `p/javascript`, `p/security-audit`
   rulesets) on push, PR, and a weekly schedule

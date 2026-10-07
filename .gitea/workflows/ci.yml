@@ -119,7 +119,7 @@ jobs:
           docker info
           bash scripts/ci/c-quality.sh
           bash scripts/ci/helm-chart_test.sh
-          bash scripts/ci/markdownlint.sh
+          node tools/markdownlint/verify.mjs
           bash scripts/ci/mkdocs-build.sh
           bash scripts/ci/terraform-validate.sh
           bash scripts/ci/kubeconform.sh
