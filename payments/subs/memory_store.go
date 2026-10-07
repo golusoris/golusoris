@@ -8,7 +8,8 @@ import (
 	"context"
 	"maps"
 	"sync"
-	"time"
+
+	"github.com/golusoris/golusoris/internal/ptr"
 )
 
 // MemoryStore is an in-memory [Store] for tests and local dev.
@@ -58,18 +59,10 @@ func (m *MemoryStore) Upsert(_ context.Context, s *Subscription) error {
 func cloneSubscription(source *Subscription) *Subscription {
 	cloned := *source
 	cloned.Metadata = maps.Clone(source.Metadata)
-	cloned.TrialEndsAt = cloneTime(source.TrialEndsAt)
-	cloned.CancelAt = cloneTime(source.CancelAt)
-	cloned.CanceledAt = cloneTime(source.CanceledAt)
-	cloned.PausedAt = cloneTime(source.PausedAt)
-	return &cloned
-}
-
-func cloneTime(source *time.Time) *time.Time {
-	if source == nil {
-		return nil
-	}
-	cloned := *source
+	cloned.TrialEndsAt = ptr.Clone(source.TrialEndsAt)
+	cloned.CancelAt = ptr.Clone(source.CancelAt)
+	cloned.CanceledAt = ptr.Clone(source.CanceledAt)
+	cloned.PausedAt = ptr.Clone(source.PausedAt)
 	return &cloned
 }
 

@@ -40,6 +40,7 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/core/validate"
 	tokenhash "github.com/golusoris/golusoris/hash"
+	"github.com/golusoris/golusoris/internal/ptr"
 )
 
 const (
@@ -234,15 +235,7 @@ func isNotFound(err error) bool {
 func cloneKey(key Key) Key {
 	key.Scopes = append([]string(nil), key.Scopes...)
 	key.Hash = append([]byte(nil), key.Hash...)
-	key.ExpiresAt = cloneTime(key.ExpiresAt)
-	key.RevokedAt = cloneTime(key.RevokedAt)
+	key.ExpiresAt = ptr.Clone(key.ExpiresAt)
+	key.RevokedAt = ptr.Clone(key.RevokedAt)
 	return key
-}
-
-func cloneTime(value *time.Time) *time.Time {
-	if value == nil {
-		return nil
-	}
-	cloned := *value
-	return &cloned
 }
