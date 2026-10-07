@@ -16,6 +16,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// bumpHelperBlockFor outlives every caller deadline in these tests.
+const bumpHelperBlockFor = time.Minute
+
 func TestRunBoundedCommandTimesOutFromBackground(t *testing.T) {
 	t.Parallel()
 	name, args := bumpHelperCommand("block", 0)
@@ -105,7 +108,8 @@ func TestBumpCommandHelperProcess(t *testing.T) {
 	mode := os.Args[separator+1]
 	switch mode {
 	case "block":
-		select {}
+		// A pending timer keeps the runtime deadlock detector quiet; select {} exits 2 in cgo-free binaries.
+		time.Sleep(bumpHelperBlockFor)
 	case "output":
 		outputBytes, err := strconv.Atoi(os.Args[separator+2])
 		if err != nil {
