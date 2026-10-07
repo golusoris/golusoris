@@ -521,7 +521,7 @@ packages:
     replaces: [github.com/gin-gonic/gin, github.com/go-chi/chi/v5, github.com/gofiber/fiber, github.com/gorilla/mux, github.com/labstack/echo]
   - import: github.com/golusoris/golusoris/httpx/server
     domain: http
-    capabilities: [http.server]
+    capabilities: [http.server, http.mtls]
     description: "Package server wires [*http.Server] as an fx dependency with slow-loris guards, body-size limits, and graceful shutdown."
   - import: github.com/golusoris/golusoris/httpx/static
     domain: http

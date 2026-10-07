@@ -21,6 +21,14 @@
 //	http.limits.header       # max header size in bytes (default 1 MiB)
 //	http.limits.body         # max request body in bytes (default 10 MiB)
 //	http.limits.unlimited    # explicitly disable the request-body cap
+//	http.tls.cert            # PEM certificate chain; enables HTTPS (TLS 1.3, reloaded on rotation)
+//	http.tls.key             # PEM private key
+//	http.tls.ca              # client-CA bundle for mTLS
+//	http.tls.clientauth      # none|request|require_any|verify_if_given|require_and_verify
+//	                         # (default: require_and_verify with ca, else none)
+//
+// File-based TLS and an autotls provider are mutually exclusive; wiring both
+// fails at construction.
 //
 // Fields use single-word koanf keys grouped under sub-structs because the
 // default env→koanf transform ("_" → path separator) can't distinguish
@@ -39,9 +47,16 @@ import (
 
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/drain"
+	"github.com/golusoris/golusoris/core/tlsx"
 	"github.com/golusoris/golusoris/core/validate"
+)
+
+var (
+	errTLSConflict = errors.New("httpx/server: http.tls.* conflicts with an autotls *tls.Config")
+	errTLSPair     = errors.New("httpx/server: http.tls needs both cert and key")
 )
 
 // Options tunes the server. Durations accept koanf strings like "30s".
@@ -49,6 +64,7 @@ type Options struct {
 	Addr     string         `koanf:"addr"`
 	Timeouts TimeoutOptions `koanf:"timeouts"`
 	Limits   LimitOptions   `koanf:"limits"`
+	TLS      TLSOptions     `koanf:"tls"`
 }
 
 // TimeoutOptions groups the server's timeouts.
@@ -65,6 +81,15 @@ type LimitOptions struct {
 	Header             int   `koanf:"header"`    // max header size in bytes
 	Body               int64 `koanf:"body"`      // max request body in bytes
 	AllowUnlimitedBody bool  `koanf:"unlimited"` // explicitly disable body limit
+}
+
+// TLSOptions serves HTTPS from PEM files that reload on handshake. The zero
+// value leaves TLS to an optional autotls provider.
+type TLSOptions struct {
+	Cert       string `koanf:"cert"`       // certificate chain path
+	Key        string `koanf:"key"`        // private key path
+	CA         string `koanf:"ca"`         // client-CA bundle that verifies client certificates
+	ClientAuth string `koanf:"clientauth"` // client-certificate policy (core/tlsx ParseClientAuth modes)
 }
 
 // DefaultOptions returns the opinionated defaults.
@@ -156,7 +181,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // serverParams lets fx supply an optional *tls.Config. If present, the
 // listener is wrapped with TLS. Apps wire this by including one of the
-// httpx/autotls/* sub-modules.
+// httpx/autotls/* sub-modules, or set http.tls.* instead.
 type serverParams struct {
 	fx.In
 
@@ -167,55 +192,92 @@ type serverParams struct {
 	TLSConfig *tls.Config `optional:"true"`
 	// Gate, when k8s/health.Module is wired, holds Shutdown until readiness has drained.
 	Gate drain.Gate `optional:"true"`
+	// Clock paces TLS file reloads; the wall clock when absent.
+	Clock clock.Clock `optional:"true"`
+}
+
+// resolveTLS returns the autotls config, a reloading config built from
+// http.tls.*, or nil for plaintext.
+func resolveTLS(opts TLSOptions, provided *tls.Config, logger *slog.Logger, clk clock.Clock) (*tls.Config, error) {
+	if opts == (TLSOptions{}) {
+		return provided, nil
+	}
+	if provided != nil {
+		return nil, errTLSConflict
+	}
+	if opts.Cert == "" || opts.Key == "" {
+		return nil, errTLSPair
+	}
+	auth, err := tlsx.ParseClientAuth(opts.ClientAuth, opts.CA != "")
+	if err != nil {
+		return nil, fmt.Errorf("httpx/server: tls clientauth: %w", err)
+	}
+	reloader, err := tlsx.NewReloader(tlsx.Files{Cert: opts.Cert, Key: opts.Key, CA: opts.CA}, tlsx.Options{Clock: clk, Logger: logger})
+	if err != nil {
+		return nil, fmt.Errorf("httpx/server: load tls files: %w", err)
+	}
+	cfg := reloader.ServerConfig(auth)
+	// "h2" here makes http.Server.Serve enable HTTP/2 on the TLS listener.
+	cfg.NextProtos = []string{"h2", "http/1.1"}
+	return cfg, nil
 }
 
 // Module provides a *http.Server that listens during fx Start and is
 // gracefully shut down during fx Stop. Requires a [http.Handler] in the
 // graph (see [httpx/router.Module]). If a *tls.Config is provided
-// (optionally, via one of the httpx/autotls sub-modules), the server
-// listens over TLS. With k8s/health.Module wired, shutdown starts only after the
-// readiness drain window, while the server keeps answering /readyz with 503.
+// (optionally, via one of the httpx/autotls sub-modules) or http.tls.cert
+// is set, the server listens over TLS. With k8s/health.Module wired, shutdown
+// starts only after the readiness drain window, while the server keeps
+// answering /readyz with 503.
 var Module = fx.Module(
 	"golusoris.httpx.server",
 	fx.Provide(loadOptions),
-	fx.Provide(func(p serverParams) *http.Server {
+	fx.Provide(func(p serverParams) (*http.Server, error) {
+		tlsConfig, err := resolveTLS(p.Opts.TLS, p.TLSConfig, p.Logger, p.Clock)
+		if err != nil {
+			return nil, err
+		}
 		srv := New(p.Handler, p.Opts)
-		srv.TLSConfig = p.TLSConfig
-
-		p.Lifecycle.Append(drain.Wrap(p.Gate, fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				rawLn, err := net.Listen("tcp", srv.Addr)
-				if err != nil {
-					return fmt.Errorf("httpx/server: listen %s: %w", srv.Addr, err)
-				}
-				ln := rawLn
-				scheme := "http"
-				if p.TLSConfig != nil {
-					ln = tls.NewListener(rawLn, p.TLSConfig)
-					scheme = "https"
-				}
-				p.Logger.InfoContext(
-					ctx, "httpx/server: listening",
-					slog.String("addr", ln.Addr().String()),
-					slog.String("scheme", scheme),
-				)
-				go func() {
-					if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-						p.Logger.ErrorContext(ctx, "httpx/server: serve failed", slog.String("error", serveErr.Error()))
-					}
-				}()
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				shutdownCtx, cancel := context.WithTimeout(ctx, p.Opts.Timeouts.Shutdown)
-				defer cancel()
-				if err := srv.Shutdown(shutdownCtx); err != nil {
-					return fmt.Errorf("httpx/server: shutdown: %w", err)
-				}
-				p.Logger.InfoContext(ctx, "httpx/server: shutdown complete")
-				return nil
-			},
-		}))
-		return srv
+		srv.TLSConfig = tlsConfig
+		p.Lifecycle.Append(drain.Wrap(p.Gate, serverHook(srv, p)))
+		return srv, nil
 	}),
 )
+
+// serverHook binds listen/serve and the bounded shutdown to the fx lifecycle.
+func serverHook(srv *http.Server, p serverParams) fx.Hook {
+	return fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			rawLn, err := (&net.ListenConfig{}).Listen(ctx, "tcp", srv.Addr)
+			if err != nil {
+				return fmt.Errorf("httpx/server: listen %s: %w", srv.Addr, err)
+			}
+			ln := rawLn
+			scheme := "http"
+			if srv.TLSConfig != nil {
+				ln = tls.NewListener(rawLn, srv.TLSConfig)
+				scheme = "https"
+			}
+			p.Logger.InfoContext(
+				ctx, "httpx/server: listening",
+				slog.String("addr", ln.Addr().String()),
+				slog.String("scheme", scheme),
+			)
+			go func() {
+				if serveErr := srv.Serve(ln); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+					p.Logger.ErrorContext(ctx, "httpx/server: serve failed", slog.String("error", serveErr.Error()))
+				}
+			}()
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			shutdownCtx, cancel := context.WithTimeout(ctx, p.Opts.Timeouts.Shutdown)
+			defer cancel()
+			if err := srv.Shutdown(shutdownCtx); err != nil {
+				return fmt.Errorf("httpx/server: shutdown: %w", err)
+			}
+			p.Logger.InfoContext(ctx, "httpx/server: shutdown complete")
+			return nil
+		},
+	}
+}
