@@ -505,20 +505,25 @@ func pickRegistered(registered []string, candidate string, publicClient bool) st
 	if err != nil || !isLoopbackRedirect(candidateURL) {
 		return ""
 	}
+	port, ok := redirectPort(candidateURL.Port())
+	if !ok {
+		return ""
+	}
 	for _, raw := range registered {
 		registeredURL, parseErr := url.Parse(raw)
 		if parseErr == nil && loopbackRedirectsMatch(registeredURL, candidateURL) {
-			return registeredRedirectWithPort(registeredURL, candidateURL.Port())
+			return registeredRedirectWithPort(registeredURL, port)
 		}
 	}
 	return ""
 }
 
-func registeredRedirectWithPort(registered *url.URL, port string) string {
+// Only the parsed port number crosses from the request; 0 keeps the registered host.
+func registeredRedirectWithPort(registered *url.URL, port int) string {
 	allowed := *registered
 	host := registered.Hostname()
-	if port != "" {
-		host = net.JoinHostPort(host, port)
+	if port != 0 {
+		host = net.JoinHostPort(host, strconv.Itoa(port))
 	} else if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
@@ -539,15 +544,20 @@ func isLoopbackRedirect(uri *url.URL) bool {
 		return false
 	}
 	ip := net.ParseIP(uri.Hostname())
-	return ip != nil && ip.IsLoopback() && validRedirectPort(uri.Port())
+	_, portOK := redirectPort(uri.Port())
+	return ip != nil && ip.IsLoopback() && portOK
 }
 
-func validRedirectPort(port string) bool {
+// redirectPort parses an optional URI port; an absent port yields 0.
+func redirectPort(port string) (int, bool) {
 	if port == "" {
-		return true
+		return 0, true
 	}
 	number, err := strconv.Atoi(port)
-	return err == nil && number > 0 && number <= 65535
+	if err != nil || number <= 0 || number > 65535 {
+		return 0, false
+	}
+	return number, true
 }
 
 // MemoryClientStore is an in-process ClientStore for tests / single-replica use.

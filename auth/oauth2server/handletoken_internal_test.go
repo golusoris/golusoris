@@ -366,6 +366,60 @@ func TestPickRegisteredAllowsOnlyPublicLoopbackPortVariance(t *testing.T) {
 	}
 }
 
+func TestPickRegisteredRebuildsLoopbackRedirectFromNumericPort(t *testing.T) {
+	t.Parallel()
+	const v4 = "http://127.0.0.1/cb?provider=example"
+	const v6 = "http://[::1]/cb"
+	tests := []struct {
+		name       string
+		registered string
+		candidate  string
+		want       string
+	}{
+		{name: "runtime port", registered: v4, candidate: "http://127.0.0.1:51004/cb?provider=example", want: "http://127.0.0.1:51004/cb?provider=example"},
+		{name: "lowest port", registered: v4, candidate: "http://127.0.0.1:1/cb?provider=example", want: "http://127.0.0.1:1/cb?provider=example"},
+		{name: "highest port", registered: v4, candidate: "http://127.0.0.1:65535/cb?provider=example", want: "http://127.0.0.1:65535/cb?provider=example"},
+		{name: "leading zeros canonicalised", registered: v4, candidate: "http://127.0.0.1:08080/cb?provider=example", want: "http://127.0.0.1:8080/cb?provider=example"},
+		{name: "empty port keeps registered host", registered: v4, candidate: "http://127.0.0.1:/cb?provider=example", want: v4},
+		{name: "ipv6 runtime port", registered: v6, candidate: "http://[::1]:8080/cb", want: "http://[::1]:8080/cb"},
+		{name: "port zero", registered: v4, candidate: "http://127.0.0.1:0/cb?provider=example"},
+		{name: "port above range", registered: v4, candidate: "http://127.0.0.1:65536/cb?provider=example"},
+		{name: "port overflowing int", registered: v4, candidate: "http://127.0.0.1:99999999999999999999/cb?provider=example"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := pickRegistered([]string{tc.registered}, tc.candidate, true); got != tc.want {
+				t.Fatalf("pickRegistered(%q) = %q; want %q", tc.candidate, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRedirectPort(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		port   string
+		want   int
+		wantOK bool
+	}{
+		{port: "", want: 0, wantOK: true},
+		{port: "1", want: 1, wantOK: true},
+		{port: "65535", want: 65535, wantOK: true},
+		{port: "0080", want: 80, wantOK: true},
+		{port: "0", wantOK: false},
+		{port: "65536", wantOK: false},
+		{port: "-1", wantOK: false},
+		{port: "http", wantOK: false},
+	}
+	for _, tc := range tests {
+		got, ok := redirectPort(tc.port)
+		if got != tc.want || ok != tc.wantOK {
+			t.Errorf("redirectPort(%q) = (%d, %v); want (%d, %v)", tc.port, got, ok, tc.want, tc.wantOK)
+		}
+	}
+}
+
 func TestAuthorizedScopes(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
