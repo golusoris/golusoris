@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# k8s.io/client-go — v0.37.0 snapshot
+# k8s.io/client-go — v0.37.1 snapshot
 
-Pinned: **v0.37.0**
-Source: [tagged source](https://github.com/kubernetes/client-go/tree/v0.37.0)
+Pinned: **v0.37.1**
+Source: [tagged source](https://github.com/kubernetes/client-go/tree/v0.37.1)
 
 ## In-cluster client
 
@@ -103,4 +103,4 @@ leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 
 ## Links
 
-- [Changelog](https://github.com/kubernetes/client-go/blob/v0.37.0/CHANGELOG.md)
+- [Changelog](https://github.com/kubernetes/client-go/blob/v0.37.1/CHANGELOG.md)

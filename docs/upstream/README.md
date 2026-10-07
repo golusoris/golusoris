@@ -34,7 +34,7 @@ mapping authority; its authority column says where each pin is resolved.
 | `github.com/golang-migrate/migrate/v4` | `v4.20.1` | root | [golang-migrate/](golang-migrate/README.md) |
 | `github.com/sqlc-dev/sqlc` | `v1.31.1` | repository tool pin | [sqlc/](sqlc/README.md) |
 | `@scalar/api-reference` | `v1.25.52` | embedded asset | [scalar/](scalar/README.md) |
-| `k8s.io/client-go` | `v0.37.0` | root | [k8s/](k8s/README.md) |
+| `k8s.io/client-go` | `v0.37.1` | root | [k8s/](k8s/README.md) |
 | `github.com/go-chi/chi/v5` | `v5.3.2` | root | [chi/](chi/README.md) |
 | `github.com/go-playground/validator/v10` | `v10.30.4` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
