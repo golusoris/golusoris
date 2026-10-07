@@ -52,6 +52,7 @@ Background job queue backed by Postgres via [river].
 | --- | --- |
 | `jobs/cron` | robfig/cron/v3 parser + `Register[T](client, expr, ctor)` helper |
 | `jobs/ui` | River UI at configurable prefix with optional basic-auth |
+| `jobs/sqlite` | River on SQLite (riversqlite) for standalone single binary |
 
 ## Don't
 
