@@ -21,21 +21,13 @@ else
 	mapfile -t files < <(go_files "$@")
 fi
 
-# Exception (one file, gofumpt only): Praetor's byte-locked API gate asset is not
-# gofumpt-clean (cordanaLLM/praetor#842). After the expiry the hook checks it again.
-readonly locked_gate=tools/apicompat/gate/main.go
-readonly locked_gate_expires=20261107
-if (($(date +%Y%m%d) <= locked_gate_expires)); then
-	declare -a checked_files=()
-	for file in "${files[@]}"; do
-		if [[ "$file" == "$locked_gate" ]]; then
-			note "skip $file: exception until $locked_gate_expires (cordanaLLM/praetor#842)"
-		else
-			checked_files+=("$file")
-		fi
-	done
-	files=("${checked_files[@]}")
-fi
+# shellcheck source=scripts/ci/lib/gofumpt-exceptions.sh
+. "$(dirname "$0")/../ci/lib/gofumpt-exceptions.sh"
+declare -a checked_files=()
+for file in "${files[@]}"; do
+	gofumpt_exempt "$file" || checked_files+=("$file")
+done
+files=("${checked_files[@]}")
 
 ((${#files[@]} > 0)) || skip "no Go files"
 need_tool gofumpt "go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
