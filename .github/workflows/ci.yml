@@ -403,6 +403,33 @@ jobs:
           grep -E '"Action":"output"' "$OUT/test-root.jsonl" | grep -E 'Reaper|reaper|testcontainers/ryuk|Connected to docker' | sed -E 's/^\{"Time":"([^"]+)".*"Package":"([^"]+)".*"Output":"(.*)"}$/\1 \2 \3/' || true
           echo "::endgroup::"
           ls -la "$OUT" || true
+      # Forced reproduction on this runner's daemon: package B starts a
+      # container on Ryuk's "die" event, with Ryuk's writable layer padded so
+      # its AutoRemove takes seconds. v044 is the negative control.
+      - name: Forced reaper-reuse reproduction (v0.44.0 vs PR head)
+        if: always() && runner.os == 'Linux'
+        env:
+          PAD_FILES: "150000"
+          TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT: 30s
+        run: |
+          # Expected failures (v044) must not stop the loop.
+          set +e
+          OUT="$RUNNER_TEMP/tc3868"
+          mkdir -p "$OUT"
+          timeout 300 docker pull --quiet alpine:3.20
+          for v in v044 pr; do
+            (cd ".github/tc3868-repro/$v" && go test -count=1 -run '^$' ./...) || echo "::warning::prebuild $v failed"
+          done
+          for k in 1 2 3; do
+            for v in v044 pr; do
+              log="$OUT/forced-$v-$k.log"
+              (cd ".github/tc3868-repro/$v" && go test -count=1 -p 1 -v -timeout 5m ./pkga ./pkgb) > "$log" 2>&1
+              rc=$?
+              echo "== forced $v #$k rc=$rc"
+              grep -E 'HARNESS (RESULT|INCONCLUSIVE|padded|probe|event)|Waiting for Reaper|Creating container for image testcontainers/ryuk' "$log" | grep -v exec_ | cut -c1-300
+            done
+          done
+          exit 0
       - name: Upload Ryuk timeline artifact
         if: always() && runner.os == 'Linux'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
