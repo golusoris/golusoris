@@ -622,11 +622,17 @@ jobs:
       # repos; the gitleaks binary itself is free (MIT). Run it directly with
       # the repo's .gitleaks.toml. Native secret-scanning + push-protection are
       # the first line; this adds a full-history custom-regex sweep.
+      - name: Install pinned gitleaks
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
       - name: gitleaks
         run: |
           set -euo pipefail
+          . tools/tool-versions.env
           command -v gitleaks
-          test "$(gitleaks version)" = "8.30.1"
+          test "$(gitleaks version)" = "$GITLEAKS_VERSION"
           gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
 
   # ── Custom SAST (semgrep) ────────────────────────────────────────────────────

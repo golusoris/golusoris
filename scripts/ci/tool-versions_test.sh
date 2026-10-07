@@ -31,6 +31,8 @@ for value in \
 	"$ACTIONLINT_VERSION" \
 	"v$GORELEASER_VERSION" \
 	"v$SYFT_VERSION" \
+	"v$COSIGN_VERSION" \
+	"v$GITLEAKS_VERSION" \
 	"v$TERRAFORM_VERSION" \
 	"v$MKDOCS_MATERIAL_VERSION" \
 	"$KUBECONFORM_VERSION" \
@@ -46,6 +48,10 @@ for value in \
 	fi
 done
 
+if [[ ! "$GITLEAKS_LINUX_X64_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+	printf 'invalid gitleaks archive digest: %s\n' "$GITLEAKS_LINUX_X64_SHA256" >&2
+	exit 1
+fi
 if [[ ! "$SEMGREP_IMAGE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
 	printf 'invalid Semgrep image digest: %s\n' "$SEMGREP_IMAGE_DIGEST" >&2
 	exit 1
@@ -138,7 +144,7 @@ if grep -En 'go install [^[:space:]]+@v[0-9]' "${direct_workflows[@]}"; then
 	exit 1
 fi
 
-cosign_version_pattern='^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
 cosign_version_guard="cosign version | grep -Eq '$cosign_version_pattern'"
 cosign_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
@@ -162,24 +168,141 @@ if grep -rHnF 'cosign version' \
 	printf 'Cosign version guard diverges from the exact runner contract\n' >&2
 	exit 1
 fi
-for version in 'v3.1.3' 'v3.1.3+dirty'; do
+for version in "v$COSIGN_VERSION" "v$COSIGN_VERSION+dirty"; do
 	if ! printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
 		printf 'Cosign runner contract rejects supported version: %s\n' "$version" >&2
 		exit 1
 	fi
 done
 for version in \
-	'v3.1.4' \
-	'v3.1.3+other' \
-	'v3.1.3+dirty.extra' \
-	'v3.1.3+dirty+other' \
-	'v3.1.3-dirty' \
-	'v3.1.30'; do
+	'v0.0.0' \
+	"v$COSIGN_VERSION+other" \
+	"v$COSIGN_VERSION+dirty.extra" \
+	"v$COSIGN_VERSION+dirty+other" \
+	"v$COSIGN_VERSION-dirty" \
+	"v${COSIGN_VERSION}0"; do
 	if printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
 		printf 'Cosign runner contract accepts unsupported version: %s\n' "$version" >&2
 		exit 1
 	fi
 done
+
+# installer_inputs prints the <key> input of every step that uses <action>, or
+# MISSING when such a step omits it.
+installer_inputs() {
+	local workflow="$1" action="$2" key="$3"
+	awk -v action="uses: $action@" -v key="$key:" '
+		function flush() { if (active) print (value == "" ? "MISSING" : value) }
+		/^      - / { flush(); active = 0; value = "" }
+		index($0, action) { active = 1 }
+		active && $1 == key { value = $2 }
+		END { flush() }
+	' "$workflow"
+}
+
+# require_inputs fails unless <workflow> uses <action> and every use sets <key> to <want>.
+require_inputs() {
+	local workflow="$1" action="$2" key="$3" want="$4"
+	local -a values=()
+	mapfile -t values < <(installer_inputs "$workflow" "$action" "$key")
+	if ((${#values[@]} == 0)); then
+		printf 'workflow does not install %s through %s: %s\n' "$key" "$action" "$workflow" >&2
+		return 1
+	fi
+	local value
+	for value in "${values[@]}"; do
+		if [[ "$value" != "$want" ]]; then
+			printf 'workflow %s input %s is %s, want %s: %s\n' \
+				"$action" "$key" "$value" "$want" "$workflow" >&2
+			return 1
+		fi
+	done
+}
+
+# check_release_tool_installs proves every release-tool workflow installs the
+# tools/tool-versions.env pins through the SHA-pinned official installers.
+check_release_tool_installs() {
+	local workflows="$1"
+	local name workflow
+	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images verify-provenance; do
+		require_inputs "$workflows/$name.yml" sigstore/cosign-installer \
+			cosign-release "v$COSIGN_VERSION" || return 1
+	done
+	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images; do
+		require_inputs "$workflows/$name.yml" anchore/sbom-action/download-syft \
+			syft-version "v$SYFT_VERSION" || return 1
+	done
+	for name in release-go release-tool-contract release; do
+		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
+			version "v$GORELEASER_VERSION" || return 1
+		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
+			install-only true || return 1
+	done
+	for workflow in "$workflows"/*.yml; do
+		if grep -Fq 'uses: sigstore/cosign-installer@' "$workflow"; then
+			require_inputs "$workflow" sigstore/cosign-installer \
+				cosign-release "v$COSIGN_VERSION" || return 1
+		fi
+		if grep -Fq 'uses: anchore/sbom-action/download-syft@' "$workflow"; then
+			require_inputs "$workflow" anchore/sbom-action/download-syft \
+				syft-version "v$SYFT_VERSION" || return 1
+		fi
+	done
+	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images verify-provenance; do
+		if grep -HnE 'pre-baked|verify-arc-runner-tools' "$workflows/$name.yml"; then
+			printf 'release-tool workflow relies on a pre-baked runner image\n' >&2
+			return 1
+		fi
+	done
+	for name in ci release-tool-contract; do
+		# shellcheck disable=SC2016 # Match the literal runtime variable in workflow YAML.
+		if ! grep -Fq 'bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"' \
+			"$workflows/$name.yml"; then
+			printf 'workflow bypasses the verified gitleaks installer: %s\n' \
+				"$workflows/$name.yml" >&2
+			return 1
+		fi
+	done
+	if grep -rHnE 'gitleaks version\)" = "[0-9]' "$workflows"; then
+		printf 'workflow hard-codes the gitleaks version instead of GITLEAKS_VERSION\n' >&2
+		return 1
+	fi
+}
+
+check_release_tool_installs "$repo_root/.github/workflows"
+install_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-tool-installs.XXXXXX")"
+trap 'rm -rf "$install_suite"' EXIT
+# expect_install_rejection <mutation-name> <file> <sed-expression>
+expect_install_rejection() {
+	local name="$1" file="$2" expression="$3"
+	rm -rf "${install_suite:?}/${name:?}"
+	cp -R "$repo_root/.github/workflows" "$install_suite/$name"
+	sed -i "$expression" "$install_suite/$name/$file"
+	if cmp -s "$repo_root/.github/workflows/$file" "$install_suite/$name/$file"; then
+		printf 'negative control %s did not mutate %s\n' "$name" "$file" >&2
+		exit 1
+	fi
+	if check_release_tool_installs "$install_suite/$name" >/dev/null 2>&1; then
+		printf 'release tool install check accepted negative control %s\n' "$name" >&2
+		exit 1
+	fi
+}
+expect_install_rejection cosign-drift release.yml \
+	"s/cosign-release: v$COSIGN_VERSION/cosign-release: v0.0.1/"
+expect_install_rejection syft-drift tiny-trainer-images.yml \
+	"s/syft-version: v$SYFT_VERSION/syft-version: v0.0.1/"
+expect_install_rejection goreleaser-drift release-go.yml \
+	"s/version: v$GORELEASER_VERSION/version: v0.0.1/"
+expect_install_rejection goreleaser-runs release.yml '/install-only: true/d'
+expect_install_rejection missing-cosign verify-provenance.yml \
+	's/uses: sigstore\/cosign-installer@/uses: example\/cosign-installer@/'
+expect_install_rejection prebaked rebuild-on-base.yml \
+	's/Verify pinned supply-chain tools/Verify pre-baked supply-chain tools/'
+# shellcheck disable=SC2016 # Match the literal runtime variable in workflow YAML.
+expect_install_rejection gitleaks-literal ci.yml \
+	's/= "\$GITLEAKS_VERSION"/= "8.30.1"/'
+expect_install_rejection gitleaks-installer ci.yml \
+	's/install-gitleaks.sh/install-other.sh/'
 
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
