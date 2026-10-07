@@ -21,36 +21,45 @@
 //	    mypb.NewPaymentClient(conn)
 //	})
 //
-// Config keys (env: APP_GRPC_*):
+// Config keys (env: APP_GRPC_*; keys with underscores need [CompoundKeys]):
 //
 //	grpc.listen         # server bind address (default: :9090)
 //	grpc.tls            # enable server TLS (default: false)
-//	grpc.cert_file      # TLS cert path
+//	grpc.cert_file      # TLS cert path (reloaded on rotation)
 //	grpc.key_file       # TLS key path
+//	grpc.ca_file        # CA bundle that verifies client certificates (mTLS)
+//	grpc.client_auth    # none|request|require_any|verify_if_given|require_and_verify
+//	                    # (default: require_and_verify with ca_file, else none)
 //	grpc.max_recv_size  # max incoming message size in bytes (default: 4 MiB)
 //	grpc.max_send_size  # max outgoing message size in bytes (default: 4 MiB)
+//	grpc.health         # register grpc.health.v1 fed by readiness checks
+//	grpc.keepalive.max_connection_age        # default 2m; negative = never
+//	grpc.keepalive.max_connection_age_grace  # default 5s; negative = unlimited
+//	grpc.keepalive.time                      # server ping interval (default 1m)
+//	grpc.keepalive.timeout                   # ping ack timeout (default 20s)
+//	grpc.keepalive.min_time                  # min client ping interval (default 5m)
+//	grpc.keepalive.permit_without_stream     # allow client pings without RPCs
 package grpc
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
-	"time"
 
 	grpclogging "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/logging"
 	grpcrecovery "github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
+	grpchealth "google.golang.org/grpc/health"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/drain"
+	"github.com/golusoris/golusoris/observability/statuspage"
 )
 
 const (
@@ -72,6 +81,16 @@ type Config struct {
 	MaxRecvSize int `koanf:"max_recv_size"`
 	// MaxSendSize caps the maximum outgoing message in bytes (default: 4 MiB).
 	MaxSendSize int `koanf:"max_send_size"`
+	// CAFile is the PEM bundle that verifies client certificates (mTLS).
+	CAFile string `koanf:"ca_file"`
+	// ClientAuth is the client-certificate policy (core/tlsx ParseClientAuth modes).
+	ClientAuth string `koanf:"client_auth"`
+	// Keepalive tunes keepalive pings and connection rotation.
+	Keepalive KeepaliveConfig `koanf:"keepalive"`
+	// Health registers grpc.health.v1, fed by readiness-tagged checks when a
+	// *statuspage.Registry is in the graph. Off by default: apps that register
+	// their own health service would otherwise collide.
+	Health bool `koanf:"health"`
 }
 
 // DefaultConfig returns the opinionated default server config.
@@ -80,6 +99,7 @@ func DefaultConfig() Config {
 		Listen:      defaultListen,
 		MaxRecvSize: defaultMaxMsgBytes,
 		MaxSendSize: defaultMaxMsgBytes,
+		Keepalive:   defaultKeepalive(),
 	}
 }
 
@@ -93,7 +113,19 @@ func (c Config) withDefaults() Config {
 	if c.MaxSendSize == 0 {
 		c.MaxSendSize = defaultMaxMsgBytes
 	}
+	c.Keepalive = c.Keepalive.withDefaults()
 	return c
+}
+
+// CompoundKeys lists the grpc.* keys whose names contain underscores. Pass
+// them to config.Options.CompoundKeys so APP_GRPC_* variables reach them.
+func CompoundKeys() []string {
+	return []string{
+		"grpc.cert_file", "grpc.key_file", "grpc.ca_file", "grpc.client_auth",
+		"grpc.max_recv_size", "grpc.max_send_size",
+		"grpc.keepalive.max_connection_age", "grpc.keepalive.max_connection_age_grace",
+		"grpc.keepalive.min_time", "grpc.keepalive.permit_without_stream",
+	}
 }
 
 // ConnFactory creates client connections with OTel instrumentation.
@@ -166,11 +198,15 @@ type serverParams struct {
 	Options []grpc.ServerOption `group:"grpc.serveropts"`
 	// Gate, when k8s/health.Module is wired, holds GracefulStop until readiness has drained.
 	Gate drain.Gate `optional:"true"`
+	// Clock paces TLS file reloads; the wall clock when absent.
+	Clock clock.Clock `optional:"true"`
+	// Registry feeds the health service's readiness answer.
+	Registry *statuspage.Registry `optional:"true"`
 }
 
 func newServer(p serverParams) (*grpc.Server, error) {
-	cfg, logger := p.Config, p.Logger
-	serverOpts, err := frameworkServerOptions(cfg, logger)
+	cfg, logger := p.Config.withDefaults(), p.Logger
+	serverOpts, err := frameworkServerOptions(cfg, logger, p.Clock)
 	if err != nil {
 		return nil, err
 	}
@@ -178,41 +214,33 @@ func newServer(p serverParams) (*grpc.Server, error) {
 	// framework's.
 	serverOpts = append(serverOpts, p.Options...)
 	srv := grpc.NewServer(serverOpts...)
-	p.LC.Append(drain.Wrap(p.Gate, serverHook(srv, cfg, logger)))
+	hs := registerHealth(srv, cfg.Health, p.Registry)
+	p.LC.Append(drain.Wrap(p.Gate, serverHook(srv, hs, cfg, logger)))
 	return srv, nil
 }
 
 // frameworkServerOptions builds the framework's own server options: TLS,
 // message-size limits, keepalive, and the OTel → logging → recovery chain.
-func frameworkServerOptions(cfg Config, logger *slog.Logger) ([]grpc.ServerOption, error) {
+func frameworkServerOptions(cfg Config, logger *slog.Logger, clk clock.Clock) ([]grpc.ServerOption, error) {
+	if err := cfg.Keepalive.validate(); err != nil {
+		return nil, err
+	}
 	var serverOpts []grpc.ServerOption
-
-	// TLS
 	if cfg.TLS {
-		cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
+		creds, err := serverCredentials(cfg, logger, clk)
 		if err != nil {
-			return nil, fmt.Errorf("grpc: load tls cert: %w", err)
+			return nil, err
 		}
-		serverOpts = append(serverOpts, grpc.Creds(credentials.NewTLS(&tls.Config{
-			Certificates: []tls.Certificate{cert},
-			MinVersion:   tls.VersionTLS13,
-		})))
+		serverOpts = append(serverOpts, grpc.Creds(creds))
 	}
 
-	// Message size limits.
 	serverOpts = append(
 		serverOpts,
 		grpc.MaxRecvMsgSize(cfg.MaxRecvSize),
 		grpc.MaxSendMsgSize(cfg.MaxSendSize),
+		grpc.KeepaliveParams(cfg.Keepalive.serverParameters()),
+		grpc.KeepaliveEnforcementPolicy(cfg.Keepalive.enforcementPolicy()),
 	)
-
-	// Keepalive — reasonable defaults for internal services.
-	serverOpts = append(serverOpts, grpc.KeepaliveParams(keepalive.ServerParameters{
-		MaxConnectionAge:      2 * time.Minute,
-		MaxConnectionAgeGrace: 5 * time.Second,
-		Time:                  1 * time.Minute,
-		Timeout:               20 * time.Second,
-	}))
 
 	// Interceptors: OTel → logging → recovery (outermost first).
 	logAdapter := newLogAdapter(logger)
@@ -250,7 +278,8 @@ func newLogAdapter(logger *slog.Logger) grpclogging.Logger {
 }
 
 // serverHook binds listen/serve and the bounded graceful stop to fx lifecycle.
-func serverHook(srv *grpc.Server, cfg Config, logger *slog.Logger) fx.Hook {
+// A registered health service reports NOT_SERVING before the drain starts.
+func serverHook(srv *grpc.Server, hs *grpchealth.Server, cfg Config, logger *slog.Logger) fx.Hook {
 	return fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			lc := &net.ListenConfig{}
@@ -267,6 +296,9 @@ func serverHook(srv *grpc.Server, cfg Config, logger *slog.Logger) fx.Hook {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			if hs != nil {
+				hs.Shutdown()
+			}
 			// Bound the graceful drain to the stop deadline, then hard-stop so
 			// shutdown can't hang on a stuck in-flight RPC.
 			done := make(chan struct{})

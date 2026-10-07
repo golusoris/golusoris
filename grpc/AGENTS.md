@@ -13,7 +13,10 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 
 | Type | Purpose |
 | --- | --- |
-| `Config` | Server config under `grpc.*` (env: `APP_GRPC_*`) — listen addr, TLS, message-size caps |
+| `Config` | Server config under `grpc.*` (env: `APP_GRPC_*`) — listen addr, TLS/mTLS, message-size caps, keepalive, health |
+| `KeepaliveConfig` | `grpc.keepalive.*` — connection age + grace, ping time/timeout, client ping policy |
+| `Infinite` | negative-duration sentinel: never rotate / unlimited grace / no server pings |
+| `CompoundKeys()` | snake_case `grpc.*` keys for `config.Options.CompoundKeys`; env overrides need it |
 | `*grpc.Server` | The `google.golang.org/grpc` server, fx-provided; serves on fx Start, graceful-stops on fx Stop |
 | `*ConnFactory` | Client-side dialer with OTel propagation; `Dial(ctx, target, ...)` returns a `*grpc.ClientConn` |
 | `Module` | Provides `*grpc.Server` + `*ConnFactory`; requires `*config.Config` + `*slog.Logger` |
@@ -21,9 +24,13 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 ## Behaviour
 
 - Interceptor chain (outermost first): OTel stats handler → slog logging → panic recovery, on both unary and stream.
-- TLS is opt-in (`grpc.tls=true` + cert/key paths); when on, it pins `MinVersion = TLS 1.3`.
-- Message size caps default to 4 MiB in and out; keepalive uses conservative internal-service defaults.
-- `k8s/health.Module` wired -> stop hook wrapped by its `core/drain.Gate` (no `k8s/health` import here): `GracefulStop` starts after `health.drain.delay`; stop ctx expiry -> hard `Stop`.
+- TLS is opt-in (`grpc.tls=true` + `cert_file`/`key_file`); pins TLS 1.3. Files reload on handshake via `core/tlsx` (30s min interval); bad rotation keeps last good cert.
+- mTLS: `grpc.ca_file` + `grpc.client_auth` (`none`, `request`, `require_any`, `verify_if_given`, `require_and_verify`). CA without mode = `require_and_verify`. Verifying mode without CA fails startup.
+- Message size caps default to 4 MiB in and out.
+- Keepalive defaults = pre-#589 values: age 2m, grace 5s, time 1m, timeout 20s; enforcement min_time 5m, no pings without stream. Zero = default. Negative age/grace/time = never (`Infinite`). Negative timeout/min_time fails startup.
+- Long RPCs (minutes): set `keepalive.max_connection_age` negative, or keep rotation and set `max_connection_age_grace` negative. App `ProvideServerOption(grpc.KeepaliveParams(...))` still overrides (appended last).
+- `k8s/health.Module` wired -> stop hook wrapped by its `core/drain.Gate`: `GracefulStop` starts after `health.drain.delay`; stop ctx expiry -> hard `Stop`.
+- `grpc.health=true` registers `grpc.health.v1`. Optional `*statuspage.Registry` in graph -> Check("") runs readiness-tagged checks (`health.Serving`); gate wired -> its `shutdown` check fails Check("") for whole drain window. fx Stop flips NOT_SERVING before `GracefulStop`. Off by default: app-registered health service would collide.
 - `ConnFactory` dials with insecure transport credentials by default — override per call with `grpc.WithTransportCredentials(...)`.
 
 ## Usage

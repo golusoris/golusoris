@@ -12,7 +12,7 @@ import (
 
 func TestServing_empty(t *testing.T) {
 	t.Parallel()
-	if !serving(nil) {
+	if !Serving(nil) {
 		t.Fatal("want true for nil (empty) results")
 	}
 }
@@ -23,7 +23,7 @@ func TestServing_allUp(t *testing.T) {
 		{Status: statuspage.StatusUp},
 		{Status: statuspage.StatusUp},
 	}
-	if !serving(results) {
+	if !Serving(results) {
 		t.Fatal("want true when all checks are up")
 	}
 }
@@ -32,13 +32,13 @@ func TestServing_allUp(t *testing.T) {
 // NOT fail the probe (still serving), but a down one must.
 func TestServing_degradedStillServes(t *testing.T) {
 	t.Parallel()
-	if !serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDegraded}}) {
+	if !Serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDegraded}}) {
 		t.Error("degraded check must still be serving (probe 200)")
 	}
-	if serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDown}}) {
+	if Serving([]statuspage.Result{{Status: statuspage.StatusUp}, {Status: statuspage.StatusDown}}) {
 		t.Error("a down check must fail the probe")
 	}
-	if serving([]statuspage.Result{{Status: statuspage.StatusUnknown}}) {
+	if Serving([]statuspage.Result{{Status: statuspage.StatusUnknown}}) {
 		t.Error("an unknown check must fail the probe")
 	}
 }
