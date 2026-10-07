@@ -19,5 +19,5 @@ Future additions (when needed):
 ## Conventions
 
 - These packages never import `k8s.io/*` or cloud SDKs. They work
-  identically in every runtime. Platform-specific code lives under
-  the platform's own directory (`k8s/`, future `docker/`, `systemd/`).
+ identically in every runtime. Platform-specific code lives under
+ platform's own directory (`k8s/`, future `docker/`, `systemd/`).

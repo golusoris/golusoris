@@ -5,8 +5,10 @@
 package llm_test
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/ai/llm"
 )
@@ -61,4 +63,26 @@ func TestRunStream(t *testing.T) {
 			t.Fatalf("expected closed empty channel, got %+v", c)
 		}
 	})
+}
+
+func TestRunStreamContextCancellationReleasesBlockedProducer(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	producerDone := make(chan struct{})
+	stream := llm.RunStreamContext(ctx, func(ch chan<- llm.Chunk) error {
+		defer close(producerDone)
+		for range 1024 {
+			if err := llm.SendChunk(ctx, ch, llm.Chunk{Content: "x"}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	_ = stream
+	cancel()
+	select {
+	case <-producerDone:
+	case <-time.After(time.Second):
+		t.Fatal("producer remained blocked after consumer context cancellation")
+	}
 }

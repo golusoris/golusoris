@@ -104,9 +104,9 @@ func TestAniList_unauthenticated(t *testing.T) {
 // non-2xx (not cached) branch of the cache transport.
 func TestCacheTransport_nonCacheable(t *testing.T) {
 	t.Parallel()
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"status_message":"nope"}`))
 	}))
@@ -128,7 +128,7 @@ func TestCacheTransport_nonCacheable(t *testing.T) {
 	// Two failing GETs: a non-2xx response must NOT be cached, so both hit.
 	_, _ = c.GetConfiguration(context.Background())
 	_, _ = c.GetConfiguration(context.Background())
-	if got := atomic.LoadInt32(&hits); got != 2 {
+	if got := hits.Load(); got != 2 {
 		t.Fatalf("non-2xx must not be cached, expected 2 hits, got %d", got)
 	}
 }

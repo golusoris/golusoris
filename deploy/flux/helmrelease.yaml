@@ -31,7 +31,8 @@ spec:
   values:
     image:
       repository: ghcr.io/golusoris/app-myapp
-      tag: "0.1.0"   # overridden by image-automation if enabled
+      # Replace before reconcile; the all-zero digest is intentionally inert.
+      digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
     replicaCount: 3
     ingress:
       enabled: true
@@ -43,7 +44,8 @@ spec:
     serviceMonitor:
       enabled: true
     backup:
-      enabled: true
+      # Enable only after setting an owned backup image digest and secrets.
+      enabled: false
       schedule: "0 2 * * *"
       dbName: myapp
       s3:

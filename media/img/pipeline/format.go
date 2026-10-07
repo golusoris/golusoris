@@ -14,10 +14,9 @@ import (
 // a named helper so the security-relevant call site reads clearly.
 func hmacEqual(a, b []byte) bool { return hmac.Equal(a, b) }
 
-// contentTypeFor maps an output format to its wire MIME type. An empty format
-// (source-format passthrough) maps to the generic octet-stream so the handler
-// never lies about the body; callers should set a concrete format when they
-// care about the header.
+// contentTypeFor maps an output format to its wire MIME type. Passthrough
+// renders inspect the output first, so only unknown processor formats reach
+// the generic fallback.
 func contentTypeFor(f img.Format) string {
 	switch f {
 	case img.FormatJPEG:

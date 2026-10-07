@@ -27,6 +27,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Message is the unified notification payload. Senders ignore fields
@@ -78,15 +80,24 @@ type Option func(*Notifier)
 
 // WithSender adds a sender.
 func WithSender(s Sender) Option {
-	return func(n *Notifier) { n.senders = append(n.senders, s) }
+	return func(n *Notifier) {
+		if !validate.IsNil(s) {
+			n.senders = append(n.senders, s)
+		}
+	}
 }
 
 // New returns a Notifier. At least one sender is recommended; sending
 // with no senders is a no-op.
 func New(logger *slog.Logger, opts ...Option) *Notifier {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	n := &Notifier{logger: logger}
 	for _, o := range opts {
-		o(n)
+		if o != nil {
+			o(n)
+		}
 	}
 	return n
 }

@@ -6,8 +6,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/nats/
 
-Spins up a real NATS container (testcontainers-go generic API, `nats:2-alpine`,
-JetStream enabled) and returns its URL for integration tests.
+Spins real NATS via testcontainers-go; JetStream enabled; URL returned.
+
+NATS + Ryuk references: immutable `internal/testimages` authority. Renovate owns
+tag + digest updates. No local mutable image strings.
 
 ## Usage
 
@@ -22,8 +24,8 @@ func TestFoo(t *testing.T) {
 
 ## Don't
 
-- Don't share the container across parallel tests — each call creates its own
-  container; isolation is the point.
-- Don't use this package when a unit test suffices. Spin containers only when
-  real NATS behaviour (pub/sub delivery, JetStream persistence) must be
-  verified.
+- Don't share container across parallel tests — each call creates its own
+ container; isolation is point.
+- Don't use this package when unit test suffices. Spin containers only when
+ real NATS behaviour (pub/sub delivery, JetStream persistence) must be
+ verified.

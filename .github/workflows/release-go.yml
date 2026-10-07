@@ -3,21 +3,20 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 # Reusable release workflow for golusoris-based Go applications.
-# Runs on version tags (v*.*.*) and produces:
+# A caller chooses the trigger; the template caller uses version tags (v*.*.*).
+# The workflow produces:
 #   - Multi-arch OCI image pushed to GHCR
-#   - syft SBOM (SPDX) uploaded to the GitHub Release + attested
-#   - cosign keyless signature (via goreleaser)
-#   - SLSA build provenance via actions/attest-build-provenance (in-toto
-#     attestation pushed to the registry). NOTE: provenance is emitted by
-#     actions/attest-build-provenance, NOT slsa-framework/slsa-github-generator.
+#   - syft SBOM (SPDX) attested to the exact OCI image digest
+#   - cosign keyless signature on the image digest
+#   - Build provenance via actions/attest-build-provenance (in-toto
+#     attestation pushed to the registry; no SLSA level claimed)
 #
 # Apps call it with:
 #   jobs:
 #     release:
-#       uses: golusoris/golusoris/.github/workflows/release-go.yml@main
+#       uses: golusoris/golusoris/.github/workflows/release-go.yml@<full-framework-commit-sha>
 #       with:
 #         runs-on: arc-cauda-golusoris-myapp
-#       secrets: inherit
 name: release-go (reusable)
 
 on:
@@ -39,26 +38,53 @@ on:
         description: Path to .goreleaser.yml
         type: string
         default: tools/.goreleaser.yml
-    secrets:
-      COSIGN_PASSWORD:
-        required: false
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-go-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   goreleaser:
     name: GoReleaser
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 30
+    env:
+      GOFLAGS: -mod=readonly
     permissions:
       contents: write
       packages: write
-      id-token: write   # needed for cosign keyless + SLSA
-      attestations: write
+      id-token: write       # cosign keyless + GitHub attestations
+      attestations: write   # build provenance + SBOM attestations
+      artifact-metadata: write
     steps:
+      - name: Validate canonical release tag
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          TAG_PATTERN='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ "$RELEASE_REF_TYPE" != tag || \
+            "$RELEASE_REF" != "refs/tags/$RELEASE_REF_NAME" || \
+            ! "$RELEASE_REF_NAME" =~ $TAG_PATTERN ]]; then
+            echo "::error::release-go requires an immutable canonical SemVer tag; got ${RELEASE_REF}."
+            exit 1
+          fi
+          # release-oci-tag:start
+          if [[ "$RELEASE_REF_NAME" == *+* ]] || ((${#RELEASE_REF_NAME} > 128)); then
+            echo '::error::release-go requires the SemVer tag to be a valid OCI tag.'
+            exit 1
+          fi
+          # release-oci-tag:end
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.sha }}
           fetch-depth: 0
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -82,28 +108,93 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for tool in cosign syft goreleaser; do command -v "$tool"; done
-          cosign version | grep -Eq 'GitVersion:[[:space:]]+v?3\.1\.3([[:space:]]|$)'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.51\.1([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.0([[:space:]]|$)'
+          for tool in cosign syft goreleaser gh node; do command -v "$tool"; done
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.52\.0([[:space:]]|$)'
+          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.2([[:space:]]|$)'
 
       - name: Run GoReleaser
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CONFIG: ${{ inputs.goreleaser-config }}
-        run: goreleaser release --config="$GORELEASER_CONFIG" --clean
+        # Keep the release mutable until every signature and attestation has
+        # succeeded. The final step is the only publication point.
+        run: goreleaser release --config="$GORELEASER_CONFIG" --clean --draft
 
-      - name: Resolve pushed image digest
+      - name: Resolve current release image receipt
         id: digest
+        shell: bash
+        env:
+          ARTIFACTS_JSON: dist/artifacts.json
+          EXPECTED_IMAGE_REF: ${{ inputs.image-name }}:${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # goreleaser-action exposes no digest output; resolve it from the
-          # registry for the tag goreleaser just pushed.
-          DIGEST=$(docker buildx imagetools inspect \
-            "${{ inputs.image-name }}:${{ github.ref_name }}" \
-            --format '{{json .Manifest.Digest}}' | tr -d '"')
-          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          DIGEST="$(
+            node --input-type=module <<'NODE'
+          // release-receipt-parser:start
+          import { readFile, stat } from 'node:fs/promises';
+
+          const artifactsPath = process.env.ARTIFACTS_JSON;
+          const expectedImage = process.env.EXPECTED_IMAGE_REF;
+          const maxBytes = 16 * 1024 * 1024;
+          const maxArtifacts = 4096;
+          const digestPattern = /^sha256:[0-9a-f]{64}$/;
+          const imageTypes = new Set([
+            'Docker Image',
+            'Published Docker Image',
+            'Docker Manifest',
+          ]);
+
+          if (!artifactsPath || !expectedImage) {
+            throw new Error('release receipt inputs are required');
+          }
+          const metadata = await stat(artifactsPath);
+          if (!metadata.isFile() || metadata.size < 2 || metadata.size > maxBytes) {
+            throw new Error(`invalid GoReleaser receipt size: ${metadata.size}`);
+          }
+          const artifacts = JSON.parse(await readFile(artifactsPath, 'utf8'));
+          if (!Array.isArray(artifacts) || artifacts.length > maxArtifacts) {
+            throw new Error('invalid GoReleaser artifact inventory');
+          }
+          const matches = artifacts.filter(
+            (artifact) => artifact?.name === expectedImage && imageTypes.has(artifact?.type),
+          );
+          const digests = matches
+            .filter((artifact) => Object.hasOwn(artifact?.extra ?? {}, 'Digest'))
+            .map((artifact) => artifact.extra.Digest);
+          if (digests.length === 0 || digests.some((digest) => !digestPattern.test(digest))) {
+            throw new Error(`missing or invalid digest for ${expectedImage}`);
+          }
+          const uniqueDigests = [...new Set(digests)];
+          if (uniqueDigests.length !== 1) {
+            throw new Error(`ambiguous digests for ${expectedImage}`);
+          }
+          process.stdout.write(uniqueDigests[0]);
+          // release-receipt-parser:end
+          NODE
+          )"
+          REMOTE_DIGEST="$(docker buildx imagetools inspect \
+            "$EXPECTED_IMAGE_REF" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+          if [[ ! "$REMOTE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ || \
+            "$REMOTE_DIGEST" != "$DIGEST" ]]; then
+            echo "::error::registry digest does not match the current GoReleaser receipt."
+            exit 1
+          fi
+          printf 'digest=%s\n' "$DIGEST" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image digest (keyless)
+        shell: bash
+        env:
+          IMAGE: ${{ inputs.image-name }}@${{ steps.digest.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ${{ inputs.image-name }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
 
       - name: Generate SBOM
         shell: bash
@@ -111,18 +202,58 @@ jobs:
           IMAGE: ${{ inputs.image-name }}@${{ steps.digest.outputs.digest }}
         run: syft packages "$IMAGE" -o spdx-json > sbom.spdx.json
 
-      - name: Upload SBOM to the GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          # SBOM is generated above but was never attached — upload it so the
-          # release carries the SPDX SBOM alongside the goreleaser artifacts.
-          gh release upload "${{ github.ref_name }}" sbom.spdx.json --clobber
-
       - name: Attest SBOM
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ${{ inputs.image-name }}
           subject-digest: ${{ steps.digest.outputs.digest }}
+          sbom-path: sbom.spdx.json
           push-to-registry: true
+
+      - name: Publish verified release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          # release-tag-binding:start
+          if ! remote_refs="$(git ls-remote --exit-code origin \
+            "refs/tags/${RELEASE_TAG}" "refs/tags/${RELEASE_TAG}^{}")"; then
+            echo '::error::release tag no longer exists on the remote.'
+            exit 1
+          fi
+          if ! remote_sha="$(printf '%s\n' "$remote_refs" | awk \
+            -v direct="refs/tags/${RELEASE_TAG}" \
+            -v peeled="refs/tags/${RELEASE_TAG}^{}" '
+              $2 == direct { direct_sha = $1; direct_count++ }
+              $2 == peeled { peeled_sha = $1; peeled_count++ }
+              END {
+                if (direct_count != 1 || peeled_count > 1) exit 1
+                print peeled_count == 1 ? peeled_sha : direct_sha
+              }
+            ')"; then
+            echo '::error::release tag remote identity is ambiguous.'
+            exit 1
+          fi
+          if [[ ! "$remote_sha" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ || \
+            "$remote_sha" != "$SOURCE_SHA" ]]; then
+            echo '::error::release tag no longer resolves to the event commit.'
+            exit 1
+          fi
+          # release-tag-binding:end
+          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft --jq '[.tagName, .isDraft] | @tsv')"
+          if [[ "$state" != "$RELEASE_TAG"$'\ttrue' ]]; then
+            echo '::error::GoReleaser did not leave the expected draft release.'
+            exit 1
+          fi
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --draft=false
+          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,isDraft --jq '[.tagName, .isDraft] | @tsv')"
+          if [[ "$state" != "$RELEASE_TAG"$'\tfalse' ]]; then
+            echo '::error::verified release publication did not converge.'
+            exit 1
+          fi

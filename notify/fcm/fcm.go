@@ -31,6 +31,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"sync"
@@ -40,7 +41,14 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
+)
+
+const (
+	defaultRequestTimeout   = 10 * time.Second
+	defaultMaxResponseBytes = 1 << 20
 )
 
 // DefaultTokenURI is Google's OAuth2 token endpoint.
@@ -75,6 +83,9 @@ type Options struct {
 	Endpoint string `koanf:"endpoint"`
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// MaxResponseBytes caps decoded OAuth token responses. Zero defaults to 1 MiB;
+	// negative and unbounded values are rejected.
+	MaxResponseBytes int64 `koanf:"max_response_bytes"`
 	// Clock is optional; defaults to a real wall clock. Injected for
 	// testable token-expiry logic.
 	Clock clockwork.Clock
@@ -82,11 +93,12 @@ type Options struct {
 
 // Sender posts notify.Messages to FCM.
 type Sender struct {
-	sa       ServiceAccount
-	scope    string
-	endpoint string
-	hc       *http.Client
-	clock    clockwork.Clock
+	sa               ServiceAccount
+	scope            string
+	endpoint         string
+	hc               *http.Client
+	clock            clockwork.Clock
+	maxResponseBytes int64
 
 	mu         sync.Mutex
 	token      string
@@ -107,15 +119,22 @@ func NewSender(opts Options) (*Sender, error) {
 	if endpoint == "" {
 		endpoint = "https://fcm.googleapis.com"
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
+	if opts.MaxResponseBytes < 0 || opts.MaxResponseBytes == math.MaxInt64 {
+		return nil, errors.New("notify/fcm: max_response_bytes must be zero or a positive bounded value")
 	}
+	maxResponseBytes := opts.MaxResponseBytes
+	if maxResponseBytes == 0 {
+		maxResponseBytes = defaultMaxResponseBytes
+	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, defaultRequestTimeout)
 	clk := opts.Clock
-	if clk == nil {
+	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
-	return &Sender{sa: sa, scope: scope, endpoint: endpoint, hc: hc, clock: clk}, nil
+	return &Sender{
+		sa: sa, scope: scope, endpoint: endpoint, hc: hc, clock: clk,
+		maxResponseBytes: maxResponseBytes,
+	}, nil
 }
 
 // resolveServiceAccount picks the account from Options (either
@@ -138,18 +157,25 @@ func resolveServiceAccount(opts Options) (ServiceAccount, error) {
 // serviceAccountFrom implements the "exactly one of ServiceAccount or
 // ServiceAccountJSON" contract documented on [Options].
 func serviceAccountFrom(opts Options) (ServiceAccount, error) {
+	hasAccount := opts.ServiceAccount != nil
+	hasJSON := len(opts.ServiceAccountJSON) > 0
+	if hasAccount == hasJSON {
+		if hasAccount {
+			return ServiceAccount{}, errors.New("notify/fcm: exactly one of ServiceAccountJSON or ServiceAccount must be set")
+		}
+		return ServiceAccount{}, errors.New("notify/fcm: ServiceAccountJSON or ServiceAccount required")
+	}
 	switch {
-	case opts.ServiceAccount != nil:
+	case hasAccount:
 		return *opts.ServiceAccount, nil
-	case len(opts.ServiceAccountJSON) > 0:
+	case hasJSON:
 		var sa ServiceAccount
 		if err := json.Unmarshal(opts.ServiceAccountJSON, &sa); err != nil {
 			return ServiceAccount{}, fmt.Errorf("notify/fcm: parse service account JSON: %w", err)
 		}
 		return sa, nil
-	default:
-		return ServiceAccount{}, errors.New("notify/fcm: ServiceAccountJSON or ServiceAccount required")
 	}
+	return ServiceAccount{}, errors.New("notify/fcm: unreachable service account source")
 }
 
 // Name implements [notify.Sender].
@@ -231,6 +257,20 @@ func (s *Sender) accessToken(ctx context.Context) (token string, err error) {
 		return s.token, nil
 	}
 
+	assertion, err := s.signedAssertion(now)
+	if err != nil {
+		return "", err
+	}
+	out, err := s.exchangeToken(ctx, assertion)
+	if err != nil {
+		return "", err
+	}
+	s.token = out.AccessToken
+	s.tokenExpAt = s.clock.Now().Add(time.Duration(out.ExpiresIn) * time.Second)
+	return s.token, nil
+}
+
+func (s *Sender) signedAssertion(now time.Time) (string, error) {
 	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(s.sa.PrivateKey))
 	if err != nil {
 		return "", fmt.Errorf("notify/fcm: parse private key: %w", err)
@@ -247,40 +287,46 @@ func (s *Sender) accessToken(ctx context.Context) (token string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("notify/fcm: sign jwt: %w", err)
 	}
+	return assertion, nil
+}
 
+func (s *Sender) exchangeToken(ctx context.Context, assertion string) (out tokenResponse, err error) {
 	form := url.Values{}
 	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
 	form.Set("assertion", assertion)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.sa.TokenURI, bytes.NewBufferString(form.Encode()))
 	if err != nil {
-		return "", fmt.Errorf("notify/fcm: token req: %w", err)
+		return tokenResponse{}, fmt.Errorf("notify/fcm: token req: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
 	if err != nil {
-		return "", fmt.Errorf("notify/fcm: token post: %w", err)
+		return tokenResponse{}, fmt.Errorf("notify/fcm: token post: %w", err)
 	}
 	defer gerr.CloseInto(resp.Body, &err, "notify/fcm: close token response body")
 
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-		return "", fmt.Errorf("notify/fcm: token status %d: %s", resp.StatusCode, raw)
+		return tokenResponse{}, fmt.Errorf("notify/fcm: token status %d: %s", resp.StatusCode, raw)
 	}
-	var out struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int    `json:"expires_in"`
-		TokenType   string `json:"token_type"`
+	raw, err := httpclient.ReadAllBounded(resp.Body, s.maxResponseBytes)
+	if err != nil {
+		return tokenResponse{}, fmt.Errorf("notify/fcm: read token response: %w", err)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("notify/fcm: token decode: %w", err)
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return tokenResponse{}, fmt.Errorf("notify/fcm: token decode: %w", err)
 	}
 	if out.AccessToken == "" {
-		return "", errors.New("notify/fcm: token response missing access_token")
+		return tokenResponse{}, errors.New("notify/fcm: token response missing access_token")
 	}
-	s.token = out.AccessToken
-	s.tokenExpAt = s.clock.Now().Add(time.Duration(out.ExpiresIn) * time.Second)
-	return s.token, nil
+	return out, nil
+}
+
+type tokenResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
 }
 
 type fcmSendRequest struct {

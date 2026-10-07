@@ -11,9 +11,11 @@ config:
   golusoris-app:dbStorageGB: "100"
   golusoris-app:dbEngineVersion: "17.2"
   golusoris-app:redisNodeType: cache.m6g.large
-  golusoris-app:appImage: ghcr.io/example/myapp:v1.0.0
+  golusoris-app:appImage: ghcr.io/example/myapp@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   golusoris-app:appReplicas: "3"
   golusoris-app:appPort: "8080"
   golusoris-app:domain: app.example.com
+  golusoris-app:hostedZoneId: Z0123456789EXAMPLE
+  golusoris-app:certificateArn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
   golusoris-app:multiAZ: "true"
   golusoris-app:deletionProtection: "true"

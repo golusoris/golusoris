@@ -18,8 +18,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	tokenhash "github.com/golusoris/golusoris/hash"
 	"github.com/golusoris/golusoris/notify/tracking"
 )
+
+var testSecret = strings.Repeat("x", tokenhash.HMACSHA256MinKeyBytes)
 
 type memStore struct {
 	mu     sync.Mutex
@@ -41,10 +44,17 @@ func (m *memStore) list() []tracking.Event {
 	return out
 }
 
+func newService(t *testing.T, store tracking.Store, logger *slog.Logger) *tracking.Service {
+	t.Helper()
+	svc, err := tracking.New(store, []byte(testSecret), logger)
+	require.NoError(t, err)
+	return svc
+}
+
 func TestPixelHandler_recordsOpen(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"), nil)
+	svc := newService(t, store, nil)
 	urlStr := svc.PixelURL("http://example.com/t/open", "msg1", "alice@example.com")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
@@ -68,7 +78,7 @@ func TestPixelHandler_recordsOpen(t *testing.T) {
 func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"), nil)
+	svc := newService(t, store, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://example.com/t/open?m=x&r=a&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.PixelHandler().ServeHTTP(rec, req)
@@ -80,7 +90,7 @@ func TestPixelHandler_servesEvenOnBadSig(t *testing.T) {
 func TestClickHandler_redirects(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"), nil)
+	svc := newService(t, store, nil)
 	target := "https://example.com/landing?x=1"
 	urlStr := svc.ClickURL("http://example.com/t/click", "msg2", "bob@example.com", target)
 
@@ -96,26 +106,27 @@ func TestClickHandler_redirects(t *testing.T) {
 	require.Len(t, events, 1)
 	require.Equal(t, tracking.KindClick, events[0].Kind)
 	require.Equal(t, target, events[0].URL)
-	require.Equal(t, "10.0.0.1:1234", events[0].IP)
+	require.Equal(t, "10.0.0.1", events[0].IP)
 }
 
-func TestClickHandler_forwardedFor(t *testing.T) {
+func TestClickHandlerIgnoresUntrustedForwardedFor(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"), nil)
+	svc := newService(t, store, nil)
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "https://ex.com/")
 
 	req := httptest.NewRequest(http.MethodGet, urlStr, nil)
+	req.RemoteAddr = "198.51.100.7:1234"
 	req.Header.Set("X-Forwarded-For", "203.0.113.5, 10.0.0.1")
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
 
-	require.Equal(t, "203.0.113.5", store.list()[0].IP)
+	require.Equal(t, "198.51.100.7", store.list()[0].IP)
 }
 
 func TestClickHandler_rejectsBadSig(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"), nil)
+	svc := newService(t, &memStore{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m&r=r&u=https%3A%2F%2Fex.com&sig=bad", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -124,7 +135,7 @@ func TestClickHandler_rejectsBadSig(t *testing.T) {
 
 func TestClickHandler_rejectsMissingParams(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"), nil)
+	svc := newService(t, &memStore{}, nil)
 	req := httptest.NewRequest(http.MethodGet, "http://x/c?m=m", nil)
 	rec := httptest.NewRecorder()
 	svc.ClickHandler().ServeHTTP(rec, req)
@@ -134,7 +145,7 @@ func TestClickHandler_rejectsMissingParams(t *testing.T) {
 func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 	t.Parallel()
 	store := &memStore{}
-	svc := tracking.New(store, []byte("k"), nil)
+	svc := newService(t, store, nil)
 	// Signed but with a javascript: target — must be rejected.
 	urlStr := svc.ClickURL("http://x/c", "m", "r", "javascript:alert(1)")
 
@@ -148,7 +159,7 @@ func TestClickHandler_rejectsNonHTTPTarget(t *testing.T) {
 
 func TestPixelURL_containsExpectedFields(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(&memStore{}, []byte("k"), nil)
+	svc := newService(t, &memStore{}, nil)
 	got := svc.PixelURL("http://x/p", "m1", "a@b")
 	require.True(t, strings.HasPrefix(got, "http://x/p?"))
 	require.Contains(t, got, "m=m1")
@@ -164,7 +175,7 @@ func newLoggedService(t *testing.T, store tracking.Store) (*tracking.Service, *b
 	t.Helper()
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
-	return tracking.New(store, []byte("k"), logger), &buf
+	return newService(t, store, logger), &buf
 }
 
 // Negative path: a store failure must not break the pixel; it is logged.
@@ -200,9 +211,45 @@ func TestClickHandler_storeFailureStillRedirectsAndLogs(t *testing.T) {
 // Boundary: a nil logger must fall back to slog.Default() rather than panic.
 func TestNew_nilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
-	svc := tracking.New(failStore{err: errors.New("db down")}, []byte("k"), nil)
+	svc := newService(t, failStore{err: errors.New("db down")}, nil)
 	req := httptest.NewRequest(http.MethodGet, svc.PixelURL("http://x/p", "m", "r"), nil)
 	rec := httptest.NewRecorder()
 	require.NotPanics(t, func() { svc.PixelHandler().ServeHTTP(rec, req) })
 	require.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestNewRejectsNilStores(t *testing.T) {
+	t.Parallel()
+	var typedNil *memStore
+	for _, store := range []tracking.Store{nil, typedNil} {
+		svc, err := tracking.New(store, []byte(testSecret), nil)
+		require.Error(t, err)
+		require.Nil(t, svc)
+	}
+}
+
+func TestNewValidatesHMACKeyBoundary(t *testing.T) {
+	t.Parallel()
+	for _, size := range []int{0, tokenhash.HMACSHA256MinKeyBytes - 1} {
+		svc, err := tracking.New(&memStore{}, make([]byte, size), nil)
+		require.ErrorIs(t, err, tokenhash.ErrWeakHMACSHA256Key)
+		require.Nil(t, svc)
+	}
+	for _, size := range []int{tokenhash.HMACSHA256MinKeyBytes, tokenhash.HMACSHA256MinKeyBytes + 1} {
+		svc, err := tracking.New(&memStore{}, make([]byte, size), nil)
+		require.NoError(t, err)
+		require.NotNil(t, svc)
+	}
+}
+
+func TestNewClonesHMACKey(t *testing.T) {
+	t.Parallel()
+	secret := []byte(testSecret)
+	svc, err := tracking.New(&memStore{}, secret, nil)
+	require.NoError(t, err)
+	want := svc.PixelURL("https://example.test/open", "message", "user@example.test")
+	for i := range secret {
+		secret[i] ^= 0xff
+	}
+	require.Equal(t, want, svc.PixelURL("https://example.test/open", "message", "user@example.test"))
 }

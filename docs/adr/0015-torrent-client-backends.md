@@ -13,7 +13,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-PLAN.md §4.12 calls for a `torrent/` module: a single `Client` interface (add by
+The framework needs a `torrent/` module with a single `Client` interface (add by
 magnet/URL/file, remove, list, get/status, pause, resume, basic stats) with
 selectable backends for **rtorrent**, **qBittorrent**, and **transmission**,
 chosen by config — mirroring how `storage/` selects local vs s3.
@@ -34,7 +34,8 @@ view, and three backends selected by `torrent.backend`:
 - **rtorrent** → **`github.com/autobrr/go-rtorrent` v1.12.0** (MIT). The
   maintained hard-fork of the archived `mrobinsn/go-rtorrent`; used in autobrr
   production. Injects a timeout-bearing `*http.Client` via `WithHTTPClient`.
-- **qBittorrent** → **`github.com/autobrr/go-qbittorrent` v1.16.0** (MIT). First-party
+- **qBittorrent** → **`github.com/autobrr/go-qbittorrent`** (MIT; v1.16.0 when
+  this decision was accepted). First-party
   autobrr client tracking WebAPI 2.13, actively maintained (commits through
   2026-05). Cookie login wired on `fx.Lifecycle` `OnStart`; the lib also
   auto-relogins on cookie expiry. Pause/resume are version-aware (it routes the
@@ -82,9 +83,9 @@ fail construction with `ErrUnsupportedBackend`.
 
 ## References
 
-- PLAN.md §4.12 — `torrent/` module spec and dependency hint.
 - `github.com/autobrr/go-rtorrent` v1.12.0, MIT — rtorrent XML-RPC client.
-- `github.com/autobrr/go-qbittorrent` v1.16.0, MIT — qBittorrent WebAPI v2 client.
+- `github.com/autobrr/go-qbittorrent`, MIT — qBittorrent WebAPI v2 client; the
+  maintained current pin is recorded in [`docs/upstream/`](../upstream/README.md).
 - `github.com/hekmon/transmissionrpc/v3` v3.0.0, MIT — transmission RPC client.
 - `torrent/AGENTS.md` — resulting API + config surface.
 - principles.md §2.5 / §2.7 — dependency, security, and supply-chain standards.

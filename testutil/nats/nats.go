@@ -26,12 +26,12 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
-	defaultImage = "nats:2-alpine"
-	natsPort     = "4222/tcp"
+	natsPort = "4222/tcp"
 	// startTimeout bounds one container start including a cold image pull;
 	// same value as testutil/pg (see the rationale there: cold ARC runners).
 	startTimeout = 3 * time.Minute
@@ -53,7 +53,8 @@ func Start(t *testing.T) string {
 	defer cancel()
 
 	req := testcontainers.ContainerRequest{
-		Image:        defaultImage,
+		Image:        testimages.NATS,
+		ReaperImage:  testimages.Ryuk,
 		ExposedPorts: []string{natsPort},
 		// -js enables JetStream; pubsub/nats.Client always creates a JS context.
 		Cmd:        []string{"-js"},

@@ -10,26 +10,32 @@
 //
 // Apps build their own room/hub logic on top — one-size-fits-all hubs are
 // always wrong. When pub/sub must span replicas, wire a
-// [realtime/pubsub]-backed broadcaster (Step 10).
+// [realtime/pubsub]-backed broadcaster.
 package ws
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/coder/websocket"
+
+	"github.com/golusoris/golusoris/httpx/middleware"
 )
 
 // AcceptOptions tunes the handshake.
 type AcceptOptions struct {
-	// AllowedOrigins lists hostnames permitted to originate the WS request.
-	// Empty means accept only same-origin (r.Host). Includes a literal "*"
-	// entry to disable the check entirely — use only for public APIs.
+	// AllowedOrigins lists exact http(s) origins permitted to originate the WS
+	// request, including a non-default port when applicable. Empty means exact
+	// same-origin only. A literal "*" disables the check; use it only for
+	// genuinely public APIs.
 	AllowedOrigins []string
 	// Subprotocols is forwarded to websocket.AcceptOptions.
 	Subprotocols []string
@@ -69,23 +75,91 @@ func originAllowed(r *http.Request, allowed []string) bool {
 		// Non-browser clients may not send Origin; accept.
 		return true
 	}
-	// Same-origin check: strip scheme + port from Origin and compare to Host.
-	host := strings.TrimPrefix(strings.TrimPrefix(origin, "https://"), "http://")
-	if i := strings.IndexByte(host, '/'); i >= 0 {
-		host = host[:i]
+	source, err := parseWebOrigin(origin)
+	if err != nil {
+		return false
 	}
-	hostNoPort := host
-	if i := strings.IndexByte(host, ':'); i >= 0 {
-		hostNoPort = host[:i]
+	target, err := requestWebOrigin(r)
+	if err != nil {
+		return false
 	}
-	reqHost := r.Host
-	if i := strings.IndexByte(reqHost, ':'); i >= 0 {
-		reqHost = reqHost[:i]
-	}
-	if hostNoPort == reqHost {
+	if source == target {
 		return true
 	}
-	return slices.Contains(allowed, host) || slices.Contains(allowed, hostNoPort)
+	for _, candidate := range allowed {
+		parsed, parseErr := parseWebOrigin(candidate)
+		if parseErr == nil && parsed == source {
+			return true
+		}
+	}
+	return false
+}
+
+type webOrigin struct {
+	scheme string
+	host   string
+	port   uint16
+}
+
+func parseWebOrigin(raw string) (webOrigin, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return webOrigin{}, fmt.Errorf("parse origin: %w", err)
+	}
+	if parsed.User != nil || parsed.Host == "" || parsed.Path != "" ||
+		parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery ||
+		parsed.Fragment != "" || parsed.Opaque != "" {
+		return webOrigin{}, errors.New("origin must contain only scheme and authority")
+	}
+	return canonicalWebOrigin(parsed.Scheme, parsed)
+}
+
+func requestWebOrigin(r *http.Request) (webOrigin, error) {
+	scheme := middleware.ForwardedProtoFromContext(r.Context())
+	if scheme == "" {
+		scheme = "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+	}
+	parsed, err := url.Parse("//" + r.Host)
+	if err != nil || parsed.User != nil || parsed.Host == "" || parsed.Path != "" {
+		return webOrigin{}, errors.New("request host is not a valid authority")
+	}
+	return canonicalWebOrigin(scheme, parsed)
+}
+
+func canonicalWebOrigin(scheme string, parsed *url.URL) (webOrigin, error) {
+	scheme = strings.ToLower(scheme)
+	if scheme != "http" && scheme != "https" {
+		return webOrigin{}, fmt.Errorf("unsupported origin scheme %q", scheme)
+	}
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if host == "" || strings.ContainsAny(host, "%/\\ \t\r\n") {
+		return webOrigin{}, errors.New("origin host is invalid")
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		host = ip.String()
+	}
+	port, err := originPort(scheme, parsed.Port())
+	if err != nil {
+		return webOrigin{}, err
+	}
+	return webOrigin{scheme: scheme, host: host, port: port}, nil
+}
+
+func originPort(scheme, raw string) (uint16, error) {
+	if raw == "" {
+		if scheme == "https" {
+			return 443, nil
+		}
+		return 80, nil
+	}
+	port, err := strconv.ParseUint(raw, 10, 16)
+	if err != nil || port == 0 {
+		return 0, fmt.Errorf("origin port %q is invalid", raw)
+	}
+	return uint16(port), nil
 }
 
 // Broadcaster fans out messages to a set of in-process subscribers. Each
@@ -114,6 +188,7 @@ func NewBroadcaster[T any](bufSize int) *Broadcaster[T] {
 // done, the subscription is automatically torn down.
 func (b *Broadcaster[T]) Subscribe(ctx context.Context) (<-chan T, func()) {
 	ch := make(chan T, b.bufSize)
+	done := make(chan struct{})
 	b.mu.Lock()
 	b.subs[ch] = struct{}{}
 	b.mu.Unlock()
@@ -121,6 +196,7 @@ func (b *Broadcaster[T]) Subscribe(ctx context.Context) (<-chan T, func()) {
 	unsubOnce := sync.Once{}
 	unsub := func() {
 		unsubOnce.Do(func() {
+			close(done)
 			b.mu.Lock()
 			if _, ok := b.subs[ch]; ok {
 				delete(b.subs, ch)
@@ -129,11 +205,16 @@ func (b *Broadcaster[T]) Subscribe(ctx context.Context) (<-chan T, func()) {
 			b.mu.Unlock()
 		})
 	}
-	go func() {
-		<-ctx.Done()
-		unsub()
-	}()
+	go watchSubscription(ctx, done, unsub)
 	return ch, unsub
+}
+
+func watchSubscription(ctx context.Context, done <-chan struct{}, unsub func()) {
+	select {
+	case <-ctx.Done():
+		unsub()
+	case <-done:
+	}
 }
 
 // Publish sends msg to every subscriber. Slow subscribers whose buffer is

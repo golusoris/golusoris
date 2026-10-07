@@ -4,65 +4,50 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# ai/tiny/litert — AGENTS.md
+# ai/tiny/litert
 
-MediaPipe Model Maker trainer producing LiteRT (`.tflite`) artifacts.
-Implements `tiny.Trainer`.
+Keras MobileNet V2 image trainer. Builtin-op LiteRT output.
 
-## Surface
+## Contract
 
-- `NewTrainer(Options) (*Trainer, error)` — validates `Runner` + `Bucket`.
-- `(*Trainer).Name() string` → `"litert"`.
-- `(*Trainer).Train(ctx, tiny.Job) (tiny.Model, error)`.
+- Constructor: `NewTrainer(Options) (*Trainer, error)`.
+- Required: `Runner`, `Bucket`, digest-pinned `Image`, canonical absolute
+  `DatasetRoot`.
+- Job: `Modality=image`; `TaskKind=classify`; base
+  `keras:image/mobilenet-v2`; format `tar|tar.gz|tgz|zip`.
+- Dataset: local `file:` only; regular file under
+  `<DatasetRoot>/<TenantID|_default>`; staged as `/work/input/dataset`.
+- Runner: read-only input/root; network denied; process, tmpfs, output-file
+  caps active.
+- Output: fixed `model.tflite`; required fixed `metrics.json` with at least two
+  unique non-empty labels.
+- Artifact key:
+  `<KeyPrefix>/tenants/<tenant>/<name>/<job>/<sha256>/model.tflite`.
 
-## Supported jobs
+Deprecated text, MediaPipe, MobileBERT, EfficientNet-Lite constants: compile
+compatibility only. Validation rejects every identifier.
 
-| Modality | TaskKind | MediaPipe task / backbone |
-| --- | --- | --- |
-| `text` | `classify` | `text_classifier` (MobileBERT / AverageWordEmbedding) |
-| `image` | `classify` | `image_classifier` (EfficientNet-Lite) |
-| `audio` | `classify` | `audio_classifier` (YAMNet) |
+## Image runtime
 
-Other combinations are rejected at `Train` entry.
+- TensorFlow `2.21.0`; Keras `3.15.1`; Python `3.11.16`.
+- `pretrained=false`; digest-pinned weight staging absent.
+- Archive: traversal, link, special-file, member, expansion bounds.
+- Images: extension plus header match; count, encoded bytes, dimensions,
+  decoded pixels, channels bounded; two labels and two images per label.
+- Conversion: `TFLITE_BUILTINS` only; `TFL3` check; interpreter allocation
+  and finite-output invocation before artifact write.
 
-## Flow
+## Limits
 
-1. `tiny.ValidateJob` + enforce `TaskKind=classify` + supported
-   modality.
-2. Stage tmpdir with `input/config.json` (job id, modality/task,
-   dataset URI, hyperparams).
-3. Invoke `Runner.Run` with `/work/input` (ro) + `/work/output` (rw),
-   env seeded with `TINY_JOB_NAME` / `TINY_MODALITY` / `TINY_TASK` plus
-   `ExtraEnv`.
-4. Drain trainer stdout/stderr into `slog` via `bytes.Buffer` +
-   `bufio.Scanner`.
-5. Read `output/model.tflite` + `output/metrics.json` (sidecar with
-   `{metrics: {...}, labels: [...]}` shape).
-6. Upload bundle to `<KeyPrefix>/<job.Name>/<job.ID>/model.tflite`.
-7. Return `tiny.Model` with `Format=TFLite`, `Labels`, `Metrics`, tag
-   metadata.
+- Timeout: 2h.
+- Logs: 1 MiB.
+- Artifact: 1 GiB.
+- Metrics: 1 MiB.
+- Dataset: 10 GiB.
 
-## Defaults
+## Proof
 
-- `Image`: `ghcr.io/golusoris/tiny-litert-trainer:v1`.
-- `KeyPrefix`: `models/litert`.
-- `Logger`: `slog.Default()`.
-
-## Metrics sidecar
-
-```json
-{
-  "metrics": {"accuracy": 0.93, "loss": 0.18, "epochs": 3},
-  "labels":  ["spam", "ham"]
-}
-```
-
-Parse failures warn but never fail the run — the `.tflite` artifact is
-the authoritative output.
-
-## Testing
-
-`StubRunner` writes `model.tflite` + `metrics.json` into
-`spec.OutputDir`; the test round-trips through `storage.LocalBucket`
-and asserts the bucketed bytes match. No Docker required for unit
-tests.
+- Go: `go test ./ai/tiny/litert ./ai/tiny/internal/trainerio`.
+- Python: `PYTHONPATH=ai/tiny python3 -B -m unittest trainers.litert.test_trainer`.
+- Container: `scripts/ci/tiny-trainer-smoke.sh litert IMAGE`.
+- Release boundary: `ai/tiny/trainers/README.md`.

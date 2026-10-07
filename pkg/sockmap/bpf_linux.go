@@ -8,8 +8,7 @@ package sockmap
 
 import _ "embed"
 
-//go:generate clang -O2 -g -Wall -target bpf -D__TARGET_ARCH_x86 -c bpf/sockmap.bpf.c -o bpf/sockmap.bpf.o
-//go:generate llvm-strip -g bpf/sockmap.bpf.o
+//go:generate ../../scripts/ci/c-quality.sh --write
 
 // bpfObject is the committed, CO-RE-enabled SOCK_OPS + SK_MSG object. It is
 // checked in (like bpf2go output) so the package builds without a clang

@@ -4,35 +4,54 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — httpx/middleware
+# httpx/middleware
 
-HTTP middleware toolkit. Each middleware is a plain `func(http.Handler) http.Handler`.
+HTTP middleware. Plain `func(http.Handler) http.Handler`.
 
 ## Order
 
-The canonical stack, outermost first:
+canonical stack, outermost first:
 
 ```go
 r.Use(
-    middleware.RequestID,                    // sets X-Request-ID on ctx+response
-    middleware.TrustProxy(trustedCIDRs),     // rewrites RemoteAddr from trusted proxies
-    middleware.Recover(logger),              // catches panics → 500
-    middleware.Logger(logger, clk),          // structured access log
-    middleware.OTel("app", tracerProvider),  // span per request
+    middleware.RequestID,
+    middleware.TrustProxy(middleware.TrustProxyOptions{TrustedCIDRs: cidrs}),
+    middleware.Recover(logger),
+    middleware.Logger(logger, clk),
+    middleware.OTel("app", tracerProvider),
     middleware.SecureHeaders(middleware.SecureHeadersDefaults()),
-    compress,                                // built via middleware.Compress()
-    middleware.ETag,                         // weak ETag + 304 for GET
+    compress,
+    middleware.ETag,
 )
 ```
 
-## Conventions
+## Trust
 
-- All middleware respect the request context — panics log with the X-Request-ID for correlation.
-- OTel middleware accepts `trace.TracerProvider`; `nil` falls back to `otel.GetTracerProvider()` (no-op unless the app wires a real one).
-- `TrustProxy` gates rewriting by direct-peer CIDR — *never* read `X-Forwarded-For` from app code.
-- `ETag` buffers the response body in memory; skip for streaming endpoints.
+- `RequestID`: always replace inbound ID.
+- `RequestIDFromTrustedPeers`: keep valid bounded ID only from direct trusted
+  CIDR. Run before `TrustProxy`.
+- `TrustProxy`: direct peer must be trusted. Walk XFF right-to-left. First
+  untrusted hop wins. Duplicate fields are one chain. Malformed or over-64-hop
+  chain is ignored, and forwarding headers from untrusted peers are removed.
+- Trusted `X-Forwarded-Proto`: exactly one `http` or `https` value. Read only
+  through `ForwardedProtoFromContext`; invalid, chained, or duplicate values
+  produce no context value.
+
+## Response
+
+- `Recover`: RFC 9457 before commit. Panic after commit becomes
+  `http.ErrAbortHandler`; never append second body.
+- `Logger`: status/bytes/elapsed/request ID. Preserves flush, hijack, push,
+  ReaderFrom, and unwrap behavior.
+- `ETag`: weak hash for bounded GET response. Default buffer cap 1 MiB.
+  Oversize, flush, or hijack switches to passthrough. First-call hijack sends
+  no synthetic HTTP status before raw connection handoff. Handler-supplied
+  validator wins and remains eligible for conditional 304.
+- `ETagWithLimit`: explicit cap; nonpositive means pass through.
+- OTel nil provider: global provider.
 
 ## Don't
 
-- Don't write new middleware that reads `r.RemoteAddr` for trust decisions unless it runs *after* `TrustProxy`.
-- Don't log access lines from handlers — the Logger middleware emits one per request with status, bytes, elapsed, and request_id.
+- No raw XFF trust outside `TrustProxy`.
+- No duplicate access log in handler.
+- No ETag middleware on known stream route.

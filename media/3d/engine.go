@@ -1,19 +1,9 @@
+//go:build linux && cgo
+
 // SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package threed provides a thin wrapper over g3n/engine for 3D rendering.
-//
-// This is a separate go.mod sub-module because g3n pulls CGO + OpenGL/GLFW
-// drivers that require a GPU and display server.
-// Import directly: github.com/golusoris/golusoris/media/3d
-//
-// # Usage
-//
-//	app, err := threed.NewApp()
-//	scene := threed.NewScene()
-//	// add meshes, lights, cameras to scene
-//	err = app.Run(scene)
 package threed
 
 import (
@@ -21,7 +11,6 @@ import (
 	"time"
 
 	"github.com/g3n/engine/app"
-	"github.com/g3n/engine/core"
 	"github.com/g3n/engine/renderer"
 )
 
@@ -46,7 +35,7 @@ func NewApp() (*App, error) {
 
 // Run starts the render loop with scene as the root node and blocks until the
 // window closes. It returns the first frame that failed to render, if any.
-func (a *App) Run(scene *core.Node) error {
+func (a *App) Run(scene *Scene) error {
 	var renderErr error
 	a.a.Run(func(rend *renderer.Renderer, _ time.Duration) {
 		if err := rend.Render(scene, nil); err != nil && renderErr == nil {
@@ -54,12 +43,4 @@ func (a *App) Run(scene *core.Node) error {
 		}
 	})
 	return renderErr
-}
-
-// Scene wraps a g3n core.Node as the scene root.
-type Scene = core.Node
-
-// NewScene creates a new scene root node.
-func NewScene() *core.Node {
-	return core.NewNode()
 }

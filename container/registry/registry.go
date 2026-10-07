@@ -49,6 +49,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // DefaultTimeout bounds a single registry call (resolve, manifest fetch, tag
@@ -83,10 +85,10 @@ type Client struct {
 // nil (the same resolution `docker`/`crane` use); transport defaults to
 // [http.DefaultTransport] when nil.
 func New(opts Options, keychain authn.Keychain, transport http.RoundTripper) *Client {
-	if keychain == nil {
+	if validate.IsNil(keychain) {
 		keychain = authn.DefaultKeychain
 	}
-	if transport == nil {
+	if validate.IsNil(transport) {
 		transport = http.DefaultTransport
 	}
 	ua := opts.UserAgent

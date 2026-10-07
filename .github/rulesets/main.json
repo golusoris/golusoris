@@ -37,19 +37,97 @@
       "parameters": {
         "required_status_checks": [
           {
+            "context": "Workflows (actionlint)"
+          },
+          {
+            "context": "Allocation budgets (HISS-03)"
+          },
+          {
+            "context": "API compatibility (apidiff)"
+          },
+          {
             "context": "Build"
+          },
+          {
+            "context": "CI success"
+          },
+          {
+            "context": "Secret scan (gitleaks)"
           },
           {
             "context": "Security (gosec)"
           },
           {
+            "context": "Kubernetes schemas (kubeconform)"
+          },
+          {
             "context": "Lint"
           },
           {
-            "context": "Test (race + coverage)"
+            "context": "Documentation lint (markdownlint-cli2)"
+          },
+          {
+            "context": "Documentation build (MkDocs)"
+          },
+          {
+            "context": "Module sweep (shard 0)"
+          },
+          {
+            "context": "Module sweep (shard 1)"
+          },
+          {
+            "context": "Module sweep (shard 2)"
+          },
+          {
+            "context": "Module sweep (shard 3)"
+          },
+          {
+            "context": "Licensing (reuse lint)"
+          },
+          {
+            "context": "Custom SAST (semgrep)"
+          },
+          {
+            "context": "Shell scripts (ShellCheck)"
+          },
+          {
+            "context": "OpenAPI lint (spectral)"
+          },
+          {
+            "context": "Terraform modules"
+          },
+          {
+            "context": "Test (race + coverage) (arc-cauda-golusoris-golusoris, module)"
           },
           {
             "context": "Vulnerabilities (govulncheck)"
+          },
+          {
+            "context": "Platform Neutrality (Linux)"
+          },
+          {
+            "context": "Platform Neutrality (macOS)"
+          },
+          {
+            "context": "Platform Neutrality (Windows)"
+          },
+          {
+            "context": "Go API Compatibility"
+          },
+          {
+            "context": "Documentation Governance"
+          },
+          {
+            "context": "Scorecard Analysis"
+          },
+          {
+            "context": "Build and smoke (gemma)"
+          },
+          {
+            "context": "Build and smoke (litert)"
+          },
+          {
+            "context": "Python contracts"
           }
         ],
         "strict_required_status_checks_policy": true

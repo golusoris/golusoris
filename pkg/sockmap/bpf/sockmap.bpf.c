@@ -17,8 +17,8 @@
 // the configured bpffs path and the external (sveltesentio) loader reads the
 // same pin as a client.
 //
-// Build (committed .o is checked in; regenerate via `go generate ./pkg/sockmap`):
-//   clang -O2 -g -target bpf -D__TARGET_ARCH_x86 -c sockmap.bpf.c -o sockmap.bpf.o
+// Build (committed .o is checked in; regenerate via `go generate ./pkg/sockmap`).
+// scripts/ci/c-quality.sh owns the digest-pinned, reproducible compiler command.
 
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
@@ -39,7 +39,7 @@ struct {
 	__type(key, struct sock_key);
 	__type(value, __u32);
 	__uint(pinning, LIBBPF_PIN_BY_NAME);
-} golusoris_sockhash SEC(".maps");
+} golusoris_sockhash SEC(".maps"); // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) -- eBPF map ABI requires this section symbol.
 
 static __always_inline void sock_key_from_ops(struct bpf_sock_ops *ops,
 					      struct sock_key *key)
@@ -54,8 +54,9 @@ SEC("sockops")
 int sockmap_sockops(struct bpf_sock_ops *ops)
 {
 	// Only IPv4 TCP on loopback colocation is in scope for this slice.
-	if (ops->family != 2 /* AF_INET */)
+	if (ops->family != 2 /* AF_INET */) {
 		return 0;
+	}
 
 	switch (ops->op) {
 	case BPF_SOCK_OPS_PASSIVE_ESTABLISHED_CB:
@@ -82,7 +83,7 @@ int sockmap_redirect(struct sk_msg_md *msg)
 		.sport = bpf_ntohl(msg->remote_port),
 		.dport = msg->local_port,
 	};
-	return bpf_msg_redirect_hash(msg, &golusoris_sockhash, &key, BPF_F_INGRESS);
+	return (int)bpf_msg_redirect_hash(msg, &golusoris_sockhash, &key, BPF_F_INGRESS);
 }
 
-char _license[] SEC("license") = "GPL";
+char bpf_license[] SEC("license") = "GPL"; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables) -- eBPF loader consumes this section symbol.

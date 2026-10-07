@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Minimal single-instance Loki for dev / small prod.
-# For scale-out use the grafana/loki Helm chart.
+# Minimal single-instance Loki for development.
+# For production use the grafana-community/loki Helm chart.
 ---
 apiVersion: v1
 kind: Namespace
@@ -95,14 +95,22 @@ spec:
         app.kubernetes.io/name: loki
     spec:
       serviceAccountName: loki
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: loki
-          image: grafana/loki:3.3.2
+          image: docker.io/grafana/loki:3.7.8@sha256:1107dd5274e0ada47e42472b7a7e71f3b2a2fe878878108f3e2f9e51528f0193
           args: ["-config.file=/etc/loki/loki.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
           ports:
             - name: http
               containerPort: 3100
@@ -123,8 +131,11 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/loki
+              readOnly: true
             - name: data
               mountPath: /loki
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 100m
@@ -136,6 +147,9 @@ spec:
         - name: config
           configMap:
             name: loki-config
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
   volumeClaimTemplates:
     - metadata:
         name: data

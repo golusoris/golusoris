@@ -26,11 +26,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
-	defaultImage = "redis:7-alpine"
 	// startTimeout bounds one container start including a cold image pull;
 	// same value as testutil/pg (see the rationale there: cold ARC runners).
 	startTimeout = 3 * time.Minute
@@ -51,7 +51,7 @@ func Start(t *testing.T) rueidis.Client {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	ctr, err := tcredis.Run(ctx, defaultImage)
+	ctr, err := tcredis.Run(ctx, testimages.Redis, testimages.WithPinnedReaper())
 	if err != nil {
 		t.Fatalf("testutil/redis: start container: %v", err)
 	}
@@ -97,7 +97,7 @@ func Addr(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	ctr, err := tcredis.Run(ctx, defaultImage)
+	ctr, err := tcredis.Run(ctx, testimages.Redis, testimages.WithPinnedReaper())
 	if err != nil {
 		t.Fatalf("testutil/redis: start container: %v", err)
 	}

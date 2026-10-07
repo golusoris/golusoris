@@ -17,6 +17,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"slices"
 	"testing"
 
 	"github.com/golusoris/golusoris/storage/safety"
@@ -29,7 +30,80 @@ func newTestStripper(t *testing.T, opts safety.StripOptions) safety.Stripper {
 }
 
 func defaultStripOpts() safety.StripOptions {
-	return safety.StripOptions{AutoOrient: true, JPEGQuality: 85, MaxPixels: 40_000_000}
+	return safety.StripOptions{AutoOrient: true, JPEGQuality: 85, MaxPixels: 40_000_000, MaxBytes: 1 << 20}
+}
+
+func TestStrip_SourceByteLimit(t *testing.T) {
+	t.Parallel()
+	src := gifBytes(t, 8, 8)
+	tests := []struct {
+		name    string
+		input   []byte
+		wantErr error
+	}{
+		{name: "exact", input: src},
+		{name: "over", input: append(append([]byte(nil), src...), 0), wantErr: safety.ErrTooLarge},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			opts := defaultStripOpts()
+			opts.MaxBytes = int64(len(src))
+			_, _, err := newTestStripper(t, opts).Strip(context.Background(), bytes.NewReader(tt.input), "image/gif")
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Strip() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+type zeroReadProbe struct {
+	reads int
+}
+
+func (r *zeroReadProbe) Read([]byte) (int, error) {
+	r.reads++
+	return 0, io.EOF
+}
+
+func TestStrip_PreCanceledContextDoesNotReadSource(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	src := &zeroReadProbe{}
+	_, _, err := newTestStripper(t, defaultStripOpts()).Strip(ctx, src, "image/png")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Strip error = %v; want context.Canceled", err)
+	}
+	if src.reads != 0 {
+		t.Fatalf("source reads = %d; want zero", src.reads)
+	}
+}
+
+type cancelingStripReader struct {
+	data   []byte
+	cancel context.CancelFunc
+	done   bool
+}
+
+func (r *cancelingStripReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	n := copy(p, r.data[:min(len(r.data), 8)])
+	r.cancel()
+	return n, nil
+}
+
+func TestStrip_CancellationDuringSourceRead(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	src := &cancelingStripReader{data: gifBytes(t, 8, 8), cancel: cancel}
+	_, _, err := newTestStripper(t, defaultStripOpts()).Strip(ctx, src, "image/gif")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Strip error = %v; want context.Canceled", err)
+	}
 }
 
 func TestStrip_DropsJPEGEXIF(t *testing.T) {
@@ -156,6 +230,52 @@ func TestStrip_GIFRoundTrips(t *testing.T) {
 	}
 	if _, _, err = image.Decode(out); err != nil {
 		t.Fatalf("gif output invalid: %v", err)
+	}
+}
+
+func TestStrip_GIFPreservesAnimationAndDropsComments(t *testing.T) {
+	t.Parallel()
+	src := animatedGIFBytes(t)
+	marker := []byte("private animation note")
+	src = append(src[:len(src)-1], append([]byte{0x21, 0xfe, byte(len(marker))}, append(marker, 0, 0x3b)...)...)
+	if !bytes.Contains(src, marker) {
+		t.Fatal("fixture lacks comment marker")
+	}
+
+	out, contentType, err := newTestStripper(t, defaultStripOpts()).Strip(
+		context.Background(), bytes.NewReader(src), "image/gif",
+	)
+	if err != nil {
+		t.Fatalf("Strip: %v", err)
+	}
+	gotBytes, err := io.ReadAll(out)
+	if err != nil {
+		t.Fatalf("read output: %v", err)
+	}
+	if contentType != "image/gif" || bytes.Contains(gotBytes, marker) {
+		t.Fatalf("content type = %q, comment retained = %t", contentType, bytes.Contains(gotBytes, marker))
+	}
+	got, err := gif.DecodeAll(bytes.NewReader(gotBytes))
+	if err != nil {
+		t.Fatalf("DecodeAll: %v", err)
+	}
+	if len(got.Image) != 2 || got.LoopCount != 2 || !slices.Equal(got.Delay, []int{3, 7}) ||
+		!bytes.Equal(got.Disposal, []byte{gif.DisposalNone, gif.DisposalBackground}) {
+		t.Fatalf("animation = frames %d, loop %d, delay %v, disposal %v", len(got.Image), got.LoopCount, got.Delay, got.Disposal)
+	}
+	if got.Image[0].ColorIndexAt(0, 0) == got.Image[1].ColorIndexAt(0, 0) {
+		t.Fatal("animation frame pixels collapsed")
+	}
+}
+
+func TestStrip_GIFAggregatePixelLimit(t *testing.T) {
+	t.Parallel()
+	src := animatedGIFBytes(t)
+	opts := defaultStripOpts()
+	opts.MaxPixels = 3 // 2x1 logical screen passes; two frames total four pixels fail.
+	_, _, err := newTestStripper(t, opts).Strip(context.Background(), bytes.NewReader(src), "image/gif")
+	if !errors.Is(err, safety.ErrImageTooLarge) {
+		t.Fatalf("Strip error = %v; want ErrImageTooLarge", err)
 	}
 }
 
@@ -301,6 +421,26 @@ func gifBytes(t *testing.T, w, h int) []byte {
 	img := image.NewPaletted(image.Rect(0, 0, w, h), pal)
 	if err := gif.Encode(&buf, img, nil); err != nil {
 		t.Fatalf("encode gif: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func animatedGIFBytes(t *testing.T) []byte {
+	t.Helper()
+	pal := color.Palette{color.Black, color.White}
+	first := image.NewPaletted(image.Rect(0, 0, 2, 1), pal)
+	second := image.NewPaletted(image.Rect(0, 0, 2, 1), pal)
+	second.Pix[0] = 1
+	var buf bytes.Buffer
+	err := gif.EncodeAll(&buf, &gif.GIF{
+		Image:     []*image.Paletted{first, second},
+		Delay:     []int{3, 7},
+		LoopCount: 2,
+		Disposal:  []byte{gif.DisposalNone, gif.DisposalBackground},
+		Config:    image.Config{ColorModel: pal, Width: 2, Height: 1},
+	})
+	if err != nil {
+		t.Fatalf("encode animated gif: %v", err)
 	}
 	return buf.Bytes()
 }

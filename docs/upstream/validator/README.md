@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go-playground/validator/v10 — v10.26.0 snapshot
+# go-playground/validator/v10 — v10.30.4 snapshot
 
-Pinned: **v10.26.0**
-Source: https://pkg.go.dev/github.com/go-playground/validator/v10@v10.26.0
+Pinned: **v10.30.4**
+Source: [tagged source](https://github.com/go-playground/validator/tree/v10.30.4)
 
 ## Initialization
 
@@ -39,15 +39,17 @@ err := validate.Struct(user)
 // Error handling
 var errs validator.ValidationErrors
 if errors.As(err, &errs) {
-    for _, e := range errs {
-        fmt.Printf("Field: %s, Tag: %s, Value: %v\n", e.Field(), e.Tag(), e.Value())
-    }
+    first := errs[0]
+    return fmt.Errorf("validate user: field %s failed %s", first.Field(), first.Tag())
+}
+if err != nil {
+    return fmt.Errorf("validate user: %w", err)
 }
 ```
 
 ## Common tags
 
-```
+```text
 required        — field must be set (non-zero)
 omitempty       — skip validation if zero value
 min=N / max=N   — length or value bounds
@@ -66,16 +68,22 @@ dive            — validate slice/map elements
 ## Custom validators
 
 ```go
-validate.RegisterValidation("is-cool", func(fl validator.FieldLevel) bool {
+err := validate.RegisterValidation("is-cool", func(
+    fl validator.FieldLevel,
+) bool {
     return fl.Field().String() == "cool"
 })
+if err != nil {
+    return fmt.Errorf("register is-cool validator: %w", err)
+}
 ```
 
 ## golusoris usage
 
-- `validate/` — `*validator.Validate` singleton provided via fx; ogen request decode validation.
+- `core/validate/` — `*validator.Validate` singleton provided via fx; ogen
+  request decode validation.
 
 ## Links
 
-- Changelog: https://github.com/go-playground/validator/blob/master/CHANGELOG.md
-- Baked-in validations: https://pkg.go.dev/github.com/go-playground/validator/v10#hdr-Baked_In_Validators_and_Tags
+- [Package documentation](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.4)
+- [Baked-in validations](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.4#hdr-Baked_In_Validators_and_Tags)

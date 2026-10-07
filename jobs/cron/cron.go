@@ -19,12 +19,15 @@
 package cron
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	rcron "github.com/robfig/cron/v3"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // parser matches robfig v3's default (5-field + descriptors).
@@ -54,15 +57,45 @@ func Schedule(expr string) (river.PeriodicSchedule, error) {
 // constructor returns the JobArgs that will be inserted on each tick.
 // Return nil to skip this tick (e.g. when the job is disabled via config).
 func Register[T river.JobArgs](c *river.Client[pgx.Tx], expr string, constructor func() T) error {
+	if constructor == nil {
+		return errors.New("cron: nil constructor")
+	}
+	if c == nil {
+		return errors.New("cron: nil client")
+	}
 	sched, err := Schedule(expr)
 	if err != nil {
 		return err
 	}
-	pj := river.NewPeriodicJob(sched, func() (river.JobArgs, *river.InsertOpts) {
-		return constructor(), nil
-	}, nil)
-	c.PeriodicJobs().Add(pj)
+	pj := river.NewPeriodicJob(sched, periodicConstructor(constructor), nil)
+	periodicJobs, err := periodicJobBundle(c)
+	if err != nil {
+		return err
+	}
+	if _, err := periodicJobs.AddSafely(pj); err != nil {
+		return fmt.Errorf("cron: add periodic job: %w", err)
+	}
 	return nil
+}
+
+func periodicConstructor[T river.JobArgs](constructor func() T) river.PeriodicJobConstructor {
+	return func() (river.JobArgs, *river.InsertOpts) {
+		args := constructor()
+		if validate.IsNil(args) {
+			return nil, nil
+		}
+		return args, nil
+	}
+}
+
+func periodicJobBundle(c *river.Client[pgx.Tx]) (bundle *river.PeriodicJobBundle, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			bundle = nil
+			err = fmt.Errorf("cron: periodic jobs unavailable: %v", recovered)
+		}
+	}()
+	return c.PeriodicJobs(), nil
 }
 
 // riverSchedule adapts a robfig cron.Schedule to river.PeriodicSchedule.

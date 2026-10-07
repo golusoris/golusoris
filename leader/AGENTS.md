@@ -15,12 +15,12 @@ Single-leader election with pluggable backends.
 
 ## Conventions
 
-- Apps pick ONE backend. Wiring both is a config error (two electors
-  fighting for one task).
+- Apps pick ONE backend. Wiring both is config error (two electors
+ fighting for one task).
 - `leader.Callbacks` is shared across backends — swap backends without
-  changing handler code.
+ changing handler code.
 - `OnStartedLeading(ctx)` handler MUST return promptly on ctx cancel
-  or risk concurrent leaders across replicas.
+ or risk concurrent leaders across replicas.
 
 ## Trade-offs
 
@@ -34,6 +34,6 @@ Single-leader election with pluggable backends.
 ## Don't
 
 - Don't tune `leader/k8s.Lease.Duration` below 2 × `Renew` — elector
-  refuses the config.
-- Don't share a `leader.name` (pg backend) across unrelated electors;
-  names hash to int8 keys, collision = contention.
+ refuses config.
+- Don't share `leader.name` (pg backend) across unrelated electors;
+ names hash to int8 keys, collision = contention.

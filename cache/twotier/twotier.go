@@ -46,6 +46,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golusoris/golusoris/cache/memory"
@@ -72,17 +73,24 @@ type l2 interface {
 // Loader fetches a value from the origin on a full cache miss.
 type Loader[V any] func(ctx context.Context) (V, error)
 
+type flightKey struct {
+	key   string
+	epoch uint64
+}
+
 // TwoTier is the untyped two-tier cache. It is created by the fx module and
 // shared across the app; callers obtain a type-safe view via [Typed].
 //
 // A nil *TwoTier is a valid disabled cache (see package doc).
 type TwoTier struct {
-	l1     *memory.Cache
-	l2     l2
-	logger *slog.Logger
-	l1TTL  time.Duration
-	l2TTL  time.Duration
-	group  *singleflight.Group[string, []byte]
+	l1       *memory.Cache
+	l2       l2
+	logger   *slog.Logger
+	l1TTL    time.Duration
+	l2TTL    time.Duration
+	mutation sync.RWMutex
+	epoch    uint64
+	group    *singleflight.Group[flightKey, []byte]
 }
 
 // Typed is a type-safe view over a [TwoTier] with a key prefix. Multiple typed
@@ -115,12 +123,14 @@ func (t *Typed[V]) Get(ctx context.Context, k string, loader Loader[V]) (V, erro
 	}
 	key := t.key(k)
 
-	if v, ok := t.l1Get(key); ok {
-		return v, nil
+	epoch, cached, ok := t.l1Snapshot(key)
+	if ok {
+		return cached, nil
 	}
 
-	raw, _, err := t.tt.group.Do(ctx, key, func(ctx context.Context) ([]byte, error) {
-		return t.load(ctx, key, loader)
+	flight := flightKey{key: key, epoch: epoch}
+	raw, _, err := t.tt.group.Do(ctx, flight, func(ctx context.Context) ([]byte, error) {
+		return t.load(ctx, key, epoch, loader)
 	})
 	if err != nil {
 		var zero V
@@ -132,29 +142,56 @@ func (t *Typed[V]) Get(ctx context.Context, k string, loader Loader[V]) (V, erro
 		var zero V
 		return zero, fmt.Errorf("cache/twotier: decode loaded value: %w", uerr)
 	}
-	t.tt.l1.Set(key, v)
+	t.setL1IfCurrent(key, v, epoch)
 	return v, nil
 }
 
-// l1Get reads the typed value from L1, guarding the any→V assertion.
-func (t *Typed[V]) l1Get(key string) (V, bool) {
+// l1Snapshot reads one generation and its typed L1 value atomically against
+// Set, Delete, and prefix invalidation.
+func (t *Typed[V]) l1Snapshot(key string) (uint64, V, bool) {
+	t.tt.mutation.RLock()
+	defer t.tt.mutation.RUnlock()
 	raw, ok := t.tt.l1.GetIfPresent(key)
 	if !ok {
 		var zero V
-		return zero, false
+		return t.tt.epoch, zero, false
 	}
 	v, ok := raw.(V)
-	return v, ok
+	return t.tt.epoch, v, ok
+}
+
+func (t *Typed[V]) setL1(key string, value V) {
+	t.tt.l1.Set(key, value)
+	if t.tt.l1TTL > 0 {
+		t.tt.l1.SetExpiresAfter(key, t.tt.l1TTL)
+	}
+}
+
+func (t *Typed[V]) setL1IfCurrent(key string, value V, epoch uint64) {
+	t.tt.mutation.Lock()
+	defer t.tt.mutation.Unlock()
+	if t.tt.epoch == epoch {
+		t.setL1(key, value)
+	}
 }
 
 // load runs inside singleflight: it checks L2, then falls back to the loader,
 // populating L2 on an origin hit. It returns the JSON bytes so L1 can be
 // back-filled by the caller after the assertion succeeds.
-func (t *Typed[V]) load(ctx context.Context, key string, loader Loader[V]) ([]byte, error) {
+func (t *Typed[V]) load(ctx context.Context, key string, epoch uint64, loader Loader[V]) ([]byte, error) {
 	if raw, ok, err := t.tt.l2.Get(ctx, key); err != nil {
 		t.tt.logger.WarnContext(ctx, "cache/twotier: L2 get failed, falling through", slog.Any("error", err))
 	} else if ok {
-		return raw, nil
+		var cached V
+		if decodeErr := json.Unmarshal(raw, &cached); decodeErr == nil {
+			return raw, nil
+		}
+		t.tt.logger.WarnContext(ctx, "cache/twotier: corrupt L2 value, falling through",
+			slog.String("key", key))
+		if deleteErr := t.tt.deleteL2IfCurrent(ctx, key, epoch); deleteErr != nil {
+			t.tt.logger.WarnContext(ctx, "cache/twotier: delete corrupt L2 value",
+				slog.String("key", key), slog.Any("error", deleteErr))
+		}
 	}
 
 	v, err := loader(ctx)
@@ -165,10 +202,34 @@ func (t *Typed[V]) load(ctx context.Context, key string, loader Loader[V]) ([]by
 	if err != nil {
 		return nil, fmt.Errorf("cache/twotier: encode loaded value: %w", err)
 	}
-	if serr := t.tt.l2.Set(ctx, key, raw, t.tt.l2TTL); serr != nil {
+	if serr := t.tt.setL2IfCurrent(ctx, key, raw, epoch); serr != nil {
 		t.tt.logger.WarnContext(ctx, "cache/twotier: L2 set failed", slog.Any("error", serr))
 	}
 	return raw, nil
+}
+
+func (t *TwoTier) setL2IfCurrent(ctx context.Context, key string, raw []byte, epoch uint64) error {
+	t.mutation.Lock()
+	defer t.mutation.Unlock()
+	if t.epoch != epoch {
+		return nil
+	}
+	if err := t.l2.Set(ctx, key, raw, t.l2TTL); err != nil {
+		return fmt.Errorf("cache/twotier: set current L2 value: %w", err)
+	}
+	return nil
+}
+
+func (t *TwoTier) deleteL2IfCurrent(ctx context.Context, key string, epoch uint64) error {
+	t.mutation.Lock()
+	defer t.mutation.Unlock()
+	if t.epoch != epoch {
+		return nil
+	}
+	if err := t.l2.Del(ctx, key); err != nil {
+		return fmt.Errorf("cache/twotier: delete current L2 value: %w", err)
+	}
+	return nil
 }
 
 // Set writes v to both tiers (write-through). On a disabled cache it is a
@@ -182,11 +243,13 @@ func (t *Typed[V]) Set(ctx context.Context, k string, v V) error {
 	if err != nil {
 		return fmt.Errorf("cache/twotier: encode value: %w", err)
 	}
-	t.tt.l1.Set(key, v)
+	t.tt.mutation.Lock()
+	defer t.tt.mutation.Unlock()
 	if serr := t.tt.l2.Set(ctx, key, raw, t.tt.l2TTL); serr != nil {
 		return fmt.Errorf("cache/twotier: L2 set: %w", serr)
 	}
-	t.tt.group.Forget(key)
+	t.tt.epoch++
+	t.setL1(key, v)
 	return nil
 }
 
@@ -196,11 +259,13 @@ func (t *Typed[V]) Delete(ctx context.Context, k string) error {
 		return nil
 	}
 	key := t.key(k)
-	t.tt.l1.Invalidate(key)
-	t.tt.group.Forget(key)
+	t.tt.mutation.Lock()
+	defer t.tt.mutation.Unlock()
 	if derr := t.tt.l2.Del(ctx, key); derr != nil {
 		return fmt.Errorf("cache/twotier: L2 delete: %w", derr)
 	}
+	t.tt.epoch++
+	t.tt.l1.Invalidate(key)
 	return nil
 }
 
@@ -230,14 +295,20 @@ func (t *TwoTier) InvalidatePrefix(ctx context.Context, prefix string) error {
 	if t == nil {
 		return nil
 	}
-	for key := range t.l1.Keys() {
-		if strings.HasPrefix(key, prefix) {
-			t.l1.Invalidate(key)
-			t.group.Forget(key)
-		}
-	}
+	t.mutation.Lock()
+	defer t.mutation.Unlock()
 	if derr := t.l2.DelPrefix(ctx, prefix); derr != nil {
 		return fmt.Errorf("cache/twotier: L2 invalidate prefix %q: %w", prefix, derr)
+	}
+	t.epoch++
+	for rawKey := range t.l1.Keys() {
+		key, ok := rawKey.(string)
+		if !ok {
+			continue
+		}
+		if strings.HasPrefix(key, prefix) {
+			t.l1.Invalidate(key)
+		}
 	}
 	return nil
 }

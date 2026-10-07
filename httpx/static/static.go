@@ -25,6 +25,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options tunes the handler. Zero value uses sensible defaults.
@@ -37,10 +39,13 @@ type Options struct {
 	NoIndexFallback bool
 }
 
-// Handler returns an http.Handler that serves files from fsys. A weak ETag
-// is computed from file contents (cached per-file) and honored against
-// If-None-Match for 304 responses.
+// Handler returns an http.Handler that serves files from fsys. It reads and
+// hashes the current file contents per request so mutable filesystems never
+// serve a stale body or ETag. If-None-Match is honored with a 304 response.
 func Handler(fsys fs.FS, opts Options) http.Handler {
+	if validate.IsNil(fsys) {
+		fsys = nil
+	}
 	if opts.CacheControl == "" {
 		opts.CacheControl = "public, max-age=300, must-revalidate"
 	}
@@ -53,6 +58,10 @@ type handler struct {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if h.fs == nil {
+		http.NotFound(w, r)
+		return
+	}
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	if path == "" || strings.HasSuffix(path, "/") {
 		if h.opts.NoIndexFallback {
@@ -73,13 +82,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Cache-Control", h.opts.CacheControl)
 
-	if match := r.Header.Get("If-None-Match"); match == etag {
-		w.WriteHeader(http.StatusNotModified)
-		return
-	}
-
-	// Delegate to stdlib's FileServer for Content-Type sniffing + Range
-	// support, but we've already written ETag + Cache-Control.
+	// Delegate content type, ranges, and RFC conditional semantics to stdlib;
+	// ETag and Cache-Control are already present for its precondition checks.
 	http.ServeContent(w, r, path, zeroTime, readSeeker(b))
 }
 

@@ -5,6 +5,8 @@ _audit/
 bin/
 coverage*.out
 dist/
+# Praetor's vendored figure engine ships its built bundle.
+!/tools/figures/dist/
 *.exe
 *.dll
 *.so
@@ -59,6 +61,11 @@ tmp/
 # Node tooling, when present (e.g. docs tooling, editor extensions).
 node_modules/
 
+# Terraform downloads providers into per-module working directories. Keep the
+# dependency lock files, but never stage the downloaded provider executables.
+.terraform/
+
+
 # .workingdir/ is private, git-ignored session state (PLAN.md, STATE.md,
 # decisions log, scratch files) per praetor HISS-17 — never staged, including
 # with force. Publish reviewed, sanitized documentation under docs/ instead.
@@ -66,4 +73,10 @@ node_modules/
 # Keep /.workingdir/ as the final line: praetor's adopt recognises this exact
 # trailing rule and will not re-append it on a future non-force adopt.
 .workingdir/
+
+# BEGIN praetor private artifacts (praetorctl adopt)
 /.workingdir/
+/.workingdir2/
+/.standards/worktrees/
+/.agents/mcp_config.json
+# END praetor private artifacts

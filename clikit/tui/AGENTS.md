@@ -34,13 +34,13 @@ if err := tui.Run(model{}); err != nil { ... }
 ## bubbletea v2 notes
 
 - `View()` now returns `tea.View` (was `string`). Build it with
-  `tea.NewView(content)`.
-- AltScreen and mouse tracking are no longer program options. The model enables
-  them via `View.AltScreen` / `View.MouseMode`, so `tui.Run` cannot inject them.
+ `tea.NewView(content)`.
+- AltScreen and mouse tracking are no longer program options. model enables
+ them via `View.AltScreen` / `View.MouseMode`, so `tui.Run` cannot inject them.
 - `tui.Run` and `tui.RunInline` are now equivalent thin wrappers; `RunInline`
-  is kept only for API symmetry.
+ is kept only for API symmetry.
 
 ## Don't
 
-- Don't call `tea.NewProgram` directly — use `tui.Run` for the standard error
-  handling.
+- Don't call `tea.NewProgram` directly — use `tui.Run` for standard error
+ handling.

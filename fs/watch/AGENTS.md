@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — fs/watch/
 
 Debounced recursive directory watcher. Collapses bursts of filesystem events
-(e.g. editor multi-write on save) into a single `Event{Paths}` per debounce
+(e.g. editor multi-write on save) into single `Event{Paths}` per debounce
 window.
 
 ## API
@@ -31,7 +31,7 @@ for ev := range w.Events() {
 
 ## Don't
 
-- Don't call `Add` for every file in a large tree — add the parent directory.
-- Don't block inside the `Events()` loop — the channel has finite capacity.
-- Don't use for security-critical file-integrity monitoring — use a dedicated
-  FIM tool (auditd, AIDE) instead.
+- Don't call `Add` for every file in large tree — add parent directory.
+- Don't block inside `Events()` loop — channel has finite capacity.
+- Don't use for security-critical file-integrity monitoring — use dedicated
+ FIM tool (auditd, AIDE) instead.

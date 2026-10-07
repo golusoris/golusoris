@@ -39,6 +39,9 @@ func (m *insertObserver) InsertMany(
 	if err != nil {
 		return res, err
 	}
+	if !hasObserver(m.obs) {
+		return res, nil
+	}
 	for _, p := range params {
 		queue := p.Queue
 		if queue == "" {
@@ -52,9 +55,17 @@ func (m *insertObserver) InsertMany(
 // Observe subscribes to completed/failed events and forwards them to obs until
 // the returned cancel is called. The client must already be started. The fx
 // [Module] calls this automatically when Options.Observer is set; apps using
-// [New] directly call it themselves after Start.
+// [New] directly call it themselves after Start. Producer-only clients return
+// a no-op cancellation function because they cannot emit worker completion
+// events.
 func Observe(c *Client, obs Observer) (cancel func()) {
-	sub, cancel := c.Subscribe(river.EventKindJobCompleted, river.EventKindJobFailed)
+	if c == nil || !hasObserver(obs) {
+		return func() {}
+	}
+	sub, cancel := subscribeWorkerEvents(c)
+	if sub == nil {
+		return cancel
+	}
 	go func() {
 		for ev := range sub {
 			state := "completed"
@@ -71,4 +82,16 @@ func Observe(c *Client, obs Observer) (cancel func()) {
 		}
 	}()
 	return cancel
+}
+
+func subscribeWorkerEvents(c *Client) (sub <-chan *river.Event, cancel func()) {
+	cancel = func() {}
+	defer func() {
+		// River intentionally panics when Subscribe is called on an insert-only
+		// client; completion observation is a no-op for that supported mode.
+		if recover() != nil {
+			sub = nil
+		}
+	}()
+	return c.Subscribe(river.EventKindJobCompleted, river.EventKindJobFailed)
 }

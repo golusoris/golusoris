@@ -7,11 +7,11 @@ description: Use when implementing any feature or bugfix, before writing impleme
 
 ## Overview
 
-Write the test first. Watch it fail. Write minimal code to pass.
+Write test first. Watch it fail. Write minimal code to pass.
 
-**Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
+**Core principle:** If you didn't watch the test fail, you don't know if it tests right thing.
 
-**Violating the letter of the rules is violating the spirit of the rules.**
+**Violating letter of rules is violating spirit of rules.**
 
 ## When to Use
 
@@ -34,7 +34,7 @@ Thinking "skip TDD just this once"? Stop. That's rationalization.
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
-Write code before the test? Delete it. Start over.
+Write code before test? Delete it. Start over.
 
 **No exceptions:**
 - Don't keep it as "reference"
@@ -129,7 +129,7 @@ Confirm:
 
 ### GREEN - Minimal Code
 
-Write simplest code to pass the test.
+Write simplest code to pass test.
 
 <Good>
 ```typescript
@@ -144,7 +144,7 @@ async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
   throw new Error('unreachable');
 }
 ```
-Just enough to pass
+enough to pass
 </Good>
 
 <Bad>
@@ -163,7 +163,7 @@ async function retryOperation<T>(
 Over-engineered
 </Bad>
 
-Don't add features, refactor other code, or "improve" beyond the test.
+Don't add features, refactor other code, or "improve" beyond test.
 
 ### Verify GREEN - Watch It Pass
 
@@ -208,12 +208,12 @@ Next failing test for next feature.
 **"I'll write tests after to verify it works"**
 
 Tests written after code pass immediately. Passing immediately proves nothing:
-- Might test wrong thing
-- Might test implementation, not behavior
-- Might miss edge cases you forgot
-- You never saw it catch the bug
+- may test wrong thing
+- may test implementation, not behavior
+- may miss edge cases you forgot
+- You never saw it catch bug
 
-Test-first forces you to see the test fail, proving it actually tests something.
+Test-first forces you to see test fail, proving it tests something.
 
 **"I already manually tested all the edge cases"**
 
@@ -223,15 +223,15 @@ Manual testing is ad-hoc. You think you tested everything but:
 - Easy to forget cases under pressure
 - "It worked when I tried it" ≠ comprehensive
 
-Automated tests are systematic. They run the same way every time.
+Automated tests are systematic. They run same way every time.
 
 **"Deleting X hours of work is wasteful"**
 
-Sunk cost fallacy. The time is already gone. Your choice now:
+Sunk cost fallacy. time is already gone. Your choice now:
 - Delete and rewrite with TDD (X more hours, high confidence)
 - Keep it and add tests after (30 min, low confidence, likely bugs)
 
-The "waste" is keeping code you can't trust. Working code without real tests is technical debt.
+"waste" is keeping code you can't trust. Working code without real tests is technical debt.
 
 **"TDD is dogmatic, being pragmatic means adapting"**
 
@@ -328,7 +328,7 @@ Extract validation for multiple fields if needed.
 
 Before marking work complete:
 
-- [ ] Every new function/method has a test
+- [ ] Every new function/method has test
 - [ ] Watched each test fail before implementing
 - [ ] Each test failed for expected reason (feature missing, not typo)
 - [ ] Wrote minimal code to pass each test
@@ -352,7 +352,7 @@ Can't check all boxes? You skipped TDD. Start over.
 
 Bug found? Write failing test reproducing it. Follow TDD cycle. Test proves fix and prevents regression.
 
-Never fix bugs without a test.
+Never fix bugs without test.
 
 ## Testing Anti-Patterns
 

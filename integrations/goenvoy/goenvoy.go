@@ -51,6 +51,7 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/httpx/client"
 )
 
@@ -110,8 +111,8 @@ type factory struct {
 // the factory accept *memory.Cache (or nil) without importing it when the
 // caller wires no cache.
 type cacheStore interface {
-	GetIfPresent(key string) (any, bool)
-	Set(key string, value any) (any, bool)
+	GetIfPresent(key any) (any, bool)
+	Set(key any, value any) (any, bool)
 }
 
 // svc returns the options for a named service, or a descriptive error.
@@ -145,8 +146,12 @@ func (f *factory) httpClient(name string, o ServiceOptions) *http.Client {
 		Logger:  f.logger,
 	})
 	if o.CacheTTL > 0 && f.cache != nil {
+		next := hc.Transport
+		if next == nil {
+			next = http.DefaultTransport
+		}
 		hc.Transport = &cacheTransport{
-			next:  hc.Transport,
+			next:  next,
 			cache: f.cache,
 			clk:   f.clk,
 			ttl:   o.CacheTTL,
@@ -259,7 +264,7 @@ func (f *factory) newTrakt(name string) (*trakt.Client, error) {
 
 // realClock returns the injected clock or a real one when none was wired.
 func realClock(c clock.Clock) clock.Clock {
-	if c == nil {
+	if validate.IsNil(c) {
 		return clockwork.NewRealClock()
 	}
 	return c

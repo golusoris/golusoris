@@ -49,6 +49,7 @@ jobs:
   # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint
+    needs: build
     runs-on: arc-cauda-golusoris-golusoris
     # Lint timeout sizing (measured 2026-09-14 on the PR #447 tip, cold caches):
     # a full `golangci-lint run` of the root module (171 pkgs) costs ~810 CPU-s
@@ -65,12 +66,10 @@ jobs:
     # resize is already declared in the cluster repo's vms.auto.tfvars and just
     # needs applying. Revisit once it lands.
     #
-    # A timeout here is also self-perpetuating: setup-go's cache-save post step
-    # is skipped when the job fails, so a run that times out on a cold cache
-    # leaves the next run cold too. One green run warms it to ~2 min.
-    #
-    # Job timeout = setup (~3 min) + 2 x 30m, rounded up. Keep in sync with
-    # run.timeout in .golangci.yml and the Makefile _ci-module target.
+    # Build is the sole setup-go cache writer. This job starts only after that
+    # key exists, so its post step restores but never recompresses the cache.
+    # Keep the hard bound aligned with run.timeout in .golangci.yml and
+    # scripts/ci/go-modules.sh.
     timeout-minutes: 65
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -78,29 +77,33 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          # Pinned for reproducible CI — bumping golangci-lint (and adopting any
-          # new linter findings) is a deliberate, reviewed change, not a float.
-          version: v2.14.0
-          args: --config=.golangci.yml --timeout=30m
-      - name: Lint core module
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
-        with:
-          version: v2.14.0
-          working-directory: core
-          args: --config=../.golangci.yml --timeout=30m
+          cache-dependency-path: '**/go.sum'
+      - name: Install pinned formatting and lint tools
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+      - name: Check gofumpt formatting
+        run: scripts/hooks/gofumpt.sh --all
+      - name: Lint primary modules
+        env:
+          GO_MODULE_GROUP: primary
+        run: scripts/ci/go-modules.sh lint
+      - name: Lint repository Python sources
+        run: |
+          docker info
+          bash scripts/ci/python-lint.sh
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
+    needs: build
     runs-on: arc-cauda-golusoris-golusoris
-    # Measured with gosec v2.27.1 (171 root + 16 core pkgs) on a 32-core box:
+    # Measured with gosec v2.29.0 (171 root + 16 core pkgs) on a 32-core box:
     # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
-    # core <1 s. The ARC runner pod is capped at 4 vCPU (750m request, so it can
-    # be throttled lower) -> a cold scan there is ~8 min (it failed to finish
-    # install + two root scans in 9m44s). A warm cache (go.sum unchanged)
-    # finishes the whole job in ~2 min.
+    # core <1 s. Build now creates the shared cache before this job starts, so
+    # this reader cannot lose the remaining job budget to a post-job upload.
     #
     # 30 was not a hard enough bound: on the office worker that loses 1-3 cores
     # to hypervisor steal, a cold run passed 30m and was killed (32.7 min wall,
@@ -116,37 +119,17 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: '**/go.sum'
       - name: gosec
+        env:
+          GO_MODULE_GROUP: primary
+          GOSEC_ROOT_SARIF: ${{ github.workspace }}/gosec.sarif
         run: |
           set -euo pipefail
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
-          # gosec type-checks but never fetches: against a partially restored
-          # module cache it reports `could not import ... (invalid package
-          # name: "")` and exits 1 with zero findings. Populate the cache first.
-          go mod download
-          (cd core && go mod download)
-          # .gosec.json is the ONE config shared with `make ci-all` (Makefile
-          # _ci-module) and praetor's own `gosec -conf .gosec.json` gate, so the
-          # three cannot drift. Path-scoped suppressions were retired in favor of
-          # targeted inline `// #nosec Gxxx -- reason` comments at each flagged
-          # line (see git history for the exclusion list this replaced).
-          # gosec expands ./... with its own directory walk, which -- unlike the
-          # go tool -- descends into dot-prefixed and testdata directories. That
-          # pulled in .config/hiss/**/testdata: HISS rule fixtures that redeclare
-          # symbols across files in one package on purpose (4 build errors) and
-          # embed insecure patterns on purpose (27 findings). -exclude-dir
-          # restores the go tool's own rule. Keep in sync with the Makefile
-          # _ci-module target.
-          #
-          # One root scan: `-out` writes the SARIF for code scanning, `-stdout
-          # -verbose text` prints the findings to the log, and the exit code
-          # still gates (gosec exits 1 on any unsuppressed issue or build error;
-          # never add `-quiet`: it skips writing the SARIF when clean).
-          gosec -conf .gosec.json -exclude-generated -exclude-dir=testdata \
-            -fmt sarif -out gosec.sarif -stdout -verbose text ./...
-          # core/ is a separate module (not reached by ./... above) and is held
-          # to the full rule set with no exclusions.
-          (cd core && gosec -exclude-generated -exclude-dir=testdata ./...)
+          . tools/tool-versions.env
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          scripts/ci/go-modules.sh verify
+          scripts/ci/go-modules.sh gosec
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
@@ -157,11 +140,10 @@ jobs:
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
+    needs: build
     runs-on: arc-cauda-golusoris-golusoris
-    # 20: whichever cache-using job finishes first pays the full setup-go
-    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
-    # run, vs 33-74s for the jobs that then find the key already written).
-    # 10 was enough only for the jobs that lost that race.
+    # Build owns the cache save; 20 minutes bounds only setup, restore, and the
+    # vulnerability scan.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -169,20 +151,27 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: '**/go.sum'
       - name: govulncheck
+        env:
+          GO_MODULE_GROUP: primary
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
-          govulncheck ./...
-          (cd core && govulncheck ./...)
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+          scripts/ci/go-modules.sh vuln
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
   # The repository-scoped Linux ARC scale set owns coverage, artifacts, and
   # Docker-backed integration tests without hosted-runner billing.
   # go.mod is the single source of truth for the exact Go toolchain. The
   # descriptive matrix axis keeps the primary-leg metadata explicit without a
-  # mutable `stable` selector.
+  # mutable `stable` selector. Keep both values in the explicit name: GitHub
+  # suffixes a plain matrix name, while praetor can only render named values.
   test:
-    name: Test (race + coverage)
+    name: Test (race + coverage) (${{ matrix.os }}, ${{ matrix.toolchain }})
+    needs: build
     runs-on: ${{ matrix.os }}
     # 30: the Docker-backed suite took 13.5 min on a cold ARC runner before the
     # pre-pull step existed; keep headroom above the 10 min per-module go test
@@ -207,6 +196,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Run repository Python regression suites
+        run: bash scripts/ci/python-tests.sh
       # The ARC runner has a Docker sidecar for testcontainers-backed packages.
       - name: Verify Docker is reachable
         if: runner.os == 'Linux'
@@ -220,26 +212,14 @@ jobs:
       # `docker load` it on every later run. The pull path below is now the
       # cold-cache exception, not the steady state.
       #
-      # The key is the manifest hash, so editing the image list repopulates the
-      # cache; the week stamp bounds how long a floating tag (postgres:17-alpine,
-      # clickhouse/clickhouse-server:24, ...) can stay frozen at whatever the
-      # cache holds, so upstream security rebuilds still land.
-      - name: Image cache key
-        if: runner.os == 'Linux'
-        id: tc-key
-        run: |
-          set -euo pipefail
-          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+      # The key is the immutable manifest hash. Renovate changes tag + digest,
+      # which changes the key and repopulates the cache exactly once.
       - name: Cache testcontainers images
         if: runner.os == 'Linux'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/testcontainers-images
-          key: tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-${{ steps.tc-key.outputs.week }}
-          # A stale week still beats a cold start: the images it holds load, and
-          # only the ones missing from it are pulled below.
-          restore-keys: |
-            tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}-
+          key: tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}
       - name: Load or pull testcontainers images
         if: runner.os == 'Linux'
         # Ceiling for the cold-cache path; a warm restore is a `docker load` of
@@ -324,10 +304,14 @@ jobs:
           docker save -o "$ARCHIVE" "${IMAGES[@]}"
           echo "Wrote $(du -h "$ARCHIVE" | cut -f1) image archive for the cache"
           docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
-      # On macOS there is no Docker daemon; skip the testcontainers-backed
-      # packages so the portability leg passes instead of failing on infra.
-      - name: Run tests (Linux — full suite with Docker)
-        if: runner.os == 'Linux'
+      - name: Run primary-module tests with race detector and coverage
+        env:
+          GO_MODULE_GROUP: primary
+          GO_COVERAGE_DIR: .coverage/primary
+          # v0.44.0 can reuse a stopped shared Ryuk after a package gap
+          # (testcontainers/testcontainers-go#3867). Keep it alive within this
+          # bounded job until testcontainers/testcontainers-go#3868 ships.
+          RYUK_RECONNECTION_TIMEOUT: 30m
         run: |
           # -p 4 bounds how many test binaries run at once. Go defaults it to
           # GOMAXPROCS, which is 16 here because that is what the node reports,
@@ -340,25 +324,11 @@ jobs:
           # then expired with the container already logging "database system is
           # ready to accept connections". Take the bound before the spawn --
           # the same rule HISS-06 applies to application code.
-          go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...
-          (cd core && go test -race -count=1 -p 4 -timeout=10m -coverprofile=coverage.out -covermode=atomic ./...)
-          # One merged profile: the threshold below covers root + core together.
-          tail -n +2 core/coverage.out >> coverage.out
-      - name: Run tests (macOS — skip Docker-requiring packages)
-        if: runner.os != 'Linux'
-        run: |
-          # testutil/pg and its dependents need a Docker daemon (testcontainers),
-          # which macOS runners lack. Exclude those packages so the leg still
-          # exercises the pure-Go code paths for portability signal.
-          # macOS ships bash 3.2, which has no `mapfile`; word-splitting is safe
-          # here because Go import paths never contain spaces.
-          PKGS=$(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
-          # shellcheck disable=SC2086
-          go test -race -count=1 -timeout=10m $PKGS
+          scripts/ci/go-modules.sh test
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |
-          COVERAGE=$(go tool cover -func=coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
+          COVERAGE=$(go tool cover -func=.coverage/primary/coverage.out | grep '^total' | awk '{print $3}' | tr -d '%')
           echo "Coverage: ${COVERAGE}%"
           if awk "BEGIN { exit !($COVERAGE < 70) }"; then
             echo "::error::Coverage ${COVERAGE}% is below the required 70%"
@@ -369,26 +339,197 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage
-          path: coverage.out
+          path: .coverage/primary/coverage.out
           retention-days: 7
 
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
     runs-on: arc-cauda-golusoris-golusoris
-    # 20: whichever cache-using job finishes first pays the full setup-go
-    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
-    # run, vs 33-74s for the jobs that then find the key already written).
-    # 10 was enough only for the jobs that lost that race.
-    timeout-minutes: 20
+    # Sole setup-go cache writer. Run 35457471789 proved parallel writers can
+    # finish their gates and then spend 13-25 minutes compressing/uploading the
+    # same 1.14 GB key until the job timeout cancels them. Build verifies every
+    # module graph before saving once; every other cache user depends on this
+    # job and therefore restores the completed primary key without saving it.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
           cache: true
-      - run: go build ./...
-      - run: cd core && go build ./... && go vet ./...
+          cache-dependency-path: '**/go.sum'
+      - name: Compile and analyze repository C sources
+        run: |
+          docker info
+          bash scripts/ci/c-quality.sh
+      - name: Verify Helm deployment chart
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          bash scripts/ci/helm-chart_test.sh
+      - name: Verify all module dependencies before caching
+        run: scripts/ci/go-modules.sh verify
+      - name: Build and vet primary modules
+        env:
+          GO_MODULE_GROUP: primary
+        run: |
+          scripts/ci/go-modules.sh tidy
+          scripts/ci/go-modules.sh build
+
+  # ── Nested Go modules ───────────────────────────────────────────────────────
+  # Root and core keep their dedicated jobs because the root suite owns the
+  # Docker-backed integration tests and the 70% aggregate. Every other module
+  # runs the same gates in four deterministic shards, bounding ARC fan-out.
+  module-sweep:
+    name: Module sweep (shard ${{ matrix.shard }})
+    needs: build
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 65
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: '0'
+          - shard: '1'
+          - shard: '2'
+          - shard: '3'
+    env:
+      GO_MODULE_GROUP: split
+      GO_MODULE_SHARD_COUNT: '4'
+      GO_MODULE_SHARD_INDEX: ${{ matrix.shard }}
+      GO_COVERAGE_DIR: .coverage/split-${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Install pinned analysis tools
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+      - name: Verify module graphs
+        run: |
+          scripts/ci/go-modules.sh verify
+          scripts/ci/go-modules.sh tidy
+      - name: Lint
+        run: scripts/ci/go-modules.sh lint
+      - name: Security and vulnerability gates
+        run: |
+          scripts/ci/go-modules.sh gosec
+          scripts/ci/go-modules.sh vuln
+      - name: Build and vet
+        run: scripts/ci/go-modules.sh build
+      - name: Test with race detector and coverage
+        run: scripts/ci/go-modules.sh test
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: coverage-modules-${{ matrix.shard }}
+          path: .coverage/split-${{ matrix.shard }}
+          retention-days: 7
+
+  # ── Public documentation lint ───────────────────────────────────────────────
+  markdownlint:
+    name: Documentation lint (markdownlint-cli2)
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+      - name: Lint repository-owned public Markdown
+        run: bash scripts/ci/markdownlint.sh
+
+  mkdocs:
+    name: Documentation build (MkDocs)
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify Docker sidecar
+        run: docker info
+      - name: Build documentation strictly from immutable tooling
+        run: bash scripts/ci/mkdocs-build.sh
+
+  allocation-budget:
+    name: Allocation budgets (HISS-03)
+    needs: build
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Enforce measured hot-path allocation budgets
+        run: bash scripts/ci/allocation-budget.sh
+
+  shellcheck:
+    name: Shell scripts (ShellCheck)
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Lint repository-owned shell scripts
+        run: bash scripts/ci/shellcheck.sh
+
+  actionlint:
+    name: Workflows (actionlint)
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install pinned actionlint
+        run: |
+          . tools/tool-versions.env
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+      - name: Lint GitHub and Gitea workflows
+        run: ACTIONLINT_BIN="$(go env GOPATH)/bin/actionlint" bash scripts/ci/actionlint.sh
+
+  terraform:
+    name: Terraform modules
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Verify Docker sidecar
+        run: docker info
+      - name: Format, initialize from locks, and validate modules
+        run: bash scripts/ci/terraform-validate.sh
+
+  kubeconform:
+    name: Kubernetes schemas (kubeconform)
+    runs-on: arc-cauda-golusoris-golusoris
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install pinned Helm renderer
+        run: |
+          . tools/tool-versions.env
+          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+      - name: Verify Docker sidecar
+        run: docker info
+      - name: Validate static and rendered Kubernetes resources
+        run: bash scripts/ci/kubeconform.sh
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────────
   # The framework has no single openapi.yaml (apps generate their own with ogen).
@@ -396,7 +537,6 @@ jobs:
   # openapi-spec input to wire spectral for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -410,11 +550,14 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Install spectral (hash-pinned via lockfile)
-        if: steps.spec-check.outputs.exists == 'true'
-        run: npm ci --prefix tools/spectral --no-audit --no-fund
+        run: npm ci --prefix tools/spectral --ignore-scripts --no-audit --no-fund
+      - name: Verify locked default OAS ruleset
+        run: scripts/ci/spectral-default-test.sh
       - name: Lint spec
         if: steps.spec-check.outputs.exists == 'true'
-        run: tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
+        run: |
+          tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral/oas.yaml --fail-severity warn
+          tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
       - name: No spec to lint
         if: steps.spec-check.outputs.exists != 'true'
         run: echo "No OpenAPI spec found at examples/full/openapi.yaml — skipping spectral."
@@ -422,12 +565,9 @@ jobs:
   # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
   apidiff:
     name: API compatibility (apidiff)
-    if: github.actor != 'renovate[bot]'
+    needs: build
     runs-on: arc-cauda-golusoris-golusoris
-    # 20: whichever cache-using job finishes first pays the full setup-go
-    # cache SAVE (the Go build+module cache is multi-GB: 6m51s on the #447
-    # run, vs 33-74s for the jobs that then find the key already written).
-    # 10 was enough only for the jobs that lost that race.
+    # Build owns the cache save; this job restores the same all-module key.
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -437,42 +577,30 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: '**/go.sum'
       - name: Install apidiff
-        run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
       - name: Run apidiff vs previous tag (informational pre-1.0)
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          set -euo pipefail
+          PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^1 2>/dev/null || true)
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag found — skipping apidiff (first release)"
             exit 0
           fi
-          MOD=github.com/golusoris/golusoris
-          echo "Comparing HEAD against $PREV_TAG"
-
-          # Correct export form: `apidiff -m -w FILE MODULE`, run in the module dir.
-          apidiff -m -w /tmp/cur-api.txt "$MOD"
-
-          # Export the previous tag from an isolated worktree (no stash dance).
-          git worktree add -q --detach /tmp/apidiff-prev "$PREV_TAG"
-          ( cd /tmp/apidiff-prev && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
-            || echo "::warning::could not export $PREV_TAG API"
-          git worktree remove /tmp/apidiff-prev --force || true
-
-          echo "## API changes vs $PREV_TAG"
-          apidiff /tmp/prev-api.txt /tmp/cur-api.txt \
-            || echo "::warning::apidiff comparison unavailable (export-data version mismatch)"
-
-          # Pre-1.0 (SemVer v0.x) permits breaking changes, so this is INFORMATIONAL.
-          # At v1.0, gate on incompatibles:
-          #   apidiff -incompatible /tmp/prev-api.txt /tmp/cur-api.txt | tee /tmp/inc
-          #   [ -s /tmp/inc ] && { echo "::error::breaking API change"; exit 1; } || true
+          apidiff_bin="$(go env GOPATH)/bin/go-apidiff"
+          test -x "$apidiff_bin"
+          GO_APIDIFF_BIN="$apidiff_bin" scripts/ci/go-apidiff.sh "$PREV_TAG" HEAD
 
   # ── Dependency review (PR-only supply-chain gate) ────────────────────────────
   # Diffs the PR's dependency manifest/lockfile changes and fails on
   # high/critical advisories or copyleft (GPL/AGPL) licences entering the tree.
   dependency-review:
     name: Dependency review
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     permissions:
@@ -494,7 +622,6 @@ jobs:
   # Scans the PR diff (and full history on push) for committed secrets.
   gitleaks:
     name: Secret scan (gitleaks)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
     steps:
@@ -513,52 +640,24 @@ jobs:
           gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
 
   # ── Custom SAST (semgrep) ────────────────────────────────────────────────────
-  # Runs the project-specific .semgrep.yml ruleset (golusoris invariants the
-  # AST-unaware linters can't express). ADVISORY: continue-on-error + absent from
-  # the ci-success gate, so a new rule can land and surface findings without
-  # blocking unrelated PRs. Promote to required once the ruleset has soaked.
+  # Runs the project-specific .semgrep.yml ruleset against every repository Go
+  # source, including non-ignored untracked files, in the digest-pinned image.
   semgrep:
     name: Custom SAST (semgrep)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # Pinned for reproducible CI — bumping semgrep (and adopting any new
-      # parser behaviour) is a deliberate, reviewed change, not a float.
-      - name: Run semgrep
-        run: |
-          pipx run semgrep==1.166.0 scan \
-            --config .semgrep.yml \
-            --error \
-            --metrics=off \
-            --disable-version-check \
-            --oss-only
+      - name: Verify Docker sidecar
+        run: docker info
+      - name: Run full-tree custom Semgrep gate
+        run: bash scripts/ci/semgrep-scan.sh
       # HISS-20 enforcement coverage: replay .config/hiss/testdata against the
       # same ruleset, in both directions. A rule that stops firing on its
       # positive fixtures, or starts matching the legitimate shape its negative
       # fixtures pin, fails here instead of quietly degrading the catalogue.
       - name: Replay the HISS enforcement-coverage corpus
-        env:
-          SEMGREP_CMD: pipx run semgrep==1.166.0
         run: bash scripts/hiss/semgrep-fixtures.sh
-
-  # ── Changelog fragments (render --check) ─────────────────────────────────────
-  # Validates the per-PR changelog.d/ fragments and that the rendered body
-  # matches the "## [Unreleased]" block in CHANGELOG.md. Advisory: a drift here
-  # should not block merging a code PR — run scripts/changelog/render.sh --write
-  # locally to resync. See changelog.d/README.md.
-  changelog:
-    name: Changelog fragments (render --check)
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
-    runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 5
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Render check
-        run: bash scripts/changelog/render.sh --check
 
   # ── Developer Certificate of Origin ─────────────────────────────────────────
   # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
@@ -588,36 +687,75 @@ jobs:
   # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
   reuse:
     name: Licensing (reuse lint)
-    if: github.actor != 'renovate[bot]'
     runs-on: arc-cauda-golusoris-golusoris
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: reuse lint
-        run: |
-          python3 -m pip install --user --quiet 'reuse==6.2.0'
-          python3 -m reuse lint
+      - name: Verify Docker sidecar
+        run: docker info
+      - name: REUSE lint from immutable tooling
+        run: bash scripts/ci/reuse-lint.sh
 
   # ── Aggregate gate ───────────────────────────────────────────────────────────
-  # Single "green only if every gating job passed" check, so branch protection
-  # can require ONE stable context instead of enumerating each job (whose names
-  # shift when the test matrix changes). CodeQL is a separate workflow and stays
-  # its own required check.
+  # Single "green only if every gating job passed" check used by classic branch
+  # protection and release verification. Current praetor excludes `if: always()`
+  # jobs from generated rulesets, so the tracked ruleset names the leaf contexts
+  # until cordanaLLM/praetor#76 gains aggregate selection. CodeQL stays separate.
   ci-success:
     name: CI success
-    # Runs for renovate[bot] too: the gating jobs above now run on
-    # dependency PRs, and a skipped aggregator would satisfy the required
-    # check vacuously. Skipped needs (e.g. reuse) are still tolerated.
+    # Runs for renovate[bot] too. Mandatory jobs must succeed; only jobs whose
+    # event contract makes them inapplicable may be skipped.
     if: always()
-    needs: [lint, gosec, vuln, test, build, reuse]
+    needs:
+      - lint
+      - gosec
+      - vuln
+      - test
+      - build
+      - module-sweep
+      - markdownlint
+      - mkdocs
+      - allocation-budget
+      - shellcheck
+      - actionlint
+      - terraform
+      - kubeconform
+      - semgrep
+      - spectral
+      - dependency-review
+      - gitleaks
+      - dco
+      - reuse
+      - apidiff
     runs-on: arc-cauda-golusoris-golusoris
-    timeout-minutes: 2
+    timeout-minutes: 5
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Test aggregate result policy
+        run: bash scripts/ci/check-required-jobs_test.sh
       - name: Verify all gating jobs passed
+        env:
+          LINT: ${{ needs.lint.result }}
+          GOSEC: ${{ needs.gosec.result }}
+          VULN: ${{ needs.vuln.result }}
+          TEST: ${{ needs.test.result }}
+          BUILD: ${{ needs.build.result }}
+          MODULE_SWEEP: ${{ needs.module-sweep.result }}
+          MARKDOWNLINT: ${{ needs.markdownlint.result }}
+          MKDOCS: ${{ needs.mkdocs.result }}
+          ALLOCATION_BUDGET: ${{ needs.allocation-budget.result }}
+          SHELLCHECK: ${{ needs.shellcheck.result }}
+          ACTIONLINT: ${{ needs.actionlint.result }}
+          TERRAFORM: ${{ needs.terraform.result }}
+          KUBECONFORM: ${{ needs.kubeconform.result }}
+          SEMGREP: ${{ needs.semgrep.result }}
+          SPECTRAL: ${{ needs.spectral.result }}
+          DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
+          GITLEAKS: ${{ needs.gitleaks.result }}
+          DCO: ${{ needs.dco.result }}
+          REUSE: ${{ needs.reuse.result }}
+          APIDIFF: ${{ needs.apidiff.result }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
         run: |
-          results='${{ join(needs.*.result, ',') }}'
-          echo "gating results: $results"
-          case ",$results," in
-            *,failure,*|*,cancelled,*) echo "::error::a gating job did not pass: $results"; exit 1 ;;
-          esac
-          echo "all gating jobs passed"
+          bash scripts/ci/check-required-jobs.sh

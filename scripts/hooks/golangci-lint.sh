@@ -8,7 +8,7 @@ set -euo pipefail
 
 files=$(go_files "$@")
 [ -n "$files" ] || skip "no staged Go files"
-need_tool golangci-lint "see https://golangci-lint.run/docs/welcome/install/ (CI pins v2.13.2)"
+need_tool golangci-lint "see https://golangci-lint.run/docs/welcome/install/ (CI pins v2.14.0)"
 
 config="$(git rev-parse --show-toplevel)/.golangci.yml"
 run_per_module "$files" golangci-lint run --config "$config" --timeout=5m ||

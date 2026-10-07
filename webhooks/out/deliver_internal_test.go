@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 // extracted helpers directly, without going through Dispatch/Replay.
 type fakeDeliverStore struct {
 	saved []Delivery
+	err   error
 }
 
 func (s *fakeDeliverStore) SaveEndpoint(context.Context, Endpoint) error { return nil }
@@ -33,6 +36,9 @@ func (s *fakeDeliverStore) ListEndpoints(context.Context, string) ([]Endpoint, e
 func (s *fakeDeliverStore) DeleteEndpoint(context.Context, string) error { return nil }
 
 func (s *fakeDeliverStore) SaveDelivery(_ context.Context, d Delivery) error {
+	if s.err != nil {
+		return s.err
+	}
 	s.saved = append(s.saved, d)
 	return nil
 }
@@ -96,8 +102,10 @@ func TestRecordAttempt_Success(t *testing.T) {
 	d := newDeliverTestDispatcher(store, clockwork.NewFakeClock(), nil)
 	del := &Delivery{ID: "d1", Error: "prior failure"}
 
-	ok := d.recordAttempt(context.Background(), del, 200, nil)
-
+	ok, err := d.recordAttempt(context.Background(), del, 200, nil)
+	if err != nil {
+		t.Fatalf("recordAttempt(200, nil) error = %v", err)
+	}
 	if !ok {
 		t.Fatal("recordAttempt(200, nil) = false, want true")
 	}
@@ -116,8 +124,10 @@ func TestRecordAttempt_TransportError(t *testing.T) {
 	d := newDeliverTestDispatcher(store, clockwork.NewFakeClock(), nil)
 	del := &Delivery{ID: "d1"}
 
-	ok := d.recordAttempt(context.Background(), del, 0, errors.New("dial boom"))
-
+	ok, err := d.recordAttempt(context.Background(), del, 0, errors.New("dial boom"))
+	if err != nil {
+		t.Fatalf("recordAttempt transport error persistence = %v", err)
+	}
 	if ok {
 		t.Fatal("recordAttempt with transport error = true, want false")
 	}
@@ -134,12 +144,36 @@ func TestRecordAttempt_BadStatus(t *testing.T) {
 	d := newDeliverTestDispatcher(store, clockwork.NewFakeClock(), nil)
 	del := &Delivery{ID: "d1"}
 
-	ok := d.recordAttempt(context.Background(), del, 500, nil)
-
+	ok, err := d.recordAttempt(context.Background(), del, 500, nil)
+	if err != nil {
+		t.Fatalf("recordAttempt(500, nil) error = %v", err)
+	}
 	if ok {
 		t.Fatal("recordAttempt(500, nil) = true, want false")
 	}
 	if del.Error != "HTTP 500" {
 		t.Fatalf("del.Error = %q, want %q", del.Error, "HTTP 500")
+	}
+}
+
+func TestRecordAttempt_PersistenceFailureIsReturned(t *testing.T) {
+	t.Parallel()
+	store := &fakeDeliverStore{err: errors.New("store unavailable")}
+	d := newDeliverTestDispatcher(store, clockwork.NewFakeClock(), nil)
+	del := &Delivery{ID: "d1"}
+
+	ok, err := d.recordAttempt(context.Background(), del, http.StatusNoContent, nil)
+
+	if ok || err == nil || !strings.Contains(err.Error(), "store unavailable") {
+		t.Fatalf("recordAttempt persistence result = (%t, %v), want false/error", ok, err)
+	}
+}
+
+func TestOptionsDefaultsNormalizeUnsafeNegativeBounds(t *testing.T) {
+	t.Parallel()
+	opts := Options{MaxAttempts: -1, Timeout: -time.Second}
+	opts.defaults()
+	if opts.MaxAttempts != 5 || opts.Timeout != 10*time.Second {
+		t.Fatalf("negative defaults = attempts %d timeout %v", opts.MaxAttempts, opts.Timeout)
 	}
 }

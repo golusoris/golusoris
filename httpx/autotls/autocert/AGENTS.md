@@ -16,4 +16,4 @@ x/crypto/acme/autocert wrapper.
 
 ## Don't
 
-- Don't use autocert with a non-persistent cache (emptyDir, tmpfs). Let's Encrypt rate-limits issuance; losing the cache rate-limits you fast.
+- Don't use autocert with ephemeral cache (emptyDir, tmpfs). Let's Encrypt rate-limits issuance; losing cache exhausts quota fast.

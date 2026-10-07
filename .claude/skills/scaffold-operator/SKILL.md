@@ -1,19 +1,20 @@
 ---
 name: scaffold-operator
-description: Use when adding a Kubernetes operator (CRD + reconciler) to a golusoris app — walks CRD API types → controller-gen codegen → scheme registration → reconciler → fx-wire against operator.Module → envtest.
+description: Use when adding Kubernetes operator (CRD + reconciler) to golusoris app — walks CRD API types → controller-gen codegen → scheme registration → reconciler → fx-wire against operator.Module → envtest.
 ---
 
 # scaffold-operator
 
-Scaffold a Kubernetes CRD + reconciler on top of `golusoris/k8s/operator`
-(controller-runtime). The framework's `operator.Module` already provides and
-runs the `manager.Manager`; this skill adds the app-side CRD type, its
-generated code, and a reconciler wired into fx.
+Scaffold Kubernetes CRD + reconciler on top of `golusoris/k8s/operator`
+(controller-runtime). framework's `operator.Module` already provides and
+runs `manager.Manager`; this skill adds app-side CRD type, its
+generated code, and reconciler wired into fx.
 
 ## Prerequisites
 
 - App composes `golusoris.K8sOperator` (i.e. `operator.Module`).
-- `controller-gen` available: `go run sigs.k8s.io/controller-tools/cmd/controller-gen@latest`.
+- `controller-gen` from `make tools-bootstrap`; its exact version comes from
+ `tools/tool-versions.env`.
 
 ## Steps
 
@@ -52,8 +53,7 @@ type WidgetList struct {
 }
 ```
 
-Add `groupversion_info.go` with the `SchemeBuilder` + `AddToScheme` for the
-group/version (standard kubebuilder boilerplate), exporting `AddToScheme`.
+Add `groupversion_info.go` with `SchemeBuilder` + `AddToScheme` for group/version (standard kubebuilder boilerplate), exporting `AddToScheme`.
 
 ### 2. Generate deepcopy + CRD manifests
 
@@ -62,12 +62,12 @@ controller-gen object paths=./api/...
 controller-gen crd paths=./api/... output:crd:dir=config/crd/bases
 ```
 
-`object` writes `zz_generated.deepcopy.go`; `crd` writes the CRD YAML to apply
-to the cluster.
+`object` writes `zz_generated.deepcopy.go`; `crd` writes CRD YAML to apply
+to cluster.
 
 ### 3. Register the scheme
 
-Wire the generated `AddToScheme` into the manager via the framework helper:
+Wire generated `AddToScheme` into manager via framework helper:
 
 ```go
 operator.ProvideScheme(examplev1.AddToScheme)
@@ -109,7 +109,7 @@ fx.New(
 
 ### 6. Test with envtest
 
-Reconciler tests use controller-runtime `envtest` (a local `kube-apiserver` +
+Reconciler tests use controller-runtime `envtest` (local `kube-apiserver` +
 `etcd`):
 
 ```bash
@@ -117,11 +117,11 @@ setup-envtest use --bin-dir bin -p path   # one-time: fetch the binaries
 KUBEBUILDER_ASSETS=$(setup-envtest use --bin-dir bin -p path) go test ./internal/controller/...
 ```
 
-Spin the env in `TestMain`, apply the CRD from `config/crd/bases`, then drive
-the reconciler with a fake or real client.
+Spin env in `TestMain`, apply CRD from `config/crd/bases`, then drive
+reconciler with fake or real client.
 
 ## Gate
 
-`gofumpt` + `gci` the generated + handwritten Go; `golangci-lint run`; reconciler
+`gofumpt` + `gci` generated + handwritten Go; `golangci-lint run`; reconciler
 errors must wrap (`%w`). Generated files (`zz_generated.*`) are excluded from
 gosec via `-exclude-generated`.

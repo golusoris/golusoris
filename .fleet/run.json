@@ -9,7 +9,7 @@
     {
       "type": "command",
       "name": "Standards: Audit",
-      "program": "standardsctl",
+      "program": "praetorctl",
       "args": ["audit"]
     }
   ]

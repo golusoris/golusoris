@@ -143,6 +143,21 @@ func TestStdoutRedirect_StrayWritesGoToSink(t *testing.T) {
 	t.Errorf("Close did not restore os.Stdout to the original")
 }
 
+//nolint:paralleltest // mutates the process-global os.Stdout; must run serially.
+func TestStdoutRedirect_TypedNilSinkUsesStderr(t *testing.T) {
+	var sink *bytes.Buffer
+	red, _, err := installStdoutRedirect(sink)
+	if err != nil {
+		t.Fatalf("installStdoutRedirect: %v", err)
+	}
+	if red.sink != os.Stderr {
+		t.Errorf("sink = %T, want os.Stderr", red.sink)
+	}
+	if err := red.Close(); err != nil {
+		t.Fatalf("redirect close: %v", err)
+	}
+}
+
 // TestRunStdio_DisconnectTriggersShutdown wires the real Module with the stdio
 // transport, but swaps the transport seam for an in-memory pair so a client can
 // connect and disconnect. On disconnect the server's Run returns and the module

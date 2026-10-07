@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — pubsub/nats/
 
-fx-wired NATS JetStream client via nats-io/nats.go v1.50.0.
+fx-wired NATS JetStream client via nats-io/nats.go v1.54.0.
 
 ## fx wiring
 
@@ -25,12 +25,16 @@ Config keys (prefix `nats`):
 
 ```go
 err := client.Publish("events.orders.created", payload)
+err = client.PublishSync(ctx, "events.orders.created", payload) // waits for server flush
 
 sub, err := client.Subscribe("events.orders.*", func(msg *nats.Msg) {
     process(msg.Data)
 })
 defer sub.Unsubscribe()
 ```
+
+`PublishSync` checks caller cancellation before publishing, then applies its
+five-second flush deadline when context has none.
 
 ## JetStream (durable, at-least-once)
 
@@ -66,14 +70,16 @@ for {
 | Test | What it asserts |
 |---|---|
 | `TestIntegration_ConnectAndPing` | fx lifecycle connects; `Conn().IsConnected()` is true |
-| `TestIntegration_PublishSubscribe` | core pub/sub delivers a message end-to-end |
-| `TestIntegration_JetStreamAvailable` | `JetStream()` returns a non-nil context |
+| `TestIntegration_PublishSubscribe` | core pub/sub delivers one message end-to-end |
+| `TestIntegration_JetStreamAvailable` | `JetStream()` returns non-nil context |
 
-Use `testutil/nats.Start(t)` in downstream tests to spin a fresh container.
+Use `testutil/nats.Start(t)` in downstream tests to spin fresh container.
 
 ## Don't
 
 - Don't use core `Publish` for work that must survive server restarts — use JetStream.
+- Use `PublishSync` before acknowledging external durable source. It confirms
+ server receipt, not durable storage; use JetStream when persistence is required.
 - Don't call `client.Conn()` to publish from multiple goroutines concurrently
-  without understanding NATS connection thread-safety (it is safe, but
-  callbacks run on a single dispatch goroutine).
+ without understanding NATS connection thread-safety (it is safe, but
+ callbacks run on single dispatch goroutine).

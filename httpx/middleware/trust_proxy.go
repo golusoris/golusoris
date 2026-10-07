@@ -5,10 +5,15 @@
 package middleware
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
 )
+
+const maxForwardedHops = 64
+
+type forwardedProtoKey struct{}
 
 // TrustProxyOptions controls which proxy sources are trusted to supply
 // X-Forwarded-For / X-Forwarded-Proto headers.
@@ -19,9 +24,9 @@ type TrustProxyOptions struct {
 	TrustedCIDRs []string
 }
 
-// TrustProxy rewrites r.RemoteAddr from the first X-Forwarded-For entry when
-// the direct peer is in TrustedCIDRs. Untrusted proxies' headers are
-// ignored, preserving the real RemoteAddr.
+// TrustProxy rewrites r.RemoteAddr by walking X-Forwarded-For from the trusted
+// direct peer toward the client. It selects the first untrusted hop from the
+// right, so caller-supplied entries on the left cannot spoof the client IP.
 //
 // Without a proxy-trust policy, apps accept spoofed X-Forwarded-For from any
 // client — which trivially bypasses rate limiters and geofencing.
@@ -29,37 +34,84 @@ func TrustProxy(opts TrustProxyOptions) Middleware {
 	nets := parseCIDRs(opts.TrustedCIDRs)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if len(nets) == 0 || !peerInNets(r.RemoteAddr, nets) {
+				stripForwardedHeaders(r.Header)
+				next.ServeHTTP(w, r)
+				return
+			}
+			if proto := validatedForwardedProto(r.Header); proto != "" {
+				ctx := context.WithValue(r.Context(), forwardedProtoKey{}, proto)
+				r = r.WithContext(ctx)
+			}
 			rewriteRemoteAddrFromXFF(r, nets)
 			next.ServeHTTP(w, r)
 		})
 	}
 }
 
-// rewriteRemoteAddrFromXFF rewrites r.RemoteAddr from the first
-// X-Forwarded-For entry, but only when the direct peer's address is in nets.
+// ForwardedProtoFromContext returns the external request scheme authenticated
+// by [TrustProxy], or "" when no valid trusted value was supplied.
+func ForwardedProtoFromContext(ctx context.Context) string {
+	proto, _ := ctx.Value(forwardedProtoKey{}).(string)
+	return proto
+}
+
+func validatedForwardedProto(header http.Header) string {
+	values := header.Values("X-Forwarded-Proto")
+	if len(values) != 1 || strings.Contains(values[0], ",") {
+		return ""
+	}
+	proto := strings.ToLower(strings.TrimSpace(values[0]))
+	if proto != "http" && proto != "https" {
+		return ""
+	}
+	return proto
+}
+
+func stripForwardedHeaders(header http.Header) {
+	header.Del("Forwarded")
+	header.Del("X-Forwarded-For")
+	header.Del("X-Forwarded-Host")
+	header.Del("X-Forwarded-Proto")
+	header.Del("X-Real-IP")
+}
+
+// rewriteRemoteAddrFromXFF rewrites r.RemoteAddr from a validated
+// X-Forwarded-For chain, but only when the direct peer is in nets.
 // It is a no-op when nets is empty, the peer is untrusted, the request
 // carries no X-Forwarded-For header, or the derived entry is empty.
 func rewriteRemoteAddrFromXFF(r *http.Request, nets []*net.IPNet) {
 	if len(nets) == 0 || !peerInNets(r.RemoteAddr, nets) {
 		return
 	}
-	xff := r.Header.Get("X-Forwarded-For")
-	if xff == "" {
+	xffValues := r.Header.Values("X-Forwarded-For")
+	if len(xffValues) == 0 {
 		return
 	}
-	if first := firstForwardedEntry(xff); first != "" {
-		r.RemoteAddr = first
+	xff := strings.Join(xffValues, ",")
+	if clientIP, ok := forwardedClientIP(xff, nets); ok {
+		r.RemoteAddr = clientIP
 	}
 }
 
-// firstForwardedEntry returns the first (original client) entry of an
-// X-Forwarded-For header value. When there is no comma-separated list, or
-// the header starts with a comma, the value is returned unchanged.
-func firstForwardedEntry(xff string) string {
-	if idx := strings.IndexByte(xff, ','); idx > 0 {
-		return strings.TrimSpace(xff[:idx])
+func forwardedClientIP(xff string, trusted []*net.IPNet) (string, bool) {
+	end := len(xff)
+	for range maxForwardedHops {
+		comma := strings.LastIndexByte(xff[:end], ',')
+		trimmedHop := strings.TrimSpace(xff[comma+1 : end])
+		ip := net.ParseIP(strings.Trim(trimmedHop, "[]"))
+		if ip == nil {
+			return "", false
+		}
+		if !ipInNets(ip, trusted) {
+			return ip.String(), true
+		}
+		if comma < 0 {
+			return ip.String(), true
+		}
+		end = comma
 	}
-	return xff
+	return "", false
 }
 
 func parseCIDRs(cidrs []string) []*net.IPNet {
@@ -82,8 +134,12 @@ func peerInNets(remoteAddr string, nets []*net.IPNet) bool {
 	if ip == nil {
 		return false
 	}
-	for _, n := range nets {
-		if n.Contains(ip) {
+	return ipInNets(ip, nets)
+}
+
+func ipInNets(ip net.IP, nets []*net.IPNet) bool {
+	for _, network := range nets {
+		if network.Contains(ip) {
 			return true
 		}
 	}

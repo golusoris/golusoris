@@ -24,7 +24,6 @@ Use **`github.com/hajimehoshi/go-mp3 (+ github.com/jfreymuth/oggvorbis + github.
 | Option | Pros | Cons | Why not chosen |
 |---|---|---|---|
 
-
 ## Consequences
 
 See `media/audio/AGENTS.md` for the resulting API + config surface. The dependency is pinned and tracked by Renovate; revisit if it goes unmaintained or a better-fit library appears.

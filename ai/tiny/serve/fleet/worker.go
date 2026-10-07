@@ -6,7 +6,6 @@ package fleet
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -15,7 +14,12 @@ import (
 	"github.com/riverqueue/river"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	"github.com/golusoris/golusoris/core/validate"
 )
+
+// WorkerDefaults preserves River's promoted worker defaults and the historical
+// composite-literal field name while keeping static-analysis parsers complete.
+type WorkerDefaults = river.WorkerDefaults[PredictArgs]
 
 // Worker is the node side of the fleet. It implements river's
 // Worker[PredictArgs]: resolve the model, load a predictor, run the
@@ -23,7 +27,7 @@ import (
 // queue this node subscribes to — capability matching already happened
 // at fetch time (river only hands it jobs from its queues).
 type Worker struct {
-	river.WorkerDefaults[PredictArgs]
+	WorkerDefaults
 
 	registry tiny.Registry
 	factory  PredictorFactory
@@ -50,14 +54,17 @@ func NewWorker(
 	maxInputBytes int,
 	logger *slog.Logger,
 ) (*Worker, error) {
-	if registry == nil {
+	if validate.IsNil(registry) {
 		return nil, errors.New("ai/tiny/serve/fleet: nil registry")
 	}
 	if factory == nil {
 		return nil, errors.New("ai/tiny/serve/fleet: nil predictor factory")
 	}
-	if sink == nil {
+	if validate.IsNil(sink) {
 		return nil, errors.New("ai/tiny/serve/fleet: nil result sink")
+	}
+	if timeout < 0 {
+		return nil, errors.New("ai/tiny/serve/fleet: timeout must not be negative")
 	}
 	norm, err := normalizeCaps(caps)
 	if err != nil {
@@ -104,7 +111,11 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[PredictArgs]) error {
 	if err != nil {
 		return err
 	}
-	if sErr := w.sink.Store(ctx, args.Ref, out); sErr != nil {
+	resolvedRef, err := resolvedModelRef(model)
+	if err != nil {
+		return err
+	}
+	if sErr := w.sink.Store(ctx, resolvedRef, out); sErr != nil {
 		return fmt.Errorf("ai/tiny/serve/fleet: store result: %w", sErr)
 	}
 	w.logger.DebugContext(ctx, "ai/tiny/serve/fleet: prediction done",
@@ -138,7 +149,7 @@ func (w *Worker) resolvePredictor(ctx context.Context, args PredictArgs) (tiny.M
 	if err != nil {
 		return tiny.Model{}, nil, fmt.Errorf("ai/tiny/serve/fleet: build predictor: %w", err)
 	}
-	if pred == nil {
+	if validate.IsNil(pred) {
 		return tiny.Model{}, nil, errors.New("ai/tiny/serve/fleet: factory returned nil predictor")
 	}
 	return model, pred, nil
@@ -187,15 +198,5 @@ func cancel(err error) error {
 // producer can't push an unbounded payload through the worker. river
 // already stored the row; this is a defense-in-depth decode cap.
 func (w *Worker) checkInputSize(input any) error {
-	if input == nil {
-		return nil
-	}
-	b, err := json.Marshal(input)
-	if err != nil {
-		return fmt.Errorf("ai/tiny/serve/fleet: encode input: %w", err)
-	}
-	if len(b) > w.maxInputBytes {
-		return fmt.Errorf("ai/tiny/serve/fleet: input %d bytes exceeds cap %d", len(b), w.maxInputBytes)
-	}
-	return nil
+	return checkInputSize(input, w.maxInputBytes)
 }

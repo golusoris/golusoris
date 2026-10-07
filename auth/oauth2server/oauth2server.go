@@ -2,10 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package oauth2server is a minimal OAuth 2.1 / OIDC issuer implementing
-// the authorization-code-with-PKCE grant. It does not aim to be a fully
-// spec-conformant IdP — it covers the common case of "be the IdP for my
-// own first-party apps".
+// Package oauth2server is a minimal OAuth authorization server implementing
+// the authorization-code-with-PKCE grant for first-party applications. It is
+// not an OpenID Connect issuer: it does not issue ID tokens or expose OIDC
+// discovery, UserInfo, or nonce handling.
 //
 // Not implemented: implicit grant (deprecated by 2.1), password grant
 // (deprecated), client credentials, device code, dynamic client
@@ -24,8 +24,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,11 +39,18 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/auth/jwt"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // maxFormBytes caps the size of x-www-form-urlencoded bodies on the
 // /token endpoint. OAuth requests are tiny — 8 KiB is generous.
-const maxFormBytes = 8 << 10
+const (
+	maxFormBytes      = 8 << 10
+	maxScopeBytes     = 1 << 10
+	maxRequestedScope = 64
+)
+
+var pkceValuePattern = regexp.MustCompile(`^[A-Za-z0-9._~-]{43,128}$`)
 
 // Client is a registered OAuth client.
 type Client struct {
@@ -57,7 +70,7 @@ type AuthRequest struct {
 	Scope               string
 	RedirectURI         string
 	CodeChallenge       string
-	CodeChallengeMethod string // "S256" or "plain"
+	CodeChallengeMethod string // "S256"
 	IssuedAt            time.Time
 	ExpiresAt           time.Time
 }
@@ -91,6 +104,8 @@ type Options struct {
 	// Authenticate must return the userID for the current request,
 	// or empty string when the user is unauthenticated.
 	Authenticate func(r *http.Request) (userID string)
+	// Logger receives response-encoding failures after headers are committed.
+	Logger *slog.Logger
 }
 
 // Server implements the OAuth2 endpoints.
@@ -98,19 +113,42 @@ type Server struct{ opts Options }
 
 // New constructs a Server. Returns an error on invalid configuration.
 func New(opts Options) (*Server, error) {
-	if opts.Issuer == "" || opts.Clients == nil || opts.Codes == nil || opts.Signer == nil || opts.Authenticate == nil {
-		return nil, errors.New("oauth2server: Issuer, Clients, Codes, Signer, Authenticate required")
+	if err := validateServerDependencies(opts); err != nil {
+		return nil, err
 	}
-	if opts.Clock == nil {
+	if validate.IsNil(opts.Clock) {
 		opts.Clock = clockwork.NewRealClock()
 	}
+	if err := normalizeTTLs(&opts); err != nil {
+		return nil, err
+	}
+	if opts.Logger == nil {
+		opts.Logger = slog.New(slog.DiscardHandler)
+	}
+	return &Server{opts: opts}, nil
+}
+
+func validateServerDependencies(opts Options) error {
+	if opts.Issuer == "" || validate.IsNil(opts.Clients) || validate.IsNil(opts.Codes) || opts.Signer == nil || opts.Authenticate == nil {
+		return errors.New("oauth2server: Issuer, Clients, Codes, Signer, Authenticate required")
+	}
+	return nil
+}
+
+func normalizeTTLs(opts *Options) error {
 	if opts.AccessTTL == 0 {
 		opts.AccessTTL = time.Hour
+	}
+	if opts.AccessTTL < time.Second {
+		return errors.New("oauth2server: AccessTTL must be at least one second")
 	}
 	if opts.CodeTTL == 0 {
 		opts.CodeTTL = 60 * time.Second
 	}
-	return &Server{opts: opts}, nil
+	if opts.CodeTTL < time.Nanosecond {
+		return errors.New("oauth2server: CodeTTL must be positive")
+	}
+	return nil
 }
 
 // Routes returns an http.Handler exposing /authorize and /token.
@@ -122,38 +160,37 @@ func (s *Server) Routes() http.Handler {
 }
 
 func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	q := r.URL.Query()
 	if q.Get("response_type") != "code" {
 		http.Error(w, "only response_type=code supported", http.StatusBadRequest)
 		return
 	}
 	clientID := q.Get("client_id")
-	client, err := s.opts.Clients.Get(r.Context(), clientID)
+	client, err := s.registeredClient(r.Context(), clientID)
 	if err != nil {
 		http.Error(w, "unknown client", http.StatusBadRequest)
 		return
 	}
-	// Resolve the user-supplied redirect_uri to an exact entry in the
-	// client's registered list. From here on we only ever use `redirect`,
-	// the trusted value copied out of config — never the raw query param.
-	// This gives CodeQL a clear allow-list sanitizer for the open-redirect
-	// taint flow into http.Redirect below.
-	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri")) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- exact-match allow-list of registered URIs
+	// Resolve redirect_uri against the client's registered list. Only RFC 8252
+	// loopback redirects may vary, and then only by port.
+	redirect := pickRegistered(client.RedirectURIs, q.Get("redirect_uri"), client.PublicClient) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- registered allow-list; public loopback redirects vary only by port
 	if redirect == "" {
 		http.Error(w, "redirect_uri not registered", http.StatusBadRequest)
 		return
 	}
-	codeChallenge := q.Get("code_challenge")
-	method := q.Get("code_challenge_method")
-	if codeChallenge == "" {
-		http.Error(w, "PKCE required: code_challenge missing", http.StatusBadRequest)
+	codeChallenge, method, pkceError := authorizePKCE(q)
+	if pkceError != "" {
+		http.Error(w, pkceError, http.StatusBadRequest)
 		return
 	}
-	if method == "" {
-		method = "plain"
-	}
-	if method != "S256" && method != "plain" {
-		http.Error(w, "unsupported code_challenge_method", http.StatusBadRequest)
+	scope, ok := authorizedScopes(q.Get("scope"), client.Scopes)
+	if !ok {
+		http.Error(w, "invalid_scope", http.StatusBadRequest)
 		return
 	}
 
@@ -166,7 +203,7 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	code, err := s.issueCode(r.Context(), AuthRequest{
 		ClientID:            clientID,
 		UserID:              userID,
-		Scope:               q.Get("scope"),
+		Scope:               scope,
 		RedirectURI:         redirect,
 		CodeChallenge:       codeChallenge,
 		CodeChallengeMethod: method,
@@ -176,6 +213,21 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirectWithCode(w, r, redirect, code, q.Get("state"))
+}
+
+func authorizePKCE(query url.Values) (challenge, method, errorMessage string) {
+	challenge = query.Get("code_challenge")
+	if challenge == "" {
+		return "", "", "PKCE required: code_challenge missing"
+	}
+	method = query.Get("code_challenge_method")
+	if method != "S256" {
+		return "", "", "code_challenge_method must be S256"
+	}
+	if !validPKCEValue(challenge) {
+		return "", "", "invalid code_challenge"
+	}
+	return challenge, method, ""
 }
 
 // issueCode mints a single-use authorization code for req, stamps its
@@ -210,45 +262,56 @@ func redirectWithCode(w http.ResponseWriter, r *http.Request, redirect, code, st
 	u.RawQuery = v.Encode()
 	// Semgrep's taint-mode open-redirect rule reports at this sink, not at the
 	// pickRegistered allow-list above; TestServer_AuthorizeRedirectAllowList pins the invariant.
-	http.Redirect(w, r, u.String(), http.StatusFound) // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- u is built from the exact-match allow-listed entry of client.RedirectURIs (pickRegistered), never the raw redirect_uri
+	http.Redirect(w, r, u.String(), http.StatusFound) // #nosec G710 -- pickRegistered uses registered scheme/host/path/query; only a validated public-loopback port can vary // nosemgrep: go.lang.security.injection.open-redirect.open-redirect -- same registered allow-list invariant
 }
 
 func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
+	setTokenCacheHeaders(w)
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		s.writeTokenErr(w, r, http.StatusMethodNotAllowed, "invalid_request", "method must be POST")
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxFormBytes)
 	if err := r.ParseForm(); err != nil {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_request", "form parse failed")
+		s.writeTokenErr(w, r, http.StatusBadRequest, "invalid_request", "form parse failed")
 		return
 	}
 	if r.PostForm.Get("grant_type") != "authorization_code" {
-		writeTokenErr(w, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code")
-		return
-	}
-
-	code, terr := s.resolveCode(r)
-	if terr != nil {
-		writeTokenErr(w, terr.status, terr.code, terr.desc)
+		s.writeTokenErr(w, r, http.StatusBadRequest, "unsupported_grant_type", "only authorization_code")
 		return
 	}
 
 	client, terr := s.authenticateClient(r)
 	if terr != nil {
-		writeTokenErr(w, terr.status, terr.code, terr.desc)
+		s.writeTokenErr(w, r, terr.status, terr.code, terr.desc)
 		return
 	}
 
+	code, terr := s.resolveCode(r)
+	if terr != nil {
+		s.writeTokenErr(w, r, terr.status, terr.code, terr.desc)
+		return
+	}
+	scope, ok := authorizedScopes(code.Req.Scope, client.Scopes)
+	if !ok {
+		s.writeTokenErr(w, r, http.StatusBadRequest, "invalid_scope", "scope no longer allowed")
+		return
+	}
+	code.Req.Scope = scope
+
 	verifier := r.PostForm.Get("code_verifier")
 	if !verifyPKCE(code.Req.CodeChallenge, code.Req.CodeChallengeMethod, verifier) {
-		writeTokenErr(w, http.StatusBadRequest, "invalid_grant", "PKCE verification failed")
+		s.writeTokenErr(w, r, http.StatusBadRequest, "invalid_grant", "PKCE verification failed")
 		return
 	}
 
 	resp, err := s.mintAccessToken(client.ID, code.Req)
 	if err != nil {
-		writeTokenErr(w, http.StatusInternalServerError, "server_error", "sign")
+		s.writeTokenErr(w, r, http.StatusInternalServerError, "server_error", "sign")
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, http.StatusOK, resp)
+	s.writeJSON(w, r, http.StatusOK, resp)
 }
 
 // tokenErrInfo carries the status/error/description triple for a rejected
@@ -268,7 +331,7 @@ func (s *Server) resolveCode(r *http.Request) (Code, *tokenErrInfo) {
 	if err != nil {
 		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "code not found"}
 	}
-	if s.opts.Clock.Now().After(code.Req.ExpiresAt) {
+	if !s.opts.Clock.Now().Before(code.Req.ExpiresAt) {
 		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "code expired"}
 	}
 	if r.PostForm.Get("redirect_uri") != code.Req.RedirectURI {
@@ -286,7 +349,7 @@ func (s *Server) resolveCode(r *http.Request) (Code, *tokenErrInfo) {
 // write.
 func (s *Server) authenticateClient(r *http.Request) (Client, *tokenErrInfo) {
 	clientID := r.PostForm.Get("client_id")
-	client, err := s.opts.Clients.Get(r.Context(), clientID)
+	client, err := s.registeredClient(r.Context(), clientID)
 	if err != nil {
 		return Client{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_client", desc: "unknown client"}
 	}
@@ -299,6 +362,20 @@ func (s *Server) authenticateClient(r *http.Request) (Client, *tokenErrInfo) {
 	return client, nil
 }
 
+func (s *Server) registeredClient(ctx context.Context, id string) (Client, error) {
+	client, err := s.opts.Clients.Get(ctx, id)
+	if err != nil {
+		return Client{}, fmt.Errorf("oauth2server: get client: %w", err)
+	}
+	if client.ID != id {
+		return Client{}, errors.New("oauth2server: client store returned mismatched ID")
+	}
+	if err := validateClient(client); err != nil {
+		return Client{}, err
+	}
+	return client, nil
+}
+
 // mintAccessToken signs a bearer JWT for the consented authorization request.
 func (s *Server) mintAccessToken(clientID string, req AuthRequest) (tokenResponse, error) {
 	jti, err := randomB64(16)
@@ -306,13 +383,14 @@ func (s *Server) mintAccessToken(clientID string, req AuthRequest) (tokenRespons
 		return tokenResponse{}, err
 	}
 	now := s.opts.Clock.Now()
-	claims := jwt.RegisteredClaims{
+	claims := accessTokenClaims{
 		Issuer:    s.opts.Issuer,
 		Subject:   req.UserID,
 		Audience:  []string{clientID},
 		IssuedAt:  gojwt.NewNumericDate(now),
 		ExpiresAt: gojwt.NewNumericDate(now.Add(s.opts.AccessTTL)),
 		ID:        jti,
+		Scope:     req.Scope,
 	}
 	tok, err := s.opts.Signer.Sign(claims)
 	if err != nil {
@@ -324,6 +402,11 @@ func (s *Server) mintAccessToken(clientID string, req AuthRequest) (tokenRespons
 		ExpiresIn:   int(s.opts.AccessTTL.Seconds()),
 		Scope:       req.Scope,
 	}, nil
+}
+
+type accessTokenClaims struct {
+	jwt.RegisteredClaims
+	Scope string `json:"scope,omitempty"`
 }
 
 type tokenResponse struct {
@@ -338,31 +421,35 @@ type tokenErr struct {
 	ErrorDescription string `json:"error_description,omitempty"`
 }
 
-func writeTokenErr(w http.ResponseWriter, status int, code, desc string) {
-	writeJSON(w, status, tokenErr{Error: code, ErrorDescription: desc})
+func (s *Server) writeTokenErr(w http.ResponseWriter, r *http.Request, status int, code, desc string) {
+	setTokenCacheHeaders(w)
+	s.writeJSON(w, r, status, tokenErr{Error: code, ErrorDescription: desc})
 }
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
+func (s *Server) writeJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil { //nolint:gosec // G117: access_token is intentionally marshaled in OAuth response body // #nosec G117
-		return // status + headers already sent; nothing more to report to the client
+		s.opts.Logger.ErrorContext(r.Context(), "oauth2server: encode response failed", slog.Any("error", err))
 	}
 }
 
+func setTokenCacheHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Pragma", "no-cache")
+}
+
 func verifyPKCE(challenge, method, verifier string) bool {
-	if verifier == "" {
+	if method != "S256" || !validPKCEValue(challenge) || !validPKCEValue(verifier) {
 		return false
 	}
-	switch method {
-	case "plain":
-		return subtle.ConstantTimeCompare([]byte(challenge), []byte(verifier)) == 1
-	case "S256":
-		sum := sha256.Sum256([]byte(verifier))
-		got := base64.RawURLEncoding.EncodeToString(sum[:])
-		return subtle.ConstantTimeCompare([]byte(challenge), []byte(got)) == 1
-	}
-	return false
+	sum := sha256.Sum256([]byte(verifier))
+	got := base64.RawURLEncoding.EncodeToString(sum[:])
+	return subtle.ConstantTimeCompare([]byte(challenge), []byte(got)) == 1
+}
+
+func validPKCEValue(value string) bool {
+	return pkceValuePattern.MatchString(value)
 }
 
 func randomB64(nBytes int) (string, error) {
@@ -374,24 +461,93 @@ func randomB64(nBytes int) (string, error) {
 }
 
 func contains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
-// pickRegistered returns the registered entry that exactly matches `candidate`,
-// or "" if no entry matches. Used as an allow-list sanitizer for redirect_uri
-// so the value passed to http.Redirect is always a trusted config string.
-func pickRegistered(registered []string, candidate string) string {
+func authorizedScopes(requested string, allowed []string) (string, bool) {
+	if len(requested) > maxScopeBytes {
+		return "", false
+	}
+	if requested == "" {
+		return "", true
+	}
+	requestedScopes := strings.Split(requested, " ")
+	if len(requestedScopes) > maxRequestedScope {
+		return "", false
+	}
+	seen := make(map[string]struct{}, len(requestedScopes))
+	normalized := make([]string, 0, len(requestedScopes))
+	for _, scope := range requestedScopes {
+		if !validScopeToken(scope) || !contains(allowed, scope) {
+			return "", false
+		}
+		if _, exists := seen[scope]; exists {
+			continue
+		}
+		seen[scope] = struct{}{}
+		normalized = append(normalized, scope)
+	}
+	return strings.Join(normalized, " "), true
+}
+
+// pickRegistered returns an allowed redirect or "". Redirects match exactly
+// except that RFC 8252 public loopback redirects may choose a runtime port.
+func pickRegistered(registered []string, candidate string, publicClient bool) string {
 	for _, s := range registered {
 		if s == candidate {
 			return s
 		}
 	}
+	if !publicClient {
+		return ""
+	}
+	candidateURL, err := url.Parse(candidate)
+	if err != nil || !isLoopbackRedirect(candidateURL) {
+		return ""
+	}
+	for _, raw := range registered {
+		registeredURL, parseErr := url.Parse(raw)
+		if parseErr == nil && loopbackRedirectsMatch(registeredURL, candidateURL) {
+			return registeredRedirectWithPort(registeredURL, candidateURL.Port())
+		}
+	}
 	return ""
+}
+
+func registeredRedirectWithPort(registered *url.URL, port string) string {
+	allowed := *registered
+	host := registered.Hostname()
+	if port != "" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	allowed.Host = host
+	return allowed.String()
+}
+
+func loopbackRedirectsMatch(registered, candidate *url.URL) bool {
+	return isLoopbackRedirect(registered) && isLoopbackRedirect(candidate) &&
+		registered.Hostname() == candidate.Hostname() &&
+		registered.EscapedPath() == candidate.EscapedPath() &&
+		registered.RawQuery == candidate.RawQuery &&
+		registered.ForceQuery == candidate.ForceQuery
+}
+
+func isLoopbackRedirect(uri *url.URL) bool {
+	if uri == nil || uri.Scheme != "http" || uri.User != nil || uri.Fragment != "" || uri.Opaque != "" {
+		return false
+	}
+	ip := net.ParseIP(uri.Hostname())
+	return ip != nil && ip.IsLoopback() && validRedirectPort(uri.Port())
+}
+
+func validRedirectPort(port string) bool {
+	if port == "" {
+		return true
+	}
+	number, err := strconv.Atoi(port)
+	return err == nil && number > 0 && number <= 65535
 }
 
 // MemoryClientStore is an in-process ClientStore for tests / single-replica use.
@@ -403,11 +559,23 @@ type MemoryClientStore struct {
 // NewMemoryClientStore returns an initialised store.
 func NewMemoryClientStore() *MemoryClientStore { return &MemoryClientStore{m: map[string]Client{}} }
 
-// Add registers a client.
+// Add preserves the legacy registration API. Invalid clients are not stored;
+// use Register when the caller must receive the validation error.
 func (s *MemoryClientStore) Add(c Client) {
+	if err := s.Register(c); err != nil {
+		return
+	}
+}
+
+// Register validates, copies, and registers a client.
+func (s *MemoryClientStore) Register(c Client) error {
+	if err := validateClient(c); err != nil {
+		return err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.m[c.ID] = c
+	s.m[c.ID] = cloneClient(c)
+	return nil
 }
 
 // Get returns the client by ID.
@@ -418,7 +586,108 @@ func (s *MemoryClientStore) Get(_ context.Context, id string) (Client, error) {
 	if !ok {
 		return Client{}, fmt.Errorf("oauth2server: client %q not found", id)
 	}
-	return c, nil
+	return cloneClient(c), nil
+}
+
+func cloneClient(client Client) Client {
+	client.RedirectURIs = append([]string(nil), client.RedirectURIs...)
+	client.Scopes = append([]string(nil), client.Scopes...)
+	return client
+}
+
+func validateClient(client Client) error {
+	if strings.TrimSpace(client.ID) == "" {
+		return errors.New("oauth2server: client ID required")
+	}
+	if err := validateRedirectURIs(client.RedirectURIs, client.PublicClient); err != nil {
+		return err
+	}
+	if err := validateClientScopes(client.Scopes); err != nil {
+		return err
+	}
+	if !client.PublicClient && client.Secret == "" {
+		return errors.New("oauth2server: confidential client secret required")
+	}
+	return nil
+}
+
+func validateRedirectURIs(registered []string, publicClient bool) error {
+	if len(registered) == 0 {
+		return errors.New("oauth2server: client requires a redirect URI")
+	}
+	redirects := make(map[string]struct{}, len(registered))
+	for _, raw := range registered {
+		if err := validateRedirectURI(raw, publicClient); err != nil {
+			return err
+		}
+		if _, exists := redirects[raw]; exists {
+			return fmt.Errorf("oauth2server: duplicate client redirect URI %q", raw)
+		}
+		redirects[raw] = struct{}{}
+	}
+	return nil
+}
+
+func validateRedirectURI(raw string, publicClient bool) error {
+	u, err := url.Parse(raw)
+	if err != nil || !validRedirectBase(u) {
+		return fmt.Errorf("oauth2server: invalid client redirect URI %q", raw)
+	}
+	if isWebRedirect(u, publicClient) || (publicClient && isPrivateUseRedirect(raw, u)) {
+		return nil
+	}
+	return fmt.Errorf("oauth2server: invalid client redirect URI %q", raw)
+}
+
+func validRedirectBase(uri *url.URL) bool {
+	return uri != nil && uri.Scheme != "" && uri.User == nil && uri.Fragment == "" && uri.Opaque == ""
+}
+
+func isWebRedirect(uri *url.URL, publicClient bool) bool {
+	if uri.Scheme == "https" && uri.Host != "" {
+		return true
+	}
+	return publicClient && isLoopbackRedirect(uri)
+}
+
+func isPrivateUseRedirect(raw string, uri *url.URL) bool {
+	privatePrefix := uri.Scheme + ":/"
+	return strings.Contains(uri.Scheme, ".") && uri.Host == "" && uri.Path != "" &&
+		strings.HasPrefix(raw, privatePrefix) && !strings.HasPrefix(raw, privatePrefix+"/")
+}
+
+func validateClientScopes(registered []string) error {
+	scopes := make(map[string]struct{}, len(registered))
+	for _, scope := range registered {
+		if err := validateClientScope(scope); err != nil {
+			return err
+		}
+		if _, exists := scopes[scope]; exists {
+			return fmt.Errorf("oauth2server: duplicate client scope %q", scope)
+		}
+		scopes[scope] = struct{}{}
+	}
+	return nil
+}
+
+func validateClientScope(scope string) error {
+	if len(scope) > maxScopeBytes || !validScopeToken(scope) {
+		return fmt.Errorf("oauth2server: invalid client scope %q", scope)
+	}
+	return nil
+}
+
+func validScopeToken(scope string) bool {
+	if scope == "" {
+		return false
+	}
+	for i := range len(scope) {
+		char := scope[i]
+		if char != 0x21 && (char < 0x23 || char > 0x5b) && (char < 0x5d || char > 0x7e) {
+			return false
+		}
+	}
+	return true
 }
 
 // MemoryCodeStore is a single-use in-memory CodeStore.

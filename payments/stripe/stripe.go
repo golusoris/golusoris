@@ -83,7 +83,7 @@ func (c *Client) NewCheckoutSession(ctx context.Context, p CheckoutParams) (stri
 	for priceID, qty := range p.LineItems {
 		items = append(items, &sdk.CheckoutSessionCreateLineItemParams{
 			Price:    sdk.String(priceID),
-			Quantity: sdk.Int64(qty),
+			Quantity: new(qty),
 		})
 	}
 
@@ -128,7 +128,7 @@ func (c *Client) NewPortalSession(ctx context.Context, p PortalParams) (string, 
 // CreatePaymentIntent creates a PaymentIntent for direct charge flows.
 func (c *Client) CreatePaymentIntent(ctx context.Context, amount int64, currency, customerID string) (*sdk.PaymentIntent, error) {
 	params := &sdk.PaymentIntentCreateParams{
-		Amount:   sdk.Int64(amount),
+		Amount:   new(amount),
 		Currency: sdk.String(currency),
 	}
 	if customerID != "" {

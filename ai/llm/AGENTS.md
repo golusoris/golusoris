@@ -32,13 +32,30 @@ type Client interface {
 Works with any OpenAI-compatible endpoint:
 
 ```go
-client := llm.NewOpenAIClient(llm.Config{
+client, err := llm.NewOpenAIClient(llm.Config{
     BaseURL: "https://api.openai.com/v1",  // or Ollama: "http://localhost:11434/v1"
     APIKey:  os.Getenv("OPENAI_API_KEY"),
     Model:   "gpt-4o-mini",
     EmbedModel: "text-embedding-3-small",
 })
+if err != nil {
+    return err
+}
 ```
+
+Constructor: `NewOpenAIClient(Config) (*OpenAIClient, error)`.
+
+HTTP bounds:
+
+| Config field | Zero-value default |
+|---|---:|
+| `Timeout` | 120s |
+| `MaxResponseBytes` | 4 MiB |
+| `MaxErrorBytes` | 64 KiB |
+| `MaxStreamFrameBytes` | 1 MiB |
+
+Negative or sentinel-unbounded values: constructor error. `HTTPClient`: cloned;
+caller state preserved; configured timeout applied when source timeout non-positive.
 
 ## Stream usage
 
@@ -49,13 +66,18 @@ for chunk := range client.Stream(ctx, messages) {
 }
 ```
 
-## Planned sub-packages
+Consumer exit before channel close: cancel `ctx`. Producer sends observe
+cancellation. Scanner/read failures arrive as terminal `Chunk{Err: err}`.
+Clean EOF before the provider terminator, malformed data frames, and provider
+error events also arrive as terminal errors; partial content is never success.
 
-- `ai/llm/anthropic/` — Anthropic Messages API (thinking, vision, tools)
-- `ai/llm/ollama/` — Ollama-specific features (model pull, list)
+## Provider sub-packages
 
-## Don't
+- `ai/llm/anthropic/` — Anthropic Messages API.
+- `ai/llm/ollama/` — Ollama native API.
 
-- Don't log full message content — it may contain PII.
-- Don't hardcode API keys — use `golusoris/secrets` or env vars.
-- Don't call `Stream` without draining the channel to completion.
+## Guardrails
+
+- Message content: sensitive; omit from logs.
+- API keys: load through `golusoris/secrets` or environment.
+- Streams: drain channel or cancel context.

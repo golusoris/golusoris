@@ -1,0 +1,22 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/golusoris/golusoris/security/vex/2026-09-19",
+  "author": "https://github.com/golusoris",
+  "timestamp": "2026-09-19T20:56:00Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-84445"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/google.golang.org/grpc@v1.84.0"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Golusoris imports no google.golang.org/grpc/xds package and never constructs xds.NewGRPCServer. Govulncheck reports no reachable call path."
+    }
+  ]
+}

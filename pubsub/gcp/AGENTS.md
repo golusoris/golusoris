@@ -22,7 +22,7 @@ Config keys (prefix `pubsub.gcp`):
 
 Authentication uses Application Default Credentials — no credential fields
 in `Config`. Set `GOOGLE_APPLICATION_CREDENTIALS` (or run on GCP compute
-with an attached service account) the same way any other `cloud.google.com/go`
+with attached service account) same way any other `cloud.google.com/go`
 client expects.
 
 ## Publishing
@@ -43,14 +43,14 @@ err := client.Subscribe(ctx, "orders-sub", func(ctx context.Context, m *gcp.Mess
 })
 ```
 
-`Subscribe` blocks until `ctx` is cancelled or an unrecoverable error occurs,
+`Subscribe` blocks until `ctx` is cancelled or unrecoverable error occurs,
 same shape as `pubsub.Subscriber.Receive`. Every message must be `Ack`ed or
 `Nack`ed exactly once.
 
 ## Health check
 
-`Client.Ping` lists at most one topic in the configured project to verify
-connectivity; the fx module calls it on `OnStart` so misconfiguration (bad
+`Client.Ping` lists at most one topic in configured project to verify
+connectivity; fx module calls it on `OnStart` so misconfiguration (bad
 project ID, missing credentials) fails fast instead of surfacing on first
 publish.
 
@@ -62,10 +62,10 @@ pc := client.Pubsub() // underlying *pubsub.Client for topic/subscription admin,
 
 ## Testing
 
-Unit tests in `gcp_test.go` run against an in-process
+Unit tests in `gcp_test.go` run against in-process
 [`pstest`](https://pkg.go.dev/cloud.google.com/go/pubsub/v2/pstest) fake
 server — no Docker, no real network, no GCP project required. For tests that
-need a `*gcp.Client` without the full fx stack:
+need `*gcp.Client` without full fx stack:
 
 ```go
 import (
@@ -89,16 +89,16 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-To target a real Pub/Sub emulator instead of `pstest`, set
-`PUBSUB_EMULATOR_HOST` — the client library honors it automatically, no code
+To target real Pub/Sub emulator instead of `pstest`, set
+`PUBSUB_EMULATOR_HOST` — client library honors it automatically, no code
 change needed.
 
 ## Don't
 
-- Don't call `Subscribe` expecting it to return once a message arrives — it
-  blocks like `pubsub.Subscriber.Receive` until `ctx` is done.
-- Don't call `Stop` on a `*pubsub.Publisher` returned by `Client.Publisher` —
-  the `Client` owns its lifecycle; call `Client.Close` instead.
-- Don't add a config field for the Pub/Sub emulator endpoint — the SDK already
-  honors `PUBSUB_EMULATOR_HOST`, and `pstest` tests dial the fake server
-  directly via `option.WithGRPCConn` (see Testing above).
+- Don't call `Subscribe` expecting it to return once message arrives — it
+ blocks like `pubsub.Subscriber.Receive` until `ctx` is done.
+- Don't call `Stop` on `*pubsub.Publisher` returned by `Client.Publisher` —
+ `Client` owns its lifecycle; call `Client.Close` instead.
+- Don't add config field for Pub/Sub emulator endpoint — SDK already
+ honors `PUBSUB_EMULATOR_HOST`, and `pstest` tests dial fake server
+ directly via `option.WithGRPCConn` (see Testing above).

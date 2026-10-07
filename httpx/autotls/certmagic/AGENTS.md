@@ -10,10 +10,14 @@ caddyserver/certmagic wrapper.
 
 ## Conventions
 
-- `http.autotls.certmagic.domains` is required.
-- `http.autotls.certmagic.staging=true` points at Let's Encrypt's staging CA for rehearsals — do NOT use staging certs in production (browsers reject them).
-- Storage defaults to filesystem; apps needing distributed storage configure certmagic.DefaultStorage before wiring the module.
+- `http.autotls.certmagic.domains` = required; IDNA-normalized, deduplicated public names; max 100 inputs.
+- `http.autotls.certmagic.timeout` = startup issuance bound; default 5m; max 30m.
+- `http.autotls.certmagic.staging=true` = Let's Encrypt staging; rehearsal only; browser-invalid certificates.
+- Direct lifecycle = `New(opts)` -> `Start(ctx)` -> `TLSConfig()` -> `Close()`.
+- TLS ALPN = `h2`, `http/1.1`, retained `acme-tls/1` challenge protocol.
+- Fx lifecycle = `Module`; startup management + cache shutdown owned by hooks.
+- Distributed storage = `Options.Storage` or fx-provided `certmagic.Storage`; manager-local config; no package-global mutation.
 
 ## Don't
 
-- Don't toggle staging back-and-forth in production — each switch invalidates cached certs for the other CA.
+- Staging switch on production cache -> issuer mismatch + cache churn.

@@ -2,15 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# DISABLED on this Gitea instance: ossf/scorecard-action requires the GitHub
-# API and publishes to the OpenSSF results endpoint keyed on a GitHub
-# repository, so 'Scorecard analysis' fails on every run here. Left in place
-# rather than deleted so the intent survives if these repositories ever return
-# to GitHub; triggers reduced to manual and reusable-call only so it stops
-# consuming the shared self-hosted runner, which also builds the cluster's
-# container images.
-# OSSF Scorecard — runs on the framework itself AND is callable as a
-# reusable workflow by downstream apps.
+# GitHub-only supply-chain gate. Gitea uses `.gitea/workflows/` and never
+# evaluates this file. Downstream apps may call this workflow directly.
 #
 # Scorecard requires:
 #   - global permissions read-only (contents: read only)
@@ -23,9 +16,14 @@ concurrency:
   cancel-in-progress: true
 
 on:
+  push:
+    branches: [main]
+  # Required PR context. OpenSSF publication stays disabled below for PRs.
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '15 6 * * 1'
   workflow_dispatch:
-  # Kept callable so downstream apps generated from template/ can pin it;
-  # a workflow_call trigger never runs on its own in this repository.
   workflow_call:
 
 permissions:

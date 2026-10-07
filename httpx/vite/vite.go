@@ -12,10 +12,14 @@ package vite
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"slices"
 	"sync"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Entry is a single manifest entry. Not all fields are always populated;
@@ -58,6 +62,9 @@ func NewFromFile(path string) (*Manifest, error) {
 
 // NewFromFS loads manifest.json from a filesystem (e.g. embed.FS).
 func NewFromFS(fsys fs.FS, path string) (*Manifest, error) {
+	if validate.IsNil(fsys) {
+		return nil, errors.New("vite: filesystem is required")
+	}
 	b, err := fs.ReadFile(fsys, path)
 	if err != nil {
 		return nil, fmt.Errorf("vite: read manifest: %w", err)
@@ -70,7 +77,15 @@ func (m *Manifest) Entry(src string) (Entry, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	e, ok := m.entries[src]
-	return e, ok
+	return cloneEntry(e), ok
+}
+
+func cloneEntry(entry Entry) Entry {
+	entry.CSS = slices.Clone(entry.CSS)
+	entry.Assets = slices.Clone(entry.Assets)
+	entry.Imports = slices.Clone(entry.Imports)
+	entry.DynamicImports = slices.Clone(entry.DynamicImports)
+	return entry
 }
 
 // File returns the hashed built filename for src (e.g. "assets/main-abc123.js").
@@ -103,6 +118,7 @@ func collectCSS(entries map[string]Entry, src string, seen map[string]bool) []st
 		limit += len(e.Imports)
 	}
 	var out []string
+	seenCSS := make(map[string]bool)
 	stack := []string{src}
 	for i := 0; i < limit && len(stack) > 0; i++ {
 		cur := stack[len(stack)-1]
@@ -115,9 +131,14 @@ func collectCSS(entries map[string]Entry, src string, seen map[string]bool) []st
 		if !ok {
 			continue
 		}
-		out = append(out, e.CSS...)
-		for j := len(e.Imports) - 1; j >= 0; j-- { // reverse push keeps import order
-			stack = append(stack, e.Imports[j])
+		for _, css := range e.CSS {
+			if !seenCSS[css] {
+				seenCSS[css] = true
+				out = append(out, css)
+			}
+		}
+		for _, v := range slices.Backward(e.Imports) { // reverse push keeps import order
+			stack = append(stack, v)
 		}
 	}
 	return out

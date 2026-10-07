@@ -1,6 +1,6 @@
 id: "framework"
 name: "Core Framework & SDK Systems"
-description: "Foundational developer platforms, compilers, and universal SDK libraries enforcing strict HISS-16 invariants"
+description: "Foundational developer platforms, compilers, and universal SDK libraries enforcing strict HISS invariants"
 runtime: "go"
 
 complexity:
@@ -28,5 +28,18 @@ linters:
   - "gocognit"
 
 devcontainer_features:
-  - "ghcr.io/devcontainers/features/go:1"
-  - "ghcr.io/devcontainers/features/common-utils:2"
+  - ghcr.io/devcontainers/features/go:1:
+      version: "1.27.1"
+      golangciLintVersion: "2.13.2"
+  - ghcr.io/devcontainers/features/common-utils:2:
+      installZsh: false
+      configureZshAsDefaultShell: false
+      installOhMyZsh: false
+      installOhMyZshConfig: false
+      upgradePackages: true
+      username: "vscode"
+      userUid: "1000"
+      userGid: "1000"
+      sudoers: true
+      nonFreePackages: false
+      installSsl: true

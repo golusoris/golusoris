@@ -6,8 +6,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — web3/solana/
 
-Solana RPC helpers over [gagliardetto/solana-go]. `Client` wraps the RPC client
-with convenience reads; `Key` wraps an Ed25519 keypair. Stateless library —
+Solana RPC helpers over [gagliardetto/solana-go]. `Client` wraps RPC client
+with convenience reads; `Key` wraps Ed25519 keypair. Stateless library —
 **no fx wiring**; apps import it directly.
 
 ## API
@@ -27,13 +27,13 @@ lamports := solana.SOLToLamports(1.5)
 
 ## Why gagliardetto/solana-go
 
-The most complete Go Solana SDK — RPC + websocket + transaction building.
+most complete Go Solana SDK — RPC + websocket + transaction building.
 
 ## Notes
 
-- **Own go.mod sub-module** (large, specialised dep graph); import via the full
-  module path, it is not part of the root module.
+- **Own go.mod sub-module** (large, specialised dep graph); import via full
+ module path, it is not part of root module.
 - **Security-critical:** `Key`/`KeyFromBase58` hold raw Ed25519 private keys —
-  never log them; load from a secret store, not config.
+ never log them; load from secret store, not config.
 - Lamport↔SOL helpers use `float64` — fine for display, not for exact accounting
-  (use the raw `uint64` lamport values for balances).
+ (use raw `uint64` lamport values for balances).

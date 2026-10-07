@@ -6,6 +6,7 @@ package pubsub_test
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -28,6 +29,41 @@ func TestPublishSubscribe(t *testing.T) {
 	if v := count.Load(); v != 2 {
 		t.Errorf("got %d events, want 2", v)
 	}
+}
+
+func TestSubscribeIgnoresNilHandler(t *testing.T) {
+	t.Parallel()
+	bus := pubsub.New()
+	cancel := bus.Subscribe("topic", nil)
+	bus.Publish(t.Context(), pubsub.Message{Topic: "topic"})
+	cancel()
+}
+
+func TestPublishConcurrentWithSubscriptionChanges(t *testing.T) {
+	t.Parallel()
+	const iterations = 5_000
+	bus := pubsub.New()
+	var calls atomic.Int64
+	var workers sync.WaitGroup
+	workers.Add(2)
+	start := make(chan struct{})
+	go func() {
+		defer workers.Done()
+		<-start
+		for range iterations {
+			cancel := bus.Subscribe("topic", func(pubsub.Message) { calls.Add(1) })
+			cancel()
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for range iterations {
+			bus.Publish(context.Background(), pubsub.Message{Topic: "topic"})
+		}
+	}()
+	close(start)
+	workers.Wait()
 }
 
 func TestUnsubscribe(t *testing.T) {

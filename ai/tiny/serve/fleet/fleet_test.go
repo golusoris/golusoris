@@ -27,11 +27,13 @@ type fakeInserter struct {
 	gotOpts *river.InsertOpts
 	id      int64
 	err     error
+	calls   int
 }
 
 func (f *fakeInserter) Insert(_ context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.calls++
 	f.gotArgs = args
 	f.gotOpts = opts
 	if f.err != nil {
@@ -78,6 +80,86 @@ func TestSubmit_routesToCapabilityQueue(t *testing.T) {
 	require.Equal(t, fleet.Capability("gpu"), args.Capability)
 	require.Equal(t, "classify this", args.Input)
 	require.Equal(t, "intent", args.Ref.Name)
+	require.Equal(t, 1, args.Ref.Version)
+}
+
+func TestSubmitPinsResolvedLatestVersion(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	ins := &fakeInserter{id: 8}
+	f, err := fleet.NewFleet(reg, ins, "tiny")
+	require.NoError(t, err)
+
+	_, err = f.Submit(context.Background(), fleet.Request{Model: ref, Capability: "cpu"})
+	require.NoError(t, err)
+	args, ok := ins.gotArgs.(fleet.PredictArgs)
+	require.True(t, ok)
+	require.Equal(t, tiny.Ref{Name: "intent", Version: 1}, args.Ref)
+
+	require.NoError(t, reg.SaveModel(context.Background(), &tiny.Model{
+		Name: "intent", Modality: tiny.ModalityText, TaskKind: tiny.TaskGenerate,
+	}))
+	require.Equal(t, 1, args.Ref.Version, "queued work must not drift when latest advances")
+}
+
+func TestSubmitRejectsOversizedInputBeforeInsert(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	ins := &fakeInserter{id: 9}
+	f, err := fleet.NewFleetWithInputLimit(reg, ins, "tiny", 16)
+	require.NoError(t, err)
+
+	_, err = f.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu", Input: strings.Repeat("x", 256),
+	})
+	require.ErrorContains(t, err, "exceeds cap")
+	require.Zero(t, ins.calls)
+}
+
+func TestSubmitCountsNullAndExactJSONBoundary(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+
+	tooSmallInserter := &fakeInserter{id: 9}
+	tooSmall, err := fleet.NewFleetWithInputLimit(reg, tooSmallInserter, "tiny", 3)
+	require.NoError(t, err)
+	_, err = tooSmall.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu", Input: nil,
+	})
+	require.ErrorContains(t, err, "exceeds cap")
+	require.Zero(t, tooSmallInserter.calls)
+
+	exactInserter := &fakeInserter{id: 10}
+	exact, err := fleet.NewFleetWithInputLimit(reg, exactInserter, "tiny", 4)
+	require.NoError(t, err)
+	_, err = exact.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu", Input: nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, exactInserter.calls)
+}
+
+func TestSubmitUsesEncodedStringBoundary(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	input := "four"
+
+	exactInserter := &fakeInserter{id: 11}
+	exact, err := fleet.NewFleetWithInputLimit(reg, exactInserter, "tiny", 6)
+	require.NoError(t, err)
+	_, err = exact.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu", Input: input,
+	})
+	require.NoError(t, err)
+
+	overInserter := &fakeInserter{id: 12}
+	over, err := fleet.NewFleetWithInputLimit(reg, overInserter, "tiny", 5)
+	require.NoError(t, err)
+	_, err = over.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu", Input: input,
+	})
+	require.ErrorContains(t, err, "exceeds cap")
+	require.Zero(t, overInserter.calls)
 }
 
 func TestSubmit_defaultPrefixWhenEmpty(t *testing.T) {
@@ -90,6 +172,20 @@ func TestSubmit_defaultPrefixWhenEmpty(t *testing.T) {
 	_, err = f.Submit(context.Background(), fleet.Request{Model: ref, Capability: "cpu"})
 	require.NoError(t, err)
 	require.Equal(t, fleet.DefaultQueuePrefix+"-cpu", ins.gotOpts.Queue)
+}
+
+func TestSubmit_normalizesQueuePrefix(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	ins := &fakeInserter{id: 8}
+	f, err := fleet.NewFleet(reg, ins, " InFer ")
+	require.NoError(t, err)
+
+	_, err = f.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "CPU",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "infer-cpu", ins.gotOpts.Queue)
 }
 
 func TestSubmit_rejectsMissingCapability(t *testing.T) {
@@ -172,11 +268,49 @@ func TestNewFleet_rejectsNilDeps(t *testing.T) {
 	require.ErrorContains(t, err, "nil registry")
 	_, err = fleet.NewFleet(reg, nil, "tiny")
 	require.ErrorContains(t, err, "nil inserter")
+
+	var typedNilRegistry *tiny.MemoryRegistry
+	_, err = fleet.NewFleet(typedNilRegistry, &fakeInserter{}, "tiny")
+	require.ErrorContains(t, err, "nil registry")
+	var typedNilInserter *fakeInserter
+	_, err = fleet.NewFleet(reg, typedNilInserter, "tiny")
+	require.ErrorContains(t, err, "nil inserter")
+}
+
+func TestNewFleet_rejectsMalformedQueuePrefix(t *testing.T) {
+	t.Parallel()
+	reg := tiny.NewMemoryRegistry()
+	_, err := fleet.NewFleet(reg, &fakeInserter{}, "bad/prefix")
+	require.ErrorContains(t, err, "queue prefix")
+	_, err = fleet.NewFleet(reg, &fakeInserter{}, strings.Repeat("a", 63))
+	require.ErrorContains(t, err, "queue prefix")
+}
+
+func TestSubmit_rejectsQueueNameOverRiverLimit(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	ins := &fakeInserter{id: 8}
+	f, err := fleet.NewFleet(reg, ins, strings.Repeat("a", 62))
+	require.NoError(t, err)
+
+	_, err = f.Submit(context.Background(), fleet.Request{
+		Model: ref, Capability: "cpu",
+	})
+	require.ErrorContains(t, err, "64 bytes")
+	require.Zero(t, ins.calls)
 }
 
 func TestPredictArgs_kindStable(t *testing.T) {
 	t.Parallel()
 	require.Equal(t, "golusoris.tiny.fleet.predict", fleet.PredictArgs{}.Kind())
+}
+
+func TestWorker_preservesPromotedRiverDefaults(t *testing.T) {
+	t.Parallel()
+	worker := fleet.Worker{
+		WorkerDefaults: river.WorkerDefaults[fleet.PredictArgs]{},
+	}
+	require.Equal(t, river.WorkerDefaults[fleet.PredictArgs]{}, worker.WorkerDefaults)
 }
 
 // stubPredictor is a tiny.Predictor double recording calls.
@@ -251,6 +385,7 @@ func TestWorker_happyPath(t *testing.T) {
 	require.Equal(t, 1, sink.n)
 	require.Equal(t, "label-a", sink.p.Text)
 	require.Equal(t, "intent", sink.ref.Name)
+	require.Equal(t, 1, sink.ref.Version)
 	require.True(t, pred.loaded)
 }
 
@@ -319,6 +454,98 @@ func TestWorker_nilPredictorRetries(t *testing.T) {
 	require.False(t, isCancel(err), "nil predictor is a factory bug, not a job-specific cancel")
 }
 
+func TestWorker_typedNilPredictorRetriesWithoutPanic(t *testing.T) {
+	t.Parallel()
+	reg, ref := seedRegistry(t)
+	var typedNil *stubPredictor
+	badFactory := func(tiny.Model) (tiny.Predictor, error) { return typedNil, nil }
+	w, err := fleet.NewWorker(reg, badFactory, &captureSink{},
+		[]fleet.Capability{"cpu"}, 0, 0, nil)
+	require.NoError(t, err)
+
+	err = w.Work(context.Background(), newJob(fleet.PredictArgs{Ref: ref, Capability: "cpu"}))
+	require.ErrorContains(t, err, "nil predictor")
+	require.False(t, isCancel(err))
+}
+
+func TestSingletonFactoryRejectsTypedNilPredictor(t *testing.T) {
+	t.Parallel()
+	var typedNil *stubPredictor
+	factory := fleet.SingletonFactory(typedNil)
+	pred, err := factory(tiny.Model{Name: "intent", Version: 1})
+	require.ErrorContains(t, err, "nil predictor")
+	require.Nil(t, pred)
+}
+
+type switchingPredictor struct {
+	mu       sync.Mutex
+	current  string
+	aEntered chan struct{}
+	bEntered chan struct{}
+	allowA   chan struct{}
+}
+
+func (p *switchingPredictor) Load(_ context.Context, model tiny.Model) error {
+	p.mu.Lock()
+	p.current = model.Name
+	p.mu.Unlock()
+	if model.Name == "a" {
+		close(p.aEntered)
+		<-p.allowA
+	} else {
+		close(p.bEntered)
+	}
+	return nil
+}
+
+func (p *switchingPredictor) Predict(context.Context, any) (tiny.Prediction, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return tiny.Prediction{Text: p.current}, nil
+}
+
+func (*switchingPredictor) Close() error { return nil }
+
+func TestSingletonFactorySerializesLoadAndPredictAcrossModels(t *testing.T) {
+	t.Parallel()
+	shared := &switchingPredictor{
+		aEntered: make(chan struct{}),
+		bEntered: make(chan struct{}),
+		allowA:   make(chan struct{}),
+	}
+	factory := fleet.SingletonFactory(shared)
+	predA, err := factory(tiny.Model{Name: "a", Version: 1})
+	require.NoError(t, err)
+	predB, err := factory(tiny.Model{Name: "b", Version: 1})
+	require.NoError(t, err)
+
+	aLoaded := make(chan error, 1)
+	go func() { aLoaded <- predA.Load(t.Context(), tiny.Model{Name: "a", Version: 1}) }()
+	<-shared.aEntered
+	bLoaded := make(chan error, 1)
+	go func() { bLoaded <- predB.Load(t.Context(), tiny.Model{Name: "b", Version: 1}) }()
+
+	overlapped := false
+	select {
+	case <-shared.bEntered:
+		overlapped = true
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(shared.allowA)
+	require.NoError(t, <-aLoaded)
+	outA, err := predA.Predict(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "a", outA.Text)
+
+	if !overlapped {
+		<-shared.bEntered
+	}
+	require.NoError(t, <-bLoaded)
+	outB, err := predB.Predict(t.Context(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "b", outB.Text)
+}
+
 func TestWorker_predictErrorRetries(t *testing.T) {
 	t.Parallel()
 	reg, ref := seedRegistry(t)
@@ -384,6 +611,12 @@ func TestNewWorker_rejectsBadArgs(t *testing.T) {
 	require.ErrorContains(t, err, "nil predictor factory")
 	_, err = fleet.NewWorker(reg, fac, nil, []fleet.Capability{"cpu"}, 0, 0, nil)
 	require.ErrorContains(t, err, "nil result sink")
+	var typedNilRegistry *tiny.MemoryRegistry
+	_, err = fleet.NewWorker(typedNilRegistry, fac, sink, []fleet.Capability{"cpu"}, 0, 0, nil)
+	require.ErrorContains(t, err, "nil registry")
+	var typedNilSink *captureSink
+	_, err = fleet.NewWorker(reg, fac, typedNilSink, []fleet.Capability{"cpu"}, 0, 0, nil)
+	require.ErrorContains(t, err, "nil result sink")
 	_, err = fleet.NewWorker(reg, fac, sink, nil, 0, 0, nil)
 	require.ErrorContains(t, err, "no capabilities")
 	// blank-only caps normalize to empty ⇒ rejected.
@@ -392,6 +625,8 @@ func TestNewWorker_rejectsBadArgs(t *testing.T) {
 	// malformed (non-blank) capability ⇒ rejected loudly.
 	_, err = fleet.NewWorker(reg, fac, sink, []fleet.Capability{"gpu/v2"}, 0, 0, nil)
 	require.ErrorContains(t, err, "must be lowercase")
+	_, err = fleet.NewWorker(reg, fac, sink, []fleet.Capability{"cpu"}, -time.Second, 0, nil)
+	require.ErrorContains(t, err, "timeout must not be negative")
 }
 
 func TestWorker_capabilityNormalization(t *testing.T) {

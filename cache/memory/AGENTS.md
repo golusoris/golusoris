@@ -27,8 +27,9 @@ func NewUserService(c *memory.Cache) *UserService {
 | `memory.Module` | fx module — provides `*memory.Cache` |
 | `memory.Typed[K, V](c, prefix)` | Type-safe view with key prefix |
 | `TypedCache.Get(k)` | Returns `(V, bool)` — no allocation on miss |
-| `TypedCache.Set(k, v)` | Returns `bool` (false = dropped at capacity) |
+| `TypedCache.Set(k, v)` | Returns `bool`: true on insert, false on replacement |
 | `TypedCache.Delete(k)` | Invalidates the key |
+| `TypedCache.SetExpiresAfter(k, ttl)` | Per-entry expiry override |
 
 ## Config
 
@@ -37,8 +38,11 @@ cache.memory.max_size = 10000   # max entries (default 10_000)
 cache.memory.ttl      = 5m      # write TTL, 0 = no expiry (default 5m)
 ```
 
+Zero default TTL still permits positive per-entry `SetExpiresAfter` overrides.
+Nonpositive maximum size and negative TTL fail construction.
+
 ## Don't
 
 - Don't store pointer-heavy structs that outlive their owner — otter holds references, not copies.
-- Don't use as a distributed cache — it's per-replica. Use `cache/redis` for cross-replica sharing.
-- Don't key by floating-point values — `Typed` keys via `fmt.Sprintf("%v", k)`, which is non-canonical for floats.
+- Don't use as distributed cache — it's per-replica. Use `cache/redis` for cross-replica sharing.
+- Typed key identity uses Go equality plus namespace; no string formatting.

@@ -19,22 +19,35 @@ package timescale
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // DB wraps a pgxpool.Pool with TimescaleDB-specific helpers.
-type DB struct{ pool *pgxpool.Pool }
+type DB struct {
+	pool        *pgxpool.Pool
+	initialized bool
+}
 
 // New returns a TimescaleDB helper backed by pool.
 // The pool must connect to a TimescaleDB-enabled PostgreSQL instance.
-func New(pool *pgxpool.Pool) *DB { return &DB{pool: pool} }
+func New(pool *pgxpool.Pool) *DB {
+	return &DB{pool: pool, initialized: poolInitialized(pool)}
+}
 
 // CreateHypertable converts an existing table into a TimescaleDB hypertable
 // partitioned on timeColumn. Idempotent: succeeds if the hypertable already exists.
 func (d *DB) CreateHypertable(ctx context.Context, table, timeColumn string) error {
+	if poolErr := d.validatePool(); poolErr != nil {
+		return poolErr
+	}
 	// if_not_exists=true makes this safe to call on every startup.
 	_, err := d.pool.Exec(
 		ctx,
@@ -50,11 +63,17 @@ func (d *DB) CreateHypertable(ctx context.Context, table, timeColumn string) err
 // SetRetention configures a data-retention policy that drops chunks older than
 // duration. Call after CreateHypertable.
 func (d *DB) SetRetention(ctx context.Context, table string, duration time.Duration) error {
-	// ($2)::interval — INTERVAL keyword rejects a bound parameter; cast instead.
-	_, err := d.pool.Exec(
+	interval, err := intervalValue(duration)
+	if err != nil {
+		return fmt.Errorf("timescale: retention duration: %w", err)
+	}
+	if poolErr := d.validatePool(); poolErr != nil {
+		return poolErr
+	}
+	_, err = d.pool.Exec(
 		ctx,
 		"SELECT add_retention_policy($1, ($2)::interval, if_not_exists => true)",
-		table, formatInterval(duration),
+		table, interval,
 	)
 	if err != nil {
 		return fmt.Errorf("timescale: add_retention_policy %s: %w", table, err)
@@ -64,10 +83,14 @@ func (d *DB) SetRetention(ctx context.Context, table string, duration time.Durat
 
 // EnableCompression enables TimescaleDB columnar compression on the hypertable.
 func (d *DB) EnableCompression(ctx context.Context, table string) error {
-	_, err := d.pool.Exec(
-		ctx,
-		fmt.Sprintf("ALTER TABLE %s SET (timescaledb.compress)", table),
-	)
+	query, err := compressionSQL(table)
+	if err != nil {
+		return fmt.Errorf("timescale: enable compression: %w", err)
+	}
+	if poolErr := d.validatePool(); poolErr != nil {
+		return poolErr
+	}
+	_, err = d.pool.Exec(ctx, query)
 	if err != nil {
 		return fmt.Errorf("timescale: enable compression %s: %w", table, err)
 	}
@@ -77,11 +100,17 @@ func (d *DB) EnableCompression(ctx context.Context, table string) error {
 // AddCompressionPolicy adds an automatic compression policy that compresses
 // chunks older than olderThan.
 func (d *DB) AddCompressionPolicy(ctx context.Context, table string, olderThan time.Duration) error {
-	// ($2)::interval — INTERVAL keyword rejects a bound parameter; cast instead.
-	_, err := d.pool.Exec(
+	interval, err := intervalValue(olderThan)
+	if err != nil {
+		return fmt.Errorf("timescale: compression duration: %w", err)
+	}
+	if poolErr := d.validatePool(); poolErr != nil {
+		return poolErr
+	}
+	_, err = d.pool.Exec(
 		ctx,
 		"SELECT add_compression_policy($1, ($2)::interval, if_not_exists => true)",
-		table, formatInterval(olderThan),
+		table, interval,
 	)
 	if err != nil {
 		return fmt.Errorf("timescale: add_compression_policy %s: %w", table, err)
@@ -90,14 +119,55 @@ func (d *DB) AddCompressionPolicy(ctx context.Context, table string, olderThan t
 }
 
 // Pool returns the underlying pgxpool.Pool.
-func (d *DB) Pool() *pgxpool.Pool { return d.pool }
-
-// formatInterval converts a Go duration to a PostgreSQL interval string
-// suitable for TimescaleDB policy calls.
-func formatInterval(d time.Duration) string {
-	hours := int(d.Hours())
-	if hours%24 == 0 {
-		return fmt.Sprintf("%d days", hours/24)
+func (d *DB) Pool() *pgxpool.Pool {
+	if d == nil || !d.initialized {
+		return nil
 	}
-	return fmt.Sprintf("%d hours", hours)
+	return d.pool
+}
+
+func (d *DB) validatePool() error {
+	if d == nil || d.pool == nil {
+		return errors.New("timescale: nil pool")
+	}
+	if !d.initialized {
+		return errors.New("timescale: invalid pool")
+	}
+	return nil
+}
+
+func poolInitialized(pool *pgxpool.Pool) (initialized bool) {
+	if pool == nil {
+		return false
+	}
+	defer func() {
+		if recover() != nil {
+			initialized = false
+		}
+	}()
+	return pool.Config() != nil
+}
+
+func intervalValue(duration time.Duration) (pgtype.Interval, error) {
+	if duration <= 0 {
+		return pgtype.Interval{}, errors.New("duration must be positive")
+	}
+	if duration%time.Microsecond != 0 {
+		return pgtype.Interval{}, errors.New("duration must have microsecond precision")
+	}
+	return pgtype.Interval{Microseconds: duration.Microseconds(), Valid: true}, nil
+}
+
+func compressionSQL(table string) (string, error) {
+	if table == "" {
+		return "", errors.New("table is required")
+	}
+	if strings.ContainsRune(table, '\x00') {
+		return "", errors.New("table contains NUL")
+	}
+	parts := strings.Split(table, ".")
+	if len(parts) > 2 || slices.Contains(parts, "") {
+		return "", errors.New("table must be an identifier or schema-qualified identifier")
+	}
+	return "ALTER TABLE " + pgx.Identifier(parts).Sanitize() + " SET (timescaledb.compress)", nil
 }

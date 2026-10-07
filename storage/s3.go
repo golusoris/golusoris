@@ -9,7 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
+	"maps"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -89,6 +89,9 @@ func NewS3Bucket(ctx context.Context, opts S3Options) (*S3Bucket, error) {
 	if opts.Region == "" {
 		return nil, errors.New("storage/s3: region is required")
 	}
+	if (opts.AccessKey == "") != (opts.SecretKey == "") {
+		return nil, errors.New("storage/s3: access_key and secret_key must be set together")
+	}
 
 	loadOpts := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(opts.Region)}
 	if opts.AccessKey != "" {
@@ -148,46 +151,66 @@ func (a presignAdapter) PresignGetObject(ctx context.Context, in *s3.GetObjectIn
 
 // Put implements [Bucket].
 func (b *S3Bucket) Put(ctx context.Context, key string, r io.Reader, opts PutOptions) (Object, error) {
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return Object{}, err
+	}
 	contentType := opts.ContentType
 	if contentType == "" {
-		contentType = "application/octet-stream"
+		contentType = DefaultContentType
 	}
+	body, bodySizer, err := newS3Body(ctx.Err, r)
+	if err != nil {
+		return Object{}, err
+	}
+	metadata := maps.Clone(opts.Metadata)
 	in := &s3.PutObjectInput{
 		Bucket:      aws.String(b.bucket),
-		Key:         aws.String(key),
-		Body:        r,
+		Key:         aws.String(clean),
+		Body:        body,
 		ContentType: aws.String(contentType),
 	}
-	if len(opts.Metadata) > 0 {
-		in.Metadata = opts.Metadata
+	if len(metadata) > 0 {
+		in.Metadata = metadata
 	}
 	out, err := b.client.PutObject(ctx, in)
 	if err != nil {
-		return Object{}, fmt.Errorf("storage/s3: put %q: %w", key, err)
+		return Object{}, fmt.Errorf("storage/s3: put %q: %w", clean, err)
+	}
+	size, err := bodySizer.size()
+	if err != nil {
+		return Object{}, fmt.Errorf("storage/s3: measure put %q: %w", clean, err)
 	}
 	return Object{
-		Key:         key,
+		Key:         clean,
+		Size:        size,
 		ContentType: contentType,
+		Metadata:    maps.Clone(metadata),
 		ETag:        aws.ToString(out.ETag),
 	}, nil
 }
 
 // Get implements [Bucket]. The caller must close the returned ReadCloser.
 func (b *S3Bucket) Get(ctx context.Context, key string) (io.ReadCloser, Object, error) {
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return nil, Object{}, err
+	}
 	out, err := b.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(clean),
 	})
 	if err != nil {
 		if isNotFound(err) {
 			return nil, Object{}, ErrNotFound
 		}
-		return nil, Object{}, fmt.Errorf("storage/s3: get %q: %w", key, err)
+		return nil, Object{}, fmt.Errorf("storage/s3: get %q: %w", clean, err)
 	}
 	obj := Object{
-		Key:          key,
+		Key:          clean,
 		Size:         aws.ToInt64(out.ContentLength),
 		ContentType:  aws.ToString(out.ContentType),
+		Metadata:     maps.Clone(out.Metadata),
 		ETag:         aws.ToString(out.ETag),
 		LastModified: aws.ToTime(out.LastModified),
 	}
@@ -197,27 +220,35 @@ func (b *S3Bucket) Get(ctx context.Context, key string) (io.ReadCloser, Object, 
 // Delete implements [Bucket]. Deleting a missing key is not an error (S3
 // DeleteObject is idempotent).
 func (b *S3Bucket) Delete(ctx context.Context, key string) error {
-	_, err := b.client.DeleteObject(ctx, &s3.DeleteObjectInput{
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return err
+	}
+	_, err = b.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(clean),
 	})
 	if err != nil {
-		return fmt.Errorf("storage/s3: delete %q: %w", key, err)
+		return fmt.Errorf("storage/s3: delete %q: %w", clean, err)
 	}
 	return nil
 }
 
 // Exists implements [Bucket].
 func (b *S3Bucket) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return false, err
+	}
+	_, err = b.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(clean),
 	})
 	if err != nil {
 		if isNotFound(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("storage/s3: head %q: %w", key, err)
+		return false, fmt.Errorf("storage/s3: head %q: %w", clean, err)
 	}
 	return true, nil
 }
@@ -225,20 +256,25 @@ func (b *S3Bucket) Exists(ctx context.Context, key string) (bool, error) {
 // Stat implements [Bucket] via HeadObject, returning metadata without the
 // body. Maps S3 404 / NotFound to [ErrNotFound].
 func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return Object{}, err
+	}
 	out, err := b.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(clean),
 	})
 	if err != nil {
 		if isNotFound(err) {
 			return Object{}, ErrNotFound
 		}
-		return Object{}, fmt.Errorf("storage/s3: stat %q: %w", key, err)
+		return Object{}, fmt.Errorf("storage/s3: stat %q: %w", clean, err)
 	}
 	return Object{
-		Key:          key,
+		Key:          clean,
 		Size:         aws.ToInt64(out.ContentLength),
 		ContentType:  aws.ToString(out.ContentType),
+		Metadata:     maps.Clone(out.Metadata),
 		ETag:         aws.ToString(out.ETag),
 		LastModified: aws.ToTime(out.LastModified),
 	}, nil
@@ -246,62 +282,85 @@ func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
 
 // List implements [Bucket].
 func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error) {
-	in := &s3.ListObjectsV2Input{Bucket: aws.String(b.bucket)}
-	if opts.Prefix != "" {
-		in.Prefix = aws.String(opts.Prefix)
+	limit, err := normalizeListLimit(opts.Limit)
+	if err != nil {
+		return nil, err
 	}
-	if opts.Limit > 0 {
-		in.MaxKeys = aws.Int32(clampInt32(opts.Limit))
+	prefix, err := cleanS3Prefix(opts.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
+	}
+	maxKeys := int32(limit) // #nosec G115 -- normalizeListLimit proves the value is within 1..1000.
+	in := &s3.ListObjectsV2Input{
+		Bucket:  aws.String(b.bucket),
+		MaxKeys: aws.Int32(maxKeys),
+	}
+	if prefix != "" {
+		in.Prefix = aws.String(prefix)
 	}
 
-	var out []Object
-	for ctx.Err() == nil {
-		page, err := b.client.ListObjectsV2(ctx, in)
-		if err != nil {
-			return nil, fmt.Errorf("storage/s3: list %q: %w", opts.Prefix, err)
-		}
-		for i := range page.Contents {
-			c := page.Contents[i]
-			out = append(out, Object{
-				Key:          aws.ToString(c.Key),
-				Size:         aws.ToInt64(c.Size),
-				ETag:         aws.ToString(c.ETag),
-				LastModified: aws.ToTime(c.LastModified),
-			})
-			if opts.Limit > 0 && len(out) >= opts.Limit {
-				return out, nil
-			}
-		}
-		if !aws.ToBool(page.IsTruncated) || page.NextContinuationToken == nil {
-			return out, nil
-		}
-		in.ContinuationToken = page.NextContinuationToken
+	page, err := b.client.ListObjectsV2(ctx, in)
+	if err != nil {
+		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
 	}
-	return nil, fmt.Errorf("storage/s3: list %q: %w", opts.Prefix, ctx.Err())
+	if err = ctx.Err(); err != nil {
+		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
+	}
+	count := min(limit, len(page.Contents))
+	out := make([]Object, 0, count)
+	for i := range count {
+		if err = ctx.Err(); err != nil {
+			return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
+		}
+		item := page.Contents[i]
+		key, keyErr := cleanS3Key(aws.ToString(item.Key))
+		if keyErr != nil {
+			return nil, fmt.Errorf("storage/s3: unsafe listed key: %w", keyErr)
+		}
+		out = append(out, Object{
+			Key:          key,
+			Size:         aws.ToInt64(item.Size),
+			ETag:         aws.ToString(item.ETag),
+			LastModified: aws.ToTime(item.LastModified),
+		})
+	}
+	return out, nil
 }
 
 // URL implements [Bucket] by issuing a presigned GET valid for the configured
 // PresignTTL. The object need not exist; the URL is signed, not validated.
 func (b *S3Bucket) URL(ctx context.Context, key string) (string, error) {
+	clean, err := cleanS3Key(key)
+	if err != nil {
+		return "", err
+	}
 	req, err := b.presigner.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(b.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(clean),
 	}, func(po *s3.PresignOptions) { po.Expires = b.presignTTL })
 	if err != nil {
-		return "", fmt.Errorf("storage/s3: presign %q: %w", key, err)
+		return "", fmt.Errorf("storage/s3: presign %q: %w", clean, err)
 	}
 	return req.URL, nil
 }
 
-// clampInt32 caps n to the int32 range for List's MaxKeys, avoiding overflow.
-func clampInt32(n int) int32 {
-	if n >= math.MaxInt32 {
-		return math.MaxInt32
+func cleanS3Key(key string) (string, error) {
+	clean, err := CleanKey(key, MaxKeyBytes)
+	if err != nil {
+		return "", fmt.Errorf("storage/s3: validate key: %w", err)
 	}
-	if n <= 0 {
-		return 0
+	return clean, nil
+}
+
+func cleanS3Prefix(prefix string) (string, error) {
+	clean, err := cleanListPrefix(prefix)
+	if err != nil {
+		return "", fmt.Errorf("storage/s3: validate list prefix: %w", err)
 	}
-	return int32(n) //nolint:gosec // G115: bounded above by MaxInt32 and below by 0 directly above
+	return clean, nil
 }
 
 // isNotFound reports whether err is an S3 "no such key"/404 response. The SDK
@@ -313,8 +372,7 @@ func isNotFound(err error) bool {
 	if errors.As(err, &noKey) || errors.As(err, &notFound) {
 		return true
 	}
-	var apiErr smithy.APIError
-	if errors.As(err, &apiErr) {
+	if apiErr, ok := errors.AsType[smithy.APIError](err); ok {
 		switch apiErr.ErrorCode() {
 		case "NoSuchKey", "NotFound", "404":
 			return true

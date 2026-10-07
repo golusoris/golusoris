@@ -21,7 +21,8 @@ deferred/merge/always/scroll props, encrypted history, and an optional Node SSR
 round-trip. Getting any of these subtly wrong silently diverges from the JS
 client. The framework needs an adapter that ships the full Inertia.js v2
 protocol, couples to nothing beyond `net/http`, and keeps the supply-chain
-surface clean ([principles.md §2.5](../principles.md): SLSA L3, govulncheck-zero).
+surface clean ([principles.md §2.5](../principles.md): build provenance,
+govulncheck-zero).
 
 ## Decision
 

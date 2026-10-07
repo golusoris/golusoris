@@ -42,4 +42,4 @@ KRW, VND, …). `New(150, "JPY").String()` returns `"150 JPY"`.
 - Don't store `Money` as float64 — rounding errors accumulate. Use minor units.
 - Don't compare `.MajorUnits()` for equality — use `m.Amount == other.Amount`.
 - Don't cross currencies — `Add`/`Sub` return `ErrCurrencyMismatch`; check
-  `SameCurrency` up front when you need to branch before arithmetic.
+ `SameCurrency` up front when you need to branch before arithmetic.

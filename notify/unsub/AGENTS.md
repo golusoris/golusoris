@@ -7,13 +7,12 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — notify/unsub/
 
 RFC 8058 one-click unsubscribe + suppression list. Generates HMAC-signed
-URLs, handles POST/GET unsubscribe clicks, and stores suppressions via a
-pluggable `Store`.
+URLs, handles POST/GET unsubscribe clicks, and stores suppressions via pluggable `Store`.
 
 ## Usage
 
 ```go
-svc := unsub.New(store, []byte(secret))
+svc, err := unsub.New(store, []byte(secret))
 
 // When building an email:
 url := svc.URL("https://app.example.com/unsub", "user@example.com")
@@ -29,13 +28,15 @@ if sup, _ := svc.IsSuppressed(ctx, email); sup { return }
 
 ## Store contract
 
-Implement `unsub.Store` (`Add / IsSuppressed / Remove`). A simple
+Implement `unsub.Store` (`Add / IsSuppressed / Remove`). simple
 Postgres table with `(email TEXT PRIMARY KEY, created_at TIMESTAMPTZ)`
 is sufficient.
 
+Constructor: nonnil store; HMAC-SHA256 secret >= 32 bytes; secret cloned.
+
 ## Don't
 
-- Don't use the URL without checking the signature in Handler — forged
-  unsubscribes are a real attack vector.
-- Don't change the secret after deployment — it invalidates all existing
-  one-click links in delivered emails.
+- Don't use URL without checking signature in Handler — forged
+ unsubscribes are real attack vector.
+- Don't change secret after deployment — it invalidates all existing
+ one-click links in delivered emails.

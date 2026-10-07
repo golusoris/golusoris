@@ -7,9 +7,11 @@ package tus
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,13 +19,12 @@ import (
 
 	tusd "github.com/tus/tusd/v2/pkg/handler"
 
-	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/storage"
 )
 
 // newTestStore wires a bucketStore over a real LocalBucket + local scratch in
-// temp dirs, capturing completion events for assertions.
-func newTestStore(t *testing.T) (*bucketStore, storage.Bucket, *[]CompletedUpload) {
+// temp dirs, returning scratch for durable completion assertions.
+func newTestStore(t *testing.T) (*bucketStore, storage.Bucket, *localScratch) {
 	t.Helper()
 	bucket, err := storage.NewLocalBucket(t.TempDir())
 	if err != nil {
@@ -33,21 +34,17 @@ func newTestStore(t *testing.T) (*bucketStore, storage.Bucket, *[]CompletedUploa
 	if err != nil {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
-	var got []CompletedUpload
-	onFinish := func(_ context.Context, c CompletedUpload) error {
-		got = append(got, c)
-		return nil
-	}
 	log := slog.New(slog.DiscardHandler)
 	store := newBucketStore(
-		scratch, bucket, defaultKeyFunc("uploads/"), clock.NewFake(), log, onFinish,
+		scratch, bucket, defaultKeyFunc("uploads/"), log,
+		func(context.Context, string) error { return nil },
 	)
-	return store, bucket, &got
+	return store, bucket, scratch
 }
 
 func TestBucketStore_NewUploadWriteFinish(t *testing.T) {
 	t.Parallel()
-	store, bucket, completed := newTestStore(t)
+	store, bucket, scratch := newTestStore(t)
 	ctx := context.Background()
 
 	up, err := store.NewUpload(ctx, tusd.FileInfo{Size: 11, MetaData: tusd.MetaData{"filename": "a.txt"}})
@@ -89,11 +86,12 @@ func TestBucketStore_NewUploadWriteFinish(t *testing.T) {
 		t.Fatalf("bucket size = %d", obj.Size)
 	}
 
-	// OnComplete fired exactly once with the right key/size/metadata.
-	if len(*completed) != 1 {
-		t.Fatalf("completed count = %d", len(*completed))
+	// Completion is durable with the right key/size/metadata until delivery.
+	record, err := scratch.Completion(ctx, info.ID)
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
 	}
-	ev := (*completed)[0]
+	ev := record.Upload.completed()
 	if ev.Key != key || ev.Size != 11 || ev.MetaData["filename"] != "a.txt" {
 		t.Fatalf("completion mismatch: %+v", ev)
 	}
@@ -269,7 +267,7 @@ func TestFinishUploadRejectsBadKey(t *testing.T) {
 	}
 	// KeyFunc deliberately returns a traversal key; FinishUpload must reject it.
 	evil := func(tusd.FileInfo) (string, error) { return "../escape", nil }
-	store := newBucketStore(scratch, bucket, evil, clock.NewFake(), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(scratch, bucket, evil, slog.New(slog.DiscardHandler), nil)
 
 	ctx := context.Background()
 	up, err := store.NewUpload(ctx, tusd.FileInfo{Size: 1})
@@ -288,6 +286,10 @@ func TestFinishUploadRejectsBadKey(t *testing.T) {
 // FinishUpload persist-failure branch.
 type failBucket struct{ storage.Bucket }
 
+func (failBucket) Get(context.Context, string) (io.ReadCloser, storage.Object, error) {
+	return nil, storage.Object{}, storage.ErrNotFound
+}
+
 func (failBucket) Put(
 	context.Context, string, io.Reader, storage.PutOptions,
 ) (storage.Object, error) {
@@ -301,8 +303,7 @@ func TestFinishUpload_BucketPutError(t *testing.T) {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
 	store := newBucketStore(
-		scratch, failBucket{}, defaultKeyFunc("uploads/"),
-		clock.NewFake(), slog.New(slog.DiscardHandler), nil,
+		scratch, failBucket{}, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil,
 	)
 	ctx := context.Background()
 	up, err := store.NewUpload(ctx, tusd.FileInfo{Size: 1})
@@ -411,6 +412,71 @@ func TestBucketUpload_PutAndClose(t *testing.T) {
 	})
 }
 
+type observedReadCloser struct {
+	r      io.Reader
+	reads  int
+	closed bool
+}
+
+func (r *observedReadCloser) Read(p []byte) (int, error) {
+	r.reads++
+	return r.r.Read(p)
+}
+
+func (r *observedReadCloser) Close() error {
+	r.closed = true
+	return nil
+}
+
+func TestHashAndClose_BoundedAndCancelable(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		body     string
+		expected int64
+		cancel   bool
+		wantErr  bool
+	}{
+		{name: "exact", body: "data", expected: 4},
+		{name: "short", body: "dat", expected: 4, wantErr: true},
+		{name: "long", body: "data!", expected: 4, wantErr: true},
+		{name: "canceled", body: "data", expected: 4, cancel: true, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			if tt.cancel {
+				cancel()
+			} else {
+				defer cancel()
+			}
+			r := &observedReadCloser{r: strings.NewReader(tt.body)}
+			sum, size, err := hashAndClose(ctx, r, tt.expected)
+			if !tt.wantErr && err != nil {
+				t.Fatalf("hashAndClose: %v", err)
+			}
+			if tt.wantErr && err == nil {
+				t.Fatal("hashAndClose error = nil")
+			}
+			if !r.closed {
+				t.Fatal("reader was not closed")
+			}
+			if tt.cancel && r.reads != 0 {
+				t.Fatalf("canceled hash performed %d reads", r.reads)
+			}
+			if tt.cancel && !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled hash error = %v", err)
+			}
+			if !tt.wantErr {
+				if size != tt.expected || sum != sha256.Sum256([]byte(tt.body)) {
+					t.Fatalf("hash result size=%d sum=%x", size, sum)
+				}
+			}
+		})
+	}
+}
+
 // termEntry is a scratchEntry whose Terminate result is configurable; the
 // other methods are unused by the cleanupScratch tests that construct it.
 type termEntry struct{ err error }
@@ -457,45 +523,6 @@ func TestBucketUpload_CleanupScratch(t *testing.T) {
 	})
 }
 
-func TestBucketUpload_NotifyFinish(t *testing.T) {
-	t.Parallel()
-
-	t.Run("nil hook is a no-op", func(t *testing.T) {
-		t.Parallel()
-		u := &bucketUpload{store: &bucketStore{onFinish: nil}, id: "x"}
-		if err := u.notifyFinish(context.Background(), CompletedUpload{ID: "x"}); err != nil {
-			t.Fatalf("notifyFinish: %v", err)
-		}
-	})
-
-	t.Run("hook success receives the completed value", func(t *testing.T) {
-		t.Parallel()
-		var got CompletedUpload
-		u := &bucketUpload{store: &bucketStore{onFinish: func(_ context.Context, c CompletedUpload) error {
-			got = c
-			return nil
-		}}, id: "x"}
-		want := CompletedUpload{ID: "x", Key: "k", Size: 5}
-		if err := u.notifyFinish(context.Background(), want); err != nil {
-			t.Fatalf("notifyFinish: %v", err)
-		}
-		if got.ID != want.ID || got.Key != want.Key || got.Size != want.Size {
-			t.Fatalf("hook received %+v, want %+v", got, want)
-		}
-	})
-
-	t.Run("hook error is wrapped", func(t *testing.T) {
-		t.Parallel()
-		u := &bucketUpload{store: &bucketStore{onFinish: func(context.Context, CompletedUpload) error {
-			return errBoom
-		}}, id: "x"}
-		err := u.notifyFinish(context.Background(), CompletedUpload{})
-		if !errors.Is(err, errBoom) {
-			t.Fatalf("err = %v, want wrapped errBoom", err)
-		}
-	})
-}
-
 func TestScratch_GetReaderAndWriteOnRemoved(t *testing.T) {
 	t.Parallel()
 	scratch, err := newLocalScratch(t.TempDir())
@@ -516,6 +543,214 @@ func TestScratch_GetReaderAndWriteOnRemoved(t *testing.T) {
 	}
 	if _, err = entry.WriteChunk(ctx, 0, strings.NewReader("y")); err == nil {
 		t.Fatal("WriteChunk on removed scratch should error")
+	}
+}
+
+func TestLocalScratch_CreateDoesNotTruncateExistingUpload(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	entry, err := scratch.Create(ctx, tusd.FileInfo{ID: "same", Size: 8})
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err = entry.WriteChunk(ctx, 0, strings.NewReader("original")); err != nil {
+		t.Fatalf("WriteChunk: %v", err)
+	}
+	if _, err = scratch.Create(ctx, tusd.FileInfo{ID: "same", Size: 3}); err == nil {
+		t.Fatal("duplicate Create succeeded")
+	}
+	rc, err := entry.GetReader(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "original" {
+		t.Fatalf("duplicate Create changed bytes to %q", data)
+	}
+}
+
+func TestLocalScratch_CreateCleansBinWhenInfoCreationFails(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	scratch, err := newLocalScratch(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(filepath.Join(root, "orphan.info"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = scratch.Create(context.Background(), tusd.FileInfo{ID: "orphan"}); err == nil {
+		t.Fatal("Create succeeded with unusable info path")
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "orphan")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("orphan bin state = %v; want absent", statErr)
+	}
+}
+
+func TestLocalEntry_WriteChunkRejectsWrongOffset(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	entry, err := scratch.Create(ctx, tusd.FileInfo{ID: "offset"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = entry.WriteChunk(ctx, 0, strings.NewReader("abc")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = entry.WriteChunk(ctx, 0, strings.NewReader("duplicate")); err == nil {
+		t.Fatal("WriteChunk accepted stale offset")
+	}
+	rc, err := entry.GetReader(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rc.Close() }()
+	data, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "abc" {
+		t.Fatalf("wrong-offset write changed bytes to %q", data)
+	}
+}
+
+type cancelAfterRead struct {
+	cancel context.CancelFunc
+	done   bool
+}
+
+func (r *cancelAfterRead) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, io.EOF
+	}
+	r.done = true
+	p[0] = 'x'
+	r.cancel()
+	return 1, nil
+}
+
+func TestLocalEntry_WriteChunkHonorsCancellationDuringRead(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, err := scratch.Create(context.Background(), tusd.FileInfo{ID: "cancel"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	n, err := entry.WriteChunk(ctx, 0, &cancelAfterRead{cancel: cancel})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("WriteChunk error = %v; want context.Canceled", err)
+	}
+	if n != 1 {
+		t.Fatalf("WriteChunk wrote %d bytes; want committed partial byte", n)
+	}
+	info, infoErr := entry.GetInfo(context.Background())
+	if infoErr != nil || info.Offset != 1 {
+		t.Fatalf("offset = %d, err = %v; want 1", info.Offset, infoErr)
+	}
+}
+
+func TestLocalScratch_PreCanceledOperationsPreserveRecoveryState(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	background := context.Background()
+	entry, err := scratch.Create(background, tusd.FileInfo{ID: "preserve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = entry.WriteChunk(background, 0, strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	original := newCompletionRecord(CompletedUpload{ID: "preserve", Key: "objects/original", Size: 4})
+	if err = scratch.SaveCompletion(background, original); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(background)
+	cancel()
+
+	if _, getErr := scratch.Get(ctx, "preserve"); !errors.Is(getErr, context.Canceled) {
+		t.Fatalf("Get error = %v; want context.Canceled", getErr)
+	}
+	updated := newCompletionRecord(CompletedUpload{ID: "preserve", Key: "objects/updated", Size: 4})
+	if saveErr := scratch.SaveCompletion(ctx, updated); !errors.Is(saveErr, context.Canceled) {
+		t.Fatalf("SaveCompletion error = %v; want context.Canceled", saveErr)
+	}
+	if _, completionErr := scratch.Completion(ctx, "preserve"); !errors.Is(completionErr, context.Canceled) {
+		t.Fatalf("Completion error = %v; want context.Canceled", completionErr)
+	}
+	if reader, readerErr := entry.GetReader(ctx); !errors.Is(readerErr, context.Canceled) {
+		if reader != nil {
+			_ = reader.Close()
+		}
+		t.Fatalf("GetReader error = %v; want context.Canceled", readerErr)
+	}
+	if deleteErr := scratch.DeleteCompletion(ctx, "preserve"); !errors.Is(deleteErr, context.Canceled) {
+		t.Fatalf("DeleteCompletion error = %v; want context.Canceled", deleteErr)
+	}
+	if removeErr := scratch.RemoveUpload(ctx, "preserve"); !errors.Is(removeErr, context.Canceled) {
+		t.Fatalf("RemoveUpload error = %v; want context.Canceled", removeErr)
+	}
+
+	preserved, err := scratch.Completion(background, "preserve")
+	if err != nil {
+		t.Fatalf("preserved Completion: %v", err)
+	}
+	if preserved.Upload.Key != original.Upload.Key {
+		t.Fatalf("completion key = %q; want %q", preserved.Upload.Key, original.Upload.Key)
+	}
+	preservedEntry, err := scratch.Get(background, "preserve")
+	if err != nil {
+		t.Fatalf("preserved Get: %v", err)
+	}
+	info, err := preservedEntry.GetInfo(background)
+	if err != nil || info.Offset != 4 {
+		t.Fatalf("preserved offset = %d, err = %v; want 4", info.Offset, err)
+	}
+}
+
+func TestLocalScratch_DeleteCompletionSyncFailureIsIndeterminate(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := newCompletionRecord(CompletedUpload{ID: "ack", Key: "objects/ack", Size: 4})
+	if err = scratch.SaveCompletion(context.Background(), record); err != nil {
+		t.Fatal(err)
+	}
+	wantErr := errors.New("injected receipt directory sync failure")
+	scratch.syncParent = func(path string) error {
+		if path != filepath.Join(scratch.root, "ack"+completionSuffix) {
+			t.Fatalf("sync path = %q", path)
+		}
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("receipt state during sync = %v; want absent", statErr)
+		}
+		return wantErr
+	}
+	if err = scratch.DeleteCompletion(context.Background(), "ack"); !errors.Is(err, wantErr) {
+		t.Fatalf("DeleteCompletion error = %v; want injected sync error", err)
+	}
+	if _, err = scratch.Completion(context.Background(), "ack"); !errors.Is(err, tusd.ErrNotFound) {
+		t.Fatalf("Completion after indeterminate delete = %v; want not found", err)
 	}
 }
 

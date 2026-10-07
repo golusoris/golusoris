@@ -2,25 +2,24 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package session manages server-side sessions stored in Redis or
-// Postgres. Each session is a JSON blob keyed by a random, opaque
-// session ID. The ID is stored in a cookie; the data lives server-side.
+// Package session manages server-side sessions through a pluggable Store.
+// Each session is keyed by a random opaque ID stored in a cookie.
 //
-// Storage is pluggable via [Store]. The package ships a [RedisStore]
-// backed by rueidis and an [MemoryStore] for tests.
+// Storage is pluggable via [Store]. The package ships [MemoryStore] for tests;
+// applications provide their own Redis or Postgres implementation.
 //
 // Usage:
 //
-//	mgr := session.NewManager(store, session.Options{
+//	mgr, err := session.NewManager(store, session.Options{
 //	    CookieName: "sid",
 //	    TTL:        24 * time.Hour,
-//	    Secure:     true,
 //	})
+//	if err != nil { /* handle configuration error */ }
 //
 //	// In a handler:
 //	sess, err := mgr.Load(r)
 //	sess.Set("user_id", "u-123")
-//	mgr.Save(w, sess)
+//	mgr.SaveContext(r.Context(), w, sess)
 package session
 
 import (
@@ -31,11 +30,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 const (
@@ -73,8 +74,9 @@ type Store interface {
 type Options struct {
 	CookieName string
 	TTL        time.Duration
-	// Secure sets the Secure flag on the cookie (should be true in prod).
-	Secure bool
+	// AllowInsecureCookie disables the Secure flag for isolated HTTP
+	// development. Cookies are secure by default.
+	AllowInsecureCookie bool
 	// SameSite sets the SameSite policy (default Lax).
 	SameSite http.SameSite
 	// Path is the cookie path (default "/").
@@ -103,9 +105,15 @@ type Manager struct {
 	opts  Options
 }
 
-// NewManager returns a Manager. store must not be nil.
-func NewManager(store Store, opts Options) *Manager {
-	return &Manager{store: store, opts: opts.withDefaults()}
+// NewManager returns a Manager after validating its store and lifetime.
+func NewManager(store Store, opts Options) (*Manager, error) {
+	if validate.IsNil(store) {
+		return nil, errors.New("session: store is required")
+	}
+	if opts.TTL < 0 {
+		return nil, errors.New("session: TTL must not be negative")
+	}
+	return &Manager{store: store, opts: opts.withDefaults()}, nil
 }
 
 // Load reads the session ID from the request cookie and fetches data
@@ -130,18 +138,18 @@ func (m *Manager) Load(r *http.Request) (*Session, error) {
 	return s, nil
 }
 
-// Save persists the session and sets the cookie on w.
-func (m *Manager) Save(w http.ResponseWriter, s *Session) error {
-	if err := m.store.Save(context.Background(), s.ID, s.data, m.opts.TTL); err != nil {
+// SaveContext persists the session using ctx and sets the cookie on w.
+func (m *Manager) SaveContext(ctx context.Context, w http.ResponseWriter, s *Session) error {
+	if err := m.store.Save(ctx, s.ID, s.data, m.opts.TTL); err != nil {
 		return fmt.Errorf("session: save: %w", err)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is default-on with explicit development opt-out // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure defaults true; AllowInsecureCookie is explicit
 		Name:     m.opts.CookieName,
 		Value:    s.ID,
 		Path:     m.opts.Path,
 		MaxAge:   int(m.opts.TTL.Seconds()),
 		HttpOnly: true,
-		Secure:   m.opts.Secure,
+		Secure:   !m.opts.AllowInsecureCookie,
 		SameSite: m.opts.SameSite,
 	})
 	return nil
@@ -153,17 +161,17 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return nil //nolint:nilerr // no cookie = no session to destroy
 	}
-	if delErr := m.store.Delete(context.Background(), cookie.Value); delErr != nil && !isNotFound(delErr) {
+	if delErr := m.store.Delete(r.Context(), cookie.Value); delErr != nil && !isNotFound(delErr) {
 		return fmt.Errorf("session: destroy: %w", delErr)
 	}
-	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure/HttpOnly set by caller config // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure comes from Options.Secure (true in prod)
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is default-on with explicit development opt-out // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure defaults true; AllowInsecureCookie is explicit
 		Name:     m.opts.CookieName,
 		Value:    "",
 		Path:     m.opts.Path,
 		MaxAge:   -1,
 		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
-		Secure:   m.opts.Secure,
+		Secure:   !m.opts.AllowInsecureCookie,
 		SameSite: m.opts.SameSite,
 	})
 	return nil
@@ -172,6 +180,7 @@ func (m *Manager) Destroy(w http.ResponseWriter, r *http.Request) error {
 // MemoryStore is an in-process store for tests. Not safe for
 // multi-replica deployments.
 type MemoryStore struct {
+	mu   sync.Mutex
 	data map[string]memEntry
 	clk  clockwork.Clock
 }
@@ -183,20 +192,36 @@ type memEntry struct {
 
 // NewMemoryStore returns an initialised in-memory store using the real clock.
 func NewMemoryStore() *MemoryStore {
-	return NewMemoryStoreWithClock(clockwork.NewRealClock())
+	return newMemoryStore(clockwork.NewRealClock())
 }
 
 // NewMemoryStoreWithClock returns an initialised in-memory store with an injected clock.
-func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
-	return &MemoryStore{data: make(map[string]memEntry), clk: clk}
+func NewMemoryStoreWithClock(clk clockwork.Clock) (*MemoryStore, error) {
+	if validate.IsNil(clk) {
+		return nil, errors.New("session/memory: clock is required")
+	}
+	return newMemoryStore(clk), nil
 }
 
 // Load implements [Store].
-func (m *MemoryStore) Load(_ context.Context, id string) (map[string]any, error) {
+func (m *MemoryStore) Load(ctx context.Context, id string) (map[string]any, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("session/memory: load: %w", err)
+	}
+	m.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		m.mu.Unlock()
+		return nil, fmt.Errorf("session/memory: load: %w", err)
+	}
 	e, ok := m.data[id]
-	if !ok || m.clk.Now().After(e.expires) {
+	if !ok || !m.clk.Now().Before(e.expires) {
+		if ok {
+			delete(m.data, id)
+		}
+		m.mu.Unlock()
 		return nil, gerr.NotFound("session not found")
 	}
+	m.mu.Unlock()
 	// Deep-copy via JSON to prevent mutation.
 	b, err := json.Marshal(e.data)
 	if err != nil {
@@ -206,11 +231,17 @@ func (m *MemoryStore) Load(_ context.Context, id string) (map[string]any, error)
 	if unmarshalErr := json.Unmarshal(b, &out); unmarshalErr != nil {
 		return nil, fmt.Errorf("session/memory: unmarshal: %w", unmarshalErr)
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("session/memory: load: %w", err)
+	}
 	return out, nil
 }
 
 // Save implements [Store].
-func (m *MemoryStore) Save(_ context.Context, id string, data map[string]any, ttl time.Duration) error {
+func (m *MemoryStore) Save(ctx context.Context, id string, data map[string]any, ttl time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("session/memory: save: %w", err)
+	}
 	b, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("session/memory: marshal: %w", err)
@@ -219,13 +250,31 @@ func (m *MemoryStore) Save(_ context.Context, id string, data map[string]any, tt
 	if unmarshalErr := json.Unmarshal(b, &cp); unmarshalErr != nil {
 		return fmt.Errorf("session/memory: unmarshal: %w", unmarshalErr)
 	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("session/memory: save: %w", err)
+	}
+	m.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("session/memory: save: %w", err)
+	}
 	m.data[id] = memEntry{data: cp, expires: m.clk.Now().Add(ttl)}
+	m.mu.Unlock()
 	return nil
 }
 
 // Delete implements [Store].
-func (m *MemoryStore) Delete(_ context.Context, id string) error {
+func (m *MemoryStore) Delete(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("session/memory: delete: %w", err)
+	}
+	m.mu.Lock()
+	if err := ctx.Err(); err != nil {
+		m.mu.Unlock()
+		return fmt.Errorf("session/memory: delete: %w", err)
+	}
 	delete(m.data, id)
+	m.mu.Unlock()
 	return nil
 }
 
@@ -251,4 +300,8 @@ func genID() (string, error) {
 func isNotFound(err error) bool {
 	var e *gerr.Error
 	return errors.As(err, &e) && e.Code == gerr.CodeNotFound
+}
+
+func newMemoryStore(clk clockwork.Clock) *MemoryStore {
+	return &MemoryStore{data: make(map[string]memEntry), clk: clk}
 }

@@ -5,12 +5,31 @@
 package ratelimit_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
+
+	"github.com/ulule/limiter/v3"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 
 	"github.com/golusoris/golusoris/httpx/ratelimit"
 )
+
+type recordingStore struct {
+	limiter.Store
+	gets atomic.Int64
+}
+
+func (s *recordingStore) Get(
+	ctx context.Context,
+	key string,
+	rate limiter.Rate,
+) (limiter.Context, error) {
+	s.gets.Add(1)
+	return s.Store.Get(ctx, key, rate)
+}
 
 func TestEmptyRateIsNoop(t *testing.T) {
 	t.Parallel()
@@ -56,10 +75,45 @@ func TestRateEnforced(t *testing.T) {
 	}
 }
 
+func TestConfiguredStoreIsUsed(t *testing.T) {
+	t.Parallel()
+	store := &recordingStore{Store: memory.NewStore()}
+	mw, err := ratelimit.New(ratelimit.Options{Rate: "2-S", Store: store})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	if got := store.gets.Load(); got != 1 {
+		t.Fatalf("store Get calls = %d, want 1", got)
+	}
+}
+
+func TestTypedNilStoreIsRejected(t *testing.T) {
+	t.Parallel()
+	var store *recordingStore
+	if _, err := ratelimit.New(ratelimit.Options{Rate: "2-S", Store: store}); err == nil {
+		t.Fatal("New accepted typed-nil store")
+	}
+}
+
 func TestBadRateErrors(t *testing.T) {
 	t.Parallel()
 	_, err := ratelimit.New(ratelimit.Options{Rate: "not-a-rate"})
 	if err == nil {
 		t.Fatal("expected parse error")
+	}
+}
+
+func TestTrustXFFIsRejected(t *testing.T) {
+	t.Parallel()
+	if _, err := ratelimit.New(ratelimit.Options{Rate: "2-S", TrustXFF: true}); err == nil {
+		t.Fatal("TrustXFF=true succeeded")
 	}
 }

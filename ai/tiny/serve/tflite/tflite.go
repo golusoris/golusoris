@@ -9,8 +9,9 @@
 // Why a sidecar, not in-process: LiteRT inference in Go requires CGo
 // bindings to libtensorflowlite, which drags a C toolchain + platform
 // build matrix into every consumer. Mirroring the ollama adapter, this
-// package is a thin HTTP client to a long-running sidecar
-// (`ghcr.io/golusoris/tiny-litert-server`) that holds the interpreter.
+// package is a thin HTTP client to an application-supplied long-running
+// sidecar that holds the interpreter. Golusoris does not currently ship that
+// runtime; golusoris/golusoris#564 tracks implementation and publication.
 // The sidecar loads the `.tflite` artifact referenced by [tiny.Model.URI]
 // and exposes:
 //
@@ -22,10 +23,9 @@
 // with the sidecar on Load, and maps the sidecar's score map onto a
 // sorted [tiny.Prediction.Labels] slice.
 //
-// Native runtime status: a pure-Go in-process backend is deferred — the
-// sidecar contract is the supported path. The interface below is stable;
-// a future in-process [Predictor] can satisfy it without a consumer
-// change.
+// Runtime status: this client protocol is implemented and tested with HTTP
+// mocks. No compatible sidecar image or native backend ships yet. The
+// interface below lets applications supply either without consumer changes.
 package tflite
 
 import (
@@ -34,7 +34,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"math"
 	"net/http"
 	"sort"
 	"strings"
@@ -42,7 +42,9 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	"github.com/golusoris/golusoris/ai/tiny/serve/internal/httpoptions"
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // DefaultEndpoint is the LiteRT sidecar HTTP root.
@@ -52,11 +54,13 @@ const DefaultEndpoint = "http://127.0.0.1:8501"
 // outputs are a small label→score map; 256 KiB is generous.
 const DefaultMaxResponseBytes int64 = 256 << 10
 
+const defaultRequestTimeout = 30 * time.Second
+
 // Options configures a [Predictor].
 type Options struct {
 	// Endpoint is the LiteRT sidecar HTTP root (default [DefaultEndpoint]).
 	Endpoint string
-	// HTTPClient defaults to a client with a 30s timeout.
+	// HTTPClient is cloned; a non-positive timeout becomes 30s.
 	HTTPClient *http.Client
 	// MaxResponseBytes caps the response body read size
 	// (default [DefaultMaxResponseBytes]).
@@ -73,21 +77,20 @@ type Predictor struct {
 
 	mu     sync.RWMutex
 	loaded bool
-	labels []string // ordered label set from the loaded model
-	name   string   // tiny.Model.Name (introspection)
+	labels map[string]struct{} // immutable loaded classifier label set
+	name   string              // tiny.Model.Name (introspection)
 }
 
 // NewPredictor returns a Predictor with the given options.
 func NewPredictor(opts Options) *Predictor {
-	if opts.Endpoint == "" {
-		opts.Endpoint = DefaultEndpoint
-	}
-	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
-	}
-	if opts.MaxResponseBytes <= 0 {
-		opts.MaxResponseBytes = DefaultMaxResponseBytes
-	}
+	opts.Endpoint, opts.HTTPClient, opts.MaxResponseBytes = httpoptions.Normalize(
+		opts.Endpoint, opts.HTTPClient, opts.MaxResponseBytes,
+		httpoptions.Defaults{
+			Endpoint:         DefaultEndpoint,
+			RequestTimeout:   defaultRequestTimeout,
+			MaxResponseBytes: DefaultMaxResponseBytes,
+		},
+	)
 	return &Predictor{opts: opts}
 }
 
@@ -107,6 +110,14 @@ func (p *Predictor) Load(ctx context.Context, m tiny.Model) error {
 	if m.Format != tiny.FormatTFLite {
 		return fmt.Errorf("ai/tiny/serve/tflite: Format=%s not supported (want tflite)", m.Format)
 	}
+	switch m.Modality {
+	case tiny.ModalityText, tiny.ModalityImage, tiny.ModalityAudio:
+	default:
+		return fmt.Errorf("ai/tiny/serve/tflite: Modality=%s not supported", m.Modality)
+	}
+	if err := tiny.ValidateClassifierLabels(m.Labels); err != nil {
+		return fmt.Errorf("ai/tiny/serve/tflite: validate labels: %w", err)
+	}
 	if m.URI == "" {
 		return errors.New("ai/tiny/serve/tflite: model.URI empty")
 	}
@@ -117,21 +128,26 @@ func (p *Predictor) Load(ctx context.Context, m tiny.Model) error {
 	if err := p.post(ctx, "/load", body, nil); err != nil {
 		return err
 	}
+	labels := make(map[string]struct{}, len(m.Labels))
+	for _, label := range m.Labels {
+		labels[label] = struct{}{}
+	}
 	p.mu.Lock()
 	p.loaded = true
-	p.labels = append([]string(nil), m.Labels...)
+	p.labels = labels
 	p.name = m.Name
 	p.mu.Unlock()
 	return nil
 }
 
-// Predict sends input to the sidecar and maps the returned score map
-// onto a sorted [tiny.Prediction.Labels] slice (desc by score). Input is
-// passed through verbatim as JSON — the sidecar interprets it per the
-// model's modality (text string, image bytes/path, audio samples).
+// Predict sends input to the sidecar, verifies the response contains exactly
+// the loaded model's labels with finite probabilities in [0,1], and maps it
+// onto a sorted [tiny.Prediction.Labels] slice (desc by score). Input is passed
+// through verbatim as JSON; the sidecar interprets it per the model's modality.
 func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, error) {
 	p.mu.RLock()
 	loaded := p.loaded
+	labels := p.labels
 	p.mu.RUnlock()
 	if !loaded {
 		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: Load not called")
@@ -149,7 +165,28 @@ func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, er
 	if out.Scores == nil {
 		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: sidecar returned no scores")
 	}
+	if err := validateScores(out.Scores, labels); err != nil {
+		return tiny.Prediction{}, err
+	}
 	return tiny.Prediction{Labels: p.sortScores(out.Scores)}, nil
+}
+
+func validateScores(scores map[string]float32, labels map[string]struct{}) error {
+	if len(scores) != len(labels) {
+		return fmt.Errorf(
+			"ai/tiny/serve/tflite: sidecar label count %d does not match loaded model %d",
+			len(scores), len(labels),
+		)
+	}
+	for label, score := range scores {
+		if _, loaded := labels[label]; !loaded {
+			return fmt.Errorf("ai/tiny/serve/tflite: sidecar label %q was not loaded", label)
+		}
+		if score < 0 || score > 1 || math.IsNaN(float64(score)) || math.IsInf(float64(score), 0) {
+			return fmt.Errorf("ai/tiny/serve/tflite: sidecar probability for %q is outside [0,1]", label)
+		}
+	}
+	return nil
 }
 
 // sortScores converts the sidecar score map into a slice sorted desc by
@@ -190,7 +227,7 @@ func (p *Predictor) post(ctx context.Context, path string, body []byte, out any)
 		return fmt.Errorf("ai/tiny/serve/tflite: %s request: %w", path, dErr)
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/tflite: close "+path+" body") }()
-	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, p.opts.MaxResponseBytes))
+	respBody, readErr := httpclient.ReadAllBounded(resp.Body, p.opts.MaxResponseBytes)
 	if readErr != nil {
 		return fmt.Errorf("ai/tiny/serve/tflite: read %s body: %w", path, readErr)
 	}

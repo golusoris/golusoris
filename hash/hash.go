@@ -20,6 +20,7 @@ import (
 	"crypto/sha1" // #nosec G505 -- SHA-1 for ETag compatibility only
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"hash"
 	"io"
@@ -28,6 +29,13 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/zeebo/blake3"
 )
+
+// HMACSHA256MinKeyBytes is the minimum key length accepted by credential
+// services that use HMAC-SHA256.
+const HMACSHA256MinKeyBytes = sha256.Size
+
+// ErrWeakHMACSHA256Key reports a key shorter than one SHA-256 digest.
+var ErrWeakHMACSHA256Key = errors.New("HMAC-SHA256 key must be at least 32 bytes")
 
 // SHA256 returns the hex-encoded SHA-256 digest of data.
 func SHA256(data []byte) string {
@@ -46,8 +54,11 @@ func SHA256File(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("hash: open %s: %w", path, err)
 	}
-	defer f.Close() //nolint:errcheck
-	return SHA256Reader(f)
+	digest, hashErr := SHA256Reader(f)
+	if closeErr := f.Close(); closeErr != nil {
+		return "", errors.Join(hashErr, fmt.Errorf("hash: close %s: %w", path, closeErr))
+	}
+	return digest, hashErr
 }
 
 // BLAKE3 returns the hex-encoded BLAKE3 digest of data.
@@ -95,6 +106,14 @@ func HMACSHA256(secret, data []byte) []byte {
 	h := hmac.New(sha256.New, secret)
 	h.Write(data)
 	return h.Sum(nil)
+}
+
+// ValidateHMACSHA256Key rejects keys shorter than the SHA-256 digest size.
+func ValidateHMACSHA256Key(secret []byte) error {
+	if len(secret) < HMACSHA256MinKeyBytes {
+		return ErrWeakHMACSHA256Key
+	}
+	return nil
 }
 
 // --- helpers ---

@@ -5,6 +5,7 @@
 package torrent
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -101,6 +102,9 @@ const (
 // newClient builds the configured backend. The qbittorrent backend registers a
 // bounded OnStart login on lc; the others are stateless at construction.
 func newClient(lc fx.Lifecycle, opts Options, logger *slog.Logger) (Client, error) {
+	if logger == nil {
+		return nil, errors.New("torrent: logger is required")
+	}
 	switch opts.Backend {
 	case backendRTorrent:
 		c, err := newRTorrentClient(opts, logger)

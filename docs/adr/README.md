@@ -45,13 +45,16 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0019](0019-praetor-governance-and-capability-contract.md) | Adopt praetor governance; publish `capabilities.yaml` | Accepted | governance, agents, tooling, fleet |
 | [ADR-0020](0020-praetor-conformance-and-release-hardening.md) | Second-wave praetor conformance and release hardening | Proposed | governance, ci, security, releases, praetor |
 
-## Backfill policy
+## Numbering policy
 
-ADRs ≤ ADR-0099 are *backfills* — decisions made before the ADR practice was formalised, captured retroactively from commit history. Status reflects the current code, not the original decision date.
+Use the next available sequential four-digit ID. ADR-0001 through ADR-0007
+are *backfills*: decisions made before the ADR practice was formalised and
+captured retroactively from commit history. Their status reflects current
+code, not the original decision date.
 
-New decisions start at ADR-0100.
+ADR-0008 and later follow the normal proposed/accepted lifecycle.
 
 ## Further reading
 
 - [joelparkerhenderson/architecture-decision-record](https://github.com/joelparkerhenderson/architecture-decision-record) — templates + alternatives (MADR, Y-statements, etc.) + tooling (`adr-tools`).
-- [`docs/architecture/`](../architecture/) — C4 diagrams (PlantUML) referenced from the ADRs.
+- [`docs/architecture/`](../architecture/README.md) — C4 diagrams (PlantUML) referenced from the ADRs.

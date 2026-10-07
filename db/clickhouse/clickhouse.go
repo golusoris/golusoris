@@ -20,14 +20,18 @@ package clickhouse
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	chgo "github.com/ClickHouse/clickhouse-go/v2"
 	chdriver "github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Config holds ClickHouse connection settings.
@@ -61,6 +65,12 @@ type params struct {
 }
 
 func newFromConfig(p params) (*DB, error) {
+	if p.Config == nil {
+		return nil, errors.New("clickhouse: config is required")
+	}
+	if p.Logger == nil {
+		return nil, errors.New("clickhouse: logger is required")
+	}
 	var cfg Config
 	if err := p.Config.Unmarshal("db.clickhouse", &cfg); err != nil {
 		return nil, fmt.Errorf("clickhouse: config: %w", err)
@@ -75,14 +85,7 @@ func newFromConfig(p params) (*DB, error) {
 		cfg.Username = "default"
 	}
 
-	opts := &chgo.Options{
-		Addr: cfg.Addr,
-		Auth: chgo.Auth{
-			Database: cfg.Database,
-			Username: cfg.Username,
-			Password: cfg.Password,
-		},
-	}
+	opts := driverOptions(cfg, p.Logger)
 
 	conn, err := chgo.Open(opts)
 	if err != nil {
@@ -106,8 +109,27 @@ func newFromConfig(p params) (*DB, error) {
 	return db, nil
 }
 
+func driverOptions(cfg Config, logger *slog.Logger) *chgo.Options {
+	opts := &chgo.Options{
+		Addr: slices.Clone(cfg.Addr),
+		Auth: chgo.Auth{
+			Database: cfg.Database,
+			Username: cfg.Username,
+			Password: cfg.Password,
+		},
+		Logger: logger,
+	}
+	if cfg.TLS {
+		opts.TLS = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+	return opts
+}
+
 // Exec executes a DDL or DML statement.
 func (d *DB) Exec(ctx context.Context, query string, args ...any) error {
+	if d == nil || validate.IsNil(d.conn) {
+		return errors.New("clickhouse: nil connection")
+	}
 	if err := d.conn.Exec(ctx, query, args...); err != nil {
 		return fmt.Errorf("clickhouse: exec: %w", err)
 	}
@@ -116,6 +138,9 @@ func (d *DB) Exec(ctx context.Context, query string, args ...any) error {
 
 // Query runs a SELECT and returns rows. The caller must close the returned rows.
 func (d *DB) Query(ctx context.Context, query string, args ...any) (chdriver.Rows, error) {
+	if d == nil || validate.IsNil(d.conn) {
+		return nil, errors.New("clickhouse: nil connection")
+	}
 	rows, err := d.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("clickhouse: query: %w", err)

@@ -5,10 +5,12 @@
 package secrets_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/golusoris/golusoris/secrets"
@@ -59,8 +61,7 @@ func TestFile_notFound(t *testing.T) {
 	t.Parallel()
 	s := secrets.File(t.TempDir())
 	_, err := s.Get(context.Background(), "missing_key")
-	var nf secrets.ErrNotFound
-	if !errors.As(err, &nf) {
+	if _, ok := errors.AsType[secrets.ErrNotFound](err); !ok {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
@@ -71,6 +72,61 @@ func TestFile_pathTraversal(t *testing.T) {
 	_, err := s.Get(context.Background(), "../etc/passwd")
 	if err == nil {
 		t.Fatal("expected error for path-separator key")
+	}
+}
+
+func TestFileRejectsSymlinkEscape(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside-secret")
+	if err := os.WriteFile(outside, []byte("must-not-leak"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	value, err := secrets.File(root).Get(t.Context(), "linked")
+	if err == nil {
+		t.Fatalf("symlink escape returned %q", value)
+	}
+}
+
+func TestFileSizeBoundaries(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	exact := bytes.Repeat([]byte{'x'}, int(secrets.MaxFileBytes))
+	if err := os.WriteFile(filepath.Join(root, "exact"), exact, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	value, err := secrets.File(root).Get(t.Context(), "exact")
+	if err != nil {
+		t.Fatalf("exact boundary: %v", err)
+	}
+	if len(value) != len(exact) {
+		t.Fatalf("exact boundary length = %d, want %d", len(value), len(exact))
+	}
+	if err = os.WriteFile(filepath.Join(root, "large"), append(exact, 'x'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = secrets.File(root).Get(t.Context(), "large"); !errors.Is(err, secrets.ErrTooLarge) {
+		t.Fatalf("oversized error = %v, want ErrTooLarge", err)
+	}
+}
+
+func TestFileRejectsNonRegularAndCanceledReads(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, "directory"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store := secrets.File(root)
+	if _, err := store.Get(t.Context(), "directory"); err == nil {
+		t.Fatal("directory accepted as secret")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := store.Get(ctx, "missing"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("pre-canceled Get error = %v, want context.Canceled", err)
 	}
 }
 
@@ -93,8 +149,40 @@ func TestStatic(t *testing.T) {
 		t.Fatalf("got (%q, %v)", v, err)
 	}
 	_, err = s.Get(context.Background(), "missing")
-	var nf secrets.ErrNotFound
-	if !errors.As(err, &nf) {
+	if _, ok := errors.AsType[secrets.ErrNotFound](err); !ok {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
+}
+
+func TestStaticClonesCallerMap(t *testing.T) {
+	t.Parallel()
+	source := map[string]string{"api_key": "original"}
+	store := secrets.Static(source)
+	source["api_key"] = "mutated"
+	value, err := store.Get(t.Context(), "api_key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if value != "original" {
+		t.Fatalf("value = %q, want original", value)
+	}
+}
+
+func TestStaticDoesNotRaceCallerMutation(t *testing.T) {
+	t.Parallel()
+	source := map[string]string{"api_key": "original"}
+	store := secrets.Static(source)
+	var workers sync.WaitGroup
+	workers.Go(func() {
+		for range 10_000 {
+			source["api_key"] = "mutated"
+		}
+	})
+	for range 10_000 {
+		value, err := store.Get(t.Context(), "api_key")
+		if err != nil || value != "original" {
+			t.Fatalf("Get = (%q, %v), want original", value, err)
+		}
+	}
+	workers.Wait()
 }

@@ -93,4 +93,25 @@ func TestServerRoundTrip(t *testing.T) {
 	if !strings.Contains(text.Text, "golusoris init blog") {
 		t.Errorf("call result = %q, want substring %q", text.Text, "golusoris init blog")
 	}
+
+	invalid := []struct {
+		name string
+		args map[string]any
+	}{
+		{name: "missing required", args: map[string]any{}},
+		{name: "wrong type", args: map[string]any{"name": 7}},
+		{name: "extra property", args: map[string]any{"name": "blog", "unexpected": true}},
+	}
+	for _, tt := range invalid {
+		got, callErr := cs.CallTool(ctx, &mcp.CallToolParams{
+			Name:      "golusoris_init",
+			Arguments: tt.args,
+		})
+		if callErr != nil {
+			t.Fatalf("%s: call schema-invalid tool: %v", tt.name, callErr)
+		}
+		if !got.IsError {
+			t.Fatalf("%s: schema-invalid call returned success; content=%v", tt.name, got.Content)
+		}
+	}
 }

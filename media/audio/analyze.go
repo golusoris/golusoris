@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/bits"
+	"time"
 
 	"github.com/exaring/ebur128"
 )
@@ -20,7 +22,7 @@ const decodeChunkFrames = 8192
 const ctxCheckMask = 0x3F
 
 // decodeChunkNoLimitGuard is the decode-chunk ceiling when no byte budget is
-// configured (maxFrames <= 0). It is generous but finite: real callers always
+// configured (maxFrames < 0). It is generous but finite: real callers always
 // go through [Options.withDefaults], which normalizes MaxDecodedBytes to a
 // positive value, so this branch is a defensive fallback rather than an
 // expected path.
@@ -33,8 +35,11 @@ const decodeChunkNoLimitGuard = 1 << 32
 // this also catches a decoder stuck returning zero frames without EOF, which
 // would otherwise spin the loop forever.
 func decodeChunkLimit(maxFrames int64) int64 {
-	if maxFrames <= 0 {
+	if maxFrames < 0 {
 		return decodeChunkNoLimitGuard
+	}
+	if maxFrames == int64(^uint64(0)>>1) {
+		return maxFrames
 	}
 	return maxFrames + 1
 }
@@ -47,8 +52,11 @@ func (a *analyzer) waveform(ctx context.Context, st pcmStream, buckets int) (Pea
 		return PeakSet{}, fmt.Errorf("audio: waveform: %w: zero channels", ErrCorrupt)
 	}
 	totalFrames := framesFor(info)
-	if totalFrames <= 0 {
-		totalFrames = int64(buckets) // unknown length: degrade to per-read bucketing
+	var acc peakCollector
+	if totalFrames > 0 {
+		acc = newPeakAccumulator(buckets, totalFrames)
+	} else {
+		acc = newStreamingPeakAccumulator(buckets)
 	}
 
 	ps := PeakSet{
@@ -58,10 +66,12 @@ func (a *analyzer) waveform(ctx context.Context, st pcmStream, buckets int) (Pea
 		Min:        make([]float32, buckets),
 		Max:        make([]float32, buckets),
 	}
-	acc := newPeakAccumulator(buckets, totalFrames)
-	read := make([]float32, decodeChunkFrames*ch)
+	read, err := decodeBuffer(ch, a.opts.MaxDecodedBytes)
+	if err != nil {
+		return PeakSet{}, err
+	}
 
-	maxFrames := a.opts.MaxDecodedBytes / int64(bytesPerFrame(ch))
+	maxFrames := a.opts.MaxDecodedBytes / bytesPerFrame(ch)
 	if err := a.streamMono(ctx, st, read, ch, maxFrames, acc.add); err != nil {
 		return PeakSet{}, err
 	}
@@ -78,31 +88,12 @@ func (a *analyzer) streamMono(
 	maxFrames int64,
 	fn func(frameIdx int64, mono float32),
 ) error {
-	var frameIdx int64
-	limit := decodeChunkLimit(maxFrames)
-	for chunk := range limit {
-		if chunk&ctxCheckMask == 0 {
-			if err := ctx.Err(); err != nil {
-				return fmt.Errorf("audio: waveform: %w", err)
-			}
-		}
-		n, err := st.read(read)
-		frames := n / ch
+	return streamPCM(ctx, "waveform", st, read, ch, maxFrames, func(samples []float32, frames int, firstFrame int64) error {
 		for f := range frames {
-			fn(frameIdx, monoMix(read[f*ch:f*ch+ch]))
-			frameIdx++
-			if maxFrames > 0 && frameIdx > maxFrames {
-				return fmt.Errorf("audio: waveform: %w", ErrInputTooLarge)
-			}
+			fn(firstFrame+int64(f), monoMix(samples[f*ch:f*ch+ch]))
 		}
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil
-			}
-			return err // already wrapped by the decoder
-		}
-	}
-	return fmt.Errorf("audio: waveform: exceeded %d decode chunks without EOF", limit)
+		return nil
+	})
 }
 
 // loudness resamples the stream to 48k stereo and runs EBU R128.
@@ -117,39 +108,32 @@ func (a *analyzer) loudness(ctx context.Context, st pcmStream) (Loudness, error)
 		return Loudness{}, fmt.Errorf("audio: loudness: new meter: %w", err)
 	}
 	rs := newStereoResampler(info.SampleRate)
-	read := make([]float32, decodeChunkFrames*ch)
-	maxFrames := a.opts.MaxDecodedBytes / int64(bytesPerFrame(ch))
+	read, err := loudnessDecodeBuffer(ch, info.SampleRate, a.opts.MaxDecodedBytes)
+	if err != nil {
+		return Loudness{}, err
+	}
+	maxFrames := a.opts.MaxDecodedBytes / bytesPerFrame(ch)
+	maxOutputFrames := a.opts.MaxDecodedBytes / bytesPerFrame(2)
+	var outputFrames int64
 
-	var frameIdx int64
-	limit := decodeChunkLimit(maxFrames)
-	reachedEOF := false
-	for chunk := range limit {
-		if chunk&ctxCheckMask == 0 {
-			if cerr := ctx.Err(); cerr != nil {
-				return Loudness{}, fmt.Errorf("audio: loudness: %w", cerr)
-			}
+	err = streamPCM(ctx, "loudness", st, read, ch, maxFrames, func(samples []float32, _ int, _ int64) error {
+		remaining := maxOutputFrames - outputFrames
+		resampled, resampleErr := rs.process(samples, ch, remaining)
+		if resampleErr != nil {
+			return resampleErr
 		}
-		n, rerr := st.read(read)
-		frames := n / ch
-		if frames > 0 {
-			meter.WriteFloat32(rs.process(read[:frames*ch], ch))
-			frameIdx += int64(frames)
-			if maxFrames > 0 && frameIdx > maxFrames {
-				return Loudness{}, fmt.Errorf("audio: loudness: %w", ErrInputTooLarge)
-			}
-		}
-		if rerr != nil {
-			if errors.Is(rerr, io.EOF) {
-				reachedEOF = true
-				break
-			}
-			return Loudness{}, rerr
-		}
+		meter.WriteFloat32(resampled)
+		outputFrames += int64(len(resampled) / 2)
+		return nil
+	})
+	if err != nil {
+		return Loudness{}, err
 	}
-	if !reachedEOF {
-		return Loudness{}, fmt.Errorf("audio: loudness: exceeded %d decode chunks without EOF", limit)
+	flushed, err := rs.flush(maxOutputFrames - outputFrames)
+	if err != nil {
+		return Loudness{}, fmt.Errorf("audio: loudness: %w", err)
 	}
-	meter.WriteFloat32(rs.flush())
+	meter.WriteFloat32(flushed)
 	meter.Finalize()
 	res := meter.Loudness()
 	return Loudness{
@@ -157,6 +141,92 @@ func (a *analyzer) loudness(ctx context.Context, st pcmStream) (Loudness, error)
 		TruePeakDBTP:    res.TruePeak,
 		LoudnessRangeLU: res.LoudnessRange,
 	}, nil
+}
+
+type pcmChunkConsumer func(samples []float32, frames int, firstFrame int64) error
+
+func streamPCM(
+	ctx context.Context,
+	op string,
+	st pcmStream,
+	read []float32,
+	channels int,
+	maxFrames int64,
+	consume pcmChunkConsumer,
+) error {
+	var frameIdx int64
+	limit := decodeChunkLimit(maxFrames)
+	for chunk := range limit {
+		if err := checkDecodeContext(ctx, op, chunk); err != nil {
+			return err
+		}
+		done, err := readPCMChunk(st, read, channels, maxFrames, &frameIdx, consume)
+		if err != nil {
+			return fmt.Errorf("audio: %s: %w", op, err)
+		}
+		if done {
+			return nil
+		}
+	}
+	return fmt.Errorf("audio: %s: exceeded %d decode chunks without EOF", op, limit)
+}
+
+func checkDecodeContext(ctx context.Context, op string, chunk int64) error {
+	if chunk&ctxCheckMask != 0 {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("audio: %s: %w", op, err)
+	}
+	return nil
+}
+
+func readPCMChunk(
+	st pcmStream,
+	read []float32,
+	channels int,
+	maxFrames int64,
+	frameIdx *int64,
+	consume pcmChunkConsumer,
+) (bool, error) {
+	if channels < 1 {
+		return false, fmt.Errorf("%w: invalid channel count %d", ErrCorrupt, channels)
+	}
+	n, readErr := st.read(read)
+	if err := validatePCMRead(n, len(read), channels); err != nil {
+		return false, err
+	}
+	if n == 0 && readErr == nil {
+		return false, io.ErrNoProgress
+	}
+	frames := n / channels
+	if frames > 0 {
+		if exceedsFrameLimit(*frameIdx, int64(frames), maxFrames) {
+			return false, ErrInputTooLarge
+		}
+		if err := consume(read[:frames*channels], frames, *frameIdx); err != nil {
+			return false, err
+		}
+		*frameIdx += int64(frames)
+	}
+	if readErr == nil {
+		return false, nil
+	}
+	if errors.Is(readErr, io.EOF) {
+		return true, nil
+	}
+	return false, readErr // already wrapped by the decoder
+}
+
+func validatePCMRead(samples, bufferSize, channels int) error {
+	if samples < 0 || samples > bufferSize || samples%channels != 0 {
+		return fmt.Errorf("%w: decoder returned %d samples for %d channels", ErrCorrupt, samples, channels)
+	}
+	return nil
+}
+
+func exceedsFrameLimit(current, next, maximum int64) bool {
+	return maximum >= 0 && (current > maximum || next > maximum-current)
 }
 
 // monoMix averages a single interleaved frame to one channel.
@@ -176,13 +246,60 @@ func framesFor(info Info) int64 {
 	if info.SampleRate <= 0 || info.Duration <= 0 {
 		return 0
 	}
-	return int64(info.Duration.Seconds() * float64(info.SampleRate))
+	high, low := bits.Mul64(uint64(info.Duration), uint64(info.SampleRate))
+	divisor := uint64(time.Second)
+	if high >= divisor {
+		return int64(^uint64(0) >> 1)
+	}
+	frames, _ := bits.Div64(high, low, divisor)
+	if frames > ^uint64(0)>>1 {
+		return int64(^uint64(0) >> 1)
+	}
+	return int64(frames)
 }
 
 // bytesPerFrame is the in-memory float32 cost of one inter-channel frame.
-func bytesPerFrame(ch int) int {
+func bytesPerFrame(ch int) int64 {
 	if ch < 1 {
 		ch = 1
 	}
-	return ch * 4
+	return int64(ch) * 4
+}
+
+func decodeBuffer(channels int, maxBytes int64) ([]float32, error) {
+	return decodeBufferWithFrameLimit(channels, maxBytes, decodeChunkFrames)
+}
+
+func loudnessDecodeBuffer(channels, sampleRate int, maxBytes int64) ([]float32, error) {
+	maxFrames := decodeChunkFrames
+	if sampleRate < targetRate {
+		maxFrames = max(int(int64(decodeChunkFrames)*int64(sampleRate)/targetRate), 1)
+	}
+	return decodeBufferWithFrameLimit(channels, maxBytes, maxFrames)
+}
+
+func decodeBufferWithFrameLimit(channels int, maxBytes int64, maxFrames int) ([]float32, error) {
+	frames, err := boundedChunkFrames(channels, maxBytes, 4, maxFrames)
+	if err != nil {
+		return nil, err
+	}
+	return make([]float32, frames*channels), nil
+}
+
+func boundedChunkFrames(channels int, maxBytes, sampleBytes int64, maxFrames int) (int, error) {
+	if channels < 1 || maxBytes <= 0 || sampleBytes <= 0 || maxFrames < 1 {
+		return 0, fmt.Errorf("audio: decode buffer: %w", ErrInputTooLarge)
+	}
+	if int64(channels) > int64(^uint64(0)>>1)/sampleBytes {
+		return 0, fmt.Errorf("audio: decode buffer: %w", ErrInputTooLarge)
+	}
+	frameBytes := int64(channels) * sampleBytes
+	frames := maxBytes / frameBytes
+	if frames < 1 {
+		return 0, fmt.Errorf("audio: decode buffer: %w", ErrInputTooLarge)
+	}
+	if frames > int64(maxFrames) {
+		frames = int64(maxFrames)
+	}
+	return int(frames), nil
 }

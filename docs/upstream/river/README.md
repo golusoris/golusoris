@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# riverqueue/river — v0.34.0 snapshot
+# riverqueue/river — v0.47.0 snapshot
 
-Pinned: **v0.34.0**
-Source: https://pkg.go.dev/github.com/riverqueue/river@v0.34.0
+Pinned: **v0.47.0**
+Source: [tagged source](https://github.com/riverqueue/river/tree/v0.47.0)
 
 ## Key API surface
 
@@ -58,23 +58,25 @@ _, err = client.InsertTx(ctx, tx, MyArgs{UserID: 42}, &river.InsertOpts{
     Queue:    river.QueueDefault,
     Priority: 1,
     MaxAttempts: 5,
-    ScheduledAt: time.Now().Add(5 * time.Minute),
+    ScheduledAt: clk.Now().Add(5 * time.Minute),
 })
 ```
 
 ### Periodic jobs
 
 ```go
-&river.PeriodicJob{
-    ConstructorFunc: func() (river.JobArgs, *river.InsertOpts) {
+periodicJob := river.NewPeriodicJob(
+    river.PeriodicInterval(15*time.Minute),
+    func() (river.JobArgs, *river.InsertOpts) {
         return MyArgs{}, nil
     },
-    RunImmediately: true,
-    Schedule:       river.ScheduleFunc(func(t time.Time) time.Time {
-        return t.Add(15 * time.Minute)
-    }),
-}
+    &river.PeriodicJobOpts{RunOnStart: true},
+)
 ```
+
+Put `periodicJob` in `river.Config.PeriodicJobs` at construction time. Dynamic
+registration uses `client.PeriodicJobs().AddSafely(periodicJob)` and must handle
+the returned validation error.
 
 ### Error handling
 
@@ -104,5 +106,5 @@ driver := riverpgxv5.New(pool)
 
 ## Links
 
-- Changelog: https://github.com/riverqueue/river/blob/master/CHANGELOG.md
-- Docs: https://riverqueue.com/docs
+- [Changelog](https://github.com/riverqueue/river/blob/v0.47.0/CHANGELOG.md)
+- [River documentation](https://riverqueue.com/docs)

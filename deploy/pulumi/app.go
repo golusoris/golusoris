@@ -13,30 +13,55 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/route53"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 // appConfig is the knob set for the ECS Fargate service.
 type appConfig struct {
-	Image    string
-	Replicas int
-	Port     int
-	Region   string // for the awslogs driver
+	Image          string
+	Replicas       int
+	Port           int
+	Region         string // for the awslogs driver
+	Domain         string
+	HostedZoneID   string
+	CertificateARN string
 }
 
 // app exposes the public URL of the deployed service.
 type app struct {
 	Service *ecs.Service
-	URL     pulumi.StringOutput // http://<alb-dns>
+	URL     pulumi.StringOutput // https://<configured-domain>
 	ALBZone pulumi.StringOutput // for route53 alias records
 	ALBDNS  pulumi.StringOutput
 }
 
+// appSecret keeps each secret value in the task-definition dependency graph.
+type appSecret struct {
+	Secret  *secretsmanager.Secret
+	Version *secretsmanager.SecretVersion
+}
+
+// appExecutionRole keeps both resources required before ECS can use the role.
+type appExecutionRole struct {
+	Role          *iam.Role
+	ManagedPolicy *iam.RolePolicyAttachment
+}
+
+type appTaskResources struct {
+	executionRole *appExecutionRole
+	secretPolicy  *iam.RolePolicy
+	dsnSecret     *appSecret
+	redisSecret   *appSecret
+}
+
 // taskCPU + taskMemory are the Fargate sizing defaults (0.25 vCPU / 512 MiB).
 const (
-	taskCPU    = "256"
-	taskMemory = "512"
+	taskCPU      = "256"
+	taskMemory   = "512"
+	albTLSPolicy = "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09"
+	albHSTS      = "max-age=31536000; includeSubDomains; preload"
 )
 
 // newApp wires an ECS Fargate service (rootless, read-only FS) behind an ALB with a /readyz check.
@@ -54,29 +79,28 @@ func newApp(
 		return nil, err
 	}
 
-	front, err := newLoadBalancer(ctx, name, net, albSG, cfg.Port, opts...)
+	front, err := newLoadBalancer(ctx, name, net, albSG, cfg.Port, cfg.CertificateARN, opts...)
+	if err != nil {
+		return nil, err
+	}
+	if err = newAppAlias(ctx, name, cfg.Domain, cfg.HostedZoneID, front, opts...); err != nil {
+		return nil, err
+	}
+
+	taskResources, err := newAppTaskResources(ctx, name, db, cache, opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	execRole, err := newExecutionRole(ctx, name, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	dsnSecret, err := newSecret(ctx, name+"-dsn", db.DSN, opts...)
-	if err != nil {
-		return nil, err
-	}
-	redisSecret, err := newSecret(ctx, name+"-redis", cache.URL, opts...)
-	if err != nil {
-		return nil, err
-	}
-	if err = grantSecretRead(ctx, name, execRole, dsnSecret, redisSecret, opts...); err != nil {
-		return nil, err
-	}
-
-	taskDef, err := newTaskDefinition(ctx, name, execRole, dsnSecret, redisSecret, cfg, opts...)
+	taskDef, err := newTaskDefinition(
+		ctx, name,
+		taskResources.executionRole,
+		taskResources.secretPolicy,
+		taskResources.dsnSecret,
+		taskResources.redisSecret,
+		cfg,
+		opts...,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -88,9 +112,42 @@ func newApp(
 
 	return &app{
 		Service: svc,
-		URL:     pulumi.Sprintf("http://%s", front.lb.DnsName),
+		URL:     pulumi.String("https://" + cfg.Domain).ToStringOutput(),
 		ALBZone: front.lb.ZoneId,
 		ALBDNS:  front.lb.DnsName,
+	}, nil
+}
+
+func newAppTaskResources(
+	ctx *pulumi.Context,
+	name string,
+	db *postgres,
+	cache *redis,
+	opts ...pulumi.ResourceOption,
+) (*appTaskResources, error) {
+	executionRole, err := newExecutionRole(ctx, name, opts...)
+	if err != nil {
+		return nil, err
+	}
+	dsnSecret, err := newSecret(ctx, name+"-dsn", db.DSN, opts...)
+	if err != nil {
+		return nil, err
+	}
+	redisSecret, err := newSecret(ctx, name+"-redis", cache.Address, opts...)
+	if err != nil {
+		return nil, err
+	}
+	secretPolicy, err := grantSecretRead(
+		ctx, name, executionRole.Role, dsnSecret.Secret, redisSecret.Secret, opts...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &appTaskResources{
+		executionRole: executionRole,
+		secretPolicy:  secretPolicy,
+		dsnSecret:     dsnSecret,
+		redisSecret:   redisSecret,
 	}, nil
 }
 
@@ -98,6 +155,7 @@ func newApp(
 type frontend struct {
 	lb          *lb.LoadBalancer
 	targetGroup *lb.TargetGroup
+	listener    *lb.Listener
 }
 
 // newLoadBalancer builds an internet-facing ALB forwarding to an IP target group with a /readyz check.
@@ -107,6 +165,7 @@ func newLoadBalancer(
 	net *network,
 	albSG *ec2.SecurityGroup,
 	port int,
+	certificateARN string,
 	opts ...pulumi.ResourceOption,
 ) (*frontend, error) {
 	alb, err := lb.NewLoadBalancer(ctx, name+"-alb", &lb.LoadBalancerArgs{
@@ -137,10 +196,13 @@ func newLoadBalancer(
 		return nil, fmt.Errorf("pulumi: create target group %s: %w", name, err)
 	}
 
-	_, err = lb.NewListener(ctx, name+"-listener", &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, name+"-listener", &lb.ListenerArgs{
 		LoadBalancerArn: alb.Arn,
-		Port:            pulumi.Int(80),
-		Protocol:        pulumi.String("HTTP"),
+		Port:            pulumi.Int(443),
+		Protocol:        pulumi.String("HTTPS"),
+		CertificateArn:  pulumi.String(certificateARN),
+		SslPolicy:       pulumi.String(albTLSPolicy),
+		RoutingHttpResponseStrictTransportSecurityHeaderValue: pulumi.String(albHSTS),
 		DefaultActions: lb.ListenerDefaultActionArray{lb.ListenerDefaultActionArgs{
 			Type:           pulumi.String("forward"),
 			TargetGroupArn: tg.Arn,
@@ -149,7 +211,29 @@ func newLoadBalancer(
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create listener %s: %w", name, err)
 	}
-	return &frontend{lb: alb, targetGroup: tg}, nil
+	return &frontend{lb: alb, targetGroup: tg, listener: listener}, nil
+}
+
+func newAppAlias(
+	ctx *pulumi.Context,
+	name, domain, hostedZoneID string,
+	front *frontend,
+	opts ...pulumi.ResourceOption,
+) error {
+	_, err := route53.NewRecord(ctx, name+"-alias", &route53.RecordArgs{
+		ZoneId: pulumi.String(hostedZoneID),
+		Name:   pulumi.String(domain),
+		Type:   pulumi.String("A"),
+		Aliases: route53.RecordAliasArray{route53.RecordAliasArgs{
+			Name:                 front.lb.DnsName,
+			ZoneId:               front.lb.ZoneId,
+			EvaluateTargetHealth: pulumi.Bool(true),
+		}},
+	}, opts...)
+	if err != nil {
+		return fmt.Errorf("pulumi: create app alias %s: %w", domain, err)
+	}
+	return nil
 }
 
 // newService runs the task definition on Fargate in private subnets, registered with the ALB.
@@ -171,6 +255,9 @@ func newService(
 		return nil, fmt.Errorf("pulumi: create ecs cluster %s: %w", name, err)
 	}
 
+	serviceOpts := make([]pulumi.ResourceOption, 0, len(opts)+1)
+	serviceOpts = append(serviceOpts, opts...)
+	serviceOpts = append(serviceOpts, pulumi.DependsOn([]pulumi.Resource{front.listener}))
 	svc, err := ecs.NewService(ctx, name+"-svc", &ecs.ServiceArgs{
 		Cluster:        cluster.Arn,
 		TaskDefinition: taskDef.Arn,
@@ -187,14 +274,14 @@ func newService(
 			ContainerPort:  pulumi.Int(cfg.Port),
 		}},
 		Tags: pulumi.StringMap{"Name": pulumi.String(name + "-svc")},
-	}, opts...)
+	}, serviceOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create ecs service %s: %w", name, err)
 	}
 	return svc, nil
 }
 
-// newAppSecurityGroups returns (alb-sg open to internet on :80, task-sg open to the alb on app port).
+// newAppSecurityGroups returns (alb-sg open to internet on :443, task-sg open to the alb on app port).
 func newAppSecurityGroups(
 	ctx *pulumi.Context,
 	name string,
@@ -207,8 +294,8 @@ func newAppSecurityGroups(
 		Description: pulumi.String("golusoris alb ingress from internet"),
 		Ingress: ec2.SecurityGroupIngressArray{ec2.SecurityGroupIngressArgs{
 			Protocol:   pulumi.String("tcp"),
-			FromPort:   pulumi.Int(80),
-			ToPort:     pulumi.Int(80),
+			FromPort:   pulumi.Int(443),
+			ToPort:     pulumi.Int(443),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
 		}},
 		Egress: ec2.SecurityGroupEgressArray{allowAllEgress()},
@@ -252,7 +339,7 @@ func newSecret(
 	name string,
 	value pulumi.StringInput,
 	opts ...pulumi.ResourceOption,
-) (*secretsmanager.Secret, error) {
+) (*appSecret, error) {
 	secret, err := secretsmanager.NewSecret(ctx, name, &secretsmanager.SecretArgs{
 		NamePrefix:           pulumi.String(name + "-"),
 		RecoveryWindowInDays: pulumi.Int(0),
@@ -261,14 +348,14 @@ func newSecret(
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create secret %s: %w", name, err)
 	}
-	_, err = secretsmanager.NewSecretVersion(ctx, name+"-v", &secretsmanager.SecretVersionArgs{
+	version, err := secretsmanager.NewSecretVersion(ctx, name+"-v", &secretsmanager.SecretVersionArgs{
 		SecretId:     secret.ID(),
 		SecretString: value,
 	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create secret version %s: %w", name, err)
 	}
-	return secret, nil
+	return &appSecret{Secret: secret, Version: version}, nil
 }
 
 // newExecutionRole creates the ECS task execution role (image pull + log write).
@@ -276,7 +363,7 @@ func newExecutionRole(
 	ctx *pulumi.Context,
 	name string,
 	opts ...pulumi.ResourceOption,
-) (*iam.Role, error) {
+) (*appExecutionRole, error) {
 	role, err := iam.NewRole(ctx, name+"-exec-role", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(ecsAssumeRolePolicy),
 		Tags:             pulumi.StringMap{"Name": pulumi.String(name + "-exec-role")},
@@ -284,14 +371,14 @@ func newExecutionRole(
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create execution role %s: %w", name, err)
 	}
-	_, err = iam.NewRolePolicyAttachment(ctx, name+"-exec-attach", &iam.RolePolicyAttachmentArgs{
+	managedPolicy, err := iam.NewRolePolicyAttachment(ctx, name+"-exec-attach", &iam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"),
 	}, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: attach execution policy %s: %w", name, err)
 	}
-	return role, nil
+	return &appExecutionRole{Role: role, ManagedPolicy: managedPolicy}, nil
 }
 
 // grantSecretRead lets the execution role read the DSN + Redis secrets at task start.
@@ -301,19 +388,19 @@ func grantSecretRead(
 	role *iam.Role,
 	dsn, redis *secretsmanager.Secret,
 	opts ...pulumi.ResourceOption,
-) error {
+) (*iam.RolePolicy, error) {
 	policy := pulumi.All(dsn.Arn, redis.Arn).ApplyT(func(arns []any) (string, error) {
 		return secretReadPolicy(arns[0].(string), arns[1].(string))
 	}).(pulumi.StringOutput)
 
-	_, err := iam.NewRolePolicy(ctx, name+"-secret-read", &iam.RolePolicyArgs{
+	policyResource, err := iam.NewRolePolicy(ctx, name+"-secret-read", &iam.RolePolicyArgs{
 		Role:   role.ID(),
 		Policy: policy,
 	}, opts...)
 	if err != nil {
-		return fmt.Errorf("pulumi: attach secret-read policy %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: attach secret-read policy %s: %w", name, err)
 	}
-	return nil
+	return policyResource, nil
 }
 
 // secretReadPolicy renders the inline IAM policy granting GetSecretValue on the two secret ARNs.
@@ -337,8 +424,9 @@ func secretReadPolicy(dsnArn, redisArn string) (string, error) {
 func newTaskDefinition(
 	ctx *pulumi.Context,
 	name string,
-	execRole *iam.Role,
-	dsn, redis *secretsmanager.Secret,
+	execRole *appExecutionRole,
+	secretPolicy *iam.RolePolicy,
+	dsn, redis *appSecret,
 	cfg appConfig,
 	opts ...pulumi.ResourceOption,
 ) (*ecs.TaskDefinition, error) {
@@ -350,7 +438,7 @@ func newTaskDefinition(
 		return nil, fmt.Errorf("pulumi: create log group %s: %w", name, err)
 	}
 
-	containers := containerDefinitions(name, cfg, dsn, redis, logGroup)
+	containers := containerDefinitions(name, cfg, dsn.Secret, redis.Secret, logGroup)
 
 	taskDef, err := ecs.NewTaskDefinition(ctx, name+"-task", &ecs.TaskDefinitionArgs{
 		Family:                  pulumi.String(name),
@@ -358,14 +446,19 @@ func newTaskDefinition(
 		Memory:                  pulumi.String(taskMemory),
 		NetworkMode:             pulumi.String("awsvpc"),
 		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-		ExecutionRoleArn:        execRole.Arn,
+		ExecutionRoleArn:        execRole.Role.Arn,
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
 			CpuArchitecture:       pulumi.String("ARM64"),
 		},
 		ContainerDefinitions: containers,
 		Tags:                 pulumi.StringMap{"Name": pulumi.String(name + "-task")},
-	}, opts...)
+	}, append(opts, pulumi.DependsOn([]pulumi.Resource{
+		dsn.Version,
+		redis.Version,
+		execRole.ManagedPolicy,
+		secretPolicy,
+	}))...)
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create task definition %s: %w", name, err)
 	}
@@ -397,10 +490,11 @@ func renderContainer(name string, cfg appConfig, dsnArn, redisArn, logGroup stri
 		"portMappings":           []map[string]any{{"containerPort": cfg.Port, "protocol": "tcp"}},
 		"environment": []map[string]any{
 			{"name": "APP_HTTP_ADDR", "value": fmt.Sprintf(":%d", cfg.Port)},
+			{"name": "APP_CACHE_REDIS_TLS", "value": "true"},
 		},
 		"secrets": []map[string]any{
 			{"name": "APP_DB_DSN", "valueFrom": dsnArn},
-			{"name": "APP_CACHE_ADDR", "valueFrom": redisArn},
+			{"name": "APP_CACHE_REDIS_ADDR", "valueFrom": redisArn},
 		},
 		"logConfiguration": map[string]any{
 			"logDriver": "awslogs",

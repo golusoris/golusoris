@@ -14,6 +14,14 @@ import (
 	"github.com/golusoris/golusoris/core/clikit"
 )
 
+func TestCommandIgnoresNilOption(t *testing.T) {
+	t.Parallel()
+	command := clikit.Command("serve", "serve", nil)
+	if command == nil {
+		t.Fatal("Command returned nil")
+	}
+}
+
 func TestRoot_execute_version(t *testing.T) {
 	t.Parallel()
 	var buf bytes.Buffer

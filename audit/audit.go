@@ -24,12 +24,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/internal/snapshot"
 )
 
 // FieldChange captures a single field's before and after values.
@@ -86,7 +90,13 @@ type Store interface {
 type Option func(*Logger)
 
 // WithClock overrides the clock used to stamp events. Default: real clock.
-func WithClock(c clock.Clock) Option { return func(l *Logger) { l.clk = c } }
+func WithClock(c clock.Clock) Option {
+	return func(l *Logger) {
+		if !validate.IsNil(c) {
+			l.clk = c
+		}
+	}
+}
 
 // Logger appends audit events via the configured Store.
 type Logger struct {
@@ -96,15 +106,23 @@ type Logger struct {
 
 // New returns a Logger backed by store.
 func New(store Store, opts ...Option) *Logger {
+	if validate.IsNil(store) {
+		store = nil
+	}
 	l := &Logger{store: store, clk: clockwork.NewRealClock()}
 	for _, o := range opts {
-		o(l)
+		if o != nil {
+			o(l)
+		}
 	}
 	return l
 }
 
 // Log appends e to the audit log, assigning ID and CreatedAt if unset.
 func (l *Logger) Log(ctx context.Context, e Event) error {
+	if l.store == nil {
+		return errors.New("audit: store is required")
+	}
 	if e.ID == "" {
 		id, err := newID()
 		if err != nil {
@@ -123,6 +141,9 @@ func (l *Logger) Log(ctx context.Context, e Event) error {
 
 // List returns events matching filter via the underlying store.
 func (l *Logger) List(ctx context.Context, f Filter) ([]Event, error) {
+	if l.store == nil {
+		return nil, errors.New("audit: store is required")
+	}
 	out, err := l.store.List(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("audit: list: %w", err)
@@ -145,9 +166,13 @@ func NewMemoryStore() *MemoryStore {
 
 // Append implements [Store].
 func (s *MemoryStore) Append(_ context.Context, e Event) error {
+	snapshot, err := cloneEvent(e)
+	if err != nil {
+		return fmt.Errorf("audit: snapshot event: %w", err)
+	}
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
-	s.events = append(s.events, e)
+	s.events = append(s.events, snapshot)
 	return nil
 }
 
@@ -157,13 +182,21 @@ func (s *MemoryStore) List(_ context.Context, f Filter) ([]Event, error) {
 	defer func() { s.mu <- struct{}{} }()
 
 	var out []Event
+	var skipped int64
 	// Iterate newest-first.
-	for i := len(s.events) - 1; i >= 0; i-- {
-		e := s.events[i]
+	for _, e := range slices.Backward(s.events) {
 		if !matchesFilter(e, f) {
 			continue
 		}
-		out = append(out, e)
+		if skipped < max(f.Offset, 0) {
+			skipped++
+			continue
+		}
+		cloned, err := cloneEvent(e)
+		if err != nil {
+			return nil, fmt.Errorf("audit: clone stored event: %w", err)
+		}
+		out = append(out, cloned)
 		if f.Limit > 0 && int64(len(out)) >= f.Limit {
 			break
 		}
@@ -198,22 +231,54 @@ func matchesIdentity(e Event, f Filter) bool {
 // matchesTimeRange checks e.CreatedAt against f's non-zero After/Before
 // bounds.
 func matchesTimeRange(e Event, f Filter) bool {
-	if !f.After.IsZero() && !e.CreatedAt.After(f.After) {
+	if !f.After.IsZero() && e.CreatedAt.Before(f.After) {
 		return false
 	}
-	if !f.Before.IsZero() && !e.CreatedAt.Before(f.Before) {
+	if !f.Before.IsZero() && e.CreatedAt.After(f.Before) {
 		return false
 	}
 	return true
 }
 
-// All returns all stored events in insertion order (for test assertions).
+// All returns snapshots of all stored events in insertion order. It preserves
+// the legacy no-error API and fails closed with a nil snapshot if internal
+// state cannot be cloned.
 func (s *MemoryStore) All() []Event {
+	events, err := s.AllChecked()
+	if err != nil {
+		return nil
+	}
+	return events
+}
+
+// AllChecked returns snapshots of all stored events in insertion order and
+// reports snapshot validation failures.
+func (s *MemoryStore) AllChecked() ([]Event, error) {
 	<-s.mu
 	defer func() { s.mu <- struct{}{} }()
 	cp := make([]Event, len(s.events))
-	copy(cp, s.events)
-	return cp
+	for i := range s.events {
+		cloned, err := cloneEvent(s.events[i])
+		if err != nil {
+			return nil, fmt.Errorf("audit: clone stored event: %w", err)
+		}
+		cp[i] = cloned
+	}
+	return cp, nil
+}
+
+func cloneEvent(event Event) (Event, error) {
+	diff, err := snapshot.Clone(event.Diff)
+	if err != nil {
+		return Event{}, fmt.Errorf("audit: snapshot diff: %w", err)
+	}
+	metadata, err := snapshot.Clone(event.Metadata)
+	if err != nil {
+		return Event{}, fmt.Errorf("audit: snapshot metadata: %w", err)
+	}
+	event.Diff = diff
+	event.Metadata = metadata
+	return event, nil
 }
 
 // --- helpers ---

@@ -24,11 +24,11 @@ err = doc.Close()                                // releases the zip reader
 ## Why nguyenthenguyen/docx
 
 - Pure-Go placeholder substitution; no LibreOffice/headless-office process to
-  shell out to. Workflow is "load a template, replace placeholders, save".
+ shell out to. Workflow is "load a template, replace placeholders, save".
 
 ## Notes
 
-- Template-driven only — generate documents from a `.docx` you author, not from
-  arbitrary structured content. `New` produces a minimal single-paragraph base.
-- `OpenReader` needs a seekable `io.ReaderAt` plus its `size`.
-- Always `Close` to release the underlying zip reader.
+- Template-driven only — generate documents from `.docx` you author, not from
+ arbitrary structured content. `New` produces minimal single-paragraph base.
+- `OpenReader` needs seekable `io.ReaderAt` plus its `size`.
+- Always `Close` to release underlying zip reader.

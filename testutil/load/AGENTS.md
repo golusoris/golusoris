@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/load/
 
-HTTP load-testing helpers over `tsenart/vegeta`: drive an attack, then assert
+HTTP load-testing helpers over `tsenart/vegeta`: drive attack, then assert
 latency/error-rate/throughput thresholds. Stateless test utility — **no fx
 wiring**. Import directly from `_test.go` files.
 
@@ -25,17 +25,17 @@ load.Assert(t, m,
 )
 ```
 
-A `load.Check` is `func(*vegeta.Metrics) string` — return a non-empty message to
-flag a violation; write custom checks inline. `Attack` aggregates results and
-does not fail the test — only `Assert` calls `t.Errorf`.
+`load.Check` is `func(*vegeta.Metrics) string` — return non-empty message to
+flag violation; write custom checks inline. `Attack` aggregates results and
+does not fail test — only `Assert` calls `t.Errorf`.
 
 ## Why tsenart/vegeta
 
 - Constant-rate (open-model) HTTP attacker with percentile latency histograms
-  out of the box; the de-facto Go load tool. `Options.Targeter` is a raw
-  `vegeta.Targeter`, so the full vegeta API is reachable when the helpers fall short.
+ out of box; de-facto Go load tool. `Options.Targeter` is raw
+ `vegeta.Targeter`, so full vegeta API is reachable when helpers fall short.
 
 ## Notes
 
 - Opt-in: guard `*_Load` tests with `testing.Short()` so they skip in normal CI.
-- `Rate` is a `vegeta.Pacer` — pass `ConstantRate(n)` or any other pacer.
+- `Rate` is `vegeta.Pacer` — pass `ConstantRate(n)` or any other pacer.

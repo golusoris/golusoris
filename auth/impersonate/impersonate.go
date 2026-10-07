@@ -11,27 +11,36 @@
 //	mw, err := impersonate.Middleware(impersonate.Options{
 //	    SessionGet:  func(r *http.Request) (string, string, bool) { ... },
 //	    SessionSet:  func(w, r, current, original string) { ... },
-//	    OnImpersonate: func(actor, target string) { auditLog.Record(...) },
+//	    OnImpersonate: func(ctx context.Context, actor, target string) error {
+//	        return auditLog.Record(ctx, actor, target)
+//	    },
 //	})
 //
 // In the principal extractor, prefer the `current` user when set,
 // falling back to the original. A banner header tells the UI to show
 // "You are impersonating X — exit".
+// Mount [ExitHandler] as a POST route behind CSRF middleware.
 package impersonate
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // HeaderImpersonating is set by the middleware on every response so
 // the frontend can render a banner.
 const HeaderImpersonating = "X-Impersonating"
 
-// QueryParamExit triggers the revert flow when present on a request.
+// QueryParamExit is retained for source compatibility. Query-string exits are
+// ignored; use [ExitHandler] on a CSRF-protected route instead.
+//
+// Deprecated: query-string state changes are unsafe.
 const QueryParamExit = "exit_impersonation"
 
 type ctxKey struct{}
@@ -60,44 +69,37 @@ type Options struct {
 	SessionGet func(r *http.Request) (current, original string, ok bool)
 	// SessionSet persists the new (current, original) pair.
 	SessionSet func(w http.ResponseWriter, r *http.Request, current, original string) error
-	// OnImpersonate is called when an actor begins impersonating target.
-	OnImpersonate func(actorUserID, targetUserID string)
-	// OnExit is called when the actor reverts to themselves.
-	OnExit func(actorUserID, targetUserID string)
+	// OnImpersonate durably audits an impersonation before session mutation.
+	OnImpersonate func(ctx context.Context, actorUserID, targetUserID string) error
+	// OnExit durably audits an exit before session mutation.
+	OnExit func(ctx context.Context, actorUserID, targetUserID string) error
 }
 
-// Middleware injects a Principal into every request context based on
-// the session and handles the exit flow. Returns an error when
-// SessionGet or SessionSet is nil.
+// Middleware injects a Principal into every request context based on the
+// session. Returns an error when SessionGet or SessionSet is nil.
 func Middleware(opts Options) (func(http.Handler) http.Handler, error) {
-	if opts.SessionGet == nil || opts.SessionSet == nil {
-		return nil, errors.New("impersonate: SessionGet + SessionSet required")
+	if err := validateOptions(opts); err != nil {
+		return nil, err
 	}
 	return func(next http.Handler) http.Handler {
+		if validate.IsNil(next) {
+			return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "downstream handler unavailable", http.StatusInternalServerError)
+			})
+		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			handleImpersonation(w, r, next, opts)
 		})
 	}, nil
 }
 
-// handleImpersonation resolves the session's current/original principal for
-// r, applies the exit-impersonation flow when requested, and forwards the
-// request to next with the resulting Principal attached to its context. It
-// writes the response itself (without calling next) when there is no
-// session to attach, or when reverting the session fails.
+// handleImpersonation resolves the session's current/original principal and
+// forwards the request with the Principal attached to its context.
 func handleImpersonation(w http.ResponseWriter, r *http.Request, next http.Handler, opts Options) {
 	cur, orig, ok := opts.SessionGet(r)
 	if !ok {
 		next.ServeHTTP(w, r)
 		return
-	}
-
-	if exitRequested(r, orig) {
-		var reverted bool
-		cur, orig, reverted = revertImpersonation(w, r, opts, cur, orig)
-		if !reverted {
-			return
-		}
 	}
 
 	if orig != "" {
@@ -107,43 +109,92 @@ func handleImpersonation(w http.ResponseWriter, r *http.Request, next http.Handl
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
-// exitRequested reports whether r asks to revert an active impersonation.
-func exitRequested(r *http.Request, orig string) bool {
-	return r.URL.Query().Get(QueryParamExit) != "" && orig != ""
+// ExitHandler returns a terminal, POST-only impersonation exit endpoint.
+// Mount it behind the application's CSRF middleware. It never delegates to a
+// downstream handler, so the exit request cannot execute with the restored
+// actor's privileges.
+func ExitHandler(opts Options) (http.Handler, error) {
+	if err := validateOptions(opts); err != nil {
+		return nil, err
+	}
+	if opts.OnExit == nil {
+		return nil, errors.New("impersonate: OnExit audit hook required")
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		exit(w, r, opts)
+	}), nil
 }
 
-// revertImpersonation persists the reverted (orig, "") session pair,
-// notifies opts.OnExit, and returns the new (current, original) pair. The
-// third return value is false when SessionSet failed and a 500 has already
-// been written to w — the caller must stop processing the request without
-// calling next.
-func revertImpersonation(w http.ResponseWriter, r *http.Request, opts Options, cur, orig string) (newCur, newOrig string, ok bool) {
+func exit(w http.ResponseWriter, r *http.Request, opts Options) {
+	cur, orig, ok := opts.SessionGet(r)
+	if !ok {
+		http.Error(w, "session required", http.StatusUnauthorized)
+		return
+	}
+	if orig == "" {
+		http.Error(w, "not impersonating", http.StatusConflict)
+		return
+	}
+	cur = strings.TrimSpace(cur)
+	orig = strings.TrimSpace(orig)
+	if cur == "" || orig == "" || cur == orig {
+		http.Error(w, "invalid impersonation session", http.StatusConflict)
+		return
+	}
+	if err := opts.OnExit(r.Context(), orig, cur); err != nil {
+		http.Error(w, "audit error", http.StatusInternalServerError)
+		return
+	}
 	if err := opts.SessionSet(w, r, orig, ""); err != nil {
 		http.Error(w, "session error", http.StatusInternalServerError)
-		return cur, orig, false
+		return
 	}
-	if opts.OnExit != nil {
-		opts.OnExit(orig, cur)
+	w.Header().Del(HeaderImpersonating)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func validateOptions(opts Options) error {
+	if opts.SessionGet == nil || opts.SessionSet == nil {
+		return errors.New("impersonate: SessionGet + SessionSet required")
 	}
-	return orig, "", true
+	return nil
 }
 
 // Begin starts an impersonation: replaces the current principal with
 // targetUserID and records the original. Returns gerr.CodeForbidden when
 // already impersonating (no nesting).
 func Begin(w http.ResponseWriter, r *http.Request, opts Options, targetUserID string) error {
+	if err := validateOptions(opts); err != nil {
+		return err
+	}
+	if opts.OnImpersonate == nil {
+		return errors.New("impersonate: OnImpersonate audit hook required")
+	}
 	cur, orig, ok := opts.SessionGet(r)
 	if !ok {
 		return errors.New("impersonate: no session")
 	}
+	cur = strings.TrimSpace(cur)
+	targetUserID = strings.TrimSpace(targetUserID)
+	if cur == "" || targetUserID == "" {
+		return gerr.Validation("impersonate: actor and target required")
+	}
+	if cur == targetUserID {
+		return gerr.Validation("impersonate: target must differ from actor")
+	}
 	if orig != "" {
 		return gerr.Forbidden("already impersonating")
 	}
-	if err := opts.SessionSet(w, r, targetUserID, cur); err != nil {
-		return err
+	if err := opts.OnImpersonate(r.Context(), cur, targetUserID); err != nil {
+		return fmt.Errorf("impersonate: audit begin: %w", err)
 	}
-	if opts.OnImpersonate != nil {
-		opts.OnImpersonate(cur, targetUserID)
+	if err := opts.SessionSet(w, r, targetUserID, cur); err != nil {
+		return fmt.Errorf("impersonate: set session: %w", err)
 	}
 	return nil
 }

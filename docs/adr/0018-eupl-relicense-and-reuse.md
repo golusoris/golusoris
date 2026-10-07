@@ -54,8 +54,8 @@ by the copyright holder, so a relicense needs no third-party consent.
 - **Negative**: copyleft — downstream apps that are Derivative Works must
   license under EUPL-1.2 or a compatible licence; MIT-only consumers must
   pin ≤ v0.8.0 or accept the terms. ~1 000 files touched by headers (one-off).
-- **Neutral / follow-ups**: `golusoris init` scaffolds `LICENSE` + `REUSE.toml`
-  + headers for new apps; LICENSING.md is the human-readable map.
+- **Neutral / follow-ups**: `golusoris init` scaffolds `LICENSE`, `REUSE.toml`,
+  and headers for new apps; LICENSING.md is the human-readable map.
 
 ## References
 

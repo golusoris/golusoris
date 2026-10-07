@@ -17,9 +17,21 @@ need_tool() {
 
 # go_files [files...] — the given (or staged) .go files that exist, minus testdata.
 go_files() {
-  if [ $# -gt 0 ]; then printf '%s\n' "$@"; else git diff --cached --name-only --diff-filter=ACMR; fi |
-    tr '\\' '/' | grep -E '\.go$' | grep -vE '(^|/)testdata/' |
-    while IFS= read -r f; do [ -f "$f" ] && printf '%s\n' "$f"; done || true
+  local listed f
+  if [ $# -gt 0 ]; then
+    listed=$(printf '%s\n' "$@")
+  else
+    listed=$(git diff --cached --name-only --diff-filter=ACMR) || return
+  fi
+  # tr needs two escaped backslashes as its portable source set.
+  # shellcheck disable=SC1003 # tr requires this portable escaped-backslash source set.
+  printf '%s\n' "$listed" | tr '\\\\' '/' | while IFS= read -r f; do
+    # case, unlike grep, succeeds when nothing matches: an empty selection is not an error.
+    case "$f" in
+      testdata/* | */testdata/*) ;;
+      *.go) if [ -f "$f" ]; then printf '%s\n' "$f"; fi ;;
+    esac
+  done
 }
 
 # module_of <file> — nearest ancestor directory holding a go.mod ("." for root).
@@ -43,6 +55,26 @@ module_pkgs() {
 }
 
 # run_per_module <files-newline-separated> <cmd...> — runs <cmd> ./pkg... inside each module.
+# buildable_pkgs prints the packages among "$@" (run inside their module) that
+# hold Go files under the default build constraints: go vet and golangci-lint
+# reject a directory whose every file a build tag excludes.
+buildable_pkgs() {
+  local listed dir counts kept=""
+  listed=$(go list -e -f '{{.Dir}}{{"\t"}}{{len .GoFiles}}{{len .CgoFiles}}{{len .TestGoFiles}}{{len .XTestGoFiles}}' "$@") || return
+  while IFS="$(printf '\t')" read -r dir counts; do
+    [ -n "$dir" ] || continue
+    if [ "$dir" = "$PWD" ]; then dir=.; else dir="./${dir#"$PWD"/}"; fi
+    if [ "$counts" = "0000" ]; then
+      note "skip $dir (build constraints exclude every file)"
+    else
+      kept="$kept$dir "
+    fi
+  done <<EOF
+$listed
+EOF
+  printf '%s\n' "$kept"
+}
+
 run_per_module() {
   local files=$1 pairs m pkgs rc=0
   shift
@@ -57,6 +89,15 @@ run_per_module() {
       continue
     fi
     pkgs=$(printf '%s\n' "$pairs" | awk -F'\t' -v m="$m" '$1==m{print $2}' | tr '\n' ' ')
+    # shellcheck disable=SC2086 # package list is intentionally word-split
+    if ! pkgs=$(cd "$m" && buildable_pkgs $pkgs); then
+      rc=1
+      continue
+    fi
+    if [ -z "$pkgs" ]; then
+      note "$m: skip (build constraints exclude every file of the staged packages)"
+      continue
+    fi
     note "$m: $* $pkgs"
     # shellcheck disable=SC2086 # package list is intentionally word-split
     (cd "$m" && "$@" $pkgs) || rc=1

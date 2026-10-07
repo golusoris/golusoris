@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — media/game/
 
 Thin wrapper over Ebitengine for 2D games and interactive apps. Direct-import —
-**no fx wiring**; this is a windowed game loop, not a server component.
+**no fx wiring**; this is windowed game loop, not server component.
 
 ## API
 
@@ -27,13 +27,13 @@ img := game.NewImage(64, 64) // off-screen *ebiten.Image
 
 ## Why Ebitengine
 
-- The dominant pure-Go 2D game library — simple `Update`/`Draw`/`Layout` contract,
-  cross-platform windowing/audio behind one façade.
+- dominant pure-Go 2D game library — simple `Update`/`Draw`/`Layout` contract,
+ cross-platform windowing/audio behind one façade.
 
 ## Notes
 
 - **CGO-gated, own go.mod sub-module.** Pulls audio/video drivers and platform
-  windowing libs; needs a display. Import directly:
-  `github.com/golusoris/golusoris/media/game`.
-- `game.Run` blocks until the window closes — own the main goroutine; do not call
-  it from an fx lifecycle hook.
+ windowing libs; needs display. Import directly:
+ `github.com/golusoris/golusoris/media/game`.
+- `game.Run` blocks until window closes — own main goroutine; do not call
+ it from fx lifecycle hook.

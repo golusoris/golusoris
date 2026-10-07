@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -21,6 +22,12 @@ import (
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
+
+const rollbackTimeout = 5 * time.Second
+
+type txBeginner interface {
+	BeginTx(context.Context, pgx.TxOptions) (pgx.Tx, error)
+}
 
 // TxFn is the function signature used with [WithTx].
 type TxFn func(ctx context.Context, tx pgx.Tx) error
@@ -36,20 +43,45 @@ type TxFn func(ctx context.Context, tx pgx.Tx) error
 //	    return queries.WithTx(tx).InsertOrder(ctx, args)
 //	})
 func WithTx(ctx context.Context, pool *pgxpool.Pool, fn TxFn) error {
-	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if pool == nil {
+		return errors.New("db/sqlc: pool is required")
+	}
+	return withTx(ctx, pool, fn)
+}
+
+func withTx(ctx context.Context, beginner txBeginner, fn TxFn) (retErr error) {
+	if ctx == nil {
+		return errors.New("db/sqlc: context is required")
+	}
+	if fn == nil {
+		return errors.New("db/sqlc: transaction function is required")
+	}
+
+	tx, err := beginner.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return fmt.Errorf("db/sqlc: begin tx: %w", err)
 	}
-	if err := fn(ctx, tx); err != nil {
-		// Join keeps errors.Is/As on the original cause working.
-		if rbErr := tx.Rollback(ctx); rbErr != nil && !errors.Is(rbErr, pgx.ErrTxClosed) {
-			return errors.Join(err, fmt.Errorf("db/sqlc: rollback: %w", rbErr))
+
+	committed := false
+	defer func() {
+		if committed {
+			return
 		}
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+		defer cancel()
+		if rbErr := tx.Rollback(cleanupCtx); rbErr != nil &&
+			!errors.Is(rbErr, pgx.ErrTxClosed) && retErr != nil {
+			retErr = errors.Join(retErr, fmt.Errorf("db/sqlc: rollback: %w", rbErr))
+		}
+	}()
+
+	if err := fn(ctx, tx); err != nil {
 		return err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("db/sqlc: commit: %w", err)
 	}
+	committed = true
 	return nil
 }
 
@@ -70,8 +102,7 @@ func MapError(err error) error {
 	if errors.Is(err, pgx.ErrNoRows) {
 		return gerr.Wrap(err, gerr.CodeNotFound, "not found")
 	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pgErr.Code {
 		case "23505", "23P01":
 			return gerr.Wrap(err, gerr.CodeConflict, "constraint violation")

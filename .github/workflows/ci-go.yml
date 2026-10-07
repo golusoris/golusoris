@@ -38,7 +38,23 @@ on:
       golangci-version:
         description: golangci-lint version
         type: string
-        default: v2.12.2
+        default: v2.14.0
+      gofumpt-version:
+        description: Exact standalone gofumpt version used for formatting
+        type: string
+        default: v0.12.0
+      gosec-version:
+        description: Exact gosec version
+        type: string
+        default: v2.29.0
+      govulncheck-version:
+        description: Exact govulncheck version
+        type: string
+        default: v1.8.0
+      apidiff-version:
+        description: Exact go-apidiff version
+        type: string
+        default: v0.8.4-0.20260910211158-c3e0953fa2fd
       golangci-config:
         description: "Path to a golangci-lint config, relative to `working-directory` (golangci-lint-action's own `working-directory` input is wired below, so this — like its config auto-discovery — resolves against the module directory, not the repo root). Empty = golangci-lint auto-discovers the caller's .golangci.yml in that same directory."
         type: string
@@ -71,6 +87,10 @@ on:
         description: Go module path for apidiff (e.g. github.com/myorg/myapp)
         type: string
         default: ""
+      apidiff-base-ref:
+        description: "Exact apidiff base revision; empty selects the previous root vN tag"
+        type: string
+        default: ""
       skip-apidiff:
         description: Skip apidiff check (set true for first release)
         type: boolean
@@ -84,9 +104,9 @@ on:
         type: string
         default: ""
       spectral-version:
-        description: "@stoplight/spectral-cli version to run via npx"
+        description: "Deprecated/unused; Spectral resolves from this workflow revision's package lock"
         type: string
-        default: 6.15.0
+        default: 6.16.3
       spectral-fail-severity:
         description: Minimum severity that fails the spectral lint (error|warn|info|hint)
         type: string
@@ -119,7 +139,7 @@ jobs:
   # ── Lint ──────────────────────────────────────────────────────────────────
   lint:
     name: Lint
-    if: github.actor != 'renovate[bot]'
+    needs: build
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -141,6 +161,18 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
+      - name: Check gofumpt formatting
+        env:
+          GOFUMPT_VERSION: ${{ inputs.gofumpt-version }}
+        run: |
+          set -euo pipefail
+          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+          gofumpt -version | grep -Fq "${GOFUMPT_VERSION} "
+          unformatted=$(gofumpt -l .)
+          test -z "$unformatted" || {
+            printf 'not gofumpt-formatted:\n%s\n' "$unformatted" >&2
+            exit 1
+          }
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: ${{ inputs.golangci-version }}
@@ -152,7 +184,7 @@ jobs:
   # ── Security scan (gosec) ─────────────────────────────────────────────────
   gosec:
     name: Security (gosec)
-    if: github.actor != 'renovate[bot]'
+    needs: build
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -178,11 +210,16 @@ jobs:
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: gosec
+        env:
+          GOSEC_VERSION: ${{ inputs.gosec-version }}
         run: |
-          go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1
-          EXCLUDE_RULES="testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505"
-          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" -fmt sarif -out gosec.sarif ./... || true
-          gosec -exclude-generated --exclude-rules="$EXCLUDE_RULES" ./...
+          set -euo pipefail
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          # One gating scan writes SARIF and logs findings. testdata is excluded
+          # because gosec's own walk includes fixtures that `go list ./...` does
+          # not; real exceptions belong at the finding with a reason.
+          gosec -exclude-generated -exclude-dir=testdata -fmt sarif \
+            -out gosec.sarif -stdout -verbose text ./...
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
@@ -197,7 +234,7 @@ jobs:
   # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:
     name: Vulnerabilities (govulncheck)
-    if: github.actor != 'renovate[bot]'
+    needs: build
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -220,8 +257,12 @@ jobs:
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: govulncheck
+        env:
+          GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.4.0
+          set -euo pipefail
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
           govulncheck ./...
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
@@ -229,7 +270,7 @@ jobs:
   # Docker-backed tests without hosted-runner billing.
   test:
     name: Test (race + coverage)
-    if: github.actor != 'renovate[bot]'
+    needs: build
     runs-on: ${{ matrix.os }}
     container: ${{ matrix.os == inputs.runs-on && inputs.container || '' }}
     timeout-minutes: 20
@@ -267,6 +308,11 @@ jobs:
         run: docker info
       - name: Run tests (Linux — full suite)
         if: runner.os == 'Linux'
+        env:
+          # v0.44.0 can reuse a stopped shared Ryuk after a package gap
+          # (testcontainers/testcontainers-go#3867). Keep it alive within this
+          # bounded job until testcontainers/testcontainers-go#3868 ships.
+          RYUK_RECONNECTION_TIMEOUT: 30m
         run: go test -race -count=1 -timeout=${{ inputs.test-timeout }} -coverprofile=coverage.out -covermode=atomic ./...
       - name: Run tests (macOS — skip Docker-requiring packages)
         if: runner.os != 'Linux'
@@ -275,8 +321,15 @@ jobs:
           # packages so this portability leg passes instead of failing on infra.
           # macOS ships bash 3.2 (no mapfile); word-split is safe — Go import
           # paths never contain spaces.
-          PKGS=$(go list ./... | grep -vE '/testutil(/|$)|/testutil/pg' || true)
-          # shellcheck disable=SC2086
+          all_pkgs=$(go list ./...)
+          # grep exits 1 when every package is filtered out; only exit 2 or higher is an error.
+          filter_status=0
+          PKGS=$(printf '%s\n' "$all_pkgs" | grep -vE '/testutil(/|$)|/testutil/pg') || filter_status=$?
+          if [ "$filter_status" -gt 1 ]; then
+            echo "::error::package filter failed with status $filter_status"
+            exit "$filter_status"
+          fi
+          # shellcheck disable=SC2086 # Go package paths cannot contain spaces; deliberate list expansion.
           go test -race -count=1 -timeout=${{ inputs.test-timeout }} $PKGS
       - name: Check coverage threshold
         if: ${{ matrix.primary && inputs.coverage-threshold > 0 }}
@@ -307,10 +360,9 @@ jobs:
   # ── Build ─────────────────────────────────────────────────────────────────
   build:
     name: Build
-    if: github.actor != 'renovate[bot]'
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
-    timeout-minutes: 10
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: ${{ inputs.working-directory }}
@@ -329,13 +381,15 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
+      - name: Check module metadata
+        run: go mod tidy -diff
       - run: go build ./...
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
   # Caller-driven: lints the spec named by `openapi-spec` from the CALLER's
-  # checkout, using the caller's `spectral-ruleset` (or Spectral's built-in oas
-  # ruleset when none is given). No dependency on the framework's tools/ dir, so
-  # downstream apps can lint their own spec without vendoring tools/spectral.
+  # checkout, using the caller's `spectral-ruleset` (or the called revision's
+  # locked OAS ruleset when none is given). The executable and dependency graph
+  # come from the called workflow revision's integrity-checked package lock.
   # Not Go-module-scoped, so `working-directory` is not wired here — spec and
   # ruleset paths are always given by the caller relative to the repo root.
   spectral:
@@ -348,25 +402,59 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.21.0
+      - name: Resolve called workflow source
+        id: workflow-source
+        env:
+          JOB_CONTEXT: ${{ toJSON(job) }}
+        run: |
+          node <<'JS'
+          const fs = require('node:fs');
+          const job = JSON.parse(process.env.JOB_CONTEXT);
+          if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(job.workflow_repository)) {
+            throw new Error('called workflow repository identity is unavailable');
+          }
+          if (!/^[0-9a-f]{40}$/.test(job.workflow_sha)) {
+            throw new Error('called workflow revision identity is unavailable');
+          }
+          fs.appendFileSync(
+            process.env.GITHUB_OUTPUT,
+            `repository=${job.workflow_repository}\nsha=${job.workflow_sha}\n`,
+          );
+          JS
+      - name: Check out locked Spectral authority
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: ${{ steps.workflow-source.outputs.repository }}
+          ref: ${{ steps.workflow-source.outputs.sha }}
+          sparse-checkout: |
+            tools/spectral
+            scripts/ci/spectral-default-test.sh
+          path: .golusoris-ci
+          persist-credentials: false
+      - name: Install locked Spectral graph
+        run: npm ci --prefix .golusoris-ci/tools/spectral --ignore-scripts --no-audit --no-fund
+      - name: Verify locked default OAS ruleset
+        run: .golusoris-ci/scripts/ci/spectral-default-test.sh
       - name: Lint OpenAPI spec
         env:
           SPEC: ${{ inputs.openapi-spec }}
           RULESET: ${{ inputs.spectral-ruleset }}
-          SPECTRAL_VERSION: ${{ inputs.spectral-version }}
           FAIL_SEVERITY: ${{ inputs.spectral-fail-severity }}
         run: |
           set -euo pipefail
           ARGS=(lint "$SPEC" --fail-severity "$FAIL_SEVERITY")
           if [ -n "$RULESET" ]; then
             ARGS+=(--ruleset "$RULESET")
+          else
+            ARGS+=(--ruleset .golusoris-ci/tools/spectral/oas.yaml)
           fi
-          # No ruleset → Spectral auto-loads its built-in `spectral:oas` ruleset.
-          npx --yes "@stoplight/spectral-cli@${SPECTRAL_VERSION}" "${ARGS[@]}"
+          .golusoris-ci/tools/spectral/node_modules/.bin/spectral "${ARGS[@]}"
 
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
     name: API compatibility (apidiff)
-    if: ${{ github.actor != 'renovate[bot]' && !inputs.skip-apidiff && inputs.module-path != '' }}
+    if: ${{ !inputs.skip-apidiff && inputs.module-path != '' }}
+    needs: build
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
@@ -391,22 +479,51 @@ jobs:
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
       - name: Install apidiff
-        run: go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
+        env:
+          GO_COMPAT_TOOL_VERSION: ${{ inputs.apidiff-version }}
+        run: go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
       - name: Run apidiff vs previous tag (informational pre-1.0)
+        env:
+          APIDIFF_BASE_REF: ${{ inputs.apidiff-base-ref }}
+          EXPECTED_MODULE: ${{ inputs.module-path }}
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          set -euo pipefail
+          PREV_TAG="$APIDIFF_BASE_REF"
+          if [ -z "$PREV_TAG" ]; then
+            # rev-parse exits 1 when HEAD is a root commit; a parent without a reachable tag also skips.
+            parent_status=0
+            git rev-parse --verify --quiet 'HEAD^1' >/dev/null || parent_status=$?
+            case "$parent_status" in
+              0)
+                reachable_tags=$(git tag --merged 'HEAD^1' --list 'v[0-9]*')
+                if [ -n "$reachable_tags" ]; then
+                  PREV_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 'HEAD^1')
+                fi
+                ;;
+              1) ;;
+              *) exit "$parent_status" ;;
+            esac
+          fi
           if [ -z "$PREV_TAG" ]; then
             echo "No previous tag — skipping apidiff (first release)"
             exit 0
           fi
-          MOD="${{ inputs.module-path }}"
+          actual_module=$(go list -m -f '{{.Path}}')
+          if [ "$actual_module" != "$EXPECTED_MODULE" ]; then
+            echo "::error::module-path $EXPECTED_MODULE does not match $actual_module in $PWD"
+            exit 2
+          fi
           echo "Comparing HEAD against $PREV_TAG"
-          apidiff -m -w /tmp/cur-api.txt "$MOD"
-          git worktree add -q --detach /tmp/apidiff-prev "$PREV_TAG"
-          ( cd "/tmp/apidiff-prev/${{ inputs.working-directory }}" && go mod download && apidiff -m -w /tmp/prev-api.txt "$MOD" ) \
-            || echo "::warning::could not export $PREV_TAG API"
-          git worktree remove /tmp/apidiff-prev --force || true
           echo "## API changes vs $PREV_TAG"
-          apidiff /tmp/prev-api.txt /tmp/cur-api.txt \
-            || echo "::warning::apidiff comparison unavailable (export-data version mismatch)"
-          # Pre-1.0 informational; gate on `apidiff -incompatible` at v1.0.
+          set +e
+          go-apidiff --repo-path="$GITHUB_WORKSPACE" "$PREV_TAG" HEAD \
+            --print-compatible
+          status=$?
+          set -e
+          if [ "$status" -eq 1 ]; then
+            echo "::warning::$EXPECTED_MODULE contains pre-1.0 incompatible API changes"
+          elif [ "$status" -ne 0 ]; then
+            echo "::error::go-apidiff execution failed with status $status"
+            exit "$status"
+          fi
+          # Pre-1.0 is informational; at v1.0, status 1 becomes blocking.

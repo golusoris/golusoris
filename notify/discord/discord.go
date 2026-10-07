@@ -20,6 +20,7 @@ import (
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -31,7 +32,7 @@ type Options struct {
 	Username string `koanf:"username"`
 	// AvatarURL overrides the webhook's default avatar.
 	AvatarURL string `koanf:"avatar_url"`
-	// HTTPClient is the optional HTTP client; defaults to a 10s-timeout client.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
 	HTTPClient *http.Client
 }
 
@@ -46,10 +47,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if opts.WebhookURL == "" {
 		return nil, errors.New("notify/discord: webhook_url is required")
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
-	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
 	return &Sender{opts: opts, hc: hc}, nil
 }
 

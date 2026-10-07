@@ -10,6 +10,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +25,8 @@ import (
 type memStore struct {
 	endpoints  map[string]out.Endpoint
 	deliveries map[string]out.Delivery
+	saveCalls  int
+	failSaveAt int
 }
 
 func newMemStore() *memStore {
@@ -55,11 +59,8 @@ func (s *memStore) ListEndpoints(_ context.Context, event string) ([]out.Endpoin
 			out = append(out, e)
 			continue
 		}
-		for _, ev := range e.Events {
-			if ev == event {
-				out = append(out, e)
-				break
-			}
+		if slices.Contains(e.Events, event) {
+			out = append(out, e)
 		}
 	}
 	return out, nil
@@ -71,6 +72,10 @@ func (s *memStore) DeleteEndpoint(_ context.Context, id string) error {
 }
 
 func (s *memStore) SaveDelivery(_ context.Context, d out.Delivery) error {
+	s.saveCalls++
+	if s.failSaveAt == s.saveCalls {
+		return errors.New("injected save failure")
+	}
 	s.deliveries[d.ID] = d
 	return nil
 }
@@ -98,10 +103,34 @@ func newDispatcher(t *testing.T, store *memStore) *out.Dispatcher {
 	clk := clockwork.NewFakeClock()
 	logger := nopLogger(t)
 	return out.New(store, out.Options{
-		MaxAttempts: 3,
-		Timeout:     5 * time.Second,
-		Backoff:     func(int) time.Duration { return 0 }, // no wait in tests
+		MaxAttempts:         3,
+		Timeout:             5 * time.Second,
+		Backoff:             func(int) time.Duration { return 0 }, // no wait in tests
+		AllowInsecureHTTP:   true,
+		AllowPrivateNetwork: true,
 	}, logger, clk)
+}
+
+func TestNewHandlesTypedNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	t.Run("store", func(t *testing.T) {
+		t.Parallel()
+		var store *memStore
+		dispatcher := out.New(store, out.Options{}, nil, nil)
+		if err := dispatcher.Dispatch(t.Context(), "event", nil); err == nil {
+			t.Fatal("typed-nil store should return an error")
+		}
+	})
+
+	t.Run("clock", func(t *testing.T) {
+		t.Parallel()
+		var clk *clockwork.FakeClock
+		dispatcher := out.New(newMemStore(), out.Options{}, nil, clk)
+		if err := dispatcher.Dispatch(t.Context(), "event", nil); err != nil {
+			t.Fatalf("typed-nil clock should use the default: %v", err)
+		}
+	})
 }
 
 func TestDispatch_success(t *testing.T) {
@@ -153,7 +182,9 @@ func TestDispatch_deadLetter(t *testing.T) {
 	})
 
 	d := newDispatcher(t, store)
-	_ = d.Dispatch(context.Background(), "any", map[string]string{})
+	if err := d.Dispatch(context.Background(), "any", map[string]string{}); err == nil {
+		t.Fatal("dead-lettered dispatch reported success")
+	}
 
 	dls, _ := store.ListDeadLetters(context.Background())
 	if len(dls) != 1 {
@@ -161,6 +192,86 @@ func TestDispatch_deadLetter(t *testing.T) {
 	}
 	if dls[0].Attempts != 3 {
 		t.Fatalf("expected 3 attempts, got %d", dls[0].Attempts)
+	}
+}
+
+func TestDispatchReturnsInitialPersistenceFailure(t *testing.T) {
+	t.Parallel()
+	store := newMemStore()
+	store.failSaveAt = 1
+	_ = store.SaveEndpoint(t.Context(), out.Endpoint{
+		ID: "ep1", URL: "https://example.invalid/hook", Secret: "secret", Active: true,
+	})
+
+	err := newDispatcher(t, store).Dispatch(t.Context(), "event", map[string]string{"id": "1"})
+	if err == nil || !strings.Contains(err.Error(), "save initial delivery") {
+		t.Fatalf("Dispatch error = %v, want initial persistence failure", err)
+	}
+}
+
+func TestDispatchReturnsDeliveredStatePersistenceFailure(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	store := newMemStore()
+	store.failSaveAt = 2
+	_ = store.SaveEndpoint(t.Context(), out.Endpoint{
+		ID: "ep1", URL: server.URL, Secret: "secret", Active: true,
+	})
+
+	err := newDispatcher(t, store).Dispatch(t.Context(), "event", nil)
+	if err == nil || !strings.Contains(err.Error(), "save delivery") {
+		t.Fatalf("Dispatch error = %v, want delivered-state persistence failure", err)
+	}
+}
+
+func TestDispatchRejectsRedirectWithoutForwardingSignature(t *testing.T) {
+	t.Parallel()
+	var redirected atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		redirected.Add(1)
+	}))
+	t.Cleanup(target.Close)
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", target.URL)
+		w.WriteHeader(http.StatusTemporaryRedirect)
+	}))
+	t.Cleanup(redirector.Close)
+	store := newMemStore()
+	_ = store.SaveEndpoint(t.Context(), out.Endpoint{
+		ID: "ep1", URL: redirector.URL, Secret: "secret", Active: true,
+	})
+
+	err := newDispatcher(t, store).Dispatch(t.Context(), "event", nil)
+	if err == nil {
+		t.Fatal("redirected dispatch reported success")
+	}
+	if redirected.Load() != 0 {
+		t.Fatalf("signed request was forwarded to redirect target %d time(s)", redirected.Load())
+	}
+}
+
+func TestDispatchRejectsPrivateEndpointByDefault(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	store := newMemStore()
+	_ = store.SaveEndpoint(t.Context(), out.Endpoint{
+		ID: "ep1", URL: server.URL, Secret: "secret", Active: true,
+	})
+	dispatcher := out.New(store, out.Options{
+		MaxAttempts:       1,
+		Backoff:           func(int) time.Duration { return 0 },
+		AllowInsecureHTTP: true,
+	}, nopLogger(t), clockwork.NewFakeClock())
+
+	err := dispatcher.Dispatch(t.Context(), "event", nil)
+	if err == nil || !strings.Contains(err.Error(), "non-public address") {
+		t.Fatalf("Dispatch error = %v, want non-public-address rejection", err)
 	}
 }
 

@@ -151,6 +151,10 @@ func TestConstructorsValidateKeys(t *testing.T) {
 	if _, err := receipt.NewSignerFromSeed(fixedSeed, nil); !errors.Is(err, receipt.ErrNilClock) {
 		t.Fatalf("nil clock: got %v", err)
 	}
+	var typedNilClock *clockwork.FakeClock
+	if _, err := receipt.NewSignerFromSeed(fixedSeed, typedNilClock); !errors.Is(err, receipt.ErrNilClock) {
+		t.Fatalf("typed-nil clock: got %v", err)
+	}
 	_, priv, err := receipt.GenerateKey()
 	if err != nil {
 		t.Fatal(err)

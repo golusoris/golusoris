@@ -16,6 +16,14 @@ import (
 	"github.com/golusoris/golusoris/core/gitx/worktree"
 )
 
+func TestNewIgnoresNilOption(t *testing.T) {
+	t.Parallel()
+	manager := worktree.New("/tmp/repository", nil)
+	if manager.Root() != "/tmp/repository" {
+		t.Fatalf("Root = %q, want /tmp/repository", manager.Root())
+	}
+}
+
 func initRepo(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {

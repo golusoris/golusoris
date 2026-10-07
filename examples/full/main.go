@@ -25,11 +25,11 @@ func main() {
 	fx.New(
 		// ── Core ──────────────────────────────────────────────────────────────
 		golusoris.Core,        // config + log + clock + id + errors + validate + crypto
-		golusoris.DB,          // pgx pool + migrations + sqlc
+		golusoris.DB,          // pgx pool + migrations
 		otel.Module,           // tracer + meter + OTLP
-		golusoris.HTTP,        // server + middleware + Scalar docs
-		golusoris.K8s,         // /livez /readyz /startupz + /metrics
-		golusoris.Jobs,        // river queue + cron
+		golusoris.HTTP,        // chi router + HTTP server
+		golusoris.K8s,         // pod metadata + Kubernetes client
+		golusoris.Jobs,        // river client + worker registry
 		golusoris.CacheMemory, // otter L1 cache
 		golusoris.CacheRedis,  // rueidis L2 cache
 		// ── Auth + authz ──────────────────────────────────────────────────────

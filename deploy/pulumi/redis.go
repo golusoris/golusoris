@@ -6,6 +6,9 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/elasticache"
@@ -20,9 +23,10 @@ type redisConfig struct {
 
 // redis exposes the cache address surface the app tier consumes.
 type redis struct {
-	Group *elasticache.ReplicationGroup
-	URL   pulumi.StringOutput // redis://host:6379
-	Host  pulumi.StringOutput
+	Group   *elasticache.ReplicationGroup
+	Address pulumi.StringOutput // host:6379 for cache.redis.addr
+	URL     pulumi.StringOutput // rediss://host:6379 for operator integrations
+	Host    pulumi.StringOutput
 }
 
 // redisPort is fixed; ElastiCache Redis always listens on 6379.
@@ -71,8 +75,27 @@ func newRedis(
 		return nil, fmt.Errorf("pulumi: create cache replication group %s: %w", name, err)
 	}
 
-	url := pulumi.Sprintf("redis://%s:%d", group.PrimaryEndpointAddress, redisPort)
-	return &redis{Group: group, URL: url, Host: group.PrimaryEndpointAddress}, nil
+	address := group.PrimaryEndpointAddress.ApplyT(func(host string) string {
+		value, _ := formatRedisConnection(host)
+		return value
+	}).(pulumi.StringOutput)
+	connectionURL := group.PrimaryEndpointAddress.ApplyT(func(host string) string {
+		_, value := formatRedisConnection(host)
+		return value
+	}).(pulumi.StringOutput)
+	return &redis{
+		Group:   group,
+		Address: address,
+		URL:     connectionURL,
+		Host:    group.PrimaryEndpointAddress,
+	}, nil
+}
+
+// formatRedisConnection returns the app's address and the operator-facing TLS URL.
+func formatRedisConnection(host string) (string, string) {
+	address := net.JoinHostPort(host, strconv.Itoa(redisPort))
+	connectionURL := (&url.URL{Scheme: "rediss", Host: address}).String()
+	return address, connectionURL
 }
 
 // newCacheSecurityGroup allows Redis only from inside the VPC, never the internet.

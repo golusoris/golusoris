@@ -64,17 +64,17 @@ func TestVerifyPKCE_emptyVerifier(t *testing.T) {
 	}
 }
 
-func TestVerifyPKCE_plain(t *testing.T) {
+func TestVerifyPKCE_plainRejected(t *testing.T) {
 	t.Parallel()
-	verifier := "testverifier123"
-	if !verifyPKCE(verifier, "plain", verifier) {
-		t.Error("expected true for plain method with matching verifier")
+	verifier := "test-verifier-with-at-least-forty-three-characters"
+	if verifyPKCE(verifier, "plain", verifier) {
+		t.Error("expected false for plain method")
 	}
 }
 
 func TestVerifyPKCE_S256(t *testing.T) {
 	t.Parallel()
-	verifier := "testverifier123"
+	verifier := "test-verifier-with-at-least-forty-three-characters"
 	sum := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
 	if !verifyPKCE(challenge, "S256", verifier) {
@@ -91,35 +91,35 @@ func TestVerifyPKCE_unknown(t *testing.T) {
 
 func TestPickRegistered_found(t *testing.T) {
 	t.Parallel()
-	if got := pickRegistered([]string{"a", "b"}, "b"); got != "b" {
+	if got := pickRegistered([]string{"a", "b"}, "b", false); got != "b" {
 		t.Errorf("expected registered entry %q, got %q", "b", got)
 	}
 }
 
 func TestPickRegistered_notFound(t *testing.T) {
 	t.Parallel()
-	if got := pickRegistered([]string{"a", "b"}, "c"); got != "" {
+	if got := pickRegistered([]string{"a", "b"}, "c", false); got != "" {
 		t.Errorf("expected empty string for unregistered candidate, got %q", got)
 	}
 }
 
 func TestPickRegistered_prefixIsNotAMatch(t *testing.T) {
 	t.Parallel()
-	if got := pickRegistered([]string{"http://x/cb"}, "http://x/cb/"); got != "" {
+	if got := pickRegistered([]string{"http://x/cb"}, "http://x/cb/", false); got != "" {
 		t.Errorf("expected empty string for a prefix-only match, got %q", got)
 	}
 }
 
 func TestPickRegistered_emptyRegistered(t *testing.T) {
 	t.Parallel()
-	if got := pickRegistered(nil, "a"); got != "" {
+	if got := pickRegistered(nil, "a", false); got != "" {
 		t.Errorf("expected empty string for nil registered list, got %q", got)
 	}
 }
 
 func TestPickRegistered_emptyCandidate(t *testing.T) {
 	t.Parallel()
-	if got := pickRegistered([]string{"a"}, ""); got != "" {
+	if got := pickRegistered([]string{"a"}, "", false); got != "" {
 		t.Errorf("expected empty string for empty candidate, got %q", got)
 	}
 }

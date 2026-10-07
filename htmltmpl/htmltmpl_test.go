@@ -17,6 +17,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
@@ -28,6 +29,14 @@ import (
 func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 }
+
+type nilFS struct{}
+
+func (*nilFS) Open(string) (fs.File, error) { return nil, fs.ErrInvalid }
+
+type nilFuncProvider struct{}
+
+func (*nilFuncProvider) Funcs() template.FuncMap { return nil }
 
 func mustNew(t *testing.T, files fstest.MapFS, opts htmltmpl.Options, p htmltmpl.FuncProvider) *htmltmpl.Renderer {
 	t.Helper()
@@ -313,19 +322,29 @@ func TestNewValidation(t *testing.T) {
 	t.Parallel()
 	files := fstest.MapFS{"p": {Data: []byte("x")}}
 	tests := []struct {
-		name   string
-		logger *slog.Logger
-		clk    clock.Clock
-		fsys   fs.FS
+		name     string
+		logger   *slog.Logger
+		clk      clock.Clock
+		fsys     fs.FS
+		provider htmltmpl.FuncProvider
 	}{
-		{"nil logger", nil, clock.NewFake(), files},
-		{"nil clock", testLogger(), nil, files},
-		{"nil fs", testLogger(), clock.NewFake(), nil},
+		{name: "nil logger", logger: nil, clk: clock.NewFake(), fsys: files},
+		{name: "nil clock", logger: testLogger(), clk: nil, fsys: files},
+		{name: "nil fs", logger: testLogger(), clk: clock.NewFake(), fsys: nil},
+		{name: "typed-nil clock", logger: testLogger(), clk: (*clockwork.FakeClock)(nil), fsys: files},
+		{name: "typed-nil fs", logger: testLogger(), clk: clock.NewFake(), fsys: (*nilFS)(nil)},
+		{
+			name:     "typed-nil provider",
+			logger:   testLogger(),
+			clk:      clock.NewFake(),
+			fsys:     files,
+			provider: (*nilFuncProvider)(nil),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if _, err := htmltmpl.New(htmltmpl.Options{}, tt.logger, tt.clk, tt.fsys, nil); err == nil {
+			if _, err := htmltmpl.New(htmltmpl.Options{}, tt.logger, tt.clk, tt.fsys, tt.provider); err == nil {
 				t.Fatal("expected error")
 			}
 		})

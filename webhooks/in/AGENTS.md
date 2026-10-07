@@ -6,8 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — webhooks/in/
 
-Inbound webhook signature verification middleware. No fx dependency — plain
-`func(http.Handler) http.Handler` factory functions.
+Inbound webhook signature verification middleware. No fx dependency. Each
+factory returns `(func(http.Handler) http.Handler, error)` and rejects empty
+signing secret before routes are mounted.
 
 ## Providers
 
@@ -22,17 +23,25 @@ Inbound webhook signature verification middleware. No fx dependency — plain
 ## Usage
 
 ```go
-mux.Handle("/webhooks/stripe",  in.Stripe(secret)(stripeHandler))
-mux.Handle("/webhooks/github",  in.GitHub(secret)(githubHandler))
-mux.Handle("/webhooks/generic", in.HMAC(secret, "X-My-Sig")(myHandler))
+stripe, err := in.Stripe(secret)
+if err != nil { return err }
+github, err := in.GitHub(secret)
+if err != nil { return err }
+generic, err := in.HMAC(secret, "X-My-Sig")
+if err != nil { return err }
+mux.Handle("/webhooks/stripe", stripe(stripeHandler))
+mux.Handle("/webhooks/github", github(githubHandler))
+mux.Handle("/webhooks/generic", generic(myHandler))
 ```
 
 ## Internals
 
 Body is buffered up to `MaxBodyBytes` (1 MiB) for HMAC computation, then
-re-placed on `r.Body` so the downstream handler can read it again.
+re-placed on `r.Body` so downstream handler can read it again. Larger bodies
+are rejected with 413; signed prefixes never pass.
 
 ## Don't
 
-- Don't add provider functions without a nolint justification for any SHA-1/MD5 use.
-- Don't skip the timestamp check for Stripe/Slack — it prevents replay attacks.
+- Don't add provider functions without nolint justification for any SHA-1/MD5 use.
+- Keep symmetric timestamp window for Stripe/Slack — past and future
+  timestamps outside five minutes are rejected to prevent replay attacks.

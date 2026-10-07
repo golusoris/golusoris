@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — authz/
 
 RBAC/ABAC policy enforcement via [casbin/casbin/v3]. Module provides
-`*authz.Enforcer` when `authz.Options` is supplied in the fx graph.
+`*authz.Enforcer` when `authz.Options` is supplied in fx graph.
 
 ## Usage
 
@@ -52,6 +52,6 @@ Custom model DSL strings accepted via `Options.Model`.
 ## Don't
 
 - Don't skip scope/role checks in hot paths — Enforce is O(policy size).
-  Cache the result in `cache/memory` if needed.
-- Don't put business logic in the policy model DSL — keep it to access
-  control only.
+ Cache result in `cache/memory` if needed.
+- Don't put business logic in policy model DSL — keep it to access
+ control only.

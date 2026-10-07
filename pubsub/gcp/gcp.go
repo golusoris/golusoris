@@ -41,6 +41,12 @@ import (
 // ErrClosed is returned by [Client] methods called after [Client.Close].
 var ErrClosed = errors.New("gcp: client closed")
 
+// ErrNilClient is returned when [ClientFromPubsub] receives a nil client.
+var ErrNilClient = errors.New("gcp: nil pubsub client")
+
+// ErrNilHandler is returned when [Client.Subscribe] receives a nil callback.
+var ErrNilHandler = errors.New("gcp: nil handler")
+
 // clientInitTimeout bounds [pubsub.NewClient] during construction. Fx does
 // not itself apply any timeout here — see the comment on that call — so this
 // mirrors fx's own [fx.DefaultTimeout] as a reasonable, self-contained bound.
@@ -154,6 +160,9 @@ func ClientFromPubsub(pc *pubsub.Client) *Client {
 // Close's own stop loop, so the two can't interleave and leak an
 // unstopped publisher.
 func (c *Client) Publisher(topicID string) (*pubsub.Publisher, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed.Load() {
@@ -186,6 +195,11 @@ func (c *Client) Publish(ctx context.Context, topicID string, data []byte, attrs
 // once the Client has been closed, so a caller can never be handed a
 // subscriber bound to an already-closed connection.
 func (c *Client) Subscriber(subID string) (*pubsub.Subscriber, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed.Load() {
 		return nil, ErrClosed
 	}
@@ -196,6 +210,9 @@ func (c *Client) Subscriber(subID string) (*pubsub.Subscriber, error) {
 // cancelled or an unrecoverable error occurs. fn must Ack or Nack every
 // message it receives.
 func (c *Client) Subscribe(ctx context.Context, subID string, fn func(context.Context, *Message)) error {
+	if fn == nil {
+		return ErrNilHandler
+	}
 	s, err := c.Subscriber(subID)
 	if err != nil {
 		return err
@@ -209,6 +226,9 @@ func (c *Client) Subscribe(ctx context.Context, subID string, fn func(context.Co
 // Ping checks connectivity to the Pub/Sub service by listing at most one
 // topic in the configured project.
 func (c *Client) Ping(ctx context.Context) error {
+	if err := c.validate(); err != nil {
+		return err
+	}
 	if c.closed.Load() {
 		return ErrClosed
 	}
@@ -225,6 +245,9 @@ func (c *Client) Ping(ctx context.Context) error {
 // Close stops every cached publisher and closes the underlying client. It is
 // idempotent: calling Close more than once is a no-op after the first call.
 func (c *Client) Close() error {
+	if err := c.validate(); err != nil {
+		return err
+	}
 	if !c.closed.CompareAndSwap(false, true) {
 		return nil
 	}
@@ -241,7 +264,19 @@ func (c *Client) Close() error {
 
 // Pubsub returns the underlying *pubsub.Client for advanced use (topic and
 // subscription admin, batching/retry tuning, etc.).
-func (c *Client) Pubsub() *pubsub.Client { return c.c }
+func (c *Client) Pubsub() *pubsub.Client {
+	if c == nil {
+		return nil
+	}
+	return c.c
+}
+
+func (c *Client) validate() error {
+	if c == nil || c.c == nil {
+		return ErrNilClient
+	}
+	return nil
+}
 
 // boundedWait runs fn in the background and returns its result, or ctx.Err()
 // if ctx's deadline passes first. It exists for operations like

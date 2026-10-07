@@ -18,11 +18,21 @@ package secrets
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
-	"path/filepath"
 	"strings"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
+
+// MaxFileBytes is the largest secret file accepted by [File].
+const MaxFileBytes int64 = 64 << 10
+
+// ErrTooLarge reports a secret file larger than [MaxFileBytes].
+var ErrTooLarge = errors.New("secrets: file exceeds maximum size")
 
 // Secret is the minimal interface for secret retrieval.
 // Implementations must be safe for concurrent use.
@@ -43,7 +53,10 @@ type envStore struct{}
 // Key lookup is exact-match and case-sensitive.
 func Env() Secret { return envStore{} }
 
-func (envStore) Get(_ context.Context, key string) (string, error) {
+func (envStore) Get(ctx context.Context, key string) (string, error) {
+	if err := contextError(ctx); err != nil {
+		return "", err
+	}
 	v, ok := os.LookupEnv(key)
 	if !ok {
 		return "", ErrNotFound{Key: key}
@@ -60,30 +73,76 @@ type fileStore struct{ dir string }
 // Leading/trailing whitespace is trimmed from file contents.
 func File(dir string) Secret { return fileStore{dir: dir} }
 
-func (f fileStore) Get(_ context.Context, key string) (string, error) {
+func (f fileStore) Get(ctx context.Context, key string) (_ string, err error) {
+	if err = contextError(ctx); err != nil {
+		return "", err
+	}
 	if strings.ContainsAny(key, "/\\") {
 		return "", fmt.Errorf("secrets: key %q must not contain path separators", key)
 	}
-	path := filepath.Join(f.dir, key)
-	data, err := os.ReadFile(path) // #nosec G304 -- secret file path is operator-controlled config
+	root, err := os.OpenRoot(f.dir)
+	if err != nil {
+		return "", fmt.Errorf("secrets: open root: %w", err)
+	}
+	defer gerr.CloseJoin(root, &err, "secrets: close root")
+	file, err := root.Open(key)
 	if os.IsNotExist(err) {
 		return "", ErrNotFound{Key: key}
 	}
 	if err != nil {
-		return "", fmt.Errorf("secrets: read %s: %w", path, err)
+		return "", fmt.Errorf("secrets: open key %q: %w", key, err)
+	}
+	defer gerr.CloseJoin(file, &err, "secrets: close key "+key)
+	data, err := readSecretFile(ctx, file, key)
+	if err != nil {
+		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
 }
 
+func readSecretFile(ctx context.Context, file *os.File, key string) ([]byte, error) {
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("secrets: stat key %q: %w", key, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("secrets: key %q is not a regular file", key)
+	}
+	data, err := io.ReadAll(io.LimitReader(file, MaxFileBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("secrets: read key %q: %w", key, err)
+	}
+	if err = contextError(ctx); err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > MaxFileBytes {
+		return nil, fmt.Errorf("%w: key %q", ErrTooLarge, key)
+	}
+	return data, nil
+}
+
 // Static returns a Secret backed by a fixed map. Useful in tests.
-func Static(m map[string]string) Secret { return staticStore{m: m} }
+func Static(m map[string]string) Secret { return staticStore{m: maps.Clone(m)} }
 
 type staticStore struct{ m map[string]string }
 
-func (s staticStore) Get(_ context.Context, key string) (string, error) {
+func (s staticStore) Get(ctx context.Context, key string) (string, error) {
+	if err := contextError(ctx); err != nil {
+		return "", err
+	}
 	v, ok := s.m[key]
 	if !ok {
 		return "", ErrNotFound{Key: key}
 	}
 	return v, nil
+}
+
+func contextError(ctx context.Context) error {
+	if ctx == nil {
+		return errors.New("secrets: context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("secrets: get: %w", err)
+	}
+	return nil
 }

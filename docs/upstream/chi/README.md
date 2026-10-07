@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go-chi/chi/v5 — v5.2.1 snapshot
+# go-chi/chi/v5 — v5.3.2 snapshot
 
-Pinned: **v5.2.1**
-Source: https://pkg.go.dev/github.com/go-chi/chi/v5@v5.2.1
+Pinned: **v5.3.2**
+Source: [tagged source](https://github.com/go-chi/chi/tree/v5.3.2)
 
 ## Router
 
@@ -19,8 +19,8 @@ r := chi.NewRouter()
 // Middleware (applied in order)
 r.Use(middleware.RequestID)
 r.Use(middleware.RealIP)
-r.Use(middleware.Logger)
 r.Use(middleware.Recoverer)
+r.Use(httpxmiddleware.Logger(logger, clk))
 
 // Routes
 r.Get("/", handler)
@@ -57,7 +57,6 @@ r.Mount("/admin", adminRouter())
 // Built-in middleware
 middleware.RequestID
 middleware.RealIP
-middleware.Logger
 middleware.Recoverer
 middleware.Compress(5)
 middleware.StripSlashes
@@ -68,8 +67,9 @@ middleware.BasicAuth("realm", map[string]string{"user": "pass"})
 ## golusoris usage
 
 - `httpx/router/` — `chi.Router` provided via fx; ogen server mounted on it.
-- `httpx/middleware/` — wraps chi middleware + custom golusoris middleware.
+- `httpx/middleware/` — bounded recovery and slog-backed access logging. Prefer
+  it over chi's standard-library `middleware.Logger` in Golusoris applications.
 
 ## Links
 
-- Changelog: https://github.com/go-chi/chi/blob/master/CHANGELOG.md
+- [Changelog](https://github.com/go-chi/chi/blob/v5.3.2/CHANGELOG.md)

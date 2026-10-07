@@ -1,6 +1,6 @@
 ---
 name: subagent-driven-development
-description: Use when executing implementation plans with independent tasks in the current session
+description: Use when executing implementation plans with independent tasks in current session
 ---
 
 # Subagent-Driven Development
@@ -86,16 +86,16 @@ digraph process {
 
 ## Model Selection
 
-Use the least powerful model that can handle each role to conserve cost and increase speed.
+Use least powerful model that can handle each role to conserve cost and increase speed.
 
-**Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use a fast, cheap model. Most implementation tasks are mechanical when the plan is well-specified.
+**Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use fast, cheap model. Most implementation tasks are mechanical when plan is well-specified.
 
-**Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use a standard model.
+**Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use standard model.
 
-**Architecture, design, and review tasks**: use the most capable available model.
+**Architecture, design, and review tasks**: use most capable available model.
 
 **Task complexity signals:**
-- Touches 1-2 files with a complete spec → cheap model
+- Touches 1-2 files with complete spec → cheap model
 - Touches multiple files with integration concerns → standard model
 - Requires design judgment or broad codebase understanding → most capable model
 
@@ -105,17 +105,17 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **DONE:** Proceed to spec compliance review.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review.
+**DONE_WITH_CONCERNS:** implementer completed work but flagged doubts. Read concerns before proceeding. If concerns are about correctness or scope, address them before review. If they're observations (e.g, "this file is getting large"), note them and proceed to review.
 
-**NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
+**NEEDS_CONTEXT:** implementer needs information that wasn't provided. Provide missing context and re-dispatch.
 
-**BLOCKED:** The implementer cannot complete the task. Assess the blocker:
-1. If it's a context problem, provide more context and re-dispatch with the same model
-2. If the task requires more reasoning, re-dispatch with a more capable model
-3. If the task is too large, break it into smaller pieces
-4. If the plan itself is wrong, escalate to the human
+**BLOCKED:** implementer cannot complete task. Assess blocker:
+1. If it's context problem, provide more context and re-dispatch with same model
+2. If task requires more reasoning, re-dispatch with more capable model
+3. If task is too large, break it into smaller pieces
+4. If plan itself is wrong, escalate to human
 
-**Never** ignore an escalation or force the same model to retry without changes. If the implementer said it's stuck, something needs to change.
+**Never** ignore escalation or force same model to retry without changes. If implementer said it's stuck, something needs to change.
 
 ## Prompt Templates
 
@@ -221,7 +221,7 @@ Done!
 **Quality gates:**
 - Self-review catches issues before handoff
 - Two-stage review: spec compliance, then code quality
-- Review loops ensure fixes actually work
+- Review loops ensure fixes work
 - Spec compliance prevents over/under-building
 - Code quality ensures implementation is well-built
 
@@ -244,7 +244,7 @@ Done!
 - Accept "close enough" on spec compliance (spec reviewer found issues = not done)
 - Skip review loops (reviewer found issues = implementer fixes = review again)
 - Let implementer self-review replace actual review (both are needed)
-- **Start code quality review before spec compliance is ✅** (wrong order)
+- **Start code quality review before spec compliance is [ok]** (wrong order)
 - Move to next task while either review has open issues
 
 **If subagent asks questions:**
@@ -256,7 +256,7 @@ Done!
 - Implementer (same subagent) fixes them
 - Reviewer reviews again
 - Repeat until approved
-- Don't skip the re-review
+- Don't skip re-review
 
 **If subagent fails task:**
 - Dispatch fix subagent with specific instructions
@@ -266,9 +266,9 @@ Done!
 
 **Required workflow skills:**
 - **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
-- **superpowers:writing-plans** - Creates the plan this skill executes
+- **superpowers:writing-plans** - Creates plan this skill executes
 - **superpowers:requesting-code-review** - Code review template for reviewer subagents
-- **superpowers:finishing-a-development-branch** - Complete development after all tasks
+- **superpowers:finishing--development-branch** - Complete development after all tasks
 
 **Subagents should use:**
 - **superpowers:test-driven-development** - Subagents follow TDD for each task

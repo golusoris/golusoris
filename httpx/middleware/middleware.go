@@ -21,7 +21,10 @@
 //	)
 package middleware
 
-import "net/http"
+import (
+	"net/http"
+	"slices"
+)
 
 // Middleware is the canonical net/http middleware signature.
 type Middleware func(http.Handler) http.Handler
@@ -29,9 +32,12 @@ type Middleware func(http.Handler) http.Handler
 // Chain applies middlewares in order so the first argument is the outermost
 // wrapper. Empty chains are a no-op.
 func Chain(ms ...Middleware) Middleware {
+	ms = slices.Clone(ms)
 	return func(next http.Handler) http.Handler {
-		for i := len(ms) - 1; i >= 0; i-- {
-			next = ms[i](next)
+		for _, m := range slices.Backward(ms) {
+			if m != nil {
+				next = m(next)
+			}
 		}
 		return next
 	}

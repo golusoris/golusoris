@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# prometheus/client_golang — v1.22.0 snapshot
+# prometheus/client_golang — v1.24.1 snapshot
 
-Pinned: **v1.22.0**
-Source: https://pkg.go.dev/github.com/prometheus/client_golang@v1.22.0
+Pinned: **v1.24.1**
+Source: [tagged source](https://github.com/prometheus/client_golang/tree/v1.24.1)
 
 ## Metrics registration
 
@@ -65,9 +65,10 @@ reg.MustRegister(
 
 ## golusoris usage
 
-- `k8s/metrics/prom/` — `/metrics` handler + per-check-status gauges provided via fx.
+- `k8s/metrics/prom/` — `/metrics` handler and per-check-status gauges provided
+  via Fx.
 
 ## Links
 
-- Changelog: https://github.com/prometheus/client_golang/blob/main/CHANGELOG.md
-- Best practices: https://prometheus.io/docs/practices/naming/
+- [Changelog](https://github.com/prometheus/client_golang/blob/v1.24.1/CHANGELOG.md)
+- [Metric naming practices](https://prometheus.io/docs/practices/naming/)

@@ -6,8 +6,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/prop/
 
-Property-based testing helpers over `leanovate/gopter`: a deterministically
-seeded `Properties` constructor (seed derived from the test name) so failures
+Property-based testing helpers over `leanovate/gopter`: deterministically
+seeded `Properties` constructor (seed derived from test name) so failures
 reproduce without `-count=1`. Stateless test utility — **no fx wiring**.
 
 ## API
@@ -22,17 +22,17 @@ prop.Run(t, func(props *prop.Properties) { // New + setup + TestingRun in one ca
 })
 ```
 
-`prop.Properties` is a type alias for `gopter.Properties`. Generators and
+`prop.Properties` is type alias for `gopter.Properties`. Generators and
 combinators come from gopter's own `gen` / `prop` sub-packages — apps import
 those directly.
 
 ## Why leanovate/gopter
 
 - Mature Go QuickCheck-style library with shrinking + composable generators;
-  `New` only adds the deterministic seed, leaving the full gopter API intact.
+ `New` only adds deterministic seed, leaving full gopter API intact.
 
 ## Notes
 
-- Seed = FNV-64a of `t.Name()`, so each test always exercises the same input
-  sequence; rename the test to reshuffle. RNG is `math/rand` (test-only, not
-  crypto — `//nolint:gosec G404,G115`).
+- Seed = FNV-64a of `t.Name()`, so each test always exercises same input
+ sequence; rename test to reshuffle. RNG is `math/rand` (test-only, not
+ crypto — `//nolint:gosec G404,G115`).

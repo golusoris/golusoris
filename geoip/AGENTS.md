@@ -7,8 +7,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — geoip/
 
 Thin wrapper around `oschwald/maxminddb-golang/v2` for MaxMind GeoLite2 / GeoIP2 database lookups.
-The public API still takes `net.IP`; the v2 `netip.Addr` lookup is bridged internally.
-No fx module — caller manages the `*DB` lifecycle (Open/Close).
+public API still takes `net.IP`; v2 `netip.Addr` lookup is bridged internally.
+No fx module — caller manages `*DB` lifecycle (Open/Close).
 
 ## Usage
 
@@ -29,13 +29,13 @@ asn, _ := asnDB.LookupASN(net.ParseIP("8.8.8.8"))
 
 ## Notes
 
-- `Lookup` returns a zero `Info` and nil error for RFC 1918 / unrecognised IPs.
-- `LookupASN` requires a separate GeoLite2-ASN.mmdb file (different database type).
-- The mmdb file is NOT bundled — obtain from MaxMind and supply the path at runtime.
-- Integrate with `httpx/geofence/` to block or redirect based on `CountryCode`.
+- `Lookup` returns zero `Info` and nil error for RFC 1918 / unrecognised IPs.
+- `LookupASN` requires separate GeoLite2-ASN.mmdb file (different database type).
+- mmdb file is NOT bundled — obtain from MaxMind and supply path at runtime.
+- Integrate with `httpx/geofence/` to block or redirect from `CountryCode`.
 
 ## Don't
 
 - Don't call `Lookup` per request without caching — mmdb reads are cheap but country
-  results rarely change; cache at the IP level for hot paths.
-- Don't use `LookupASN` on a city database or vice-versa; the struct tags won't match.
+ results rarely change; cache at IP level for hot paths.
+- Don't use `LookupASN` on city database or vice-versa; struct tags won't match.

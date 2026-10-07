@@ -15,8 +15,8 @@ no CGO, no subprocess, works on every GOOS.
 
 | Symbol | Purpose |
 |---|---|
-| `plugin.New[T](name)` | create a named `*Registry[T]` (T is usually an interface) |
-| `Registry.Register(key, impl) error` | add impl; returns `ErrDuplicate` on a repeat key |
+| `plugin.New[T](name)` | create named `*Registry[T]` (T is usually an interface) |
+| `Registry.Register(key, impl) error` | add impl; returns `ErrDuplicate` on repeat key |
 | `Registry.MustRegister(key, impl)` | add/replace (use in tests) |
 | `Registry.Get(key)` | `(impl, ok)` |
 | `Registry.Lookup(key) (T, error)` | impl or `ErrNotRegistered` (fail-fast at startup) |
@@ -35,17 +35,17 @@ func wireStripe() error { return PaymentProviders.Register("stripe", &StripeProv
 p, ok := PaymentProviders.Get("stripe")
 ```
 
-Resolve in an `fx.Invoke` with `Lookup` and return its error to fail fast on
+Resolve in `fx.Invoke` with `Lookup` and return its error to fail fast on
 misconfiguration.
 
 ## Don't
 
-- Don't call `Register` twice for the same key — it returns `ErrDuplicate` by
-  design (surface it at startup, like `http.Handle`). Use `MustRegister` only
-  in tests.
-- Don't use `Lookup` on the request hot path — resolve once at startup and
-  hold the impl; the read lock is cheap but the error-on-miss is a startup
-  contract, not a runtime one.
-- Don't treat this as a security boundary — every registered impl runs in-process
-  with full trust. It's a wiring mechanism, not a sandbox.
+- Don't call `Register` twice for same key — it returns `ErrDuplicate` by
+ design (surface it at startup, like `http.Handle`). Use `MustRegister` only
+ in tests.
+- Don't use `Lookup` on request hot path — resolve once at startup and
+ hold impl; read lock is cheap but error-on-miss is startup
+ contract, not runtime one.
+- Don't treat this as security boundary — every registered impl runs in-process
+ with full trust. It's wiring mechanism, not sandbox.
 - Don't rely on `Keys()`/`All()` ordering — it's undefined.

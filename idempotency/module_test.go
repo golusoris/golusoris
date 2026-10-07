@@ -57,6 +57,13 @@ func TestModule_DefaultsOnEmptyConfig(t *testing.T) {
 	if got.Header != "Idempotency-Key" {
 		t.Errorf("Header = %q, want %q (default)", got.Header, "Idempotency-Key")
 	}
+	if got.MaxRequestBody != 1<<20 || got.MaxResponseBody != 1<<20 {
+		t.Errorf(
+			"body limits = (%d, %d), want 1 MiB each",
+			got.MaxRequestBody,
+			got.MaxResponseBody,
+		)
+	}
 }
 
 // TestModule_BuildsDefaultBackend boots the Module via fxtest and asserts the

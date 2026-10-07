@@ -6,6 +6,7 @@ package webpush_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -17,6 +18,12 @@ import (
 	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/notify/webpush"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
 
 // stubSubscription fakes a browser PushSubscription. The keys don't
 // need to be real P-256 because webpush-go only performs the ECDH on
@@ -32,8 +39,9 @@ func stubSubscription(t *testing.T, endpoint string) string {
 	require.NoError(t, err)
 	_ = priv // only pub matters for the client-side key
 
-	// Pretend auth secret (16 random bytes base64'd).
-	auth := "DGv6ra1nlYgDCS1FRnbzlw"
+	// Fixture-only zero bytes satisfy the 16-byte Web Push auth shape without
+	// embedding high-entropy secret-like material in source.
+	auth := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
 	s, err := webpush.EncodeSubscription(endpoint, pub, auth)
 	require.NoError(t, err)
 	return s
@@ -43,7 +51,7 @@ func TestSender_Send(t *testing.T) {
 	t.Parallel()
 
 	var gotBody []byte
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodPost, r.Method)
 		require.NotEmpty(t, r.Header.Get("Authorization"))
 		require.Contains(t, r.Header.Get("Authorization"), "vapid")
@@ -59,6 +67,7 @@ func TestSender_Send(t *testing.T) {
 		VAPIDPublicKey:  pub,
 		VAPIDPrivateKey: priv,
 		Subject:         "mailto:ops@example.com",
+		HTTPClient:      srv.Client(),
 	})
 	require.NoError(t, err)
 	require.Equal(t, "webpush", s.Name())
@@ -88,6 +97,45 @@ func TestSender_RejectsEmptyBody(t *testing.T) {
 	}))
 }
 
+func TestSender_RejectsInsecureEndpointBeforeTransport(t *testing.T) {
+	t.Parallel()
+	priv, pub, err := webpush.NewVAPIDKeys()
+	require.NoError(t, err)
+
+	called := false
+	s, err := webpush.NewSender(webpush.Options{
+		VAPIDPublicKey:  pub,
+		VAPIDPrivateKey: priv,
+		HTTPClient: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			called = true
+			return &http.Response{
+				StatusCode: http.StatusCreated,
+				Header:     make(http.Header),
+				Body:       http.NoBody,
+			}, nil
+		})},
+	})
+	require.NoError(t, err)
+
+	_, clientPublicKey, err := webpush.NewVAPIDKeys()
+	require.NoError(t, err)
+	subscription, err := json.Marshal(map[string]any{
+		"endpoint": "http://push.example/endpoint",
+		"keys": map[string]string{
+			"p256dh": clientPublicKey,
+			"auth":   base64.RawURLEncoding.EncodeToString(make([]byte, 16)),
+		},
+	})
+	require.NoError(t, err)
+
+	err = s.Send(context.Background(), notify.Message{
+		Body:     "payload",
+		Metadata: map[string]string{"subscription": string(subscription)},
+	})
+	require.ErrorContains(t, err, "HTTPS")
+	require.False(t, called, "insecure endpoint reached HTTP transport")
+}
+
 func TestSender_RejectsMissingKeys(t *testing.T) {
 	t.Parallel()
 	_, err := webpush.NewSender(webpush.Options{VAPIDPrivateKey: "x"})
@@ -98,9 +146,15 @@ func TestSender_RejectsMissingKeys(t *testing.T) {
 
 func TestEncodeSubscription(t *testing.T) {
 	t.Parallel()
-	raw, err := webpush.EncodeSubscription("http://push/abc", "pub", "auth")
+	raw, err := webpush.EncodeSubscription("https://push/abc", "pub", "auth")
 	require.NoError(t, err)
 	var m map[string]any
 	require.NoError(t, json.Unmarshal([]byte(raw), &m))
-	require.Equal(t, "http://push/abc", m["endpoint"])
+	require.Equal(t, "https://push/abc", m["endpoint"])
+}
+
+func TestEncodeSubscriptionRejectsInsecureEndpoint(t *testing.T) {
+	t.Parallel()
+	_, err := webpush.EncodeSubscription("http://push/abc", "pub", "auth")
+	require.ErrorContains(t, err, "HTTPS")
 }

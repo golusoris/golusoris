@@ -94,7 +94,7 @@ func newFleet(opts Options, registry tiny.Registry, client *jobs.Client) (*Fleet
 	if client == nil {
 		return nil, errors.New("ai/tiny/serve/fleet: nil jobs.Client (is jobs.Module wired and enabled?)")
 	}
-	return NewFleet(registry, client, opts.QueuePrefix)
+	return NewFleetWithInputLimit(registry, client, opts.QueuePrefix, opts.MaxInputBytes)
 }
 
 // registerWorker wires the node-side Worker onto the shared jobs.Workers
@@ -108,7 +108,9 @@ func registerWorker(opts Options, registry tiny.Registry, factory PredictorFacto
 	if err != nil {
 		return err
 	}
-	jobs.Register(workers, w)
+	if err := jobs.Register(workers, w); err != nil {
+		return fmt.Errorf("ai/tiny/serve/fleet: register worker: %w", err)
+	}
 	return nil
 }
 
@@ -118,14 +120,25 @@ func registerWorker(opts Options, registry tiny.Registry, factory PredictorFacto
 // client.
 func addQueues(lc fx.Lifecycle, opts Options, client *jobs.Client, logger *slog.Logger) error {
 	opts = opts.withDefaults()
+	prefix, err := normalizeQueuePrefix(opts.QueuePrefix)
+	if err != nil {
+		return err
+	}
 	caps, err := normalizeCaps(opts.capabilities())
 	if err != nil {
 		return err
 	}
+	queueNames := make([]string, 0, len(caps))
+	for _, capability := range caps {
+		name, nameErr := queueName(prefix, capability)
+		if nameErr != nil {
+			return nameErr
+		}
+		queueNames = append(queueNames, name)
+	}
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
-			for _, c := range caps {
-				name := queueName(opts.QueuePrefix, c)
+			for _, name := range queueNames {
 				if addErr := client.Queues().Add(name, river.QueueConfig{MaxWorkers: opts.MaxWorkers}); addErr != nil {
 					return fmt.Errorf("ai/tiny/serve/fleet: add queue %q: %w", name, addErr)
 				}

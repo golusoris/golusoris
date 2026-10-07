@@ -26,8 +26,8 @@ page.NewOffsetPage(rows, total, offset, limit)
 
 ## Convention
 
-Fetch `limit + 1` rows from the DB to detect HasMore without a COUNT query.
-Pass the slice and `limit` to `NewCursorPage` — the helper strips the extra.
+Fetch `limit + 1` rows from DB to detect HasMore without COUNT query.
+Pass slice and `limit` to `NewCursorPage` — helper strips extra.
 
 ## Don't
 

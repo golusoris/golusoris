@@ -46,6 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          . tools/tool-versions.env
           # The dind daemon cannot bind-mount this workspace: separate containers,
           # separate filesystems. Stream the tree in over stdin rather than
           # reaching for a -v that would mount an empty directory.
@@ -58,8 +59,9 @@ jobs:
           # correct by construction. They are replayed against .semgrep.yml,
           # in both directions, by scripts/hiss/semgrep-fixtures.sh
           # (`make hiss-fixtures`), which scans them from a temporary copy.
+          semgrep_image="semgrep/semgrep:${SEMGREP_VERSION}@${SEMGREP_IMAGE_DIGEST}"
           tar -cf - --exclude=.git . \
-            | docker run --rm -i semgrep/semgrep:1.144.0@sha256:10301f060aacf84078f9704fb1ba3a321df4ac46b009fd29c1c66880d1db8e77 \
+            | docker run --rm -i "$semgrep_image" \
                 sh -ec 'mkdir -p /src && tar -xf - -C /src && \
                   semgrep scan \
                     --config p/golang \
@@ -68,3 +70,7 @@ jobs:
                     --exclude .config/hiss/testdata \
                     --exclude .config/hiss/semgrep/testdata \
                     --error --metrics=off --quiet /src'
+
+      - name: Run Trivy dependency, secret, and IaC gate
+        shell: bash
+        run: bash scripts/ci/trivy-scan.sh

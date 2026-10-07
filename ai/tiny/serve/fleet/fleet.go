@@ -39,16 +39,19 @@ package fleet
 
 import (
 	"context"
+	jsonv1 "encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // capabilityRe restricts a (normalized) capability to river's queue-name
@@ -65,6 +68,9 @@ const DefaultQueuePrefix = "tiny"
 // queueSep joins the prefix and capability. river rejects "." in queue
 // names, so a hyphen is used.
 const queueSep = "-"
+
+// maxQueueNameBytes mirrors River v0.47.0's queue-name limit.
+const maxQueueNameBytes = 64
 
 // DefaultMaxInputBytes caps the JSON-encoded job input. Tiny task
 // models take short prompts / small feature vectors; 1 MiB is generous
@@ -94,9 +100,38 @@ type Request struct {
 	Tags []string
 }
 
-// queueName maps a capability to its river queue under prefix.
-func queueName(prefix string, c Capability) string {
-	return prefix + queueSep + string(c)
+// queueName maps a capability to its bounded River queue under prefix.
+func queueName(prefix string, c Capability) (string, error) {
+	name := prefix + queueSep + string(c)
+	if len(name) > maxQueueNameBytes {
+		return "", fmt.Errorf(
+			"ai/tiny/serve/fleet: queue name %q exceeds River's %d bytes",
+			name,
+			maxQueueNameBytes,
+		)
+	}
+	return name, nil
+}
+
+func normalizeQueuePrefix(prefix string) (string, error) {
+	if prefix == "" {
+		prefix = DefaultQueuePrefix
+	}
+	normalized := strings.ToLower(strings.TrimSpace(prefix))
+	if normalized == "" || !capabilityRe.MatchString(normalized) {
+		return "", fmt.Errorf(
+			"ai/tiny/serve/fleet: queue prefix %q must be lowercase letters/digits separated by - or _",
+			prefix,
+		)
+	}
+	if len(normalized)+len(queueSep)+1 > maxQueueNameBytes {
+		return "", fmt.Errorf(
+			"ai/tiny/serve/fleet: queue prefix %q leaves no room within River's %d-byte queue limit",
+			prefix,
+			maxQueueNameBytes,
+		)
+	}
+	return normalized, nil
 }
 
 // normalizeCapability lowercases + trims a capability and validates it
@@ -144,26 +179,78 @@ func (f ResultSinkFunc) Store(ctx context.Context, ref tiny.Ref, p tiny.Predicti
 }
 
 // PredictorFactory builds a fresh [tiny.Predictor] for a model. The
-// fleet calls it per job and Closes the predictor when the job ends, so
-// the factory can return a cheap per-model client (the ollama Predictor
-// is a stateless HTTP client). Returning a nil predictor with a nil
-// error is a programming bug and is rejected.
+// fleet calls it per job and Closes the predictor when the job ends. Returning
+// a nil predictor with a nil error is a programming bug and is rejected.
 type PredictorFactory func(m tiny.Model) (tiny.Predictor, error)
 
-// SingletonFactory returns a [PredictorFactory] that always hands back
-// p and a no-op Close, for predictors that are already concurrency-safe
-// and process-wide (e.g. one ollama client serving every model).
+// SingletonFactory returns a [PredictorFactory] backed by one process-wide
+// predictor. Each returned lease serializes its Load+Predict pair so one job
+// cannot replace the model another in-flight job is about to use.
 func SingletonFactory(p tiny.Predictor) PredictorFactory {
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
 	return func(tiny.Model) (tiny.Predictor, error) {
-		return noClosePredictor{p}, nil
+		if validate.IsNil(p) {
+			return nil, errors.New("ai/tiny/serve/fleet: singleton has nil predictor")
+		}
+		return &singletonLease{Predictor: p, gate: gate}, nil
 	}
 }
 
-// noClosePredictor wraps a shared Predictor so the fleet's per-job Close
-// does not tear down a process-wide instance.
-type noClosePredictor struct{ tiny.Predictor }
+// singletonLease keeps one model selection stable through its prediction and
+// returns the shared predictor to the factory without closing it.
+type singletonLease struct {
+	tiny.Predictor
+	gate     chan struct{}
+	acquired bool
+}
 
-func (noClosePredictor) Close() error { return nil }
+func (p *singletonLease) Load(ctx context.Context, model tiny.Model) error {
+	if p.acquired {
+		return errors.New("ai/tiny/serve/fleet: singleton lease already loaded")
+	}
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("ai/tiny/serve/fleet: acquire singleton predictor: %w", ctx.Err())
+	case <-p.gate:
+		p.acquired = true
+	}
+	loaded := false
+	defer func() {
+		if !loaded {
+			p.release()
+		}
+	}()
+	if err := p.Predictor.Load(ctx, model); err != nil {
+		return fmt.Errorf("ai/tiny/serve/fleet: load singleton predictor: %w", err)
+	}
+	loaded = true
+	return nil
+}
+
+func (p *singletonLease) Predict(ctx context.Context, input any) (tiny.Prediction, error) {
+	if !p.acquired {
+		return tiny.Prediction{}, errors.New("ai/tiny/serve/fleet: singleton predictor not loaded")
+	}
+	defer p.release()
+	prediction, err := p.Predictor.Predict(ctx, input)
+	if err != nil {
+		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/fleet: predict with singleton: %w", err)
+	}
+	return prediction, nil
+}
+
+func (p *singletonLease) Close() error {
+	p.release()
+	return nil
+}
+
+func (p *singletonLease) release() {
+	if p.acquired {
+		p.acquired = false
+		p.gate <- struct{}{}
+	}
+}
 
 // Inserter is the subset of [river.Client] the controller needs. Both
 // the real *river.Client[pgx.Tx] and test doubles satisfy it.
@@ -174,25 +261,40 @@ type Inserter interface {
 // Fleet is the controller handle. It validates + enqueues predictions;
 // the work happens on a node running [Worker].
 type Fleet struct {
-	registry    tiny.Registry
-	inserter    Inserter
-	queuePrefix string
+	registry      tiny.Registry
+	inserter      Inserter
+	queuePrefix   string
+	maxInputBytes int
 }
 
 // NewFleet builds a controller. registry resolves models pre-flight;
 // inserter enqueues onto a capability queue. queuePrefix defaults to
 // [DefaultQueuePrefix] when empty.
 func NewFleet(registry tiny.Registry, inserter Inserter, queuePrefix string) (*Fleet, error) {
-	if registry == nil {
+	return NewFleetWithInputLimit(registry, inserter, queuePrefix, DefaultMaxInputBytes)
+}
+
+// NewFleetWithInputLimit builds a controller with an explicit encoded-input
+// cap. Non-positive limits select [DefaultMaxInputBytes].
+func NewFleetWithInputLimit(
+	registry tiny.Registry, inserter Inserter, queuePrefix string, maxInputBytes int,
+) (*Fleet, error) {
+	if validate.IsNil(registry) {
 		return nil, errors.New("ai/tiny/serve/fleet: nil registry")
 	}
-	if inserter == nil {
+	if validate.IsNil(inserter) {
 		return nil, errors.New("ai/tiny/serve/fleet: nil inserter")
 	}
-	if queuePrefix == "" {
-		queuePrefix = DefaultQueuePrefix
+	normalizedPrefix, err := normalizeQueuePrefix(queuePrefix)
+	if err != nil {
+		return nil, err
 	}
-	return &Fleet{registry: registry, inserter: inserter, queuePrefix: queuePrefix}, nil
+	if maxInputBytes <= 0 {
+		maxInputBytes = DefaultMaxInputBytes
+	}
+	return &Fleet{
+		registry: registry, inserter: inserter, queuePrefix: normalizedPrefix, maxInputBytes: maxInputBytes,
+	}, nil
 }
 
 // Submit validates req, resolves the model, and enqueues a prediction
@@ -209,18 +311,30 @@ func (f *Fleet) Submit(ctx context.Context, req Request) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if err = checkInputSize(req.Input, f.maxInputBytes); err != nil {
+		return 0, err
+	}
 	// Pre-flight resolve: fail fast on an unknown / not-yet-trained model
 	// instead of burning a queue round-trip + a node's load attempt.
-	if _, gErr := f.registry.GetModel(ctx, req.Model); gErr != nil {
-		return 0, fmt.Errorf("ai/tiny/serve/fleet: resolve model: %w", gErr)
+	model, getErr := f.registry.GetModel(ctx, req.Model)
+	if getErr != nil {
+		return 0, fmt.Errorf("ai/tiny/serve/fleet: resolve model: %w", getErr)
+	}
+	resolvedRef, refErr := resolvedModelRef(model)
+	if refErr != nil {
+		return 0, refErr
+	}
+	queue, queueErr := queueName(f.queuePrefix, capName)
+	if queueErr != nil {
+		return 0, queueErr
 	}
 	opts := &river.InsertOpts{
-		Queue:    queueName(f.queuePrefix, capName),
+		Queue:    queue,
 		Priority: req.Priority,
-		Tags:     req.Tags,
+		Tags:     slices.Clone(req.Tags),
 	}
 	res, err := f.inserter.Insert(ctx, PredictArgs{
-		Ref:        req.Model,
+		Ref:        resolvedRef,
 		Capability: capName,
 		Input:      req.Input,
 	}, opts)
@@ -228,6 +342,52 @@ func (f *Fleet) Submit(ctx context.Context, req Request) (int64, error) {
 		return 0, fmt.Errorf("ai/tiny/serve/fleet: enqueue: %w", err)
 	}
 	return res.Job.ID, nil
+}
+
+func resolvedModelRef(model tiny.Model) (tiny.Ref, error) {
+	if model.Name == "" || model.Version < 1 {
+		return tiny.Ref{}, fmt.Errorf(
+			"ai/tiny/serve/fleet: registry returned unresolved model name=%q version=%d",
+			model.Name, model.Version,
+		)
+	}
+	return tiny.Ref{Name: model.Name, TenantID: model.TenantID, Version: model.Version}, nil
+}
+
+func checkInputSize(input any, maxInputBytes int) error {
+	if maxInputBytes <= 0 {
+		return errors.New("ai/tiny/serve/fleet: input cap must be positive")
+	}
+	if err := validateJSONInputMemory(input, maxInputBytes); err != nil {
+		return err
+	}
+	w := jsonLimitWriter{limit: int64(maxInputBytes)}
+	err := jsonv2.MarshalWrite(&w, input, jsonv1.DefaultOptionsV1())
+	if errors.Is(err, errInputTooLarge) {
+		return fmt.Errorf(
+			"ai/tiny/serve/fleet: input exceeds cap %d bytes",
+			maxInputBytes,
+		)
+	}
+	if err != nil {
+		return fmt.Errorf("ai/tiny/serve/fleet: encode input: %w", err)
+	}
+	return nil
+}
+
+var errInputTooLarge = errors.New("encoded input exceeds limit")
+
+type jsonLimitWriter struct {
+	limit   int64
+	written int64
+}
+
+func (w *jsonLimitWriter) Write(p []byte) (int, error) {
+	if int64(len(p)) > w.limit-w.written {
+		return 0, errInputTooLarge
+	}
+	w.written += int64(len(p))
+	return len(p), nil
 }
 
 // normalizeCaps validates, lowercases, de-dupes, and sorts caps so a
@@ -256,6 +416,6 @@ func normalizeCaps(caps []Capability) ([]Capability, error) {
 	if len(out) == 0 {
 		return nil, errors.New("ai/tiny/serve/fleet: node has no capabilities")
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	slices.Sort(out)
 	return out, nil
 }

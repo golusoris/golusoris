@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"go.uber.org/fx"
@@ -113,37 +114,58 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{byID: map[string]Tenant{}, bySlug: map[string]Tenant{}}
 }
 
-// Add upserts a tenant, indexing it by both ID and slug.
-func (s *MemoryStore) Add(t Tenant) {
+// Add upserts a tenant, indexing it by ID and an optional canonical slug.
+func (s *MemoryStore) Add(t Tenant) error {
+	t.ID = strings.TrimSpace(t.ID)
+	t.Slug = strings.ToLower(strings.TrimSpace(t.Slug))
+	if t.ID == "" {
+		return ErrInvalidTenant
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	t = cloneTenant(t)
+	if owner, found := s.bySlug[t.Slug]; t.Slug != "" && found && owner.ID != t.ID {
+		return ErrTenantSlugConflict
+	}
+	if previous, found := s.byID[t.ID]; found && previous.Slug != "" && previous.Slug != t.Slug {
+		delete(s.bySlug, previous.Slug)
+	}
 	s.byID[t.ID] = t
 	if t.Slug != "" {
 		s.bySlug[t.Slug] = t
 	}
+	return nil
 }
 
 // ErrTenantNotFound is returned by [MemoryStore] when no tenant matches.
 var ErrTenantNotFound = errors.New("tenancy: tenant not found")
 
+// ErrInvalidTenant reports an empty tenant ID.
+var ErrInvalidTenant = errors.New("tenancy: tenant ID required")
+
+// ErrTenantSlugConflict reports a slug already owned by another tenant ID.
+var ErrTenantSlugConflict = errors.New("tenancy: tenant slug already exists")
+
 // FindByID implements [Store].
 func (s *MemoryStore) FindByID(_ context.Context, id string) (Tenant, error) {
+	id = strings.TrimSpace(id)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.byID[id]
 	if !ok {
 		return Tenant{}, ErrTenantNotFound
 	}
-	return t, nil
+	return cloneTenant(t), nil
 }
 
 // FindBySlug implements [Store].
 func (s *MemoryStore) FindBySlug(_ context.Context, slug string) (Tenant, error) {
+	slug = strings.ToLower(strings.TrimSpace(slug))
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	t, ok := s.bySlug[slug]
 	if !ok {
 		return Tenant{}, ErrTenantNotFound
 	}
-	return t, nil
+	return cloneTenant(t), nil
 }

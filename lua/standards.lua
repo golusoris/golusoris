@@ -1,4 +1,4 @@
--- cordanallm/praetor Neovim LSP and Tool Configuration
+-- cordanaLLM/praetor Neovim LSP and Tool Configuration
 local lspconfig = require("lspconfig")
 local configs = require("lspconfig.configs")
 
@@ -24,11 +24,11 @@ end
 lspconfig.standards_lsp.setup({})
 
 vim.api.nvim_create_user_command("StandardsAudit", function()
-  vim.cmd("!standardsctl audit")
+  vim.cmd("!praetorctl audit")
 end, { desc = "Audit repository against declared HISS invariants" })
 
 vim.api.nvim_create_user_command("StandardsCompileContext", function()
-  vim.cmd("!standardsctl compile-context")
+  vim.cmd("!praetorctl compile-context")
 end, { desc = "Compile AGENTS.md cross-agent contexts" })
 
 vim.api.nvim_create_user_command("StandardsVerifyAll", function()

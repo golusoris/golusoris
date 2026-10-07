@@ -23,6 +23,8 @@
 //	idempotency.required  # reject requests without the header (default false)
 //	idempotency.ttl       # how long a cached response is retained (default 24h)
 //	idempotency.header    # request header carrying the key (default Idempotency-Key)
+//	idempotency.max_request_body   # fingerprint buffer bound (default 1 MiB)
+//	idempotency.max_response_body  # replay capture bound (default 1 MiB)
 
 package idempotency
 
@@ -49,13 +51,19 @@ type Config struct {
 	// Header is the request header carrying the idempotency key
 	// (default "Idempotency-Key").
 	Header string `koanf:"header"`
+	// MaxRequestBody bounds request bytes buffered for fingerprinting.
+	MaxRequestBody int64 `koanf:"max_request_body"`
+	// MaxResponseBody bounds response bytes retained for replay.
+	MaxResponseBody int64 `koanf:"max_response_body"`
 }
 
 func defaultOptions() Config {
 	return Config{
-		Required: false,
-		TTL:      24 * time.Hour,
-		Header:   "Idempotency-Key",
+		Required:        false,
+		TTL:             24 * time.Hour,
+		Header:          "Idempotency-Key",
+		MaxRequestBody:  defaultBodyLimit,
+		MaxResponseBody: defaultBodyLimit,
 	}
 }
 
@@ -78,10 +86,12 @@ func newStore(clk clock.Clock, logger *slog.Logger) Store {
 // fx-provided (possibly decorated) [Store].
 func newMiddleware(store Store, cfg Config, logger *slog.Logger) middleware.Middleware {
 	return Middleware(store, Options{
-		Required: cfg.Required,
-		TTL:      cfg.TTL,
-		Header:   cfg.Header,
-		Logger:   logger,
+		Required:        cfg.Required,
+		TTL:             cfg.TTL,
+		Header:          cfg.Header,
+		MaxRequestBody:  cfg.MaxRequestBody,
+		MaxResponseBody: cfg.MaxResponseBody,
+		Logger:          logger,
 	})
 }
 

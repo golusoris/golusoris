@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"github.com/golusoris/goenvoy/arr/sonarr"
 	"github.com/golusoris/goenvoy/metadata/anime/anilist"
@@ -17,8 +18,10 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/cache/singleflight"
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/httpx/client"
 )
 
@@ -41,63 +44,44 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // over its own resilient transport. Clients are cached per name so repeated
 // lookups return the same instance.
 type Registry struct {
-	f       *factory
-	sonarr  map[string]*sonarr.Client
-	tmdb    map[string]*tmdb.Client
-	anilist map[string]*anilist.Client
-	trakt   map[string]*trakt.Client
+	f             *factory
+	mu            sync.RWMutex
+	sonarr        map[string]*sonarr.Client
+	tmdb          map[string]*tmdb.Client
+	anilist       map[string]*anilist.Client
+	trakt         map[string]*trakt.Client
+	sonarrBuilds  *singleflight.Group[string, *sonarr.Client]
+	tmdbBuilds    *singleflight.Group[string, *tmdb.Client]
+	anilistBuilds *singleflight.Group[string, *anilist.Client]
+	traktBuilds   *singleflight.Group[string, *trakt.Client]
 }
 
 // Sonarr returns the Sonarr client configured under name.
 func (r *Registry) Sonarr(name string) (*sonarr.Client, error) {
-	if c, ok := r.sonarr[name]; ok {
-		return c, nil
-	}
-	c, err := r.f.newSonarr(name)
-	if err != nil {
-		return nil, err
-	}
-	r.sonarr[name] = c
-	return c, nil
+	return registryClient(&r.mu, r.sonarr, r.sonarrBuilds, name, func() (*sonarr.Client, error) {
+		return r.f.newSonarr(name)
+	})
 }
 
 // TMDb returns the TMDb client configured under name.
 func (r *Registry) TMDb(name string) (*tmdb.Client, error) {
-	if c, ok := r.tmdb[name]; ok {
-		return c, nil
-	}
-	c, err := r.f.newTMDb(name)
-	if err != nil {
-		return nil, err
-	}
-	r.tmdb[name] = c
-	return c, nil
+	return registryClient(&r.mu, r.tmdb, r.tmdbBuilds, name, func() (*tmdb.Client, error) {
+		return r.f.newTMDb(name)
+	})
 }
 
 // AniList returns the AniList client configured under name.
 func (r *Registry) AniList(name string) (*anilist.Client, error) {
-	if c, ok := r.anilist[name]; ok {
-		return c, nil
-	}
-	c, err := r.f.newAniList(name)
-	if err != nil {
-		return nil, err
-	}
-	r.anilist[name] = c
-	return c, nil
+	return registryClient(&r.mu, r.anilist, r.anilistBuilds, name, func() (*anilist.Client, error) {
+		return r.f.newAniList(name)
+	})
 }
 
 // Trakt returns the Trakt client configured under name.
 func (r *Registry) Trakt(name string) (*trakt.Client, error) {
-	if c, ok := r.trakt[name]; ok {
-		return c, nil
-	}
-	c, err := r.f.newTrakt(name)
-	if err != nil {
-		return nil, err
-	}
-	r.trakt[name] = c
-	return c, nil
+	return registryClient(&r.mu, r.trakt, r.traktBuilds, name, func() (*trakt.Client, error) {
+		return r.f.newTrakt(name)
+	})
 }
 
 // Names returns the configured service names in sorted order.
@@ -116,18 +100,19 @@ type registryParams struct {
 }
 
 func newRegistry(p registryParams) *Registry {
+	logger := loggerOrDiscard(p.Logger)
 	var store cacheStore
 	if p.Cache != nil {
 		store = p.Cache
 	}
 	f := &factory{
 		services: p.Opts.Services,
-		logger:   p.Logger,
+		logger:   logger,
 		clk:      realClock(p.Clk),
 		cache:    store,
 		newHTTP:  client.New,
 	}
-	p.Logger.Debug(
+	logger.Debug(
 		"goenvoy: started",
 		slog.Int("services", len(p.Opts.Services)),
 		slog.Bool("cache", p.Cache != nil),
@@ -137,12 +122,55 @@ func newRegistry(p registryParams) *Registry {
 
 func newRegistryFromFactory(f *factory) *Registry {
 	return &Registry{
-		f:       f,
-		sonarr:  make(map[string]*sonarr.Client),
-		tmdb:    make(map[string]*tmdb.Client),
-		anilist: make(map[string]*anilist.Client),
-		trakt:   make(map[string]*trakt.Client),
+		f:             f,
+		sonarr:        make(map[string]*sonarr.Client),
+		tmdb:          make(map[string]*tmdb.Client),
+		anilist:       make(map[string]*anilist.Client),
+		trakt:         make(map[string]*trakt.Client),
+		sonarrBuilds:  singleflight.New[string, *sonarr.Client](),
+		tmdbBuilds:    singleflight.New[string, *tmdb.Client](),
+		anilistBuilds: singleflight.New[string, *anilist.Client](),
+		traktBuilds:   singleflight.New[string, *trakt.Client](),
 	}
+}
+
+func registryClient[T any](
+	mu *sync.RWMutex,
+	clients map[string]T,
+	builds *singleflight.Group[string, T],
+	name string,
+	build func() (T, error),
+) (T, error) {
+	mu.RLock()
+	value, ok := clients[name]
+	mu.RUnlock()
+	if ok {
+		return value, nil
+	}
+
+	value, _, err := builds.Do(context.Background(), name, func(context.Context) (T, error) {
+		mu.RLock()
+		cached, found := clients[name]
+		mu.RUnlock()
+		if found {
+			return cached, nil
+		}
+
+		created, buildErr := build()
+		if buildErr != nil {
+			var zero T
+			return zero, buildErr
+		}
+		mu.Lock()
+		clients[name] = created
+		mu.Unlock()
+		return created, nil
+	})
+	if err != nil {
+		var zero T
+		return zero, fmt.Errorf("goenvoy: build client %q: %w", name, err)
+	}
+	return value, nil
 }
 
 // Module provides a *Registry to the fx graph and closes idle connections on
@@ -179,12 +207,27 @@ func NewRegistryForTest(
 	if newHTTP == nil {
 		newHTTP = client.New
 	}
+	logger = loggerOrDiscard(logger)
 	f := &factory{
 		services: opts.Services,
 		logger:   logger,
 		clk:      realClock(clk),
-		cache:    cache,
+		cache:    optionalCache(cache),
 		newHTTP:  newHTTP,
 	}
 	return newRegistryFromFactory(f)
+}
+
+func optionalCache(cache cacheStore) cacheStore {
+	if validate.IsNil(cache) {
+		return nil
+	}
+	return cache
+}
+
+func loggerOrDiscard(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return logger
 }

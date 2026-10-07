@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Architecture
 
-```
+```text
 git repo
  └── apps/myapp/application.yaml   ← ArgoCD Application
  └── apps/myapp/values.yaml        ← app-specific values

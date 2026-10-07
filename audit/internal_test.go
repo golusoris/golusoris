@@ -52,9 +52,9 @@ func TestMatchesFilter_tenantMismatch(t *testing.T) {
 func TestMatchesFilter_afterBoundary(t *testing.T) {
 	t.Parallel()
 	ref := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	// Equal to After is not strictly after: excluded.
-	if matchesFilter(Event{CreatedAt: ref}, Filter{After: ref}) {
-		t.Fatal("CreatedAt == After should not match (After is exclusive)")
+	// Equal to After is included.
+	if !matchesFilter(Event{CreatedAt: ref}, Filter{After: ref}) {
+		t.Fatal("CreatedAt == After should match (After is inclusive)")
 	}
 	// Strictly after: included.
 	if !matchesFilter(Event{CreatedAt: ref.Add(time.Second)}, Filter{After: ref}) {
@@ -65,9 +65,9 @@ func TestMatchesFilter_afterBoundary(t *testing.T) {
 func TestMatchesFilter_beforeBoundary(t *testing.T) {
 	t.Parallel()
 	ref := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	// Equal to Before is not strictly before: excluded.
-	if matchesFilter(Event{CreatedAt: ref}, Filter{Before: ref}) {
-		t.Fatal("CreatedAt == Before should not match (Before is exclusive)")
+	// Equal to Before is included.
+	if !matchesFilter(Event{CreatedAt: ref}, Filter{Before: ref}) {
+		t.Fatal("CreatedAt == Before should match (Before is inclusive)")
 	}
 	// Strictly before: included.
 	if !matchesFilter(Event{CreatedAt: ref.Add(-time.Second)}, Filter{Before: ref}) {
@@ -98,8 +98,8 @@ func TestMatchesTimeRange_directCall(t *testing.T) {
 	if !matchesTimeRange(Event{CreatedAt: ref}, Filter{After: ref.Add(-time.Minute), Before: ref.Add(time.Minute)}) {
 		t.Error("CreatedAt strictly within (After, Before) should match")
 	}
-	if matchesTimeRange(Event{CreatedAt: ref}, Filter{After: ref}) {
-		t.Error("CreatedAt == After should not match (exclusive)")
+	if !matchesTimeRange(Event{CreatedAt: ref}, Filter{After: ref}) {
+		t.Error("CreatedAt == After should match (inclusive)")
 	}
 }
 

@@ -33,6 +33,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/leader"
+	"github.com/golusoris/golusoris/leader/internal/hook"
 )
 
 // Options tunes the elector. See package doc for config keys.
@@ -162,23 +163,8 @@ func Module(cb leader.Callbacks) fx.Option {
 			if err != nil {
 				return fmt.Errorf("leader/k8s: kubernetes client: %w", err)
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			done := make(chan struct{})
-			lc.Append(fx.Hook{
-				OnStart: func(_ context.Context) error {
-					go func() {
-						defer close(done)
-						if runErr := Run(ctx, k, opts, cb); runErr != nil {
-							logger.ErrorContext(ctx, "leader/k8s: run failed", slog.String("error", runErr.Error()))
-						}
-					}()
-					return nil
-				},
-				OnStop: func(_ context.Context) error {
-					cancel()
-					<-done
-					return nil
-				},
+			hook.RunUntilStop(lc, logger, "leader/k8s", func(ctx context.Context) error {
+				return Run(ctx, k, opts, cb)
 			})
 			return nil
 		}),

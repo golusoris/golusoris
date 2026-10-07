@@ -16,6 +16,7 @@
 //	workflow.tls          # enable TLS (required for Temporal Cloud)
 //	workflow.api_key      # API key for Temporal Cloud (passed as bearer header)
 //	workflow.identity     # worker identity label shown in Temporal UI
+//	workflow.connect_timeout # eager dial timeout (default: 5s)
 //
 // Usage:
 //
@@ -40,6 +41,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/log"
@@ -47,6 +49,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Config holds connection options for a Temporal server or Temporal Cloud.
@@ -65,13 +68,16 @@ type Config struct {
 	// Identity is the worker label shown in the Temporal Web UI.
 	// Defaults to hostname if empty.
 	Identity string `koanf:"identity"`
+	// ConnectTimeout bounds the eager Temporal connection attempt.
+	ConnectTimeout time.Duration `koanf:"connect_timeout"`
 }
 
 // DefaultConfig returns safe defaults targeting a local Temporal server.
 func DefaultConfig() Config {
 	return Config{
-		Host:      "localhost:7233",
-		Namespace: "default",
+		Host:           "localhost:7233",
+		Namespace:      "default",
+		ConnectTimeout: 5 * time.Second,
 	}
 }
 
@@ -82,6 +88,9 @@ func (c Config) withDefaults() Config {
 	}
 	if c.Namespace == "" {
 		c.Namespace = d.Namespace
+	}
+	if c.ConnectTimeout == 0 {
+		c.ConnectTimeout = d.ConnectTimeout
 	}
 	return c
 }
@@ -110,7 +119,24 @@ func loadConfig(cfg *config.Config) (Config, error) {
 }
 
 func newClient(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (client.Client, error) {
+	return newClientWithDial(lc, cfg, logger, client.DialContext)
+}
+
+type clientDialFunc func(context.Context, client.Options) (client.Client, error)
+
+func newClientWithDial(
+	lc fx.Lifecycle,
+	cfg Config,
+	logger *slog.Logger,
+	dial clientDialFunc,
+) (client.Client, error) {
+	if logger == nil {
+		return nil, errors.New("workflow: nil logger")
+	}
 	cfg = cfg.withDefaults()
+	if cfg.ConnectTimeout <= 0 {
+		return nil, errors.New("workflow: connect timeout must be positive")
+	}
 
 	opts := client.Options{
 		HostPort:  cfg.Host,
@@ -132,7 +158,9 @@ func newClient(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (client.Client,
 		opts.Credentials = client.NewAPIKeyStaticCredentials(cfg.APIKey)
 	}
 
-	c, err := client.Dial(opts)
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), cfg.ConnectTimeout)
+	defer dialCancel()
+	c, err := dial(dialCtx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("workflow: dial: %w", err)
 	}
@@ -146,12 +174,15 @@ func newClient(lc fx.Lifecycle, cfg Config, logger *slog.Logger) (client.Client,
 	return c, nil
 }
 
-func newWorker(lc fx.Lifecycle, cfg Config, c client.Client) worker.Worker {
+func newWorker(lc fx.Lifecycle, cfg Config, c client.Client) (worker.Worker, error) {
+	if validate.IsNil(c) {
+		return nil, errors.New("workflow: nil client")
+	}
 	if cfg.TaskQueue == "" {
 		// No task queue configured → producer-only mode. Return a no-op worker
 		// so fx.Provide doesn't fail; callers that inject worker.Worker should
 		// guard on cfg.TaskQueue != "" in their own fx.Invoke.
-		return worker.New(c, "", worker.Options{DisableRegistrationAliasing: true})
+		return worker.New(c, "", worker.Options{DisableRegistrationAliasing: true}), nil
 	}
 
 	w := worker.New(c, cfg.TaskQueue, worker.Options{})
@@ -167,5 +198,5 @@ func newWorker(lc fx.Lifecycle, cfg Config, c client.Client) worker.Worker {
 			return nil
 		},
 	})
-	return w
+	return w, nil
 }

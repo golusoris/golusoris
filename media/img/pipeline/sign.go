@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package pipeline provides on-demand image resize + signed-URL serving on top
-// of the media/img govips transforms.
+// Package pipeline provides on-demand image resize and signed-URL serving on
+// top of an application-provided [img.Processor].
 //
 // An app mounts [Handler] behind a route like "/img/{signed}". The signed token
 // carries the source image key plus the requested transform (width, height,
@@ -13,14 +13,13 @@
 // (SSRF / decompression-bomb DoS guard). Output dimensions are bounded by
 // [Options] before any decode.
 //
-// The signing, validation, and handler-routing logic is CGO-independent and
-// lives in non-CGO files; only the actual resize delegates to media/img
-// (libvips via govips, CGO). On a runner without libvips the resize path returns
-// [img.ErrCGORequired] while signing/validation/routing still build and test.
+// The repository does not bundle a runtime image backend. Applications inject
+// a bounded processor and own its lifecycle; signing, validation, and routing
+// remain backend-neutral.
 //
 // Usage:
 //
-//	p := pipeline.New(opts, processor, bucket, clk, logger)
+//	p, err := pipeline.New(opts, processor, source, clk, logger)
 //	tok, err := p.Sign("avatars/u42.png", pipeline.Transform{Width: 256, Format: "webp"}, 5*time.Minute)
 //	mux.Handle("/img/{signed}", p.Handler())
 package pipeline

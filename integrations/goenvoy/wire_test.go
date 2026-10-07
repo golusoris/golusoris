@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/httpx/client"
@@ -156,9 +158,9 @@ func TestTraktWiring(t *testing.T) {
 // a 503 → 200 on a real goenvoy call.
 func TestResilientTransport_retries(t *testing.T) {
 	t.Parallel()
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&hits, 1) == 1 {
+		if hits.Add(1) == 1 {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -181,7 +183,7 @@ func TestResilientTransport_retries(t *testing.T) {
 	if _, err := c.GetHealth(context.Background()); err != nil {
 		t.Fatalf("GetHealth after retry: %v", err)
 	}
-	if got := atomic.LoadInt32(&hits); got != 2 {
+	if got := hits.Load(); got != 2 {
 		t.Fatalf("expected 2 upstream hits (503 then 200), got %d", got)
 	}
 }
@@ -191,9 +193,9 @@ func TestResilientTransport_retries(t *testing.T) {
 // the TTL elapses the next GET re-fetches.
 func TestCacheTransport_ttl(t *testing.T) {
 	t.Parallel()
-	var hits int32
+	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&hits, 1)
+		hits.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"images":{"base_url":"http://img"}}`))
 	}))
@@ -220,7 +222,7 @@ func TestCacheTransport_ttl(t *testing.T) {
 	if _, err := c.GetConfiguration(ctx); err != nil {
 		t.Fatalf("cached GET: %v", err)
 	}
-	if got := atomic.LoadInt32(&hits); got != 1 {
+	if got := hits.Load(); got != 1 {
 		t.Fatalf("expected 1 upstream hit within TTL, got %d", got)
 	}
 
@@ -228,8 +230,88 @@ func TestCacheTransport_ttl(t *testing.T) {
 	if _, err := c.GetConfiguration(ctx); err != nil {
 		t.Fatalf("post-TTL GET: %v", err)
 	}
-	if got := atomic.LoadInt32(&hits); got != 2 {
+	if got := hits.Load(); got != 2 {
 		t.Fatalf("expected re-fetch after TTL (2 hits), got %d", got)
+	}
+}
+
+func TestNewRegistryForTest_TypedNilClockFallsBack(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"images":{"base_url":"http://img"}}`))
+	}))
+	defer srv.Close()
+
+	var typedNilClock *clockwork.FakeClock
+	opts := goenvoy.Options{Services: map[string]goenvoy.ServiceOptions{
+		"tmdb": {
+			Provider: goenvoy.ProviderTMDb, BaseURL: srv.URL, AccessToken: "t",
+			CacheTTL: time.Minute,
+		},
+	}}
+	r := goenvoy.NewRegistryForTest(opts, discardLogger(), typedNilClock, newCache(t), nil)
+	c, err := r.TMDb("tmdb")
+	if err != nil {
+		t.Fatalf("TMDb: %v", err)
+	}
+	if _, err = c.GetConfiguration(context.Background()); err != nil {
+		t.Fatalf("GetConfiguration: %v", err)
+	}
+}
+
+func TestNewRegistryForTest_TypedNilCacheDisablesCaching(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"images":{"base_url":"http://img"}}`))
+	}))
+	defer srv.Close()
+
+	var typedNilCache *memory.Cache
+	opts := goenvoy.Options{Services: map[string]goenvoy.ServiceOptions{
+		"tmdb": {
+			Provider: goenvoy.ProviderTMDb, BaseURL: srv.URL, AccessToken: "t",
+			CacheTTL: time.Minute,
+		},
+	}}
+	r := goenvoy.NewRegistryForTest(opts, discardLogger(), clock.NewFake(), typedNilCache, nil)
+	c, err := r.TMDb("tmdb")
+	if err != nil {
+		t.Fatalf("TMDb: %v", err)
+	}
+	if _, err = c.GetConfiguration(context.Background()); err != nil {
+		t.Fatalf("GetConfiguration: %v", err)
+	}
+}
+
+func TestNewRegistryForTest_CacheSupportsDefaultHTTPTransport(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"images":{"base_url":"http://img"}}`))
+	}))
+	defer srv.Close()
+
+	opts := goenvoy.Options{Services: map[string]goenvoy.ServiceOptions{
+		"tmdb": {
+			Provider: goenvoy.ProviderTMDb, BaseURL: srv.URL, AccessToken: "t",
+			CacheTTL: time.Minute,
+		},
+	}}
+	r := goenvoy.NewRegistryForTest(
+		opts,
+		discardLogger(),
+		clock.NewFake(),
+		newCache(t),
+		func(client.Options) *http.Client { return &http.Client{Timeout: time.Second} },
+	)
+	c, err := r.TMDb("tmdb")
+	if err != nil {
+		t.Fatalf("TMDb: %v", err)
+	}
+	if _, err = c.GetConfiguration(context.Background()); err != nil {
+		t.Fatalf("GetConfiguration: %v", err)
 	}
 }
 

@@ -27,7 +27,7 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 
 ## Usage
 
-Register services after adding the module:
+Register services after adding module:
 
 ```go
 fx.Invoke(func(s *grpc.Server) {
@@ -38,20 +38,19 @@ fx.Invoke(func(s *grpc.Server) {
 ## Codegen
 
 Proto stubs are generated with [buf](https://buf.build), not committed by hand.
-The shared, version-pinned config lives under `tools/`:
+shared, version-pinned config lives under `tools/`:
 
 | File | Purpose |
 |---|---|
 | `tools/buf.gen.yaml` | Codegen plugins: `protocolbuffers/go` + `grpc/go`, `paths=source_relative`, output to `gen/go/`. Plugins are pinned to versions tracking the `protobuf` / `grpc` deps in go.mod. |
 | `tools/buf.yaml` | Module + `buf lint` (STANDARD) + `buf breaking` (FILE) config. |
 
-Copy both to the app repo root, then `buf lint && buf generate`. The
-`/scaffold-grpc-service` skill walks the full proto → generate → implement →
+Copy both to app repo root, then `buf lint && buf generate`. `/scaffold-grpc-service` skill walks full proto → generate → implement →
 fx-register flow.
 
 ## Don't
 
 - Don't hand-write `*.pb.go` — regenerate via `buf generate` after editing protos.
-- Don't bump the buf plugin pins in `tools/buf.gen.yaml` independently of the matching go.mod modules; bump them together.
+- Don't bump buf plugin pins in `tools/buf.gen.yaml` independently of matching go.mod modules; bump them together.
 - Don't call `time.Now()` in service implementations — use `clock.Now(ctx)`.
 - Don't return raw Go errors from RPCs — map to `google.golang.org/grpc/status` codes.

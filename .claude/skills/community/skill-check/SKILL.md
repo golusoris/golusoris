@@ -6,13 +6,13 @@ allowed-tools: Read Glob
 category: development
 compatibility: claude-code
 metadata:
-  version: 3.17.0
-  author: olgasafonova
+ version: 3.17.0
+ author: olgasafonova
 ---
 
 # SkillCheck (Free)
 
-Check skills against Anthropic guidelines and the agentskills specification. This file contains Free tier validation rules.
+Check skills against Anthropic guidelines and agentskills specification. This file contains Free tier validation rules.
 
 **Want deeper analysis?** [Upgrade to Pro](https://getskillcheck.com) for anti-slop detection, security scanning, token optimization, WCAG compliance, enterprise checks, and Eval Kit (auto-generated test prompts for your skills).
 
@@ -25,7 +25,7 @@ Check skills against Anthropic guidelines and the agentskills specification. Thi
 ## How to Check a Skill
 
 1. **Locate**: Find target SKILL.md file(s)
-2. **Read**: Load the content
+2. **Read**: Load content
 3. **Validate**: Apply each rule section below
 4. **Report**: List issues found with severity and fixes
 
@@ -52,11 +52,11 @@ Every SKILL.md must start with YAML frontmatter between `---` markers.
 
 **Detection**: Scan all frontmatter string values (name, description, compatibility, etc.) for `<` or `>` characters.
 
-**Fix**: Remove angle brackets from frontmatter. Use plain text descriptions. Markdown formatting and XML tags are fine in the SKILL.md body.
+**Fix**: Remove angle brackets from frontmatter. Use plain text descriptions. Markdown formatting and XML tags are fine in SKILL.md body.
 
 ### Optional Fields (Spec)
 
-Fields defined in the [agentskills.io](https://agentskills.io) specification:
+Fields defined in [agentskills.io](https://agentskills.io) specification:
 
 | Field | Purpose |
 |-------|---------|
@@ -67,7 +67,7 @@ Fields defined in the [agentskills.io](https://agentskills.io) specification:
 
 ### Claude Code Extensions
 
-Recognized by Claude Code but not part of the agentskills.io spec. Other agents may ignore these fields.
+Recognized by Claude Code but not part of agentskills.io spec. Other agents may ignore these fields.
 
 | Field | Purpose |
 |-------|---------|
@@ -97,7 +97,7 @@ Not part of any spec. Used by community tools and registries.
 
 ### Category Validation
 
-> **Note**: `category` is a Claude Code extension, not part of the agentskills.io spec. Do not flag a missing category field. Only validate format if present.
+> **Note**: `category` is Claude Code extension, not part of agentskills.io spec. Do not flag missing category field. Only validate format if present.
 
 **Format**: String or array of strings, lowercase letters, numbers, and hyphens only.
 
@@ -111,8 +111,8 @@ category: development
 
 <example type="valid">
 category:
-  - development
-  - automation
+ - development
+ - automation
 </example>
 
 <example type="invalid">
@@ -133,9 +133,9 @@ reason: consecutive hyphens not allowed
 
 **Known artifact types**: `content-brief`, `knowledge-note`, `reading-log-entry`, `sift-article`
 
-**Check 1.10-artifact-types** (Warning): If `produces` or `consumes` contains a type not in the known list above, flag as a warning (not an error). New types are valid but should be registered in `rules/artifact-passing.md`.
+**Check 1.10-artifact-types** (Warning): If `produces` or `consumes` contains type not in known list above, flag as warning (not error). New types are valid but should be registered in `rules/artifact-passing.md`.
 
-**Check 1.11-consumes-without-tools** (Warning): If a skill declares `consumes:` but its `allowed-tools` does not include `Read` or `Glob`, flag as a warning. Consuming artifacts requires reading files.
+**Check 1.11-consumes-without-tools** (Warning): If skill declares `consumes:` but its `allowed-tools` does not include `Read` or `Glob`, flag as warning. Consuming artifacts requires reading files.
 
 <example type="valid">
 produces: content-brief, knowledge-note
@@ -154,7 +154,7 @@ reason: uppercase and underscore not allowed
 
 **Pattern**: `^[a-z][a-z0-9-]*[a-z0-9]$`
 
-**Naming suggestions**: Avoid generic terms that don't describe what the skill does: `helper`, `utils`, `tools`, `misc`, `stuff`, `things`, `manager`, `handler`. Product-specific terms (`claude`, `anthropic`, `mcp`) are allowed but may limit portability across agents.
+**Naming suggestions**: Avoid generic terms that don't describe what skill does: `helper`, `utils`, `tools`, `misc`, `stuff`, `things`, `manager`, `handler`. Product-specific terms (`claude`, `anthropic`, `mcp`) are allowed but may limit portability across agents.
 
 <example type="valid">
 name: weekly-report-generator
@@ -192,7 +192,7 @@ description: Helps with code review workflows for Pull Requests.
 </example>
 
 <example type="invalid">
-description: A tool for reports.
+description: tool for reports.
 reason: no WHAT verb, no WHEN trigger
 </example>
 
@@ -206,9 +206,9 @@ allowed-tools: Read Glob Bash
 
 <example type="valid">
 allowed-tools:
-  - Read
-  - Glob
-  - Bash
+ - Read
+ - Glob
+ - Bash
 </example>
 
 <example type="invalid">
@@ -218,7 +218,7 @@ reason: comma separation is deprecated; use spaces or YAML list
 
 ### Directory Structure Validation
 
-Skills can include optional subdirectories per the agentskills spec:
+Skills can include optional subdirectories per agentskills spec:
 
 | Directory | Purpose | Validation |
 |-----------|---------|------------|
@@ -226,7 +226,7 @@ Skills can include optional subdirectories per the agentskills spec:
 | `scripts/` | Executable code (Python, Bash, JS) | Should have execute permissions |
 | `assets/` | Static resources (templates, data) | No validation required |
 
-**Check 1.10-readme-in-folder** (Warning): Skill folder must not contain a `README.md` file. All documentation goes in SKILL.md or `references/`. For GitHub distribution, place the README at the repo root, outside the skill folder.
+**Check 1.10-readme-in-folder** (Warning): Skill folder must not contain `README.md` file. All documentation goes in SKILL.md or `references/`. For GitHub distribution, place README at repo root, outside skill folder.
 
 **Detection**: Use Glob to check if `{skill-dir}/README.md` exists.
 
@@ -240,20 +240,20 @@ Skills can include optional subdirectories per the agentskills spec:
 
 <example type="valid">
 my-skill/
-├── SKILL.md
-├── references/
-│   └── advanced-usage.md
-└── scripts/
-    └── helper.py
++-- SKILL.md
++-- references/
+| +-- advanced-usage.md
++-- scripts/
+ +-- helper.py
 </example>
 
 <example type="invalid">
 my-skill/
-├── skill.md          # Wrong: must be SKILL.md (case-sensitive)
-└── refs/             # Warning: use references/ not refs/
++-- skill.md # Wrong: must be SKILL.md (case-sensitive)
++-- refs/ # Warning: use references/ not refs/
 </example>
 
-**Directory name must match skill name**: The parent directory name must exactly match the `name` field in frontmatter.
+**Directory name must match skill name**: parent directory name must exactly match `name` field in frontmatter.
 
 <example type="invalid">
 weekly-report/SKILL.md with name: weekly-reports
@@ -279,10 +279,13 @@ name: pdf-report-generator
 
 ### Anti-Pattern Format Lint
 
-**Check 2.8-antipattern-format** (Suggestion): When a skill documents anti-patterns (sections with headers matching "anti-pattern", "what not to do", "avoid", "common mistakes", "bad practices", "pitfalls"), the content should use structured formats (tables or bullet lists) rather than wall-of-text prose.
+**Check 2.8-antipattern-format** (Suggestion): When skill documents
+anti-patterns, use structured formats instead of wall-of-text prose. Matching
+headers include "anti-pattern", "what not to do", "avoid", "common mistakes",
+"bad practices", and "pitfalls".
 
 **Fires when**:
-- Anti-pattern section has a long prose line (100+ chars) containing don't/avoid/never
+- Anti-pattern section has long prose line (100+ chars) containing don't/avoid/never
 - Anti-pattern section has 3+ prose lines with 3+ avoidance directives
 
 **Does NOT fire when**:
@@ -301,7 +304,8 @@ name: pdf-report-generator
 <example type="invalid">
 ## Common Mistakes
 
-You should avoid using global variables because they create hidden dependencies and you should never skip error handling because it leads to silent failures in production and makes debugging very difficult.
+Avoid global variables because they create hidden dependencies. Never skip
+error handling because silent production failures make debugging difficult.
 
 reason: Wall-of-text prose; restructure as table or bullet list
 </example>
@@ -314,7 +318,7 @@ Validate logical consistency and clarity of skill instructions.
 
 ### Contradiction Detection
 
-Flag conflicting instructions that simultaneously require and forbid the same action.
+Flag conflicting instructions that simultaneously require and forbid same action.
 
 ### Ambiguous Terms
 
@@ -324,7 +328,7 @@ Flag vague language that should be more specific. Terms like "multiple items" or
 - Terms inside code blocks or blockquotes
 - Content in example/usage/pattern sections
 - Before/After and correct/incorrect comparison lines
-- Terms followed by qualifiers (e.g., "some specific files")
+- Terms followed by qualifiers (e.g, "some specific files")
 
 ### Output Format Specification
 
@@ -350,7 +354,7 @@ Returns JSON:
 <example type="invalid">
 ## Output
 
-Returns the processed data.
+Returns processed data.
 
 reason: No concrete format example
 </example>
@@ -386,15 +390,15 @@ Set timeout to 30 seconds for HTTP requests.
 
 ### Description Trigger Style
 
-**Check 4.8-description-trigger-style** (Suggestion): The description field should read as a trigger condition, not a capability summary. Claude scans descriptions to decide "is there a skill for this request?" A trigger-oriented description activates correctly; a summary-oriented one gets overlooked.
+**Check 4.8-description-trigger-style** (Suggestion): description field should read as trigger condition, not capability summary. Claude scans descriptions to decide "is there a skill for this request?" trigger-oriented description activates correctly; summary-oriented one gets overlooked.
 
 **Detection**: Description opens with summary patterns instead of trigger patterns:
 - Summary openers (flag): "This skill", "A tool that", "Provides", "Offers", "Handles", "Manages", "Enables"
 - Trigger openers (pass): "Use when", "Generate", "Build", "Convert", "Extract", "Validate", "Run", "Create", "Find", "Search"
 
 **Does NOT fire when**:
-- Description has a summary opener but also contains a WHEN trigger phrase later ("Handles X. Use when user says Y" is fine)
-- Description starts with an action verb
+- Description has summary opener but also contains WHEN trigger phrase later ("Handles X. Use when user says Y" is fine)
+- Description starts with action verb
 
 **Severity**: Suggestion
 
@@ -407,7 +411,7 @@ description: This skill generates weekly reports from Azure DevOps data and prov
 reason: Reads as capability summary, not trigger condition. Claude won't route to this reliably.
 </example>
 
-**Fix**: Rewrite to lead with action verb and include "Use when" clause. The description is a routing instruction, not documentation.
+**Fix**: Rewrite to lead with action verb and include "Use when" clause. description is routing instruction, not documentation.
 
 ### Railroading Detection
 
@@ -421,14 +425,14 @@ reason: Reads as capability summary, not trigger condition. Claude won't route t
 **Does NOT fire when**:
 - Prescriptive language is inside code blocks, blockquotes, or example tags
 - Prescriptive language is in anti-pattern/gotchas sections (where it describes what NOT to do)
-- Skill is a safety-critical skill (security, compliance) where strict instructions are warranted
+- Skill is safety-critical skill (security, compliance) where strict instructions are warranted
 
 **Severity**: Suggestion
 
 <example type="valid">
 ## Configuration
 
-The config file lives at `~/.config/myskill/config.json`. If missing, Claude asks the user for the required values.
+config file lives at `~/.config/myskill/config.json`. If missing, Claude asks user for required values.
 
 Common options:
 - `output_dir`: where reports land (default: current directory)
@@ -438,22 +442,22 @@ Common options:
 <example type="invalid">
 ## Configuration
 
-You must always check the config file at `~/.config/myskill/config.json`. You must never deviate from this path. Always do exactly as follows: first read the config, then validate every field. You must always use JSON format. Never change the output directory.
+You must always check config file at `~/.config/myskill/config.json`. You must never deviate from this path. Always do exactly as follows: first read config, then validate every field. You must always use JSON format. Never change output directory.
 
-reason: 5 prescriptive phrases; give Claude the information and let it adapt
+reason: 5 prescriptive phrases; give Claude information and let it adapt
 </example>
 
 ### Misplaced Routing Content
 
-**Check 4.4**: Body contains trigger conditions that belong in the description field.
+**Check 4.4**: Body contains trigger conditions that belong in description field.
 
-**Detection**: Body contains a heading matching `## When to Use` or `## When to Use This Skill`, or body text contains routing phrases like "Activate when user", "Trigger this skill when", "Use this skill when".
+**Detection**: Body contains heading matching `## When to Use` or `## When to Use This Skill`, or body text contains routing phrases like "Activate when user", "Trigger this skill when", "Use this skill when".
 
-**Problem**: The skill body loads only AFTER the Skill tool is invoked. Trigger conditions placed here don't influence routing decisions. Claude reads the `description` field during routing; that's where "Use when" patterns, trigger keywords, and example phrases belong.
+**Problem**: skill body loads only AFTER Skill tool is invoked. Trigger conditions placed here don't influence routing decisions. Claude reads the `description` field during routing; that's where "Use when" patterns, trigger keywords, and example phrases belong.
 
 **Severity**: Warning
 
-**Fix**: Merge unique trigger content from the body section into the `description` field, then remove the redundant body section.
+**Fix**: Merge unique trigger content from body section into `description` field, then remove redundant body section.
 
 <example type="invalid">
 ---
@@ -565,7 +569,7 @@ Available with [SkillCheck Pro](https://getskillcheck.com):
 | "Description missing WHEN trigger" | Add "Use when..." clause |
 | "Unknown tool in allowed-tools" | Check spelling, use space separation |
 
-If validation stalls on large files (1000+ lines), break the skill into smaller modules or check frontmatter syntax first.
+If validation stalls on large files (1000+ lines), break skill into smaller modules or check frontmatter syntax first.
 
 ---
 
@@ -603,32 +607,32 @@ If validation stalls on large files (1000+ lines), break the skill into smaller 
 
 ## 5. Design Pattern Classification
 
-SkillCheck classifies each skill into one of five design patterns from the Google ADK taxonomy:
+SkillCheck classifies each skill into one of five design patterns from Google ADK taxonomy:
 
-- **Reviewer**: evaluates output against criteria (e.g., skill-check, code-review)
-- **Generator**: produces structured artifacts from templates (e.g., linkedin-post, brand-assets)
-- **Inversion**: asks user questions before acting (e.g., grill-me, feature-scoping)
-- **Pipeline**: chains multiple steps with checkpoints (e.g., sift, tapestry)
-- **Tool Wrapper**: wraps an API with context-aware instructions (e.g., lmwtfy)
+- **Reviewer**: evaluates output against criteria (e.g, skill-check, code-review)
+- **Generator**: produces structured artifacts from templates (e.g, linkedin-post, brand-assets)
+- **Inversion**: asks user questions before acting (e.g, grill-me, feature-scoping)
+- **Pipeline**: chains multiple steps with checkpoints (e.g, sift, tapestry)
+- **Tool Wrapper**: wraps API with context-aware instructions (e.g, lmwtfy)
 
 **Check 19.1-pattern-detected** (Strength): Pattern identified. Reports primary pattern and any secondary patterns. Most skills are hybrids.
 
-**Pro checks 19.2-19.7**: Validate pattern-specific requirements. A Reviewer without criteria, a Generator without output format, an Inversion without question framework, a Pipeline without stages, or a Tool Wrapper without API boundaries.
+**Pro checks 19.2-19.7**: Validate pattern-specific requirements. Reviewer without criteria, Generator without output format, Inversion without question framework, Pipeline without stages, or Tool Wrapper without API boundaries.
 
 ---
 
 ## Autonomy Design
 
-**Stop condition**: Stop after reporting all issues for the target SKILL.md. Do not iterate or re-check unless the user requests it.
+**Stop condition**: Stop after reporting all issues for target SKILL.md. Do not iterate or re-check unless user requests it.
 
 **Budget**: Maximum attempts: 1. Single SKILL.md validation completes in one pass with maximum retries: 0. No looping.
 
-**Idempotency**: Safe to re-run. Same input produces the same severity counts and issue list.
+**Idempotency**: Safe to re-run. Same input produces same severity counts and issue list.
 
 ## Composability
 
 **Input/Output contract**:
-- Input: expects: path to a SKILL.md file or directory containing one.
+- Input: expects: path to SKILL.md file or directory containing one.
 - Output: returns: structured report with overall score (0-100), issue list (check_id, severity, line, message, fix), and passed count.
 
 **Output structure**:
@@ -666,15 +670,15 @@ Phase 4: Report — Format and return results.
 
 ## Gotchas
 
-- YAML frontmatter with multi-line descriptions may trigger false positives on line-based checks. Use a single-line description or pipe (`|`) syntax.
+- YAML frontmatter with multi-line descriptions may trigger false positives on line-based checks. Use single-line description or pipe (`|`) syntax.
 - Skills using non-standard frontmatter fields (custom extensions) get informational notices, not errors. These are expected and safe to ignore.
-- Check 4.6 (wisdom/platitude detection) has a ~5% false positive rate on technical content that uses advisory language. If flagged incorrectly, the content is fine; the heuristic is conservative.
-- The "misplaced routing" check (4.4) fires on body content that contains trigger phrases. If your body has a "Quick Start" section showing example invocations, wrap them in code blocks or `<example>` tags to avoid false positives.
+- Check 4.6 (wisdom/platitude detection) has ~5% false positive rate on technical content that uses advisory language. If flagged incorrectly, content is fine; heuristic is conservative.
+- "misplaced routing" check (4.4) fires on body content that contains trigger phrases. If your body has "Quick Start" section showing example invocations, wrap them in code blocks or `<example>` tags to avoid false positives.
 
 ---
 
 ## Upgrade to Pro
 
-Get the complete suite at [getskillcheck.com](https://getskillcheck.com): Go binary for CI/CD, MCP server for IDE integration, all Pro checks, auto-fix, and badge generation.
+Get complete suite at [getskillcheck.com](https://getskillcheck.com): Go binary for CI/CD, MCP server for IDE integration, all Pro checks, auto-fix, and badge generation.
 
-Skills can also be distributed via the `/v1/skills` API endpoint. See [agentskills.io](https://agentskills.io) for the specification.
+Skills can also be distributed via `/v1/skills` API endpoint. See [agentskills.io](https://agentskills.io) for specification.

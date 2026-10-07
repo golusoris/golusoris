@@ -7,22 +7,22 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — validate/
 
 Wraps [go-playground/validator](https://github.com/go-playground/validator)
-with golusoris conventions: failures map to a `*errors.Error` with
-`errors.CodeValidation` (→ HTTP 400), and messages reference the **JSON** field
-name (from the `json` tag) rather than the Go field name.
+with golusoris conventions: failures map to `*errors.Error` with
+`errors.CodeValidation` (→ HTTP 400), and messages reference **JSON** field
+name (from `json` tag) rather than Go field name.
 
 ## Key API
 
 | Symbol | Purpose |
 |---|---|
 | `validate.Module` | fx module — provides `*Validator` |
-| `validate.New()` | build a `*Validator` directly (tests) |
+| `validate.New()` | build `*Validator` directly (tests) |
+| `validate.IsNil(value)` | reject nil and typed-nil dependencies |
 | `Validator.Struct(s)` | validate via `validate:"..."` tags |
-| `Validator.Var(value, tag)` | validate a single value against a tag |
+| `Validator.Var(value, tag)` | validate single value against tag |
 | `Validator.Raw()` | underlying `*validator.Validate` for custom rule registration |
 
-On failure the underlying `validator.ValidationErrors` is preserved as the
-error `Cause`, so callers can `errors.As` it for field-level detail.
+On failure underlying `validator.ValidationErrors` is preserved as error `Cause`, so callers can `errors.As` it for field-level detail.
 
 ## Usage
 
@@ -40,8 +40,7 @@ func (h *Handler) signup(v *validate.Validator, in Signup) error {
 ## Don't
 
 - Don't import go-playground/validator directly in handlers — use `*Validator`
-  so error codes + JSON field names stay consistent.
+ so error codes + JSON field names stay consistent.
 - Don't register custom validators ad hoc; do it once via `Raw()` at startup in
-  an `fx.Invoke`, not per request.
-- Don't surface the raw `Cause` to clients — the formatted `Message` is the
-  client-safe surface.
+ `fx.Invoke`, not per request.
+- Don't surface raw `Cause` to clients — formatted `Message` is  client-safe surface.

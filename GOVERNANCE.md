@@ -13,62 +13,70 @@ framework for Go services — is governed.
 
 golusoris ships foundational building blocks (config, logging, clock, DB, HTTP,
 jobs, cache, auth, observability, …) as independent `fx` modules that apps
-compose à la carte. The framework's binding constraints (tracked day-to-day in
-the maintainers' private, git-ignored `.workingdir/PLAN.md`, per HISS-17) are:
+compose à la carte. Day-to-day work is tracked in the maintainers' private,
+git-ignored `.workingdir/` OPEN, BACKLOG, BUGS, QUESTIONS, and STATE ledgers
+under HISS-17. The framework's binding constraints are:
 
 - Power-of-10 (Go-adapted) hard gates, SEI CERT for Go, Google Go Style.
 - Zero lint / zero gosec / zero govulncheck, race-clean, on every merged commit.
 - Architecture decisions recorded as ADRs under [`docs/adr/`](docs/adr/).
-- Supply-chain + compliance posture (SLSA L3, OWASP ASVS L2, NIST SSDF, EU CRA,
-  OpenSSF) asserted in [`SECURITY.md`](SECURITY.md).
+- Supply-chain posture (SBOMs, signing, provenance attestations, vulnerability
+  disclosure, and on-demand OpenSSF Scorecard) documented in
+  [`SECURITY.md`](SECURITY.md). Applications own compliance mapping and claims.
 - Licensing: EUPL-1.2 for code, CC-BY-SA-4.0 for prose, REUSE-compliant, DCO
   sign-off ([ADR-0018](docs/adr/0018-eupl-relicense-and-reuse.md),
   [`LICENSING.md`](LICENSING.md)).
 
 These are non-negotiable: a change that regresses a hard gate does not merge.
 
-### 1.1 Governance harness — the praetor HISS-20 lattice
+### 1.1 Governance harness — the praetor HISS-21 lattice
 
 Since v0.9.0 the contract is machine-enforced by
 [cordanallm/praetor](https://github.com/cordanallm/praetor)
 ([ADR-0019](docs/adr/0019-praetor-governance-and-capability-contract.md)),
-which layers five fleet-wide invariants (HISS-16 to HISS-20) on top of the
+which layers six fleet-wide invariants (HISS-16 to HISS-21) on top of the
 fifteen numbered Power-of-10 gates (HISS-01 to HISS-15) in
-[`AGENTS.md`](AGENTS.md) — twenty invariants in all, each row there naming the
+[`AGENTS.md`](AGENTS.md) — twenty-one invariants in all, each row there naming the
 gate that enforces it in this repository:
 
 - **HISS-16 (Context Integrity)**: [`AGENTS.md`](AGENTS.md) is the **single
   canonical agent harness**. Every vendor context file (`CLAUDE.md`,
   `.cursor/`, `.gemini/`, `.codex/`, `.windsurfrules`, IDE configs) is
-  compiled from it by `standardsctl compile-context` and verified by the
+  compiled from it by `praetorctl compile-context` and verified by the
   lefthook pre-commit hook and `make verify-all` — never edited by hand.
+  `make caveman-context` also checks every tracked package guide, canonical
+  persona, skill, and Paperclip surface.
 - **HISS-17 (State Ledger Discipline)**: the private `.workingdir/` ledger
-  (§1 above) is kept current with `standardsctl state task`, `state bug`
+  (§1 above) is kept current with `praetorctl state task`, `state bug`
   and `state question`; the lefthook post-commit hook runs
-  `standardsctl state sync` after every commit.
-- **HISS-18 (Diff-Aware CI Efficiency)**: praetor's `standardsctl ci filter`
+  `praetorctl state sync` after every commit.
+- **HISS-18 (Diff-Aware CI Efficiency)**: praetor's `praetorctl ci filter`
   scopes a change's gates to what its diff actually touches. **It is not wired
   here**: `.github/workflows/ci.yml` has no filter step and no `paths:`
   restriction, so every pull request still runs the full matrix.
-- **HISS-19 (Reuse Before Writing)**: `standardsctl dedupe scan` (wired as
+- **HISS-19 (Reuse Before Writing)**: `praetorctl dedupe scan` (wired as
   `make dedupe-scan` and the lefthook post-commit `dedupe-cadence` job)
   flags a second implementation of a behavior — including a second
   configuration format — that already exists elsewhere in the tree.
 - **HISS-20 (Enforcement Coverage Catalogue)**: a repository declares, per rule
-  and per language, what its gates actually detect, and `standardsctl hiss
+  and per language, what its gates actually detect, and `praetorctl hiss
   coverage --verify` replays that claim against a fixture corpus in both
-  directions. **Not declared here yet**: there is no `.config/hiss/coverage.yaml`,
-  so enforcement evidence is undeclared for every invariant.
+  directions. `.config/hiss/coverage.yaml` declares 40 claims backed by 107
+  positive, negative, and gap fixtures; `make hiss-coverage` gates drift.
+- **HISS-21 (Platform Neutrality)**: a bounded portability driver builds,
+  vets, and short-tests every discovered module on Linux, macOS, and Windows.
+  Unsupported platform paths must fail explicitly or carry a stated skip;
+  silent gate skips do not count as passing.
 
-`standardsctl audit` scores the tree against the HISS invariants (the
+`praetorctl audit` scores the tree against the HISS invariants (the
 modernised Power-of-10 table at the top of `AGENTS.md`) with a ratcheting
 baseline in `.standards-baseline.json`; a change may not regress it.
-`standardsctl gate run` runs praetor's four-stage conformance gate
-(lockfile digests, the HISS scan, a security pass, flavor conformance);
-stages 1-3 pass on `main` today, but stage 4 is held back because praetor
-misclassifies this library as a `go-service` and demands artifacts a
-library does not carry (a `Dockerfile`, an `on:`-less `security.yml`) —
-tracked upstream as
+`praetorctl gate run` runs praetor's six-stage conformance gate: prefetch and
+lockfiles, HISS invariants, security/SCA, flavor conformance, isolated race
+tests, and an Ed25519 Exit-0 receipt. It remains an on-demand gate because
+praetor misclassifies this library as a `go-service` and demands artifacts a
+library does not carry (a `Dockerfile`, an `on:`-less `security.yml`) — tracked
+upstream as
 [cordanaLLM/praetor#36](https://github.com/cordanaLLM/praetor/issues/36).
 [`capabilities.yaml`](capabilities.yaml) is the machine-readable capability
 contract that praetor `needs` resolves fleet demand against; the root
@@ -82,9 +90,10 @@ commit-msg (Conventional Commits + DCO), post-commit (`state sync`,
 `dedupe cadence`), and pre-push (build + `go test -short`, `govulncheck`,
 `audit`) — the pre-push `gate` and `flavor-audit` jobs stay held back for
 the same praetor#36 reason as above. [`make verify-all`](Makefile) runs the
-equivalent build, lint, test, capability-drift, `compile-context --verify`,
-`audit`, `dedupe-scan` and `reuse lint` gates in one command — the one
-command every maintainer and agent runs before concluding a change.
+equivalent Go, Python, C, documentation, workflow, infrastructure, security,
+licensing, capability-drift, `compile-context --verify`, `audit`,
+`dedupe-scan`, and HISS-coverage gates in one command — the one command every
+maintainer and agent runs before concluding a change.
 
 ## 2. Roles
 
@@ -138,25 +147,30 @@ Every PR must satisfy:
 - Conventional Commits (`type(scope): subject`).
 - DCO `Signed-off-by:` trailer on every commit.
 - The status checks GitHub requires on `main` today (classic branch
-  protection, `strict` — the branch must be up to date — with linear
-  history required): **CI success** (lint, gosec, govulncheck, race tests,
-  build, `reuse lint`), **PR title (Conventional Commits)**, and
+  protection, `strict` — the branch must be up to date — with signed commits,
+  linear history, and resolved conversations): **CI success** (the complete
+  aggregate declared in `.github/workflows/ci.yml`), **PR title (Conventional
+  Commits)**, and
   **Analyze (go)** — the required job of GitHub's CodeQL default setup,
   which replaced the self-hosted `codeql.yml` workflow on 2026-08-28. The
-  advisory jobs (apidiff, Semgrep, gitleaks, DCO, changelog fragments) run
-  alongside but are not required checks.
+  Apidiff execution and Semgrep are part of the aggregate; incompatible API
+  findings remain informational before v1.0. DCO is inapplicable to Renovate
+  commits; DCO and dependency review
+  are inapplicable outside pull-request events, and `CI success` validates
+  those skipped results explicitly.
 
 praetor's target protection is declared, not yet enforced, as a GitHub
 ruleset in [`.github/rulesets/main.json`](.github/rulesets/main.json)
-(#509): per-job required checks (`Build`, `Security (gosec)`, `Lint`,
-`Test (race + coverage)`, `Vulnerabilities (govulncheck)`), required
-signed commits, and a pull-request rule under **`review_mode:
+(#509): every leaf context Praetor can represent, required signed commits, and a
+pull-request rule under **`review_mode:
 single_maintainer`** ([`.standards.yaml`](.standards.yaml)). That mode
 keeps the framework's declared `required_approving_reviewers: 1` on
 record but renders it as `0` required approvals with no code-owner review
-today, because the project has one maintainer who cannot approve their own
-PR; switching to independent review once a second maintainer or an
-approving review bot exists is then a config change, not a rewrite.
+today, because the project has one maintainer who cannot approve their own PR.
+The local ruleset is not synced remotely: conditional jobs and the `CI success`
+aggregate cannot yet be represented faithfully by Praetor
+([cordanaLLM/praetor#76](https://github.com/cordanaLLM/praetor/issues/76)).
+Classic branch protection above remains authoritative.
 
 Classic protection does not set `enforce_admins`, so the BDFL can merge a
 PR past a required check that never ran. That bypass is reserved for one
@@ -192,11 +206,14 @@ commit `Migration:` footer and the changelog.
 Pushing the root `vX.Y.Z` tag triggers
 [`release.yml`](.github/workflows/release.yml) (goreleaser): multi-arch
 archives for `cmd/golusoris` and `cmd/golusoris-mcp`, a checksum manifest,
-per-archive SPDX SBOMs (syft), cosign keyless signatures, and SLSA build
-provenance (`actions/attest-build-provenance`); and
-[`sbom.yml`](.github/workflows/sbom.yml), which additionally attests
-source-tree SPDX and CycloneDX SBOMs of the tagged commit
-(`actions/attest-sbom`) and uploads them as workflow artifacts. Releases on
+per-archive SPDX SBOMs (syft), cosign keyless signatures, and build provenance
+(`actions/attest-build-provenance`). The
+[v0.12.0 release run](https://github.com/golusoris/golusoris/actions/runs/35001126039)
+successfully published those release assets. [`sbom.yml`](.github/workflows/sbom.yml)
+separately attempts source-tree SPDX and CycloneDX attestations for each root
+tag. Its [v0.12.0 run](https://github.com/golusoris/golusoris/actions/runs/35001126102)
+failed during Rekor publication, so source-tree SBOM attestations are not an
+every-tag guarantee; the next tag must prove the added retry path. Releases on
 this repository are immutable (enabled from `v0.10.1` onward): once
 published, a release's tag, assets and metadata cannot be edited or
 deleted. Only the root tag ever produces a GitHub Release — `core/vX.Y.Z`

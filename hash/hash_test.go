@@ -6,6 +6,7 @@ package hash_test
 
 import (
 	"encoding/hex"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -76,6 +77,16 @@ func TestDifferentInputsDifferentHashes(t *testing.T) {
 	}
 	if hash.BLAKE3([]byte("a")) == hash.BLAKE3([]byte("b")) {
 		t.Fatal("BLAKE3 collision")
+	}
+}
+
+func TestValidateHMACSHA256KeyBoundaries(t *testing.T) {
+	t.Parallel()
+	if err := hash.ValidateHMACSHA256Key(make([]byte, hash.HMACSHA256MinKeyBytes-1)); !errors.Is(err, hash.ErrWeakHMACSHA256Key) {
+		t.Fatalf("short key error = %v", err)
+	}
+	if err := hash.ValidateHMACSHA256Key(make([]byte, hash.HMACSHA256MinKeyBytes)); err != nil {
+		t.Fatalf("exact-size key rejected: %v", err)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/redis/rueidis"
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/realtime/pubsub"
 )
 
@@ -37,12 +38,22 @@ var _ pubsub.Bus = (*Bus)(nil)
 
 // New returns a Redis-backed pub/sub Bus.
 func New(client rueidis.Client, logger *slog.Logger) *Bus {
+	if validate.IsNil(client) {
+		client = nil
+	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &Bus{client: client, logger: logger}
 }
 
 // Publish encodes msg.Data and PUBLISHes it to the msg.Topic channel. Errors
 // are logged — the [pubsub.Bus] contract is fire-and-forget.
 func (b *Bus) Publish(ctx context.Context, msg pubsub.Message) {
+	if b.client == nil {
+		b.logger.ErrorContext(ctx, "pubsub/redis: client is required", slog.String("topic", msg.Topic))
+		return
+	}
 	payload, err := encode(msg.Data)
 	if err != nil {
 		b.logger.ErrorContext(ctx, "pubsub/redis: encode", slog.String("topic", msg.Topic), slog.Any("err", err))
@@ -56,6 +67,13 @@ func (b *Bus) Publish(ctx context.Context, msg pubsub.Message) {
 // Subscribe SUBSCRIBEs to topic on a dedicated connection in a background
 // goroutine. The returned func cancels the subscription.
 func (b *Bus) Subscribe(topic string, h pubsub.Handler) func() {
+	if h == nil {
+		return func() {}
+	}
+	if b.client == nil {
+		b.logger.Error("pubsub/redis: client is required", slog.String("topic", topic))
+		return func() {}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		err := b.client.Receive(ctx, b.client.B().Subscribe().Channel(topic).Build(), func(m rueidis.PubSubMessage) {

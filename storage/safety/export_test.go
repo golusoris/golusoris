@@ -6,8 +6,6 @@ package safety
 
 import (
 	"log/slog"
-
-	"github.com/golusoris/golusoris/core/clock"
 )
 
 // NewStripperForTest exposes the unexported stripper constructor to the
@@ -18,6 +16,6 @@ func NewStripperForTest(opts StripOptions, logger *slog.Logger) Stripper {
 
 // NewFetcherForTest exposes the unexported fetcher constructor to the external
 // test package.
-func NewFetcherForTest(opts FetchOptions, logger *slog.Logger, clk clock.Clock) (Fetcher, error) {
-	return newFetcher(Options{Fetch: opts}, logger, clk)
+func NewFetcherForTest(opts FetchOptions, logger *slog.Logger) (Fetcher, error) {
+	return newFetcher(Options{Fetch: opts}, logger)
 }

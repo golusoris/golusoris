@@ -4,7 +4,7 @@
 
 All commits and PR titles MUST follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-```
+```text
 <type>(<scope>): <subject>
 
 [optional body]
@@ -12,15 +12,22 @@ All commits and PR titles MUST follow [Conventional Commits](https://www.convent
 [optional footer(s)]
 ```
 
-Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`.
+Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `build`,
+`ci`, `revert`.
 
 Scopes are subpackage names: `feat(jobs):`, `fix(db/pgx):`, `chore(tools):`.
+
+Release Please is the sole changelog writer. Put every user-visible change in
+a release-visible Conventional Commit message (`feat`, `fix`, `perf`,
+`revert`, or `refactor`). For a squash commit with multiple distinct changes,
+put additional Conventional Commit messages in the commit body; Release Please
+parses each message into the release pull request.
 
 ## Breaking changes
 
 Append `!` to type and add a `BREAKING CHANGE:` footer:
 
-```
+```text
 feat(auth)!: rename SessionStore to Sessions
 
 BREAKING CHANGE: SessionStore is now Sessions; rename all references.
@@ -32,7 +39,11 @@ Migration:
   store := auth.NewSessions(db)
 ```
 
-The `Migration:` footer is **required** for breaking changes. CI fails without it. The footer is auto-stitched into `docs/migrations/vX.Y.Z.md`.
+The `Migration:` footer is **required by project policy** for breaking
+changes and is checked during review. Before v1.0, the `apidiff` job reports
+compatibility changes without blocking the merge. Release Please builds the
+changelog from Conventional Commit messages; maintainers add a migration guide
+when an upgrade needs more than the commit's before/after example.
 
 ## Licensing and the Developer Certificate of Origin
 
@@ -63,32 +74,41 @@ if every job below it passed), **PR title (Conventional Commits)**, and
 
 Jobs that feed the **CI success** aggregate:
 
-- `lint` — golangci-lint, run separately against the root module and `core/`
-- `gosec` — security scan; findings are uploaded to GitHub code scanning as SARIF
-- `vuln` — govulncheck, root and `core/`
-- `test` — `go test -race -count=1`, root + `core/` merged into one coverage
-  profile; fails if total coverage drops below 70%
-- `build` — `go build ./...` (root and `core/`, plus `go vet` in `core/`)
+- `lint` — golangci-lint on the primary root + `core/` modules, plus immutable
+  Ruff over all repository Python
+- `gosec` — security scan on the primary modules; root findings are uploaded
+  to GitHub code scanning as SARIF
+- `vuln` — fail-closed govulncheck JSON policy on the primary modules
+- `test` — `go test -race -count=1` on the primary modules with merged
+  coverage gated at 70%, plus 48 required Python policy regression tests
+- `build` — `go build ./...` plus `go vet ./...` on the primary modules;
+  immutable Clang/clang-tidy also compiles C and verifies the checked eBPF object
+- `module-sweep` — four deterministic shards apply the same lint, gosec,
+  govulncheck, module-tidiness, build/vet, and race-test gates to every other
+  discovered module
+- `markdownlint` — pinned structural lint over repository-owned public Markdown;
+  generated agent context, release changelogs, HISS fixtures, and vendored
+  upstream snapshots remain under their dedicated authorities
+- `mkdocs` — strict documentation-site build from immutable tooling
+- `allocation-budget` — measured byte/op and allocation/op ceilings for named
+  hot paths
+- `shellcheck` and `actionlint` — pinned full-tree shell and workflow lint
+- `terraform` and `kubeconform` — locked Terraform validation plus static and
+  rendered Kubernetes schema checks
+- `semgrep` — blocking full-tree custom SAST and HISS fixture replay
 - `reuse` — REUSE/SPDX licensing compliance (`capabilities.yaml` drift is
   covered here too, via the `TestCapabilities` test in the root suite —
   every package must be in the capability contract)
-
-Jobs that run on every PR but are not required for merge (informational or
-advisory, so a red run here does not block):
-
-- `apidiff` — API compatibility vs. the previous tag; pre-1.0 SemVer permits
-  breaking changes, so this is informational only
-- `spectral` — OpenAPI lint, only when `examples/full/openapi.yaml` exists
+- `spectral` — OpenAPI lint; a missing example spec is an explicit successful
+  no-op
 - `dependency-review` — fails on high/critical advisories or a GPL/AGPL
-  licence entering the tree (PR-only)
+  licence entering the tree (PR-only; explicitly skipped on other events)
 - `gitleaks` — full-history secret scan
-- `semgrep` ("Custom SAST") — the project's own `.semgrep.yml` rules;
-  `continue-on-error`, so a new rule can land without blocking unrelated PRs
-  while it soaks
-- `changelog` — validates `changelog.d/` fragments render against the
-  `[Unreleased]` block in `CHANGELOG.md` (PR-only)
-- `dco` — every commit in the PR must carry `Signed-off-by:` (PR-only; the
-  `commit-msg` hook below catches this earlier, locally)
+- `dco` — every human-authored commit in the PR must carry `Signed-off-by:`;
+  Renovate and non-PR events are explicitly not applicable
+- `apidiff` — checks every discovered Go module against the previous root
+  release tag; discovery and checker errors fail the aggregate, while detected
+  incompatibilities remain informational before v1.0
 
 Two more gates run outside `ci.yml` and are not part of `ci-success`:
 
@@ -106,7 +126,8 @@ praetorctl state init --if-absent  # once per fresh checkout: seeds .workingdir/
                                     # ledger that already exists
 make dev    # air hot-reload (when implemented)
 make ci     # full local CI (root module)
-make verify-all  # root + core + governance gates (what CI runs)
+make verify-all  # all 23 Go modules + security, licensing, and governance
+make python-lint python-test c-quality  # focused Python and C gates
 make gen    # sqlc / ogen / mockery codegen
 ```
 
@@ -117,13 +138,13 @@ Local gates run through [lefthook](https://github.com/evilmartians/lefthook)
 are one bash script per check under [`scripts/hooks/`](scripts/hooks/);
 governance checks (`context-check`, `hiss-audit`, `state-sync`,
 `dedupe-cadence`, and the pre-push `audit` job) are adopted verbatim from
-[cordanaLLM/praetor](https://github.com/cordanaLLM/praetor)'s `standardsctl
+[cordanaLLM/praetor](https://github.com/cordanaLLM/praetor)'s `praetorctl
 adopt` scaffold — see the comment header in `lefthook.yml` for which checks
 stayed on the golusoris implementation and why (HISS-19: one behavior, one
 implementation). Install once per clone:
 
 ```bash
-go install github.com/evilmartians/lefthook@latest
+make tools-bootstrap     # installs every repository-pinned Go development tool
 lefthook install          # writes .git/hooks/{pre-commit,commit-msg,post-commit,pre-push}
 ```
 
@@ -132,7 +153,7 @@ lefthook install          # writes .git/hooks/{pre-commit,commit-msg,post-commit
 | `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config .golangci.yml` and `go vet` on the packages of the staged files; `praetorctl compile-context --verify`, `praetorctl audit`, `reuse lint`, `gitleaks git --staged` |
 | `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`) and the DCO `Signed-off-by:` trailer |
 | `post-commit` | `praetorctl state sync .`, `praetorctl dedupe cadence --threshold=20 --record .` |
-| `pre-push` | `go build ./...` + `go test -short ./...` (no `-race`) in the root and `core/` modules; `govulncheck ./...`; `praetorctl audit` |
+| `pre-push` | all primary-module build/vet + `go test -short` (no `-race`); `GO_MODULE_GROUP=primary scripts/ci/go-modules.sh vuln`; `praetorctl audit` |
 | `agent-checkpoint-tool` / `agent-checkpoint-stop` | Bounded checkpoint evaluator (`.config/lefthook/scripts/checkpoint.py`); disabled until a reviewed `.config/agent/checkpoint.json` is added locally — not part of this adoption |
 
 `go test -short` skips the testcontainers-backed helpers in `testutil/`
@@ -143,21 +164,25 @@ including the container-backed packages, runs in CI (`ci.yml`'s `test` job).
 Two governance jobs from praetor's scaffold are configured but currently held
 back, commented out in [`lefthook.yml`](lefthook.yml)'s `pre-push` block:
 `flavor-audit` (`praetorctl flavor audit .`) and `gate` (`praetorctl gate run
---path=.`, stage 4 of which **is** the flavor audit). Praetor classifies this
+--path=.`, whose fourth of six stages is the flavor audit). Praetor classifies this
 repository as a `go-service` flavor and demands a `Dockerfile`, an `on:`-less
 `security.yml`, and duplicate lint/gosec stubs that don't fit a library
 (tracked upstream as
 [cordanaLLM/praetor#36](https://github.com/cordanaLLM/praetor/issues/36)).
 Re-enable both once the flavor classification is fixed — `praetorctl flavor
 audit .` and `praetorctl gate run --path=.` must both exit `0` on `main`
-first. `standardsctl gate run` already passes stages 1-3 (lockfiles, HISS
-scan, security); only stage 4 is blocked.
+first. The complete gate also includes isolated race tests and a signed Exit-0
+receipt after flavor conformance.
 
-A check whose tool is not on PATH (`gofumpt`, `gci`, `golangci-lint`,
-`praetorctl`/`standardsctl`, `reuse`, `gitleaks`, `govulncheck`) skips with an
-install hint instead of failing — the hooks never require Python outside the
+Formatting, lint, REUSE, gitleaks, and pre-push govulncheck hooks emit an
+install hint and skip when their optional local binary is absent. Praetor
+governance hooks fail closed when neither `praetorctl` nor the in-repository
+legacy source is available. The hooks never require Python outside the
 checkpoint lifecycle jobs. CI (`make verify-all`) remains the authoritative
-gate, so a skipped local check is still enforced on the PR.
+gate, so an allowed local skip is still enforced on the PR.
+An installed but mismatched gofumpt fails with the exact
+`make tools-bootstrap` remediation; the shared pin lives in
+`tools/tool-versions.env`.
 
 Dry-run without committing:
 
@@ -197,10 +222,13 @@ maintainer:
    - [`release.yml`](.github/workflows/release.yml) — goreleaser builds
      multi-arch archives for `cmd/golusoris` and `cmd/golusoris-mcp`,
      checksums, a keyless cosign signature bundle, per-archive SPDX SBOMs,
-     and SLSA build provenance (`actions/attest-build-provenance`), then
+     and build provenance (`actions/attest-build-provenance`), then
      publishes the GitHub release.
-   - [`sbom.yml`](.github/workflows/sbom.yml) — publishes source-tree SPDX
-     and CycloneDX SBOMs as GitHub attestations and workflow artifacts.
+   - [`sbom.yml`](.github/workflows/sbom.yml) — attempts source-tree SPDX and
+     CycloneDX attestations and workflow artifacts. The v0.12.0 run failed
+     during Rekor publication while the release workflow and its per-archive
+     SBOMs succeeded; confirm this workflow on the new tag before claiming its
+     source-tree attestations are available.
 
 GitHub immutable releases are enabled, so a published release's assets
 cannot be amended — a mistake needs a new patch release, not a re-run.

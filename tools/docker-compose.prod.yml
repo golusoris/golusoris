@@ -5,7 +5,7 @@
 # Production-like local stack. Apps copy + adjust.
 services:
   postgres:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?required}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?required}
@@ -15,10 +15,10 @@ services:
       interval: 10s
     restart: unless-stopped
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql
 
   redis:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:bd999b5cfee25fb24b8320a31fddbd69f462df44c8138c66e369582937beebc0
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -27,17 +27,20 @@ services:
       - redis_data:/data
 
   app:
-    image: ghcr.io/${GH_OWNER:?required}/${APP_NAME:?required}:${APP_VERSION:-latest}
+    # Supply the repository and digest separately so the template cannot fall
+    # back to a mutable tag.
+    image: ${APP_IMAGE_REPOSITORY:?required}@${APP_IMAGE_DIGEST:?required}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
-      REDIS_URL: redis://redis:6379/0
-      LOG_LEVEL: info
-      LOG_FORMAT: json
+      # Pass a URL-encoded DSN; raw credential interpolation corrupts reserved characters.
+      APP_DB_DSN: ${APP_DB_DSN:?required}
+      APP_CACHE_REDIS_ADDR: redis:6379
+      APP_LOG_LEVEL: info
+      APP_LOG_FORMAT: json
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
     ports:
       - "${APP_PORT:-8080}:8080"

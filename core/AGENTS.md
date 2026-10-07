@@ -6,11 +6,11 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — core/ (module `github.com/golusoris/golusoris/core`)
 
-The **lean sub-module** every consumer can afford (ADR-0017): configuration,
+**lean sub-module** every consumer can afford (ADR-0017): configuration,
 logging, clock, errors, crypto, ids, validation, build info, CLI kit, MCP
 server, YAML codec, execution receipts, git runner, Go-source analysis, and
-the capability-contract schema. ~20 direct dependencies; no database, HTTP,
-cloud, or CGO code lives here — those stay in the root module and import core.
+capability-contract schema. ~20 direct dependencies; no database, HTTP,
+cloud, or CGO code lives here — those stay in root module and import core.
 
 ## Packages
 
@@ -34,16 +34,14 @@ cloud, or CGO code lives here — those stay in the root module and import core.
 
 ## Rules specific to core
 
-- **Dependency budget.** Adding a third-party module to `core/go.mod` is a
-  reviewed decision; the point of the module is a small trust surface. Heavy
-  or CGO code belongs in the root module or its own sub-module.
-- **No imports from the root module.** Core must never import
-  `github.com/golusoris/golusoris/<root-pkg>` — that is a cycle. Tests use
-  `go.uber.org/fx/fxtest` directly, not `testutil/`.
+- **Dependency budget.** Adding third-party module to `core/go.mod` is  reviewed decision; point of module is small trust surface. Heavy
+ or CGO code belongs in root module or its own sub-module.
+- **No imports from root module.** Core must never import
+ `github.com/golusoris/golusoris/<root-pkg>` — that is cycle. Tests use
+ `go.uber.org/fx/fxtest` directly, not `testutil/`.
 - **Every package is listed in `capabilities.yaml`** with
-  `module: github.com/golusoris/golusoris/core`; the root drift test enforces it.
-- **Release together.** Tag `core/vX.Y.Z` and `vX.Y.Z` on the same commit; the
-  root `go.mod` requires the matching `core` version (in-repo `replace` for dev).
+ `module: github.com/golusoris/golusoris/core`; root drift test enforces it.
+- **Release together.** Tag `core/vX.Y.Z` and `vX.Y.Z` on same commit;  root `go.mod` requires matching `core` version (in-repo `replace` for dev).
 
 ## Developing
 

@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# casbin/casbin/v2 — v2.105.0 snapshot
+# casbin/casbin/v3 — v3.11.0 snapshot
 
-Pinned: **v2.105.0**
-Source: https://pkg.go.dev/github.com/casbin/casbin/v2@v2.105.0
+Pinned: **v3.11.0**
+Source: [tagged source](https://github.com/casbin/casbin/tree/v3.11.0)
 
 ## Core concepts
 
@@ -18,7 +18,7 @@ Source: https://pkg.go.dev/github.com/casbin/casbin/v2@v2.105.0
 ## Usage
 
 ```go
-import "github.com/casbin/casbin/v2"
+import "github.com/casbin/casbin/v3"
 
 // Load from model + policy files
 e, err := casbin.NewEnforcer("model.conf", "policy.csv")
@@ -59,26 +59,24 @@ m = g(r.sub, p.sub) && r.obj == p.obj && r.act == p.act
 ## Policy management
 
 ```go
-e.AddPolicy("alice", "/data/1", "read")
-e.RemovePolicy("alice", "/data/1", "read")
-e.AddRoleForUser("alice", "admin")
-e.GetRolesForUser("alice")
-e.GetUsersForRole("admin")
-e.DeleteRoleForUser("alice", "admin")
+added, err := e.AddPolicy("alice", "/data/1", "read")
+removed, err := e.RemovePolicy("alice", "/data/1", "read")
+roleAdded, err := e.AddRoleForUser("alice", "admin")
+roles, err := e.GetRolesForUser("alice")
+users, err := e.GetUsersForRole("admin")
+roleRemoved, err := e.DeleteRoleForUser("alice", "admin")
 ```
+
+Every management call returns an error. Mutation calls also return whether the
+policy changed; do not discard either result.
 
 ## Adapters
 
-```go
-// PostgreSQL adapter
-import gormadapter "github.com/casbin/gorm-adapter/v3"
-a, _ := gormadapter.NewAdapter("postgres", dsn, true)
-e, _ := casbin.NewEnforcer("model.conf", a)
-
-// Auto-save on policy change
-e.EnableAutoSave(true)
-e.SavePolicy()
-```
+Golusoris accepts Casbin's `persist.Adapter` contract. The selected v3 module
+includes `persist/file-adapter`; database adapters are separate dependencies
+and must be pinned and audited before use. `EnableAutoSave(true)` persists
+supported policy mutations through the configured adapter; handle
+`SavePolicy()` errors when forcing a full save.
 
 ## golusoris usage
 
@@ -86,5 +84,5 @@ e.SavePolicy()
 
 ## Links
 
-- Docs: https://casbin.org/docs/overview
-- Changelog: https://github.com/casbin/casbin/blob/master/CHANGELOG.md
+- [Documentation](https://casbin.org/docs/overview)
+- [Tagged source](https://github.com/casbin/casbin/tree/v3.11.0)

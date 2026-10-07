@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/notify/fcm"
 )
@@ -143,10 +145,76 @@ func TestNewSender_AcceptsJSON(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestNewSender_RejectsAmbiguousServiceAccountSources(t *testing.T) {
+	t.Parallel()
+	sa := fakeSA(t, "http://unused")
+	b, err := json.Marshal(sa)
+	require.NoError(t, err)
+
+	_, err = fcm.NewSender(fcm.Options{
+		ServiceAccount:     &sa,
+		ServiceAccountJSON: b,
+	})
+	require.Error(t, err)
+}
+
 func TestNewSender_ValidatesFields(t *testing.T) {
 	t.Parallel()
 	_, err := fcm.NewSender(fcm.Options{
 		ServiceAccount: &fcm.ServiceAccount{ProjectID: "p"}, // missing email + key
 	})
 	require.Error(t, err)
+}
+
+func TestNewSender_RejectsNegativeResponseLimit(t *testing.T) {
+	t.Parallel()
+	sa := fakeSA(t, "http://unused")
+	_, err := fcm.NewSender(fcm.Options{
+		ServiceAccount:   &sa,
+		MaxResponseBytes: -1,
+	})
+	require.Error(t, err)
+}
+
+func TestNewSender_RejectsUnboundedResponseLimit(t *testing.T) {
+	t.Parallel()
+	sa := fakeSA(t, "http://unused")
+	_, err := fcm.NewSender(fcm.Options{
+		ServiceAccount:   &sa,
+		MaxResponseBytes: math.MaxInt64,
+	})
+	require.Error(t, err)
+}
+
+func TestSend_TokenResponseSizeBoundary(t *testing.T) {
+	t.Parallel()
+	payload := []byte(`{"access_token":"t","expires_in":3600}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			_, _ = w.Write(payload)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	sa := fakeSA(t, srv.URL+"/token")
+
+	exact, err := fcm.NewSender(fcm.Options{
+		ServiceAccount:   &sa,
+		Endpoint:         srv.URL,
+		MaxResponseBytes: int64(len(payload)),
+	})
+	require.NoError(t, err)
+	require.NoError(t, exact.Send(t.Context(), notify.Message{
+		To: []string{"device"}, Subject: "subject",
+	}))
+
+	over, err := fcm.NewSender(fcm.Options{
+		ServiceAccount:   &sa,
+		Endpoint:         srv.URL,
+		MaxResponseBytes: int64(len(payload) - 1),
+	})
+	require.NoError(t, err)
+	err = over.Send(t.Context(), notify.Message{To: []string{"device"}, Subject: "subject"})
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
 }

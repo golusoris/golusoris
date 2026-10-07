@@ -30,6 +30,8 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
@@ -44,7 +46,7 @@ type Options struct {
 	NoSandbox bool
 	// DisableGPU passes --disable-gpu to Chrome (common in headless CI).
 	DisableGPU bool
-	// ChromePath overrides the Chrome/Chromium executable path.
+	// ChromePath overrides CHROME_PATH, CHROMIUM_PATH, and PATH discovery.
 	ChromePath string
 }
 
@@ -93,7 +95,7 @@ func (o RenderOptions) params() *page.PrintToPDFParams {
 
 // Renderer renders PDFs using a persistent headless Chrome instance.
 type Renderer struct {
-	ctx    context.Context
+	ctx    context.Context //nolint:containedctx // chromedp requires the persistent browser context as its session handle.
 	cancel context.CancelFunc
 	opts   Options
 }
@@ -106,85 +108,106 @@ func NewRenderer(opts Options) (*Renderer, error) {
 	}
 
 	allocOpts := chromedp.DefaultExecAllocatorOptions[:]
-	allocOpts = append(allocOpts, chromedp.Headless)
+	allocOpts = append(allocOpts, chromedp.Headless, chromedp.WSURLReadTimeout(opts.Timeout))
 	if opts.NoSandbox {
 		allocOpts = append(allocOpts, chromedp.NoSandbox)
 	}
 	if opts.DisableGPU {
 		allocOpts = append(allocOpts, chromedp.DisableGPU)
 	}
-	if opts.ChromePath != "" {
-		allocOpts = append(allocOpts, chromedp.ExecPath(opts.ChromePath))
+	if executable := chromeExecutablePath(opts); executable != "" {
+		allocOpts = append(allocOpts, chromedp.ExecPath(executable))
 	}
 
 	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 	ctx, ctxCancel := chromedp.NewContext(allocCtx)
 
-	// Ping to verify Chrome is reachable.
-	pingCtx, pingCancel := context.WithTimeout(ctx, opts.Timeout)
-	defer pingCancel()
-	if err := chromedp.Run(pingCtx); err != nil {
-		ctxCancel()
-		cancel()
+	// Merge cancels: closing allocCtx also kills ctxCancel.
+	var cancelOnce sync.Once
+	combined := func() {
+		cancelOnce.Do(func() {
+			ctxCancel()
+			cancel()
+		})
+	}
+	startupCtx, cancelStartup := context.WithTimeout(context.Background(), opts.Timeout)
+	stopStartup := context.AfterFunc(startupCtx, combined)
+	err := chromedp.Run(ctx)
+	startupTimedOut := !stopStartup()
+	cancelStartup()
+	if err != nil || startupTimedOut {
+		combined()
+		if startupTimedOut {
+			return nil, fmt.Errorf("pdf: launch chrome: %w", context.DeadlineExceeded)
+		}
 		return nil, fmt.Errorf("pdf: launch chrome: %w", err)
 	}
 
-	// Merge cancels: closing allocCtx also kills ctxCancel.
-	combined := func() {
-		ctxCancel()
-		cancel()
-	}
-
 	return &Renderer{ctx: ctx, cancel: combined, opts: opts}, nil
+}
+
+func chromeExecutablePath(opts Options) string {
+	if opts.ChromePath != "" {
+		return opts.ChromePath
+	}
+	if executable := os.Getenv("CHROME_PATH"); executable != "" {
+		return executable
+	}
+	return os.Getenv("CHROMIUM_PATH")
 }
 
 // Close shuts down the headless Chrome process.
 func (r *Renderer) Close() { r.cancel() }
 
 // RenderURL navigates to url and returns the page as a PDF byte slice.
-func (r *Renderer) RenderURL(_ context.Context, url string, opts RenderOptions) ([]byte, error) {
+func (r *Renderer) RenderURL(ctx context.Context, url string, opts RenderOptions) ([]byte, error) {
 	if url == "" {
 		return nil, errors.New("pdf: url is required")
 	}
-	tCtx, cancel := context.WithTimeout(r.ctx, r.opts.Timeout)
-	defer cancel()
-
-	var buf []byte
-	if err := chromedp.Run(tCtx,
-		chromedp.Navigate(url),
-		chromedp.ActionFunc(func(ac context.Context) error {
-			var err error
-			buf, _, err = opts.params().Do(ac)
-			return err
-		}),
-	); err != nil {
-		return nil, fmt.Errorf("pdf: render url %s: %w", url, err)
-	}
-	return buf, nil
+	return r.render(ctx, url, "url "+url, opts)
 }
 
 // RenderHTML loads raw HTML content and returns the page as a PDF byte slice.
 // The HTML is loaded via a data: URL so no HTTP server is needed.
-func (r *Renderer) RenderHTML(_ context.Context, html string, opts RenderOptions) ([]byte, error) {
+func (r *Renderer) RenderHTML(ctx context.Context, html string, opts RenderOptions) ([]byte, error) {
 	if html == "" {
 		return nil, errors.New("pdf: html is required")
 	}
-	tCtx, cancel := context.WithTimeout(r.ctx, r.opts.Timeout)
-	defer cancel()
-
 	// data: URLs bypass the need for a running HTTP server.
 	dataURL := "data:text/html," + url.PathEscape(html)
+	return r.render(ctx, dataURL, "html", opts)
+}
+
+func (r *Renderer) render(ctx context.Context, target, description string, opts RenderOptions) ([]byte, error) {
+	taskCtx, cancel := r.taskContext(ctx)
+	defer cancel()
 
 	var buf []byte
-	if err := chromedp.Run(tCtx,
-		chromedp.Navigate(dataURL),
+	if err := chromedp.Run(taskCtx,
+		chromedp.Navigate(target),
 		chromedp.ActionFunc(func(ac context.Context) error {
 			var err error
 			buf, _, err = opts.params().Do(ac)
-			return err
+			if err != nil {
+				return fmt.Errorf("pdf: print page: %w", err)
+			}
+			return nil
 		}),
 	); err != nil {
-		return nil, fmt.Errorf("pdf: render html: %w", err)
+		return nil, fmt.Errorf("pdf: render %s: %w", description, err)
 	}
 	return buf, nil
+}
+
+// taskContext gives each render its own tab on the persistent browser while
+// honoring both the caller's cancellation and the operation timeout.
+func (r *Renderer) taskContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	targetCtx, cancelTarget := chromedp.NewContext(r.ctx)
+	taskCtx, cancelTask := context.WithTimeout(targetCtx, r.opts.Timeout)
+	stopCaller := context.AfterFunc(ctx, cancelTask)
+	return taskCtx, func() {
+		stopCaller()
+		cancelTask()
+		cancelTarget()
+	}
 }

@@ -6,11 +6,65 @@ package twotier
 
 import (
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/core/config"
 )
+
+func TestNewTwoTier_DoesNotRetainNilL1(t *testing.T) {
+	t.Parallel()
+	tt, err := newTwoTier(Options{}, nil, nil, slog.New(slog.DiscardHandler))
+	if !errors.Is(err, errInvalidDependency) {
+		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+	}
+	if tt != nil {
+		t.Fatal("newTwoTier returned a cache with nil L1")
+	}
+}
+
+func TestNewTwoTier_DoesNotRetainNilRedisClient(t *testing.T) {
+	t.Parallel()
+	l1, err := memory.NewForTest(10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt, err := newTwoTier(Options{}, l1, nil, slog.New(slog.DiscardHandler))
+	if !errors.Is(err, errInvalidDependency) {
+		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+	}
+	if tt != nil {
+		t.Fatal("newTwoTier returned a cache with nil Redis client")
+	}
+}
+
+func TestNewTwoTier_NilLoggerDoesNotPanic(t *testing.T) {
+	t.Parallel()
+	tt, err := newTwoTier(Options{}, nil, nil, nil)
+	if !errors.Is(err, errInvalidDependency) {
+		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+	}
+	if tt != nil {
+		t.Fatal("newTwoTier returned a cache with nil logger")
+	}
+}
+
+func TestNewTwoTierRejectsNegativeTTLs(t *testing.T) {
+	t.Parallel()
+	for name, opts := range map[string]Options{
+		"L1": {L1TTL: -time.Second},
+		"L2": {L2TTL: -time.Second},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if cache, err := newTwoTier(opts, nil, nil, slog.New(slog.DiscardHandler)); err == nil || cache != nil {
+				t.Fatalf("newTwoTier() = (%v, %v), want TTL validation error", cache, err)
+			}
+		})
+	}
+}
 
 func TestLoadOptions_defaults(t *testing.T) {
 	t.Parallel()

@@ -69,6 +69,13 @@ func TestNewTintFormat(t *testing.T) {
 	}
 }
 
+func TestNewTypedNilOutputUsesDefault(t *testing.T) {
+	t.Parallel()
+	var output *bytes.Buffer
+	logger := log.New(log.Options{Format: log.FormatJSON, Output: output})
+	logger.Info("typed nil output")
+}
+
 func TestLevelFromString(t *testing.T) {
 	t.Parallel()
 	cases := map[string]slog.Level{

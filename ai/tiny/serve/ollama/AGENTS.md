@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ai/tiny/serve/ollama — AGENTS.md
 
-[tiny.Predictor] that routes generate calls to an Ollama HTTP
+[tiny.Predictor] that routes generate calls to Ollama HTTP
 endpoint. Intended to serve Gemma / Gemma 3n base checkpoints + LoRA
 adapters produced by [ai/tiny/gemma].
 
@@ -14,11 +14,11 @@ adapters produced by [ai/tiny/gemma].
 
 - `NewPredictor(Options) *Predictor`.
 - `(*Predictor).Load(ctx, tiny.Model) error` — validates
-  Modality=text + TaskKind=generate, then calls `/api/show` to verify
-  the ollama tag is registered.
+ Modality=text + TaskKind=generate, then calls `/api/show` to verify
+ ollama tag is registered.
 - `(*Predictor).Predict(ctx, input any) (tiny.Prediction, error)` —
-  posts `{model, prompt, stream:false}` to `/api/generate`. Input must
-  be a string.
+ posts `{model, prompt, stream:false}` to `/api/generate`. Input must
+ be string.
 - `(*Predictor).Close() error` — no-op (stateless HTTP).
 
 ## Options
@@ -30,13 +30,15 @@ adapters produced by [ai/tiny/gemma].
 | `MaxResponseBytes` | 256 KiB                    | Caps `/api/generate` body read.              |
 | `TagOverride`      | ""                         | Use when registry name ≠ ollama tag.         |
 
+Injected clients are cloned. Positive timeout stays. Zero timeout becomes 60s.
+
 ## Assumptions
 
-- Ollama instance has the model tag already registered. This package
-  is a thin client — it does not `ollama create` or push weights.
-- Ollama's response JSON has a `response` field (non-streaming mode).
+- Ollama instance has model tag already registered. This package
+ is thin client — it does not `ollama create` or push weights.
+- Ollama's response JSON has `response` field (non-streaming mode).
 - Model versioning is expressed via distinct ollama tags
-  (e.g. `intent-v3`) rather than inline version params.
+ (e.g. `intent-v3`) rather than inline version params.
 
 ## Testing
 

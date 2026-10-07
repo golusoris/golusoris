@@ -26,11 +26,17 @@ package safety
 
 import (
 	"fmt"
+	"log/slog"
 	"time"
 
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+)
+
+const (
+	defaultStripMaxBytes  int64 = 32 << 20
+	defaultStripMaxPixels       = 40_000_000
 )
 
 // Options tunes upload hardening. Config keys live under "storage.safety".
@@ -52,9 +58,11 @@ type StripOptions struct {
 	AutoOrient bool `koanf:"auto_orient"`
 	// JPEGQuality is the re-encode quality (1-100) for JPEG output.
 	JPEGQuality int `koanf:"jpeg_quality"`
-	// MaxPixels guards against decode bombs: width*height above this rejects
-	// before a full decode, checked via image.DecodeConfig.
+	// MaxPixels rejects a raster above this size before decode. For animated
+	// GIFs it also caps the sum of all frame pixels retained by gif.DecodeAll.
 	MaxPixels int `koanf:"max_pixels"`
+	// MaxBytes caps the encoded source buffered before decode.
+	MaxBytes int64 `koanf:"max_bytes"`
 }
 
 // FetchOptions controls the SSRF-guarded fetcher.
@@ -85,7 +93,8 @@ func defaultOptions() Options {
 		Strip: StripOptions{
 			AutoOrient:  true,
 			JPEGQuality: 85,
-			MaxPixels:   40_000_000,
+			MaxPixels:   defaultStripMaxPixels,
+			MaxBytes:    defaultStripMaxBytes,
 		},
 		Fetch: FetchOptions{
 			MaxBytes:       33_554_432, // 32 MiB
@@ -106,6 +115,13 @@ func loadOptions(cfg *config.Config) (Options, error) {
 		return Options{}, fmt.Errorf("storage/safety: load options: %w", err)
 	}
 	return opts, nil
+}
+
+func loggerOrDiscard(logger *slog.Logger) *slog.Logger {
+	if logger == nil {
+		return slog.New(slog.DiscardHandler)
+	}
+	return logger
 }
 
 // Module provides safety.Stripper and safety.Fetcher to the fx graph. CleanKey,

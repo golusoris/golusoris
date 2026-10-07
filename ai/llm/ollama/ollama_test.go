@@ -8,17 +8,148 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/ai/llm"
 	"github.com/golusoris/golusoris/ai/llm/ollama"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
+
+func TestNewRejectsNegativeTimeout(t *testing.T) {
+	t.Parallel()
+	client, err := ollama.New(ollama.Config{Timeout: -time.Second})
+	require.Error(t, err)
+	require.Nil(t, client)
+}
+
+func TestNewAcceptsTypedNilHTTPClient(t *testing.T) {
+	t.Parallel()
+	var clientWithType *http.Client
+	client, err := ollama.New(ollama.Config{HTTPClient: clientWithType})
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
+func TestNewClonesInjectedUnboundedClientWithFiniteTimeout(t *testing.T) {
+	t.Parallel()
+	var deadline time.Time
+	var hasDeadline bool
+	source := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		deadline, hasDeadline = req.Context().Deadline()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				`{"model":"m","done":true,"message":{"content":"ok"}}`,
+			)),
+		}, nil
+	})}
+	client := newOllama(t, ollama.Config{
+		Model: "m", Timeout: time.Hour, HTTPClient: source,
+	})
+	_, err := client.Chat(context.Background(), nil)
+	require.NoError(t, err)
+	require.True(t, hasDeadline)
+	remaining := time.Until(deadline)
+	require.Positive(t, remaining)
+	require.LessOrEqual(t, remaining, time.Hour)
+	require.Zero(t, source.Timeout)
+}
+
+func newOllama(t *testing.T, cfg ollama.Config) *ollama.Client {
+	t.Helper()
+	client, err := ollama.New(cfg)
+	require.NoError(t, err)
+	return client
+}
+
+func responseClient(status int, payload string) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(payload)),
+		}, nil
+	})}
+}
+
+func TestChatHonorsExactResponseBoundaryAndRejectsOverflow(t *testing.T) {
+	t.Parallel()
+	const payload = `{"model":"m","done":true,"message":{"content":"ok"}}`
+	newClient := func(maxBytes int64) *ollama.Client {
+		return newOllama(t, ollama.Config{
+			Model: "m", MaxResponseBytes: maxBytes,
+			HTTPClient: responseClient(http.StatusOK, payload),
+		})
+	}
+	response, err := newClient(int64(len(payload))).Chat(context.Background(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "ok", response.Content)
+	_, err = newClient(int64(len(payload)-1)).Chat(context.Background(), nil)
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestChatHonorsExactErrorBoundaryAndRejectsOverflow(t *testing.T) {
+	t.Parallel()
+	newClient := func(body string, maxBytes int64) *ollama.Client {
+		return newOllama(t, ollama.Config{
+			Model: "m", MaxErrorBytes: maxBytes,
+			HTTPClient: responseClient(http.StatusBadRequest, body),
+		})
+	}
+	_, err := newClient("1234", 4).Chat(context.Background(), nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, httpclient.ErrBodyTooLarge)
+	require.Contains(t, err.Error(), "1234")
+	_, err = newClient("12345", 4).Chat(context.Background(), nil)
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestEmbedRejectsResponseOverflow(t *testing.T) {
+	t.Parallel()
+	const payload = `{"embedding":[0.1]}`
+	client := newOllama(t, ollama.Config{
+		Model: "m", MaxResponseBytes: int64(len(payload) - 1),
+		HTTPClient: responseClient(http.StatusOK, payload),
+	})
+	_, err := client.Embed(context.Background(), "input")
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestStreamRejectsErrorResponseOverflow(t *testing.T) {
+	t.Parallel()
+	client := newOllama(t, ollama.Config{
+		Model: "m", MaxErrorBytes: 4,
+		HTTPClient: responseClient(http.StatusTooManyRequests, "12345"),
+	})
+	_, err := drain(t, client.Stream(context.Background(), nil))
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestStreamHonorsExactFrameBoundaryBeyond64KiB(t *testing.T) {
+	t.Parallel()
+	content := strings.Repeat("x", 70<<10)
+	line := fmt.Sprintf(`{"message":{"content":%q},"done":false}`, content)
+	newClient := func(maxFrameBytes int) *ollama.Client {
+		return newOllama(t, ollama.Config{
+			Model: "m", MaxStreamFrameBytes: maxFrameBytes,
+			HTTPClient: responseClient(http.StatusOK, line+"\n{\"done\":true}\n"),
+		})
+	}
+	got, err := drain(t, newClient(len(line)).Stream(context.Background(), nil))
+	require.NoError(t, err)
+	require.Len(t, got, len(content))
+	_, err = drain(t, newClient(len(line)-1).Stream(context.Background(), nil))
+	require.ErrorIs(t, err, llm.ErrStreamFrameTooLarge)
+}
 
 func TestChat(t *testing.T) {
 	t.Parallel()
@@ -40,7 +171,7 @@ func TestChat(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := ollama.New(ollama.Config{BaseURL: srv.URL, Model: "llama3.3"})
+	c := newOllama(t, ollama.Config{BaseURL: srv.URL, Model: "llama3.3"})
 	resp, err := c.Chat(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 	require.NoError(t, err)
 	require.Equal(t, "Hi there", resp.Content)
@@ -65,7 +196,7 @@ func TestStream(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := ollama.New(ollama.Config{BaseURL: srv.URL, Model: "m"})
+	c := newOllama(t, ollama.Config{BaseURL: srv.URL, Model: "m"})
 	var out strings.Builder
 	for chunk := range c.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}}) {
 		require.NoError(t, chunk.Err)
@@ -82,7 +213,7 @@ func TestEmbed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := ollama.New(ollama.Config{BaseURL: srv.URL, Model: "nomic-embed-text"})
+	c := newOllama(t, ollama.Config{BaseURL: srv.URL, Model: "nomic-embed-text"})
 	vec, err := c.Embed(context.Background(), "hello")
 	require.NoError(t, err)
 	require.Len(t, vec, 3)
@@ -148,7 +279,7 @@ const partialLine = `{"message":{"content":"Hello"},"done":false}` + "\n"
 
 func streamHi(t *testing.T, hc *http.Client) (string, error) {
 	t.Helper()
-	c := ollama.New(ollama.Config{Model: "m", HTTPClient: hc})
+	c := newOllama(t, ollama.Config{Model: "m", HTTPClient: hc})
 	return drain(t, c.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}}))
 }
 
@@ -162,10 +293,23 @@ func TestStream_readErrorSurfacesErrChunk(t *testing.T) {
 	require.Contains(t, err.Error(), "ollama: stream")
 }
 
+func TestStream_cleanEOFBeforeDoneSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	out, err := streamHi(t, faultyClient(partialLine, nil, nil))
+	require.Equal(t, "Hello", out)
+	require.ErrorIs(t, err, llm.ErrStreamTruncated)
+}
+
+func TestStream_providerErrorEventSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	_, err := streamHi(t, faultyClient(`{"error":"model runner crashed"}`+"\n", nil, nil))
+	require.ErrorContains(t, err, "model runner crashed")
+}
+
 // Negative: a failed body close surfaces as the error chunk.
 func TestStream_closeErrorSurfacesErrChunk(t *testing.T) {
 	t.Parallel()
-	out, err := streamHi(t, faultyClient(partialLine, nil, errBoom))
+	out, err := streamHi(t, faultyClient(partialLine+`{"done":true}`+"\n", nil, errBoom))
 	require.Equal(t, "Hello", out)
 	require.ErrorIs(t, err, errBoom)
 	require.Contains(t, err.Error(), "close stream body")
@@ -185,7 +329,7 @@ func TestStream_readErrorWinsOverCloseError(t *testing.T) {
 func TestChat_closeErrorReturnsErr(t *testing.T) {
 	t.Parallel()
 	const payload = `{"model":"m","done":true,"message":{"role":"assistant","content":"Hi"}}`
-	c := ollama.New(ollama.Config{Model: "m", HTTPClient: faultyClient(payload, nil, errBoom)})
+	c := newOllama(t, ollama.Config{Model: "m", HTTPClient: faultyClient(payload, nil, errBoom)})
 	_, err := c.Chat(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 	require.ErrorIs(t, err, errBoom)
 	require.Contains(t, err.Error(), "close response body")
@@ -194,7 +338,7 @@ func TestChat_closeErrorReturnsErr(t *testing.T) {
 // Negative: Embed reports a failed body close even after a good decode.
 func TestEmbed_closeErrorReturnsErr(t *testing.T) {
 	t.Parallel()
-	c := ollama.New(ollama.Config{Model: "m", HTTPClient: faultyClient(`{"embedding":[0.1]}`, nil, errBoom)})
+	c := newOllama(t, ollama.Config{Model: "m", HTTPClient: faultyClient(`{"embedding":[0.1]}`, nil, errBoom)})
 	_, err := c.Embed(context.Background(), "hello")
 	require.ErrorIs(t, err, errBoom)
 	require.Contains(t, err.Error(), "close embed body")

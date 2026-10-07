@@ -6,17 +6,28 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # auth/scim
 
-Minimal SCIM 2.0 (RFC 7643 + 7644) HTTP handlers for User and Group provisioning.
+SCIM 2.0 subset. RFC 7643 plus RFC 7644. User and Group provisioning.
 
 ## Surface
 
-- `scim.Handler(store)` → `http.Handler` for `/Users`, `/Users/{id}`, `/Groups`, `/Groups/{id}` (mount under `/scim/v2/`).
-- `scim.Store` interface — apps implement persistence (typically Postgres via sqlc).
-- Types: `User`, `Group`, `Email`, `Name`, `Member`, `ListResponse`, `Error`.
-- `scim.ErrNotFound` — return from Store to map to HTTP 404.
+- `Handler(store)` -> default `/Users`, `/Users/{id}`, `/Groups`, `/Groups/{id}` handler.
+- `HandlerWithOptions(store, ...option)` -> explicit logger or body limit.
+- Mount prefix: `/scim/v2/`.
+- `WithLogger(logger)` -> internal backend error evidence.
+- `WithMaxRequestBodyBytes(n)` -> JSON body limit; default 1 MiB.
+- `Store` -> application persistence, typically sqlc plus PostgreSQL.
+- `ErrNotFound` -> HTTP `404`.
 
-## Notes
+## Invariants
 
-- Authentication is the caller's responsibility; wrap the handler in a bearer-token middleware.
-- PATCH is not implemented yet; PUT replaces the resource.
-- Filter strings are passed through to the Store opaquely; Store may parse RFC 7644 §3.4.2.2 expressions (e.g. `userName eq "alice"`).
+- One bounded JSON value only. Trailing value rejected.
+- Input `schemas` must contain matching core User or Group URI.
+- Backend failure -> internal log plus generic external `500`; no backend
+  detail leak.
+- Authentication at caller route; bearer middleware required.
+- PATCH absent. PUT replaces resource.
+- Filter string opaque to handler; Store owns RFC 7644 expression
+  parsing.
+- `count=0` or negative returns no resources plus `totalResults`; page size
+  defaults to 100, caps at 1000, and handler caps over-returning stores.
+- Response encoding failures after committed headers go to configured logger.

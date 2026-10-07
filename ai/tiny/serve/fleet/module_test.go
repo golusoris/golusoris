@@ -111,6 +111,14 @@ func TestRegisterWorker_rejectsMalformedCapability(t *testing.T) {
 	require.ErrorContains(t, err, "must be lowercase")
 }
 
+func TestAddQueues_rejectsMalformedQueuePrefix(t *testing.T) {
+	t.Parallel()
+	opts := DefaultOptions()
+	opts.QueuePrefix = "bad/prefix"
+	err := addQueues(nil, opts, nil, slog.New(slog.DiscardHandler))
+	require.ErrorContains(t, err, "queue prefix")
+}
+
 func TestRegisterWorker_happyPath(t *testing.T) {
 	t.Parallel()
 	reg := tiny.NewMemoryRegistry()

@@ -7,6 +7,7 @@ package pipeline_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -21,6 +22,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/media/img/pipeline"
 	"github.com/golusoris/golusoris/storage"
 )
@@ -65,6 +67,7 @@ func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Han
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		fx.Provide(func() clock.Clock { return fc }),
+		fx.Provide(func() img.Processor { return stubProcessor{} }),
 		storage.Module,
 		pipeline.Module,
 		fx.Populate(&p, &bkt),
@@ -86,17 +89,16 @@ func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Han
 }
 
 // TestModule_wiresPipelineAndHandler boots the fx Module and drives the
-// provided handler end-to-end. This exercises loadOptions, newProcessor,
-// newPipeline, and the bucketSource adapter.
+// provided handler end-to-end. This exercises loadOptions, newPipeline, and
+// the bucketSource adapter.
 func TestModule_wiresPipelineAndHandler(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
 	p, h, bkt := bootModule(t, ctx)
 
-	// The handler should reach the LocalBucket. With the no-CGO stub processor
-	// the resize yields 415; with a real libvips build it yields 200. Either
-	// proves the source fetch + routing path ran (not 404/403/400).
+	// The injected unavailable processor proves the source fetch and routing
+	// path ran before the handler maps its error to 415.
 	tok, signErr := p.Sign("logo.png", pipeline.Transform{Width: 32, Format: "png"}, time.Minute)
 	if signErr != nil {
 		t.Fatalf("Sign: %v", signErr)
@@ -106,11 +108,8 @@ func TestModule_wiresPipelineAndHandler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 
-	switch rec.Code {
-	case http.StatusOK, http.StatusUnsupportedMediaType:
-		// ok: source was fetched; resize either succeeded or hit the CGO stub.
-	default:
-		t.Fatalf("status = %d, want 200 or 415; body=%s", rec.Code, rec.Body.String())
+	if rec.Code != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415; body=%s", rec.Code, rec.Body.String())
 	}
 
 	// Sanity: the seeded object is reachable via the wired bucket.
@@ -125,6 +124,42 @@ func TestModule_wiresPipelineAndHandler(t *testing.T) {
 	}
 	if buf.String() != "rawbytes" {
 		t.Errorf("object body = %q, want rawbytes", buf.String())
+	}
+}
+
+func TestSourceFromBucket(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	bucket, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewLocalBucket: %v", err)
+	}
+	if _, err = bucket.Put(ctx, "source.png", bytes.NewBufferString("source-bytes"), storage.PutOptions{}); err != nil {
+		t.Fatalf("bucket.Put: %v", err)
+	}
+
+	source := pipeline.SourceFromBucket(bucket)
+	if source == nil {
+		t.Fatal("SourceFromBucket(valid) = nil")
+	}
+	rc, err := source.Get(ctx, "source.png")
+	if err != nil {
+		t.Fatalf("source.Get: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read source: %v", err)
+	}
+	if string(got) != "source-bytes" {
+		t.Fatalf("source body = %q, want source-bytes", got)
+	}
+	if pipeline.SourceFromBucket(nil) != nil {
+		t.Fatal("SourceFromBucket(nil) must return nil")
+	}
+	var typedNilBucket *storage.LocalBucket
+	if pipeline.SourceFromBucket(typedNilBucket) != nil {
+		t.Fatal("SourceFromBucket(typed nil) must return nil")
 	}
 }
 
@@ -146,6 +181,7 @@ func TestModule_loadOptionsMissingSecret(t *testing.T) {
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		fx.Provide(func() clock.Clock { return clockwork.NewFakeClock() }),
+		fx.Provide(func() img.Processor { return stubProcessor{} }),
 		storage.Module,
 		pipeline.Module,
 		fx.Populate(&p),

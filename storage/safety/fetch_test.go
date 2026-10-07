@@ -11,11 +11,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/storage/safety"
 )
 
@@ -30,7 +30,7 @@ func defaultFetchOpts() safety.FetchOptions {
 
 func newGuardedFetcher(t *testing.T, opts safety.FetchOptions) safety.Fetcher {
 	t.Helper()
-	f, err := safety.NewFetcherForTest(opts, slog.New(slog.DiscardHandler), clock.NewFake())
+	f, err := safety.NewFetcherForTest(opts, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("newFetcher: %v", err)
 	}
@@ -213,6 +213,60 @@ func TestFetch_HostAllowlist(t *testing.T) {
 	_, _, err := f.Fetch(context.Background(), "https://blocked.example/")
 	if !errors.Is(err, safety.ErrBlockedAddress) {
 		t.Fatalf("non-allowlisted host err = %v; want ErrBlockedAddress", err)
+	}
+}
+
+func TestFetch_HostAllowlistAllowsExactHost(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "allowed")
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+
+	opts := defaultFetchOpts()
+	opts.AllowPrivate = true
+	opts.AllowHosts = []string{u.Hostname()}
+	body, _, err := newGuardedFetcher(t, opts).Fetch(context.Background(), srv.URL)
+	if err != nil {
+		t.Fatalf("Fetch(allowlisted host): %v", err)
+	}
+	defer body.Close()
+}
+
+func TestFetch_HostAllowlistRecheckedOnRedirect(t *testing.T) {
+	t.Parallel()
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "must not be reached")
+	}))
+	defer destination.Close()
+
+	destinationURL, err := url.Parse(destination.URL)
+	if err != nil {
+		t.Fatalf("parse destination URL: %v", err)
+	}
+	destinationURL.Host = "localhost:" + destinationURL.Port()
+
+	redirector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destinationURL.String(), http.StatusFound)
+	}))
+	defer redirector.Close()
+	redirectURL, err := url.Parse(redirector.URL)
+	if err != nil {
+		t.Fatalf("parse redirect URL: %v", err)
+	}
+
+	opts := defaultFetchOpts()
+	opts.AllowPrivate = true
+	opts.AllowHosts = []string{redirectURL.Hostname()}
+	f := newGuardedFetcher(t, opts)
+
+	_, _, err = f.Fetch(context.Background(), redirector.URL)
+	if !errors.Is(err, safety.ErrBlockedAddress) {
+		t.Fatalf("redirect to non-allowlisted host error = %v; want ErrBlockedAddress", err)
 	}
 }
 

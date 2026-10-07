@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# k8s.io/client-go — v0.32.3 snapshot
+# k8s.io/client-go — v0.37.0 snapshot
 
-Pinned: **v0.32.3**
-Source: https://pkg.go.dev/k8s.io/client-go@v0.32.3
+Pinned: **v0.37.0**
+Source: [tagged source](https://github.com/kubernetes/client-go/tree/v0.37.0)
 
 ## In-cluster client
 
@@ -42,10 +42,28 @@ cm, err := client.CoreV1().ConfigMaps("namespace").Get(ctx, "name", metav1.GetOp
 // Create lease (leader election)
 lease, err := client.CoordinationV1().Leases("namespace").Create(ctx, lease, metav1.CreateOptions{})
 
-// Watch
+// Watch a bounded number of events under the caller's deadline.
 watcher, err := client.CoreV1().Pods("namespace").Watch(ctx, metav1.ListOptions{})
-for event := range watcher.ResultChan() {
-    pod := event.Object.(*corev1.Pod)
+if err != nil {
+    return fmt.Errorf("watch pods: %w", err)
+}
+defer watcher.Stop()
+
+const maxWatchEvents = 1_000
+for processed := 0; processed < maxWatchEvents; processed++ {
+    select {
+    case <-ctx.Done():
+        return ctx.Err()
+    case event, ok := <-watcher.ResultChan():
+        if !ok {
+            return errors.New("pod watch closed")
+        }
+        pod, ok := event.Object.(*corev1.Pod)
+        if !ok {
+            return fmt.Errorf("unexpected pod watch object %T", event.Object)
+        }
+        handlePod(pod)
+    }
 }
 ```
 
@@ -78,9 +96,11 @@ leaderelection.RunOrDie(ctx, leaderelection.LeaderElectionConfig{
 
 ## golusoris usage
 
-- `k8s/client/` — `*kubernetes.Clientset` provided via fx; in-cluster + kubeconfig auto-detect.
-- `leader/k8s/` — k8s Lease-based leader election implementing the `leader.Elector` interface.
+- `k8s/client/` — `*kubernetes.Clientset` provided via Fx; in-cluster plus
+  kubeconfig auto-detection.
+- `leader/k8s/` — Kubernetes Lease-based leader election implementing the
+  `leader.Elector` interface.
 
 ## Links
 
-- Changelog: https://github.com/kubernetes/client-go/blob/master/CHANGELOG.md
+- [Changelog](https://github.com/kubernetes/client-go/blob/v0.37.0/CHANGELOG.md)

@@ -8,13 +8,13 @@
   },
   {
     "label": "Standards: Audit",
-    "command": "standardsctl",
+    "command": "praetorctl",
     "args": ["audit"],
     "use_new_terminal": false
   },
   {
     "label": "Standards: Compile Context",
-    "command": "standardsctl",
+    "command": "praetorctl",
     "args": ["compile-context", "--verify"],
     "use_new_terminal": false
   }

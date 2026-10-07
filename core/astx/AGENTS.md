@@ -8,7 +8,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Shared Go-source analysis primitives for tooling (praetor scanners,
 `golusoris bump` codemods, `needs` migration). Everything is bounded: walks
-have a file budget, reads have size limits, parsing uses `go/parser` — never
+have file budget, reads have size limits, parsing uses `go/parser` — never
 regexes over source text. Capability key: `ast.analyzer`.
 
 ## Key API
@@ -26,7 +26,7 @@ regexes over source text. Capability key: `ast.analyzer`.
 ## Don't
 
 - Don't string-replace import paths (`strings.ReplaceAll` on `"old"`) — it
-  also rewrites string literals and comments. Use `RewriteImports`.
+ also rewrites string literals and comments. Use `RewriteImports`.
 - Don't hand-parse `go.mod` lines; `ParseGoMod` handles blocks, comments,
-  `// indirect`, and retract/replace directives correctly.
-- Don't run `Walk` without a cancellable context on user-supplied roots.
+ `// indirect`, and retract/replace directives correctly.
+- Don't run `Walk` without cancellable context on user-supplied roots.

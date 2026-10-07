@@ -321,7 +321,9 @@ linters:
 
 formatters:
   enable:
-    - gofumpt
+    # gofumpt is intentionally standalone: the repository pins v0.12.0 in
+    # tools/tool-versions.env instead of inheriting golangci-lint's bundled
+    # formatter version.
     - gci
     - goimports
   settings:

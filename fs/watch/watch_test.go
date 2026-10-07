@@ -77,6 +77,48 @@ func TestWatcher_remove_unregistered(t *testing.T) {
 	}
 }
 
+func TestWatcher_CloseClosesEvents(t *testing.T) {
+	t.Parallel()
+	w, err := watch.New(watch.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	select {
+	case _, ok := <-w.Events():
+		if ok {
+			t.Fatal("Events remained open after Close")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Events did not close after Close")
+	}
+}
+
+func TestNew_RejectsNegativeOptions(t *testing.T) {
+	t.Parallel()
+	for name, opts := range map[string]watch.Options{
+		"debounce":    {Debounce: -time.Millisecond},
+		"buffer size": {BufferSize: -1},
+		"max paths":   {MaxPaths: -1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			w, err := watch.New(opts)
+			if err == nil {
+				if w != nil {
+					_ = w.Close()
+				}
+				t.Fatal("New accepted a negative option")
+			}
+			if w != nil {
+				t.Fatal("New returned a watcher for a negative option")
+			}
+		})
+	}
+}
+
 func TestWatcher_debounce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

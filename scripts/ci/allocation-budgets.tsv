@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+# benchmark maximum-B/op maximum-allocs/op
+BenchmarkNewUUID 16 1
+BenchmarkNewKSUID 0 0
+BenchmarkHashPassword 67200000 70
+BenchmarkSealOpen 2704 7
+BenchmarkTypedSetGet 165 7

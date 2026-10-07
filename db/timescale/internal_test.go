@@ -4,35 +4,25 @@
 
 package timescale
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
-func TestFormatInterval_hours(t *testing.T) {
+func TestCompressionSQLQuotesQualifiedRelation(t *testing.T) {
 	t.Parallel()
-	got := formatInterval(2 * time.Hour)
-	want := "2 hours"
-	if got != want {
-		t.Errorf("formatInterval(2h) = %q, want %q", got, want)
+	query, err := compressionSQL("analytics.metrics")
+	if err != nil {
+		t.Fatalf("compressionSQL: %v", err)
+	}
+	want := `ALTER TABLE "analytics"."metrics" SET (timescaledb.compress)`
+	if query != want {
+		t.Fatalf("compressionSQL = %q, want %q", query, want)
 	}
 }
 
-func TestFormatInterval_minutes(t *testing.T) {
+func TestCompressionSQLRejectsMalformedQualification(t *testing.T) {
 	t.Parallel()
-	// 90 minutes = 1.5 hours; 1 hour in integer, not divisible by 24
-	got := formatInterval(90 * time.Minute)
-	want := "1 hours"
-	if got != want {
-		t.Errorf("formatInterval(90m) = %q, want %q", got, want)
-	}
-}
-
-func TestFormatInterval_days(t *testing.T) {
-	t.Parallel()
-	got := formatInterval(30 * 24 * time.Hour)
-	want := "30 days"
-	if got != want {
-		t.Errorf("formatInterval(30d) = %q, want %q", got, want)
+	for _, table := range []string{".metrics", "analytics.", "db.analytics.metrics"} {
+		if _, err := compressionSQL(table); err == nil {
+			t.Errorf("compressionSQL(%q) accepted malformed qualification", table)
+		}
 	}
 }

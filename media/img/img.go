@@ -2,29 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package img provides image processing helpers backed by libvips via govips
-// (CGO). libvips must be installed before this package can be used.
+// Package img defines a backend-neutral image-processing contract.
 //
-// Install system deps (Debian/Ubuntu):
-//
-//	apt-get install libvips-dev
-//
-// Install system deps (macOS):
-//
-//	brew install vips
-//
-// Activate implementation:
-//
-//  1. Remove //go:build ignore from media/img/impl_govips.go
-//  2. Add the dep: go get github.com/davidbyttow/govips/v2
-//  3. go mod tidy
-//
-// Usage:
-//
-//	p, err := img.NewProcessor(img.Options{})
-//	defer p.Close()
-//	out, err := p.Resize(ctx, src, 800, 600)
-//	out, err = p.Convert(ctx, src, img.FormatWEBP)
+// The repository does not ship a runtime image backend. Applications provide
+// a [Processor] implementation and inject it into consumers such as
+// media/img/pipeline. [NewProcessor] fails explicitly so an unavailable backend
+// cannot be mistaken for a working optional build.
 package img
 
 import (
@@ -32,8 +15,9 @@ import (
 	"errors"
 )
 
-// ErrCGORequired is returned when the govips implementation is not activated.
-var ErrCGORequired = errors.New("img: CGO implementation not activated; see package doc")
+// ErrCGORequired is returned because no runtime image backend is bundled.
+// The name is retained for API compatibility.
+var ErrCGORequired = errors.New("img: no runtime backend is bundled; inject a Processor")
 
 // Format is an image output format.
 type Format string
@@ -48,11 +32,12 @@ const (
 	FormatTIFF Format = "tiff"
 )
 
-// Options configures the image processor.
+// Options is retained for the compatibility [NewProcessor] constructor.
+// It has no effect while the repository ships no runtime backend.
 type Options struct {
-	// Concurrency sets the number of libvips threads (default: runtime.NumCPU).
+	// Concurrency is reserved for application backends.
 	Concurrency int
-	// MaxCacheSize caps the libvips operation cache (MiB). 0 = libvips default.
+	// MaxCacheSize is reserved for application backends.
 	MaxCacheSize int
 }
 
@@ -97,8 +82,8 @@ func (stub) Info(_ context.Context, _ []byte) (int, int, Format, error) {
 }
 func (stub) Close() {}
 
-// NewProcessor returns a [Processor] backed by libvips.
-// When the CGO implementation is not activated it returns an error.
+// NewProcessor returns [ErrCGORequired]. Applications must inject their own
+// [Processor] implementation.
 func NewProcessor(_ Options) (Processor, error) {
 	return stub{}, ErrCGORequired
 }

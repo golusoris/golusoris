@@ -1,0 +1,21 @@
+// SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+// SPDX-License-Identifier: EUPL-1.2
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/v0.23.2/schema/markdownlint-cli2-config-schema.json",
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD024": {
+      "siblings_only": true
+    },
+    "MD033": {
+      "allowed_elements": [
+        "a",
+        "img",
+        "p"
+      ]
+    },
+    "MD060": false
+  },
+  "noProgress": true
+}

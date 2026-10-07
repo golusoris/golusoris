@@ -8,8 +8,9 @@ set -euo pipefail
 
 msgfile=${1:?usage: commit-msg.sh <commit-message-file>}
 # Drop comment lines and CRs (Windows editors) before inspecting the message.
-body=$(tr -d '\r' < "$msgfile" | grep -vE '^#' || true)
-subject=$(printf '%s\n' "$body" | grep -m1 -E '.' || true)
+# awk, unlike grep, exits 0 when no line survives, so only a read failure stops the hook here.
+body=$(tr -d '\r' < "$msgfile" | awk '!/^#/')
+subject=$(printf '%s\n' "$body" | awk '!found && length { print; found = 1 }')
 [ -n "$subject" ] || fail "empty commit message"
 
 # git-generated subjects and to-be-squashed fixups are exempt (CI's DCO check ignores merges).

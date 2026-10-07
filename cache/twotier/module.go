@@ -17,6 +17,7 @@ import (
 	"github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/cache/singleflight"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options tunes the two-tier cache.
@@ -27,8 +28,7 @@ import (
 //	cache.twotier.l2_ttl = 5m   # L2 (redis) TTL, 0 = no expiry
 type Options struct {
 	// L1TTL is the time-to-live for entries written into L1 by this cache.
-	// Note: L1 entries also obey cache/memory's own configured TTL; this knob
-	// is surfaced for symmetry and future per-key expiry. Default 1m.
+	// L1 entries also obey cache/memory's configured TTL. Default 1m.
 	L1TTL time.Duration `koanf:"l1_ttl"`
 	// L2TTL is the time-to-live for entries written into L2 (Redis).
 	// 0 means no expiry. Default 5m.
@@ -146,22 +146,36 @@ func (r redisL2) DelPrefix(ctx context.Context, prefix string) error {
 	})
 }
 
+var errInvalidDependency = errors.New("cache/twotier: invalid dependency")
+
 // newTwoTier wires a [TwoTier] from the L1 cache, the Redis client, and config.
-func newTwoTier(opts Options, l1 *memory.Cache, client rueidis.Client, logger *slog.Logger) *TwoTier {
+func newTwoTier(opts Options, l1 *memory.Cache, client rueidis.Client, logger *slog.Logger) (*TwoTier, error) {
+	if opts.L1TTL < 0 || opts.L2TTL < 0 {
+		return nil, errors.New("cache/twotier: TTLs must not be negative")
+	}
+	if logger == nil {
+		return nil, fmt.Errorf("%w: logger", errInvalidDependency)
+	}
+	if l1 == nil {
+		return nil, fmt.Errorf("%w: L1 cache", errInvalidDependency)
+	}
+	if validate.IsNil(client) {
+		return nil, fmt.Errorf("%w: Redis client", errInvalidDependency)
+	}
 	tt := &TwoTier{
 		l1:     l1,
 		l2:     redisL2{client: client},
 		logger: logger,
 		l1TTL:  opts.L1TTL,
 		l2TTL:  opts.L2TTL,
-		group:  singleflight.New[string, []byte](),
+		group:  singleflight.New[flightKey, []byte](),
 	}
 	logger.Debug(
 		"cache/twotier: started",
 		slog.Duration("l1_ttl", opts.L1TTL),
 		slog.Duration("l2_ttl", opts.L2TTL),
 	)
-	return tt
+	return tt, nil
 }
 
 // Module provides *twotier.TwoTier to the fx graph. It requires *memory.Cache

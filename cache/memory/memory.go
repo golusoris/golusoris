@@ -26,6 +26,7 @@ package memory
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -37,9 +38,10 @@ import (
 )
 
 // Cache is the concrete otter cache type used by this module.
-// Key is string; value is any so a single pool serves all callers.
-// Use [Typed] to get a type-safe accessor.
-type Cache = otter.Cache[string, any]
+// Key is any; direct callers may use string keys, while [Typed] stores a
+// comparable namespace/key pair so generic keys retain exact identity. Value
+// is any so one pool serves all callers. Use [Typed] for type-safe access.
+type Cache = otter.Cache[any, any]
 
 // Options tunes the cache.
 type Options struct {
@@ -62,15 +64,12 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 func newCache(opts Options, logger *slog.Logger) (*Cache, error) {
-	o := &otter.Options[string, any]{
-		MaximumSize: opts.MaxSize,
+	if logger == nil {
+		return nil, errors.New("cache/memory: logger is required")
 	}
-	if opts.TTL > 0 {
-		o.ExpiryCalculator = otter.ExpiryWriting[string, any](opts.TTL)
-	}
-	c, err := otter.New(o)
+	c, err := buildCache(opts.MaxSize, opts.TTL)
 	if err != nil {
-		return nil, fmt.Errorf("cache/memory: build: %w", err)
+		return nil, err
 	}
 	logger.Debug(
 		"cache/memory: started",
@@ -83,9 +82,19 @@ func newCache(opts Options, logger *slog.Logger) (*Cache, error) {
 // NewForTest constructs a Cache directly without fx, for use in tests.
 // ttl=0 means no expiry.
 func NewForTest(maxSize int, ttl time.Duration) (*Cache, error) {
-	o := &otter.Options[string, any]{MaximumSize: maxSize}
-	if ttl > 0 {
-		o.ExpiryCalculator = otter.ExpiryWriting[string, any](ttl)
+	return buildCache(maxSize, ttl)
+}
+
+func buildCache(maxSize int, ttl time.Duration) (*Cache, error) {
+	if maxSize <= 0 {
+		return nil, errors.New("cache/memory: max size must be positive")
+	}
+	if ttl < 0 {
+		return nil, errors.New("cache/memory: TTL must not be negative")
+	}
+	o := &otter.Options[any, any]{
+		MaximumSize:      maxSize,
+		ExpiryCalculator: otter.ExpiryWriting[any, any](ttl),
 	}
 	c, err := otter.New(o)
 	if err != nil {
@@ -116,6 +125,11 @@ type TypedCache[K comparable, V any] struct {
 	prefix string
 }
 
+type typedKey[K comparable] struct {
+	prefix string
+	key    K
+}
+
 // Typed returns a type-safe accessor over c. prefix is prepended to
 // every key so multiple typed caches can share the underlying pool
 // without colliding.
@@ -123,8 +137,8 @@ func Typed[K comparable, V any](c *Cache, prefix string) *TypedCache[K, V] {
 	return &TypedCache[K, V]{c: c, prefix: prefix}
 }
 
-func (t *TypedCache[K, V]) key(k K) string {
-	return fmt.Sprintf("%s:%v", t.prefix, k)
+func (t *TypedCache[K, V]) key(k K) typedKey[K] {
+	return typedKey[K]{prefix: t.prefix, key: k}
 }
 
 // Get returns the value for k and true, or zero value and false.
@@ -138,9 +152,8 @@ func (t *TypedCache[K, V]) Get(k K) (V, bool) {
 	return typed, ok
 }
 
-// Set stores k → v using the cache's configured TTL. Returns true if
-// the entry was accepted (false means the cache is at capacity and
-// the entry was dropped).
+// Set stores k → v using the cache's configured TTL. The bool reports
+// whether the key was newly inserted; false means an existing value changed.
 func (t *TypedCache[K, V]) Set(k K, v V) bool {
 	_, ok := t.c.Set(t.key(k), v)
 	return ok
@@ -149,4 +162,9 @@ func (t *TypedCache[K, V]) Set(k K, v V) bool {
 // Delete removes k from the cache.
 func (t *TypedCache[K, V]) Delete(k K) {
 	t.c.Invalidate(t.key(k))
+}
+
+// SetExpiresAfter overrides the expiry duration for one typed key.
+func (t *TypedCache[K, V]) SetExpiresAfter(k K, ttl time.Duration) {
+	t.c.SetExpiresAfter(t.key(k), ttl)
 }

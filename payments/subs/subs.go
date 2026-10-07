@@ -29,8 +29,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/id"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Status is the subscription lifecycle state.
@@ -96,9 +99,9 @@ type ChangeEvent struct {
 
 // Options configures [Service].
 type Options struct {
-	// OnChange is invoked after a successful transition (persist has
-	// already happened). Keep the callback fast; fan out to a worker if
-	// needed.
+	// OnChange is invoked with an independent subscription snapshot after a
+	// successful transition has persisted. Keep the callback fast; fan out to
+	// a worker if needed.
 	OnChange func(context.Context, ChangeEvent)
 	// IDGen overrides the default UUIDv7 generator. An error aborts Start.
 	IDGen func() (string, error)
@@ -117,6 +120,12 @@ type Service struct {
 
 // New returns a Service. Logger may be nil (discards events).
 func New(store Store, clk clock.Clock, logger *slog.Logger, opts Options) *Service {
+	if validate.IsNil(store) {
+		store = nil
+	}
+	if validate.IsNil(clk) {
+		clk = clockwork.NewRealClock()
+	}
 	if opts.PeriodLength == 0 {
 		opts.PeriodLength = 30 * 24 * time.Hour
 	}
@@ -150,6 +159,9 @@ type StartParams struct {
 
 // Start creates a new subscription. See StartParams for trial handling.
 func (s *Service) Start(ctx context.Context, p StartParams) (*Subscription, error) {
+	if s.store == nil {
+		return nil, errors.New("payments/subs: store is required")
+	}
 	if p.CustomerID == "" || p.Plan == "" {
 		return nil, errors.New("payments/subs: CustomerID and Plan required")
 	}
@@ -244,9 +256,15 @@ func (s *Service) Resume(ctx context.Context, subID string) error {
 	if sub.CancelAt == nil {
 		return nil
 	}
+	from := sub.Status
+	now := s.clock.Now()
 	sub.CancelAt = nil
-	sub.UpdatedAt = s.clock.Now()
-	return s.store.Upsert(ctx, sub) //nolint:wrapcheck
+	sub.UpdatedAt = now
+	if err := s.store.Upsert(ctx, sub); err != nil {
+		return fmt.Errorf("payments/subs: resume: %w", err)
+	}
+	s.emit(ctx, sub, from, sub.Status, now)
+	return nil
 }
 
 // Pause transitions Active→Paused.
@@ -296,6 +314,7 @@ func (s *Service) Renew(ctx context.Context, subID string) error {
 		return fmt.Errorf("payments/subs: cannot Renew from %s", sub.Status)
 	}
 	now := s.clock.Now()
+	from := sub.Status
 	sub.CurrentPeriodStart = sub.CurrentPeriodEnd
 	sub.CurrentPeriodEnd = sub.CurrentPeriodStart.Add(s.opts.PeriodLength)
 	if sub.Status == StatusTrialing && sub.TrialEndsAt != nil && !now.Before(*sub.TrialEndsAt) {
@@ -303,23 +322,32 @@ func (s *Service) Renew(ctx context.Context, subID string) error {
 		sub.Status = StatusActive
 	}
 	sub.UpdatedAt = now
-	return s.store.Upsert(ctx, sub) //nolint:wrapcheck
+	if err := s.store.Upsert(ctx, sub); err != nil {
+		return fmt.Errorf("payments/subs: renew: %w", err)
+	}
+	s.emit(ctx, sub, from, sub.Status, now)
+	return nil
 }
 
-// ChangePlan updates the plan + seats. When prorate is true, returns a
-// [Proration] describing the credit/charge the caller should apply via
-// the payment processor. The state machine itself doesn't bill.
+// ChangePlan updates the plan and, when positive, the seat count. Proration is
+// the caller's responsibility; the state machine itself does not bill.
 func (s *Service) ChangePlan(ctx context.Context, subID, newPlan string, newSeats int) error {
 	sub, err := s.fetch(ctx, subID)
 	if err != nil {
 		return err
 	}
+	from := sub.Status
 	sub.Plan = newPlan
 	if newSeats > 0 {
 		sub.Seats = newSeats
 	}
-	sub.UpdatedAt = s.clock.Now()
-	return s.store.Upsert(ctx, sub) //nolint:wrapcheck
+	now := s.clock.Now()
+	sub.UpdatedAt = now
+	if err := s.store.Upsert(ctx, sub); err != nil {
+		return fmt.Errorf("payments/subs: change plan: %w", err)
+	}
+	s.emit(ctx, sub, from, sub.Status, now)
+	return nil
 }
 
 // ProcessDue walks all subscriptions with a non-nil CancelAt in the past
@@ -330,10 +358,18 @@ func (s *Service) ChangePlan(ctx context.Context, subID, newPlan string, newSeat
 // This helper needs the Store to support iteration; if it doesn't,
 // apps can call Cancel directly from their own scanners.
 func (s *Service) ProcessDue(ctx context.Context, subIDs []string) error {
+	if s.store == nil {
+		return errors.New("payments/subs: store is required")
+	}
 	now := s.clock.Now()
 	for _, sid := range subIDs {
 		sub, err := s.fetch(ctx, sid)
 		if err != nil {
+			s.logger.WarnContext(
+				ctx, "subs: due subscription fetch failed",
+				slog.String("id", sid),
+				slog.Any("err", err),
+			)
 			continue
 		}
 		if sub.CancelAt != nil && !sub.CancelAt.After(now) && sub.Status != StatusCanceled {
@@ -364,6 +400,9 @@ func (s *Service) cancelDue(ctx context.Context, subID, reason string) {
 // message — keeps wrapcheck happy in one place rather than at every
 // call site.
 func (s *Service) fetch(ctx context.Context, subID string) (*Subscription, error) {
+	if s.store == nil {
+		return nil, errors.New("payments/subs: store is required")
+	}
 	sub, err := s.store.Get(ctx, subID)
 	if err != nil {
 		return nil, fmt.Errorf("payments/subs: get %s: %w", subID, err)
@@ -411,6 +450,6 @@ func (s *Service) emit(ctx context.Context, sub *Subscription, from, to Status, 
 		slog.String("to", string(to)),
 	)
 	if s.opts.OnChange != nil {
-		s.opts.OnChange(ctx, ChangeEvent{Subscription: sub, From: from, To: to, At: at})
+		s.opts.OnChange(ctx, ChangeEvent{Subscription: cloneSubscription(sub), From: from, To: to, At: at})
 	}
 }

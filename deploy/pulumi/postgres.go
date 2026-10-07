@@ -6,6 +6,9 @@ package main
 
 import (
 	"fmt"
+	"net"
+	"net/url"
+	"strconv"
 
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
@@ -62,11 +65,24 @@ func newPostgres(
 		return nil, fmt.Errorf("pulumi: create db instance %s: %w", name, err)
 	}
 
-	dsn := pulumi.Sprintf(
-		"postgres://%s:%s@%s:%d/%s?sslmode=require",
-		pgUser, cfg.Password, inst.Address, inst.Port, pgDBName,
-	)
+	dsn := pulumi.All(inst.Address, inst.Port, cfg.Password).ApplyT(func(values []any) string {
+		return formatPostgresDSN(values[0].(string), values[1].(int), values[2].(string))
+	}).(pulumi.StringOutput)
 	return &postgres{Instance: inst, DSN: dsn, Host: inst.Address, Port: inst.Port}, nil
+}
+
+// formatPostgresDSN escapes credentials and brackets address literals correctly.
+func formatPostgresDSN(host string, port int, password string) string {
+	dsn := &url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(pgUser, password),
+		Host:   net.JoinHostPort(host, strconv.Itoa(port)),
+		Path:   "/" + pgDBName,
+	}
+	query := dsn.Query()
+	query.Set("sslmode", "require")
+	dsn.RawQuery = query.Encode()
+	return dsn.String()
 }
 
 // pgInstanceArgs centralises the hardened RDS defaults (encryption, gp3, PerfInsights, IAM auth, backups).

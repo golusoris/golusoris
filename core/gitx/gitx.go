@@ -77,7 +77,9 @@ func WithMaxOutput(n int64) Option {
 func New(dir string, opts ...Option) *Runner {
 	r := &Runner{dir: dir, bin: "git", timeout: DefaultTimeout, maxOut: MaxOutput}
 	for _, o := range opts {
-		o(r)
+		if o != nil {
+			o(r)
+		}
 	}
 	return r
 }

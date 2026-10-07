@@ -2,12 +2,12 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Source-tree SBOMs for every release tag (praetor supply-chain policy:
+# Source-tree SBOM attempt for every release tag (praetor supply-chain policy:
 # slsa_level 3, enforce_cosign, require_sbom). The release workflow already
 # emits per-archive SPDX SBOMs through goreleaser and attests them; this
-# workflow adds source-tree SBOMs in SPDX and CycloneDX and publishes them as
-# GitHub attestations (Sigstore keyless, SLSA-3 provenance semantics) plus
-# workflow artifacts. Nothing is uploaded to the release itself: releases are
+# workflow generates source-tree SBOMs in SPDX and CycloneDX, then publishes
+# them only when their GitHub attestations succeed. No SLSA level is claimed.
+# Nothing is uploaded to the release itself: releases are
 # immutable, so assets cannot be added after publication.
 name: SBOM
 
@@ -15,7 +15,6 @@ on:
   push:
     tags:
       - 'v*.*.*'
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +29,7 @@ jobs:
   require-green-ci:
     uses: ./.github/workflows/require-green-ci.yml
     with:
-      ref: ${{ github.ref }}
+      ref: ${{ github.sha }}
 
   sbom:
     name: Source SBOM & attestation
@@ -40,10 +39,28 @@ jobs:
     permissions:
       contents: read
       id-token: write       # Sigstore keyless signing of the attestations
-      attestations: write   # actions/attest-sbom
+      attestations: write   # actions/attest
+      artifact-metadata: write
     steps:
+      - name: Validate canonical release tag
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.ref }}
+          RELEASE_REF_NAME: ${{ github.ref_name }}
+          RELEASE_REF_TYPE: ${{ github.ref_type }}
+        run: |
+          set -euo pipefail
+          TAG_PATTERN='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
+          if [[ "$RELEASE_REF_TYPE" != tag || \
+            "$RELEASE_REF" != "refs/tags/$RELEASE_REF_NAME" || \
+            ! "$RELEASE_REF_NAME" =~ $TAG_PATTERN ]]; then
+            echo "::error::SBOM publication requires an immutable canonical SemVer tag; got ${RELEASE_REF}."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Package the tagged source tree (attestation subject)
         run: git archive --format=tar.gz --prefix="golusoris-${GITHUB_REF_NAME}/" -o "golusoris-${GITHUB_REF_NAME}-src.tar.gz" HEAD
@@ -73,26 +90,26 @@ jobs:
       - name: Attest SPDX SBOM
         id: attest-spdx
         continue-on-error: true
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
           sbom-path: sbom.spdx.json
       - name: Attest SPDX SBOM (retry)
         if: steps.attest-spdx.outcome == 'failure'
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
           sbom-path: sbom.spdx.json
       - name: Attest CycloneDX SBOM
         id: attest-cdx
         continue-on-error: true
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
           sbom-path: sbom.cdx.json
       - name: Attest CycloneDX SBOM (retry)
         if: steps.attest-cdx.outcome == 'failure'
-        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: golusoris-${{ github.ref_name }}-src.tar.gz
           sbom-path: sbom.cdx.json

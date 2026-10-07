@@ -6,6 +6,7 @@ package scan
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 )
@@ -42,14 +43,7 @@ func parseSize(s string) (int64, error) {
 			continue
 		}
 		num := strings.TrimSpace(strings.TrimSuffix(s, u.suffix))
-		val, err := strconv.ParseFloat(num, 64)
-		if err != nil {
-			return 0, fmt.Errorf("storage/scan: parse size %q: %w", s, err)
-		}
-		if val < 0 {
-			return 0, fmt.Errorf("storage/scan: negative size %q", s)
-		}
-		return int64(val * float64(u.mult)), nil
+		return parseScaledSize(s, num, u.mult)
 	}
 	val, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
@@ -59,4 +53,24 @@ func parseSize(s string) (int64, error) {
 		return 0, fmt.Errorf("storage/scan: negative size %q", s)
 	}
 	return val, nil
+}
+
+func parseScaledSize(input, number string, multiplier int64) (int64, error) {
+	value, ok := new(big.Rat).SetString(number)
+	if !ok {
+		return 0, fmt.Errorf("storage/scan: parse size %q: invalid number", input)
+	}
+	if value.Sign() < 0 {
+		return 0, fmt.Errorf("storage/scan: negative size %q", input)
+	}
+	value.Mul(value, new(big.Rat).SetInt64(multiplier))
+	bytes := new(big.Int).Quo(value.Num(), value.Denom())
+	if !bytes.IsInt64() {
+		return 0, fmt.Errorf("storage/scan: size %q overflows int64 bytes", input)
+	}
+	result := bytes.Int64()
+	if value.Sign() > 0 && result == 0 {
+		return 0, fmt.Errorf("storage/scan: size %q is below one byte", input)
+	}
+	return result, nil
 }

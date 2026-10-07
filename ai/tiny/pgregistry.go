@@ -17,6 +17,7 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/core/id"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // maxVersionRetries bounds the optimistic-version retry loop. A unique
@@ -54,7 +55,7 @@ func NewPGRegistryWithClock(pool *pgxpool.Pool, clk clockwork.Clock) (*PGRegistr
 	if pool == nil {
 		return nil, errors.New("ai/tiny: nil pool")
 	}
-	if clk == nil {
+	if validate.IsNil(clk) {
 		return nil, errors.New("ai/tiny: nil clock")
 	}
 	return &PGRegistry{pool: pool, idGen: id.New(), clk: clk}, nil
@@ -63,7 +64,10 @@ func NewPGRegistryWithClock(pool *pgxpool.Pool, clk clockwork.Clock) (*PGRegistr
 // SaveJob stores j, assigning ID + CreatedAt when unset. The free-form
 // fields (Dataset, Hyperparams, Tags) are persisted as a JSON spec blob;
 // only id/name/tenant_id/base_model/created_at are queryable columns.
-func (r *PGRegistry) SaveJob(ctx context.Context, j Job) error {
+func (r *PGRegistry) SaveJob(ctx context.Context, j *Job) error {
+	if j == nil {
+		return errors.New("ai/tiny: nil job")
+	}
 	if j.ID == "" {
 		u, err := r.idGen.NewUUID()
 		if err != nil {
@@ -74,6 +78,12 @@ func (r *PGRegistry) SaveJob(ctx context.Context, j Job) error {
 	if j.CreatedAt.IsZero() {
 		j.CreatedAt = r.clk.Now().UTC()
 	}
+	if err := ValidateJob(*j); err != nil {
+		return err
+	}
+	if err := validateJobMetadata(*j); err != nil {
+		return err
+	}
 	spec, err := json.Marshal(jobSpec{
 		Dataset:     j.Dataset,
 		Hyperparams: j.Hyperparams,
@@ -82,13 +92,14 @@ func (r *PGRegistry) SaveJob(ctx context.Context, j Job) error {
 	if err != nil {
 		return fmt.Errorf("ai/tiny: marshal job spec: %w", err)
 	}
-	_, err = r.pool.Exec(ctx,
+	err = r.pool.QueryRow(ctx,
 		`INSERT INTO golusoris_tiny_jobs (id, name, tenant_id, base_model, spec, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (id) DO UPDATE
 		 SET name = EXCLUDED.name, tenant_id = EXCLUDED.tenant_id,
-		     base_model = EXCLUDED.base_model, spec = EXCLUDED.spec`,
-		j.ID, j.Name, j.TenantID, j.BaseModel, spec, j.CreatedAt)
+		     base_model = EXCLUDED.base_model, spec = EXCLUDED.spec
+		 RETURNING created_at`,
+		j.ID, j.Name, j.TenantID, j.BaseModel, spec, j.CreatedAt).Scan(&j.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("ai/tiny: insert job: %w", err)
 	}

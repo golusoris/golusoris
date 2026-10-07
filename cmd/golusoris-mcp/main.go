@@ -78,7 +78,8 @@ func newServer(logger *slog.Logger) *mcp.Server {
 	srv := mcp.NewServer(&mcp.Implementation{Name: serverName, Version: serverVersion}, &mcp.ServerOptions{Logger: logger})
 	for i := range mcpTools {
 		t := mcpTools[i]
-		srv.AddTool(
+		mcp.AddTool[map[string]any, any](
+			srv,
 			&mcp.Tool{Name: t.name, Description: t.description, InputSchema: t.inputSchema},
 			toolHandler(t.name),
 		)
@@ -144,6 +145,7 @@ var mcpTools = []mcpTool{
 		inputSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["name"],
+			"additionalProperties": false,
 			"properties": {
 				"name": {"type": "string", "description": "App name (directory name)"},
 				"module": {"type": "string", "description": "Go module path (default: github.com/example/<name>)"}
@@ -156,6 +158,7 @@ var mcpTools = []mcpTool{
 		inputSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["module"],
+			"additionalProperties": false,
 			"properties": {
 				"module": {"type": "string", "description": "Module short name (e.g. 'db', 'http', 'jobs')"}
 			}
@@ -166,6 +169,7 @@ var mcpTools = []mcpTool{
 		description: "Show how to bump golusoris to a specific version in a downstream app.",
 		inputSchema: json.RawMessage(`{
 			"type": "object",
+			"additionalProperties": false,
 			"properties": {
 				"version": {"type": "string", "description": "Target version (e.g. 'v0.5.0' or 'latest')"}
 			}
@@ -173,17 +177,11 @@ var mcpTools = []mcpTool{
 	},
 }
 
-// toolHandler returns an MCP tool handler that unmarshals the raw arguments
-// and dispatches to the corresponding golusoris CLI guidance.
-func toolHandler(name string) mcp.ToolHandler {
-	return func(_ context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		args := map[string]any{}
-		if len(req.Params.Arguments) > 0 {
-			if err := json.Unmarshal(req.Params.Arguments, &args); err != nil {
-				return errorResult("invalid arguments: " + err.Error()), nil //nolint:nilerr // MCP convention: bad tool args are reported as an IsError result, not a transport error
-			}
-		}
-		return textResult(dispatchTool(name, args)), nil
+// toolHandler dispatches schema-validated arguments to the corresponding
+// golusoris CLI guidance.
+func toolHandler(name string) mcp.ToolHandlerFor[map[string]any, any] {
+	return func(_ context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+		return textResult(dispatchTool(name, args)), nil, nil
 	}
 }
 
@@ -218,8 +216,4 @@ func dispatchTool(name string, args map[string]any) string {
 
 func textResult(text string) *mcp.CallToolResult {
 	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
-}
-
-func errorResult(text string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}, IsError: true}
 }

@@ -1,1 +1,0 @@
-- `core/astx`: bounded Go-source walker, AST import rewriter (the `golusoris bump` codemod engine), per-function metrics, go.mod reader (capability `ast.analyzer`).

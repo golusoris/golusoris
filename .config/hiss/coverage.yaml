@@ -39,18 +39,17 @@
 # bucket is NOT flagged by the verifier -- only the attribution is replayed for a delegated
 # claim -- so the reason for each absence is written down here instead.
 #
-# Languages are declared only where this repository has such code: 689 tracked .go files,
-# 3 .py files (.config/agent/hooks/block_evasion.py, .config/lefthook/scripts/checkpoint.py,
-# .config/lefthook/scripts/common.py) and 1 .c file (pkg/sockmap/bpf/sockmap.bpf.c). All
-# three extensions are read by `praetorctl audit`; no Rust, TypeScript or Svelte source
-# exists here, so no entry is declared for them.
+# Source-language claims exist for Go, Python and C code present here; all three extensions
+# are read by `praetorctl audit`. HISS-10 also declares public Markdown, shell scripts, forge
+# workflow YAML, HCL, and Kubernetes YAML because their delegated gates are independently
+# executable. No Rust, TypeScript or Svelte source exists here, so no entry is declared for them.
 #
 # To update a claim when a rule gains or loses coverage, see AGENTS.md, section
 # "Updating the HISS-20 enforcement coverage catalogue".
 version: 1
 rules:
   - id: HISS-01
-    title: Acyclic Control Flow
+    title: Control Flow - Acyclic DAG Control Flow
     coverage:
       - language: go
         state: partial
@@ -82,32 +81,38 @@ rules:
           gap/direct-recursion.c is the same cycle the Go scanner reports and the native line
           matcher does not decide recursion at all, so it passes unreported.
       - language: python
-        state: unsupported
+        state: partial
         mechanism: >-
-          none. The Python side of internal/hiss implements HISS-02 (while True), HISS-04
-          (function length), HISS-07 (bare except) and HISS-08 (eval/exec) and no control-flow
-          rule; no other gate in this repository reads a .py file for structure.
+          praetorctl audit (internal/hiss selfcall.go, the direct-recursion check of the
+          line-scanned languages, run by script.go for Python), same three entry points as
+          Go.
         rationale: >-
-          positive/ is empty because no mechanism reports a Python call-graph cycle.
-          gap/recursive-walk.py recurses into every child node and goes undetected.
+          Direct self-recursion is reported: positive/recursive-walk.py raises HISS-01 and
+          negative/iterative-walk.py does not. recursive-walk.py moved out of gap/ when the
+          praetor ede0d5d55 audit started reporting it: `praetorctl hiss coverage --verify`
+          failed with "[FAIL] HISS-01/python gap/recursive-walk.py: a fixture recorded as an
+          undetected gap is now reported; close the gap in the catalog". The scanner reads one
+          function's text at a time, so a cycle through two functions stays unreported:
+          gap/mutual-recursion.py (walk_even -> walk_odd -> walk_even) passes.
   - id: HISS-02
-    title: Bounded Loops and I/O Timeouts
+    title: "Loops & I/O - Bounded Loops & Mandatory I/O Timeouts"
     coverage:
       - language: go
         state: partial
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go, `for {}` / `for ;;`) for the loop half;
           for the I/O half, the .semgrep.yml rules http-client-must-set-timeout,
-          no-http-default-client and no-http-listenandserve run by the CI job "Custom SAST
-          (semgrep)", plus the noctx, contextcheck and fatcontext linters in .golangci.yml.
+          no-http-default-client and no-http-listenandserve run over every repository Go file
+          by scripts/ci/semgrep-scan.sh, make semgrep-scan and required CI job "Custom SAST
+          (semgrep)"; plus noctx, contextcheck and fatcontext in all-module golangci-lint.
         rationale: >-
           positive/unbounded-for.go raises HISS-02; negative/bounded-for.go, which counts to a
           named constant, does not. gap/condition-without-scalar-bound.go is the honest limit
           of the loop half: `for !done` has no scalar upper bound, which is what the axiom
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
-          is reported by semgrep and golangci-lint rather than by the scanner. The
-          ci.yml semgrep job is continue-on-error and advises; security-scan.yml's
-          "Semgrep analysis" job runs on pull_request without it and gates.
+          is reported by Semgrep and golangci-lint rather than by the HISS scanner. Semgrep
+          1.177.0 runs from the declared digest with strict parsing and proves all 721 selected
+          repository Go files were scanned; scanner errors, omissions and findings fail.
       - language: c
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go nativeUnboundedLoop).
@@ -125,27 +130,32 @@ rules:
     title: Zero Frame Malloc
     coverage:
       - language: go
-        state: unsupported
+        state: partial
+        runner: allocation-budget
         mechanism: >-
-          none. core/id/bench_test.go, core/crypto/bench_test.go and cache/memory/bench_test.go
-          call b.ReportAllocs(), which prints an allocation count and asserts nothing; no gate
-          reads those numbers, there is no testing.AllocsPerRun assertion anywhere in the tree
-          and no benchmark-regression job in .github/workflows/.
+          scripts/ci/allocation-budget.sh parses benchmem output against
+          scripts/ci/allocation-budgets.tsv and fails closed on missing, duplicate, malformed,
+          byte-over-budget or allocations-over-budget results. make allocation-budget runs in
+          make verify-all; required hosted allocation jobs run the same wrapper.
         rationale: >-
-          positive/ is empty because no mechanism reports an allocation.
-          gap/hot-path-allocation.go allocates a fresh slice per call on a hot path and is
-          reported by nothing.
+          scripts/ci/allocation-budget-policy_test.sh measures positive/over-budget_test.go at
+          16 B/op against an 8 B/op cap and requires failure, measures
+          negative/within-budget_test.go at 0 B/op and negative/at-budget_test.go at exactly
+          8 B/op and requires success, then proves allocation-over, missing-result and
+          duplicate-result failures. The production gate covers five named benchmarks;
+          gap/hot-path-allocation.go remains undetected because no static rule finds an
+          unbenchmarked hot path.
   - id: HISS-04
-    title: Complexity Bounds
+    title: "Complexity Bounds & Modular Sizing"
     coverage:
       - language: go
         state: partial
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go checkFuncLOC) against
-          .standards.yaml overrides.complexity.max_func_loc = 75, plus gocyclo
+          .standards.yaml overrides.complexity.max_func_loc = 60, plus gocyclo
           (min-complexity 10), gocognit (15), funlen (60 lines / 50 statements) and cyclop (18)
-          in .golangci.yml, run by the CI job "Lint", make ci-all and the lefthook pre-commit
-          job golangci-lint.
+          in .golangci.yml, run for all 23 modules by CI jobs "Lint" and "Module sweep" and by
+          make ci-all; lefthook pre-commit job golangci-lint covers staged packages.
         rationale: >-
           The scanner decides function length only: positive/overlong-function.go (90
           statements) raises HISS-04 and negative/short-function.go does not.
@@ -153,15 +163,14 @@ rules:
           while golangci-lint with this repository's .golangci.yml reports "cyclomatic
           complexity 12 of func `Classify` is high (> 10) (gocyclo)". The cyclomatic, cognitive
           and statement caps are golangci-lint's, so they are held as gaps here rather than
-          counted as scanner coverage. The two caps also differ on purpose: golangci-lint's
-          funlen is stricter (60) than the audit's max_func_loc (75).
+          counted as scanner coverage. Both independent function-length gates use 60 LOC.
       - language: c
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go braceTracker).
         rationale: >-
           Function length is decided by brace tracking: positive/overlong-function.c raises
           HISS-04 and negative/short-function.c does not. The three other caps have no native
-          check, and no C compiler runs in any gate.
+          check; the Clang and clang-tidy gate does not enforce their exact thresholds.
       - language: python
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go python indentation tracker).
@@ -178,8 +187,9 @@ rules:
         mechanism: >-
           .golangci.yml with govet `enable-all: true` (so the shadow analyzer is on), revive's
           redefines-builtin-id rule, the predeclared and reassign linters and importas, run by
-          the CI job "Lint", by make ci-all and by the lefthook pre-commit job golangci-lint.
-          internal/hiss implements no HISS-05 rule.
+          CI jobs "Lint" and "Module sweep" across all 23 modules and by make ci-all; lefthook
+          pre-commit job golangci-lint covers staged packages. internal/hiss implements no
+          HISS-05 rule.
         rationale: >-
           Measured with golangci-lint 2.13.2 and this repository's .golangci.yml verbatim.
           positive/shadowed-error.go -> 'shadow: declaration of "err" shadows declaration at
@@ -192,13 +202,13 @@ rules:
     title: Bounded Concurrency
     coverage:
       - language: go
-        state: unsupported
+        state: partial
+        runner: semgrep
         mechanism: >-
-          none in praetorctl: internal/hiss carries no Go HISS-06 rule, and `go test -race`
-          decides a different property (a correctly synchronised unbounded fan-out is
-          race-free and still unbounded). The invariant is enforced here by .semgrep.yml
-          no-unbounded-goroutine-in-loop, whose own corpus lives in .config/hiss/semgrep/testdata and
-          is replayed in both directions by `make hiss-fixtures`.
+          .semgrep.yml no-unbounded-goroutine-in-loop, run over every repository Go file by
+          scripts/ci/semgrep-scan.sh, make semgrep-scan and required CI job "Custom SAST
+          (semgrep)"; its focused corpus is replayed by make hiss-fixtures. internal/hiss has
+          no Go HISS-06 rule; race tests decide a different property.
         rationale: >-
           gap/unrelated-send-before-spawn.go and gap/counted-loop-len-in-variable.go are the
           shapes nothing reports: a send on an unrelated channel before the spawn, which the
@@ -207,14 +217,15 @@ rules:
           rule does report are positives of that corpus, not of this one, because this file
           records what praetorctl's scanner decides.
   - id: HISS-07
-    title: Checked Errors
+    title: "Checked Errors & Zero Unwrap"
     coverage:
       - language: go
         state: partial
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go checkBlankAssign, checkPanic and
           checkEmptyErrBranch), plus errcheck, errorlint, nilerr, nilnil, nilnesserr and
-          wrapcheck in .golangci.yml.
+          wrapcheck in .golangci.yml, executed across all 23 modules by "Lint" and "Module
+          sweep" plus make ci-all.
         rationale: >-
           positive/discarded-error.go (`_ = os.Remove(path)`), positive/empty-error-branch.go
           and positive/panic-in-production.go each raise HISS-07;
@@ -227,19 +238,19 @@ rules:
         mechanism: praetorctl audit (internal/hiss rules.go bare-except matcher).
         rationale: >-
           positive/bare-except.py raises HISS-07 and negative/explicit-except.py, which names
-          the one exception it handles, does not. Errors discarded by other means -- an
-          `except Exception: pass`, a swallowed return code -- are not decided by a line
-          scanner and no Python linter runs in this repository.
+          the one exception it handles, does not. Ruff's S rules report selected exception
+          anti-patterns, but swallowed return codes remain outside both mechanisms.
   - id: HISS-08
-    title: Static Determinism
+    title: "Static Determinism & Banned Functions"
     coverage:
       - language: go
-        state: unsupported
+        state: partial
+        runner: semgrep
         mechanism: >-
-          none in praetorctl: internal/hiss implements HISS-08 for Python and C only. The
-          invariant is enforced here by .semgrep.yml no-dynamic-code-loading and
-          no-dynamic-exec-command, whose corpus lives in .config/hiss/semgrep/testdata and is replayed
-          in both directions by `make hiss-fixtures`.
+          .semgrep.yml no-dynamic-code-loading and no-dynamic-exec-command, run over every
+          repository Go file by scripts/ci/semgrep-scan.sh, make semgrep-scan and required CI
+          job "Custom SAST (semgrep)"; focused corpora are replayed by make hiss-fixtures.
+          internal/hiss implements HISS-08 for Python and C only.
         rationale: >-
           gap/command-name-from-environment.go is the shape nothing reports: the command name
           comes from an environment variable held in a plain variable, and both semgrep rules
@@ -265,14 +276,15 @@ rules:
           object into the process at run time and is not decided by a rule that matches three
           string primitives.
   - id: HISS-09
-    title: Reference Safety
+    title: "Reference Safety & Mandatory Safety Proofs"
     coverage:
       - language: go
         state: partial
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go checkUnsafe), with .semgrep.yml
-          unsafe-requires-safety-proof covering the import form and the aliased import;
-          its corpus lives in .config/hiss/semgrep/testdata.
+          unsafe-requires-safety-proof covering the import form and aliased import. The custom
+          rule runs over every repository Go file through scripts/ci/semgrep-scan.sh, make
+          semgrep-scan and required CI; its corpus lives in .config/hiss/semgrep/testdata.
         rationale: >-
           The scanner reports an unproven unsafe.Pointer, unproven Slice and String
           conversions, an unproven import, a usage with no proof at all and a proof detached
@@ -284,25 +296,26 @@ rules:
       - language: c
         state: unsupported
         mechanism: >-
-          none. internal/hiss implements HISS-09 for Go and Rust only, and no C compiler,
-          clang-tidy run or sanitizer executes in any gate (.clang-tidy exists at the root but
-          nothing invokes it).
+          none. internal/hiss implements HISS-09 for Go and Rust only. c-quality compiles with
+          Clang and runs clang-tidy, but no selected rule requires a SAFETY proof or establishes
+          pointer bounds; no sanitizer executes.
         rationale: >-
           positive/ is empty because no mechanism reports an unproven native memory operation.
           gap/raw-pointer-arithmetic.c dereferences base+offset with no bound and no proof and
           is reported by nothing.
   - id: HISS-10
-    title: Zero-Warning Cascade
+    title: 5-Layer Zero-Warnings Cascade
     coverage:
       - language: go
         state: partial
         runner: golangci-lint
         mechanism: >-
           golangci-lint v2 with this repository's .golangci.yml (69 linters enabled, default
-          none), reached by the CI job "Lint", by make ci-all inside make verify-all and by the
-          lefthook pre-commit jobs golangci-lint and govet; the gofumpt, gci and goimports
-          formatters are part of the same config and are also enforced by the lefthook
-          pre-commit jobs gofumpt and gci. internal/hiss implements no HISS-10 rule.
+          none), reached across all 23 modules by CI jobs "Lint" and "Module sweep" and by make
+          ci-all inside make verify-all; lefthook pre-commit jobs golangci-lint and govet cover
+          staged packages. gofumpt, gci and goimports are part of the same config and are also
+          enforced by lefthook pre-commit jobs gofumpt and gci. internal/hiss implements no
+          HISS-10 rule.
         rationale: >-
           Measured with golangci-lint 2.13.2 and this repository's config verbatim. 3/3
           positives reported: 'ineffectual assignment to sum (ineffassign)', 'func helper is
@@ -310,30 +323,142 @@ rules:
           (govet)'. negative/clean-and-formatted.go produced "0 issues.".
           gap/unexplained-nolint.go carries a bare `//nolint:errcheck` with no reason and also
           produced "0 issues.", because nolintlint is enabled with require-explanation and
-          require-specific unset. The scope gap is larger than the fixture: MODULES in the
-          Makefile is `. core`, so the 22 nested modules (pdf/, ocr/, web3/*, science/*,
-          media/*, hw/*, deploy/*, container/registry, k8s/nri, testutil/pact) are linted by
-          neither the CI job nor make ci-all.
+          require-specific unset. `scripts/ci/go-modules.sh list` discovers 23 modules; local
+          make ci-all and hosted primary plus four split shards run this same lint config for
+          every discovered module.
+      - language: markdown
+        state: partial
+        runner: markdownlint-cli2
+        mechanism: >-
+          markdownlint-cli2 0.23.2 from tools/markdownlint/package-lock.json, installed by npm
+          ci with lifecycle scripts disabled and run with .markdownlint-cli2.jsonc; selection by
+          scripts/ci/markdownlint.sh covers tracked plus non-ignored untracked public Markdown.
+          Makefile target markdownlint runs inside make verify-all and required CI job
+          "Documentation lint (markdownlint-cli2)" feeds "CI success". Generated context,
+          release-generated changelogs, HISS fixtures and upstream/vendor snapshots use their
+          own authorities and are explicitly excluded.
+        rationale: >-
+          Measured with the pinned tool and repository config. positive/missing-heading-blank.md
+          reports MD022; negative/clean-document.md reports 0 issues; gap/long-prose-line.md
+          reports 0 issues because MD013 is deliberately disabled. The default selector linted
+          50 current public Markdown files with 0 issues, while
+          scripts/ci/markdownlint-policy_test.sh proves positive, negative, untracked,
+          generated/vendor/ignored exclusion and symlink-boundary behavior.
+      - language: mkdocs-markdown
+        state: partial
+        runner: mkdocs
+        mechanism: >-
+          Material for MkDocs 9.7.7 from its immutable image digest through
+          scripts/ci/mkdocs-build.sh, with no network, a read-only container, dropped
+          capabilities, and MkDocs strict mode. Make target mkdocs-build runs inside make
+          verify-all; required CI job "Documentation build (MkDocs)" feeds "CI success";
+          the Pages workflow and Gitea CI use the same wrapper.
+        rationale: >-
+          Measured by scripts/ci/mkdocs-build-policy_test.sh: positive/broken-link.md warns and
+          fails strict mode; negative/clean-page.md passes; gap/external-link.md passes because
+          MkDocs does not fetch or verify external targets. The policy suite also proves the
+          immutable container contract, input symlink rejection and Docker-failure propagation.
+      - language: shell
+        state: partial
+        runner: shellcheck
+        mechanism: >-
+          ShellCheck 0.11.0 at style severity through scripts/ci/shellcheck.sh. Its bounded Git
+          selector covers tracked plus non-ignored untracked *.sh, *.bash, *.ksh and shell-
+          shebang files, rejects symlinks, and follows repository sources. The wrapper also
+          rejects ShellCheck disable directives without an inline WHY across those scripts and
+          both workflow roots. Make target shellcheck runs inside make verify-all; required CI
+          job "Shell scripts (ShellCheck)" feeds "CI success"; Gitea uses the same wrapper.
+        rationale: >-
+          Measured by scripts/ci/shellcheck-policy_test.sh: positive/unquoted-expansion.sh
+          reports SC2086; positive/unexplained-disable.sh fails the wrapper's WHY policy; and
+          negative/clean-script.sh passes. The policy suite proves explained suppressions,
+          workflow-embedded suppressions, tracked, untracked, extensionless-shebang, fixture
+          exclusion, binary/NUL, symlink, version-mismatch and scanner-failure behavior.
+      - language: workflow-yaml
+        state: partial
+        runner: actionlint
+        mechanism: >-
+          actionlint v1.7.12 with .github/actionlint.yaml and pinned ShellCheck 0.11.0 through
+          scripts/ci/actionlint.sh. Its bounded Git selector covers tracked plus non-ignored
+          untracked .github/workflows and .gitea/workflows YAML and rejects symlinks. Make
+          target actionlint runs inside make verify-all; required CI job "Workflows
+          (actionlint)" feeds "CI success"; Gitea's CI gate runs the same wrapper.
+        rationale: >-
+          Measured by scripts/ci/actionlint-policy_test.sh:
+          positive/undefined-expression.yml reports undefined variable unknown;
+          negative/clean-workflow.yml reports nothing; gap/unpinned-action.yml reports nothing
+          because actionlint validates workflow structure and expressions, not immutable action
+          references. The wrapper currently selects all 20 GitHub and Gitea workflow files and
+          the policy suite proves both roots, untracked input, symlink, version mismatch and
+          scanner failure.
+      - language: hcl
+        state: partial
+        runner: terraform
+        mechanism: >-
+          Terraform 1.16.3 through scripts/ci/terraform-validate.sh, preferring an exact native
+          binary and otherwise using hashicorp/terraform by immutable image digest. The bounded
+          selector covers every immediate deploy/terraform/modules child, rejects symlinks,
+          requires .terraform.lock.hcl, runs recursive format checking, initializes with backend
+          disabled and lockfile readonly, then validates. Make target terraform-validate runs
+          inside make verify-all; required CI job "Terraform modules" feeds "CI success";
+          Gitea's CI gate runs the same wrapper.
+        rationale: >-
+          Measured by scripts/ci/terraform-policy_test.sh: positive/unformatted.tf fails format
+          checking; negative/clean.tf passes format, locked init and validate;
+          gap/undocumented-variable.tf passes because Terraform does not require a variable
+          description. The policy suite also proves both production modules are selected and
+          version mismatch, missing lock, symlink, format, init and validate failures fail closed.
+      - language: kubernetes-yaml
+        state: partial
+        runner: kubeconform
+        mechanism: >-
+          kubeconform v0.8.0 from an immutable image digest validates repository-owned static
+          manifests plus default and feature-complete Helm renders in strict mode against
+          Kubernetes v1.37.0 schemas and external CRD schemas at immutable source commits.
+          scripts/ci/kubeconform.sh selects tracked plus non-ignored untracked manifests,
+          rejects symlinks, and fails on missing schemas except the explicit local AppStack
+          claim. Make target kubeconform runs inside make verify-all; required CI job
+          "Kubernetes schemas (kubeconform)" feeds "CI success"; Gitea uses the same wrapper.
+        rationale: >-
+          Measured by scripts/ci/kubeconform-policy_test.sh:
+          positive/unknown-field.yaml fails strict schema validation;
+          negative/clean-configmap.yaml passes; gap/local-appstack.yaml passes because its local
+          XRD has no generated kubeconform schema and AppStack is explicitly skipped. Production
+          validation finds 33 resources across 12 static files and two Helm renders: 32 valid,
+          zero invalid or errored, and exactly one declared AppStack skip. Policy tests also
+          prove version, immutable schema, selection, symlink and scanner-failure controls.
       - language: python
-        state: unsupported
+        state: partial
+        runner: ruff
         mechanism: >-
-          none. No ruff, flake8, mypy, pylint or black config or invocation exists in the
-          Makefile, .github/workflows/, lefthook.yml or scripts/hooks/. lefthook executes
-          .config/lefthook/scripts/checkpoint.py as an agent-checkpoint job but never lints it.
+          Ruff 0.16.8 from its immutable image digest through scripts/ci/python-lint.sh. The
+          bounded Git selector covers tracked plus non-ignored untracked Python, rejects
+          symlinks, excludes the HISS corpus and vendor trees, rejects file-level noqa, and
+          requires specific codes plus an inline WHY on scoped noqa. make python-lint runs
+          inside make verify-all; GitHub Lint and the Gitea CI gate use the same wrapper.
         rationale: >-
-          positive/ is empty because no mechanism reports a Python warning.
-          gap/unused-import.py imports json and never uses it -- flake8 F401 -- and nothing in
-          this repository looks at it.
+          scripts/ci/python-lint-policy_test.sh proves positive/unused-import.py reports F401,
+          positive/unexplained-noqa.py fails the suppression policy, and
+          negative/clean-module.py passes. The suite also proves explained, empty-reason and
+          file-level suppression handling plus tracked, untracked, fixture-exclusion, symlink,
+          immutable-container, and scanner-failure behavior. Production Ruff selects
+          E/F/I/B/UP/S/RUF/PERF/ASYNC/C90.
       - language: c
-        state: unsupported
+        state: partial
+        runner: clang
         mechanism: >-
-          none. No gcc, clang or clang-tidy invocation exists in the Makefile,
-          .github/workflows/ or any lefthook hook. pkg/sockmap/bpf/sockmap.bpf.o is checked in
-          pre-built (bpf2go style) precisely so that no gate needs a C toolchain, so the one .c
-          file in the tree is never compiled by CI.
+          Clang and clang-tidy 22.1.8 from the immutable silkeh/clang image through
+          scripts/ci/c-quality.sh. The bounded Git selector covers tracked plus non-ignored
+          untracked C and rejects symlinks. The wrapper compiles with -Wall -Wextra -Werror,
+          treats clang-tidy findings as errors, and reproduces the checked-in stripped eBPF
+          object. make c-quality, GitHub Build, and the Gitea CI gate run it.
         rationale: >-
-          positive/ is empty because no mechanism reports a C warning. gap/unused-variable.c is
-          a real `gcc -Wall` [-Wunused-variable] and is reported by nothing here.
+          scripts/ci/c-quality-policy_test.sh proves positive/unused-variable.c fails,
+          negative/clean.c passes, and gap/suppressed-unused-variable.c passes because Clang
+          accepts unexplained diagnostic and NOLINT suppressions. The suite also proves
+          untracked selection, fixture exclusion, symlink rejection, immutable-container
+          failure propagation, and checked-object parity. Production compiles and analyzes the
+          one C source and matches its reproducibly rebuilt object.
   - id: HISS-11
     title: Hermetic Supply Chain
     coverage:
@@ -347,9 +472,18 @@ rules:
           copyleft licences entering the tree); renovate.json extending
           helpers:pinGitHubActionDigests with pinDigest enabled; sbom.yml (SPDX SBOM plus
           Sigstore-keyless attestations on every tag); verify-provenance.yml (cosign verify
-          plus gh attestation verify); scorecard.yml. .standards.yaml declares
+          plus gh attestation verify); scorecard.yml. Custom Semgrep, Material for MkDocs,
+          Ruff, Clang, kubeconform, Terraform, Trivy and REUSE execute from version-plus-digest image
+          authorities in tools/tool-versions.env; Renovate updates each pair atomically and
+          policy tests reject ambient or version-only bypasses. Its regex manager also tracks
+          immutable integration-test references in internal/testimages/images.go and the CI
+          cache manifest; policy tests require their parity except declared ClamAV absence.
+          .standards.yaml declares
           supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
-          checks as configuration.
+          checks as configuration. scripts/ci/govulncheck.sh parses pinned govulncheck v1.8.0
+          symbol JSON for every module and rejects every unexpected reachable finding; its one
+          temporary database exception binds an exact module version, checksum, absence of a
+          replacement, patched-source content and full source hash.
         rationale: >-
           No positive fixture exists because every mechanism above decides a repository-global
           property -- the lockfile, the pinned digest, the signed attestation -- that no single
@@ -359,7 +493,12 @@ rules:
           //go:generate line: no gate pins go:generate tool versions.
           gap/unpinned-action.yml is a workflow step on a mutable tag; Renovate rewrites that
           shape in .github/workflows/, but nothing FAILS on it, so one introduced by hand
-          between Renovate runs merges unreported.
+          between Renovate runs merges unreported. scripts/ci/govulncheck-policy_test.sh
+          measures the vulnerability path: a patched exact exception passes, while an unknown
+          reachable finding, version drift, mixed finding set, invalid scanner JSON, scanner
+          failure, source-hash drift and exception-authority drift each fail closed. The real
+          23-module sweep reports only the verified GO-2026-6452 database false positive and
+          otherwise zero reachable vulnerabilities.
   - id: HISS-12
     title: Secret Leak Prevention
     coverage:
@@ -407,7 +546,7 @@ rules:
           reported "0 active violations", because golangci-lint findings never reach
           .standards-baseline.json.
   - id: HISS-14
-    title: Append-Only ABI
+    title: "Append-Only ABI & Migration Footers"
     coverage:
       - language: go
         state: manual
@@ -418,16 +557,15 @@ rules:
           `Migration:` section, and the Conventional-Commits `!` / `BREAKING CHANGE:` footer
           checked for SHAPE by scripts/hooks/commit-msg.sh and the CI job "PR title
           (Conventional Commits)" and consumed by release-please for the version bump. The CI
-          job "API compatibility (apidiff)" is explicitly INFORMATIONAL: every apidiff failure
-          in it is downgraded to `::warning::` and the gating form is commented out until v1.0.
+          job "API compatibility (apidiff)" executes against every discovered Go module and
+          feeds the required aggregate gate; discovery or checker errors fail closed. Detected
+          incompatibilities remain `::warning::` findings until v1.0.
         rationale: >-
-          Nothing in this repository fails a build on a breaking API change, and nothing checks
-          that a `Migration:` footer is present -- scripts/hooks/commit-msg.sh checks only the
-          Conventional-Commits subject and the DCO trailer. positive/ is empty because no
-          mechanism reports the removal. gap/removed-exported-func.go deletes a published
-          symbol and gap/narrowed-exported-signature.go prepends a required context.Context to
-          one; both break every importer and both can land with an ordinary `fix(api):`
-          subject.
+          API coverage itself is complete and fail-closed, but nothing fails a build on a
+          detected pre-v1 breaking change or checks that a `Migration:` footer is present --
+          scripts/hooks/commit-msg.sh checks only the Conventional-Commits subject and DCO
+          trailer. gap/removed-exported-func.go and gap/narrowed-exported-signature.go therefore
+          remain honest gaps: both can land with an ordinary `fix(api):` subject.
   - id: HISS-15
     title: 3D Test Discipline
     coverage:
@@ -435,10 +573,10 @@ rules:
         state: partial
         runner: ci
         mechanism: >-
-          The CI job "Test (race + coverage)" step "Check coverage threshold (70%)", fed by
-          `go test -race -covermode=atomic -coverprofile`, plus `go test -race -count=1` in
-          make ci-all and the lefthook pre-push job build-test, plus the 3D-testing checkbox in
-          .github/PULL_REQUEST_TEMPLATE.md (a self-attestation, not a measurement).
+          CI job "Test (race + coverage)" applies the 70% aggregate to root/core; four "Module
+          sweep" shards race-test every split module and retain coverage without a percentage
+          floor. make ci-all race-tests all 23 modules. lefthook pre-push job build-test and the
+          3D-testing PR checkbox provide narrower checks and self-attestation.
         rationale: >-
           Measured with go test -covermode=atomic against each fixture package.
           positive/untested-public-func.go exports Clamp with no sibling test and measured
@@ -450,35 +588,41 @@ rules:
           statement-coverage floor, and the floor is an aggregate over the whole module, so it
           cannot decide any individual function either.
       - language: python
-        state: unsupported
+        state: partial
+        runner: python-unittest
         mechanism: >-
-          none. No pytest, unittest invocation, coverage tool or test file exists for the three
-          .py files in the tree; make verify-all never executes them and neither does CI.
+          scripts/ci/python-tests.sh requires Python 3.12 or newer and executes the vendored
+          Praetor checkpoint suite, command-policy hook suite, and portability-policy suite.
+          Missing, linked, failing, or zero-test suites fail closed. make python-test runs
+          inside make verify-all; GitHub Test and the Gitea CI gate run the same wrapper.
         rationale: >-
-          positive/ is empty because nothing mechanical decides this rule for Python.
-          gap/untested-public-function.py is a public interface with no test of any dimension.
+          The production run executes 48 tests: 33 current-Praetor checkpoint tests, five
+          command-policy hook tests, and ten portability-policy tests.
+          scripts/ci/python-tests-policy_test.sh proves positive/test_failing_suite.py fails and
+          negative/test_complete_dimensions.py passes with positive, negative, and boundary
+          cases. gap/test_positive_only.py also passes, proving unittest execution cannot
+          decide 3D shape; gap/untested-public-function.py remains outside the required suites.
   - id: HISS-16
-    title: Context Integrity
+    title: "Canonical AGENTS.md & Server Gates"
     coverage:
       - language: go
         state: partial
         runner: compile-context
         mechanism: >-
-          `standardsctl compile-context --verify`, reached by the Makefile target
-          compile-context-verify inside make verify-all and by the lefthook pre-commit job
-          context-check. AGENTS.md is the single canonical source; CLAUDE.md, .cursor/,
-          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/ are generated
-          from it and must never be edited by hand.
+          `praetorctl compile-context --verify`, reached by Makefile target
+          compile-context-verify and lefthook pre-commit job context-check, verifies root
+          projections and persona projections. Makefile target caveman-context, also inside
+          make verify-all, lints every tracked AGENTS.md plus canonical personas, skills and
+          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .cursor/,
+          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/.
         rationale: >-
-          No positive fixture exists because the mechanism compares one canonical document
-          against its generated vendor copies -- a repository-global property no single file
-          can exhibit. The verification is that `make compile-context-verify` exits 0, which
-          praetorctl audit reports as "[PASS] Cross-agent context targets (Claude, Cursor,
-          Copilot, Windsurf, Gemini, Codex) verified in sync".
-          gap/nested-agents-context.md records the limit: a nested AGENTS.md further down the
-          tree is neither an input nor a target of compile-context, so it can contradict the
-          canonical source indefinitely; the repository already contains such files,
-          pkg/sockmap/AGENTS.md among them.
+          No positive fixture exists because projection comparison and bounded source
+          discovery are repository-global properties no single fixture can exhibit. Measured
+          `make caveman-context` across 248 canonical inputs and
+          `make compile-context-verify` across root plus eight persona projections; both exit
+          0. gap/nested-agents-context.md records remaining limit: nested AGENTS.md files are
+          register-checked but not derived from root, so Caveman-compliant contradictions can
+          persist. Praetor upstream issue #311 tracks missing native recursive coverage.
   - id: HISS-17
     title: State Ledger Discipline
     coverage:
@@ -488,8 +632,9 @@ rules:
         mechanism: >-
           The lefthook post-commit job state-sync (`praetorctl state sync .`), which maintains
           the git-ignored .workingdir/ ledger (BACKLOG.md, BUGS.md, OPEN.md, QUESTIONS.md,
-          STATE.md, evidence/). Verified to run here: it printed "Synchronized state for .
-          (feat/hiss20-coverage, clean, bugs: 0, questions: 0)" and created the directory.
+          STATE.md, evidence/). `praetorctl state audit .` parses those current ledgers and
+          returns a valid report only when the required private state exists and has no P0
+          blocker.
         rationale: >-
           It is a recorder, not a gate, and is therefore declared manual rather than partial: it
           runs AFTER the commit is already made, a non-zero exit cannot reject anything, and
@@ -498,17 +643,18 @@ rules:
           writes it. No fixture is declared, because no source file can exhibit the state of a
           ledger.
   - id: HISS-18
-    title: Diff-Aware CI Efficiency
+    title: CI Efficiency
     coverage:
       - language: go
         state: unsupported
         mechanism: >-
           none for the Go pipeline. .github/workflows/ci.yml triggers on every pull_request and
           every push to main with no `paths:` filter and no changed-files job selection, so all
-          15 jobs run for a README-only change. Only docs.yml carries a paths filter. The
-          efficiency measures that do exist -- concurrency with cancel-in-progress,
-          `if: github.actor != 'renovate[bot]'` on most jobs, and the setup-go build/module
-          cache -- shorten a run without selecting jobs by diff.
+          22 jobs run for a README-only change. Only docs.yml carries a paths filter. The
+          efficiency measures that do exist -- concurrency with cancel-in-progress and the
+          setup-go build/module cache -- shorten a run without selecting jobs by diff. Only the
+          PR-title and DCO jobs exclude Renovate; that is event/actor applicability, not
+          diff-aware gate selection.
         rationale: >-
           No fixture is declared, because the rule is about which jobs a workflow runs and no
           source file can exhibit that. The gap is the whole claim and it is stated above
@@ -520,7 +666,7 @@ rules:
         state: partial
         runner: dedupe
         mechanism: >-
-          `standardsctl dedupe scan .`, reached by the Makefile target dedupe-scan inside make
+          `praetorctl dedupe scan .`, reached by the Makefile target dedupe-scan inside make
           verify-all, plus the lefthook post-commit job dedupe-cadence
           (`praetorctl dedupe cadence --threshold=20 --record .`), which records rather than
           gates.
@@ -533,7 +679,7 @@ rules:
           duplicated-block-a.go it scored 100.0% and passed, so a rename plus a reorder defeats
           the comparison.
   - id: HISS-20
-    title: Enforcement Coverage Catalogue
+    title: Replayable Enforcement Evidence
     coverage:
       - language: go
         state: partial
@@ -554,3 +700,26 @@ rules:
           fixture, and a delegated claim's missing positive bucket is not flagged by the
           verifier at all -- which is exactly why each absence is argued in its own rationale
           rather than left to be inferred.
+  - id: HISS-21
+    title: Platform Neutrality
+    coverage:
+      - language: go
+        state: partial
+        runner: portability
+        mechanism: >-
+          scripts/ci/portability.py discovers 1..64 Git-visible Go modules, requires the root
+          module and 1..512 packages per module, then runs go build, go vet, and go test -short
+          without a command shell. make portability-test runs the same driver locally;
+          .github/workflows/portability.yml runs it on Linux, macOS, and Windows with
+          fail-fast disabled and digest-pinned toolchain actions.
+        rationale: >-
+          scripts/ci/portability_test.py proves every discovered module receives all three
+          phases; a Git-reported worktree deletion is excluded while an unknown deletion fails
+          closed; empty discovery, missing root, zero packages, ambiguous separators, and a
+          failed phase also fail closed; the 64-module bound is inclusive while 65 is refused.
+          positive/windows-compile-break.go is selected and rejected by the Windows build;
+          negative/portable-path.go delegates separators to filepath. The claim remains
+          partial: gap/silent-platform-skip_test.go exits green after skipping its only Windows
+          behavior because the driver proves packages and phases, not per-test execution.
+          macOS and Windows remain hosted-only evidence until their first green run; their
+          status contexts are therefore deliberately absent from the active ruleset.

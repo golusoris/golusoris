@@ -31,8 +31,10 @@ package dnsserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 
 	"github.com/miekg/dns"
 	"go.uber.org/fx"
@@ -98,44 +100,117 @@ func register(p params) {
 	tcp := &dns.Server{Addr: p.Cfg.Addr, Net: "tcp", Handler: p.Mux}
 
 	p.LC.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			udpReady := make(chan struct{})
-			tcpReady := make(chan struct{})
-			udp.NotifyStartedFunc = func() { close(udpReady) }
-			tcp.NotifyStartedFunc = func() { close(tcpReady) }
-
-			go func() {
-				if err := udp.ListenAndServe(); err != nil {
-					p.Logger.ErrorContext(ctx, "dnsserver: udp serve", "err", err)
-				}
-			}()
-			go func() {
-				if err := tcp.ListenAndServe(); err != nil {
-					p.Logger.ErrorContext(ctx, "dnsserver: tcp serve", "err", err)
-				}
-			}()
-
-			select {
-			case <-udpReady:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			select {
-			case <-tcpReady:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-			p.Logger.InfoContext(ctx, "dnsserver: listening", "addr", p.Cfg.Addr)
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			if err := udp.ShutdownContext(ctx); err != nil {
-				p.Logger.WarnContext(ctx, "dnsserver: udp shutdown", "err", err)
-			}
-			if err := tcp.ShutdownContext(ctx); err != nil {
-				p.Logger.WarnContext(ctx, "dnsserver: tcp shutdown", "err", err)
-			}
-			return nil
-		},
+		OnStart: func(ctx context.Context) error { return startServers(ctx, p.Logger, p.Cfg.Addr, udp, tcp) },
+		OnStop:  func(ctx context.Context) error { return stopServers(ctx, p.Logger, udp, tcp) },
 	})
+}
+
+type serveResult struct {
+	network string
+	err     error
+}
+
+func startServers(ctx context.Context, logger *slog.Logger, addr string, udp, tcp *dns.Server) error {
+	packetConn, listener, err := bindServers(ctx, addr)
+	if err != nil {
+		return err
+	}
+	udp.PacketConn = packetConn
+	tcp.Listener = listener
+
+	udpReady := make(chan struct{})
+	tcpReady := make(chan struct{})
+	udp.NotifyStartedFunc = func() { close(udpReady) }
+	tcp.NotifyStartedFunc = func() { close(tcpReady) }
+	serveDone := make(chan serveResult, 2)
+	serveCtx := context.WithoutCancel(ctx)
+	go serve(logger, serveCtx, "udp", udp, serveDone)
+	go serve(logger, serveCtx, "tcp", tcp, serveDone)
+
+	for range 2 {
+		select {
+		case <-udpReady:
+			udpReady = nil
+		case <-tcpReady:
+			tcpReady = nil
+		case result := <-serveDone:
+			return startupServeError(result, packetConn, listener)
+		case <-ctx.Done():
+			return errors.Join(
+				fmt.Errorf("dnsserver: start: %w", ctx.Err()),
+				closeBoundServers(packetConn, listener),
+			)
+		}
+	}
+	logger.InfoContext(ctx, "dnsserver: listening", "addr", addr)
+	return nil
+}
+
+func bindServers(ctx context.Context, configured string) (net.PacketConn, net.Listener, error) {
+	var listenConfig net.ListenConfig
+	packetConn, err := listenConfig.ListenPacket(ctx, "udp", configured)
+	if err != nil {
+		return nil, nil, fmt.Errorf("dnsserver: udp listen: %w", err)
+	}
+	listener, err := listenConfig.Listen(ctx, "tcp", matchingTCPAddress(configured, packetConn.LocalAddr()))
+	if err == nil {
+		return packetConn, listener, nil
+	}
+	return nil, nil, errors.Join(
+		fmt.Errorf("dnsserver: tcp listen: %w", err),
+		wrapCloseError("udp startup listener", packetConn.Close()),
+	)
+}
+
+func serve(logger *slog.Logger, ctx context.Context, network string, server *dns.Server, done chan<- serveResult) {
+	err := server.ActivateAndServe()
+	if err != nil {
+		logger.ErrorContext(ctx, "dnsserver: serve", "network", network, "err", err)
+	}
+	done <- serveResult{network: network, err: err}
+}
+
+func startupServeError(result serveResult, packetConn net.PacketConn, listener net.Listener) error {
+	if result.err == nil {
+		result.err = errors.New("server stopped before readiness")
+	}
+	return errors.Join(
+		fmt.Errorf("dnsserver: %s serve before startup: %w", result.network, result.err),
+		closeBoundServers(packetConn, listener),
+	)
+}
+
+func stopServers(ctx context.Context, logger *slog.Logger, udp, tcp *dns.Server) error {
+	var shutdownErrs []error
+	if err := udp.ShutdownContext(ctx); err != nil {
+		logger.WarnContext(ctx, "dnsserver: udp shutdown", "err", err)
+		shutdownErrs = append(shutdownErrs, fmt.Errorf("dnsserver: udp shutdown: %w", err))
+	}
+	if err := tcp.ShutdownContext(ctx); err != nil {
+		logger.WarnContext(ctx, "dnsserver: tcp shutdown", "err", err)
+		shutdownErrs = append(shutdownErrs, fmt.Errorf("dnsserver: tcp shutdown: %w", err))
+	}
+	return errors.Join(shutdownErrs...)
+}
+
+func matchingTCPAddress(configured string, udpAddr net.Addr) string {
+	_, port, err := net.SplitHostPort(configured)
+	if err == nil && port == "0" {
+		return udpAddr.String()
+	}
+	return configured
+}
+
+func closeBoundServers(packetConn net.PacketConn, listener net.Listener) error {
+	return errors.Join(
+		wrapCloseError("udp startup listener", packetConn.Close()),
+		wrapCloseError("tcp startup listener", listener.Close()),
+	)
+}
+
+func wrapCloseError(resource string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("dnsserver: close %s: %w", resource, err)
 }

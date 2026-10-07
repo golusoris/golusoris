@@ -48,6 +48,8 @@ func (stubProcessor) Close() {}
 // exercisable without CGO. It records the last resize box for assertions.
 type fakeProcessor struct {
 	lastW, lastH int
+	infoFormat   img.Format
+	infoInput    string
 }
 
 func (f *fakeProcessor) Resize(_ context.Context, _ []byte, w, h int, _ img.ResizeOptions) ([]byte, error) {
@@ -60,8 +62,12 @@ func (f *fakeProcessor) Convert(_ context.Context, src []byte, _ img.Format, _ i
 }
 func (f *fakeProcessor) Optimize(_ context.Context, src []byte) ([]byte, error) { return src, nil }
 
-func (f *fakeProcessor) Info(context.Context, []byte) (int, int, img.Format, error) {
-	return 0, 0, img.FormatJPEG, nil
+func (f *fakeProcessor) Info(_ context.Context, src []byte) (int, int, img.Format, error) {
+	f.infoInput = string(src)
+	if f.infoFormat == "" {
+		return 0, 0, img.FormatJPEG, nil
+	}
+	return 0, 0, f.infoFormat, nil
 }
 func (f *fakeProcessor) Close() {}
 
@@ -76,6 +82,43 @@ func (m mapSource) Get(_ context.Context, key string) (io.ReadCloser, error) {
 	}
 	return io.NopCloser(strings.NewReader(string(b))), nil
 }
+
+type countingSource struct {
+	calls int
+	body  []byte
+}
+
+func (s *countingSource) Get(context.Context, string) (io.ReadCloser, error) {
+	s.calls++
+	return io.NopCloser(strings.NewReader(string(s.body))), nil
+}
+
+type fixedReaderSource struct {
+	reader io.ReadCloser
+}
+
+func (s fixedReaderSource) Get(context.Context, string) (io.ReadCloser, error) {
+	return s.reader, nil
+}
+
+type cancelingReadCloser struct {
+	cancel  context.CancelFunc
+	payload string
+	reads   int
+}
+
+func (r *cancelingReadCloser) Read(dst []byte) (int, error) {
+	r.reads++
+	if r.reads > 1 {
+		return 0, io.EOF
+	}
+	if r.cancel != nil {
+		r.cancel()
+	}
+	return copy(dst, r.payload), nil
+}
+
+func (*cancelingReadCloser) Close() error { return nil }
 
 // failCloser reads a fixed body but fails on Close, so the deferred source
 // close in render is the only thing that can go wrong on the request path.
@@ -92,7 +135,7 @@ func (failCloseSource) Get(context.Context, string) (io.ReadCloser, error) {
 
 func newHandlerPipeline(t *testing.T, proc img.Processor, src pipeline.Source) (*pipeline.Pipeline, *clockwork.FakeClock) {
 	t.Helper()
-	fc := clockwork.NewFakeClock()
+	fc := clockwork.NewFakeClockAt(time.Unix(1_700_000_000, 0))
 	p, err := pipeline.New(pipeline.Options{Secret: testSecret}, proc, src, fc, slog.New(slog.DiscardHandler))
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -118,14 +161,118 @@ func TestHandler_200(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); ct != "image/webp" {
 		t.Errorf("Content-Type = %q, want image/webp", ct)
 	}
-	if cc := rec.Header().Get("Cache-Control"); cc != pipeline.DefaultCacheControl {
-		t.Errorf("Cache-Control = %q, want default", cc)
+	if cc := rec.Header().Get("Cache-Control"); cc != "public, max-age=60, immutable" {
+		t.Errorf("Cache-Control = %q, want token-bounded lifetime", cc)
 	}
 	if proc.lastW != 200 || proc.lastH != 100 {
 		t.Errorf("resize box = %dx%d, want 200x100", proc.lastW, proc.lastH)
 	}
 	if !strings.Contains(rec.Body.String(), "resized-body") {
 		t.Errorf("body missing resized payload: %q", rec.Body.String())
+	}
+}
+
+func TestHandler_cacheLifetimeDoesNotOutliveToken(t *testing.T) {
+	t.Parallel()
+	p, fc := newHandlerPipeline(t, &fakeProcessor{}, mapSource{"k": []byte("raw")})
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, 5*time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	fc.Advance(2 * time.Minute)
+
+	rec := serve(t, p, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=180, immutable" {
+		t.Fatalf("Cache-Control = %q, want public, max-age=180, immutable", got)
+	}
+}
+
+func TestHandler_cacheLifetimeCapsSharedOverrideWithoutExtendingShorterPolicy(t *testing.T) {
+	t.Parallel()
+	fc := clockwork.NewFakeClockAt(time.Unix(1_700_000_000, 0))
+	p, err := pipeline.New(
+		pipeline.Options{
+			Secret:       testSecret,
+			CacheControl: "public, max-age=30, s-maxage=600, immutable",
+		},
+		&fakeProcessor{},
+		mapSource{"k": []byte("raw")},
+		fc,
+		slog.New(slog.DiscardHandler),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, 3*time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+
+	rec := serve(t, p, tok)
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=30, s-maxage=180, immutable" {
+		t.Fatalf("Cache-Control = %q, want bounded browser and shared-cache lifetimes", got)
+	}
+}
+
+func TestHandler_emptyFormatUsesRenderedContentType(t *testing.T) {
+	t.Parallel()
+	proc := &fakeProcessor{infoFormat: img.FormatPNG}
+	p, _ := newHandlerPipeline(t, proc, mapSource{"k": []byte("raw")})
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50}, time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+
+	rec := serve(t, p, tok)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/png" {
+		t.Fatalf("Content-Type = %q, want image/png", got)
+	}
+	if proc.infoInput != "resized-body" {
+		t.Fatalf("Info input = %q, want rendered output", proc.infoInput)
+	}
+}
+
+func TestHandler_rejectsUnsupportedMethodsBeforeRendering(t *testing.T) {
+	t.Parallel()
+	methods := []string{
+		http.MethodPost,
+		http.MethodPut,
+		http.MethodPatch,
+		http.MethodDelete,
+		http.MethodOptions,
+	}
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			t.Parallel()
+			src := &countingSource{body: []byte("raw")}
+			proc := &fakeProcessor{}
+			p, _ := newHandlerPipeline(t, proc, src)
+			tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+			if err != nil {
+				t.Fatalf("Sign: %v", err)
+			}
+			req := httptest.NewRequest(method, "/img/"+tok, nil)
+			req.SetPathValue("signed", tok)
+			rec := httptest.NewRecorder()
+
+			p.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusMethodNotAllowed {
+				t.Fatalf("status = %d, want 405", rec.Code)
+			}
+			if got := rec.Header().Get("Allow"); got != "GET, HEAD" {
+				t.Errorf("Allow = %q, want GET, HEAD", got)
+			}
+			if src.calls != 0 || proc.lastW != 0 {
+				t.Fatalf("unsupported method performed work: source calls=%d, resize width=%d", src.calls, proc.lastW)
+			}
+		})
 	}
 }
 
@@ -264,6 +411,93 @@ func TestHandler_415_closeErrorDoesNotMaskPrimary(t *testing.T) {
 	rec := serve(t, p, tok)
 	if rec.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("status = %d, want 415; body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestHandler_sourceByteLimit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		source     string
+		wantStatus int
+	}{
+		{name: "exact limit", source: "1234", wantStatus: http.StatusOK},
+		{name: "over limit", source: "12345", wantStatus: http.StatusInternalServerError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			proc := &fakeProcessor{}
+			p, err := pipeline.New(
+				pipeline.Options{Secret: testSecret, MaxSourceBytes: 4},
+				proc,
+				mapSource{"k": []byte(tt.source)},
+				clockwork.NewFakeClock(),
+				slog.New(slog.DiscardHandler),
+			)
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+			if err != nil {
+				t.Fatalf("Sign: %v", err)
+			}
+
+			rec := serve(t, p, tok)
+			if rec.Code != tt.wantStatus {
+				t.Fatalf("status = %d, want %d; body=%s", rec.Code, tt.wantStatus, rec.Body.String())
+			}
+			if tt.wantStatus != http.StatusOK && proc.lastW != 0 {
+				t.Fatalf("processor ran for oversized source: width = %d", proc.lastW)
+			}
+		})
+	}
+}
+
+func TestHandler_sourceReadHonorsRequestCancellation(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name        string
+		payload     string
+		cancelFirst bool
+		wantReads   int
+	}{
+		{name: "before first read", payload: "unread", cancelFirst: true, wantReads: 0},
+		{name: "after zero-byte read", payload: "", wantReads: 1},
+		{name: "after partial read", payload: "partial", wantReads: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			reader := &cancelingReadCloser{payload: tt.payload}
+			if tt.cancelFirst {
+				cancel()
+			} else {
+				reader.cancel = cancel
+			}
+			proc := &fakeProcessor{}
+			p, _ := newHandlerPipeline(t, proc, fixedReaderSource{reader: reader})
+			tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+			if err != nil {
+				t.Fatalf("Sign: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodGet, "/img/"+tok, nil).WithContext(ctx)
+			req.SetPathValue("signed", tok)
+			rec := httptest.NewRecorder()
+
+			p.Handler().ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusInternalServerError {
+				t.Fatalf("status = %d, want 500 after cancellation; body=%s", rec.Code, rec.Body.String())
+			}
+			if reader.reads != tt.wantReads {
+				t.Fatalf("source reads = %d, want %d", reader.reads, tt.wantReads)
+			}
+			if proc.lastW != 0 {
+				t.Fatalf("processor ran after source cancellation: width = %d", proc.lastW)
+			}
+		})
 	}
 }
 

@@ -6,6 +6,7 @@ package static_test
 
 import (
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,10 @@ import (
 
 	"github.com/golusoris/golusoris/httpx/static"
 )
+
+type typedNilFS struct{}
+
+func (*typedNilFS) Open(string) (fs.File, error) { panic("typed-nil filesystem used") }
 
 func testFS() fstest.MapFS {
 	return fstest.MapFS{
@@ -38,6 +43,17 @@ func TestServesFile(t *testing.T) {
 	}
 }
 
+func TestHandlerTypedNilFilesystemReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	var filesystem *typedNilFS
+	handler := static.Handler(filesystem, static.Options{})
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/asset.js", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
+	}
+}
+
 func TestETagRoundTripReturns304(t *testing.T) {
 	t.Parallel()
 	h := static.Handler(testFS(), static.Options{})
@@ -55,6 +71,36 @@ func TestETagRoundTripReturns304(t *testing.T) {
 	h.ServeHTTP(rr2, req)
 	if rr2.Code != http.StatusNotModified {
 		t.Errorf("status = %d, want 304", rr2.Code)
+	}
+}
+
+func TestETagConditionUsesHTTPMethodSemantics(t *testing.T) {
+	t.Parallel()
+	handler := static.Handler(testFS(), static.Options{})
+
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
+	etag := first.Header().Get("ETag")
+	for _, test := range []struct {
+		name   string
+		method string
+		value  string
+		status int
+	}{
+		{name: "weak list match", method: http.MethodGet, value: `"other", ` + etag, status: http.StatusNotModified},
+		{name: "wildcard", method: http.MethodGet, value: "*", status: http.StatusNotModified},
+		{name: "unsafe method", method: http.MethodPost, value: etag, status: http.StatusPreconditionFailed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequest(test.method, "/robots.txt", nil)
+			request.Header.Set("If-None-Match", test.value)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code != test.status {
+				t.Fatalf("status = %d, want %d", recorder.Code, test.status)
+			}
+		})
 	}
 }
 

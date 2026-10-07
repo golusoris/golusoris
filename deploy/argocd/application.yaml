@@ -13,14 +13,15 @@ metadata:
 spec:
   project: platform
   source:
-    repoURL: oci://ghcr.io/golusoris/charts
+    repoURL: ghcr.io/golusoris/charts
     chart: golusoris-app
     targetRevision: 0.1.x
     helm:
       values: |
         image:
           repository: ghcr.io/golusoris/app-myapp
-          tag: "0.1.0"
+          # Replace before sync; the all-zero digest is intentionally inert.
+          digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
         replicaCount: 3
         ingress:
           enabled: true
@@ -32,7 +33,9 @@ spec:
         serviceMonitor:
           enabled: true
         backup:
-          enabled: true
+          # Enable only after setting an owned backup image digest, secrets,
+          # and bucket in environment-specific values.
+          enabled: false
           schedule: "0 2 * * *"
   destination:
     server: https://kubernetes.default.svc

@@ -135,7 +135,7 @@ var K8sOperator = fx.Module(
 
 // Jobs bundles the background-job modules: the river client + a
 // Workers registry. Apps register workers via fx.Invoke(func(w
-// *jobs.Workers) { jobs.Register(w, &MyWorker{}) }).
+// *jobs.Workers) error { return jobs.Register(w, &MyWorker{}) }).
 //
 // Requires [Core] + [DB] in the same fx graph (river needs a pg pool).
 //

@@ -6,19 +6,20 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/pg
 
-Boots a real Postgres container via testcontainers-go for tests that need a
-genuine database. Docker is a hard requirement (no fake/mock fallback).
+Boots real Postgres container via testcontainers-go for tests that need genuine database. Docker is hard requirement (no fake/mock fallback).
 
 ## Conventions
 
-- `pg.Start(t)` returns a connected `*pgxpool.Pool`. The container + pool are torn down via `t.Cleanup`. Each call gets its own container — tests are isolated.
-- For tests that need only the DSN (e.g. driving `db/migrate`), use `pg.DSN(t)`.
-- For logical-replication tests (e.g. `db/cdc`), use `pg.StartReplication(t)` — it boots a `wal_level=logical` container and returns `(pool, replicationDSN)`; the DSN already carries `replication=database`.
-- For TimescaleDB tests, use `pg.StartTimescale(t)` — it boots the pinned `timescale/timescaledb:2.30.0-pg17` image and `CREATE EXTENSION`s timescaledb before returning the pool.
-- Default image is `postgres:17-alpine`. Override via `Options.Image`.
-- Every start is bounded by `startTimeout` (3 min, image pull included) — sized for the cold-cache CI ARC runners where all container packages pull at once. Keep it a scalar constant (HISS-02).
-- Image tags are pinned; when you bump one, update `.github/testcontainers-images.txt` — CI caches exactly that list, so a tag missing from it is pulled on every run.
-- Every helper takes a slot from `testutil/internal/startgate` before booting, so at most 2 containers start at once per test binary; parallel tests beyond that queue instead of timing out.
+- `pg.Start(t)` returns connected `*pgxpool.Pool`. container + pool are torn down via `t.Cleanup`. Each call gets its own container — tests are isolated.
+- For tests that need only DSN (e.g. driving `db/migrate`), use `pg.DSN(t)`.
+- For logical-replication tests (e.g. `db/cdc`), use `pg.StartReplication(t)` — it boots `wal_level=logical` container and returns `(pool, replicationDSN)`; DSN already carries `replication=database`.
+- For TimescaleDB tests, use `pg.StartTimescale(t)` — immutable repository pin + `CREATE EXTENSION` before return.
+- Default PostgreSQL + TimescaleDB references: `internal/testimages` authority.
+- `Options.Image`: exact `tag@sha256:<64 lowercase hex>` required; mutable override fails before Docker access.
+- Every start is bounded by `startTimeout` (3 min, image pull included) — sized for cold-cache CI ARC runners where all container packages pull at once. Keep it scalar constant (HISS-02).
+- Image updates: change `internal/testimages` + `.github/testcontainers-images.txt`; Renovate manager + parity test enforce both copies.
+- Ryuk: immutable repository pin; helper overrides testcontainers default.
+- Every helper takes slot from `testutil/internal/startgate` before booting, so at most 2 containers start at once per test binary; parallel tests beyond that queue instead of timing out.
 
 ## Key surface
 
@@ -31,5 +32,5 @@ genuine database. Docker is a hard requirement (no fake/mock fallback).
 
 ## Don't
 
-- Don't share containers across test files via package-level vars — use TestMain or a sync.Once helper if you genuinely need to amortize startup cost.
-- Don't `t.Skip()` when Docker is missing — a CI without Docker is a CI bug.
+- Don't share containers across test files via package-level vars — use TestMain or sync.Once helper if you genuinely need to amortize startup cost.
+- Don't `t.Skip()` when Docker is missing — CI without Docker is CI bug.

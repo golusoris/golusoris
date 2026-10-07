@@ -63,3 +63,17 @@ func TestOptions_preservesNonZero(t *testing.T) {
 		t.Error("DSN not preserved")
 	}
 }
+
+func TestFileSourceURLEscapesReservedPathCharacters(t *testing.T) {
+	t.Parallel()
+
+	for path, want := range map[string]string{
+		"migrations":      "file://migrations",
+		"dir/a b":         "file://dir/a%20b",
+		"/tmp/a#b?tenant": "file:///tmp/a%23b%3Ftenant",
+	} {
+		if got := fileSourceURL(path); got != want {
+			t.Errorf("fileSourceURL(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

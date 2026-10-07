@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"go.uber.org/fx"
 
@@ -40,6 +41,10 @@ type LocalOptions struct {
 	Path string `koanf:"path"`
 }
 
+const s3InitTimeout = 15 * time.Second
+
+type s3BucketFactory func(context.Context, S3Options) (*S3Bucket, error)
+
 func defaultOptions() Options {
 	return Options{
 		Backend: "local",
@@ -56,6 +61,12 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
+	return newBucketWithS3Factory(opts, logger, s3InitTimeout, NewS3Bucket)
+}
+
+func newBucketWithS3Factory(
+	opts Options, logger *slog.Logger, timeout time.Duration, factory s3BucketFactory,
+) (Bucket, error) {
 	switch opts.Backend {
 	case "local", "":
 		b, err := NewLocalBucket(opts.Local.Path)
@@ -69,9 +80,12 @@ func newBucket(opts Options, logger *slog.Logger) (Bucket, error) {
 		)
 		return b, nil
 	case "s3":
-		// Bounded init: a background context is fine here — the AWS config
-		// load is the only blocking call and fx applies its own start timeout.
-		b, err := NewS3Bucket(context.Background(), opts.S3)
+		if timeout <= 0 {
+			return nil, fmt.Errorf("storage: s3 init timeout must be positive: %s", timeout)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		b, err := factory(ctx, opts.S3)
 		if err != nil {
 			return nil, fmt.Errorf("storage: build s3 backend: %w", err)
 		}

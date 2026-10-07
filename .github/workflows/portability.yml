@@ -1,0 +1,79 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Platform Neutrality
+
+on:
+  pull_request:
+    branches:
+      - main
+      - 'lts-*'
+  push:
+    branches:
+      - main
+      - 'lts-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Add these exact matrix contexts to the active ruleset only after each leg's first hosted green:
+# Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (Windows).
+jobs:
+  portability:
+    name: Platform Neutrality (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux
+            runner: ubuntu-latest
+          - name: macOS
+            runner: macos-latest
+          - name: Windows
+            runner: windows-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Setup Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Verify portability driver policy
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci/portability_test.py
+      - name: Install verified Pact FFI on Unix
+        if: runner.os != 'Windows'
+        run: |
+          pact_dir="${RUNNER_TEMP}/pact-ffi"
+          install -d -m 0700 "$pact_dir"
+          python -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
+      - name: Install verified Pact FFI on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'
+          New-Item -ItemType Directory -Force -Path $pactDir | Out-Null
+          python -B scripts/ci/pact_ffi.py --lib-dir $pactDir
+          $pactDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PACT_GO_LIB_DOWNLOAD_PATH=$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Build, vet, and short-test every Go module
+        env:
+          GOFLAGS: -mod=readonly
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: python -B scripts/ci/portability.py

@@ -14,6 +14,13 @@ import (
 
 type stubTracer struct{}
 
+type pointerTracer struct{}
+
+func (*pointerTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
+	return ctx
+}
+func (*pointerTracer) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
+
 func (stubTracer) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryStartData) context.Context {
 	return ctx
 }
@@ -35,5 +42,9 @@ func TestComposeTracer(t *testing.T) {
 	got := composeTracer(a, []pgx.QueryTracer{b})
 	if _, ok := got.(*multitracer.Tracer); !ok {
 		t.Errorf("slow + custom: got %T, want *multitracer.Tracer", got)
+	}
+	var typedNil *pointerTracer
+	if got := composeTracer(nil, []pgx.QueryTracer{typedNil}); got != nil {
+		t.Errorf("typed-nil custom tracer: got %T, want nil", got)
 	}
 }

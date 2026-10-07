@@ -13,10 +13,10 @@ System(app, "golusoris-based app", "Go service composed from opt-in fx modules")
 
 System_Ext(postgres, "PostgreSQL", "Application data + jobs (river) + outbox + leader-pg")
 System_Ext(otel_collector, "OpenTelemetry collector", "Receives traces, metrics, logs (OTLP)")
-System_Ext(idp, "OIDC IdP", "Auth (auth/oidc, future)")
-System_Ext(object_store, "Object storage", "S3-compatible (storage/, future)")
+System_Ext(idp, "OIDC IdP", "Auth (auth/oidc)")
+System_Ext(object_store, "Object storage", "S3-compatible (storage/)")
 System_Ext(sentry, "Sentry", "Error aggregation (observability/sentry slog bridge)")
-System_Ext(k8s, "Kubernetes / Docker / systemd", "Runtime — election + lifecycle hooks adapt per backend")
+System_Ext(runtime, "Kubernetes or Linux host", "Deployment environment; optional k8s and systemd integrations")
 
 Rel(end_user, app, "Uses", "HTTPS")
 Rel(operator, app, "Observes", "/metrics, /livez, /readyz, /status, /debug/pprof")
@@ -27,6 +27,6 @@ Rel(app, otel_collector, "Exports", "OTLP gRPC")
 Rel(app, idp, "Delegates auth", "OIDC + PKCE")
 Rel(app, object_store, "Stores blobs", "S3 API")
 Rel(app, sentry, "Reports errors", "Sentry SDK via slog bridge")
-Rel(app, k8s, "Runs under", "in-cluster / docker / systemd / bare")
+Rel(app, runtime, "Runs in", "in-cluster / systemd / bare process")
 
 @enduml

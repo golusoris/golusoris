@@ -17,6 +17,7 @@
 package pprof
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"net/http"
 	nethttppprof "net/http/pprof"
@@ -34,10 +35,11 @@ type Options struct {
 }
 
 // Handler returns a chi.Router that mounts all stdlib pprof endpoints.
-// When Options.User is non-empty, basic-auth is required on every endpoint.
+// Complete credentials require basic-auth on every endpoint. A partial
+// credential configuration rejects every request.
 func Handler(opts Options) http.Handler {
 	r := chi.NewRouter()
-	if opts.User != "" {
+	if opts.User != "" || opts.Password != "" {
 		r.Use(basicAuth(opts.User, opts.Password))
 	}
 	// Stdlib registers /debug/pprof/* on http.DefaultServeMux — we re-expose
@@ -58,12 +60,20 @@ func Handler(opts Options) http.Handler {
 }
 
 func basicAuth(user, pass string) func(http.Handler) http.Handler {
+	wantUser := credentialDigest(user)
+	wantPass := credentialDigest(pass)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if user == "" || pass == "" {
+				w.Header().Set("WWW-Authenticate", `Basic realm="pprof"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 			u, p, ok := r.BasicAuth()
-			// constant-time comparison to resist timing attacks.
-			userOK := subtle.ConstantTimeCompare([]byte(u), []byte(user)) == 1
-			passOK := subtle.ConstantTimeCompare([]byte(p), []byte(pass)) == 1
+			gotUser := credentialDigest(u)
+			gotPass := credentialDigest(p)
+			userOK := subtle.ConstantTimeCompare(gotUser[:], wantUser[:]) == 1
+			passOK := subtle.ConstantTimeCompare(gotPass[:], wantPass[:]) == 1
 			if !ok || !userOK || !passOK {
 				w.Header().Set("WWW-Authenticate", `Basic realm="pprof"`)
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -72,4 +82,8 @@ func basicAuth(user, pass string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func credentialDigest(value string) [sha256.Size]byte {
+	return sha256.Sum256([]byte(value))
 }

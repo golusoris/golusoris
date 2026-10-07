@@ -12,8 +12,9 @@ Parses Vite's `manifest.json` to resolve entry points to hashed asset URLs.
 
 - Build step: `vite build` emits `manifest.json` with `isEntry` + hashed filenames + CSS/imports graph.
 - Load once at app startup via `vite.NewFromFile` or `vite.NewFromFS` (for embed.FS).
+- `Entry` returns caller-owned data; slice edits never change parsed manifest state.
 - In templates: `{{ .Manifest.File "src/main.tsx" }}` and `{{ range .Manifest.CSS "src/main.tsx" }}`.
-- `CSS(src)` follows the manifest's transitive imports so shared CSS from imported JS chunks comes along automatically.
+- `CSS(src)` follows manifest's transitive imports and returns each shared CSS asset once in first-seen order.
 
 ## Don't
 

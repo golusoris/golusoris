@@ -86,7 +86,7 @@ func (o Options) DSN() string {
 		q.Add("mode", "ro")
 	}
 	q.Add("_pragma", "busy_timeout("+strconv.FormatInt(o.BusyTimeout.Milliseconds(), 10)+")")
-	if !o.DisableWAL && o.Path != MemoryPath {
+	if !o.DisableWAL && !o.ReadOnly && o.Path != MemoryPath {
 		q.Add("_pragma", "journal_mode(WAL)")
 	}
 	if !o.DisableForeignKeys {
@@ -99,13 +99,20 @@ func (o Options) DSN() string {
 	if path != MemoryPath {
 		path = filepath.ToSlash(path)
 	}
-	return "file:" + path + "?" + q.Encode()
+	escapedPath := (&url.URL{Path: path}).EscapedPath()
+	return "file:" + escapedPath + "?" + q.Encode()
 }
 
 // Open opens and pings the database. The caller owns the returned *sql.DB.
 func Open(ctx context.Context, opts Options, logger *slog.Logger) (*sql.DB, error) {
 	if strings.TrimSpace(opts.Path) == "" {
 		return nil, ErrMissingPath
+	}
+	if logger == nil {
+		return nil, errors.New("db/sqlite: nil logger")
+	}
+	if err := validateOptions(opts); err != nil {
+		return nil, err
 	}
 	opts = opts.withDefaults()
 	db, err := sql.Open(DriverName, opts.DSN())
@@ -136,11 +143,24 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	if err := cfg.Unmarshal("db.sqlite", &opts); err != nil {
 		return Options{}, fmt.Errorf("db/sqlite: load options: %w", err)
 	}
-	opts = opts.withDefaults()
 	if strings.TrimSpace(opts.Path) == "" {
 		return Options{}, ErrMissingPath
 	}
+	if err := validateOptions(opts); err != nil {
+		return Options{}, err
+	}
+	opts = opts.withDefaults()
 	return opts, nil
+}
+
+func validateOptions(opts Options) error {
+	if opts.BusyTimeout < 0 {
+		return errors.New("db/sqlite: busy timeout must not be negative")
+	}
+	if opts.MaxOpenConns < 0 {
+		return errors.New("db/sqlite: max open connections must not be negative")
+	}
+	return nil
 }
 
 // Module provides *sql.DB from config (prefix db.sqlite) and closes it on stop.

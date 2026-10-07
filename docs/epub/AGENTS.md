@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — docs/epub/
 
-Generate EPUB 3.0 files (with EPUB 2.0 ToC for compatibility) via a thin
+Generate EPUB 3.0 files (with EPUB 2.0 ToC for compatibility) via thin
 wrapper over `bmaupin/go-epub`. Stateless utility — **no fx wiring**. Apps
 import it directly.
 
@@ -31,6 +31,6 @@ err = b.Write("mybook.epub")                     // or WriteToWriter(w)
 
 ## Notes
 
-- `body` is HTML; the package does not sanitize it — escape untrusted input.
-- `WriteToWriter` round-trips through an `os.CreateTemp` file (go-epub only
-  writes to a path), then streams + removes it.
+- `body` is HTML; package does not sanitize it — escape untrusted input.
+- `WriteToWriter` round-trips through `os.CreateTemp` file (go-epub only
+ writes to path), then streams + removes it.

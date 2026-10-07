@@ -25,6 +25,18 @@ variable "force_destroy" {
   default     = false
 }
 
+variable "kms_key_arn" {
+  description = "Existing customer-managed KMS key ARN. Null creates a dedicated rotating key."
+  type        = string
+  default     = null
+  nullable    = true
+
+  validation {
+    condition     = var.kms_key_arn == null || startswith(var.kms_key_arn, "arn:")
+    error_message = "kms_key_arn must be null or an AWS ARN."
+  }
+}
+
 variable "tags" {
   description = "Tags to attach to the bucket."
   type        = map(string)

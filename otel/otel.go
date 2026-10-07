@@ -8,7 +8,7 @@
 //
 // A slog-bridge is registered via [otelslog.NewHandler] so every slog call
 // is also emitted as an OTel log record. Apps that wire both
-// [golusoris/log] and [otel.Module] get HTTP access logs, app logs, spans,
+// [github.com/golusoris/golusoris/core/log] and [otel.Module] get HTTP access logs, app logs, spans,
 // and metrics on the same export pipeline.
 //
 // Config keys (env: APP_OTEL_*):
@@ -40,6 +40,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -48,12 +49,15 @@ import (
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	otlptrace "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/log/global"
+	nooplog "go.opentelemetry.io/otel/log/noop"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
@@ -107,11 +111,22 @@ type Providers struct {
 	Tracer *sdktrace.TracerProvider
 	Meter  *sdkmetric.MeterProvider
 	Logger *sdklog.LoggerProvider
+
+	shutdownOnce sync.Once
+	shutdownErr  error
 }
 
 // Shutdown flushes + stops the providers. Errors from individual
 // providers are joined so one failure doesn't hide the others.
 func (p *Providers) Shutdown(ctx context.Context) error {
+	p.shutdownOnce.Do(func() {
+		p.detachGlobals()
+		p.shutdownErr = p.shutdown(ctx)
+	})
+	return p.shutdownErr
+}
+
+func (p *Providers) shutdown(ctx context.Context) error {
 	var errs []error
 	if p.Tracer != nil {
 		if err := p.Tracer.Shutdown(ctx); err != nil {
@@ -129,6 +144,18 @@ func (p *Providers) Shutdown(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (p *Providers) detachGlobals() {
+	if p.Tracer != nil && otelapi.GetTracerProvider() == p.Tracer {
+		otelapi.SetTracerProvider(nooptrace.NewTracerProvider())
+	}
+	if p.Meter != nil && otelapi.GetMeterProvider() == p.Meter {
+		otelapi.SetMeterProvider(noopmetric.NewMeterProvider())
+	}
+	if p.Logger != nil && global.GetLoggerProvider() == p.Logger {
+		global.SetLoggerProvider(nooplog.NewLoggerProvider())
+	}
 }
 
 // New constructs the providers, registers them as OTel globals, installs the
@@ -151,16 +178,17 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	}
 
 	providers := &Providers{}
-	if err := wireTracer(ctx, res, opts, providers); err != nil {
-		return nil, err
+	if err := buildTracer(ctx, res, opts, providers); err != nil {
+		return nil, cleanupPartialProviders(ctx, providers, err)
 	}
-	if err := wireMeter(ctx, res, opts, providers); err != nil {
-		return nil, err
+	if err := buildMeter(ctx, res, opts, providers); err != nil {
+		return nil, cleanupPartialProviders(ctx, providers, err)
 	}
-	if err := wireLogger(ctx, res, opts, providers); err != nil {
-		return nil, err
+	if err := buildLogger(ctx, res, opts, providers); err != nil {
+		return nil, cleanupPartialProviders(ctx, providers, err)
 	}
 
+	installGlobals(providers)
 	otelapi.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
 		propagation.TraceContext{},
 		propagation.Baggage{},
@@ -169,15 +197,35 @@ func New(ctx context.Context, opts Options) (*Providers, error) {
 	return providers, nil
 }
 
+func cleanupPartialProviders(parent context.Context, providers *Providers, buildErr error) error {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
+	defer cancel()
+	if err := providers.Shutdown(ctx); err != nil {
+		return errors.Join(buildErr, fmt.Errorf("otel: clean up partial providers: %w", err))
+	}
+	return buildErr
+}
+
+func installGlobals(providers *Providers) {
+	if providers.Tracer != nil {
+		otelapi.SetTracerProvider(providers.Tracer)
+	}
+	if providers.Meter != nil {
+		otelapi.SetMeterProvider(providers.Meter)
+	}
+	if providers.Logger != nil {
+		global.SetLoggerProvider(providers.Logger)
+	}
+}
+
 // skipOTel reports whether New must degrade to a silent no-op — see New's
 // doc comment for the three conditions.
 func skipOTel(opts Options) bool {
 	return !opts.Enabled || sdkDisabled() || !exporterConfigured(opts)
 }
 
-// wireTracer builds and registers the tracer provider when trace export is
-// enabled; a no-op otherwise.
-func wireTracer(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+// buildTracer builds the tracer provider when trace export is enabled.
+func buildTracer(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
 	if !opts.Export.Traces {
 		return nil
 	}
@@ -186,13 +234,11 @@ func wireTracer(ctx context.Context, res *resource.Resource, opts Options, provi
 		return err
 	}
 	providers.Tracer = p
-	otelapi.SetTracerProvider(p)
 	return nil
 }
 
-// wireMeter builds and registers the meter provider when metric export is
-// enabled; a no-op otherwise.
-func wireMeter(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+// buildMeter builds the meter provider when metric export is enabled.
+func buildMeter(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
 	if !opts.Export.Metrics {
 		return nil
 	}
@@ -201,13 +247,11 @@ func wireMeter(ctx context.Context, res *resource.Resource, opts Options, provid
 		return err
 	}
 	providers.Meter = p
-	otelapi.SetMeterProvider(p)
 	return nil
 }
 
-// wireLogger builds and registers the logger provider when log export is
-// enabled; a no-op otherwise.
-func wireLogger(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
+// buildLogger builds the logger provider when log export is enabled.
+func buildLogger(ctx context.Context, res *resource.Resource, opts Options, providers *Providers) error {
 	if !opts.Export.Logs {
 		return nil
 	}
@@ -216,7 +260,6 @@ func wireLogger(ctx context.Context, res *resource.Resource, opts Options, provi
 		return err
 	}
 	providers.Logger = p
-	global.SetLoggerProvider(p)
 	return nil
 }
 

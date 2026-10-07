@@ -26,6 +26,56 @@ func okHandler() http.Handler {
 	})
 }
 
+type statusHandler struct {
+	status int
+}
+
+func (h *statusHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(h.status)
+}
+
+func requireMiddleware(
+	t *testing.T,
+	middleware func(http.Handler) http.Handler,
+	err error,
+) func(http.Handler) http.Handler {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("middleware constructor: %v", err)
+	}
+	return middleware
+}
+
+func requireGitHub(t *testing.T, secret string) func(http.Handler) http.Handler {
+	t.Helper()
+	middleware, err := in.GitHub(secret)
+	return requireMiddleware(t, middleware, err)
+}
+
+func requireStripe(t *testing.T, secret string) func(http.Handler) http.Handler {
+	t.Helper()
+	middleware, err := in.Stripe(secret)
+	return requireMiddleware(t, middleware, err)
+}
+
+func requireSlack(t *testing.T, secret string) func(http.Handler) http.Handler {
+	t.Helper()
+	middleware, err := in.Slack(secret)
+	return requireMiddleware(t, middleware, err)
+}
+
+func requireGitHubLegacy(t *testing.T, secret string) func(http.Handler) http.Handler {
+	t.Helper()
+	middleware, err := in.GitHubLegacy(secret)
+	return requireMiddleware(t, middleware, err)
+}
+
+func requireHMAC(t *testing.T, secret, header string) func(http.Handler) http.Handler {
+	t.Helper()
+	middleware, err := in.HMAC(secret, header)
+	return requireMiddleware(t, middleware, err)
+}
+
 // --- GitHub ---
 
 func githubSig(secret, body string) string {
@@ -34,11 +84,97 @@ func githubSig(secret, body string) string {
 	return "sha256=" + hex.EncodeToString(h.Sum(nil))
 }
 
+func TestMiddlewaresRejectNilDownstream(t *testing.T) {
+	t.Parallel()
+	const (
+		secret = "shared-secret"
+		body   = `{"event":"test"}`
+	)
+	timestamp := time.Now().Unix()
+	tests := []struct {
+		name       string
+		middleware func(http.Handler) http.Handler
+		request    func() *http.Request
+	}{
+		{
+			name:       "Stripe",
+			middleware: requireStripe(t, secret),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				req.Header.Set("Stripe-Signature", stripeSig(secret, body, timestamp))
+				return req
+			},
+		},
+		{
+			name:       "GitHub",
+			middleware: requireGitHub(t, secret),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				req.Header.Set("X-Hub-Signature-256", githubSig(secret, body))
+				return req
+			},
+		},
+		{
+			name:       "GitHub legacy",
+			middleware: requireGitHubLegacy(t, secret),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				req.Header.Set("X-Hub-Signature", githubLegacySig(secret, body))
+				return req
+			},
+		},
+		{
+			name:       "Slack",
+			middleware: requireSlack(t, secret),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(timestamp, 10))
+				req.Header.Set("X-Slack-Signature", slackSig(secret, body, timestamp))
+				return req
+			},
+		},
+		{
+			name:       "generic HMAC",
+			middleware: requireHMAC(t, secret, "X-Signature"),
+			request: func() *http.Request {
+				req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+				req.Header.Set("X-Signature", githubSig(secret, body))
+				return req
+			},
+		},
+	}
+	var typedNil *statusHandler
+	downstreams := []struct {
+		name    string
+		handler http.Handler
+	}{
+		{name: "nil", handler: nil},
+		{name: "typed nil", handler: typedNil},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			for _, downstream := range downstreams {
+				t.Run(downstream.name, func(t *testing.T) {
+					t.Parallel()
+					rec := httptest.NewRecorder()
+
+					test.middleware(downstream.handler).ServeHTTP(rec, test.request())
+
+					if rec.Code != http.StatusInternalServerError {
+						t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestGitHub_valid(t *testing.T) {
 	t.Parallel()
 	const secret = "mysecret"
 	body := `{"action":"push"}`
-	handler := in.GitHub(secret)(okHandler())
+	handler := requireGitHub(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-Hub-Signature-256", githubSig(secret, body))
@@ -52,7 +188,7 @@ func TestGitHub_valid(t *testing.T) {
 
 func TestGitHub_invalid(t *testing.T) {
 	t.Parallel()
-	handler := in.GitHub("secret")(okHandler())
+	handler := requireGitHub(t, "secret")(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("body"))
 	req.Header.Set("X-Hub-Signature-256", "sha256=deadbeef")
@@ -66,7 +202,7 @@ func TestGitHub_invalid(t *testing.T) {
 
 func TestGitHub_missingHeader(t *testing.T) {
 	t.Parallel()
-	handler := in.GitHub("secret")(okHandler())
+	handler := requireGitHub(t, "secret")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("body"))
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
@@ -90,7 +226,7 @@ func TestStripe_valid(t *testing.T) {
 	const secret = "whsec_test"
 	body := `{"type":"charge.succeeded"}`
 	ts := time.Now().Unix()
-	handler := in.Stripe(secret)(okHandler())
+	handler := requireStripe(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("Stripe-Signature", stripeSig(secret, body, ts))
@@ -107,7 +243,24 @@ func TestStripe_oldTimestamp(t *testing.T) {
 	const secret = "whsec_test"
 	body := `{}`
 	ts := time.Now().Add(-10 * time.Minute).Unix()
-	handler := in.Stripe(secret)(okHandler())
+	handler := requireStripe(t, secret)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Stripe-Signature", stripeSig(secret, body, ts))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestStripe_futureTimestamp(t *testing.T) {
+	t.Parallel()
+	const secret = "whsec_test"
+	body := `{}`
+	ts := time.Now().Add(10 * time.Minute).Unix()
+	handler := requireStripe(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("Stripe-Signature", stripeSig(secret, body, ts))
@@ -124,7 +277,7 @@ func TestStripe_oldTimestamp(t *testing.T) {
 // header.
 func TestStripe_malformedHeader(t *testing.T) {
 	t.Parallel()
-	handler := in.Stripe("whsec_test")(okHandler())
+	handler := requireStripe(t, "whsec_test")(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	req.Header.Set("Stripe-Signature", "foo=bar,baz") // no t=, no v1=
@@ -143,7 +296,7 @@ func TestStripe_wrongSignature(t *testing.T) {
 	const secret = "whsec_test"
 	body := `{"type":"charge.succeeded"}`
 	ts := time.Now().Unix()
-	handler := in.Stripe(secret)(okHandler())
+	handler := requireStripe(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("Stripe-Signature", fmt.Sprintf("t=%d,v1=%s", ts, "deadbeef"))
@@ -160,14 +313,14 @@ func TestStripe_wrongSignature(t *testing.T) {
 // sends multiple v1 values) to find one that does.
 func TestStripe_secondSignatureMatches(t *testing.T) {
 	t.Parallel()
-	const secret = "whsec_test"
+	const secret = "whsec_rotation"
 	body := `{"type":"charge.succeeded"}`
 	ts := time.Now().Unix()
 	valid := stripeSig(secret, body, ts) // "t=<ts>,v1=<mac>"
 	_, correctMac, _ := strings.Cut(valid, "v1=")
 	header := fmt.Sprintf("t=%d,v1=deadbeef,v1=%s", ts, correctMac) // wrong sig first, correct one second
 
-	handler := in.Stripe(secret)(okHandler())
+	handler := requireStripe(t, secret)(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("Stripe-Signature", header)
 	rw := httptest.NewRecorder()
@@ -192,7 +345,7 @@ func TestSlack_valid(t *testing.T) {
 	const secret = "slack_secret"
 	body := `payload=test`
 	ts := time.Now().Unix()
-	handler := in.Slack(secret)(okHandler())
+	handler := requireSlack(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
@@ -202,6 +355,83 @@ func TestSlack_valid(t *testing.T) {
 
 	if rw.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rw.Code)
+	}
+}
+
+func TestSlack_futureTimestamp(t *testing.T) {
+	t.Parallel()
+	const secret = "slack_secret"
+	body := `payload=test`
+	ts := time.Now().Add(10 * time.Minute).Unix()
+	handler := requireSlack(t, secret)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
+	req.Header.Set("X-Slack-Signature", slackSig(secret, body, ts))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestOversizedBodyIsRejectedInsteadOfVerifyingTruncatedPrefix(t *testing.T) {
+	t.Parallel()
+	const secret = "genericsecret"
+	body := strings.Repeat("a", in.MaxBodyBytes+1)
+	prefix := body[:in.MaxBodyBytes]
+	called := false
+	next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true })
+	handler := requireGitHub(t, secret)(next)
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("X-Hub-Signature-256", githubSig(secret, prefix))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rw.Code)
+	}
+	if called {
+		t.Fatal("oversized body reached downstream handler")
+	}
+}
+
+func TestSlackOversizedBodyReturnsRequestEntityTooLarge(t *testing.T) {
+	t.Parallel()
+	handler := requireSlack(t, "slack_secret")(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", in.MaxBodyBytes+1)))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rw.Code)
+	}
+}
+
+func TestConstructorsRejectEmptySecrets(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		build func() (func(http.Handler) http.Handler, error)
+	}{
+		{name: "stripe", build: func() (func(http.Handler) http.Handler, error) { return in.Stripe("") }},
+		{name: "github", build: func() (func(http.Handler) http.Handler, error) { return in.GitHub("") }},
+		{name: "github legacy", build: func() (func(http.Handler) http.Handler, error) { return in.GitHubLegacy("") }},
+		{name: "slack", build: func() (func(http.Handler) http.Handler, error) { return in.Slack("") }},
+		{name: "generic", build: func() (func(http.Handler) http.Handler, error) { return in.HMAC("", "X-Sig") }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			middleware, err := tc.build()
+			if err == nil {
+				t.Fatal("constructor accepted empty secret")
+			}
+			if middleware != nil {
+				t.Fatal("constructor returned middleware with an error")
+			}
+		})
 	}
 }
 
@@ -215,7 +445,7 @@ func TestHMAC_valid(t *testing.T) {
 	h.Write([]byte(body))
 	sig := "sha256=" + hex.EncodeToString(h.Sum(nil))
 
-	handler := in.HMAC(secret, "X-My-Signature")(okHandler())
+	handler := requireHMAC(t, secret, "X-My-Signature")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-My-Signature", sig)
 	rw := httptest.NewRecorder()
@@ -240,7 +470,7 @@ func TestGitHubLegacy_valid(t *testing.T) {
 	body := `{"ref":"refs/heads/main"}`
 	sig := githubLegacySig(secret, body)
 
-	handler := in.GitHubLegacy(secret)(okHandler())
+	handler := requireGitHubLegacy(t, secret)(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-Hub-Signature", sig)
 	rw := httptest.NewRecorder()
@@ -252,7 +482,7 @@ func TestGitHubLegacy_valid(t *testing.T) {
 
 func TestGitHubLegacy_invalid(t *testing.T) {
 	t.Parallel()
-	handler := in.GitHubLegacy("secret")(okHandler())
+	handler := requireGitHubLegacy(t, "secret")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	req.Header.Set("X-Hub-Signature", "sha1=badhex!!!")
 	rw := httptest.NewRecorder()
@@ -264,7 +494,7 @@ func TestGitHubLegacy_invalid(t *testing.T) {
 
 func TestGitHubLegacy_missingHeader(t *testing.T) {
 	t.Parallel()
-	handler := in.GitHubLegacy("secret")(okHandler())
+	handler := requireGitHubLegacy(t, "secret")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
@@ -275,12 +505,55 @@ func TestGitHubLegacy_missingHeader(t *testing.T) {
 
 func TestHMAC_missingHeader(t *testing.T) {
 	t.Parallel()
-	handler := in.HMAC("secret", "X-Sig")(okHandler())
+	handler := requireHMAC(t, "secret", "X-Sig")(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{}`))
 	rw := httptest.NewRecorder()
 	handler.ServeHTTP(rw, req)
 	if rw.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+func TestSignatureMiddlewaresRejectWrongAlgorithmPrefix(t *testing.T) {
+	t.Parallel()
+	const secret = "shared-secret"
+	const body = `{"event":"test"}`
+	tests := []struct {
+		name       string
+		headerName string
+		header     string
+		middleware func(http.Handler) http.Handler
+	}{
+		{
+			name:       "GitHub SHA-256",
+			headerName: "X-Hub-Signature-256",
+			header:     strings.Replace(githubSig(secret, body), "sha256=", "sha1=", 1),
+			middleware: requireGitHub(t, secret),
+		},
+		{
+			name:       "GitHub legacy SHA-1",
+			headerName: "X-Hub-Signature",
+			header:     strings.Replace(githubLegacySig(secret, body), "sha1=", "sha256=", 1),
+			middleware: requireGitHubLegacy(t, secret),
+		},
+		{
+			name:       "generic HMAC SHA-256",
+			headerName: "X-Signature",
+			header:     strings.Replace(githubSig(secret, body), "sha256=", "md5=", 1),
+			middleware: requireHMAC(t, secret, "X-Signature"),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+			req.Header.Set(test.headerName, test.header)
+			response := httptest.NewRecorder()
+			test.middleware(okHandler()).ServeHTTP(response, req)
+			if response.Code != http.StatusUnauthorized {
+				t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+			}
+		})
 	}
 }
 
@@ -292,7 +565,7 @@ func TestSlack_expiredTimestamp(t *testing.T) {
 	ts := time.Now().Add(-10 * time.Minute).Unix()
 	sig := slackSig(secret, body, ts)
 
-	handler := in.Slack(secret)(okHandler())
+	handler := requireSlack(t, secret)(okHandler())
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
 	req.Header.Set("X-Slack-Request-Timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("X-Slack-Signature", sig)

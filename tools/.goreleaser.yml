@@ -15,14 +15,6 @@ version: 2
 
 project_name: golusoris
 
-before:
-  hooks:
-    - go mod tidy
-    # No `go generate ./...`: the only generate directive is pkg/sockmap's
-    # clang/llvm-strip eBPF compile, whose output (bpf/sockmap.bpf.o) is
-    # committed and embedded. The release runner has no clang/kernel headers,
-    # so regenerating it only breaks the build; releases use committed sources.
-
 builds:
   - id: golusoris
     main: ./cmd/golusoris
@@ -31,7 +23,7 @@ builds:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
-    flags: [-trimpath]
+    flags: [-trimpath, -mod=readonly]
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -44,7 +36,7 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
-    flags: [-trimpath]
+    flags: [-trimpath, -mod=readonly]
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -106,6 +98,10 @@ release:
   github:
     owner: golusoris
     name: golusoris
-  draft: false
+  # Release workflow publishes this draft only after signature and provenance
+  # verification. Re-runs resume a failed draft and replace partial assets.
+  draft: true
+  use_existing_draft: true
+  replace_existing_artifacts: true
   prerelease: auto
   mode: replace

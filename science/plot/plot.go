@@ -10,6 +10,7 @@
 package plot
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -37,7 +38,7 @@ func New(title, xLabel, yLabel string) (*Chart, error) {
 // AddLine adds a line series from xy pairs.
 func (c *Chart) AddLine(label string, xs, ys []float64) error {
 	if len(xs) != len(ys) {
-		return fmt.Errorf("plot: xs and ys must have equal length")
+		return errors.New("plot: xs and ys must have equal length")
 	}
 	pts := make(plotter.XYs, len(xs))
 	for i := range xs {
@@ -55,7 +56,7 @@ func (c *Chart) AddLine(label string, xs, ys []float64) error {
 // AddScatter adds a scatter series.
 func (c *Chart) AddScatter(label string, xs, ys []float64) error {
 	if len(xs) != len(ys) {
-		return fmt.Errorf("plot: xs and ys must have equal length")
+		return errors.New("plot: xs and ys must have equal length")
 	}
 	pts := make(plotter.XYs, len(xs))
 	for i := range xs {

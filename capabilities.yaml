@@ -12,8 +12,7 @@ framework: github.com/golusoris/golusoris
 modules:
   - github.com/golusoris/golusoris/container/registry
   - github.com/golusoris/golusoris/core
-  - github.com/golusoris/golusoris/deploy/multiregion
-  - github.com/golusoris/golusoris/deploy/pulumi
+  - github.com/golusoris/golusoris/deploy
   - github.com/golusoris/golusoris/hw/fssnap
   - github.com/golusoris/golusoris/hw/gpio
   - github.com/golusoris/golusoris/hw/robotics
@@ -334,13 +333,13 @@ packages:
     description: "Package timescale provides TimescaleDB hypertable helpers for pgx/v5."
     replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/deploy/multiregion
-    module: github.com/golusoris/golusoris/deploy/multiregion
+    module: github.com/golusoris/golusoris/deploy
     domain: deploy
     capabilities: [deploy.multiregion]
     description: "Command golusoris-multiregion is a reference Pulumi (Go) program for an active/passive two-region golusoris deployment: Aurora Global Database (writer in the pr"
     replaces: [github.com/pulumi/pulumi-aws/sdk/v7, github.com/pulumi/pulumi/sdk/v3]
   - import: github.com/golusoris/golusoris/deploy/pulumi
-    module: github.com/golusoris/golusoris/deploy/pulumi
+    module: github.com/golusoris/golusoris/deploy
     domain: deploy
     capabilities: [deploy.pulumi]
     description: "Command golusoris-app is a reference Pulumi (Go) program deploying a golusoris application on AWS: VPC + RDS Postgres + ElastiCache Redis + ECS Fargate behind a"
@@ -622,15 +621,15 @@ packages:
   - import: github.com/golusoris/golusoris/media/av
     module: github.com/golusoris/golusoris/media/av
     domain: media
-    capabilities: [media.av]
-    description: "Package av wraps FFmpeg via go-astiav (CGO) for audio/video transcoding and media probing."
-    replaces: [github.com/asticode/go-astiav]
+    capabilities: [media.av_spi]
+    description: "Package av defines audio/video probing and transcoding interfaces; no runtime backend is bundled."
+    status: experimental
   - import: github.com/golusoris/golusoris/media/cv
     module: github.com/golusoris/golusoris/media/cv
     domain: media
-    capabilities: [media.cv]
-    description: "Package cv provides computer vision helpers backed by OpenCV via gocv (CGO)."
-    replaces: [gocv.io/x/gocv]
+    capabilities: [media.cv_spi]
+    description: "Package cv defines computer-vision interfaces; no runtime backend is bundled."
+    status: experimental
   - import: github.com/golusoris/golusoris/media/game
     module: github.com/golusoris/golusoris/media/game
     domain: media
@@ -640,14 +639,14 @@ packages:
   - import: github.com/golusoris/golusoris/media/img
     module: github.com/golusoris/golusoris/media/img
     domain: media
-    capabilities: [media.img]
-    description: "Package img provides image processing helpers backed by libvips via govips (CGO)."
-    replaces: [github.com/davidbyttow/govips, github.com/disintegration/imaging, github.com/h2non/bimg]
+    capabilities: [media.img_spi]
+    description: "Package img defines image-processing interfaces; no runtime backend is bundled."
+    status: experimental
   - import: github.com/golusoris/golusoris/media/img/pipeline
     module: github.com/golusoris/golusoris/media/img
     domain: media
     capabilities: [media.img_pipeline]
-    description: "Package pipeline provides on-demand image resize + signed-URL serving on top of the media/img govips transforms."
+    description: "Package pipeline provides bounded signed-URL resize orchestration over an injected media/img Processor."
   - import: github.com/golusoris/golusoris/money
     domain: payments
     capabilities: [payments.money]
@@ -869,8 +868,7 @@ packages:
     module: github.com/golusoris/golusoris/science/bio
     domain: science
     capabilities: [science.bio]
-    description: "Package bio provides bioinformatics helpers — sequence handling, FASTA/FASTQ parsing, and basic alignment utilities using biogo/biogo."
-    replaces: [github.com/biogo/biogo]
+    description: "Package bio provides bounded context-aware FASTA parsing, reverse-complement, and GC-content helpers."
   - import: github.com/golusoris/golusoris/science/numerical
     module: github.com/golusoris/golusoris/science/numerical
     domain: science

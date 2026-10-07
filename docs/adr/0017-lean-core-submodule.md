@@ -19,7 +19,8 @@ module that also holds `config`, `log`, and `clikit`. That is fine for apps
 that want the whole toolbox, but it disqualified golusoris for the other class
 of fleet consumer — governance and agent tooling such as
 [cordanallm/praetor](https://github.com/cordanallm/praetor), which is a
-one-dependency CLI by design (`security:high`, SLSA L3, SBOM-audited). Pulling
+one-dependency CLI by design (`security:high`, declared provenance policy,
+SBOM-audited). Pulling
 the root module into praetor to reuse `config` would have dragged the whole
 graph into its `go.sum` and SBOM.
 

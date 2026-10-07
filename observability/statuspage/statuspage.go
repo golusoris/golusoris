@@ -6,7 +6,7 @@
 // check registry. Checks are periodic functions reporting up/down + detail;
 // the page also shows process uptime.
 //
-// The check registry is shared with k8s/health (Step 6) so /livez and
+// The check registry is shared with k8s/health so /livez and
 // /readyz and /status all read from the same source.
 //
 // Accept: text/html → renders a small HTML page; Accept: application/json
@@ -21,11 +21,16 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/internal/snapshot"
 )
 
 // Status is a single check's current state.
@@ -38,6 +43,12 @@ const (
 	StatusDown     Status = "down"
 	StatusUnknown  Status = "unknown"
 )
+
+// ErrNilCheckFunc reports a registered check with no evaluator.
+var ErrNilCheckFunc = errors.New("statuspage: check function is nil")
+
+// ErrInvalidDetails reports metadata that cannot be copied or represented in JSON.
+var ErrInvalidDetails = errors.New("statuspage: check details cannot be safely snapshotted as JSON")
 
 // CheckFunc is the user-supplied evaluation. Return nil for "up"; a
 // non-nil error for "down" with the message surfaced; or a [Degraded] error
@@ -64,20 +75,15 @@ type Check struct {
 	// "liveness", "readiness", "startup" (defined in k8s/health).
 	Tags []string
 	Fn   CheckFunc
-	// Details, if set, returns structured metadata merged into the check's
-	// Result regardless of status (e.g. DB pool stats). Keep it cheap — it
-	// runs on every evaluation.
+	// Details, if set, returns JSON metadata merged into the check's Result.
+	// The registry makes type-preserving independent snapshots for callers,
+	// hooks, and its cache. Keep it cheap — it runs on every evaluation.
 	Details func(ctx context.Context) map[string]any
 }
 
 // HasTag reports whether the check carries the given tag.
 func (c Check) HasTag(tag string) bool {
-	for _, t := range c.Tags {
-		if t == tag {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(c.Tags, tag)
 }
 
 // Result is the latest state of a check.
@@ -109,6 +115,9 @@ type Registry struct {
 // NewRegistry returns an empty registry started at clk.Now(). Each check
 // runs with a per-call timeout (default 2s).
 func NewRegistry(clk clock.Clock) *Registry {
+	if validate.IsNil(clk) {
+		clk = clockwork.NewRealClock()
+	}
 	return &Registry{
 		results: make(map[string]Result),
 		started: clk.Now(),
@@ -121,6 +130,7 @@ func NewRegistry(clk clock.Clock) *Registry {
 func (r *Registry) Register(c Check) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	c.Tags = slices.Clone(c.Tags)
 	r.checks = append(r.checks, c)
 }
 
@@ -128,6 +138,9 @@ func (r *Registry) Register(c Check) {
 // run in registration order. Used by k8s/metrics/prom to mirror check
 // status into Prometheus gauges.
 func (r *Registry) OnRun(fn RunHook) {
+	if fn == nil {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.hooks = append(r.hooks, fn)
@@ -161,12 +174,12 @@ func (r *Registry) run(ctx context.Context, tag string) []Result {
 	}
 	r.mu.Lock()
 	for _, res := range out {
-		r.results[res.Name] = res
+		r.results[res.Name] = cloneResult(res)
 	}
 	hooks := append([]RunHook(nil), r.hooks...)
 	r.mu.Unlock()
 	for _, fn := range hooks {
-		fn(ctx, out)
+		fn(ctx, cloneResults(out))
 	}
 	return out
 }
@@ -178,9 +191,32 @@ func (r *Registry) Cached() []Result {
 	defer r.mu.RUnlock()
 	out := make([]Result, 0, len(r.results))
 	for _, v := range r.results {
-		out = append(out, v)
+		out = append(out, cloneResult(v))
 	}
 	return out
+}
+
+func cloneResults(results []Result) []Result {
+	cloned := make([]Result, len(results))
+	for i := range results {
+		cloned[i] = cloneResult(results[i])
+	}
+	return cloned
+}
+
+func cloneResult(result Result) Result {
+	if result.Details == nil {
+		return result
+	}
+	details, err := snapshot.Clone(result.Details)
+	if err != nil {
+		result.Status = StatusDown
+		result.Message = ErrInvalidDetails.Error()
+		result.Details = nil
+		return result
+	}
+	result.Details = details
+	return result
 }
 
 // Uptime returns the duration since the registry was constructed.
@@ -194,7 +230,12 @@ func (r *Registry) runOne(ctx context.Context, c Check) Result {
 	start := r.clk.Now()
 	cctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	err := c.Fn(cctx)
+	var err error
+	if c.Fn == nil {
+		err = ErrNilCheckFunc
+	} else {
+		err = c.Fn(cctx)
+	}
 	latency := r.clk.Since(start)
 	res := Result{
 		Name:    c.Name,
@@ -203,8 +244,7 @@ func (r *Registry) runOne(ctx context.Context, c Check) Result {
 		At:      r.clk.Now(),
 	}
 	if err != nil {
-		var de *degradedError
-		if errors.As(err, &de) {
+		if _, ok := errors.AsType[*degradedError](err); ok {
 			res.Status = StatusDegraded
 		} else {
 			res.Status = StatusDown
@@ -213,8 +253,13 @@ func (r *Registry) runOne(ctx context.Context, c Check) Result {
 	}
 	if c.Details != nil {
 		res.Details = c.Details(cctx)
+		if _, detailErr := json.Marshal(res.Details); detailErr != nil {
+			res.Status = StatusDown
+			res.Message = ErrInvalidDetails.Error()
+			res.Details = nil
+		}
 	}
-	return res
+	return cloneResult(res)
 }
 
 // Handler returns an http.Handler that renders HTML or JSON based on the

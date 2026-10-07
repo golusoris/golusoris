@@ -36,9 +36,9 @@ We will use `go.uber.org/fx` as the dependency-injection and lifecycle backbone 
 
 - **Positive**: Apps wire 5-line `fx.New(golusoris.Core, golusoris.DB, golusoris.HTTP, ...)` instead of 100 lines of glue. Lifecycle hooks make ordered shutdown trivial. Each module is independently testable by composing only the deps it needs.
 - **Negative**: Runtime errors when graphs are misconfigured (missing provider, type collision) instead of compile-time errors. Mitigated by `go test` + `fxtest.New(t, ...)` in every module's tests.
-- **Follow-ups**: Every new module ships with an `fx.Module` + a smoke test (`fxtest.New`) verifying it can start + stop in isolation. Documented in [.claude/skills/wire-fx-module/](../../.claude/skills/wire-fx-module/).
+- **Follow-ups**: Every new module ships with an `fx.Module` + a smoke test (`fxtest.New`) verifying it can start + stop in isolation. Documented in [`.claude/skills/wire-fx-module.md`](https://github.com/golusoris/golusoris/blob/main/.claude/skills/wire-fx-module.md).
 
 ## References
 
-- fx pinned at v1.24.0 — see [`docs/upstream/fx/`](../upstream/fx/).
+- fx pinned at v1.24.0 — see [`docs/upstream/fx/`](../upstream/fx/README.md).
 - [principles.md §2.1](../principles.md) — Power of 10 rule on no `init()` side effects.

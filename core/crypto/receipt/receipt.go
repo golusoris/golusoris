@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Version is the receipt schema version written into every receipt.
@@ -85,7 +86,7 @@ func NewSigner(priv ed25519.PrivateKey, clk clock.Clock) (*Signer, error) {
 	if len(priv) != ed25519.PrivateKeySize {
 		return nil, fmt.Errorf("%w: private key is %d bytes, want %d", ErrBadKey, len(priv), ed25519.PrivateKeySize)
 	}
-	if clk == nil {
+	if validate.IsNil(clk) {
 		return nil, ErrNilClock
 	}
 	return &Signer{priv: priv, clk: clk}, nil

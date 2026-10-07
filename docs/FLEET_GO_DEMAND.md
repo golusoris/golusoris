@@ -147,7 +147,6 @@ capability golusoris could add, or a deliberate non-goal worth recording as one.
 
 ## Proposal
 
-
 Synthesis of 58 classified fleet-demand gaps (Task N14) against the pre-migration epic (#429: #431 decoupling, #432 dependency substitution, #433 verification, #434 activation). Verified against the actual `golusoris` package tree and `go.mod` rather than taken at face value — several classified `nearest_golusoris` paths referenced a `core/` prefix and packages (`core/gitx`, `core/codec/yaml`) that do not exist anywhere in the repository; those are corrected below.
 
 **Scale**: 58 items, 51 VMAFx/vmafx-only, 7 shared with other fleet repos (lusoris/20-watts-was-enough ×4, lusoris/k8s ×2, cordanaLLM/imago + lusoris/venio ×1 via testify).

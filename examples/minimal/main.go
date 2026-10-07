@@ -4,7 +4,7 @@
 
 // Command minimal demonstrates a minimal golusoris app composing five modules:
 // Core (config + log + clock + id), DB (pgx + migrate), HTTP (server + router),
-// OTel (tracer + meter), and K8s health probes (/livez /readyz /startupz).
+// OTel (tracer + meter), and K8s runtime metadata/client wiring.
 //
 // Run:
 //
@@ -22,10 +22,10 @@ import (
 
 func main() {
 	fx.New(
-		golusoris.Core, // config + log + lifecycle + errors + clock + id
-		golusoris.DB,   // pgx pool + migrations + sqlc helpers
+		golusoris.Core, // config + log + clock + id + validate + crypto
+		golusoris.DB,   // pgx pool + migrations
 		otel.Module,    // tracer + meter + logs + OTLP
-		golusoris.HTTP, // server + standard middleware + Scalar docs
-		golusoris.K8s,  // /livez /readyz /startupz + podinfo + prom /metrics
+		golusoris.HTTP, // chi router + HTTP server
+		golusoris.K8s,  // pod metadata + Kubernetes client
 	).Run()
 }

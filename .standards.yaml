@@ -3,9 +3,23 @@ repository:
     owner: golusoris
     name: golusoris
     visibility: public
-    description: ""
-    homepage: ""
-    topics: []
+    description: "Composable Go framework — opt-in fx modules for everything a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s, ...)."
+    homepage: "https://golusoris.github.io/golusoris/"
+    topics:
+        - backend
+        - framework
+        - fx
+        - go
+        - golang
+        - koanf
+        - kubernetes
+        - ogen
+        - opentelemetry
+        - pgx
+        - postgres
+        - river
+        - sqlc
+        - uber-fx
 profiles:
     - framework
 facets:
@@ -14,12 +28,25 @@ facets:
     - docs:seo-portal
     - agent:sandboxed
 
+# praetor#36 (BUG-371): the flavor detector classifies this framework library as a
+# go-service and scaffolds a service Dockerfile and security workflow it does not ship.
+adoption:
+    decline:
+        - working-dir-and-flavor
+
+# Declared gaps, one rule and one file each; an expired entry fails its gate again.
+exceptions:
+    - rule: HISS-11
+      path: .github/workflows/release.yml
+      reason: Release provenance is attested in the caller's build job (SLSA Build L2), not an isolated reusable workflow (L3); tracked in golusoris#619.
+      expires: "2027-01-05"
+
 # Framework archetype bounds (strictness can only be increased, never reduced).
 overrides:
     complexity:
         max_cyclomatic: 10
         max_cognitive: 15
-        max_func_loc: 75
+        max_func_loc: 60
         max_statements: 50
     branch_protection:
         enforce_linear_history: true
@@ -35,3 +62,19 @@ overrides:
         slsa_level: 3
         enforce_cosign: true
         require_sbom: true
+register:
+    sources:
+        expected: 13
+        sha256:
+            sha256:5409e0da4e037f7eae70f639c8dada48111c261e1b005b9b2f93904b6f82b8e8
+        inputs:
+            - path: .paperclip/harness.json
+              surface: prompts
+              kind: message
+              format: json
+              selector: operating_contract.*
+            - path: .paperclip/harness.json
+              surface: prompts
+              kind: message
+              format: json
+              selector: invariants.*

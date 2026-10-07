@@ -12,7 +12,7 @@ import (
 	xslog "golang.org/x/exp/slog"
 )
 
-// tusd v2.10.0 logs through golang.org/x/exp/slog, a distinct package from
+// tusd v2.10.1 logs through golang.org/x/exp/slog, a distinct package from
 // stdlib log/slog. xslogBridge adapts our injected *slog.Logger so tusd's
 // internal logs flow through the framework's handler instead of a second sink.
 

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+
+	corelog "github.com/golusoris/golusoris/core/log"
 )
 
 // noopScanner always reports Clean. It exists for local dev / tests where no
@@ -23,6 +25,9 @@ func NewNoopScanner(logger *slog.Logger) Scanner { return newNoopScanner(logger)
 
 // newNoopScanner builds the no-op backend and logs the loud disabled warning.
 func newNoopScanner(logger *slog.Logger) *noopScanner {
+	if logger == nil {
+		logger = corelog.New(corelog.Options{})
+	}
 	logger.Warn("storage/scan: NOOP backend selected — malware scanning is DISABLED")
 	return &noopScanner{logger: logger}
 }

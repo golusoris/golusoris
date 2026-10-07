@@ -1,20 +1,20 @@
 ---
 name: VibeSec-Skill
-description: This skill helps Claude write secure web applications. Use this when working on any web application or when a user requests a scan or audit to ensure security best practices are followed.
+description: This skill helps Claude write secure web applications. Use this when working on any web application or when user requests scan or audit to ensure security best practices are followed.
 ---
 
 # Secure Coding Guide for Web Applications
 
 ## Overview
 
-This guide provides comprehensive secure coding practices for web applications. As an AI assistant, your role is to approach code from a **bug hunter's perspective** and make applications **as secure as possible** without breaking functionality.
+This guide provides comprehensive secure coding practices for web applications. As AI assistant, your role is to approach code from **bug hunter's perspective** and make applications **as secure as possible** without breaking functionality.
 
 **Key Principles:**
-- Defense in depth: Never rely on a single security control
+- Defense in depth: Never rely on single security control
 - Fail securely: When something fails, fail closed (deny access)
 - Least privilege: Grant minimum permissions necessary
 - Input validation: Never trust user input, validate everything server-side
-- Output encoding: Encode data appropriately for the context it's rendered in
+- Output encoding: Encode data appropriately for context it's rendered in
 
 ---
 
@@ -27,32 +27,32 @@ Access control vulnerabilities occur when users can access resources or perform 
 For **every data point and action** that requires authentication:
 
 1. **User-Level Authorization**
-   - Each user must only access/modify their own data
-   - No user should access data from other users or organizations
-   - Always verify ownership at the data layer, not just the route level
+ - Each user must only access/modify their own data
+ - No user should access data from other users or organizations
+ - Always verify ownership at data layer, not route level
 
 2. **Use UUIDs Instead of Sequential IDs**
-   - Use UUIDv4 or similar non-guessable identifiers
-   - Exception: Only use sequential IDs if explicitly requested by user
+ - Use UUIDv4 or similar non-guessable identifiers
+ - Exception: Only use sequential IDs if explicitly requested by user
 
 3. **Account Lifecycle Handling**
-   - When a user is removed from an organization: immediately revoke all access tokens and sessions
-   - When an account is deleted/deactivated: invalidate all active sessions and API keys
-   - Implement token revocation lists or short-lived tokens with refresh mechanisms
+ - When user is removed from organization: immediately revoke all access tokens and sessions
+ - When account is deleted/deactivated: invalidate all active sessions and API keys
+ - Implement token revocation lists or short-lived tokens with refresh mechanisms
 
 ### Authorization Checks Checklist
 
-- [ ] Verify user owns the resource on every request (don't trust client-side data)
+- [ ] Verify user owns resource on every request (don't trust client-side data)
 - [ ] Check organization membership for multi-tenant apps
 - [ ] Validate role permissions for role-based actions
 - [ ] Re-validate permissions after any privilege change
-- [ ] Check parent resource ownership (e.g., if accessing a comment, verify user owns the parent post)
+- [ ] Check parent resource ownership (e.g, if accessing comment, verify user owns parent post)
 
 ### Common Pitfalls to Avoid
 
-- **IDOR (Insecure Direct Object Reference)**: Always verify the requesting user has permission to access the requested resource ID
+- **IDOR (Insecure Direct Object Reference)**: Always verify requesting user has permission to access requested resource ID
 - **Privilege Escalation**: Validate role changes server-side; never trust role info from client
-- **Horizontal Access**: User A accessing User B's resources with the same privilege level
+- **Horizontal Access**: User accessing User B's resources with same privilege level
 - **Vertical Access**: Regular user accessing admin functionality
 - **Mass Assignment**: Filter which fields users can update; don't blindly accept all request body fields
 
@@ -79,7 +79,7 @@ function getResource(resourceId, currentUser):
 
 ### Cross-Site Scripting (XSS)
 
-Every input controllable by the user—whether directly or indirectly—must be sanitized against XSS.
+Every input controllable by user—whether directly or indirectly—must be sanitized against XSS.
 
 #### Input Sources to Protect
 
@@ -92,7 +92,7 @@ Every input controllable by the user—whether directly or indirectly—must be 
 **Indirect Inputs:**
 - URL parameters and query strings
 - URL fragments (hash values)
-- HTTP headers used in the application (Referer, User-Agent if displayed)
+- HTTP headers used in application (Referer, User-Agent if displayed)
 - Data from third-party APIs displayed to users
 - WebSocket messages
 - postMessage data from iframes
@@ -110,11 +110,11 @@ Every input controllable by the user—whether directly or indirectly—must be 
 #### Protection Strategies
 
 1. **Output Encoding** (Context-Specific)
-   - HTML context: HTML entity encode (`<` → `&lt;`)
-   - JavaScript context: JavaScript escape
-   - URL context: URL encode
-   - CSS context: CSS escape
-   - Use framework's built-in escaping (React's JSX, Vue's {{ }}, etc.)
+ - HTML context: HTML entity encode (`<` → `&lt;`)
+ - JavaScript context: JavaScript escape
+ - URL context: URL encode
+ - CSS context: CSS escape
+ - Use framework's built-in escaping (React's JSX, Vue's {{ }}, etc.)
 
 2. **Content Security Policy (CSP)**
    ```
@@ -129,18 +129,18 @@ Every input controllable by the user—whether directly or indirectly—must be 
      base-uri 'self';
      form-action 'self';
    ```
-   - Avoid `'unsafe-inline'` and `'unsafe-eval'` for scripts
-   - Use nonces or hashes for inline scripts when necessary
-   - Report violations: `report-uri /csp-report`
+ - Avoid `'unsafe-inline'` and `'unsafe-eval'` for scripts
+ - Use nonces or hashes for inline scripts when necessary
+ - Report violations: `report-uri /csp-report`
 
 3. **Input Sanitization**
-   - Use established libraries (DOMPurify for HTML)
-   - Whitelist allowed tags/attributes for rich text
-   - Strip or encode dangerous patterns
+ - Use established libraries (DOMPurify for HTML)
+ - Whitelist allowed tags/attributes for rich text
+ - Strip or encode dangerous patterns
 
 4. **Additional Headers**
-   - `X-Content-Type-Options: nosniff`
-   - `X-Frame-Options: DENY` (or use CSP frame-ancestors)
+ - `X-Content-Type-Options: nosniff`
+ - `X-Frame-Options: DENY` (or use CSP frame-ancestors)
 
 ---
 
@@ -168,26 +168,26 @@ Every state-changing endpoint must be protected against CSRF attacks.
 #### Protection Mechanisms
 
 1. **CSRF Tokens**
-   - Generate cryptographically random tokens
-   - Tie token to user session
-   - Validate on every state-changing request
-   - Regenerate after login (prevent session fixation combo)
+ - Generate cryptographically random tokens
+ - Tie token to user session
+ - Validate on every state-changing request
+ - Regenerate after login (prevent session fixation combo)
 
 2. **SameSite Cookies**
    ```
    Set-Cookie: session=abc123; SameSite=Strict; Secure; HttpOnly
    ```
-   - `Strict`: Cookie never sent cross-site (best security)
-   - `Lax`: Cookie sent on top-level navigations (good balance)
-   - Always combine with CSRF tokens for defense in depth
+ - `Strict`: Cookie never sent cross-site (best security)
+ - `Lax`: Cookie sent on top-level navigations (good balance)
+ - Always combine with CSRF tokens for defense in depth
 
 3. **Double Submit Cookie Pattern**
-   - Send CSRF token in both cookie and request body/header
-   - Server validates they match
+ - Send CSRF token in both cookie and request body/header
+ - Server validates they match
 
 #### Edge Cases and Common Mistakes
 
-- **Token presence check**: CSRF validation must NOT depend on whether the token is present, always require it
+- **Token presence check**: CSRF validation must NOT depend on whether token is present, always require it
 - **Token per form**: Consider unique tokens per form for sensitive operations
 - **JSON APIs**: Don't assume JSON content-type prevents CSRF; validate Origin/Referer headers AND use tokens
 - **CORS misconfiguration**: Overly permissive CORS can bypass SameSite cookies
@@ -258,7 +258,7 @@ No secrets or sensitive information should be accessible to client-side code.
 
 ## Open Redirect
 
-Any endpoint accepting a URL for redirection must be protected against open redirect attacks.
+Any endpoint accepting URL for redirection must be protected against open redirect attacks.
 
 ### Protection Strategies
 
@@ -272,11 +272,11 @@ Any endpoint accepting a URL for redirection must be protected against open redi
    ```
 
 2. **Relative URLs Only**
-   - Only accept paths (e.g., `/dashboard`) not full URLs
-   - Validate the path starts with `/` and doesn't contain `//`
+ - Only accept paths (e.g, `/dashboard`) not full URLs
+ - Validate path starts with `/` and doesn't contain `//`
 
 3. **Indirect References**
-   - Use a mapping instead of raw URLs: `?redirect=dashboard` → lookup to `/dashboard`
+ - Use mapping instead of raw URLs: `?redirect=dashboard` → lookup to `/dashboard`
 
 ### Bypass Techniques to Block
 
@@ -307,7 +307,7 @@ Any endpoint accepting a URL for redirection must be protected against open redi
 #### Password Requirements
 
 - Minimum 8 characters (12+ recommended)
-- No maximum length (or very high, e.g., 128 chars)
+- No maximum length (or very high, e.g, 128 chars)
 - Allow all characters including special chars
 - Don't require specific character types (let users choose strong passwords)
 
@@ -322,7 +322,7 @@ Any endpoint accepting a URL for redirection must be protected against open redi
 
 ### Server-Side Request Forgery (SSRF)
 
-Any functionality where the server makes requests to URLs provided or influenced by users must be protected.
+Any functionality where server makes requests to URLs provided or influenced by users must be protected.
 
 #### Potential Vulnerable Features
 
@@ -339,12 +339,12 @@ Any functionality where the server makes requests to URLs provided or influenced
 #### Protection Strategies
 
 1. **Allowlist Approach** (Preferred)
-   - Only allow requests to pre-approved domains
-   - Maintain a strict allowlist for integrations
+ - Only allow requests to pre-approved domains
+ - Maintain strict allowlist for integrations
 
 2. **Network Segmentation**
-   - Run URL-fetching services in isolated network
-   - Block access to internal network, cloud metadata
+ - Run URL-fetching services in isolated network
+ - Block access to internal network, cloud metadata
 
 #### IP and DNS Bypass Techniques to Block
 
@@ -367,7 +367,7 @@ Any functionality where the server makes requests to URLs provided or influenced
 
 1. Resolve DNS before making request
 2. Validate resolved IP is not internal
-3. Pin the resolved IP for the request (don't re-resolve)
+3. Pin resolved IP for request (don't re-resolve)
 4. Or: Resolve twice with delay, ensure both resolve to same external IP
 
 #### Cloud Metadata Protection
@@ -400,7 +400,7 @@ File uploads must validate type, content, and size to prevent various attacks.
 **1. File Type Validation**
 - Check file extension against allowlist
 - Validate magic bytes/file signature match expected type
-- Never rely on just one check
+- Never rely on one check
 
 **2. File Content Validation**
 - Read and verify magic bytes
@@ -446,9 +446,9 @@ File uploads must validate type, content, and size to prevent various attacks.
 1. **Rename files**: Use random UUID names, discard original
 2. **Store outside webroot**: Or use separate domain for uploads
 3. **Serve with correct headers**:
-   - `Content-Disposition: attachment` (forces download)
-   - `X-Content-Type-Options: nosniff`
-   - `Content-Type` matching actual file type
+ - `Content-Disposition: attachment` (forces download)
+ - `X-Content-Type-Options: nosniff`
+ - `Content-Type` matching actual file type
 4. **Use CDN/separate domain**: Isolate uploaded content from main app
 5. **Set restrictive permissions**: Uploaded files should not be executable
 
@@ -695,7 +695,7 @@ jwt.verify(token, secret, { algorithms: ['HS256'] }, (err, decoded) => {
 
 - [ ] Algorithm explicitly specified on verification (never trust token header)
 - [ ] `alg: none` rejected
-- [ ] Secret is 256+ bits of random data (not a password or phrase)
+- [ ] Secret is 256+ bits of random data (not password or phrase)
 - [ ] `exp` claim always set and validated
 - [ ] Tokens stored in httpOnly cookies (not localStorage/sessionStorage)
 - [ ] Refresh token rotation implemented (old refresh token invalidated on use)
@@ -718,7 +718,7 @@ const updates = pick(req.body, allowed)
 User.update(updates)
 ```
 
-This applies to any ORM/framework — always explicitly define which fields a request can modify.
+This applies to any ORM/framework — always explicitly define which fields request can modify.
 
 ### GraphQL
 
@@ -749,10 +749,10 @@ When generating code, always:
 1. **Validate all input server-side** — Never trust client-side validation alone
 2. **Use parameterized queries** — Never concatenate user input into queries
 3. **Encode output contextually** — HTML, JS, URL, CSS contexts need different encoding
-4. **Apply authentication checks** — On every endpoint, not just at routing
-5. **Apply authorization checks** — Verify the user can access the specific resource
+4. **Apply authentication checks** — On every endpoint, not at routing
+5. **Apply authorization checks** — Verify user can access specific resource
 6. **Use secure defaults**
 7. **Handle errors securely** — Don't leak stack traces or internal details to users
 8. **Keep dependencies updated** — Use tools to track vulnerable dependencies
 
-When unsure, choose the more restrictive/secure option and document the security consideration in comments.
+When unsure, choose more restrictive/secure option and document security consideration in comments.

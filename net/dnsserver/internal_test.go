@@ -5,10 +5,22 @@
 package dnsserver
 
 import (
+	"context"
+	"log/slog"
+	"net"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/miekg/dns"
+	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
 )
+
+type lifecycleRecorder struct{ hook fx.Hook }
+
+func (l *lifecycleRecorder) Append(hook fx.Hook) { l.hook = hook }
 
 func TestWithDefaults_zero(t *testing.T) {
 	t.Parallel()
@@ -48,5 +60,40 @@ func TestNewServeMux(t *testing.T) {
 	t.Parallel()
 	if newServeMux() == nil {
 		t.Error("newServeMux returned nil")
+	}
+}
+
+func TestRegister_TCPBindFailureReturnsAndCleansUDP(t *testing.T) {
+	t.Parallel()
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("occupy TCP address: %v", err)
+	}
+	t.Cleanup(func() { _ = occupied.Close() })
+
+	lifecycle := &lifecycleRecorder{}
+	register(params{
+		LC:     lifecycle,
+		Cfg:    Config{Addr: occupied.Addr().String(), UDPSize: defaultUDPSize},
+		Mux:    dns.NewServeMux(),
+		Logger: slog.New(slog.DiscardHandler),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	startErr := lifecycle.hook.OnStart(ctx)
+
+	probe, probeErr := net.ListenPacket("udp", occupied.Addr().String())
+	if probeErr == nil {
+		_ = probe.Close()
+	}
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), time.Second)
+	defer stopCancel()
+	_ = lifecycle.hook.OnStop(stopCtx)
+
+	if startErr == nil || !strings.Contains(startErr.Error(), "tcp") {
+		t.Fatalf("OnStart error = %v; want immediate TCP serve failure", startErr)
+	}
+	if probeErr != nil {
+		t.Fatalf("UDP listener leaked after failed start: %v", probeErr)
 	}
 }

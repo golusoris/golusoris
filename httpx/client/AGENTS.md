@@ -4,27 +4,41 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — httpx/client
+# httpx/client
 
-Builds outbound `*http.Client` with retry, circuit breaker, and OTel spans.
+Bounded outbound client. Retry. Breaker. OTel. Slog.
 
-## Layering (outer → inner)
+## Stack
 
-```
+```text
 circuit-breaker → retry → otelhttp → stdlib transport
 ```
 
-- **Circuit breaker outermost** so an open breaker short-circuits without entering the retry loop. 5xx + network errors trip the breaker; 4xx do not.
-- **Retry** uses hashicorp/go-retryablehttp — retries on 429/5xx + network errors with exponential backoff + jitter.
-- **OTel** emits one span per HTTP request (per retry attempt).
+- Breaker outside retry. Open breaker stops request.
+- Retry on network error, 429, 5xx.
+- Default retry only safe/idempotent method.
+- Unsafe method retry only with `Idempotency-Key` or `Retry.AllowUnsafe`.
+- Retried body requires `Request.GetBody`. missing replay factory returns
+ `ErrBodyNotReplayable` before network I/O; transport never buffers body.
+- Exhausted HTTP-status retries return final response. caller owns body.
+- OTel span per attempt.
 
-## Conventions
+## Rules
 
-- Apps calling third-party APIs build a client per upstream with a distinctive `Name` — breaker state-change logs + OTel spans then tell you which dependency is flaky.
-- `Timeout` covers the entire request lifecycle (including redirects + body read). For long-running endpoints, prefer `ctx` deadlines.
-- `Drain(ctx, resp)` is the canonical way to return a response body to the connection pool after an early error path.
+- One client per upstream. Unique `Name`.
+- Non-positive timeout defaults to 30s. Caller context may be shorter.
+- `CloneBounded(client, fallback)` clones injected clients and fills missing or
+ non-positive timeouts without mutating caller-owned configuration.
+- `ReadAllBounded(reader, max)` accepts exact-size bodies and returns
+ `ErrBodyTooLarge` after one sentinel byte on overflow.
+- Non-positive retry waits default to 500ms/10s; breaker open time to 30s.
+- `Retry.Max=0`: retry off.
+- `Breaker.Max=0`: breaker off.
+- Use `Drain(ctx, resp)` on early exit. Drain caps at 1 MiB, five seconds, and
+  two cleanup goroutines even when a custom body blocks in `Read` or `Close`.
 
-## Don't
+## Never
 
-- Don't use `http.DefaultClient` for external calls. No timeout + no retries + no tracing = production pain.
-- Don't set `Retry.Max` very high (>5) — retries compound latency under load. Prefer breaker + circuit-breaker for long outages.
+- No `http.DefaultClient` for external I/O.
+- No unsafe retry without idempotency proof.
+- No large retry count. Retry amplifies outage load.

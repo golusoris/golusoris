@@ -18,11 +18,14 @@ import (
 // Mistral, LM Studio, …). For native Anthropic/Ollama clients use the
 // ai/llm/anthropic and ai/llm/ollama subpackages directly.
 type Options struct {
-	BaseURL    string        `koanf:"base_url"`
-	APIKey     string        `koanf:"api_key"`
-	Model      string        `koanf:"model"`
-	EmbedModel string        `koanf:"embed_model"`
-	Timeout    time.Duration `koanf:"timeout"`
+	BaseURL             string        `koanf:"base_url"`
+	APIKey              string        `koanf:"api_key"`
+	Model               string        `koanf:"model"`
+	EmbedModel          string        `koanf:"embed_model"`
+	Timeout             time.Duration `koanf:"timeout"`
+	MaxResponseBytes    int64         `koanf:"max_response_bytes"`
+	MaxErrorBytes       int64         `koanf:"max_error_bytes"`
+	MaxStreamFrameBytes int           `koanf:"max_stream_frame_bytes"`
 }
 
 func loadOptions(cfg *config.Config) (Options, error) {
@@ -33,9 +36,17 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
-func newClient(opts Options) Client {
-	// Options mirrors Config (with koanf tags); a direct conversion is exact.
-	return NewOpenAIClient(Config(opts))
+func newClient(opts Options) (Client, error) {
+	client, err := NewOpenAIClient(Config{
+		BaseURL: opts.BaseURL, APIKey: opts.APIKey, Model: opts.Model,
+		EmbedModel: opts.EmbedModel, Timeout: opts.Timeout,
+		MaxResponseBytes: opts.MaxResponseBytes, MaxErrorBytes: opts.MaxErrorBytes,
+		MaxStreamFrameBytes: opts.MaxStreamFrameBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ai/llm: create client: %w", err)
+	}
+	return client, nil
 }
 
 // Module provides an OpenAI-compatible ai/llm.Client built from config.

@@ -67,3 +67,41 @@ func TestRenderTo(t *testing.T) {
 		t.Fatalf("expected h1 tag, got: %s", buf.String())
 	}
 }
+
+func TestRenderTo_nilBufferReturnsError(t *testing.T) {
+	t.Parallel()
+	if err := markdown.RenderTo(nil, []byte("# Title")); err == nil {
+		t.Fatal("expected nil buffer error")
+	}
+}
+
+func TestRender_extensions(t *testing.T) {
+	t.Parallel()
+	src := "# Hello World\n\nline one\nline two\n\n- [x] done\n\n[^1]\n\n[^1]: note\n\n\"quoted\""
+	out, err := markdown.RenderString(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`<h1 id="hello-world">`,
+		"line one<br />",
+		`type="checkbox"`,
+		`class="footnotes"`,
+		"“quoted”",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected %q in extension output: %s", want, out)
+		}
+	}
+}
+
+func TestRender_doesNotEnableUnsafeHTML(t *testing.T) {
+	t.Parallel()
+	out, err := markdown.RenderString(`<script>alert("x")</script>`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "<script>") {
+		t.Fatalf("unsafe HTML rendered: %s", out)
+	}
+}

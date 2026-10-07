@@ -22,7 +22,11 @@ for spec in "$@"; do
   fi
 
   package="${spec%%=*}"
-  status="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null || true)"
+  # dpkg-query fails for a package dpkg does not know; that is the not-installed answer below.
+  status=""
+  if queried="$(dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null)"; then
+    status="$queried"
+  fi
   if [[ "$status" != "installed ok installed" ]]; then
     echo "::error::required system package is not pre-baked in the ARC image: $spec"
     exit 1

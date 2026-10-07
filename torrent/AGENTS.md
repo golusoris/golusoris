@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — torrent/
 
-Backend-agnostic `Client` over a running torrent daemon. The concrete backend
+Backend-agnostic `Client` over running torrent daemon. concrete backend
 (rtorrent, qBittorrent, transmission) is selected by config, mirroring how
 `storage/` selects local vs s3.
 
@@ -25,12 +25,11 @@ type Client interface {
 }
 ```
 
-`Add`/`AddFile` return the info-hash when the backend reports one
-synchronously. rtorrent and qBittorrent do **not** return a hash on add, so the
-returned string is empty there — re-`List` to find the new torrent. transmission
-returns the hash directly.
+`Add`/`AddFile` return info-hash when backend reports one
+synchronously. rtorrent and qBittorrent do **not** return hash on add, so returned string is empty there — re-`List` to find new torrent. transmission
+returns hash directly.
 
-State is normalised onto a small shared vocabulary (`downloading`, `seeding`,
+State is normalised onto small shared vocabulary (`downloading`, `seeding`,
 `paused`, `checking`, `queued`, `error`, `unknown`); each backend's native
 states map onto it.
 
@@ -46,7 +45,7 @@ Unknown / not-compiled backends fail construction with `ErrUnsupportedBackend`.
 
 ## Config
 
-Keys live under the `torrent` prefix. `timeout` caps every daemon round-trip
+Keys live under `torrent` prefix. `timeout` caps every daemon round-trip
 (applied to each backend's `*http.Client`; default 30s).
 
 ```yaml
@@ -80,16 +79,16 @@ fx.New(
 )
 ```
 
-The qBittorrent backend logs in on `fx.Lifecycle` `OnStart` (bounded by fx's
-start timeout) — selecting `qbittorrent` makes app start depend on the daemon
+qBittorrent backend logs in on `fx.Lifecycle` `OnStart` (bounded by fx's
+start timeout) — selecting `qbittorrent` makes app start depend on daemon
 being reachable. rtorrent and transmission are stateless at construction.
 
 ## Don't
 
-- Don't expect `Add`/`AddFile` to return a hash on rtorrent/qBittorrent — only
-  transmission does. Re-`List` to find the torrent.
-- Don't construct a backend's `*http.Client` without a `Timeout` — `Options.Timeout`
-  is plumbed into every backend (CI rule `http-client-must-set-timeout`).
+- Don't expect `Add`/`AddFile` to return hash on rtorrent/qBittorrent — only
+ transmission does. Re-`List` to find torrent.
+- Don't construct a backend's `*http.Client` without `Timeout` — `Options.Timeout`
+ is plumbed into every backend (CI rule `http-client-must-set-timeout`).
 - Don't enable `insecure_skip_verify` in production — it disables TLS validation.
 - Don't add per-torrent N+1 status calls in hot paths — rtorrent's `Get` already
-  issues several XML-RPC round-trips; prefer `List` for bulk reads.
+ issues several XML-RPC round-trips; prefer `List` for bulk reads.

@@ -6,8 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — ai/vector/
 
-pgvector helpers for storing and querying vector embeddings using the
-PostgreSQL `pgvector` extension. Wraps `pgvector/pgvector-go` types for use
+pgvector helpers for storing and querying vector embeddings using PostgreSQL `pgvector` extension. Wraps `pgvector/pgvector-go` types for use
 with pgx/v5.
 
 ## Core types
@@ -42,6 +41,6 @@ ids, err := vector.SimilaritySearch(ctx, pool, vector.SearchQuery{
 ## Don't
 
 - Don't forget to call `RegisterTypes` at startup — pgx won't know how to
-  encode/decode `vector` columns otherwise.
+ encode/decode `vector` columns otherwise.
 - Don't pass user-controlled strings as `Table` or `IDColumn` — SQL injection.
-- Don't store embeddings without an HNSW or IVFFlat index on large tables.
+- Don't store embeddings without HNSW or IVFFlat index on large tables.

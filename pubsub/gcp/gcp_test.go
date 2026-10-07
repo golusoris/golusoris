@@ -233,6 +233,19 @@ func TestClosedClientBoundary(t *testing.T) {
 	}
 }
 
+func TestSubscribeRejectsNilHandler(t *testing.T) {
+	t.Parallel()
+	pc, _ := newTestClient(t, "proj-nil-handler")
+	c := gcp.ClientFromPubsub(pc)
+	t.Cleanup(func() { _ = c.Close() })
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := c.Subscribe(ctx, "subscription", nil)
+	if !errors.Is(err, gcp.ErrNilHandler) {
+		t.Fatalf("Subscribe nil handler error = %v; want ErrNilHandler", err)
+	}
+}
+
 // TestPublisherRaceWithClose is the concurrency boundary the review flagged:
 // a Publisher call racing a concurrent Close must never observe the client
 // as still open and cache a publisher that Close's own stop loop has

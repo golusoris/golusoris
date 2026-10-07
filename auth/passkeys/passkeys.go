@@ -52,7 +52,7 @@ func New(opts Options) (*Service, error) {
 	cfg := &webauthn.Config{
 		RPID:          opts.RPID,
 		RPDisplayName: opts.RPName,
-		RPOrigins:     opts.RPOrigins,
+		RPOrigins:     append([]string(nil), opts.RPOrigins...),
 	}
 	wa, err := webauthn.New(cfg)
 	if err != nil {

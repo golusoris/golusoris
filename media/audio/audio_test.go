@@ -7,7 +7,9 @@ package audio_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -59,6 +61,34 @@ func readFixture(t *testing.T, name string) []byte {
 	return b
 }
 
+type trackingReadSeeker struct {
+	*bytes.Reader
+	reads     int
+	bytesRead int
+}
+
+func (r *trackingReadSeeker) Read(p []byte) (int, error) {
+	r.reads++
+	n, err := r.Reader.Read(p)
+	r.bytesRead += n
+	return n, err
+}
+
+type trackingReader struct {
+	data  []byte
+	reads int
+}
+
+func (r *trackingReader) Read(p []byte) (int, error) {
+	r.reads++
+	if len(r.data) == 0 {
+		return 0, io.EOF
+	}
+	n := copy(p, r.data)
+	r.data = r.data[n:]
+	return n, nil
+}
+
 func TestNewAnalyzer(t *testing.T) {
 	t.Parallel()
 	if _, err := audio.NewAnalyzer(audio.Options{}, nil); err == nil {
@@ -70,6 +100,27 @@ func TestNewAnalyzer(t *testing.T) {
 	}
 	if _, err := audio.NewAnalyzer(audio.Options{}, discardLogger()); err != nil {
 		t.Fatalf("zero options should be valid: %v", err)
+	}
+	if _, err := audio.NewAnalyzer(audio.Options{
+		DefaultPeakBuckets: 5,
+		MaxPeakBuckets:     4,
+	}, discardLogger()); err == nil {
+		t.Fatal("default buckets above maximum should fail")
+	}
+}
+
+func TestNewAnalyzerRejectsUnsupportedBackend(t *testing.T) {
+	t.Parallel()
+	for _, backend := range []string{"ffmpeg", "purego", " pureGo "} {
+		_, err := audio.NewAnalyzer(audio.Options{Backend: backend}, discardLogger())
+		if err == nil {
+			t.Errorf("NewAnalyzer(Backend=%q) error = nil, want unsupported-backend error", backend)
+		}
+	}
+	for _, backend := range []string{"", "pureGo"} {
+		if _, err := audio.NewAnalyzer(audio.Options{Backend: backend}, discardLogger()); err != nil {
+			t.Errorf("NewAnalyzer(Backend=%q) error = %v, want nil", backend, err)
+		}
 	}
 }
 
@@ -133,6 +184,120 @@ func TestProbeMaxDuration(t *testing.T) {
 	}
 }
 
+func TestProbeSeekableReadsHeadersOnly(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{fixWAV, fixAIFF} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			data := readFixture(t, name)
+			source := &trackingReadSeeker{Reader: bytes.NewReader(data)}
+			a := newAnalyzer(t, audio.Options{})
+
+			if _, err := a.Probe(context.Background(), source, ""); err != nil {
+				t.Fatalf("Probe() error = %v", err)
+			}
+			if source.bytesRead > 4096 {
+				t.Fatalf("Probe() read %d bytes from seekable input; want header-only <= 4096", source.bytesRead)
+			}
+		})
+	}
+}
+
+func TestEncodedInputBoundaryAllFormats(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		file string
+	}{
+		{name: "wav", file: fixWAV},
+		{name: "mp3", file: fixMP3},
+		{name: "ogg", file: fixOGG},
+		{name: "flac", file: fixFLAC},
+		{name: "aiff", file: fixAIFF},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			data := readFixture(t, tt.file)
+			maxInputBytes := int64(len(data))
+			a := newAnalyzer(t, audio.Options{MaxInputBytes: maxInputBytes})
+
+			info, err := a.Probe(context.Background(), bytes.NewReader(data), "")
+			if err != nil {
+				t.Fatalf("Probe(exact input limit): %v", err)
+			}
+			if info.Duration <= 0 {
+				t.Fatal("Probe(exact input limit) lost seekable duration")
+			}
+
+			over := append(append([]byte(nil), data...), 0)
+			source := &trackingReadSeeker{Reader: bytes.NewReader(over)}
+			_, err = a.Probe(context.Background(), source, "")
+			if !errors.Is(err, audio.ErrInputTooLarge) {
+				t.Fatalf("Probe(input limit + 1) error = %v; want ErrInputTooLarge", err)
+			}
+			if source.reads != 0 {
+				t.Fatalf("Probe(input limit + 1) reads = %d; want 0 before decoder construction", source.reads)
+			}
+		})
+	}
+}
+
+func TestDecodeMethodsHonorCancellationBeforeInputRead(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	a := newAnalyzer(t, audio.Options{})
+	for _, tt := range []struct {
+		name string
+		call func(io.Reader) error
+	}{
+		{
+			name: "waveform",
+			call: func(r io.Reader) error {
+				_, err := a.Waveform(ctx, r, audio.FormatOGG, 32)
+				return err
+			},
+		},
+		{
+			name: "loudness",
+			call: func(r io.Reader) error {
+				_, err := a.Loudness(ctx, r, audio.FormatFLAC)
+				return err
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			source := &trackingReader{data: []byte("must not be read")}
+			err := tt.call(source)
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("call error = %v; want context.Canceled", err)
+			}
+			if source.reads != 0 {
+				t.Fatalf("reads = %d; want 0", source.reads)
+			}
+		})
+	}
+}
+
+func TestProbeRejectsForgedWAVChannelCount(t *testing.T) {
+	t.Parallel()
+	for _, channels := range []uint16{audio.DefaultMaxChannels + 1, 65535} {
+		data := readFixture(t, fixWAV)
+		fmtOffset := bytes.Index(data, []byte("fmt "))
+		if fmtOffset < 0 || fmtOffset+12 > len(data) {
+			t.Fatal("WAV fixture has no complete fmt chunk")
+		}
+		binary.LittleEndian.PutUint16(data[fmtOffset+10:fmtOffset+12], channels)
+
+		a := newAnalyzer(t, audio.Options{})
+		_, err := a.Probe(context.Background(), bytes.NewReader(data), audio.FormatWAV)
+		if !errors.Is(err, audio.ErrCorrupt) {
+			t.Fatalf("Probe(channels=%d) error = %v, want ErrCorrupt", channels, err)
+		}
+	}
+}
+
 func TestWaveform(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -186,6 +351,28 @@ func TestWaveformDefaultBuckets(t *testing.T) {
 	}
 	if ps.Buckets != 256 {
 		t.Errorf("Buckets = %d, want 256 (default)", ps.Buckets)
+	}
+}
+
+func TestWaveformRejectsBucketsAboveLimitBeforeInputRead(t *testing.T) {
+	t.Parallel()
+	a := newAnalyzer(t, audio.Options{DefaultPeakBuckets: 4, MaxPeakBuckets: 4})
+	_, err := a.Waveform(context.Background(), bytes.NewReader(nil), "", 5)
+	if !errors.Is(err, audio.ErrInputTooLarge) {
+		t.Fatalf("Waveform error = %v; want ErrInputTooLarge", err)
+	}
+}
+
+func TestWaveformRejectsNegativeBucketsBeforeInputRead(t *testing.T) {
+	t.Parallel()
+	a := newAnalyzer(t, audio.Options{})
+	r := &trackingReader{data: []byte("not audio")}
+	_, err := a.Waveform(context.Background(), r, "", -1)
+	if !errors.Is(err, audio.ErrInputTooLarge) {
+		t.Fatalf("Waveform error = %v; want ErrInputTooLarge", err)
+	}
+	if r.reads != 0 {
+		t.Fatalf("input reads = %d, want 0", r.reads)
 	}
 }
 

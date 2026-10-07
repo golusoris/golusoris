@@ -2,34 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package av wraps FFmpeg via go-astiav (CGO) for audio/video transcoding and
-// media probing. FFmpeg shared libraries must be installed before use.
+// Package av defines backend-neutral audio/video probe and transcode contracts.
 //
-// Install system deps (Debian/Ubuntu):
-//
-//	apt-get install libavcodec-dev libavformat-dev libavutil-dev \
-//	    libswscale-dev libswresample-dev
-//
-// Install system deps (macOS):
-//
-//	brew install ffmpeg
-//
-// Activate implementation:
-//
-//  1. Remove //go:build ignore from media/av/impl_astiav.go
-//  2. Add the dep: go get github.com/asticode/go-astiav
-//  3. go mod tidy
-//
-// Usage:
-//
-//	p, err := av.NewProber(av.Options{})
-//	info, err := p.Probe(ctx, "video.mp4")
-//
-//	t, err := av.NewTranscoder(av.Options{})
-//	err = t.Transcode(ctx, "in.mp4", "out.webm", av.TranscodeOptions{
-//	    VideoCodec: "vp9",
-//	    AudioCodec: "opus",
-//	})
+// The repository does not ship an FFmpeg runtime backend. Applications provide
+// [Prober] and [Transcoder] implementations. The constructors fail explicitly
+// so an unavailable prototype cannot be mistaken for a working optional build.
 package av
 
 import (
@@ -38,8 +15,9 @@ import (
 	"time"
 )
 
-// ErrCGORequired is returned when the go-astiav implementation is not activated.
-var ErrCGORequired = errors.New("av: CGO implementation not activated; see package doc")
+// ErrCGORequired is returned because no runtime AV backend is bundled.
+// The name is retained for API compatibility.
+var ErrCGORequired = errors.New("av: no runtime backend is bundled; inject a Prober or Transcoder")
 
 // StreamInfo describes a single audio or video stream within a media file.
 type StreamInfo struct {
@@ -63,10 +41,10 @@ type MediaInfo struct {
 	Streams  []StreamInfo
 }
 
-// Options configures av helpers.
+// Options is retained for the compatibility constructors. It has no effect
+// while the repository ships no runtime backend.
 type Options struct {
-	// LogLevel controls FFmpeg log verbosity ("quiet", "error", "warning", "info").
-	// Default: "warning".
+	// LogLevel is reserved for application backends.
 	LogLevel string
 }
 
@@ -109,10 +87,9 @@ func (stubTranscoder) Transcode(_ context.Context, _, _ string, _ TranscodeOptio
 	return ErrCGORequired
 }
 
-// NewProber returns a [Prober] backed by FFmpeg.
-// When the CGO implementation is not activated it returns an error.
+// NewProber returns [ErrCGORequired]. Applications must provide a [Prober].
 func NewProber(_ Options) (Prober, error) { return stubProber{}, ErrCGORequired }
 
-// NewTranscoder returns a [Transcoder] backed by FFmpeg.
-// When the CGO implementation is not activated it returns an error.
+// NewTranscoder returns [ErrCGORequired]. Applications must provide a
+// [Transcoder].
 func NewTranscoder(_ Options) (Transcoder, error) { return stubTranscoder{}, ErrCGORequired }

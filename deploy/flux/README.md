@@ -10,7 +10,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Architecture
 
-```
+```text
 git repo
  └── apps/myapp/release.yaml     ← HelmRelease
  └── apps/myapp/values.yaml      ← app-specific values

@@ -7,10 +7,19 @@ package notify
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"html"
+	"mime"
+	"strings"
+	"time"
 
 	mail "github.com/wneessen/go-mail"
 )
+
+type smtpClient interface {
+	DialAndSendWithContext(context.Context, ...*mail.Msg) error
+}
 
 // SMTPOptions configures the SMTP sender.
 type SMTPOptions struct {
@@ -20,34 +29,52 @@ type SMTPOptions struct {
 	Password string `koanf:"password"`
 	// From is the default sender address.
 	From string `koanf:"from"`
-	// TLS enables STARTTLS (port 587) or implicit TLS (port 465).
-	// Default true.
-	TLS bool `koanf:"tls"`
+	// AllowInsecurePlaintext disables transport encryption. Keep false outside
+	// isolated development networks.
+	AllowInsecurePlaintext bool `koanf:"allow_insecure_plaintext"`
+	// Timeout bounds SMTP connection and delivery I/O. Default 15 seconds.
+	Timeout time.Duration `koanf:"timeout"`
 }
 
 // SMTPSender sends email via SMTP using go-mail.
 type SMTPSender struct {
 	opts   SMTPOptions
-	client *mail.Client
+	client smtpClient
 }
 
 // NewSMTPSender returns an SMTPSender. The connection is established
 // lazily per message (go-mail manages pooling internally).
 func NewSMTPSender(opts SMTPOptions) (*SMTPSender, error) {
+	if opts.Timeout < 0 {
+		return nil, errors.New("notify/smtp: timeout must not be negative")
+	}
+	if opts.Timeout == 0 {
+		opts.Timeout = mail.DefaultTimeout
+	}
 	if opts.Port == 0 {
 		opts.Port = 587
+		if opts.AllowInsecurePlaintext {
+			opts.Port = 25
+		}
 	}
 	tlsPolicy := mail.TLSMandatory
-	if !opts.TLS {
+	if opts.AllowInsecurePlaintext {
 		tlsPolicy = mail.NoTLS
 	}
-	c, err := mail.NewClient(
-		opts.Host,
+	clientOpts := []mail.Option{
 		mail.WithPort(opts.Port),
 		mail.WithSMTPAuth(mail.SMTPAuthPlain),
 		mail.WithUsername(opts.Username),
 		mail.WithPassword(opts.Password),
 		mail.WithTLSPolicy(tlsPolicy),
+		mail.WithTimeout(opts.Timeout),
+	}
+	if opts.Port == 465 && !opts.AllowInsecurePlaintext {
+		clientOpts = append(clientOpts, mail.WithSSL())
+	}
+	c, err := mail.NewClient(
+		opts.Host,
+		clientOpts...,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("notify/smtp: new client: %w", err)
@@ -59,7 +86,10 @@ func NewSMTPSender(opts SMTPOptions) (*SMTPSender, error) {
 func (s *SMTPSender) Name() string { return "smtp" }
 
 // Send implements [Sender].
-func (s *SMTPSender) Send(_ context.Context, msg Message) error {
+func (s *SMTPSender) Send(ctx context.Context, msg Message) error {
+	if ctx == nil {
+		return errors.New("notify/smtp: context is required")
+	}
 	m := mail.NewMsg()
 	if err := applyRecipients(m, msg, s.opts.From); err != nil {
 		return err
@@ -68,7 +98,9 @@ func (s *SMTPSender) Send(_ context.Context, msg Message) error {
 	if err := attachFiles(m, msg.Attachments); err != nil {
 		return err
 	}
-	if err := s.client.DialAndSend(m); err != nil {
+	deliveryCtx, cancel := context.WithTimeout(ctx, s.opts.Timeout)
+	defer cancel()
+	if err := s.client.DialAndSendWithContext(deliveryCtx, m); err != nil {
 		return fmt.Errorf("notify/smtp: send: %w", err)
 	}
 	return nil
@@ -101,23 +133,66 @@ func applyRecipients(m *mail.Msg, msg Message, defaultFrom string) error {
 	return nil
 }
 
-// applyBody sets the subject and HTML/plain-text bodies. When both are
-// set, HTML is the primary body and Text is attached as the
-// plain-text alternative part.
+// applyBody sets the subject and plain-text/HTML bodies.
 func applyBody(m *mail.Msg, msg Message) {
 	m.Subject(msg.Subject)
+	plain := msg.Text
+	if plain == "" && msg.HTML != "" {
+		plain = htmlToPlainText(msg.HTML)
+	}
+	if plain == "" {
+		plain = msg.Body
+	}
+	if plain != "" || msg.HTML != "" {
+		m.SetBodyString(mail.TypeTextPlain, plain)
+	}
 	if msg.HTML != "" {
-		m.SetBodyString(mail.TypeTextHTML, msg.HTML)
+		m.AddAlternativeString(mail.TypeTextHTML, msg.HTML)
 	}
-	if msg.Text != "" {
-		m.AddAlternativeString(mail.TypeTextPlain, msg.Text)
+}
+
+func htmlToPlainText(value string) string {
+	text := make([]byte, 0, len(value))
+	inTag := false
+	var quote byte
+	for idx := range len(value) {
+		current := value[idx]
+		if !inTag {
+			if current == '<' {
+				inTag = true
+				continue
+			}
+			text = append(text, current)
+			continue
+		}
+		if quote != 0 {
+			if current == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch current {
+		case '\'', '"':
+			quote = current
+		case '>':
+			inTag = false
+			text = append(text, ' ')
+		}
 	}
+	return strings.Join(strings.Fields(html.UnescapeString(string(text))), " ")
 }
 
 // attachFiles adds each attachment to m, base64-encoded.
 func attachFiles(m *mail.Msg, attachments []Attachment) error {
 	for _, a := range attachments {
-		if err := m.AttachReader(a.Name, bytes.NewReader(a.Data), mail.WithFileEncoding(mail.EncodingB64)); err != nil {
+		fileOpts := []mail.FileOption{mail.WithFileEncoding(mail.EncodingB64)}
+		if a.ContentType != "" {
+			if _, _, err := mime.ParseMediaType(a.ContentType); err != nil {
+				return fmt.Errorf("notify/smtp: attachment %q content type: %w", a.Name, err)
+			}
+			fileOpts = append(fileOpts, mail.WithFileContentType(mail.ContentType(a.ContentType)))
+		}
+		if err := m.AttachReader(a.Name, bytes.NewReader(a.Data), fileOpts...); err != nil {
 			return fmt.Errorf("notify/smtp: attach %q: %w", a.Name, err)
 		}
 	}

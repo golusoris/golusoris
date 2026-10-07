@@ -10,11 +10,12 @@
 //
 // Usage:
 //
-//	lo := lockout.New(lockout.NewMemoryStore(), lockout.Options{
+//	lo, err := lockout.New(lockout.NewMemoryStore(), nil, lockout.Options{
 //	    MaxFails: 5,
 //	    Window:   15 * time.Minute,
 //	    Cooldown: 30 * time.Minute,
 //	})
+//	if err != nil { return err }
 //
 //	// Before checking the password:
 //	if err := lo.Check(ctx, username); err != nil { return err }
@@ -26,12 +27,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options tune the lockout policy.
@@ -67,7 +70,8 @@ type State struct {
 // Store is the backing store contract.
 type Store interface {
 	Get(ctx context.Context, key string) (State, error)
-	Set(ctx context.Context, key string, s State, ttl time.Duration) error
+	// RecordFailure atomically resets stale windows, increments, and locks at threshold.
+	RecordFailure(ctx context.Context, key string, now time.Time, opts Options) error
 	Delete(ctx context.Context, key string) error
 }
 
@@ -78,16 +82,26 @@ type Service struct {
 	opts  Options
 }
 
-// New returns a Service. clk may be nil — defaults to clockwork.NewRealClock.
-func New(store Store, clk clockwork.Clock, opts Options) *Service {
-	if clk == nil {
+// New returns a Service. clk may be nil and uses the real clock.
+func New(store Store, clk clockwork.Clock, opts Options) (*Service, error) {
+	if validate.IsNil(store) {
+		return nil, errors.New("lockout: store is required")
+	}
+	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
-	return &Service{store: store, clk: clk, opts: opts.withDefaults()}
+	opts = opts.withDefaults()
+	if opts.MaxFails <= 0 || opts.Window <= 0 || opts.Cooldown <= 0 {
+		return nil, errors.New("lockout: MaxFails, Window, and Cooldown must be positive")
+	}
+	return &Service{store: store, clk: clk, opts: opts}, nil
 }
 
 // Check returns gerr.CodeUnauthorized when key is currently locked.
 func (s *Service) Check(ctx context.Context, key string) error {
+	if err := validateKey(key); err != nil {
+		return err
+	}
 	st, err := s.store.Get(ctx, key)
 	if err != nil {
 		if isNotFound(err) {
@@ -104,28 +118,20 @@ func (s *Service) Check(ctx context.Context, key string) error {
 // Fail records a failed attempt. When the count crosses MaxFails inside
 // the window, the identity is locked for Cooldown.
 func (s *Service) Fail(ctx context.Context, key string) error {
-	now := s.clk.Now()
-	st, err := s.store.Get(ctx, key)
-	if err != nil && !isNotFound(err) {
-		return fmt.Errorf("lockout: get: %w", err)
+	if err := validateKey(key); err != nil {
+		return err
 	}
-	if st.FirstFailAt.IsZero() || now.Sub(st.FirstFailAt) > s.opts.Window {
-		st = State{FirstFailAt: now}
-	}
-	st.Fails++
-	ttl := s.opts.Window
-	if st.Fails >= s.opts.MaxFails {
-		st.LockedUntil = now.Add(s.opts.Cooldown)
-		ttl = s.opts.Cooldown
-	}
-	if setErr := s.store.Set(ctx, key, st, ttl); setErr != nil {
-		return fmt.Errorf("lockout: set: %w", setErr)
+	if err := s.store.RecordFailure(ctx, key, s.clk.Now(), s.opts); err != nil {
+		return fmt.Errorf("lockout: record failure: %w", err)
 	}
 	return nil
 }
 
 // Reset clears the failure counter for key (call after a successful login).
 func (s *Service) Reset(ctx context.Context, key string) error {
+	if err := validateKey(key); err != nil {
+		return err
+	}
 	if err := s.store.Delete(ctx, key); err != nil && !isNotFound(err) {
 		return fmt.Errorf("lockout: delete: %w", err)
 	}
@@ -169,11 +175,27 @@ func (m *MemoryStore) Get(_ context.Context, key string) (State, error) {
 	return e.state, nil
 }
 
-// Set stores the state with a TTL.
-func (m *MemoryStore) Set(_ context.Context, key string, s State, ttl time.Duration) error {
+// RecordFailure atomically updates one identity using opts.
+func (m *MemoryStore) RecordFailure(_ context.Context, key string, now time.Time, opts Options) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.data[key] = memEntry{state: s, expires: m.clk.Now().Add(ttl)}
+
+	storeNow := m.clk.Now()
+	entry, ok := m.data[key]
+	if ok && !entry.expires.IsZero() && storeNow.After(entry.expires) {
+		ok = false
+	}
+	state := entry.state
+	if !ok || state.FirstFailAt.IsZero() || now.Sub(state.FirstFailAt) > opts.Window {
+		state = State{FirstFailAt: now}
+	}
+	state.Fails++
+	ttl := opts.Window
+	if state.Fails >= opts.MaxFails {
+		state.LockedUntil = now.Add(opts.Cooldown)
+		ttl = opts.Cooldown
+	}
+	m.data[key] = memEntry{state: state, expires: storeNow.Add(ttl)}
 	return nil
 }
 
@@ -188,4 +210,11 @@ func (m *MemoryStore) Delete(_ context.Context, key string) error {
 func isNotFound(err error) bool {
 	var e *gerr.Error
 	return errors.As(err, &e) && e.Code == gerr.CodeNotFound
+}
+
+func validateKey(key string) error {
+	if strings.TrimSpace(key) == "" {
+		return gerr.Validation("lockout: identity key required")
+	}
+	return nil
 }

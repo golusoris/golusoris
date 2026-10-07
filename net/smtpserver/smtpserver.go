@@ -28,13 +28,21 @@
 //	smtp.max_recipients    # max recipients per message (default: 50)
 //	smtp.read_timeout      # per-command read timeout (default: 60s)
 //	smtp.write_timeout     # per-command write timeout (default: 60s)
+//	smtp.tls_cert_file     # PEM certificate; pair with tls_key_file for STARTTLS
+//	smtp.tls_key_file      # PEM private key
+//	smtp.implicit_tls      # use implicit TLS instead of STARTTLS
+//	smtp.allow_insecure_auth # permit AUTH before TLS (default false)
 package smtpserver
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"sync"
 	"time"
 
 	gosmtp "github.com/emersion/go-smtp"
@@ -53,12 +61,16 @@ const (
 
 // Config holds SMTP server configuration.
 type Config struct {
-	Addr            string        `koanf:"addr"`
-	Domain          string        `koanf:"domain"`
-	MaxMessageBytes int64         `koanf:"max_message_bytes"`
-	MaxRecipients   int           `koanf:"max_recipients"`
-	ReadTimeout     time.Duration `koanf:"read_timeout"`
-	WriteTimeout    time.Duration `koanf:"write_timeout"`
+	Addr              string        `koanf:"addr"`
+	Domain            string        `koanf:"domain"`
+	MaxMessageBytes   int64         `koanf:"max_message_bytes"`
+	MaxRecipients     int           `koanf:"max_recipients"`
+	ReadTimeout       time.Duration `koanf:"read_timeout"`
+	WriteTimeout      time.Duration `koanf:"write_timeout"`
+	TLSCertFile       string        `koanf:"tls_cert_file"`
+	TLSKeyFile        string        `koanf:"tls_key_file"`
+	ImplicitTLS       bool          `koanf:"implicit_tls"`
+	AllowInsecureAuth bool          `koanf:"allow_insecure_auth"`
 }
 
 // DefaultConfig returns a safe default configuration.
@@ -116,33 +128,125 @@ func loadConfig(cfg *config.Config) (Config, error) {
 	if err := cfg.Unmarshal("smtp", &c); err != nil {
 		return Config{}, fmt.Errorf("smtpserver: load config: %w", err)
 	}
+	if c.TLSCertFile == "" {
+		c.TLSCertFile = cfg.String("smtp.tls.cert.file")
+	}
+	if c.TLSKeyFile == "" {
+		c.TLSKeyFile = cfg.String("smtp.tls.key.file")
+	}
+	if !c.ImplicitTLS {
+		c.ImplicitTLS = cfg.Bool("smtp.implicit.tls")
+	}
+	if !c.AllowInsecureAuth {
+		c.AllowInsecureAuth = cfg.Bool("smtp.allow.insecure.auth")
+	}
 	return c.withDefaults(), nil
 }
 
-func startServer(p params) {
-	srv := gosmtp.NewServer(p.Backend)
-	srv.Addr = p.Cfg.Addr
-	srv.Domain = p.Cfg.Domain
-	srv.MaxMessageBytes = p.Cfg.MaxMessageBytes
-	srv.MaxRecipients = p.Cfg.MaxRecipients
-	srv.ReadTimeout = p.Cfg.ReadTimeout
-	srv.WriteTimeout = p.Cfg.WriteTimeout
-	srv.AllowInsecureAuth = true // TLS is opt-in via TLSConfig
+func startServer(p params) error {
+	srv, err := newServer(p.Backend, p.Cfg)
+	if err != nil {
+		return err
+	}
 
 	p.LC.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			listener, listenErr := listen(ctx, p.Cfg, srv.TLSConfig)
+			if listenErr != nil {
+				return listenErr
+			}
+			ready := &readyListener{Listener: listener, ready: make(chan struct{})}
+			serveDone := make(chan error, 1)
+			serveCtx := context.WithoutCancel(ctx)
 			go func() {
-				if err := srv.ListenAndServe(); err != nil {
-					p.Logger.ErrorContext(ctx, "smtpserver: serve", "err", err)
+				serveErr := srv.Serve(ready)
+				if serveErr != nil {
+					p.Logger.ErrorContext(serveCtx, "smtpserver: serve", "err", serveErr)
 				}
+				serveDone <- serveErr
 			}()
-			p.Logger.InfoContext(ctx, "smtpserver: listening", "addr", p.Cfg.Addr)
-			return nil
+			select {
+			case <-ready.ready:
+				p.Logger.InfoContext(ctx, "smtpserver: listening", "addr", listener.Addr())
+				return nil
+			case serveErr := <-serveDone:
+				return fmt.Errorf("smtpserver: serve before startup: %w", serveErr)
+			case <-ctx.Done():
+				if closeErr := listener.Close(); closeErr != nil {
+					return errors.Join(ctx.Err(), fmt.Errorf("smtpserver: close startup listener: %w", closeErr))
+				}
+				return fmt.Errorf("smtpserver: start: %w", ctx.Err())
+			}
 		},
 		OnStop: func(ctx context.Context) error {
 			return srv.Shutdown(ctx)
 		},
 	})
+	return nil
+}
+
+type readyListener struct {
+	net.Listener
+	ready chan struct{}
+	once  sync.Once
+}
+
+func (l *readyListener) Accept() (net.Conn, error) {
+	l.once.Do(func() { close(l.ready) })
+	return l.Listener.Accept() //nolint:wrapcheck // Preserve net.Error for go-smtp retry classification.
+}
+
+func listen(ctx context.Context, cfg Config, tlsConfig *tls.Config) (net.Listener, error) {
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(ctx, "tcp", cfg.withDefaults().Addr)
+	if err != nil {
+		return nil, fmt.Errorf("smtpserver: listen: %w", err)
+	}
+	if cfg.ImplicitTLS {
+		return tls.NewListener(listener, tlsConfig), nil
+	}
+	return listener, nil
+}
+
+func newServer(backend gosmtp.Backend, cfg Config) (*gosmtp.Server, error) {
+	cfg = cfg.withDefaults()
+	certSet := cfg.TLSCertFile != ""
+	keySet := cfg.TLSKeyFile != ""
+	if certSet != keySet {
+		return nil, errors.New("smtpserver: tls_cert_file and tls_key_file must both be set")
+	}
+	if cfg.ImplicitTLS && !certSet {
+		return nil, errors.New("smtpserver: implicit TLS requires tls_cert_file and tls_key_file")
+	}
+	var tlsConfig *tls.Config
+	if certSet {
+		var err error
+		tlsConfig, err = loadTLSConfig(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if err != nil {
+			return nil, err
+		}
+	}
+	srv := gosmtp.NewServer(backend)
+	srv.Addr = cfg.Addr
+	srv.Domain = cfg.Domain
+	srv.MaxMessageBytes = cfg.MaxMessageBytes
+	srv.MaxRecipients = cfg.MaxRecipients
+	srv.ReadTimeout = cfg.ReadTimeout
+	srv.WriteTimeout = cfg.WriteTimeout
+	srv.TLSConfig = tlsConfig
+	srv.AllowInsecureAuth = cfg.AllowInsecureAuth
+	return srv, nil
+}
+
+func loadTLSConfig(certFile, keyFile string) (*tls.Config, error) {
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, fmt.Errorf("smtpserver: load TLS certificate: %w", err)
+	}
+	return &tls.Config{
+		MinVersion:   tls.VersionTLS12,
+		Certificates: []tls.Certificate{certificate},
+	}, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -193,6 +297,9 @@ func (s *handlerSession) Rcpt(to string, _ *gosmtp.RcptOptions) error {
 }
 
 func (s *handlerSession) Data(r io.Reader) error {
+	if s.handler == nil {
+		return errors.New("smtpserver: nil handler")
+	}
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return fmt.Errorf("smtpserver: read data: %w", err)

@@ -40,23 +40,42 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
+// notifyTimeout bounds one sd_notify dial plus write; a full receive queue
+// on a wedged manager would otherwise block the datagram write forever.
+const notifyTimeout = 5 * time.Second
+
 // Available reports whether the process is running under systemd with
 // sd_notify enabled (Type=notify).
 func Available() bool { return os.Getenv("NOTIFY_SOCKET") != "" }
 
 // Notify sends a single sd_notify message. state is formatted as systemd
 // expects — "READY=1", "RELOADING=1", "STOPPING=1", "STATUS=...", etc.
-// Returns nil when NOTIFY_SOCKET is unset (no-op).
-func Notify(state string) (err error) {
+// Returns nil when NOTIFY_SOCKET is unset (no-op). The dial and write are
+// bounded by a 5 s deadline.
+func Notify(state string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
+	defer cancel()
+	return notify(ctx, state)
+}
+
+// notify sends state over NOTIFY_SOCKET, dialing under ctx and applying
+// ctx's deadline to the write.
+func notify(ctx context.Context, state string) (err error) {
 	sock := os.Getenv("NOTIFY_SOCKET")
 	if sock == "" {
 		return nil
 	}
-	conn, err := net.DialUnix("unixgram", nil, &net.UnixAddr{Name: sock, Net: "unixgram"})
+	var dialer net.Dialer
+	conn, err := dialer.DialContext(ctx, "unixgram", sock)
 	if err != nil {
 		return fmt.Errorf("systemd: dial %s: %w", sock, err)
 	}
 	defer gerr.CloseInto(conn, &err, "systemd: close notify socket")
+	if deadline, ok := ctx.Deadline(); ok {
+		if derr := conn.SetWriteDeadline(deadline); derr != nil {
+			return fmt.Errorf("systemd: set write deadline: %w", derr)
+		}
+	}
 	if _, werr := conn.Write([]byte(state)); werr != nil {
 		return fmt.Errorf("systemd: write: %w", werr)
 	}
@@ -147,7 +166,7 @@ func runWatchdog(ctx context.Context, clk clock.Clock, logger *slog.Logger) {
 		case <-ctx.Done():
 			return
 		case <-clk.After(interval):
-			if err := Pet(); err != nil {
+			if err := pet(ctx); err != nil {
 				// Log at Warn; the next iteration retries. If systemd
 				// actually doesn't hear from us it'll kill the unit —
 				// that's the watchdog's job.
@@ -155,6 +174,14 @@ func runWatchdog(ctx context.Context, clk clock.Clock, logger *slog.Logger) {
 			}
 		}
 	}
+}
+
+// pet sends WATCHDOG=1 bounded by notifyTimeout; a stopped watchdog's ctx
+// also aborts the dial.
+func pet(ctx context.Context) error {
+	petCtx, cancel := context.WithTimeout(ctx, notifyTimeout)
+	defer cancel()
+	return notify(petCtx, "WATCHDOG=1")
 }
 
 // CheckSocketAddrSafe rejects the abstract-socket form ("@...") that

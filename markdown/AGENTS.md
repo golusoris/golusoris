@@ -20,8 +20,7 @@ err  := markdown.RenderTo(&buf, []byte(src))  // write to existing buffer
 
 ## Security
 
-Output is **not sanitized**. For user-generated content, pipe through a
-sanitizer (e.g. microcosm-cc/bluemonday) before writing to HTTP responses:
+Output is **not sanitized**. For user-generated content, pipe through sanitizer (e.g. microcosm-cc/bluemonday) before writing to HTTP responses:
 
 ```go
 out, _ := markdown.Render(src)
@@ -30,5 +29,5 @@ safe := bluemonday.UGCPolicy().SanitizeBytes(out)
 
 ## Don't
 
-- Don't discard the `RenderString` error; it returns one instead of panicking.
+- Don't discard `RenderString` error; it returns one instead of panicking.
 - Don't skip sanitization when rendering untrusted Markdown in browser output.

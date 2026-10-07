@@ -120,6 +120,9 @@ func (c *Config) Unmarshal(path string, into any) error {
 // or SIGHUP is received. Callbacks run synchronously in the watcher goroutine
 // — keep them quick or fan out to a worker.
 func (c *Config) OnChange(fn func()) {
+	if fn == nil {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.listeners = append(c.listeners, fn)

@@ -78,6 +78,34 @@ func TestNewExhaustsRetries(t *testing.T) {
 	}
 }
 
+func TestNewRejectsNilRuntimeDependenciesBeforeConnecting(t *testing.T) {
+	t.Parallel()
+	opts := dbpgx.Options{
+		DSN: "postgres://nobody:nobody@127.0.0.1:1/none?sslmode=disable",
+	}
+	t.Run("logger", func(t *testing.T) {
+		t.Parallel()
+		_, err := dbpgx.New(context.Background(), opts, nil, clockwork.NewRealClock())
+		if err == nil {
+			t.Fatal("expected nil logger error, got nil")
+		}
+		if !strings.Contains(err.Error(), "nil logger") {
+			t.Errorf("error %q missing %q", err, "nil logger")
+		}
+	})
+	t.Run("typed nil clock", func(t *testing.T) {
+		t.Parallel()
+		var clk *clockwork.FakeClock
+		_, err := dbpgx.New(context.Background(), opts, log.New(log.Options{}), clk)
+		if err == nil {
+			t.Fatal("expected nil clock error, got nil")
+		}
+		if !strings.Contains(err.Error(), "nil clock") {
+			t.Errorf("error %q missing %q", err, "nil clock")
+		}
+	})
+}
+
 // TestLoadOptionsFromConfig verifies koanf-driven config wiring (env var →
 // nested struct) and the new time.Duration decode hook end-to-end.
 func TestLoadOptionsFromConfig(t *testing.T) {

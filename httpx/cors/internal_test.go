@@ -6,6 +6,7 @@ package cors
 
 import (
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 
@@ -36,13 +37,7 @@ func TestLoadOptions_defaults(t *testing.T) {
 func TestDefaultOptions_methods(t *testing.T) {
 	t.Parallel()
 	opts := DefaultOptions()
-	found := false
-	for _, m := range opts.Methods {
-		if m == http.MethodGet {
-			found = true
-			break
-		}
-	}
+	found := slices.Contains(opts.Methods, http.MethodGet)
 	if !found {
 		t.Error("DefaultOptions Methods should include GET")
 	}

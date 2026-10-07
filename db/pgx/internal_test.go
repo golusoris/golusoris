@@ -5,6 +5,7 @@
 package pgx
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -88,5 +89,43 @@ func TestLoadOptions_missingDSN(t *testing.T) {
 	_, err = loadOptions(cfg)
 	if err == nil {
 		t.Error("expected error for missing DSN, got nil")
+	}
+}
+
+func TestValidateOptionsRejectsInvalidBounds(t *testing.T) {
+	t.Parallel()
+	base := DefaultOptions()
+	base.DSN = "postgres://localhost/test"
+	tests := map[string]func(*Options){
+		"negative pool min":        func(o *Options) { o.Pool.Min = -1 },
+		"negative pool max":        func(o *Options) { o.Pool.Max = -1 },
+		"pool min exceeds max":     func(o *Options) { o.Pool.Min = o.Pool.Max + 1 },
+		"negative lifetime":        func(o *Options) { o.Pool.Lifetime = -time.Second },
+		"negative idle":            func(o *Options) { o.Pool.Idle = -time.Second },
+		"negative healthcheck":     func(o *Options) { o.Pool.Healthcheck = -time.Second },
+		"negative connect timeout": func(o *Options) { o.ConnectTimeout = -time.Second },
+		"negative attempts":        func(o *Options) { o.Retry.Attempts = -1 },
+		"negative initial delay":   func(o *Options) { o.Retry.Initial = -time.Second },
+		"negative maximum delay":   func(o *Options) { o.Retry.Max = -time.Second },
+		"initial exceeds maximum":  func(o *Options) { o.Retry.Initial = o.Retry.Max + time.Second },
+		"negative slow threshold":  func(o *Options) { o.Tracing.Slow = -time.Second },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			opts := base
+			mutate(&opts)
+			if err := validateOptions(opts); err == nil {
+				t.Fatal("validateOptions accepted invalid bounds")
+			}
+		})
+	}
+}
+
+func TestNextRetryDelaySaturatesWithoutOverflow(t *testing.T) {
+	t.Parallel()
+	maximum := time.Duration(math.MaxInt64)
+	if got := nextRetryDelay(maximum-1, maximum); got != maximum {
+		t.Fatalf("nextRetryDelay = %v, want saturation %v", got, maximum)
 	}
 }

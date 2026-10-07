@@ -31,6 +31,7 @@ jobs:
       startsWith(github.ref, 'refs/tags/')
     runs-on: cauda-k8s-office-canary
     container:
+      # Source and bump authority: lusoris/k8s apps/dev/gitea-actions-runner/job-image.
       image: harbor.infra.cauda.dev/library/gitea-actions-job:2.335.1-cauda3-gitea3@sha256:ca08d1bee54628ae8713133ae4bf2fe7f06a20a6db6ffd1d184f6ac63660297b
     timeout-minutes: 15
     env:
@@ -57,7 +58,7 @@ jobs:
           askpass=$(mktemp)
           trap 'rm -f "$askpass"' EXIT
           # Variables expand when Git invokes the generated helper.
-          # shellcheck disable=SC2016
+          # shellcheck disable=SC2016 # Git expands helper variables only when it invokes the generated script.
           printf '%s\n' '#!/bin/sh' \
             'case "$1" in *Username*) printf "%s\n" "x-access-token";; *) printf "%s\n" "$PUBLIC_GITHUB_TOKEN";; esac' > "$askpass"
           chmod 0700 "$askpass"

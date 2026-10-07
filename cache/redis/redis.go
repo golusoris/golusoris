@@ -3,8 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package redis provides a [rueidis] client as an fx module. rueidis
-// auto-detects cluster vs standalone mode from InitAddress and supports
-// client-side caching out of the box.
+// auto-detects cluster vs standalone mode from InitAddress.
 //
 // Config key prefix: cache.redis.*
 //
@@ -17,6 +16,8 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -30,7 +31,7 @@ import (
 // Options are the configuration knobs for the redis module.
 type Options struct {
 	// Addr is one address for standalone or multiple comma-separated
-	// addresses for cluster / sentinel (default "localhost:6379").
+	// addresses for a standalone server or cluster (default "localhost:6379").
 	Addr     string `koanf:"addr"`
 	Username string `koanf:"user"`
 	Password string `koanf:"pass"`
@@ -52,6 +53,20 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 func newClient(opts Options, logger *slog.Logger) (rueidis.Client, error) {
+	if logger == nil {
+		return nil, errors.New("cache/redis: logger is required")
+	}
+	co := clientOption(opts)
+	c, err := rueidis.NewClient(co)
+	if err != nil {
+		return nil, fmt.Errorf("cache/redis: new client: %w", err)
+	}
+	logger.Debug("cache/redis: connected", slog.String("addr", opts.Addr))
+	return c, nil
+}
+
+// clientOption maps the validated module config onto rueidis transport settings.
+func clientOption(opts Options) rueidis.ClientOption {
 	addrs := strings.Split(opts.Addr, ",")
 	for i, a := range addrs {
 		addrs[i] = strings.TrimSpace(a)
@@ -62,12 +77,10 @@ func newClient(opts Options, logger *slog.Logger) (rueidis.Client, error) {
 		Password:    opts.Password,
 		SelectDB:    opts.DB,
 	}
-	c, err := rueidis.NewClient(co)
-	if err != nil {
-		return nil, fmt.Errorf("cache/redis: new client: %w", err)
+	if opts.TLS {
+		co.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
 	}
-	logger.Debug("cache/redis: connected", slog.String("addr", opts.Addr))
-	return c, nil
+	return co
 }
 
 // Module provides rueidis.Client to the fx graph. Requires [Core] for

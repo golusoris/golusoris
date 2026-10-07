@@ -13,9 +13,9 @@ Pluggable auto-TLS. Two implementations:
 | `httpx/autotls/autocert` | x/crypto/acme/autocert | Lean, stdlib-ish, single-replica. |
 | `httpx/autotls/certmagic` | caddyserver/certmagic | On-demand issuance, distributed storage, DNS-01 providers. |
 
-Apps pick ONE sub-module and add it to the fx graph. The sub-module provides a `*tls.Config` that `httpx/server` picks up via optional dependency — plaintext otherwise.
+Apps pick ONE sub-module and add it to fx graph. sub-module provides `*tls.Config` that `httpx/server` picks up via optional dependency — plaintext otherwise.
 
 ## Don't
 
-- Don't wire both autocert + certmagic. They conflict — the fx graph will get two providers for `*tls.Config`.
-- Don't use autotls when terminating TLS at a load balancer (k8s ingress, AWS ALB). The LB already handles issuance + rotation.
+- Don't wire both autocert + certmagic. They conflict — fx graph will get two providers for `*tls.Config`.
+- Don't use autotls when terminating TLS at load balancer (k8s ingress, AWS ALB). LB already handles issuance + rotation.

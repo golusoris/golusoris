@@ -24,6 +24,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Format selects the handler.
@@ -55,7 +56,7 @@ type Options struct {
 // POD_IP, NODE_NAME, SERVICE_ACCOUNT env vars (set by k8s downward API) is
 // attached as default attributes.
 func New(opts Options) *slog.Logger {
-	if opts.Output == nil {
+	if validate.IsNil(opts.Output) {
 		opts.Output = os.Stderr
 	}
 	if opts.Format == "" {

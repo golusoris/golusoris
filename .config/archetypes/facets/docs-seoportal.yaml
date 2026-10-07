@@ -7,4 +7,15 @@ linters:
   - "spectral"
 
 devcontainer_features:
-  - "ghcr.io/devcontainers/features/common-utils:2"
+  - ghcr.io/devcontainers/features/common-utils:2:
+      installZsh: false
+      configureZshAsDefaultShell: false
+      installOhMyZsh: false
+      installOhMyZshConfig: false
+      upgradePackages: true
+      username: "vscode"
+      userUid: "1000"
+      userGid: "1000"
+      sudoers: true
+      nonFreePackages: false
+      installSsl: true

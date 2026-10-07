@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# golusoris — coding & compliance contract
+# golusoris — coding & assurance contract
 
 > This is the framework's foundational contract (§2 of the design plan).
 > Every package in the framework — and every app built on top — is expected to follow these rules.
@@ -20,20 +20,22 @@ Reference: <https://spinroot.com/gerard/pdf/P10.pdf>
 
 | # | Original rule | Go adaptation |
 |---|---|---|
-| 1 | Restrict to simple control flow; no `goto`, `setjmp`, `longjmp`, recursion. | No `goto`. No hand-written recursion where a loop suffices (tree walks + parsers are the allowed exception — document the bound). Panic/recover only at trust boundaries (fx lifecycle, `http.Handler` recover, `ogenkit.RecoverMiddleware`). |
+| 1 | Restrict to simple control flow; no `goto`, `setjmp`, `longjmp`, recursion. | No `goto` or recursion; call graphs remain acyclic, including tree walks and parsers. Panic/recover only at trust boundaries (fx lifecycle, `http.Handler` recover, `ogenkit.RecoverMiddleware`). |
 | 2 | All loops must have a fixed upper bound, statically provable. | Every `for` that isn't `for range` over a bounded collection must have a bound visible in the loop head (counter, max attempts, ctx deadline). Long-running loops `select` on `ctx.Done()`. |
 | 3 | No dynamic memory allocation after initialization. | Soft: hot paths preallocate (`make([]T, 0, cap)`), reuse `sync.Pool` where profiles show churn. Startup-phase allocation is free; steady-state is watched. |
-| 4 | No function longer than ~60 lines (single printed page). | `funlen` 120 lines / 60 statements + `gocognit` ≤ 30. Refactor when flagged; don't silence the linter. |
+| 4 | No function longer than ~60 lines (single printed page). | `funlen` 60 lines / 50 statements + `gocognit` ≤ 15. Refactor when flagged; don't silence the linter. |
 | 5 | ≥2 assertions per function on average; side-effect-free. | Table-driven tests + contract checks at API boundaries (validator, ogen decoders, `gerr.Wrap`). Target ≥2 assertions per test per function. `require`/`assert` via testify; no `panic(msg)` in non-test code. |
 | 6 | Declare data at smallest possible scope. | Prefer block-scoped `:=`. Struct fields unexported unless explicitly part of the API. Package-level `var` only for singletons + sentinels. |
 | 7 | Check every return value; check every parameter. | `errcheck` + `wrapcheck` + `nilerr` on. Errors wrapped with context via `gerr.Wrap` or `fmt.Errorf("pkg: op: %w", err)`. Exported funcs validate inputs at the boundary. |
 | 8 | Preprocessor limited to simple macros. | N/A in Go. `go generate` directives stay simple + declarative. No build tags for behaviour switches in production paths. |
 | 9 | Pointers restricted; one dereference per expression; no function pointers. | Soft: no multi-hop `*foo.bar.baz` chains. Small interfaces (≤5 methods) only, defined where consumed. No `unsafe` outside explicitly-reviewed performance code. |
-| 10 | Compile at most pedantic warning level. | `.golangci.yml` is the gate. Every merged commit: **0 lint · 0 gosec · 0 govulncheck · race-green**. `//nolint` requires a justification comment + PR review. |
+| 10 | Compile at most pedantic warning level. | `.golangci.yml` gates Go; `.markdownlint-cli2.jsonc` gates public Markdown. Every merged commit has no unreviewed lint, gosec, or reachable govulncheck finding and is race-green. An exact vulnerability exception must bind the module checksum and patched-source hash and fail closed on drift. `//nolint` requires a justification comment and PR review. |
 
 **Hard gates** (CI blocks on violation): rules 1, 2, 4, 7, 10.  
 **Guidance** (cite rule ID in review): rules 3, 5, 6, 9.  
-Rule 8 is N/A in Go.
+Rule 8 is N/A in Go. HISS-09 separately hard-gates a `// SAFETY:` proof for
+every `unsafe` block or pointer cast; only remaining Rule 9 pointer-shape advice
+is guidance.
 
 ---
 
@@ -76,8 +78,9 @@ Michael Nygard format. One ADR per significant decision — pinned dependencies,
 
 - ADRs supersede rather than edit: old ADRs stay, a new one overrides with `Supersedes: ADR-NNNN`.
 - Template: `docs/adr/0000-template.md`.
-- Index + backfill policy: `docs/adr/README.md`.
-- ADRs ≤ 0099 are retroactive backfills; new decisions start at ADR-0100.
+- Index + numbering policy: `docs/adr/README.md`.
+- Use next sequential ADR number. ADR-0001 through ADR-0007 are retroactive
+  backfills; later records describe decisions made during development.
 
 Reference: <https://github.com/joelparkerhenderson/architecture-decision-record>
 
@@ -97,24 +100,23 @@ Reference: <https://github.com/joelparkerhenderson/architecture-decision-record>
 
 ## 2.5 Security + supply-chain standards
 
-Frameworks can't claim compliance — apps can, built on compliant scaffolding. Every `docs/compliance/*.md` is a machine-readable checklist keyed by control ID so auditors and AI agents can verify.
+golusoris provides engineering controls and reusable primitives; it does not
+certify an application or make a blanket legal-compliance claim. This
+repository does not ship a control-mapping catalogue. Application owners must
+identify applicable requirements, test the assembled system, and retain their
+own evidence.
 
-| Standard | Jurisdiction | Purpose | Enforcement |
-|---|---|---|---|
-| **praetor HISS-20 lattice** | cordanaLLM fleet | Twenty deterministic engineering invariants (HISS-01 to HISS-20): Power-of-10 control flow, complexity, error and warning hygiene, plus supply chain, secrets, debt ratchet, ABI, and the agentic-fleet rows | [`AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/AGENTS.md) carries the table and the per-invariant gate; `standardsctl audit` + `make verify-all` run them (ADR-0019) |
-| **SLSA Level 3** | OpenSSF (global) | Supply-chain provenance, immutable builds, SBOM, signed artifacts | `.github/workflows/release-go.yml` (cosign + syft + slsa-framework) |
-| **OWASP ASVS Level 2** | OWASP (global) | App verification checklist (auth, session, crypto, API, config) | `SECURITY.md` declares compliance; CI runs OWASP ZAP against example apps |
-| **NIST SSDF (SP 800-218)** | US | Secure Software Development Framework | OpenSSF Scorecard covers most items; CI publishes Scorecard badge |
-| **EU Cyber Resilience Act (CRA)** | EU | SBOM + vuln reporting + secure-by-default for products with digital elements | SBOM generated per release; `SECURITY.md` documents coordinated disclosure |
-| **NIS2 Directive** | EU | Incident handling + risk management for essential/important entities | Apps in NIS2 scope inherit the framework's logging + audit trail; `docs/compliance/nis2.md` checklist |
-| **BSI IT-Grundschutz** | Germany | Baseline security controls | Framework provides the controls (crypto, auth lockout, audit log, secrets); apps map to BSI module numbers in their `SECURITY.md` |
-| **BSI C5** | Germany | Cloud service criteria catalog | Relevant for apps on German government / regulated cloud; `deploy/` manifests are C5-compatible (NetworkPolicy, PodSecurityStandards, audit logs) |
-| **UK NCSC Secure Development & Deployment** | UK | Developer-facing secure-dev guidance | Framework maps to NCSC's 8 principles — documented in `docs/compliance/ncsc.md` |
-| **ENISA Good Practices** | EU | Sectoral security guidance | Cited in relevant module docs (IoT, AI) rather than blanket |
-| **GDPR** | EU | PII handling, right to erasure | `log/` redacts documented PII fields; `audit/` + `tenancy/` support per-subject-data queries |
-| **EU AI Act** | EU | High-risk AI transparency + risk management | Applies to apps using `ai/llm/` + `ai/vector/` for regulated decisions; framework provides audit log of prompts/outputs + human-override hook; compliance is per-app |
+| Reference | Evidence shipped here | Boundary |
+|---|---|---|
+| **praetor HISS-21 lattice** | `AGENTS.md` names each invariant and its repository gate; `praetorctl audit` and `make verify-all` run the declared checks | Engineering policy, not a certification |
+| **SLSA provenance model** | release workflows produce SBOMs, cosign signatures, and build-provenance attestations with `actions/attest-build-provenance` | No SLSA level or independent conformance is claimed |
+| **OWASP ASVS** | auth, input-validation, upload-safety, and HTTP-security modules provide reusable controls; CI runs gosec, govulncheck, Semgrep, and CodeQL | No ASVS verification or ZAP scan is bundled; applications own control mapping and dynamic testing |
+| **NIST SSDF / OpenSSF Scorecard** | reviewed changes, dependency automation, secret scanning, signed releases, and an on-demand/reusable Scorecard workflow | Scorecard is not automatic and does not establish SSDF conformance |
+| **EU CRA and coordinated disclosure** | release SBOMs and `SECURITY.md` provide technical inputs for vulnerability handling | Product classification, reporting duties, and legal compliance remain with the distributor |
+| **NIS2, BSI, NCSC, ENISA, GDPR, EU AI Act** | framework modules can support app-specific controls such as structured logs, tenancy, audit events, secrets, and model access | No mappings or compliance guarantees ship. Logs do not automatically redact PII; AI modules do not provide prompt/output audit or human override |
 
 References:
+
 - SLSA: <https://slsa.dev/>
 - OWASP ASVS: <https://owasp.org/www-project-application-security-verification-standard/>
 - NIST SSDF: <https://csrc.nist.gov/Projects/ssdf>
@@ -152,7 +154,7 @@ References:
 | Tool / Standard | Enforcement |
 |---|---|
 | **EditorConfig** | `.editorconfig` at repo root; tabs/spaces/line endings consistent across editors |
-| **gofumpt** | Stricter gofmt — configured in `.golangci.yml` |
+| **gofumpt** | Stricter gofmt — standalone v0.12.0 pin in `tools/tool-versions.env`, enforced by hooks and CI |
 | **gci** | Grouped imports: standard / external / `prefix(github.com/golusoris/golusoris)` |
 | **golines** | Line-length cap at 120 chars; long lines broken at safe points |
 | **Conventional Commits 1.0** | CI PR-title check; release-please reads commit history |
@@ -181,9 +183,9 @@ References:
 | Standard | Application |
 |---|---|
 | **Twelve-Factor App** | Config from env, logs to stdout, stateless processes, declared dependencies (`go.mod`), port binding (`httpx/server`), disposability (fx shutdown hooks) |
-| **CNCF Cloud Native Principles** | K8s-native manifests (`deploy/helm/`) with downward API, PodDisruptionBudget, NetworkPolicy, CiliumNetworkPolicy |
+| **CNCF Cloud Native Principles** | K8s-native manifests (`deploy/helm/`) with downward API, PodDisruptionBudget, NetworkPolicy, and ServiceMonitor |
 | **OCI Image Spec** | Multi-arch via buildx (amd64 + arm64); Chainguard distroless base |
-| **Rootless + read-only filesystem** | Enforced in `Dockerfile.template` (`USER 65532`, `readOnlyRootFilesystem: true`) |
+| **Rootless + read-only filesystem** | Dockerfile templates use a non-root runtime user; the Helm chart defaults `readOnlyRootFilesystem: true` and numeric non-root IDs |
 
 ---
 
@@ -192,8 +194,8 @@ References:
 | Pattern | Why | Alternative |
 |---|---|---|
 | `time.Now()` outside `clock/` | Breaks testability (non-deterministic) | `clock.Now()` via `clockwork.Clock` |
-| `fmt.Println` / `log.Printf` | Bypasses structured logging | `slog.InfoContext(ctx, ...)` via `golusoris/log` |
+| `fmt.Println` / `log.Printf` | Bypasses structured logging | `slog.InfoContext(ctx, ...)` via `github.com/golusoris/golusoris/core/log` |
 | `init()` side effects | Breaks fx lifecycle ordering | `fx.Provide` / `fx.Invoke` hooks |
 | Bare `errors.New` returned across packages | Loses context chain | `fmt.Errorf("pkg: op: %w", err)` or `gerr.Wrap` |
 | `//nolint` without justification | Silently hides real issues | Add inline comment explaining why |
-| `unsafe` without review | Memory safety violation | Explicit PR review + link to benchmark |
+| `unsafe` without a `// SAFETY:` proof | Memory safety violation | Keep the operation local and document why every pointer or memory invariant holds |

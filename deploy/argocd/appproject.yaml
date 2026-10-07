@@ -13,7 +13,7 @@ spec:
   sourceRepos:
     - https://github.com/golusoris/*
     - https://github.com/lusoris/*
-    - oci://ghcr.io/golusoris/charts
+    - ghcr.io/golusoris/charts
   destinations:
     - namespace: "apps"
       server: https://kubernetes.default.svc

@@ -24,30 +24,46 @@ func TestCleanKey(t *testing.T) {
 	}{
 		{"simple", "avatars/u-42.png", "avatars/u-42.png", false},
 		{"nested", "a/b/c/d.txt", "a/b/c/d.txt", false},
-		{"dot-segment normalized", "a/./b.txt", "a/b.txt", false},
-		{"redundant slash", "a//b.txt", "a/b.txt", false},
-		{"trailing slash normalized", "a/b/", "a/b", false},
+		{"dots inside segment ok", "tenant.v1/file..name", "tenant.v1/file..name", false},
 		{"leading dot file ok", ".hidden", ".hidden", false},
 
+		{"dot segment", "a/./b.txt", "", true},
+		{"redundant slash", "a//b.txt", "", true},
+		{"trailing slash", "a/b/", "", true},
 		{"parent traversal", "../etc/passwd", "", true},
+		{"namespace traversal", "tenant-a/../tenant-b/object", "", true},
 		{"embedded traversal", "a/../../b", "", true},
 		{"traversal resolves up", "a/../../etc", "", true},
 		{"absolute", "/etc/passwd", "", true},
 		{"unc backslash", `\\unc\share`, "", true},
 		{"windows drive backslash", `C:\x`, "", true},
+		{"windows ads", "file.txt:secret", "", true},
+		{"windows less than", "dir/a<b", "", true},
+		{"windows greater than", "dir/a>b", "", true},
+		{"windows quote", `dir/a"b`, "", true},
+		{"windows pipe", "dir/a|b", "", true},
+		{"windows question", "dir/a?b", "", true},
+		{"windows star", "dir/a*b", "", true},
 		{"trailing space rejected", "key ", "", true},
 		{"trailing dot rejected", "file.", "", true},
+		{"component trailing space rejected", "dir /file", "", true},
+		{"component trailing dot rejected", "dir./file", "", true},
+		{"repeated trailing dots rejected", "file..", "", true},
 		{"null byte", "a\x00b", "", true},
 		{"control char", "a\tb", "", true},
 		{"newline", "a\nb", "", true},
 		{"win reserved CON", "CON", "", true},
 		{"win reserved nul with ext", "dir/NUL.txt", "", true},
 		{"win reserved lower com1", "com1", "", true},
+		{"win reserved conin", "CONIN$", "", true},
+		{"win reserved conout with ext", "dir/conout$.txt", "", true},
+		{"win reserved superscript com", "COM¹", "", true},
+		{"win reserved superscript lpt with ext", "dir/LPT³.log", "", true},
 		{"empty", "", "", true},
 		{"dot only", ".", "", true},
 		{"dotdot only", "..", "", true},
 		{"del char", "a\x7fb", "", true},
-		{"trailing dotdot (not a lone dot) ok", "file..", "file..", false},
+		{"reserved staged object", "dir/.golusoris-put-token.tmp", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -71,7 +87,7 @@ func TestCleanKey(t *testing.T) {
 			if !filepath.IsLocal(got) {
 				t.Fatalf("CleanKey(%q) = %q is not local", tt.key, got)
 			}
-			for _, seg := range strings.Split(got, "/") {
+			for seg := range strings.SplitSeq(got, "/") {
 				if seg == ".." {
 					t.Fatalf("CleanKey(%q) = %q has .. segment", tt.key, got)
 				}
@@ -116,6 +132,9 @@ func TestMustBeLocal(t *testing.T) {
 		{"nested ok", "x/y/z", false},
 		{"traversal", "../x", true},
 		{"embedded traversal", "a/../b", true},
+		{"component trailing dot", "dir./file", true},
+		{"component trailing space", "dir /file", true},
+		{"windows reserved", "dir/NUL.txt", true},
 		{"absolute", "/x", true},
 		{"empty", "", true},
 		{"null", "a\x00b", true},
@@ -137,7 +156,8 @@ func TestMustBeLocal(t *testing.T) {
 func FuzzCleanKey(f *testing.F) {
 	seeds := []string{
 		"a/b.txt", "../etc/passwd", "/abs", `\unc`, "a\x00b", "CON",
-		"a/./b", "a//b", "..", ".", "", "a/../../b", "key ",
+		"a/./b", "a//b", "..", ".", "", "a/../../b", "tenant-a/../tenant-b/object",
+		"key ", "dir./file", "dir /file", "file..",
 	}
 	for _, s := range seeds {
 		f.Add(s, 1024)
@@ -151,7 +171,7 @@ func FuzzCleanKey(f *testing.F) {
 			t.Fatalf("CleanKey(%q) = %q is not local", key, got)
 		}
 		// No ".." path SEGMENT (a file literally named "..0" is legitimate).
-		for _, seg := range strings.Split(got, "/") {
+		for seg := range strings.SplitSeq(got, "/") {
 			if seg == ".." {
 				t.Fatalf("CleanKey(%q) = %q has .. segment", key, got)
 			}
@@ -161,6 +181,9 @@ func FuzzCleanKey(f *testing.F) {
 		}
 		if strings.ContainsRune(got, '\x00') {
 			t.Fatalf("CleanKey(%q) = %q contains null byte", key, got)
+		}
+		if got != key {
+			t.Fatalf("CleanKey(%q) silently aliases to %q", key, got)
 		}
 	})
 }

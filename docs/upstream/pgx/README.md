@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# jackc/pgx/v5 — v5.9.1 snapshot
+# jackc/pgx/v5 — v5.11.0 snapshot
 
-Pinned: **v5.9.1**
-Source: https://pkg.go.dev/github.com/jackc/pgx/v5@v5.9.1
+Pinned: **v5.11.0**
+Source: [tagged source](https://github.com/jackc/pgx/tree/v5.11.0)
 
 ## Key API surface
 
@@ -21,7 +21,10 @@ defer conn.Release()
 pool.Close()
 
 // Config
-cfg, _ := pgxpool.ParseConfig(dsn)
+cfg, err := pgxpool.ParseConfig(dsn)
+if err != nil {
+    return fmt.Errorf("parse PostgreSQL config: %w", err)
+}
 cfg.MaxConns = 10
 cfg.MinConns = 2
 cfg.MaxConnLifetime = time.Hour
@@ -43,11 +46,17 @@ items, err := pgx.CollectRows(rows, pgx.RowToStructByName[MyStruct])
 ### Transactions
 
 ```go
-tx, err := pool.Begin(ctx)
-tx, err := pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-err = tx.Commit(ctx)
-err = tx.Rollback(ctx)
+err := pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
+    if _, err := tx.Exec(ctx, statement, args...); err != nil {
+        return fmt.Errorf("update record: %w", err)
+    }
+    return nil
+})
 ```
+
+`pgx.BeginFunc` commits only when the callback returns nil and otherwise
+rolls back. A manually opened transaction must guarantee the same rollback
+path.
 
 ### Named arguments / pgtype
 
@@ -72,6 +81,7 @@ if errors.As(err, &pgErr) {
 ```
 
 Common SQLSTATE codes:
+
 - `23505` — unique_violation
 - `23503` — foreign_key_violation
 - `42710` — duplicate_object (e.g. replication slot already exists)
@@ -80,7 +90,11 @@ Common SQLSTATE codes:
 
 ```go
 type QueryTracer interface {
-    TraceQueryStart(ctx context.Context, conn *pgx.Conn, data TraceQueryStartData) context.Context
+    TraceQueryStart(
+        ctx context.Context,
+        conn *pgx.Conn,
+        data TraceQueryStartData,
+    ) context.Context
     TraceQueryEnd(ctx context.Context, conn *pgx.Conn, data TraceQueryEndData)
 }
 ```
@@ -88,10 +102,10 @@ type QueryTracer interface {
 ## golusoris usage
 
 - `db/pgx/` — `*pgxpool.Pool` provided as fx singleton; koanf-driven config.
-- `db/sqlc/` — `WithTx(pool, fn)` helper + `MapError`.
+- `db/sqlc/` — `WithTx(ctx, pool, fn)` helper + `MapError`.
 - `testutil/pg/` — testcontainers postgres, returns pool.
 
 ## Links
 
-- Changelog: https://github.com/jackc/pgx/blob/master/CHANGELOG.md
-- Wiki: https://github.com/jackc/pgx/wiki
+- [Changelog](https://github.com/jackc/pgx/blob/v5.11.0/CHANGELOG.md)
+- [Package documentation](https://pkg.go.dev/github.com/jackc/pgx/v5@v5.11.0)

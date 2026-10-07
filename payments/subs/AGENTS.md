@@ -6,9 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # payments/subs
 
-Provider-agnostic subscription-lifecycle state machine. The processor
-(Stripe / Paddle / Lemon Squeezy / self-hosted) drives the money and
-reports events back; `subs` holds the authoritative record + valid
+Provider-agnostic subscription-lifecycle state machine. processor
+(Stripe / Paddle / Lemon Squeezy / self-hosted) drives money and
+reports events back; `subs` holds authoritative record + valid
 transitions.
 
 ## Surface
@@ -16,8 +16,8 @@ transitions.
 - `subs.New(Store, clock.Clock, *slog.Logger, Options)` → `*Service`.
 - `Options{OnChange, IDGen, PeriodLength}`.
 - `subs.Subscription{ID, CustomerID, Plan, Seats, Status, TrialEndsAt,
-  CurrentPeriodStart, CurrentPeriodEnd, CancelAt, CanceledAt, PausedAt,
-  Metadata, CreatedAt, UpdatedAt}`.
+ CurrentPeriodStart, CurrentPeriodEnd, CancelAt, CanceledAt, PausedAt,
+ Metadata, CreatedAt, UpdatedAt}`.
 - `subs.Store` interface (Get, GetByCustomer, Upsert, Delete).
 - `subs.NewMemoryStore()` for tests.
 
@@ -52,22 +52,19 @@ past_due. Pause/Unpause round-trip between active and paused.
 
 ## Events
 
-`Options.OnChange` fires after every successful transition, with the
-post-state Subscription. Keep it fast or fan out — it blocks the
-transition.
+`Options.OnChange` fires after successful transition with independent post-state snapshot. Keep fast or fan out; callback blocks transition.
 
 ## Persistence
 
-`MemoryStore` for tests. Apps write a Postgres-backed Store against
-their own schema — the interface is minimal (Get/GetByCustomer/Upsert/
-Delete). When using Postgres, put INSERT/UPDATE inside the same tx as
+`MemoryStore` for tests. Apps write Postgres-backed Store against
+their own schema — interface is minimal (Get/GetByCustomer/Upsert/
+Delete). When using Postgres, put INSERT/UPDATE inside same tx as
 your app's row changes to keep subscription state consistent with your
 domain.
 
 ## What this package does NOT do
 
-- It does not charge cards. The payment processor does.
-- It does not compute proration amounts. `ChangePlan` updates the
-  record; the app computes charges via its payment processor's API.
+- It does not charge cards. payment processor does.
+- It does not compute proration amounts. `ChangePlan` updates  record; app computes charges via its payment processor's API.
 - It does not store invoices. See `payments/invoice` for that.
 - It does not emit webhooks. See `webhooks/out` for delivery.

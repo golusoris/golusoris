@@ -18,7 +18,7 @@ We aim to acknowledge within 72 hours and provide a remediation plan within 7 da
 
 | Version | Supported | Licence |
 |---|---|---|
-| `v0.10.x` (current root module) | yes — security fixes land here | EUPL-1.2 |
+| `v0.12.x` (current root module) | yes — security fixes land here | EUPL-1.2 |
 | `core/v0.9.x` (current `core/` sub-module) | yes — security fixes land here | EUPL-1.2 |
 | `v0.8.0` and earlier | no | MIT |
 
@@ -29,32 +29,43 @@ promptly when an advisory is published. Root and `core/` are released by
 `release-please` as independent components (`release-please-config.json`)
 and no longer move in lockstep: they were tagged together through
 `v0.9.0` / `core/v0.9.0`, but from `v0.10.0` on the root module and the
-`core/` sub-module version separately, so `v0.10.x` (root) and
+`core/` sub-module version separately, so `v0.12.x` (root) and
 `core/v0.9.x` (`core/`) are each the current, supported line for their own
 module — watch both tag series, not just the root one. The licence changed
 from MIT to EUPL-1.2 at `v0.9.0`; `v0.8.0` and earlier remain MIT. Heavy
 sub-modules with their own `go.mod` (`media/*`, `ocr/`, `pdf/`, `hw/*`,
-`science/*`, `web3/*`, `testutil/pact`) are patched on the same cadence but
-only when a consumer exists — alerts there are scoped to apps that import
-them.
+`science/*`, `web3/*`, `testutil/pact`) follow the same patch cadence. CI
+builds, vets, lints, scans, and race-tests every module; deployment alerts stay
+scoped to apps that import them.
+
+The govulncheck gate parses the scanner's JSON and rejects every unexpected
+reachable finding. Its sole temporary exception is `GO-2026-6452` for
+Excelize `v2.11.0`: the release contains the upstream fix, and the gate binds
+the module checksum plus the patched `cell.go` hash until the Go vulnerability
+database records the fixed version. Policy tests reject scanner, version,
+checksum, source, and exception-authority drift.
 
 ## Supply chain
 
-Every merged commit passes (`.github/workflows/ci.yml`, all jobs on
-self-hosted [ARC](https://github.com/actions/actions-runner-controller)
-runners — `runs-on: arc-cauda-golusoris-golusoris` — with pinned action SHAs):
+The blocking `CI success` aggregate in `.github/workflows/ci.yml` covers
+formatting; lint, gosec, govulncheck, tidiness, build/vet, API diff, and race
+tests across all 23 Go modules; Python and C gates; allocation budgets;
+documentation, shell, workflow, Terraform, and Kubernetes checks; Semgrep,
+Spectral, dependency review, gitleaks, DCO, and REUSE. DCO is not applicable to
+Renovate commits; dependency review and DCO are both skipped outside
+pull-request events, and the aggregate validates those skips explicitly.
+Main branch protection separately requires the Conventional-Commit PR title and
+GitHub-managed CodeQL `Analyze (go)` checks. Repository Actions run on
+self-hosted [ARC](https://github.com/actions/actions-runner-controller) runners
+(`runs-on: arc-cauda-golusoris-golusoris`) with pinned action SHAs.
 
-- `golangci-lint` (30+ linters incl. `gosec`-adjacent checks), standalone
-  `gosec`, `govulncheck`, `go test -race`, `apidiff` vs the previous tag
-- **Semgrep** custom SAST (`.semgrep.yml`; also the standalone
-  `security-scan.yml` run inside the pinned `semgrep/semgrep` container)
-- **gitleaks** secret scan (`.gitleaks.toml`) on every PR and, via lefthook,
-  on every staged commit
-- **DCO** `Signed-off-by:` on every commit and **`reuse lint`** on every
-  first-party file (SPDX headers + `REUSE.toml`; see
-  [LICENSING.md](LICENSING.md)) — the licence of every file is
-  machine-readable for SBOM accuracy
-- Dependency review on every PR
+The following controls have enforcement distinct from the blocking
+`CI success` aggregate:
+
+- **Semgrep** custom SAST (`.semgrep.yml`) is blocking inside `CI success`.
+  The separate `security-scan.yml` registry-rules run is an additional scan.
+- `apidiff` reports against the previous root tag but remains informational
+  before v1.0
 - **CodeQL default setup**, GitHub-managed (languages: Go, Python, GitHub
   Actions; weekly schedule) — its `Analyze (go)` check is a required
   branch-protection check on `main`. It replaces the repository's own
@@ -64,13 +75,19 @@ runners — `runs-on: arc-cauda-golusoris-golusoris` — with pinned action SHAs
 - **OpenSSF Scorecard** as a manual (`workflow_dispatch`) and reusable
   (`workflow_call`) workflow — not triggered on every push, so results are
   not continuously published to the OpenSSF API
-- praetor **HISS-20 lattice** governance audit (`standardsctl audit`, ratcheting
-  baseline at zero infractions in `.standards-baseline.json`) and
-  `standardsctl gate run` (stages 1–3), run on demand — `make verify-all`
-  composes the audit, not the gate. Both are
-  local / lefthook gates today rather than CI jobs; gate's stage 4 (flavor
-  conformance) and the hook wiring for `gate` itself stay disabled until an
-  upstream praetor classification fix (cordanaLLM/praetor#36)
+- praetor **HISS-21 lattice** governance audit (`praetorctl audit`, ratcheting
+  baseline at zero infractions in `.standards-baseline.json`) and the
+  six-stage `praetorctl gate run`, run on demand — `make verify-all` composes
+  the audit, not the gate. They are local / lefthook gates rather than CI jobs;
+  gate wiring stays disabled until the upstream framework-classification fix
+  (cordanaLLM/praetor#36)
+
+`.standards.yaml` retains SLSA Build Level 3 as the target policy. The current
+root release workflow uses direct GitHub artifact attestations and does not
+establish or claim Level 3 conformance. Praetor does not yet measure that
+distinction;
+[cordanaLLM/praetor#330](https://github.com/cordanaLLM/praetor/issues/330)
+tracks audit enforcement.
 
 Releases are:
 
@@ -79,13 +96,22 @@ Releases are:
   `release-please` and land on the same commit only when both change
   together
 - Signed with [cosign](https://docs.sigstore.dev/cosign/) (keyless, GitHub OIDC)
-- Accompanied by a per-archive SPDX SBOM ([syft](https://github.com/anchore/syft),
-  via goreleaser) plus source-tree SPDX and CycloneDX SBOMs published as
-  GitHub attestations and workflow artifacts on every tag
-  (`.github/workflows/sbom.yml`, `actions/attest-sbom`)
-- Attested with [SLSA](https://slsa.dev/) L3 provenance
-  (`actions/attest-build-provenance`); downstream apps can gate deploys
-  with the reusable `verify-provenance.yml` workflow
+- Accompanied by per-archive SPDX SBOMs ([syft](https://github.com/anchore/syft)
+  via goreleaser). The
+  [v0.12.0 release run](https://github.com/golusoris/golusoris/actions/runs/35001126039)
+  succeeded and its immutable release carries those SBOM assets. The separate
+  source-tree SPDX/CycloneDX workflow is intended to run on each root tag, but
+  its [v0.12.0 run](https://github.com/golusoris/golusoris/actions/runs/35001126102)
+  failed during Rekor publication. Retry handling is now prospective; do not
+  treat source-tree attestations as an every-tag guarantee until a later tag
+  proves the repaired path
+- Attested with build provenance (`actions/attest-build-provenance`); no SLSA
+  level is claimed. Downstream apps can gate deploys with the reusable
+  `verify-provenance.yml` workflow, which defaults to checking the keyless
+  signature plus SLSA-provenance and SPDX-SBOM predicates against an exact
+  commit-pinned signer workflow, source ref, source commit, and image digest.
+  GoReleaser stages release assets in a resumable draft; publication happens
+  only after the signature and attestations succeed
 - Published as [immutable GitHub releases](https://github.blog/changelog/2025-10-28-immutable-releases-are-now-generally-available/)
   (enabled from `v0.10.1` on) — release assets cannot be altered or
   deleted after publication
@@ -118,7 +144,7 @@ turned off so Renovate stays the single updater. The Go toolchain floor is
 
 ## Framework vs. app responsibility
 
-golusoris ships the scaffolding (SBOM, signing, provenance, secure defaults,
-compliance anchors in [docs/principles.md](docs/principles.md) §2.5). Apps
-assert their own compliance posture in their `SECURITY.md`; the
-`template/.github/SECURITY.md` stub is the starting point.
+golusoris ships security primitives, secure defaults, SBOMs, signing, and
+provenance attestations. It does not ship a compliance mapping or certify an
+assembled application. Apps document and verify their own controls in
+`SECURITY.md`; `template/.github/SECURITY.md` is the starting point.

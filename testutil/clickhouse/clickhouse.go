@@ -27,11 +27,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
-	defaultImage = "clickhouse/clickhouse-server:24"
 	// startTimeout bounds one container start including a cold image pull;
 	// same value as testutil/pg (see the rationale there: cold ARC runners).
 	startTimeout = 3 * time.Minute
@@ -53,13 +53,12 @@ func Start(t *testing.T) chgo.Conn {
 	defer cancel()
 
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        defaultImage,
-			ExposedPorts: []string{"9000/tcp", "8123/tcp"},
-			// /ping returns "Ok." when the server is ready.
-			WaitingFor: wait.ForHTTP("/ping").WithPort("8123/tcp").WithStartupTimeout(startTimeout),
-		},
-		Started: true,
+		Image:        testimages.ClickHouse,
+		ReaperImage:  testimages.Ryuk,
+		ExposedPorts: []string{"9000/tcp", "8123/tcp"},
+		// /ping returns "Ok." when the server is ready.
+		WaitingFor: wait.ForHTTP("/ping").WithPort("8123/tcp").WithStartupTimeout(startTimeout),
+		Started:    true,
 	})
 	if err != nil {
 		t.Fatalf("testutil/clickhouse: start container: %v", err)

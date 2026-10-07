@@ -6,27 +6,23 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ai/tiny/serve/fleet — AGENTS.md
 
-Distributed-inference **recipe** for `ai/tiny`: serve a `tiny.Predictor`
-across a replica set using the framework's own `jobs/` (river) queues +
-`leader/` election instead of a bespoke controller. A capability is a
-river queue name; node fan-out is river's fetch model. Apps get
+Distributed-inference **recipe** for `ai/tiny`: serve `tiny.Predictor`
+across replica set using framework's own `jobs/` (river) queues +
+`leader/` election instead of bespoke controller. capability is river queue name; node fan-out is river's fetch model. Apps get
 distributed inference by composing existing modules — no hand-rolled
 scheduler.
 
 ## Topology
 
-- **Controller** (any replica): `Fleet.Submit(ctx, Request)` resolves the
-  model against the `tiny.Registry` (fail-fast on a bad model) and
-  inserts a `PredictArgs` river job into the capability-matched queue
-  `"<prefix>-<capability>"`.
-- **Node**: `Module` registers a `Worker` on the capability queues the
-  node serves and `Client.Queues().Add`s them to the running river
-  client, so this replica fetches only capability-matched jobs. The
-  worker resolves the model, builds a `tiny.Predictor` via a
-  `PredictorFactory`, runs Predict, and hands the result to a
-  `ResultSink`.
+- **Controller** (any replica): `Fleet.Submit(ctx, Request)` validates input
+ size before insert, resolves `Version=0` once, and queues concrete positive
+ version in capability queue `"<prefix>-<capability>"`.
+- **Node**: `Module` registers `Worker` on capability queues  node serves and `Client.Queues().Add`s them to running river
+ client, so this replica fetches only capability-matched jobs. Worker resolves
+ exact model, builds `tiny.Predictor`, runs Predict, and sends exact executed
+ model ref to `ResultSink`.
 
-Capability matching is structural: river only delivers a job to a node
+Capability matching is structural: river only delivers job to node
 that subscribed to its queue. No node-side filtering loop, no central
 dispatcher.
 
@@ -34,13 +30,14 @@ dispatcher.
 
 | Symbol | Purpose |
 | --- | --- |
-| `Fleet` / `NewFleet(registry, inserter, prefix)` | Controller handle. |
+| `Fleet` / `NewFleet(registry, inserter, prefix)` | Controller with 1 MiB input cap. |
+| `NewFleetWithInputLimit(...)` | Controller with explicit encoded-input cap. |
 | `(*Fleet).Submit(ctx, Request) (int64, error)` | Validate + enqueue; returns river job ID. |
 | `Request{Model, Capability, Input, Priority, Tags}` | One prediction ask. |
 | `PredictArgs` | river job payload (wire contract). `Kind() = "golusoris.tiny.fleet.predict"`. |
 | `Worker` / `NewWorker(...)` | Node-side river `Worker[PredictArgs]`. |
 | `PredictorFactory` | `func(tiny.Model) (tiny.Predictor, error)` — per-job predictor. |
-| `SingletonFactory(p)` | Share one concurrency-safe predictor; no per-job Close. |
+| `SingletonFactory(p)` | Share one predictor; serialize each Load+Predict lease; no per-job Close. |
 | `ResultSink` / `ResultSinkFunc` | Persist/forward a finished `tiny.Prediction`. |
 | `Capability` | Opaque node trait → queue name. Lowercase `[a-z0-9_-]`. |
 | `Module` | fx wiring: provides `*Fleet`, registers the node `Worker` + queues. |
@@ -81,21 +78,22 @@ Config keys (env `APP_TINY_FLEET_*`):
 
 ## Failure semantics
 
-- **Capability mismatch** / **oversized input** → `river.JobCancel`
-  (permanent; retrying cannot help; it is a routing/producer bug).
+- controller streams JSON sizing to a discard writer; null counts as 4 bytes;
+ oversized/non-JSON input → synchronous rejection before insert.
+- worker capability mismatch / oversized legacy payload → `river.JobCancel`.
 - **Model resolve / Load / Predict / Sink** errors → plain error → river
-  retries per its backoff.
-- A controller `Submit` against an unknown model fails synchronously
-  (no queue round-trip).
+ retries per its backoff.
+- controller unknown/unresolved model fails synchronously. Queued latest refs
+ never drift after newer model publication.
 
 ## Don't
 
-- Don't put `.` (or uppercase) in a capability — river queue names are
-  `[a-z0-9_-]`. `Submit` / `NewWorker` normalize case + reject the rest.
-- Don't copy vmafx's SQLite controller. The queue + leader modules
-  already provide durable scheduling, retries, and graceful drain.
+- Don't put `.` (or uppercase) in capability — river queue names are
+ `[a-z0-9_-]`. `Submit` / `NewWorker` normalize case + reject rest.
+- Don't copy vmafx's SQLite controller. queue + leader modules
+ already provide durable scheduling, retries, and graceful drain.
 - Don't assume `SingletonFactory`'s predictor is Closed per job — it is
-  not (it is process-wide). Use a plain `PredictorFactory` when each job
-  needs a fresh, Closed predictor.
-- Don't run training here — this is the inference half. Trainers live in
-  `ai/tiny/gemma` + `ai/tiny/litert`.
+ process-wide and runs one Load+Predict lease at a time. Use plain
+ `PredictorFactory` for parallel per-job predictors.
+- Don't run training here — this is inference half. Trainers live in
+ `ai/tiny/gemma` + `ai/tiny/litert`.
