@@ -56,8 +56,8 @@ Renovate commits; dependency review and DCO are both skipped outside
 pull-request events, and the aggregate validates those skips explicitly.
 Main branch protection separately requires the Conventional-Commit PR title and
 GitHub-managed CodeQL `Analyze (go)` checks. Repository Actions run on
-self-hosted [ARC](https://github.com/actions/actions-runner-controller) runners
-(`runs-on: arc-cauda-golusoris-golusoris`) with pinned action SHAs.
+GitHub-hosted runners (`runs-on: ubuntu-24.04`) with pinned action SHAs; each
+job installs its tools at the versions pinned in `tools/tool-versions.env`.
 
 The following controls have enforcement distinct from the blocking
 `CI success` aggregate:
@@ -70,7 +70,7 @@ The following controls have enforcement distinct from the blocking
   Actions; weekly schedule) — its `Analyze (go)` check is a required
   branch-protection check on `main`. It replaces the repository's own
   `codeql.yml` workflow, removed on 2026-08-28 because it could not run on
-  the self-hosted ARC runners; default setup runs on GitHub's own
+  the self-hosted ARC runners then in use; default setup runs on GitHub's own
   infrastructure instead
 - **OpenSSF Scorecard** as a manual (`workflow_dispatch`) and reusable
   (`workflow_call`) workflow — not triggered on every push, so results are

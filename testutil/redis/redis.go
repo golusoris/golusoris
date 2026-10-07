@@ -32,7 +32,7 @@ import (
 
 const (
 	// startTimeout bounds one container start including a cold image pull;
-	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	// same value as testutil/pg (see the rationale there: cold CI runners).
 	startTimeout = 3 * time.Minute
 )
 

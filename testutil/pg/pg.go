@@ -39,7 +39,7 @@ const (
 	defaultUser     = "test"
 	defaultPassword = "test"
 	// startTimeout bounds one container start (HISS-02) — image pull included.
-	// It is deliberately generous: the CI ARC runners begin every job with an
+	// It is deliberately generous: the CI runners begin every job with an
 	// empty Docker image cache (docker info: "Images: 0") and `go test ./...`
 	// launches every testcontainers-backed package at once, so one pull
 	// competes with half a dozen others (timescaledb alone is >2 GB

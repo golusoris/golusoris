@@ -168,6 +168,7 @@ Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 - Clang/clang-tidy 22.1.8: full-tree C warnings; reproducible checked eBPF object
 - All-module `apidiff` versus previous root tag; execution required, incompatibilities informational before v1.0
 - Conventional-commit PR title
+- Runners: GitHub-hosted `ubuntu-24.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
 
 ## Working Agreements
 

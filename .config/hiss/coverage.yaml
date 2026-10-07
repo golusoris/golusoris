@@ -509,10 +509,12 @@ rules:
         state: partial
         runner: gitleaks
         mechanism: >-
-          gitleaks 8.30.1 with this repository's .gitleaks.toml, run over the FULL history by
-          the CI job "Secret scan (gitleaks)" (`gitleaks git . -c .gitleaks.toml --redact
-          --no-banner --verbose`, version-pinned by an explicit `test "$(gitleaks version)" =
-          "8.30.1"`) and over the staged diff by the lefthook pre-commit job gitleaks
+          gitleaks GITLEAKS_VERSION (tools/tool-versions.env, 8.30.1) with this repository's
+          .gitleaks.toml, run over the FULL history by the CI job "Secret scan (gitleaks)"
+          (`gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose`, installed by
+          scripts/ci/install-gitleaks.sh only after the archive matches
+          GITLEAKS_LINUX_X64_SHA256, then version-pinned by `test "$(gitleaks version)" =
+          "$GITLEAKS_VERSION"`) and over the staged diff by the lefthook pre-commit job gitleaks
           (scripts/hooks/gitleaks.sh). GitHub native secret scanning and push protection sit in
           front of both.
         rationale: >-
