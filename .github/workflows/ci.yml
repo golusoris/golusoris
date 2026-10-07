@@ -376,6 +376,7 @@ jobs:
           GO_MODULE_GROUP: primary
         run: |
           scripts/ci/go-modules.sh tidy
+          scripts/ci/go-modules.sh fix
           scripts/ci/go-modules.sh build
 
   # ── Nested Go modules ───────────────────────────────────────────────────────
@@ -419,6 +420,7 @@ jobs:
         run: |
           scripts/ci/go-modules.sh verify
           scripts/ci/go-modules.sh tidy
+          scripts/ci/go-modules.sh fix
       - name: Lint
         run: scripts/ci/go-modules.sh lint
       - name: Security and vulnerability gates

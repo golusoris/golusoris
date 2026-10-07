@@ -78,4 +78,25 @@ if (
 	exit 1
 fi
 
+fix_root="$(mktemp -d)"
+trap 'rm -rf "$fix_root"' EXIT
+mkdir -p "$fix_root/probe"
+printf 'module probe\n\ngo 1.27\n' >"$fix_root/probe/go.mod"
+printf 'package probe\n\nfunc Count() int {\n\tn := 0\n\tfor i := 0; i < 3; i++ {\n\t\tn += i\n\t}\n\treturn n\n}\n' \
+	>"$fix_root/probe/probe.go"
+if fix_output="$(go_fix_check "$fix_root/probe" 2>&1)"; then
+	printf 'fix phase accepted a module go fix would modernize\n' >&2
+	exit 1
+fi
+if [[ "$fix_output" != *"for i := range 3"* ]]; then
+	printf 'fix phase failed without the go fix rewrite: %s\n' "$fix_output" >&2
+	exit 1
+fi
+printf 'package probe\n\nfunc Count() int {\n\tn := 0\n\tfor i := range 3 {\n\t\tn += i\n\t}\n\treturn n\n}\n' \
+	>"$fix_root/probe/probe.go"
+if ! go_fix_check "$fix_root/probe" >/dev/null 2>&1; then
+	printf 'fix phase rejected a module go fix leaves unchanged\n' >&2
+	exit 1
+fi
+
 printf 'go-module coverage selection tests passed\n'

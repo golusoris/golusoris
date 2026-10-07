@@ -77,6 +77,10 @@ tidy-all: ## go mod tidy in root, core, and every sub-module
 tidy-check-all: ## assert go mod tidy would not change any Go module
 	@$(GO_MODULES) tidy
 
+.PHONY: fix-check-all
+fix-check-all: ## assert go fix would not modernize any Go module
+	@$(GO_MODULES) fix
+
 .PHONY: tools-bootstrap
 tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
@@ -243,7 +247,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all ci-policy-test go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy markdownlint mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy markdownlint mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

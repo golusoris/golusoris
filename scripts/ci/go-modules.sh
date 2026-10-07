@@ -28,7 +28,7 @@ esac
 export GOFLAGS
 
 usage() {
-	printf 'usage: %s <list|list-ref|verify|tidy|lint|gosec|vuln|build|test|test-short> [revision]\n' "$0" >&2
+	printf 'usage: %s <list|list-ref|verify|tidy|fix|lint|gosec|vuln|build|test|test-short> [revision]\n' "$0" >&2
 }
 
 validate_selector() {
@@ -170,6 +170,12 @@ select_modules() {
 	done
 }
 
+# go_fix_check fails when go fix would modernize any package of the module in dir:
+# go fix -diff prints the rewrite and exits nonzero.
+go_fix_check() {
+	(cd "$1" && go fix -diff ./...)
+}
+
 run_module() {
 	local phase="$1"
 	local module="$2"
@@ -184,6 +190,9 @@ run_module() {
 			;;
 		tidy)
 			(cd "$REPO_ROOT/$module" && go mod tidy -diff)
+			;;
+		fix)
+			go_fix_check "$REPO_ROOT/$module"
 			;;
 		lint)
 			(cd "$REPO_ROOT/$module" && golangci-lint run \
@@ -361,7 +370,7 @@ main() {
 		return
 	fi
 	case "$phase" in
-		verify | tidy | lint | gosec | vuln | build | test | test-short) ;;
+		verify | tidy | fix | lint | gosec | vuln | build | test | test-short) ;;
 		*)
 			usage
 			return 2
