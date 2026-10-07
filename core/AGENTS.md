@@ -27,7 +27,7 @@ import core.
 | `id/` | `id.uuid`, `id.ksuid` | UUIDv7 / KSUID |
 | `validate/` | `validate.struct` | go-playground/validator wrapper |
 | `version/` | `build.version` | build metadata from ldflags / VCS |
-| `clikit/` | `clikit.cli`, `clikit.cobra`, `clikit.ioc` | cobra + fx CLI builder (`tui/` stays in the root module) |
+| `clikit/` | `clikit.cli`, `clikit.cobra`, `clikit.ioc`, `clikit.completion`, `clikit.manpage` | cobra + fx CLI builder; shell completions, man pages, drift check (`tui/` stays in the root module) |
 | `mcp/` | `mcp.server` | MCP server fx module (stdio / streamable-HTTP) |
 | `gitx/`, `gitx/worktree/` | `git.runner`, `git.worktree` | bounded git exec; per-task worktrees |
 | `astx/` | `ast.analyzer`, `ast.rewrite` | source walker, import rewriter, func metrics, go.mod reader |

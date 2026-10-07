@@ -49,7 +49,7 @@ packages:
   - import: github.com/golusoris/golusoris/core/clikit
     module: github.com/golusoris/golusoris/core
     domain: clikit
-    capabilities: [clikit.cli, clikit.cobra, clikit.ioc]
+    capabilities: [clikit.cli, clikit.cobra, clikit.ioc, clikit.completion, clikit.manpage]
     description: "Package clikit provides a cobra + fx-aware CLI builder."
     replaces: [github.com/alecthomas/kong, github.com/spf13/cobra, github.com/spf13/pflag, github.com/urfave/cli]
   - import: github.com/golusoris/golusoris/core/drain

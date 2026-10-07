@@ -97,7 +97,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/id/` | UUIDv7 and KSUID generators | google/uuid · segmentio/ksuid |
 | `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
 | `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
-| `core/clikit/` | cobra + fx CLI builder (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
+| `core/clikit/` | cobra + fx CLI builder; bash/zsh/fish/PowerShell completions, man pages, generated-file drift check (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
 | `core/mcp/` | MCP server fx module — stdio + streamable-HTTP | modelcontextprotocol/go-sdk |
 | `core/gitx/` | bounded git runner + `worktree/` per-task worktrees | stdlib |
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |

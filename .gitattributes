@@ -1,3 +1,6 @@
+# Golden output and test vectors are compared byte for byte on every OS.
+core/clikit/testdata/golden/** text eol=lf
+
 # BEGIN praetor managed attributes (praetorctl adopt)
 # praetorctl audit hashes these files; keep their checkout bytes the same on every platform.
 .devcontainer/Dockerfile.praetor text eol=lf

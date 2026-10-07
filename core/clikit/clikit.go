@@ -28,6 +28,10 @@
 //	    })),
 //	)
 //	root.Execute()
+//
+// [Generate] renders bash, zsh, fish and PowerShell completions plus one man
+// page per command from the same tree; [EnumFlag] declares a flag's value set
+// for both, and [CheckDrift] fails CI when checked-in copies go stale.
 package clikit
 
 import (

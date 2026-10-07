@@ -49,6 +49,22 @@ clikit.Command("migrate", "Run DB migrations",
 )
 ```
 
+## Completions + man pages (#630)
+
+| Symbol | Purpose |
+| --- | --- |
+| `EnumFlag(cmd, name, values...)` | declare flag value set; shells complete it, man page lists it |
+| `WriteCompletion(w, root, shell)` | one script; `Shells()` = bash, zsh, fish, powershell |
+| `ManPages(root, ManOptions)` | one man(7) page per visible command; aliases + enum values listed |
+| `Generate(root, ManOptions)` | completions + man pages, keyed `completions/<shell>/...`, `man/man<N>/...` |
+| `WriteFiles(dir, files)` / `CheckDrift(dir, files)` | write output; CI drift check -> `ErrDrift` names stale, missing, unexpected files |
+
+- Scripts call `<prog> __complete` at TAB time; flags never baked into scripts, so scripts cannot drift.
+- Output byte-reproducible: no date unless `ManOptions.Date` set. Golden: `testdata/golden`, regenerate via `GOLUSORIS_UPDATE_GOLDEN=1 go test ./clikit/`.
+- Tree walk iterative, bounded by `MaxCommands`; `CheckDrift` walk bounded by `MaxGeneratedFiles`.
+- `ManPages`/`Generate` add cobra default `completion` command + help flags, same as `Execute` does.
+- Shell harness test runs real bash, zsh, fish when installed; PowerShell covered via `__complete` protocol test only.
+
 ## Sub-package
 
 - `clikit/tui/` — bubbletea helpers (`Run`, `RunInline`, `Quit`)
