@@ -108,7 +108,7 @@ require (
 	github.com/uptrace/bun/dialect/pgdialect v1.2.18
 	github.com/uptrace/bun/extra/bundebug v1.2.18
 	github.com/wneessen/go-mail v0.8.1
-	github.com/xuri/excelize/v2 v2.11.0
+	github.com/xuri/excelize/v2 v2.11.1-0.20260910071107-696050fbf14e
 	github.com/yuin/goldmark/v2 v2.1.5
 	github.com/zeebo/blake3 v0.2.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
