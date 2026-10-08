@@ -31,10 +31,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 
 	"github.com/golusoris/golusoris/core/clikit"
+	"github.com/golusoris/golusoris/core/mcp"
 )
 
 const (
@@ -74,13 +75,13 @@ func run(ctx context.Context, transport, addr string) error {
 }
 
 // newServer builds the MCP server with all golusoris tools registered.
-func newServer(logger *slog.Logger) *mcp.Server {
-	srv := mcp.NewServer(&mcp.Implementation{Name: serverName, Version: serverVersion}, &mcp.ServerOptions{Logger: logger})
+func newServer(logger *slog.Logger) *sdkmcp.Server {
+	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: serverName, Version: serverVersion}, &sdkmcp.ServerOptions{Logger: logger})
 	for i := range mcpTools {
 		t := mcpTools[i]
-		mcp.AddTool[map[string]any, any](
+		sdkmcp.AddTool[map[string]any, any](
 			srv,
-			&mcp.Tool{Name: t.name, Description: t.description, InputSchema: t.inputSchema},
+			&sdkmcp.Tool{Name: t.name, Description: t.description, InputSchema: t.inputSchema},
 			toolHandler(t.name),
 		)
 	}
@@ -91,27 +92,26 @@ func runStdio(ctx context.Context, logger *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	logger.InfoContext(ctx, "golusoris-mcp serving on stdio")
-	if err := newServer(logger).Run(ctx, &mcp.StdioTransport{}); err != nil && !errors.Is(err, context.Canceled) {
+	if err := newServer(logger).Run(ctx, &sdkmcp.StdioTransport{}); err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("stdio transport: %w", err)
 	}
 	return nil
 }
 
 func runHTTP(ctx context.Context, logger *slog.Logger, addr string) error {
-	handler := mcp.NewStreamableHTTPHandler(
-		func(*http.Request) *mcp.Server { return newServer(logger) },
+	handler := sdkmcp.NewStreamableHTTPHandler(
+		func(*http.Request) *sdkmcp.Server { return newServer(logger) },
 		nil,
 	)
-	mux := http.NewServeMux()
-	mux.Handle("/mcp", handler)
-
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      mux,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0, // streamable HTTP may stream responses; no write deadline
 		IdleTimeout:  60 * time.Second,
 	}
+	mux := http.NewServeMux()
+	mux.Handle("/mcp", mcp.EndStreamsOnShutdown(ctx, srv, handler))
+	srv.Handler = mux
 
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -124,7 +124,7 @@ func runHTTP(ctx context.Context, logger *slog.Logger, addr string) error {
 	}()
 
 	<-ctx.Done()
-	shutCtx, shutCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	shutCtx, shutCancel := context.WithTimeout(context.WithoutCancel(ctx), mcp.HTTPShutdownGrace)
 	defer shutCancel()
 	return srv.Shutdown(shutCtx) //nolint:wrapcheck // stdlib error is descriptive
 }
@@ -179,8 +179,8 @@ var mcpTools = []mcpTool{
 
 // toolHandler dispatches schema-validated arguments to the corresponding
 // golusoris CLI guidance.
-func toolHandler(name string) mcp.ToolHandlerFor[map[string]any, any] {
-	return func(_ context.Context, _ *mcp.CallToolRequest, args map[string]any) (*mcp.CallToolResult, any, error) {
+func toolHandler(name string) sdkmcp.ToolHandlerFor[map[string]any, any] {
+	return func(_ context.Context, _ *sdkmcp.CallToolRequest, args map[string]any) (*sdkmcp.CallToolResult, any, error) {
 		return textResult(dispatchTool(name, args)), nil, nil
 	}
 }
@@ -214,6 +214,6 @@ func dispatchTool(name string, args map[string]any) string {
 	}
 }
 
-func textResult(text string) *mcp.CallToolResult {
-	return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: text}}}
+func textResult(text string) *sdkmcp.CallToolResult {
+	return &sdkmcp.CallToolResult{Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: text}}}
 }

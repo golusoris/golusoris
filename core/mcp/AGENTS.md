@@ -25,6 +25,8 @@ standalone MCP server). Apps wire `mcp.Module` and register tools via fx.
 | `mcp.ToolHandler` | Low-level escape hatch; no input or output validation |
 | `mcp.Options` | `transport` (`stdio`\|`http`), `http.addr`, `http.path`, `name`, `version` |
 | `mcp.TransportStdio` / `mcp.TransportHTTP` | Transport selectors |
+| `mcp.EndStreamsOnShutdown` | Wraps streamable-HTTP handler; GET event streams end once `http.Server.Shutdown` begins, tool calls keep draining |
+| `mcp.HTTPShutdownGrace` | Graceful-shutdown bound (10s); exceeds net/http's 5s wait on never-used connections (golang/go#22682) |
 
 ## Config keys (prefix `mcp`)
 
@@ -60,7 +62,8 @@ fx.New(
 - **stdio** mode: `Server.Run` is launched on fx Start; on client disconnect
  Run returns and module ends app via `fx.Shutdowner` (CLI-style exit).
 - **http** mode: dedicated `*http.Server` serves streamable-HTTP handler
- at `http.path`, gracefully shut down on fx Stop.
+ at `http.path`, gracefully shut down on fx Stop. Open GET event streams end
+ when shutdown begins; in-flight tool calls drain within `HTTPShutdownGrace`.
 
 ## Stdout purity (stdio mode)
 
@@ -77,4 +80,5 @@ via `github.com/golusoris/golusoris/core/log`.
 - Don't import `github.com/modelcontextprotocol/go-sdk` directly — use this
  package's re-exports so transport/protocol negotiation stays correct.
 - Don't add second HTTP listener for `http` mode if you already run
- `httpx/server`; mount SDK handler there instead if you need shared port.
+ `httpx/server`; mount SDK handler there instead if you need shared port,
+ wrapped in `mcp.EndStreamsOnShutdown` so connected clients can't hold Stop.
