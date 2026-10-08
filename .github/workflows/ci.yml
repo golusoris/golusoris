@@ -123,7 +123,7 @@ jobs:
           scripts/ci/go-modules.sh gosec
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: gosec.sarif
         continue-on-error: true   # SARIF upload requires Advanced Security (private repos)
@@ -325,7 +325,7 @@ jobs:
           fi
       - name: Upload coverage artifact
         if: matrix.primary
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage
           path: .coverage/primary/coverage.out
@@ -425,7 +425,7 @@ jobs:
       - name: Test with race detector and coverage
         run: scripts/ci/go-modules.sh test
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-modules-${{ matrix.shard }}
           path: .coverage/split-${{ matrix.shard }}
