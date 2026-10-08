@@ -6,6 +6,13 @@
 set -euo pipefail
 
 readonly max_go_files=16384
+
+# Exception (one file, all rules): Semgrep's Go parser rejects generic type
+# aliases while the ruleset holds a for-range pattern (semgrep/semgrep#11972),
+# and jobs/types.go re-exports River's generic types that way. After the expiry
+# Semgrep scans the file again and the gate fails until the parser is fixed.
+readonly generic_alias_exception=jobs/types.go
+readonly generic_alias_exception_expires=20261107
 scan_work=''
 
 cleanup() {
@@ -47,6 +54,13 @@ collect_files() {
 		if [[ -L "$root/$path" ]]; then
 			printf 'Semgrep refuses symlink input: %s\n' "$path" >&2
 			return 1
+		fi
+		# SEMGREP_EXCEPTION_DATE (YYYYMMDD) lets the policy test move past the expiry.
+		if [[ "$path" == "$generic_alias_exception" ]] &&
+			((${SEMGREP_EXCEPTION_DATE:-$(date -u +%Y%m%d)} <= generic_alias_exception_expires)); then
+			printf 'Semgrep skips %s: exception until %s (semgrep/semgrep#11972)\n' \
+				"$path" "$generic_alias_exception_expires" >&2
+			continue
 		fi
 		[[ -f "$root/$path" ]] || continue
 		files+=("$path")

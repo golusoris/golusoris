@@ -59,6 +59,11 @@ func (m *insertObserver) InsertMany(
 // a no-op cancellation function because they cannot emit worker completion
 // events.
 func Observe(c *Client, obs Observer) (cancel func()) {
+	return ObserveClient(c, obs)
+}
+
+// ObserveClient is [Observe] for a client over any River driver.
+func ObserveClient[TTx any](c *river.Client[TTx], obs Observer) (cancel func()) {
 	if c == nil || !hasObserver(obs) {
 		return func() {}
 	}
@@ -84,7 +89,7 @@ func Observe(c *Client, obs Observer) (cancel func()) {
 	return cancel
 }
 
-func subscribeWorkerEvents(c *Client) (sub <-chan *river.Event, cancel func()) {
+func subscribeWorkerEvents[TTx any](c *river.Client[TTx]) (sub <-chan *river.Event, cancel func()) {
 	cancel = func() {}
 	defer func() {
 		// River intentionally panics when Subscribe is called on an insert-only

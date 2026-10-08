@@ -91,3 +91,34 @@ func TestClient_bound(t *testing.T) {
 		t.Fatal("bound: expected a deadline on the derived context")
 	}
 }
+
+// TestNewLimits covers zero and negative (defaults) and explicit values.
+func TestNewLimits(t *testing.T) {
+	t.Parallel()
+	want := limits{
+		transfer: DefaultTransferTimeout, manifestBytes: DefaultMaxManifestBytes, blobBytes: DefaultMaxBlobBytes,
+		totalBytes: DefaultMaxTotalBytes, blobs: DefaultMaxBlobs, referrers: DefaultMaxReferrers,
+	}
+	if got := newLimits(Options{}); got != want {
+		t.Errorf("zero options = %+v, want %+v", got, want)
+	}
+	if got := newLimits(Options{MaxBlobBytes: -1, MaxBlobs: -5, TransferTimeout: -time.Second}); got != want {
+		t.Errorf("negative options = %+v, want defaults", got)
+	}
+	explicit := Options{TransferTimeout: time.Minute, MaxManifestBytes: 1, MaxBlobBytes: 2, MaxTotalBytes: 3, MaxBlobs: 4, MaxReferrers: 5}
+	if got := newLimits(explicit); got != (limits{time.Minute, 1, 2, 3, 4, 5}) {
+		t.Errorf("explicit options = %+v", got)
+	}
+}
+
+func TestValidateName(t *testing.T) {
+	t.Parallel()
+	for n, ok := range map[string]bool{
+		"model.onnx": true, "a": true, "": false, ".": false, "..": false,
+		"../x": false, "a/b": false, `a\b`: false, "/abs": false,
+	} {
+		if err := validateName(n); (err == nil) != ok {
+			t.Errorf("validateName(%q) = %v, want ok=%v", n, err, ok)
+		}
+	}
+}

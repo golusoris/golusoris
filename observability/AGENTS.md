@@ -14,6 +14,11 @@ Sub-packages layering on top of `otel/`:
 | `observability/profiling` | Pyroscope in-process profiling |
 | `observability/pprof` | Auth-gated `/debug/pprof` handler |
 | `observability/statuspage` | HTML + JSON `/status` page backed by shared check registry |
+| `observability/metricdef` | metric catalog: `Def` -> typed handles + generator/checker input |
+| `observability/grafana` | dashboard JSON generator over metricdef (Foundation SDK) |
+| `observability/rules` | PrometheusRule / rule-file builder, runbook required, SLO burn-rate alerts |
+
+Gate generated or hand-written dashboards + rules with `testutil/promcheck` (own go.mod) against `metricdef` catalog or real emission (`CatalogFromGatherer`).
 
 ## Conventions
 

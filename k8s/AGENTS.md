@@ -16,6 +16,7 @@ Kubernetes-aware modules. All opt-in.
 | `k8s/client` | client-go wrapper, in-cluster + kubeconfig + workload identity |
 | `k8s/operator` | controller-runtime manager lifecycle + caller-supplied schemes |
 | `k8s/nri` | split-module containerd NRI plugin registration + bounded hooks |
+| `k8s/keda` | KEDA external scaler gRPC over jobs queue depth |
 
 Leader election lives under top-level `leader/` so non-k8s apps can
 elect via pg advisory lock. `leader/k8s` is k8s-Lease backend;

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -253,5 +254,27 @@ func TestLoadOptions_defaults(t *testing.T) {
 	}
 	if opts.Job.MaxAttempts != 25 {
 		t.Errorf("Job.MaxAttempts = %d, want 25", opts.Job.MaxAttempts)
+	}
+}
+
+func TestLoadOptions_RejectsNilConfig(t *testing.T) {
+	t.Parallel()
+	if _, err := LoadOptions(nil); err == nil {
+		t.Fatal("LoadOptions accepted nil config")
+	}
+}
+
+func TestProvideInserter(t *testing.T) {
+	t.Parallel()
+	if _, err := ProvideInserter[pgx.Tx](nil); err == nil || !strings.Contains(err.Error(), "disabled") {
+		t.Fatalf("ProvideInserter(nil) error = %v, want disabled", err)
+	}
+	client, err := New(nil, Options{}, nil, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ins, err := ProvideInserter(client)
+	if err != nil || ins == nil {
+		t.Fatalf("ProvideInserter(client) = %v, %v", ins, err)
 	}
 }

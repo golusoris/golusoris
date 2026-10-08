@@ -17,7 +17,7 @@ spec:
       rules:
         - alert: HighErrorRate
           expr: |
-            sum(rate(http_server_request_duration_seconds_count{status=~"5.."}[5m]))
+            sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m]))
             /
             sum(rate(http_server_request_duration_seconds_count[5m])) > 0.05
           for: 5m
@@ -70,5 +70,5 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "Health check {{ $labels.check }} is failing"
-            description: "The health check {{ $labels.check }} has been failing for 2 minutes."
+            summary: "Health check {{ $labels.name }} is failing"
+            description: "The health check {{ $labels.name }} has been failing for 2 minutes."

@@ -55,8 +55,14 @@ func newClient(p clientParams) *Client {
 //
 // Config keys live under the "container.registry" prefix:
 //
-//	container.registry.user_agent = "my-app/1.0"
-//	container.registry.timeout    = "15s"
+//	container.registry.user_agent         = "my-app/1.0"
+//	container.registry.timeout            = "15s"
+//	container.registry.transfer_timeout   = "10m"        // artifact push/pull/blob fetch
+//	container.registry.max_manifest_bytes = 4194304
+//	container.registry.max_blob_bytes     = 1073741824
+//	container.registry.max_total_bytes    = 4294967296
+//	container.registry.max_blobs          = 64
+//	container.registry.max_referrers      = 256
 //
 // An app that needs a non-default [authn.Keychain] or [http.RoundTripper]
 // (a cloud credential helper, mTLS, a proxy) provides one itself — fx wires
