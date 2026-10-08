@@ -83,7 +83,12 @@ func newLimits(o Options) limits {
 	return l
 }
 
-func positiveOr[T int | int64 | time.Duration](v, d T) T {
+// limitValue covers the limit types: counts, byte sizes and durations. It is a
+// named interface, not an inline union, so Semgrep's Go parser can read it
+// (semgrep/semgrep#11972).
+type limitValue interface{ ~int | ~int64 }
+
+func positiveOr[T limitValue](v, d T) T {
 	if v <= 0 {
 		return d
 	}
