@@ -29,7 +29,7 @@ const (
 )
 
 func newClient(objs ...runtime.Object) *fake.Clientset {
-	all := append([]runtime.Object{&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: node, UID: "node-a-uid"}}}, objs...)
+	all := append([]runtime.Object{&corev1.Node{Name: node, UID: "node-a-uid"}}, objs...)
 	k := fake.NewClientset(all...)
 	apiServerLike(k)
 	return k
@@ -145,10 +145,10 @@ func TestPublisher_splitsAt128Devices(t *testing.T) {
 func TestPublisher_stopDeletesOnlyOwnSlices(t *testing.T) {
 	t.Parallel()
 	foreign := &resourceapi.ResourceSlice{
-		ObjectMeta: metav1.ObjectMeta{Name: "other"},
+		Name: "other",
 		Spec: resourceapi.ResourceSliceSpec{
 			Driver:   "other.example.com",
-			NodeName: ptrTo(node),
+			NodeName: new(node),
 			Pool:     resourceapi.ResourcePool{Name: node, ResourceSliceCount: 1},
 		},
 	}
@@ -260,5 +260,3 @@ func TestDevice_validation(t *testing.T) {
 		})
 	}
 }
-
-func ptrTo[T any](v T) *T { return &v }

@@ -42,8 +42,7 @@ func TestStatus_onStoppedLeadingClears(t *testing.T) {
 	s := leader.NewStatus()
 	stopped := false
 	cb := s.Observe(leader.Callbacks{OnStoppedLeading: func() { stopped = true }})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	cb.OnStartedLeading(ctx)
 	cb.OnStoppedLeading()
 	require.False(t, s.IsLeader())
@@ -56,8 +55,7 @@ func TestStatus_lateCancelKeepsNewerTerm(t *testing.T) {
 	cb := s.Observe(leader.Callbacks{})
 	first, cancelFirst := context.WithCancel(context.Background())
 	cb.OnStartedLeading(first)
-	second, cancelSecond := context.WithCancel(context.Background())
-	defer cancelSecond()
+	second := t.Context()
 	cb.OnStartedLeading(second)
 
 	cancelFirst()
@@ -75,8 +73,7 @@ func TestStatus_observeKeepsOtherCallbacksAndNilSafe(t *testing.T) {
 	require.Equal(t, "pod-1", newLeader)
 
 	empty := s.Observe(leader.Callbacks{})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	empty.OnStartedLeading(ctx)
 	empty.OnStoppedLeading()
 	require.Nil(t, empty.OnNewLeader)

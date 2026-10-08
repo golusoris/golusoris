@@ -12,13 +12,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
 func TestUpdate_identicalDevicesSkipController(t *testing.T) {
 	t.Parallel()
-	k := fake.NewClientset(&corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n"}})
+	k := fake.NewClientset(&corev1.Node{Name: "n"})
 	p, err := NewPublisher(k, Options{Driver: "d.example.com", Node: "n"}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
