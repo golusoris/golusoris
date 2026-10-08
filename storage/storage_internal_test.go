@@ -380,11 +380,20 @@ func TestLocalBucket_TwoInstancesShareOperationLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The waiter's own retry limit bounds the wait; the fsyncs after hand-off are host-paced.
+	ctx, cancel := context.WithTimeout(context.Background(), maxLocalLockAttempts*localLockRetryInterval)
 	result := make(chan error, 1)
+	finished := make(chan struct{})
 	go func() {
-		_, putErr := second.Put(context.Background(), "object", strings.NewReader("body"), PutOptions{})
+		defer close(finished)
+		_, putErr := second.Put(ctx, "object", strings.NewReader("body"), PutOptions{})
 		result <- putErr
 	}()
+	// Join the Put before TempDir cleanup; Windows cannot remove a staged file still open.
+	t.Cleanup(func() {
+		cancel()
+		<-finished
+	})
 	select {
 	case putErr := <-result:
 		t.Fatalf("second Put completed while first instance held lock: %v", putErr)
@@ -393,13 +402,8 @@ func TestLocalBucket_TwoInstancesShareOperationLock(t *testing.T) {
 	if err = lock.Close(); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case putErr := <-result:
-		if putErr != nil {
-			t.Fatalf("second Put after release: %v", putErr)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("second Put did not complete after shared lock release")
+	if putErr := <-result; putErr != nil {
+		t.Fatalf("second Put after shared lock release: %v", putErr)
 	}
 }
 
