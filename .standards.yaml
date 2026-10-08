@@ -30,6 +30,20 @@ facets:
 
 # praetor#36 (BUG-371): the flavor detector classifies this framework library as a
 # go-service and scaffolds a service Dockerfile and security workflow it does not ship.
+# The Go API compatibility workflow installs these before building: hw/udev
+# and media/3d are cgo modules (same list as scripts/ci/install-cgo-libs.sh).
+api:
+  system_packages:
+    - libudev-dev
+    - libopenal-dev
+    - libvorbis-dev
+    - libgl-dev
+    - libx11-dev
+    - libxrandr-dev
+    - libxxf86vm-dev
+    - libxi-dev
+    - libxcursor-dev
+    - libxinerama-dev
 adoption:
     decline:
         - working-dir-and-flavor
