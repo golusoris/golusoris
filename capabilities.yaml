@@ -845,6 +845,11 @@ packages:
     domain: plugin
     capabilities: [plugin.registry]
     description: "Package plugin provides a type-safe, in-process extension-point registry."
+  - import: github.com/golusoris/golusoris/pubsub/cloudevents
+    domain: pubsub
+    capabilities: [pubsub.cloudevents]
+    description: "Package cloudevents implements the CloudEvents 1.0 envelope: context attribute validation, the JSON event format, and binary-mode header codecs."
+    replaces: [github.com/cloudevents/sdk-go/v2]
   - import: github.com/golusoris/golusoris/pubsub/gcp
     domain: pubsub
     capabilities: [pubsub.gcp]

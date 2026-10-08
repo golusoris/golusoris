@@ -31,14 +31,35 @@ fx.New(
 type Sink interface { Send(ctx context.Context, ev outbox.Event) error }
 ```
 
+## CloudEvents sinks
+
+```go
+cdc.ProvideSinkFn(func(nc *nats.Client) cdc.Sink {
+    return cdc.NewNATSCloudEventSink(nc, "events.jobs", cdc.CloudEventOptions{
+        Source: "/vmafx/controller", Mode: cloudevents.ModeBinary,
+    })
+})
+cdc.NewKafkaCloudEventSink(kc, "events", cdc.CloudEventOptions{Source: "/vmafx/controller"})
+```
+
+- Row -> `outbox.Event.CloudEvent(opts.Source)`; row source wins.
+- NATS: JetStream publish, `Nats-Msg-Id` = row `event_id`, waits for PubAck.
+ WAL replay inside stream `Duplicates` window -> stored once. Subject needs
+ bound stream.
+- Kafka: key = subject, else kind. No broker dedupe; consumers dedupe on
+ `source` + `id`.
+- `Timeout` bounds one Send (default 10s). Zero `Mode` = binary.
+- Rows without `event_id` (pre-migration) fail with `*cloudevents.AttributeError`
+ naming `id`; legacy JSON sinks still accept them.
+
 ## Notes
 
 - Pick CDC or polling drainer per app. Do not wire both.
 - Replicas sharing one slot form active/standby sessions through reconnect.
 - Sink failure leaves commit unacknowledged. WAL replays after reconnect.
 - Successful delivery marks source row dispatched before WAL acknowledgement.
-- NATS delivery flushes core-NATS output before source row is marked. Use
- JetStream when broker persistence is required.
+- `NATSSink` flushes core-NATS output before source row is marked. Use
+ `NATSCloudEventSink` (JetStream + PubAck) when broker persistence is required.
 - Webhooks reject redirects before forwarding method, payload, or secret.
 - Webhook clients are cloned and receive 10-second timeout when unset.
 - Sink order is unspecified. A successful sink can see duplicates when another

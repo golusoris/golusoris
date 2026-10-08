@@ -78,7 +78,8 @@ var (
 	ErrInvalidRelationIdentifier = errors.New("outbox: invalid relation identifier")
 )
 
-// Event is a row in the outbox table.
+// Event is a row in the outbox table. EventID through TraceState carry the
+// CloudEvents context stored by [AddEvent]; see [Event.CloudEvent].
 type Event struct {
 	ID           int64           `json:"id"`
 	Kind         string          `json:"kind"`
@@ -87,28 +88,22 @@ type Event struct {
 	DispatchedAt *time.Time      `json:"dispatched_at,omitempty"`
 	Attempts     int             `json:"attempts"`
 	LastError    *string         `json:"last_error,omitempty"`
+	EventID      string          `json:"event_id,omitempty"`
+	Source       string          `json:"source,omitempty"`
+	Subject      string          `json:"subject,omitempty"`
+	DataSchema   string          `json:"data_schema,omitempty"`
+	Tenant       string          `json:"tenant,omitempty"`
+	TraceParent  string          `json:"traceparent,omitempty"`
+	TraceState   string          `json:"tracestate,omitempty"`
 }
 
 // Add writes an event to the outbox within an existing transaction. The
 // payload can be any JSON-marshalable value; a []byte or
-// json.RawMessage is used verbatim.
+// json.RawMessage is used verbatim. It is [AddEvent] with an empty
+// [Envelope], so the row still gets an event id and the W3C trace context of
+// ctx.
 func Add(ctx context.Context, tx pgx.Tx, kind string, payload any) error {
-	if kind == "" {
-		return errors.New("outbox: kind required")
-	}
-	raw, err := marshalPayload(payload)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec(
-		ctx,
-		`INSERT INTO golusoris_outbox (kind, payload) VALUES ($1, $2)`,
-		kind, raw,
-	)
-	if err != nil {
-		return fmt.Errorf("outbox: insert: %w", err)
-	}
-	return nil
+	return AddEvent(ctx, tx, kind, payload, Envelope{})
 }
 
 func marshalPayload(payload any) (json.RawMessage, error) {
@@ -146,7 +141,8 @@ func queryPending(ctx context.Context, queryer rowQuerier, limit int, lock bool)
 		lockClause = " FOR UPDATE SKIP LOCKED"
 	}
 	rows, err := queryer.Query(ctx,
-		`SELECT id, kind, payload, created_at, dispatched_at, attempts, last_error
+		`SELECT id, kind, payload, created_at, dispatched_at, attempts, last_error,
+		        event_id::text, source, subject, data_schema, tenant, traceparent, tracestate
 		   FROM golusoris_outbox
 		  WHERE dispatched_at IS NULL AND next_attempt_at <= now()
 		  ORDER BY next_attempt_at, id
@@ -160,7 +156,9 @@ func queryPending(ctx context.Context, queryer rowQuerier, limit int, lock bool)
 	for rows.Next() {
 		var ev Event
 		if err := rows.Scan(&ev.ID, &ev.Kind, &ev.Payload, &ev.CreatedAt,
-			&ev.DispatchedAt, &ev.Attempts, &ev.LastError); err != nil {
+			&ev.DispatchedAt, &ev.Attempts, &ev.LastError,
+			&ev.EventID, &ev.Source, &ev.Subject, &ev.DataSchema,
+			&ev.Tenant, &ev.TraceParent, &ev.TraceState); err != nil {
 			return nil, fmt.Errorf("outbox: scan: %w", err)
 		}
 		out = append(out, ev)

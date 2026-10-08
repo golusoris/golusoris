@@ -18,6 +18,8 @@ func TestMyHandler(t *testing.T) {
     addr := kafkatest.Addr(t)
     // addr is "host:port" — pass to kgo.SeedBrokers or kafka.Config.Brokers
 }
+
+addr := kafkatest.AddrSASL(t, "svc", "s3cret") // SCRAM-SHA-256 required; user is superuser
 ```
 
 ## Contract

@@ -31,11 +31,41 @@ drainer atomically enqueues River jobs + marks rows dispatched.
 - Handoff creates one River job per outbox row. River job execution remains
  at-least-once; workers must be idempotent.
 
+## CloudEvents envelope
+
+```go
+err := outbox.AddEvent(ctx, tx, "job.completed", job, outbox.Envelope{
+    Source: "/vmafx/controller", Subject: "job/42", Tenant: "acme",
+    DataSchema: "https://schemas.example.com/job.json",
+})
+ce, err := ev.CloudEvent("/vmafx/controller") // default source for rows without one
+```
+
+- `Add` = `AddEvent` with empty `Envelope`.
+- `event_id`: UUID, assigned once at insert (`gen_random_uuid()`) or from
+ `Envelope.EventID` (canonicalised; duplicate -> unique violation). Same id on
+ every retry/replay -> CloudEvents `id` + NATS `Nats-Msg-Id`.
+- Trace: empty `TraceParent` -> W3C trace context of ctx span
+ (`propagation.TraceContext`). Travels as `traceparent`/`tracestate`
+ extensions. `Tenant` -> `tenant` extension (`outbox.TenantExtension`).
+- Mapping: kind -> `type`, created_at -> `time`, payload -> data
+ (`application/json`).
+- Invalid envelope -> `ErrInvalidEnvelope` before insert; attribute named by
+ `*cloudevents.AttributeError` in chain.
+- Publishing: CDC sinks `NewNATSCloudEventSink` / `NewKafkaCloudEventSink`
+ (`outbox/cdc`). Polling drainer hands `Event` to River dispatcher; worker
+ may publish `ev.CloudEvent(...)` via `nats.Client.PublishCloudEvent`.
+
 ## Migration
 
-`outbox/migrations/` ships schema as golang-migrate pair. Wire
+`outbox/migrations/` ships schema as golang-migrate pairs. Wire
 via `dbmigrate.Options{}.WithFS(outbox.MigrationsFS)` or copy SQL
 into app's own migrations directory.
+
+- `20261007000003_outbox_cloudevents` adds `event_id`, `source`, `subject`,
+ `data_schema`, `tenant`, `traceparent`, `tracestate` + unique index on
+ `event_id`. Apply before deploying code that calls `Add`/`Pending`.
+ Volatile default rewrites existing rows under exclusive lock.
 
 ## Dispatcher contract
 

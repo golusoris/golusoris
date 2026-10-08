@@ -39,6 +39,23 @@ const (
 // address as "host:port". The container is terminated via t.Cleanup.
 func Addr(t *testing.T) string {
 	t.Helper()
+	return start(t)
+}
+
+// AddrSASL boots a Redpanda container whose Kafka listener requires SASL
+// SCRAM-SHA-256 and creates user with password as a superuser. It returns the
+// broker address as "host:port"; the container is terminated via t.Cleanup.
+func AddrSASL(t *testing.T, user, password string) string {
+	t.Helper()
+	return start(t,
+		redpandacontainer.WithEnableSASL(),
+		redpandacontainer.WithNewServiceAccount(user, password),
+		redpandacontainer.WithSuperusers(user),
+	)
+}
+
+func start(t *testing.T, extra ...testcontainers.ContainerCustomizer) string {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("testutil/kafka: container-backed; skipped under -short")
 	}
@@ -52,12 +69,11 @@ func Addr(t *testing.T) string {
 	// The module renders Redpanda's advertised listener with Docker's mapped
 	// host port. A hand-written localhost:9092 advertisement breaks as soon as
 	// Docker assigns an ephemeral port (and races when tests run in parallel).
-	ctr, err := redpandacontainer.Run(
-		ctx,
-		testimages.Redpanda,
+	opts := append([]testcontainers.ContainerCustomizer{
 		redpandacontainer.WithAutoCreateTopics(),
 		testimages.WithPinnedReaper(),
-	)
+	}, extra...)
+	ctr, err := redpandacontainer.Run(ctx, testimages.Redpanda, opts...)
 	if err != nil {
 		t.Fatalf("testutil/kafka: start container: %v", err)
 	}
