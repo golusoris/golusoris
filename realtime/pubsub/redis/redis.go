@@ -34,7 +34,7 @@ type Bus struct {
 	logger *slog.Logger
 }
 
-var _ pubsub.Bus = (*Bus)(nil)
+var _ pubsub.CheckedBus = (*Bus)(nil)
 
 // New returns a Redis-backed pub/sub Bus.
 func New(client rueidis.Client, logger *slog.Logger) *Bus {
@@ -48,20 +48,28 @@ func New(client rueidis.Client, logger *slog.Logger) *Bus {
 }
 
 // Publish encodes msg.Data and PUBLISHes it to the msg.Topic channel. Errors
-// are logged — the [pubsub.Bus] contract is fire-and-forget.
+// are logged — the [pubsub.Bus] contract is fire-and-forget; use
+// [Bus.TryPublish] to receive them.
 func (b *Bus) Publish(ctx context.Context, msg pubsub.Message) {
+	if err := b.TryPublish(ctx, msg); err != nil {
+		b.logger.ErrorContext(ctx, "pubsub/redis: publish", slog.String("topic", msg.Topic), slog.Any("err", err))
+	}
+}
+
+// TryPublish encodes msg.Data and PUBLISHes it to the msg.Topic channel,
+// returning a missing client, encode or Redis error.
+func (b *Bus) TryPublish(ctx context.Context, msg pubsub.Message) error {
 	if b.client == nil {
-		b.logger.ErrorContext(ctx, "pubsub/redis: client is required", slog.String("topic", msg.Topic))
-		return
+		return errors.New("pubsub/redis: client is required")
 	}
 	payload, err := encode(msg.Data)
 	if err != nil {
-		b.logger.ErrorContext(ctx, "pubsub/redis: encode", slog.String("topic", msg.Topic), slog.Any("err", err))
-		return
+		return err
 	}
 	if err := b.client.Do(ctx, b.client.B().Publish().Channel(msg.Topic).Message(payload).Build()).Error(); err != nil {
-		b.logger.ErrorContext(ctx, "pubsub/redis: publish", slog.String("topic", msg.Topic), slog.Any("err", err))
+		return fmt.Errorf("pubsub/redis: publish %q: %w", msg.Topic, err)
 	}
+	return nil
 }
 
 // Subscribe SUBSCRIBEs to topic on a dedicated connection in a background

@@ -17,6 +17,14 @@
 // Bulk invalidation: InvalidatePrefix evicts every entry under a key prefix
 // from both tiers (otter is scanned via Keys(); Redis via SCAN MATCH + UNLINK).
 //
+// L1-only mode: cache.twotier.l2 = none drops the distributed tier; the same
+// typed API and singleflight serve a single process without Redis.
+//
+// Cross-replica invalidation: with a [Broadcaster], every Set, Delete and
+// InvalidatePrefix sends one notice and peers evict that key or prefix from
+// their L1. Delivery is at most once, so a lost notice leaves a peer stale
+// until its L1 TTL; invalidation therefore requires a positive L1 TTL.
+//
 // Disabled / nil-passthrough mode: a nil *Cache is a valid no-op cache. Every
 // method is nil-safe — Get falls straight through to the loader, Set/Delete and
 // InvalidatePrefix do nothing — so call sites never branch on whether caching
@@ -83,14 +91,17 @@ type flightKey struct {
 //
 // A nil *TwoTier is a valid disabled cache (see package doc).
 type TwoTier struct {
-	l1       *memory.Cache
-	l2       l2
-	logger   *slog.Logger
-	l1TTL    time.Duration
-	l2TTL    time.Duration
-	mutation sync.RWMutex
-	epoch    uint64
-	group    *singleflight.Group[flightKey, []byte]
+	l1               *memory.Cache
+	l2               l2
+	logger           *slog.Logger
+	l1TTL            time.Duration
+	l2TTL            time.Duration
+	mutation         sync.RWMutex
+	epoch            uint64
+	group            *singleflight.Group[flightKey, []byte]
+	origin           string
+	broadcaster      Broadcaster
+	broadcastTimeout time.Duration
 }
 
 // Typed is a type-safe view over a [TwoTier] with a key prefix. Multiple typed
@@ -232,8 +243,9 @@ func (t *TwoTier) deleteL2IfCurrent(ctx context.Context, key string, epoch uint6
 	return nil
 }
 
-// Set writes v to both tiers (write-through). On a disabled cache it is a
-// no-op.
+// Set writes v to both tiers (write-through) and tells peers to evict k. On a
+// disabled cache it is a no-op. An error wrapping [ErrBroadcast] means both
+// local tiers hold v but peers were not told.
 func (t *Typed[V]) Set(ctx context.Context, k string, v V) error {
 	if t.tt == nil {
 		return nil
@@ -243,29 +255,45 @@ func (t *Typed[V]) Set(ctx context.Context, k string, v V) error {
 	if err != nil {
 		return fmt.Errorf("cache/twotier: encode value: %w", err)
 	}
+	if err := t.setBoth(ctx, key, raw, v); err != nil {
+		return err
+	}
+	return t.tt.broadcast(ctx, InvalidationKey, key)
+}
+
+func (t *Typed[V]) setBoth(ctx context.Context, key string, raw []byte, value V) error {
 	t.tt.mutation.Lock()
 	defer t.tt.mutation.Unlock()
 	if serr := t.tt.l2.Set(ctx, key, raw, t.tt.l2TTL); serr != nil {
 		return fmt.Errorf("cache/twotier: L2 set: %w", serr)
 	}
 	t.tt.epoch++
-	t.setL1(key, v)
+	t.setL1(key, value)
 	return nil
 }
 
-// Delete removes k from both tiers. On a disabled cache it is a no-op.
+// Delete removes k from both tiers and tells peers to evict it. On a disabled
+// cache it is a no-op. An error wrapping [ErrBroadcast] means k is gone
+// locally but peers were not told.
 func (t *Typed[V]) Delete(ctx context.Context, k string) error {
 	if t.tt == nil {
 		return nil
 	}
 	key := t.key(k)
-	t.tt.mutation.Lock()
-	defer t.tt.mutation.Unlock()
-	if derr := t.tt.l2.Del(ctx, key); derr != nil {
+	if err := t.tt.deleteBoth(ctx, key); err != nil {
+		return err
+	}
+	return t.tt.broadcast(ctx, InvalidationKey, key)
+}
+
+func (t *TwoTier) deleteBoth(ctx context.Context, key string) error {
+	t.mutation.Lock()
+	defer t.mutation.Unlock()
+	if derr := t.l2.Del(ctx, key); derr != nil {
 		return fmt.Errorf("cache/twotier: L2 delete: %w", derr)
 	}
-	t.tt.epoch++
-	t.tt.l1.Invalidate(key)
+	t.epoch++
+	t.l1.Invalidate(key)
 	return nil
 }
 
@@ -290,17 +318,31 @@ func (t *Typed[V]) InvalidatePrefix(ctx context.Context, prefix string) error {
 //
 // L1 (otter) is scanned via Keys() because it has no native prefix delete;
 // matching keys are Invalidated individually and forgotten from singleflight.
-// L2 prefix eviction is delegated to the [l2] adapter.
+// L2 prefix eviction is delegated to the [l2] adapter. Peers are told to
+// evict the prefix; an error wrapping [ErrBroadcast] means they were not.
 func (t *TwoTier) InvalidatePrefix(ctx context.Context, prefix string) error {
 	if t == nil {
 		return nil
 	}
+	if err := t.invalidatePrefixBoth(ctx, prefix); err != nil {
+		return err
+	}
+	return t.broadcast(ctx, InvalidationPrefix, prefix)
+}
+
+func (t *TwoTier) invalidatePrefixBoth(ctx context.Context, prefix string) error {
 	t.mutation.Lock()
 	defer t.mutation.Unlock()
 	if derr := t.l2.DelPrefix(ctx, prefix); derr != nil {
 		return fmt.Errorf("cache/twotier: L2 invalidate prefix %q: %w", prefix, derr)
 	}
 	t.epoch++
+	t.evictL1Prefix(prefix)
+	return nil
+}
+
+// evictL1Prefix drops every string L1 key under prefix; callers hold mutation.
+func (t *TwoTier) evictL1Prefix(prefix string) {
 	for rawKey := range t.l1.Keys() {
 		key, ok := rawKey.(string)
 		if !ok {
@@ -310,5 +352,47 @@ func (t *TwoTier) InvalidatePrefix(ctx context.Context, prefix string) error {
 			t.l1.Invalidate(key)
 		}
 	}
+}
+
+// broadcast tells peers about one local mutation, bounded by broadcastTimeout.
+func (t *TwoTier) broadcast(ctx context.Context, kind InvalidationKind, key string) error {
+	if t.broadcaster == nil {
+		return nil
+	}
+	sendCtx, cancel := context.WithTimeout(ctx, t.broadcastTimeout)
+	defer cancel()
+	if err := t.broadcaster.Broadcast(sendCtx, Invalidation{Origin: t.origin, Kind: kind, Key: key}); err != nil {
+		return fmt.Errorf("%w: %s %q: %w", ErrBroadcast, kind, key, err)
+	}
 	return nil
+}
+
+// Listen subscribes to peer invalidations and returns the func that stops
+// it. Without a [Broadcaster], or on a nil *TwoTier, it is a no-op. The fx
+// module calls it on start.
+func (t *TwoTier) Listen() (stop func()) {
+	if t == nil || t.broadcaster == nil {
+		return func() {}
+	}
+	return t.broadcaster.Subscribe(t.applyInvalidation)
+}
+
+// applyInvalidation evicts a peer's mutation from L1 and fences in-flight
+// loads; L2 already holds the peer's write.
+func (t *TwoTier) applyInvalidation(inv Invalidation) {
+	if inv.Origin == t.origin {
+		return
+	}
+	t.mutation.Lock()
+	defer t.mutation.Unlock()
+	switch inv.Kind {
+	case InvalidationKey:
+		t.epoch++
+		t.l1.Invalidate(inv.Key)
+	case InvalidationPrefix:
+		t.epoch++
+		t.evictL1Prefix(inv.Key)
+	default:
+		t.logger.Warn("cache/twotier: ignore unknown invalidation kind", slog.String("kind", string(inv.Kind)))
+	}
 }

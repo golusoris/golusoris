@@ -7,10 +7,14 @@ package twotier
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/golusoris/golusoris/cache/memory"
+	"github.com/golusoris/golusoris/realtime/pubsub/redis"
 	redistest "github.com/golusoris/golusoris/testutil/redis"
 )
 
@@ -64,4 +68,46 @@ func TestRedisL2_DelPrefix_NoMatchesIsNoop(t *testing.T) {
 	l2 := redisL2{client: client}
 
 	require.NoError(t, l2.DelPrefix(context.Background(), "nothing-has-this-prefix:"))
+}
+
+// TestInvalidation_RealRedisAcrossReplicas is the #623 acceptance: two
+// replicas share a Redis L2 and the Redis pub/sub bus; a Delete on one
+// evicts the other's L1 within one second once both subscriptions are up.
+func TestInvalidation_RealRedisAcrossReplicas(t *testing.T) {
+	t.Parallel()
+	client := redistest.Start(t)
+	newReplica := func() *Typed[int] {
+		l1, err := memory.NewForTest(100, 0)
+		require.NoError(t, err)
+		broadcaster, err := NewBusBroadcaster(redis.New(client, nil), "test.invalidate", nil)
+		require.NoError(t, err)
+		opts := Options{L2: L2Redis, L1TTL: time.Hour, L2TTL: time.Minute, Invalidation: InvalidationOptions{Enabled: true}}
+		tt, err := New(l1, opts, slog.New(slog.DiscardHandler), WithRedis(client), WithBroadcaster(broadcaster))
+		require.NoError(t, err)
+		t.Cleanup(tt.Listen())
+		return NewTyped[int](tt, "inv")
+	}
+	a, b := newReplica(), newReplica()
+	ctx := context.Background()
+	fromL2 := func(context.Context) (int, error) { return -1, nil }
+
+	// SUBSCRIBE starts asynchronously and a notice sent before it is lost (the
+	// documented at-most-once bound), so re-send until b observes a's write.
+	require.NoError(t, a.Set(ctx, "k", 1))
+	got, err := b.Get(ctx, "k", fromL2)
+	require.NoError(t, err)
+	require.Equal(t, 1, got)
+	require.Eventually(t, func() bool {
+		if setErr := a.Set(ctx, "k", 2); setErr != nil {
+			return false
+		}
+		value, getErr := b.Get(ctx, "k", fromL2)
+		return getErr == nil && value == 2
+	}, 30*time.Second, 100*time.Millisecond)
+
+	require.NoError(t, a.Delete(ctx, "k"))
+	require.Eventually(t, func() bool {
+		value, getErr := b.Get(ctx, "k", func(context.Context) (int, error) { return 3, nil })
+		return getErr == nil && value == 3
+	}, time.Second, 10*time.Millisecond, "peer L1 evicted within one second of the Delete")
 }

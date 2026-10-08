@@ -16,12 +16,12 @@ import (
 
 func TestNewTwoTier_DoesNotRetainNilL1(t *testing.T) {
 	t.Parallel()
-	tt, err := newTwoTier(Options{}, nil, nil, slog.New(slog.DiscardHandler))
+	tt, err := New(nil, Options{}, slog.New(slog.DiscardHandler))
 	if !errors.Is(err, errInvalidDependency) {
-		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+		t.Fatalf("New error = %v; want errInvalidDependency", err)
 	}
 	if tt != nil {
-		t.Fatal("newTwoTier returned a cache with nil L1")
+		t.Fatal("New returned a cache with nil L1")
 	}
 }
 
@@ -31,23 +31,23 @@ func TestNewTwoTier_DoesNotRetainNilRedisClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tt, err := newTwoTier(Options{}, l1, nil, slog.New(slog.DiscardHandler))
+	tt, err := New(l1, Options{}, slog.New(slog.DiscardHandler))
 	if !errors.Is(err, errInvalidDependency) {
-		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+		t.Fatalf("New error = %v; want errInvalidDependency", err)
 	}
 	if tt != nil {
-		t.Fatal("newTwoTier returned a cache with nil Redis client")
+		t.Fatal("New returned a cache with nil Redis client")
 	}
 }
 
 func TestNewTwoTier_NilLoggerDoesNotPanic(t *testing.T) {
 	t.Parallel()
-	tt, err := newTwoTier(Options{}, nil, nil, nil)
+	tt, err := New(nil, Options{}, nil)
 	if !errors.Is(err, errInvalidDependency) {
-		t.Fatalf("newTwoTier error = %v; want errInvalidDependency", err)
+		t.Fatalf("New error = %v; want errInvalidDependency", err)
 	}
 	if tt != nil {
-		t.Fatal("newTwoTier returned a cache with nil logger")
+		t.Fatal("New returned a cache with nil logger")
 	}
 }
 
@@ -59,8 +59,8 @@ func TestNewTwoTierRejectsNegativeTTLs(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if cache, err := newTwoTier(opts, nil, nil, slog.New(slog.DiscardHandler)); err == nil || cache != nil {
-				t.Fatalf("newTwoTier() = (%v, %v), want TTL validation error", cache, err)
+			if cache, err := New(nil, opts, slog.New(slog.DiscardHandler)); err == nil || cache != nil {
+				t.Fatalf("New() = (%v, %v), want TTL validation error", cache, err)
 			}
 		})
 	}

@@ -93,3 +93,23 @@ func TestPubSubRoundTrip(t *testing.T) {
 	}
 	t.Fatalf("no message after %d publish attempts", maxPublishAttempts)
 }
+
+func TestTryPublishReportsFailures(t *testing.T) {
+	t.Parallel()
+	if err := New(nil, nil).TryPublish(t.Context(), pubsub.Message{Topic: "t"}); err == nil {
+		t.Fatal("TryPublish without client = nil; want error")
+	}
+	client := redistest.Start(t)
+	bus := New(client, nil)
+	if err := bus.TryPublish(t.Context(), pubsub.Message{Topic: "t", Data: make(chan int)}); err == nil {
+		t.Fatal("TryPublish of unencodable data = nil; want error")
+	}
+	if err := bus.TryPublish(t.Context(), pubsub.Message{Topic: "t", Data: "ok"}); err != nil {
+		t.Fatalf("TryPublish = %v; want nil", err)
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := bus.TryPublish(ctx, pubsub.Message{Topic: "t", Data: "late"}); err == nil {
+		t.Fatal("TryPublish with canceled context = nil; want error")
+	}
+}

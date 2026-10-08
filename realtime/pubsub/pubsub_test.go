@@ -95,3 +95,24 @@ func TestTopicIsolation(t *testing.T) {
 		t.Errorf("topic isolation broken: a=%d b=%d", a.Load(), b.Load())
 	}
 }
+
+func TestLocalBusTryPublishDeliversAndReportsSuccess(t *testing.T) {
+	t.Parallel()
+	var bus pubsub.Bus = pubsub.New()
+	checked, ok := bus.(pubsub.CheckedBus)
+	if !ok {
+		t.Fatal("LocalBus does not implement CheckedBus")
+	}
+	var count atomic.Int32
+	cancel := bus.Subscribe("topic", func(pubsub.Message) { count.Add(1) })
+	defer cancel()
+	if err := checked.TryPublish(t.Context(), pubsub.Message{Topic: "topic"}); err != nil {
+		t.Fatalf("TryPublish = %v; want nil", err)
+	}
+	if err := checked.TryPublish(t.Context(), pubsub.Message{Topic: "nobody"}); err != nil {
+		t.Fatalf("TryPublish without subscribers = %v; want nil", err)
+	}
+	if count.Load() != 1 {
+		t.Fatalf("deliveries = %d; want 1", count.Load())
+	}
+}

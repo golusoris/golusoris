@@ -2,18 +2,19 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package idempotency provides HTTP middleware that enforces the
-// Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header).
+// Package idempotency provides HTTP middleware and a gRPC unary interceptor
+// that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header).
 // On the first request for a key the middleware reserves the scoped key,
 // captures a bounded response, and stores it. Completed retries replay the
-// response; concurrent retries fail with HTTP 409.
+// response; concurrent retries fail with HTTP 409 (gRPC Aborted).
 //
 // Usage:
 //
 //	mux.Handle("/payments", idempotency.Middleware(store, idempotency.Options{})(payHandler))
 //
-// The caller must supply a [Store] — use [MemoryStore] for tests or a Redis /
-// Postgres-backed implementation for production.
+// The caller supplies a [Store]: [MemoryStore] for one process or tests,
+// [PostgresStore] or [RedisStore] shared across replicas, [SQLiteStore] for
+// a standalone node.
 package idempotency
 
 import (
@@ -351,20 +352,18 @@ func scopedKey(r *http.Request, rawKey string, scope *ScopeFunc) (string, error)
 	if query := r.URL.Query().Encode(); query != "" {
 		target += "?" + query
 	}
+	return digestScope("v1:", strings.ToUpper(r.Method), strings.ToLower(r.Host), target, tenantID, extraScope, rawKey)
+}
+
+// digestScope hashes length-prefixed parts so no two part lists collide.
+func digestScope(prefix string, parts ...string) (string, error) {
 	digest := sha256.New()
-	for _, part := range []string{
-		strings.ToUpper(r.Method),
-		strings.ToLower(r.Host),
-		target,
-		tenantID,
-		extraScope,
-		rawKey,
-	} {
+	for _, part := range parts {
 		if err := writeHashPart(digest, []byte(part)); err != nil {
 			return "", fmt.Errorf("idempotency: hash scoped key: %w", err)
 		}
 	}
-	return "v1:" + hex.EncodeToString(digest.Sum(nil)), nil
+	return prefix + hex.EncodeToString(digest.Sum(nil)), nil
 }
 
 // Request-derived parts only ever feed a digest, never a response or log writer.
@@ -527,14 +526,8 @@ func (s *MemoryStore) Claim(
 	fingerprint string,
 	ttl time.Duration,
 ) (ClaimResult, error) {
-	if err := ctx.Err(); err != nil {
-		return ClaimResult{}, fmt.Errorf("idempotency: claim: %w", err)
-	}
-	if key == "" || fingerprint == "" {
-		return ClaimResult{}, errors.New("idempotency: claim: key and fingerprint required")
-	}
-	if ttl <= 0 {
-		return ClaimResult{}, errors.New("idempotency: claim: positive TTL required")
+	if err := validateClaim(ctx, key, fingerprint, ttl); err != nil {
+		return ClaimResult{}, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -577,14 +570,8 @@ func (s *MemoryStore) Commit(
 	response CachedResponse,
 	ttl time.Duration,
 ) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("idempotency: commit: %w", err)
-	}
-	if key == "" || token == "" {
-		return errors.New("idempotency: commit: key and token required")
-	}
-	if ttl <= 0 {
-		return errors.New("idempotency: commit: positive TTL required")
+	if err := validateCommit(ctx, key, token, ttl); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -608,11 +595,8 @@ func (s *MemoryStore) Commit(
 
 // Release removes the in-flight reservation owned by token.
 func (s *MemoryStore) Release(ctx context.Context, key string, token string) error {
-	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("idempotency: release: %w", err)
-	}
-	if key == "" || token == "" {
-		return errors.New("idempotency: release: key and token required")
+	if err := validateRelease(ctx, key, token); err != nil {
+		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -622,6 +606,27 @@ func (s *MemoryStore) Release(ctx context.Context, key string, token string) err
 	}
 	delete(s.entries, key)
 	return nil
+}
+
+// Sweep deletes at most limit expired entries.
+func (s *MemoryStore) Sweep(ctx context.Context, limit int) (int64, error) {
+	if err := validateSweep(ctx, limit); err != nil {
+		return 0, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.clk.Now()
+	var removed int64
+	for key, entry := range s.entries {
+		if removed == int64(limit) {
+			break
+		}
+		if !now.Before(entry.expiresAt) {
+			delete(s.entries, key)
+			removed++
+		}
+	}
+	return removed, nil
 }
 
 func cloneResponse(response CachedResponse) CachedResponse {
