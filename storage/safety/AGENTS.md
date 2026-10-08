@@ -131,7 +131,7 @@ Sentinel errors: `ErrUnsupportedType`, `ErrImageTooLarge` (strip);
  connections at rest. future IANA-prefix-refresh ticker would wire via
  `OnStart`/`OnStop`. `Detect` needs neither — it is pure function.
 
-```
+```text
 storage.safety.strip.auto_orient    bool     (default true)
 storage.safety.strip.jpeg_quality   int      (default 85)
 storage.safety.strip.max_pixels     int      (default 40000000)   # ~40 MP

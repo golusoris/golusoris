@@ -27,7 +27,7 @@ fx.New(
 - **Requires:** `*config.Config`, `gosmtp.Backend`, `*slog.Logger`.
 - **Config prefix:** `smtp` (env `APP_SMTP_*`).
 
-```
+```text
 smtp.addr              # listen address (default: :2525)
 smtp.domain            # EHLO domain (default: localhost)
 smtp.max_message_bytes # default 10 MiB

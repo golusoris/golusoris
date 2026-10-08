@@ -27,7 +27,7 @@ golusoris bump v0.5.0
 
 ## Internal layout
 
-```
+```text
 cmd/golusoris/
 ├── main.go
 └── internal/scaffold/

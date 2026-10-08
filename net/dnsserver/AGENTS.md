@@ -25,7 +25,7 @@ fx.New(
 - **Requires:** `*config.Config`, `*slog.Logger`.
 - **Config prefix:** `dns` (env `APP_DNS_*`).
 
-```
+```text
 dns.addr      # listen address (default: :5353)
 dns.udp_size  # max UDP message size in bytes (default: 4096)
 ```

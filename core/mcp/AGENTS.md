@@ -28,7 +28,7 @@ standalone MCP server). Apps wire `mcp.Module` and register tools via fx.
 
 ## Config keys (prefix `mcp`)
 
-```
+```text
 mcp.transport     # "stdio" (default) or "http" (streamable-HTTP)
 mcp.http.addr     # listen address for http transport (default ":8899")
 mcp.http.path     # mount path for http transport (default "/mcp")

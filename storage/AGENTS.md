@@ -36,7 +36,7 @@ type Bucket interface {
 `S3Bucket` lives in root `storage` package (not sub-package) so
 `Module` can wire it without import cycle. Select it via config:
 
-```
+```ini
 storage.backend = "s3"
 storage.s3.bucket      = "uploads"
 storage.s3.region      = "us-east-1"

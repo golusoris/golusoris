@@ -39,7 +39,7 @@ fx.New(
 - **Requires:** `*config.Config`, `clock.Clock`, `*slog.Logger`.
 - **Config prefix:** `cdc` (env `APP_CDC_*`).
 
-```
+```text
 cdc.dsn          # replication DSN — REQUIRED, must include replication=database
 cdc.slot         # replication slot (default: golusoris)
 cdc.publication  # PUBLICATION name (default: golusoris)

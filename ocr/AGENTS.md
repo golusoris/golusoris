@@ -25,7 +25,7 @@ directly.
 
 ## Activate the real implementation
 
-```
+```sh
 # system deps (Debian/Ubuntu):
 apt-get install libtesseract-dev tesseract-ocr-eng libleptonica-dev
 # macOS: brew install tesseract

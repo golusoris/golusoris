@@ -33,7 +33,7 @@ func NewUserService(c *memory.Cache) *UserService {
 
 ## Config
 
-```
+```ini
 cache.memory.max_size = 10000   # max entries (default 10_000)
 cache.memory.ttl      = 5m      # write TTL, 0 = no expiry (default 5m)
 ```

@@ -11,7 +11,7 @@ unified `tiny.Predictor` interface.
 
 ## Layout
 
-```
+```text
 serve/
   internal/httpoptions/ # shared bounded HTTP option normalization
   ollama/   # Ollama HTTP API → Gemma / Gemma 3n (text, generate)

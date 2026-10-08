@@ -28,7 +28,7 @@ A nil logger is accepted and uses a discard handler.
 
 ## Event wire format
 
-```
+```text
 event: order.updated
 data: {"id":"O-42","status":"shipped"}
 

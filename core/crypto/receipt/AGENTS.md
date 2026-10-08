@@ -27,7 +27,7 @@ public key, signature. Canonical payload is wire-compatible with praetor
 
 ## Config keys
 
-```
+```text
 crypto.receipt.seed   # hex-encoded 32-byte Ed25519 seed — QUOTE it in YAML (an all-digit hex
                       # string would otherwise parse as a number); store in secrets/, not in git
 ```
