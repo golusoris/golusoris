@@ -118,7 +118,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          bash scripts/ci/install-gosec.sh
           scripts/ci/go-modules.sh verify
           scripts/ci/go-modules.sh gosec
       - name: Upload SARIF
@@ -406,7 +406,7 @@ jobs:
           set -euo pipefail
           . tools/tool-versions.env
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          bash scripts/ci/install-gosec.sh
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
       - name: Verify module graphs
