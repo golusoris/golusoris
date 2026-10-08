@@ -10,9 +10,8 @@ import os
 import subprocess
 import sys
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 import checkpoint
@@ -39,7 +38,7 @@ def git(root, *args, check=True):
     return result
 
 
-class CheckpointTests(unittest.TestCase):
+class CheckpointTests(TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="praetor-checkpoint-")
         self.root = Path(self.temp.name)
@@ -481,7 +480,7 @@ class CheckpointTests(unittest.TestCase):
                 self.assertNotIn(checkpoint.PUSH_ACTION, result["actions"])
 
 
-class CheckedPolicyRead(unittest.TestCase):
+class CheckedPolicyRead(TestCase):
     """The reader used where descriptor-relative opens are unavailable, exercised on every host.
 
     Windows selects it automatically; calling it directly keeps its refusals covered on the
@@ -535,7 +534,7 @@ class CheckedPolicyRead(unittest.TestCase):
         self.assertIsNone(checkpoint._policy_bytes_checked(self.root / "absent"))
 
 
-class ThreadedBoundedOutput(unittest.TestCase):
+class ThreadedBoundedOutput(TestCase):
     """The pipe reader Windows uses because select() there accepts only sockets."""
 
     def start(self, code):
@@ -571,4 +570,4 @@ class ThreadedBoundedOutput(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()

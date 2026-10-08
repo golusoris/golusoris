@@ -33,6 +33,9 @@ facets:
 adoption:
     decline:
         - working-dir-and-flavor
+        # Hand-managed until Documentation Governance (#622) and Go API Compatibility
+        # (cordanaLLM/praetor#849) are green; re-enable per #646.
+        - branch-ruleset
 
 # Declared gaps, one rule and one file each; an expired entry fails its gate again.
 exceptions:

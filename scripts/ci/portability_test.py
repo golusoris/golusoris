@@ -15,9 +15,8 @@ import os
 import sys
 import tempfile
 import time
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 import pact_ffi
 import portability
@@ -87,7 +86,7 @@ def verify_quiet(root: Path, runner: FakeRunner) -> portability.Summary:
         return portability.verify_repository(root, runner)
 
 
-class PortabilityDriverTest(unittest.TestCase):
+class PortabilityDriverTest(TestCase):
     def test_process_output_bound_accepts_exact_and_rejects_overflow(self) -> None:
         runner = portability.ProcessRunner()
         with tempfile.TemporaryDirectory() as directory:
@@ -277,7 +276,7 @@ class PortabilityDriverTest(unittest.TestCase):
         )
 
 
-class PactFFIInstallerTests(unittest.TestCase):
+class PactFFIInstallerTests(TestCase):
     def test_asset_lock_covers_every_hosted_runner_architecture(self) -> None:
         expected = {
             (system_name, architecture)
@@ -432,4 +431,4 @@ class PactFFIInstallerTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main(verbosity=2)
+    main(verbosity=2)

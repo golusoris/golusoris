@@ -6,9 +6,8 @@ from __future__ import annotations
 
 import json
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 from trainers.common import contract
 from trainers.gemma import trainer
@@ -27,7 +26,7 @@ def valid_config(dataset: Path) -> dict[str, object]:
     }
 
 
-class GemmaTrainerTest(unittest.TestCase):
+class GemmaTrainerTest(TestCase):
     def test_exact_base_mapping(self) -> None:
         self.assertEqual(trainer.preset_for("gemma3:4b-text"), "gemma3_4b_text")
         with self.assertRaisesRegex(contract.ContractError, "unsupported"):
@@ -101,4 +100,4 @@ class GemmaTrainerTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
