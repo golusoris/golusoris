@@ -48,12 +48,12 @@ type fixtureConfig struct {
 
 func fixtureDefaults() fixtureConfig {
 	return fixtureConfig{
-		fixtureCommon: fixtureCommon{Name: "svc"},
-		Timeout:       5 * time.Second,
-		Enabled:       true,
-		Ratio:         0.5,
-		Hosts:         []string{"a", "b"},
-		Retry:         fixtureRetry{Attempts: 3, Initial: 50 * time.Millisecond},
+		Name:    "svc",
+		Timeout: 5 * time.Second,
+		Enabled: true,
+		Ratio:   0.5,
+		Hosts:   []string{"a", "b"},
+		Retry:   fixtureRetry{Attempts: 3, Initial: 50 * time.Millisecond},
 	}
 }
 
@@ -171,8 +171,7 @@ func TestGenerateConfig_Rejects(t *testing.T) {
 	}
 	for name, v := range map[string]any{"recursive": recursiveConfig{}, "func field": unsupportedConfig{}} {
 		_, err := jsonschema.GenerateConfig(v, jsonschema.ConfigOptions{})
-		var unsupported *jsonschema.ErrUnsupportedType
-		if !errors.As(err, &unsupported) {
+		if _, ok := errors.AsType[*jsonschema.ErrUnsupportedType](err); !ok {
 			t.Errorf("%s: error = %v, want ErrUnsupportedType", name, err)
 		}
 	}

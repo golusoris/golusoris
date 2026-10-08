@@ -101,8 +101,8 @@ func reflectConfig(root reflect.Value) (schema *invopop.Schema, err error) {
 // configField mirrors the reflector's field naming for the koanf tag:
 // name "" with inline=true means an embedded struct whose fields are hoisted.
 func configField(f reflect.StructField) (name string, inline bool) {
-	tag := strings.Split(f.Tag.Get("koanf"), ",")[0]
-	schemaTag := strings.Split(f.Tag.Get("jsonschema"), ",")[0]
+	tag, _, _ := strings.Cut(f.Tag.Get("koanf"), ",")
+	schemaTag, _, _ := strings.Cut(f.Tag.Get("jsonschema"), ",")
 	if tag == "-" || schemaTag == "-" {
 		return "", false
 	}
