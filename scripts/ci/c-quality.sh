@@ -75,7 +75,13 @@ resolve_headers() {
 		printf 'c-quality refuses a replaced github.com/cilium/ebpf module\n' >&2
 		return 1
 	fi
+	# go list reports an empty Dir until the module is in the module cache.
+	GOFLAGS=-mod=readonly go -C "$root" mod download github.com/cilium/ebpf || return
 	module_dir="$(GOFLAGS=-mod=readonly go -C "$root" list -m -f '{{.Dir}}' github.com/cilium/ebpf)"
+	if [[ -z "$module_dir" ]]; then
+		printf 'c-quality could not locate the github.com/cilium/ebpf module directory\n' >&2
+		return 1
+	fi
 	(cd "$module_dir/examples/headers" && pwd)
 }
 
