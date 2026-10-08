@@ -102,9 +102,11 @@ rules:
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go, `for {}` / `for ;;`) for the loop half;
           for the I/O half, the .semgrep.yml rules http-client-must-set-timeout,
-          no-http-default-client and no-http-listenandserve run over every repository Go file
-          by scripts/ci/semgrep-scan.sh, make semgrep-scan and required CI job "Custom SAST
-          (semgrep)"; plus noctx, contextcheck and fatcontext in all-module golangci-lint.
+          no-http-default-client, no-default-http-client-in-tests and no-http-listenandserve
+          run over every repository Go file by scripts/ci/semgrep-scan.sh, make semgrep-scan
+          and required CI job "Custom SAST (semgrep)"; plus noctx, contextcheck and fatcontext
+          in all-module golangci-lint. no-default-http-client-in-tests is replayed by
+          scripts/hiss/semgrep-fixtures.sh against .config/hiss/semgrep/testdata/HISS-02.
         rationale: >-
           positive/unbounded-for.go raises HISS-02; negative/bounded-for.go, which counts to a
           named constant, does not. gap/condition-without-scalar-bound.go is the honest limit
@@ -112,7 +114,10 @@ rules:
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
           is reported by Semgrep and golangci-lint rather than by the HISS scanner. Semgrep
           1.177.0 runs from the declared digest with strict parsing and proves all 721 selected
-          repository Go files were scanned; scanner errors, omissions and findings fail.
+          repository Go files were scanned; scanner errors, omissions and findings fail. The
+          test-request rule fires on its eight positive fixtures, stays silent on four negative
+          and two gap fixtures (a client literal without Transport, and http.DefaultTransport
+          handed to a wrapper), and fails the replay when removed.
       - language: c
         state: partial
         mechanism: praetorctl audit (internal/hiss rules.go nativeUnboundedLoop).

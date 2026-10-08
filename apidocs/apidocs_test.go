@@ -266,7 +266,7 @@ func mcpSessionWithSpec(t *testing.T, spec []byte, baseURL string, hc *http.Clie
 	srv := httptest.NewServer(mountWithSpec(t, spec, baseURL, hc))
 	t.Cleanup(srv.Close)
 	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp"}, nil)
+	cs, err := client.Connect(context.Background(), &mcp.StreamableClientTransport{Endpoint: srv.URL + "/mcp", HTTPClient: srv.Client()}, nil)
 	if err != nil {
 		t.Fatalf("mcp connect: %v", err)
 	}

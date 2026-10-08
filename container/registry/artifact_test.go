@@ -47,9 +47,10 @@ func newArtifactRegistry(t *testing.T, mw func(http.Handler) http.Handler, opts 
 	return u.Host
 }
 
-func artifactClient(opts registry.Options, rt http.RoundTripper) *registry.Client {
+func artifactClient(t *testing.T, opts registry.Options, rt http.RoundTripper) *registry.Client {
+	t.Helper()
 	if rt == nil {
-		rt = http.DefaultTransport
+		rt = newTestTransport(t)
 	}
 	return registry.New(opts, authn.NewMultiKeychain(), rt)
 }
@@ -82,7 +83,7 @@ func mustRead(t *testing.T, p string) []byte {
 func TestArtifact_RoundTrip(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	scores, report := []byte(`{"vmaf":97.1}`), []byte("report body")
 	desc, err := c.PushArtifact(ctx, host+"/vmafx/scores:run-1", registry.Artifact{
@@ -127,7 +128,7 @@ func TestArtifact_RoundTrip(t *testing.T) {
 func TestPushArtifact_StableDigest(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	model := tempFile(t, "model.onnx", []byte("weights"))
 	push := func(ref string, ann map[string]string) v1.Descriptor {
@@ -160,7 +161,7 @@ func TestPushArtifact_StableDigest(t *testing.T) {
 func TestPushArtifact_EmptyLayer(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	desc, err := c.PushArtifact(ctx, host+"/r:empty", registry.Artifact{ArtifactType: scoreType})
 	if err != nil {
@@ -176,18 +177,18 @@ func TestPullArtifact_DigestMismatchRejected(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
 	ctx := testCtx(t)
-	desc, err := artifactClient(registry.Options{}, nil).PushArtifact(ctx, host+"/r:t", registry.Artifact{
+	desc, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:t", registry.Artifact{
 		ArtifactType: scoreType,
 		Blobs:        []registry.Blob{{Name: "a.bin", Reader: strings.NewReader("payload")}},
 	})
 	if err != nil {
 		t.Fatalf("PushArtifact: %v", err)
 	}
-	_, man, err := artifactClient(registry.Options{}, nil).ArtifactManifest(ctx, host+"/r:t")
+	_, man, err := artifactClient(t, registry.Options{}, nil).ArtifactManifest(ctx, host+"/r:t")
 	if err != nil {
 		t.Fatalf("ArtifactManifest: %v", err)
 	}
-	bad := artifactClient(registry.Options{}, &corruptingTransport{pathSuffix: "/blobs/" + man.Layers[0].Digest.String()})
+	bad := artifactClient(t, registry.Options{}, &corruptingTransport{base: newTestTransport(t), pathSuffix: "/blobs/" + man.Layers[0].Digest.String()})
 	dir := t.TempDir()
 	if _, err = bad.PullArtifact(ctx, host+"/r@"+desc.Digest.String(), dir, registry.PullOptions{}); !errors.Is(err, registry.ErrDigestMismatch) {
 		t.Fatalf("PullArtifact err = %v, want ErrDigestMismatch", err)
@@ -204,7 +205,7 @@ func TestArtifact_SizeCaps(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
 	ctx := testCtx(t)
-	small := artifactClient(registry.Options{MaxBlobBytes: 8}, nil)
+	small := artifactClient(t, registry.Options{MaxBlobBytes: 8}, nil)
 	blob := func(body string) registry.Artifact {
 		return registry.Artifact{ArtifactType: scoreType, Blobs: []registry.Blob{{Name: "b", Reader: strings.NewReader(body)}}}
 	}
@@ -223,17 +224,17 @@ func TestArtifact_SizeCaps(t *testing.T) {
 	if _, err = small.PushArtifact(ctx, host+"/r:nine", pathBlob); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("path over limit err = %v", err)
 	}
-	big, err := artifactClient(registry.Options{}, nil).PushArtifact(ctx, host+"/r:sixteen", blob("0123456789abcdef"))
+	big, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:sixteen", blob("0123456789abcdef"))
 	if err != nil {
 		t.Fatalf("push big: %v", err)
 	}
 	cases := map[string]*registry.Client{
 		"blob":     small,
-		"total":    artifactClient(registry.Options{MaxTotalBytes: 15}, nil),
-		"manifest": artifactClient(registry.Options{MaxManifestBytes: 64}, nil),
-		"count":    artifactClient(registry.Options{MaxBlobs: 1}, nil),
+		"total":    artifactClient(t, registry.Options{MaxTotalBytes: 15}, nil),
+		"manifest": artifactClient(t, registry.Options{MaxManifestBytes: 64}, nil),
+		"count":    artifactClient(t, registry.Options{MaxBlobs: 1}, nil),
 	}
-	two, err := artifactClient(registry.Options{}, nil).PushArtifact(ctx, host+"/r:two", registry.Artifact{
+	two, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:two", registry.Artifact{
 		ArtifactType: scoreType,
 		Blobs:        []registry.Blob{{Reader: strings.NewReader("a")}, {Reader: strings.NewReader("b")}},
 	})
@@ -259,7 +260,7 @@ func TestArtifact_SizeCaps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ArtifactManifest: %v", err)
 	}
-	if _, err = artifactClient(registry.Options{}, nil).FetchBlob(ctx, host+"/r", man.Layers[0], 15); !errors.Is(err, registry.ErrTooLarge) {
+	if _, err = artifactClient(t, registry.Options{}, nil).FetchBlob(ctx, host+"/r", man.Layers[0], 15); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("FetchBlob over maxBytes err = %v", err)
 	}
 }
@@ -267,7 +268,7 @@ func TestArtifact_SizeCaps(t *testing.T) {
 func TestPullArtifact_ArtifactTypeMismatch(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	if _, err := c.PushArtifact(ctx, host+"/r:t", registry.Artifact{ArtifactType: scoreType}); err != nil {
 		t.Fatalf("PushArtifact: %v", err)
@@ -281,7 +282,7 @@ func TestPullArtifact_ArtifactTypeMismatch(t *testing.T) {
 func TestArtifact_InvalidInputs(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	push := func(ref string, a registry.Artifact) func() error {
 		return func() error { _, err := c.PushArtifact(ctx, ref, a); return err }
@@ -322,11 +323,11 @@ func TestPushArtifact_Keychain(t *testing.T) {
 	host := newArtifactRegistry(t, basicAuth)
 	ctx := testCtx(t)
 	kc := staticKeychain{auth: authn.FromConfig(authn.AuthConfig{Username: "robot", Password: "s3cret"})}
-	c := registry.New(registry.Options{}, kc, http.DefaultTransport)
+	c := registry.New(registry.Options{}, kc, newTestTransport(t))
 	if _, err := c.PushArtifact(ctx, host+"/r:t", registry.Artifact{ArtifactType: scoreType}); err != nil {
 		t.Fatalf("PushArtifact with keychain: %v", err)
 	}
-	if _, err := artifactClient(registry.Options{}, nil).PushArtifact(ctx, host+"/r:t", registry.Artifact{ArtifactType: scoreType}); err == nil {
+	if _, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:t", registry.Artifact{ArtifactType: scoreType}); err == nil {
 		t.Fatal("anonymous push succeeded against an authenticated registry")
 	}
 }

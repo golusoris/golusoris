@@ -78,7 +78,7 @@ func TestRoundTrip_injectsAuth(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	tr := authTransport{
-		base:        http.DefaultTransport,
+		base:        srv.Client().Transport,
 		bearerToken: "tok",
 		apiKey:      "key123",
 	}

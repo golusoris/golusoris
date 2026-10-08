@@ -36,6 +36,14 @@ func freeAddr(t *testing.T) string {
 	return addr
 }
 
+// newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
+func newTestClient(t *testing.T) *http.Client {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return &http.Client{Transport: transport, Timeout: 10 * time.Second}
+}
+
 func drainConfig(t *testing.T, addr string) *config.Config {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -46,12 +54,12 @@ func drainConfig(t *testing.T, addr string) *config.Config {
 	return cfg
 }
 
-func get(ctx context.Context, url string) (int, error) {
+func get(ctx context.Context, client *http.Client, url string) (int, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return 0, fmt.Errorf("build request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return 0, fmt.Errorf("get %s: %w", url, err)
 	}
@@ -87,8 +95,9 @@ func TestModuleServesReadyz503DuringDrain(t *testing.T) {
 	defer cancel()
 	require.NoError(t, app.Start(ctx))
 	base := "http://" + addr
+	client := newTestClient(t)
 
-	code, err := get(ctx, base+"/readyz")
+	code, err := get(ctx, client, base+"/readyz")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code)
 
@@ -96,15 +105,15 @@ func TestModuleServesReadyz503DuringDrain(t *testing.T) {
 	go func() { stopped <- app.Stop(ctx) }()
 	require.NoError(t, fc.BlockUntilContext(ctx, 1))
 
-	code, err = get(ctx, base+"/readyz")
+	code, err = get(ctx, client, base+"/readyz")
 	require.NoError(t, err, "server must still serve during the drain window")
 	require.Equal(t, http.StatusServiceUnavailable, code)
-	code, err = get(ctx, base+"/livez")
+	code, err = get(ctx, client, base+"/livez")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, code, "liveness must stay up while draining")
 
 	fc.Advance(drainDelay)
 	require.NoError(t, <-stopped)
-	_, err = get(ctx, base+"/livez")
+	_, err = get(ctx, client, base+"/livez")
 	require.Error(t, err, "server must be shut down after the drain window")
 }

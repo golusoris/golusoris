@@ -37,7 +37,7 @@ func TestClient_Copy_crossRegistry(t *testing.T) {
 	dst := dstHost + "/test/copy:v1"
 	pushImage(t, src, img)
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	if err = c.Copy(t.Context(), src, dst); err != nil {
 		t.Fatalf("Copy: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestClient_Copy_missingSource(t *testing.T) {
 	src := srcHost + "/test/does-not-exist:v1"
 	dst := dstHost + "/test/copy:v1"
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	err := c.Copy(t.Context(), src, dst)
 	if err == nil {
 		t.Fatal("Copy: expected error for missing source image, got nil")
@@ -86,11 +86,12 @@ func TestClient_Copy_missingSource(t *testing.T) {
 // transport: production code never does this, but a caller who needs to
 // harden against it (or, as here, test the failure path) can.
 type corruptingTransport struct {
+	base       http.RoundTripper
 	pathSuffix string
 }
 
 func (c *corruptingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	resp, err := http.DefaultTransport.RoundTrip(req)
+	resp, err := c.base.RoundTrip(req)
 	if err != nil || req.Method != http.MethodGet || !strings.HasSuffix(req.URL.Path, c.pathSuffix) {
 		return resp, err
 	}
@@ -122,7 +123,7 @@ func TestClient_Manifest_digestMismatch(t *testing.T) {
 	repo := host + "/test/mismatch"
 	pushImage(t, repo+":v1", img)
 
-	rt := &corruptingTransport{pathSuffix: "/manifests/" + digest.String()}
+	rt := &corruptingTransport{base: newTestTransport(t), pathSuffix: "/manifests/" + digest.String()}
 	c := registry.New(registry.Options{}, authn.NewMultiKeychain(), rt)
 
 	ref := fmt.Sprintf("%s@%s", repo, digest)

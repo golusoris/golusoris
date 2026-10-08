@@ -90,7 +90,7 @@ func TestBodyLimitEnforced(t *testing.T) {
 	defer func() { _ = srv.Shutdown(context.Background()) }()
 
 	url := "http://" + ln.Addr().String() + "/"
-	resp, err := http.Post(url, "text/plain", strings.NewReader("aaaaaaaaaaaaaaaaaaaa"))
+	resp, err := newTestClient(t).Post(url, "text/plain", strings.NewReader("aaaaaaaaaaaaaaaaaaaa"))
 	if err != nil {
 		t.Fatalf("post: %v", err)
 	}

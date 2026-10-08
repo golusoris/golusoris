@@ -141,7 +141,10 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	q.Set("state", "xyz")
 	q.Set("scope", "openid profile")
 
-	noFollow := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	noFollow := &http.Client{
+		Transport:     ts.Client().Transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := noFollow.Get(ts.URL + "/authorize?" + q.Encode())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusFound, resp.StatusCode)
@@ -161,7 +164,7 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	form.Set("client_id", "spa")
 	form.Set("code_verifier", verifier)
 
-	tokResp, err := http.Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	tokResp, err := ts.Client().Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, tokResp.StatusCode)
 	require.Equal(t, "no-store", tokResp.Header.Get("Cache-Control"))
@@ -180,7 +183,7 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	require.Equal(t, "openid profile", body.Scope)
 
 	// Reusing the code is rejected.
-	tokResp2, err := http.Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	tokResp2, err := ts.Client().Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, tokResp2.StatusCode)
 	require.Equal(t, "no-store", tokResp2.Header.Get("Cache-Control"))
@@ -375,7 +378,7 @@ func TestServer_RejectsBadPKCE(t *testing.T) {
 	form.Set("redirect_uri", "https://app.example/cb")
 	form.Set("client_id", "c")
 	form.Set("code_verifier", "wrong")
-	resp, err := http.Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	resp, err := ts.Client().Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -427,7 +430,10 @@ func authorize(t *testing.T, ts *httptest.Server, redirectURI, state string) (in
 	}
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.URL+"/authorize?"+q.Encode(), http.NoBody)
 	require.NoError(t, err)
-	noFollow := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	noFollow := &http.Client{
+		Transport:     ts.Client().Transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := noFollow.Do(req)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())

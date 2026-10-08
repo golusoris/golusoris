@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -40,6 +41,14 @@ func freeAddr(t *testing.T) string {
 		t.Fatalf("close reserved listener: %v", err)
 	}
 	return addr
+}
+
+// newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
+func newTestClient(t *testing.T) *http.Client {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return &http.Client{Transport: transport, Timeout: 10 * time.Second}
 }
 
 // cfgFromYAML builds a config.Config from an in-memory YAML body written to a
@@ -89,7 +98,7 @@ func TestModule_HTTPTransport(t *testing.T) {
 	t.Cleanup(app.RequireStop)
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}, nil)
+	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}, nil)
 	if err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
@@ -141,7 +150,7 @@ func TestModule_HTTPTransportStopsWithOpenSession(t *testing.T) {
 	app.RequireStart()
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}, nil)
+	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}, nil)
 	if err != nil {
 		t.Fatalf("client connect: %v", err)
 	}

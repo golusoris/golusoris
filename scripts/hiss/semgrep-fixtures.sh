@@ -47,6 +47,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cp -R "$corpus/." "$work/"
 install -m 0644 "$root/.semgrep.yml" "$work/.semgrep.yml"
+# An empty .semgrepignore replaces Semgrep's default list, which skips the
+# *_test.go fixtures a test-only rule needs.
+: >"$work/.semgrepignore"
 
 report="$work/findings.json"
 image="semgrep/semgrep:${SEMGREP_VERSION}@${SEMGREP_IMAGE_DIGEST}"
@@ -85,6 +88,7 @@ import sys
 # entry when a new HISS-NN directory appears — an unmapped directory is a
 # failure, not a pass.
 RULES = {
+    "HISS-02": {"no-default-http-client-in-tests"},
     "HISS-06": {"no-unbounded-goroutine-in-loop"},
     "HISS-08": {"no-dynamic-code-loading", "no-dynamic-exec-command"},
     "HISS-09": {"unsafe-requires-safety-proof"},

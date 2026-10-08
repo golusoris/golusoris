@@ -413,7 +413,7 @@ func fakeClient(srv *httptest.Server) *http.Client {
 		r2 := r.Clone(r.Context())
 		r2.URL.Scheme = "http"
 		r2.URL.Host = srv.Listener.Addr().String()
-		return http.DefaultTransport.RoundTrip(r2)
+		return srv.Client().Transport.RoundTrip(r2)
 	}}}
 }
 

@@ -41,7 +41,7 @@ func TestHub_publishReachesConnectedClient(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := srv.Client().Do(req)
 		if err != nil {
 			done <- result{err: err}
 			return
@@ -90,7 +90,7 @@ func TestHubNilLoggerUsesDiscardLogger(t *testing.T) {
 			done <- err
 			return
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := srv.Client().Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 		}

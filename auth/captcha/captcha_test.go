@@ -45,7 +45,7 @@ func TestVerifier_Failure(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := &http.Client{Transport: rewriteTransport{base: http.DefaultTransport, target: srv.URL}}
+	client := &http.Client{Transport: rewriteTransport{base: srv.Client().Transport, target: srv.URL}}
 	v := captcha.NewHCaptcha("secret", client)
 
 	err := v.Verify(context.Background(), "tok", "")
@@ -62,7 +62,7 @@ func TestVerifierRejectsSuccessfulBodyFromFailedHTTPResponse(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	client := &http.Client{Transport: rewriteTransport{base: http.DefaultTransport, target: srv.URL}}
+	client := &http.Client{Transport: rewriteTransport{base: srv.Client().Transport, target: srv.URL}}
 	v := captcha.NewTurnstile("secret", client)
 
 	err := v.Verify(context.Background(), "tok", "")

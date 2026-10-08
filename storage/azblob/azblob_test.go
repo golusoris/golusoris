@@ -132,7 +132,10 @@ func put(ctx context.Context, t *testing.T, req storage.PresignedRequest, body [
 		t.Fatal(err)
 	}
 	maps.Copy(httpReq.Header, req.Header)
-	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(httpReq)
+	// Private transport: httptest.Server.Close resets http.DefaultTransport (#701).
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defer transport.CloseIdleConnections()
+	resp, err := (&http.Client{Transport: transport, Timeout: 30 * time.Second}).Do(httpReq)
 	if err != nil {
 		t.Fatal(err)
 	}

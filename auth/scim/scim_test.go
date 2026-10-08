@@ -63,7 +63,7 @@ func TestUsers_CreateGetDelete(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	body := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice","active":true}`)
-	resp, err := http.Post(srv.URL+"/Users", "application/scim+json", body)
+	resp, err := srv.Client().Post(srv.URL+"/Users", "application/scim+json", body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
@@ -74,20 +74,20 @@ func TestUsers_CreateGetDelete(t *testing.T) {
 	require.Equal(t, "alice", u.UserName)
 
 	// GET
-	resp2, err := http.Get(srv.URL + "/Users/" + u.ID)
+	resp2, err := srv.Client().Get(srv.URL + "/Users/" + u.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	require.NoError(t, resp2.Body.Close())
 
 	// DELETE
 	req, _ := http.NewRequest(http.MethodDelete, srv.URL+"/Users/"+u.ID, nil)
-	resp3, err := http.DefaultClient.Do(req)
+	resp3, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNoContent, resp3.StatusCode)
 	require.NoError(t, resp3.Body.Close())
 
 	// 404 after delete
-	resp4, err := http.Get(srv.URL + "/Users/" + u.ID)
+	resp4, err := srv.Client().Get(srv.URL + "/Users/" + u.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp4.StatusCode)
 	require.NoError(t, resp4.Body.Close())
@@ -103,7 +103,7 @@ func TestUsers_List(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(store))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Users")
+	resp, err := srv.Client().Get(srv.URL + "/Users")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var lr scim.ListResponse
@@ -288,7 +288,7 @@ func TestGroups_CreateGetUpdateDelete(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	body := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"eng"}`)
-	resp, err := http.Post(srv.URL+"/Groups", "application/scim+json", body)
+	resp, err := srv.Client().Post(srv.URL+"/Groups", "application/scim+json", body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var g scim.Group
@@ -298,7 +298,7 @@ func TestGroups_CreateGetUpdateDelete(t *testing.T) {
 	require.Equal(t, "eng", g.DisplayName)
 
 	// GET
-	resp2, err := http.Get(srv.URL + "/Groups/" + g.ID)
+	resp2, err := srv.Client().Get(srv.URL + "/Groups/" + g.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 	require.NoError(t, resp2.Body.Close())
@@ -307,20 +307,20 @@ func TestGroups_CreateGetUpdateDelete(t *testing.T) {
 	upd := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"platform"}`)
 	reqPut, _ := http.NewRequest(http.MethodPut, srv.URL+"/Groups/"+g.ID, upd)
 	reqPut.Header.Set("Content-Type", "application/scim+json")
-	resp3, err := http.DefaultClient.Do(reqPut)
+	resp3, err := srv.Client().Do(reqPut)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp3.StatusCode)
 	require.NoError(t, resp3.Body.Close())
 
 	// DELETE
 	reqDel, _ := http.NewRequest(http.MethodDelete, srv.URL+"/Groups/"+g.ID, nil)
-	resp4, err := http.DefaultClient.Do(reqDel)
+	resp4, err := srv.Client().Do(reqDel)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNoContent, resp4.StatusCode)
 	require.NoError(t, resp4.Body.Close())
 
 	// 404 after delete
-	resp5, err := http.Get(srv.URL + "/Groups/" + g.ID)
+	resp5, err := srv.Client().Get(srv.URL + "/Groups/" + g.ID)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNotFound, resp5.StatusCode)
 	require.NoError(t, resp5.Body.Close())
@@ -335,7 +335,7 @@ func TestGroups_List(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(store))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Groups")
+	resp, err := srv.Client().Get(srv.URL + "/Groups")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var lr scim.ListResponse
@@ -355,7 +355,7 @@ func TestUsers_Update(t *testing.T) {
 	body := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice-updated","active":false}`)
 	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/Users/"+u.ID, body)
 	req.Header.Set("Content-Type", "application/scim+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var got scim.User
@@ -370,7 +370,7 @@ func TestUsers_MethodNotAllowed(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/Users", nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -382,7 +382,7 @@ func TestGroups_MethodNotAllowed(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/Groups", nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -396,7 +396,7 @@ func TestGroupItem_MethodNotAllowed(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	req, _ := http.NewRequest(http.MethodPatch, srv.URL+"/Groups/"+g.ID, nil)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusMethodNotAllowed, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -407,7 +407,7 @@ func TestUserItem_InvalidPath(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(newMemStore()))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Users/")
+	resp, err := srv.Client().Get(srv.URL + "/Users/")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -418,7 +418,7 @@ func TestGroupItem_InvalidPath(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(newMemStore()))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Groups/")
+	resp, err := srv.Client().Get(srv.URL + "/Groups/")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -432,7 +432,7 @@ func TestUserItem_InvalidPath_NestedSegment(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(newMemStore()))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Users/abc/extra")
+	resp, err := srv.Client().Get(srv.URL + "/Users/abc/extra")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -445,7 +445,7 @@ func TestGroupItem_InvalidPath_NestedSegment(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(newMemStore()))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Groups/abc/extra")
+	resp, err := srv.Client().Get(srv.URL + "/Groups/abc/extra")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -494,7 +494,7 @@ func TestUserItem_GetStoreError(t *testing.T) {
 	))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Users/any-id")
+	resp, err := srv.Client().Get(srv.URL + "/Users/any-id")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	var body scim.Error
@@ -513,7 +513,7 @@ func TestUserItem_PutStoreError(t *testing.T) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Users/any-id", bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"x"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/scim+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -526,7 +526,7 @@ func TestUserItem_DeleteStoreError(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/Users/any-id", nil)
 	require.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -537,7 +537,7 @@ func TestGroupItem_GetStoreError(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Groups/any-id")
+	resp, err := srv.Client().Get(srv.URL + "/Groups/any-id")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -551,7 +551,7 @@ func TestGroupItem_PutStoreError(t *testing.T) {
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Groups/any-id", bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"x"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/scim+json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -564,7 +564,7 @@ func TestGroupItem_DeleteStoreError(t *testing.T) {
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodDelete, srv.URL+"/Groups/any-id", nil)
 	require.NoError(t, err)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := srv.Client().Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
@@ -580,7 +580,7 @@ func TestPaging_QueryParams(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(store))
 	t.Cleanup(srv.Close)
 
-	resp, err := http.Get(srv.URL + "/Users?startIndex=1&count=3")
+	resp, err := srv.Client().Get(srv.URL + "/Users?startIndex=1&count=3")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var lr scim.ListResponse

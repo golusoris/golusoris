@@ -44,6 +44,7 @@ unrelated rule: an unrelated finding proves nothing about the claim.
 
 | Rule | Invariant | semgrep rule id |
 | --- | --- | --- |
+| HISS-02 | Bounded I/O | `no-default-http-client-in-tests` |
 | HISS-06 | Bounded Concurrency | `no-unbounded-goroutine-in-loop` |
 | HISS-08 | Static Determinism | `no-dynamic-code-loading`, `no-dynamic-exec-command` |
 | HISS-09 | Reference Safety | `unsafe-requires-safety-proof` |
