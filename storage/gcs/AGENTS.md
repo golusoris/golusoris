@@ -20,7 +20,7 @@ fx.New(golusoris.Core, gcs.Module) // provides storage.Bucket; replaces storage.
 Needs `*config.Config`, `*slog.Logger`, `clock.Clock`. Construction bounded
 by 15s; OnStop closes client.
 
-```
+```ini
 storage.gcs.bucket       = "uploads"
 storage.gcs.endpoint     = ""      # emulator JSON API base; empty = Google
 storage.gcs.signer_email = ""      # SA that signs URLs; default detected

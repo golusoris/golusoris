@@ -22,7 +22,7 @@ Needs `*config.Config`, `*slog.Logger`, `clock.Clock`. `New` does no I/O;
 credentials resolve on first request. Debug log names auth path
 (`entra-id` / `shared-key`).
 
-```
+```ini
 storage.azblob.service_url  = "https://acct.blob.core.windows.net/"
 storage.azblob.container    = "uploads"
 storage.azblob.account_name = ""   # + account_key -> shared key (Azurite)
