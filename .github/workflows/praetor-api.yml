@@ -59,6 +59,22 @@ jobs:
             gobuild-${{ runner.os }}-${{ runner.arch }}-api-compatibility-${{ hashFiles('**/go.sum') }}-
             gobuild-${{ runner.os }}-${{ runner.arch }}-api-compatibility-
       # yamllint enable rule:line-length
+      - name: Install system packages for the Go build
+        if: github.event.pull_request.draft != true
+        timeout-minutes: 15
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libudev-dev \
+            libopenal-dev \
+            libvorbis-dev \
+            libgl-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxxf86vm-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxinerama-dev
       - name: Compare the API of every Go module
         if: github.event.pull_request.draft != true
         env:
