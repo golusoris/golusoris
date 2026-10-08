@@ -49,6 +49,7 @@ fi
 
 run_policy >/dev/null
 ACTOR='renovate[bot]' DCO=skipped run_policy >/dev/null
+ACTOR='github-actions[bot]' DCO=skipped run_policy >/dev/null
 EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=skipped run_policy >/dev/null
 EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped run_policy >/dev/null
 expect_failure env LINT=skipped bash "$0" --single
@@ -65,6 +66,7 @@ expect_failure env DEPENDENCY_REVIEW=skipped bash "$0" --single
 expect_failure env EVENT_NAME=push DEPENDENCY_REVIEW=success DCO=skipped bash "$0" --single
 expect_failure env EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=success bash "$0" --single
 expect_failure env ACTOR='renovate[bot]' DCO=success bash "$0" --single
+expect_failure env ACTOR='github-actions[bot]' DCO=success bash "$0" --single
 expect_failure env DCO=skipped bash "$0" --single
 expect_failure env EVENT_NAME=merge_group TEST=skipped DEPENDENCY_REVIEW=skipped DCO=skipped bash "$0" --single
 expect_failure env EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=success bash "$0" --single

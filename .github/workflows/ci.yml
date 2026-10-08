@@ -679,7 +679,7 @@ jobs:
   # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
   dco:
     name: DCO sign-off
-    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
+    if: github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]' && github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
