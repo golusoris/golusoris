@@ -403,9 +403,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 23 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 24 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 23 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 24 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
