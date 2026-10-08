@@ -7,10 +7,12 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/modelcontextprotocol/go-sdk/mcp"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestDispatchTool(t *testing.T) {
@@ -45,14 +47,14 @@ func TestServerRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	logger := slog.New(slog.DiscardHandler)
 
-	serverT, clientT := mcp.NewInMemoryTransports()
+	serverT, clientT := sdkmcp.NewInMemoryTransports()
 	serverSession, err := newServer(logger).Connect(ctx, serverT, nil)
 	if err != nil {
 		t.Fatalf("server connect: %v", err)
 	}
 	defer func() { _ = serverSession.Close() }()
 
-	client := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "0"}, nil)
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	cs, err := client.Connect(ctx, clientT, nil)
 	if err != nil {
 		t.Fatalf("client connect: %v", err)
@@ -76,7 +78,7 @@ func TestServerRoundTrip(t *testing.T) {
 		}
 	}
 
-	res, err := cs.CallTool(ctx, &mcp.CallToolParams{
+	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name:      "golusoris_init",
 		Arguments: map[string]any{"name": "blog"},
 	})
@@ -86,9 +88,9 @@ func TestServerRoundTrip(t *testing.T) {
 	if res.IsError {
 		t.Fatalf("call tool returned IsError; content=%v", res.Content)
 	}
-	text, ok := res.Content[0].(*mcp.TextContent)
+	text, ok := res.Content[0].(*sdkmcp.TextContent)
 	if !ok {
-		t.Fatalf("content[0] is %T, want *mcp.TextContent", res.Content[0])
+		t.Fatalf("content[0] is %T, want *sdkmcp.TextContent", res.Content[0])
 	}
 	if !strings.Contains(text.Text, "golusoris init blog") {
 		t.Errorf("call result = %q, want substring %q", text.Text, "golusoris init blog")
@@ -103,7 +105,7 @@ func TestServerRoundTrip(t *testing.T) {
 		{name: "extra property", args: map[string]any{"name": "blog", "unexpected": true}},
 	}
 	for _, tt := range invalid {
-		got, callErr := cs.CallTool(ctx, &mcp.CallToolParams{
+		got, callErr := cs.CallTool(ctx, &sdkmcp.CallToolParams{
 			Name:      "golusoris_init",
 			Arguments: tt.args,
 		})
@@ -113,5 +115,51 @@ func TestServerRoundTrip(t *testing.T) {
 		if !got.IsError {
 			t.Fatalf("%s: schema-invalid call returned success; content=%v", tt.name, got.Content)
 		}
+	}
+}
+
+// TestRunHTTPStopsWithOpenSession asserts that a client still holding its
+// event stream does not hold up the HTTP server's graceful shutdown.
+func TestRunHTTPStopsWithOpenSession(t *testing.T) {
+	t.Parallel()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve port: %v", err)
+	}
+	addr := ln.Addr().String()
+	if err = ln.Close(); err != nil {
+		t.Fatalf("close reserved listener: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	serveCtx, stop := context.WithCancel(ctx)
+	served := make(chan error, 1)
+	go func() { served <- runHTTP(serveCtx, slog.New(slog.DiscardHandler), addr) }()
+
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
+	transport := &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}
+	var session *sdkmcp.ClientSession
+	for range 100 { // the server starts listening asynchronously
+		if session, err = client.Connect(ctx, transport, nil); err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		stop()
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+
+	stop()
+	// Well below the shutdown grace: only ending the stream lets runHTTP return in time.
+	select {
+	case err := <-served:
+		if err != nil {
+			t.Fatalf("runHTTP with an open session: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("runHTTP did not return within 3s of the stop signal")
 	}
 }

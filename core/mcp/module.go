@@ -17,9 +17,6 @@ import (
 	"go.uber.org/fx"
 )
 
-// httpShutdownGrace bounds the streamable-HTTP server's graceful shutdown.
-const httpShutdownGrace = 5 * time.Second
-
 // runParams carries the dependencies the transport runner needs.
 type runParams struct {
 	fx.In
@@ -102,18 +99,19 @@ func runHTTP(p runParams) {
 		func(*http.Request) *Server { return p.Server },
 		nil,
 	)
-	mux := http.NewServeMux()
-	mux.Handle(p.Opts.HTTP.Path, handler)
 	srv := &http.Server{
 		Addr:              p.Opts.HTTP.Addr,
-		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second, // slow-loris guard
 		// No WriteTimeout: streamable HTTP may stream responses indefinitely.
 		IdleTimeout: 60 * time.Second,
 	}
+	streams, endStreams := context.WithCancel(context.Background())
 
 	p.Lifecycle.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
+			mux := http.NewServeMux()
+			mux.Handle(p.Opts.HTTP.Path, EndStreamsOnShutdown(streams, srv, handler))
+			srv.Handler = mux
 			var lc net.ListenConfig
 			ln, err := lc.Listen(ctx, "tcp", srv.Addr)
 			if err != nil {
@@ -133,7 +131,8 @@ func runHTTP(p runParams) {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			shutCtx, cancel := context.WithTimeout(ctx, httpShutdownGrace)
+			endStreams()
+			shutCtx, cancel := context.WithTimeout(ctx, HTTPShutdownGrace)
 			defer cancel()
 			if err := srv.Shutdown(shutCtx); err != nil {
 				return fmt.Errorf("mcp: shutdown: %w", err)

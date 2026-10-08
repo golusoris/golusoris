@@ -123,6 +123,41 @@ func TestModule_HTTPTransport(t *testing.T) {
 	}
 }
 
+// TestModule_HTTPTransportStopsWithOpenSession asserts that a client still
+// holding its event stream does not hold up a graceful stop.
+func TestModule_HTTPTransportStopsWithOpenSession(t *testing.T) {
+	t.Parallel()
+	addr := freeAddr(t)
+	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \""+addr+"\"\n")
+
+	app := fxtest.New(
+		t,
+		fx.Provide(func() *config.Config { return cfg }),
+		fx.Provide(discardLogger),
+		mcp.Module,
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	app.RequireStart()
+
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
+	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer func() { _ = session.Close() }()
+	if _, err := session.ListTools(ctx, &sdkmcp.ListToolsParams{}); err != nil {
+		t.Fatalf("list tools: %v", err)
+	}
+
+	// Well below mcp.HTTPShutdownGrace: only ending the stream lets Stop finish in time.
+	stopCtx, stopCancel := context.WithTimeout(ctx, 3*time.Second)
+	defer stopCancel()
+	if err := app.Stop(stopCtx); err != nil {
+		t.Fatalf("stop with an open session: %v", err)
+	}
+}
+
 // TestModule_RejectsUnknownTransport asserts the module fails to start when the
 // configured transport is invalid (caught at provide time by loadOptions).
 func TestModule_RejectsUnknownTransport(t *testing.T) {
