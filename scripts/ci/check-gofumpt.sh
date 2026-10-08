@@ -11,8 +11,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 readonly REPO_ROOT
 # shellcheck source=tools/tool-versions.env disable=SC1091
 . "$REPO_ROOT/tools/tool-versions.env"
-# shellcheck source=scripts/ci/lib/gofumpt-exceptions.sh
-. "$REPO_ROOT/scripts/ci/lib/gofumpt-exceptions.sh"
 
 tool=""
 if command -v gofumpt >/dev/null; then
@@ -39,7 +37,7 @@ fi
 mapfile -d '' candidates <"$candidate_list"
 for file in "${candidates[@]}"; do
 	[[ -f "$REPO_ROOT/$file" ]] || continue
-	gofumpt_exempt "$file" || files+=("$REPO_ROOT/$file")
+	files+=("$REPO_ROOT/$file")
 done
 
 ((${#files[@]} > 0)) || {

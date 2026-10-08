@@ -610,6 +610,7 @@
         "tools/figures/README.md",
         ".github/workflows/praetor-api.yml",
         "tools/apicompat/gate/main.go",
+        "tools/apicompat/gate/placeholder.go",
         ".devcontainer/devcontainer.json",
         ".devcontainer/Dockerfile.praetor"
       ],

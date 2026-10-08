@@ -21,14 +21,6 @@ else
 	mapfile -t files < <(go_files "$@")
 fi
 
-# shellcheck source=scripts/ci/lib/gofumpt-exceptions.sh
-. "$(dirname "$0")/../ci/lib/gofumpt-exceptions.sh"
-declare -a checked_files=()
-for file in "${files[@]}"; do
-	gofumpt_exempt "$file" || checked_files+=("$file")
-done
-files=("${checked_files[@]}")
-
 ((${#files[@]} > 0)) || skip "no Go files"
 need_tool gofumpt "go install mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
 
