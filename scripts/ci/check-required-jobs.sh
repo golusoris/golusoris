@@ -51,7 +51,8 @@ main() {
 	require_conditional dependency-review "${DEPENDENCY_REVIEW:?}" "$is_pr"
 
 	local dco_applicable="$is_pr"
-	[[ "${ACTOR:?}" == 'renovate[bot]' ]] && dco_applicable=false
+	# Bots author no human contribution to certify: Renovate and the release-please bot.
+	[[ "${ACTOR:?}" == 'renovate[bot]' || "${ACTOR:?}" == 'github-actions[bot]' ]] && dco_applicable=false
 	require_conditional dco "${DCO:?}" "$dco_applicable"
 
 	printf 'all gating jobs passed\n'
