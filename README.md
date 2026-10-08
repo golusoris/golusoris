@@ -89,6 +89,7 @@ checksum and patched-source hash, then fail closed on drift.
 | --- | --- | --- |
 | `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
 | `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
+| `core/codec/jcs/` | RFC 8785 JSON canonicalisation for hashed/signed records — UTF-16 member order, ECMAScript numbers, refuses duplicate names, lone surrogates, invalid UTF-8 | stdlib |
 | `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
 | `core/errors/` | typed error codes, HTTP status mapping, RFC 9457 responses | go-faster/errors |
 | `core/crypto/` | argon2id passwords, AES-GCM helpers, bounded configured encryptor | alexedwards/argon2id |
@@ -97,7 +98,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/id/` | UUIDv7 and KSUID generators | google/uuid · segmentio/ksuid |
 | `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
 | `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
-| `core/clikit/` | cobra + fx CLI builder (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
+| `core/clikit/` | cobra + fx CLI builder; bash/zsh/fish/PowerShell completions, man pages, generated-file drift check (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
 | `core/mcp/` | MCP server fx module — stdio + streamable-HTTP | modelcontextprotocol/go-sdk |
 | `core/gitx/` | bounded git runner + `worktree/` per-task worktrees | stdlib |
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
@@ -387,6 +388,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/snapshot/` | golden-file / snapshot testing | gkampitakis/go-snaps |
 | `testutil/factory/` | deterministic gofakeit test data factories | brianvoe/gofakeit |
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
+| `junit/` | JUnit XML report writer for CI gates — suites, pass/fail/error/skip, properties, XML-illegal characters escaped; validates against junit-10.xsd | stdlib |
 | `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
