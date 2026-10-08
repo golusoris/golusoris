@@ -171,7 +171,8 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `jobs/` | river client + worker registry + named queues + lifecycle observer | riverqueue/river |
+| `jobs/` | river client + worker registry + named queues + lifecycle observer + drain/retry + depth metrics | riverqueue/river, rivercontrib/otelriver |
+| `jobs/sqlite/` | River queue on SQLite for standalone single-binary mode | riverqueue/river/riverdriver/riversqlite |
 | `jobs/cron/` | cron expression parser / validator | robfig/cron/v3 |
 | `jobs/ui/` | auth-gated river job dashboard handler | riverqueue/riverui |
 | `jobs/workflow/` | Temporal workflow orchestration | go.temporal.io/sdk |
@@ -194,6 +195,9 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
+| `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
 ### Kubernetes runtime
 
@@ -202,6 +206,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `k8s/podinfo/` | downward-API env → fx-provided `PodInfo` | stdlib |
 | `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry; shutdown gate fails readiness and drains before servers stop | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
+| `k8s/keda/` | KEDA external scaler gRPC over jobs queue depth (scale to zero) | google.golang.org/grpc, KEDA externalscaler.proto |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
 | `k8s/operator/` | controller-runtime manager fx module + application-supplied CRD schemes | sigs.k8s.io/controller-runtime |
 | `k8s/nri/` | containerd NRI plugin scaffold — typed pod/container lifecycle hooks, context-timeout bounded (own go.mod) | containerd/nri |
@@ -333,7 +338,11 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 | --- | --- | --- |
-| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy | google/go-containerregistry |
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers | google/go-containerregistry |
+| `container/registry/credentials/` | registry credential chain behind `authn.Keychain` — secret files, cloud workload identity, docker config | google/go-containerregistry |
+| `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
+| `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
+| `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bounded FASTA parser, rev-complement, GC content | stdlib |
@@ -346,6 +355,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `media/game/` | Ebitengine 2D game loop scaffold | hajimehoshi/ebiten/v2 |
 | `media/3d/` | g3n 3D engine scaffold | g3n/engine |
 | `testutil/pact/` | Pact consumer-driven contract testing | pact-foundation/pact-go/v2 |
+| `testutil/promcheck/` | dashboard + rule queries vs emitted metrics gate (own go.mod) | prometheus/prometheus promql/parser |
 
 ### Misc utilities
 
@@ -402,9 +412,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 23 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 24 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 23 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 24 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec

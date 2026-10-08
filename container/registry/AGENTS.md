@@ -6,10 +6,11 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — container/registry/
 
-OCI/Docker image-registry client over
+OCI/Docker registry client over
 [google/go-containerregistry](https://github.com/google/go-containerregistry)'s
 `pkg/v1/remote`: parse reference, resolve tag to its content digest, fetch
-manifest, list tags, and copy image (or index) between registries.
+manifest, list tags, copy image (or index), push/pull OCI 1.1 artifacts,
+list referrers. One OCI client for fleet; oras-go deliberately not used.
 
 ## API
 
@@ -23,6 +24,32 @@ err          = c.Copy(ctx, "gcr.io/distroless/static:nonroot", "my-registry.exam
 
 ref, err := registry.ParseReference("nginx:1.27") // pure parse, no I/O
 ```
+
+### OCI 1.1 artifacts
+
+```go
+desc, err := c.PushArtifact(ctx, "ghcr.io/org/models:v3", registry.Artifact{ // or "ghcr.io/org/models" = untagged
+    ArtifactType: "application/vnd.vmafx.model.v1",
+    Blobs: []registry.Blob{{MediaType: "application/vnd.vmafx.model.onnx", Path: "model.onnx"}}, // or Reader + Name
+    Annotations: map[string]string{"dev.vmafx.version": "3"},
+    Subject: &other,                                       // optional: referrer link
+})
+desc, err = c.PullArtifact(ctx, "ghcr.io/org/models@"+desc.Digest.String(), dir,
+    registry.PullOptions{ArtifactType: "application/vnd.vmafx.model.v1"})
+refs, err := c.Referrers(ctx, "ghcr.io/org/models:v3", "application/vnd.dev.sigstore.bundle.v0.3+json")
+desc, man, err := c.ArtifactManifest(ctx, "ghcr.io/org/models@"+refs[0].Digest.String())
+bundle, err := c.FetchBlob(ctx, "ghcr.io/org/models", man.Layers[0], 1<<20)
+```
+
+- Manifest: image-spec v1.1, empty config (`application/vnd.oci.empty.v1+json`), caller `artifactType` + layer media types, manifest/layer annotations, optional `subject`. No blobs -> single empty layer.
+- Stable digests: nothing time-dependent added (no `created`); identical input -> identical digest. vmafx signs with `cosign sign <repo>@<digest>`.
+- `Blob.Name` -> `org.opencontainers.image.title` (default `filepath.Base(Path)`); pull file name = title, else `sha256-<hex>`. Name must be single local path element.
+- Push target: repo (untagged) or repo:tag; digest target -> `ErrInvalidArtifact`. `Reader` blobs spooled to temp file first (digest before upload).
+- Pull: manifest HEAD size check, then GET + sha256 recheck; caps (`max_blobs`, `max_blob_bytes`, `max_total_bytes`, names) checked before any write; each blob hashed while streamed into temp file in `dir`, fsync, rename only after digest match. Short/long/corrupt body -> `ErrDigestMismatch`, temp file removed.
+- Referrers: ggcr `remote.Referrers` = OCI 1.1 API, fallback tag schema `sha256-<hex>`; push with `Subject` updates fallback index on registries without API (ggcr `commitSubjectReferrers`, same path cosign uses). Over `max_referrers` -> `ErrTooLarge`. Filter is client-side on descriptor `artifactType`.
+- Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. Signing itself stays in cosign (vmafx side); no sigstore-go here.
+- Timeouts: `PushArtifact`/`PullArtifact`/`FetchBlob` bounded by `transfer_timeout` (default 10m); `Referrers`/`ArtifactManifest` by `timeout`.
+- Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`.
 
 Every network method takes `context.Context` **and** is additionally bounded
 by `Options.Timeout` (default `registry.DefaultTimeout`, 30s) — HISS-02: caller that forgets deadline still gets one.
@@ -47,6 +74,12 @@ container:
   registry:
     user_agent: my-app/1.0
     timeout: 15s
+    transfer_timeout: 10m
+    max_manifest_bytes: 4194304
+    max_blob_bytes: 1073741824
+    max_total_bytes: 4294967296
+    max_blobs: 64
+    max_referrers: 256
 ```
 
 `authn.Keychain` and `http.RoundTripper` are **optional** fx dependencies of
@@ -56,6 +89,14 @@ module — provide your own to override defaults:
 fx.Provide(func() authn.Keychain { return authn.NewMultiKeychain(ecrHelper, authn.DefaultKeychain) }),
 fx.Provide(func() http.RoundTripper { return myMTLSTransport }),
 ```
+
+## Credentials
+
+`container/registry/credentials` builds `authn.Keychain` chain: secret files
+-> opt-in cloud workload identity (`credentials/ecr`, `credentials/gar`,
+`credentials/acr`) -> `authn.DefaultKeychain`. `credentials.Module` provides
+keychain; `registry.Module` picks it up as optional dependency. Details:
+`credentials/AGENTS.md`.
 
 ## Why go-containerregistry
 

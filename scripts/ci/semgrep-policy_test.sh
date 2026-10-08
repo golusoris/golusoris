@@ -105,6 +105,29 @@ git -C "$parse_root" add .
 expect_failure 'Semgrep error:' \
 	bash "$parse_root/scripts/ci/semgrep-scan.sh" --root "$parse_root"
 
+write_generic_alias() {
+	local path="$1"
+	mkdir -p "$(dirname "$path")"
+	printf '%s\n' 'package jobs' '' 'type Box[T any] struct{ V T }' '' \
+		'type Job[T any] = Box[T]' >"$path"
+}
+
+alias_root="$(new_repo generic-alias)"
+write_clean_go "$alias_root"
+write_generic_alias "$alias_root/jobs/types.go"
+git -C "$alias_root" add .
+SEMGREP_EXCEPTION_DATE=20261008 \
+	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root" >/dev/null
+expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261108 \
+	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root"
+
+alias_elsewhere_root="$(new_repo generic-alias-elsewhere)"
+write_clean_go "$alias_elsewhere_root"
+write_generic_alias "$alias_elsewhere_root/other/types.go"
+git -C "$alias_elsewhere_root" add .
+expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261008 \
+	bash "$alias_elsewhere_root/scripts/ci/semgrep-scan.sh" --root "$alias_elsewhere_root"
+
 symlink_root="$(new_repo symlink)"
 mkdir -p "$suite_root/outside"
 write_clean_go "$suite_root/outside"

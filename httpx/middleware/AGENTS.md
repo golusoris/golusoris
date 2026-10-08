@@ -49,6 +49,7 @@ r.Use(
   validator wins and remains eligible for conditional 304.
 - `ETagWithLimit`: explicit cap; nonpositive means pass through.
 - OTel nil provider: global provider.
+- OTel via chi `Use` -> matched route pattern lands as `http.route` on span + metrics (`http_route` label), even when inner middleware passes `r.WithContext(…)`. Wrapping mux from outside -> no route (chi route context not built yet).
 
 ## Don't
 

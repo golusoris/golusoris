@@ -30,6 +30,7 @@ modules:
   - github.com/golusoris/golusoris/science/numerical
   - github.com/golusoris/golusoris/science/plot
   - github.com/golusoris/golusoris/testutil/pact
+  - github.com/golusoris/golusoris/testutil/promcheck
   - github.com/golusoris/golusoris/web3/evm
   - github.com/golusoris/golusoris/web3/solana
 packages:
@@ -289,9 +290,31 @@ packages:
   - import: github.com/golusoris/golusoris/container/registry
     module: github.com/golusoris/golusoris/container/registry
     domain: registry
-    capabilities: [registry.image]
-    description: "Package registry wraps go-containerregistry's remote client: parse a reference, resolve a tag to its digest, fetch a manifest, list tags, and copy an image between registries."
+    capabilities: [registry.image, registry.artifact, registry.referrers]
+    description: "Package registry wraps go-containerregistry's remote client: resolve, fetch manifests, list tags, copy images, and push, pull (digest-verified, size-capped) and list referrers of OCI 1.1 artifacts."
     replaces: [github.com/google/go-containerregistry]
+  - import: github.com/golusoris/golusoris/container/registry/credentials
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials]
+    description: "Package credentials resolves OCI registry credentials behind the registry authn.Keychain seam: secret files, cloud workload identity, docker config.json."
+  - import: github.com/golusoris/golusoris/container/registry/credentials/acr
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.acr]
+    description: "Package acr resolves Azure Container Registry credentials by exchanging a Microsoft Entra workload-identity token for an ACR refresh token."
+    replaces: [github.com/chrismellard/docker-credential-acr-env]
+  - import: github.com/golusoris/golusoris/container/registry/credentials/ecr
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.ecr]
+    description: "Package ecr resolves Amazon ECR credentials from the AWS default chain (IRSA, Pod Identity, IMDS) through GetAuthorizationToken."
+    replaces: [github.com/awslabs/amazon-ecr-credential-helper/ecr-login]
+  - import: github.com/golusoris/golusoris/container/registry/credentials/gar
+    module: github.com/golusoris/golusoris/container/registry
+    domain: registry
+    capabilities: [registry.credentials.gar]
+    description: "Package gar resolves Google Artifact Registry credentials from Application Default Credentials (GKE Workload Identity, federation, gcloud)."
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
     capabilities: [runtime.detect]
@@ -548,14 +571,19 @@ packages:
     replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/jobs
     domain: jobs
-    capabilities: [jobs.queue]
+    capabilities: [jobs.queue, jobs.metrics]
     description: "Package jobs wires a [river] client as an fx dependency so apps can enqueue + process background jobs backed by Postgres."
-    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype]
+    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype, github.com/riverqueue/rivercontrib/otelriver]
   - import: github.com/golusoris/golusoris/jobs/cron
     domain: jobs
     capabilities: [jobs.cron]
     description: "Package cron parses cron expressions (robfig/cron/v3) and registers them as river periodic jobs."
     replaces: [github.com/go-co-op/gocron, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/robfig/cron, github.com/robfig/cron/v3]
+  - import: github.com/golusoris/golusoris/jobs/sqlite
+    domain: jobs
+    capabilities: [jobs.queue_sqlite]
+    description: "Package sqlite runs the jobs queue on SQLite through River's riversqlite driver, for standalone single-binary deployments."
+    replaces: [github.com/riverqueue/river/riverdriver/riversqlite, github.com/riverqueue/river/rivermigrate]
   - import: github.com/golusoris/golusoris/jobs/ui
     domain: jobs
     capabilities: [jobs.ui]
@@ -581,6 +609,11 @@ packages:
     capabilities: [k8s.health]
     description: "Package health serves the canonical Kubernetes probe endpoints — /livez, /readyz, /startupz — backed by a [statuspage.Registry]."
     replaces: [github.com/go-chi/chi/v5]
+  - import: github.com/golusoris/golusoris/k8s/keda
+    domain: k8s
+    capabilities: [k8s.keda_scaler]
+    description: "Package keda serves KEDA's external scaler gRPC protocol over jobs queue depth, so a ScaledObject can scale River workers on outstanding jobs, including to and from zero."
+    replaces: [github.com/kedacore/keda/v2]
   - import: github.com/golusoris/golusoris/k8s/metrics/prom
     domain: k8s
     capabilities: [telemetry.prometheus]
@@ -759,6 +792,15 @@ packages:
     capabilities: [notify.webpush]
     description: "Package webpush sends browser push notifications via the Web Push Protocol (RFC 8030 / draft-ietf-webpush-encryption-08)."
     replaces: [github.com/SherClockHolmes/webpush-go]
+  - import: github.com/golusoris/golusoris/observability/grafana
+    domain: telemetry
+    capabilities: [telemetry.dashboards]
+    description: "Package grafana builds Grafana dashboards in Go from github.com/golusoris/golusoris/observability/metricdef definitions, on the Grafana Foundation SDK."
+    replaces: [github.com/grafana/grafana-foundation-sdk/go]
+  - import: github.com/golusoris/golusoris/observability/metricdef
+    domain: telemetry
+    capabilities: [telemetry.metrics.catalog]
+    description: "Package metricdef declares Prometheus metrics once — name, help, unit, kind, labels, buckets and label-cardinality bounds — so services register typed handles from"
   - import: github.com/golusoris/golusoris/observability/pprof
     domain: telemetry
     capabilities: [telemetry.pprof]
@@ -769,6 +811,11 @@ packages:
     capabilities: [telemetry.profiling]
     description: "Package profiling wires grafana/pyroscope-go for continuous in-process profiling."
     replaces: [github.com/grafana/pyroscope-go]
+  - import: github.com/golusoris/golusoris/observability/rules
+    domain: telemetry
+    capabilities: [telemetry.alerting, telemetry.slo]
+    description: "Package rules builds Prometheus alerting and recording rules — as a prometheus-operator PrometheusRule (monitoring.coreos.com/v1) or a plain rule file for"
+    replaces: [github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring]
   - import: github.com/golusoris/golusoris/observability/sentry
     domain: telemetry
     capabilities: [telemetry.sentry]
@@ -793,7 +840,7 @@ packages:
     domain: telemetry
     capabilities: [telemetry.otel]
     description: "Package otel wires OpenTelemetry — tracer, meter, and logger — with an OTLP gRPC exporter."
-    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
+    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/exporters/prometheus, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
   - import: github.com/golusoris/golusoris/outbox
     domain: outbox
     capabilities: [jobs.outbox]
@@ -1007,6 +1054,12 @@ packages:
     capabilities: [test.pact]
     description: "Package pact provides helpers for Pact consumer-driven contract testing."
     replaces: [github.com/pact-foundation/pact-go/v2]
+  - import: github.com/golusoris/golusoris/testutil/promcheck
+    module: github.com/golusoris/golusoris/testutil/promcheck
+    domain: test
+    capabilities: [test.promql, telemetry.query.check]
+    description: "Package promcheck fails tests when a dashboard panel, template variable, annotation or Prometheus rule queries a metric or label that nothing emits."
+    replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
     capabilities: [test.pg]

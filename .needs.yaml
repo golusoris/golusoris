@@ -919,7 +919,7 @@ dependencies:
       golusoris_replacement: github.com/golusoris/golusoris/cache/redis
       notes: Fast auto-pipelining Redis client
     - package: github.com/riverqueue/river
-      version: v0.47.0
+      version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
@@ -927,7 +927,7 @@ dependencies:
       golusoris_replacement: github.com/golusoris/golusoris/jobs
       notes: Native River queue engine wrapped in Golusoris
     - package: github.com/riverqueue/river/riverdriver/riverpgxv5
-      version: v0.47.0
+      version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
@@ -935,7 +935,7 @@ dependencies:
       golusoris_replacement: github.com/golusoris/golusoris/jobs
       notes: Native River queue engine wrapped in Golusoris
     - package: github.com/riverqueue/river/rivertype
-      version: v0.47.0
+      version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
@@ -1354,7 +1354,7 @@ dependencies:
       status: gap
       notes: Third-party package without native Golusoris equivalent
     - package: riverqueue.com/riverui
-      version: v0.19.0
+      version: v0.20.0
       language: go
       ecosystem: go
       capability: custom.riverqueue_com_riverui

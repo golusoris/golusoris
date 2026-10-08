@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Generates Go stubs for KEDA's external scaler protocol.
+# Source: github.com/kedacore/keda v2.21.0 (commit
+# 626ded5d783108bedf647e20bbc83f8e458e02e4),
+# pkg/scalers/externalscaler/externalscaler.proto, Apache-2.0.
+# protoc-gen-go stays at v1.36.3, the last release whose output imports no
+# unsafe (v1.36.4+ inline unsafe.StringData for raw descriptors, which the
+# unsafe-requires-safety-proof gate rejects in code that cannot carry a
+# proof); the runtime is the go.mod google.golang.org/protobuf. grpc/go
+# matches tools/buf.gen.yaml. Regenerate from this directory, then apply the
+# repository formatters the commit hooks enforce on every Go file:
+#   buf generate
+#   gofumpt -w *.pb.go
+#   gci write -s standard -s default -s 'prefix(github.com/golusoris/golusoris)' --custom-order *.pb.go
+version: v2
+managed:
+  enabled: true
+  override:
+    - file_option: go_package
+      value: github.com/golusoris/golusoris/k8s/keda/internal/externalscalerpb
+plugins:
+  - remote: buf.build/protocolbuffers/go:v1.36.3
+    out: .
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go:v1.6.2
+    out: .
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false
