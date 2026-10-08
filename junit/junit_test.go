@@ -239,8 +239,7 @@ func validate(t *testing.T, xmllint, path string) (string, bool) {
 	defer cancel()
 	out, err := exec.CommandContext(ctx, xmllint, "--noout", "--nonet", "--schema", schema, path).CombinedOutput()
 	if err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) {
+		if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 			t.Fatalf("xmllint: %v", err)
 		}
 		return string(out), false

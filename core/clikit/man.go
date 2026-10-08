@@ -200,7 +200,7 @@ func roffBlock(s string) string {
 		return ""
 	}
 	var b strings.Builder
-	for _, line := range strings.Split(strings.TrimRight(s, "\n"), "\n") {
+	for line := range strings.SplitSeq(strings.TrimRight(s, "\n"), "\n") {
 		line = strings.TrimRight(line, " \t")
 		switch {
 		case line == "":

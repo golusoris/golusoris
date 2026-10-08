@@ -121,7 +121,7 @@ func runShell(t *testing.T, binDir, shell string, args []string) []string {
 		t.Fatalf("%s: %v\nstderr:\n%s", shell, err, stderr.String())
 	}
 	var out []string
-	for _, line := range strings.Split(stdout.String(), "\n") {
+	for line := range strings.SplitSeq(stdout.String(), "\n") {
 		if name, _, _ := strings.Cut(line, "\t"); strings.TrimSpace(name) != "" {
 			out = append(out, strings.TrimSpace(name))
 		}
