@@ -12,6 +12,7 @@ Single-leader election with pluggable backends.
 | --- | --- | --- |
 | `leader/k8s` | Kubernetes Lease (client-go) | Running on k8s; avoids adding pg dep to k8s-only apps |
 | `leader/pg` | PostgreSQL advisory lock | Anywhere else (Docker Compose, Swarm, Nomad, bare Linux, k8s without Lease RBAC). Needs a *pgxpool.Pool |
+| `leader/always` | none: always leader | Standalone single replica (desktop, dev, one-node install). Never with >1 replica |
 
 ## Conventions
 
@@ -21,6 +22,17 @@ Single-leader election with pluggable backends.
  changing handler code.
 - `OnStartedLeading(ctx)` handler MUST return promptly on ctx cancel
  or risk concurrent leaders across replicas.
+- Several singleton tasks -> one `NamedModule(key, cb)` per task (any
+ backend, beside `Module` or not). Options under
+ `leader.elections.<key>` (same keys as `leader.*`), env
+ `APP_LEADER_ELECTIONS_<KEY>_*`. key `[a-z][a-z0-9]{0,62}`; each needs
+ own `name` (Lease / lock key).
+- State: `leader.Status.IsLeader()`. NamedModule provides `*leader.Status`
+ tagged `name:"<key>"`. `Module` provides none (two backends wired, one
+ disabled, stays legal): wrap callbacks yourself,
+ `st := leader.NewStatus(); k8s.Module(st.Observe(cb))`.
+- Status true from `OnStartedLeading` until term ctx ends or
+ `OnStoppedLeading`; term id stops late cancel clearing newer term.
 
 ## Trade-offs
 

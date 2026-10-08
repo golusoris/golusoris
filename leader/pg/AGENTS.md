@@ -18,7 +18,7 @@ fx.New(
     golusoris.Core,
     golusoris.DB,
     // requires *pgxpool.Pool + clock.Clock in the graph
-    pg.Module("outbox-drainer", leader.Callbacks{
+    pg.Module(leader.Callbacks{ // lock name from leader.name
         OnStartedLeading: drainOutbox, // ctx canceled on stop — return promptly
     }),
 )
@@ -49,3 +49,4 @@ leader:
  crash via TCP keepalive), so there's no TTL/renewal tuning.
 - `name` must be unique per elector: two electors with same name hash to  same key and contend (caller config error, not library bug).
 - Empty `leader.name` with `enabled=true` fails construction.
+- `NamedModule(key, cb)` adds election per key (options `leader.elections.<key>`, `*leader.Status` tagged `name:"<key>"`); see `leader/AGENTS.md`.

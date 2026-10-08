@@ -614,6 +614,15 @@ packages:
     capabilities: [k8s.client]
     description: "Package client builds a *rest.Config + Kubernetes clientset with graceful fallback across deployment modes:"
     replaces: [k8s.io/api, k8s.io/apimachinery, k8s.io/client-go]
+  - import: github.com/golusoris/golusoris/k8s/cnpg
+    domain: k8s
+    capabilities: [k8s.cnpg]
+    description: "Package cnpg reads CloudNativePG (CNPG) Cluster status through the dynamic client, without importing the CNPG module, and turns backup health into a statu"
+  - import: github.com/golusoris/golusoris/k8s/dra
+    domain: k8s
+    capabilities: [k8s.dra]
+    description: "Package dra publishes the devices a node exposes as Kubernetes Dynamic Resource Allocation ResourceSlices (resource.k8s.io/v1, GA in Kubernetes 1.34), so th"
+    replaces: [k8s.io/dynamic-resource-allocation]
   - import: github.com/golusoris/golusoris/k8s/health
     domain: k8s
     capabilities: [k8s.health]
@@ -629,6 +638,10 @@ packages:
     capabilities: [telemetry.prometheus]
     description: "Package prom mounts a Prometheus /metrics endpoint and exposes the check registry's per-check status as Gauges so Prometheus alerting can fire on individual dep"
     replaces: [github.com/go-chi/chi/v5, github.com/prometheus/client_golang, github.com/prometheus/client_model]
+  - import: github.com/golusoris/golusoris/k8s/nfd
+    domain: k8s
+    capabilities: [k8s.nfd]
+    description: "Package nfd publishes node labels through the Node Feature Discovery (NFD) local feature source: it writes feature files into the directory nfd-worker reads"
   - import: github.com/golusoris/golusoris/k8s/nri
     module: github.com/golusoris/golusoris/k8s/nri
     domain: k8s
@@ -648,6 +661,10 @@ packages:
     domain: leader
     capabilities: [leader.election]
     description: "Package leader defines the pluggable interface for single-leader election across a replica set."
+  - import: github.com/golusoris/golusoris/leader/always
+    domain: leader
+    capabilities: [leader.always]
+    description: "Package always is the leader backend for standalone single-replica runs: the replica is leader from start to stop without any lock, so singleton tasks writte"
   - import: github.com/golusoris/golusoris/leader/k8s
     domain: leader
     capabilities: [leader.k8s]

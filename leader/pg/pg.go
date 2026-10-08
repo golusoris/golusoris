@@ -34,7 +34,6 @@ import (
 	"fmt"
 	"hash/fnv"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -86,7 +85,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 	if opts.Name == "" {
 		return errors.New("leader/pg: leader.name is required when enabled")
 	}
-	identity := resolveIdentity(opts.Identity)
+	identity := hook.Identity(opts.Identity)
 
 	key, err := keyFor(opts.Name)
 	if err != nil {
@@ -108,7 +107,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 		if got {
 			// The lock is held until ctx cancellation and releases when
 			// conn is released (deferred above).
-			lead(ctx, identity, cb)
+			hook.Lead(ctx, identity, cb)
 			return nil
 		}
 		// Not leader: wait + retry.
@@ -119,34 +118,6 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 		}
 	}
 	return nil
-}
-
-// resolveIdentity returns identity when set, else the local hostname,
-// falling back to "unknown" when the hostname cannot be determined.
-func resolveIdentity(identity string) string {
-	if identity != "" {
-		return identity
-	}
-	if h, err := os.Hostname(); err == nil {
-		return h
-	}
-	return "unknown"
-}
-
-// lead runs the leadership callbacks and blocks until ctx is cancelled.
-func lead(ctx context.Context, identity string, cb leader.Callbacks) {
-	if cb.OnNewLeader != nil {
-		cb.OnNewLeader(identity)
-	}
-	leaderCtx, cancel := context.WithCancel(ctx)
-	if cb.OnStartedLeading != nil {
-		cb.OnStartedLeading(leaderCtx)
-	}
-	<-ctx.Done()
-	cancel()
-	if cb.OnStoppedLeading != nil {
-		cb.OnStoppedLeading()
-	}
 }
 
 func tryLock(ctx context.Context, conn *pgx.Conn, key int64) (bool, error) {
@@ -165,9 +136,11 @@ func (o Options) withDefaults() Options {
 	return o
 }
 
-func loadOptions(cfg *config.Config) (Options, error) {
+func loadOptions(cfg *config.Config) (Options, error) { return loadOptionsAt(cfg, "leader") }
+
+func loadOptionsAt(cfg *config.Config, path string) (Options, error) {
 	opts := DefaultOptions()
-	if err := cfg.Unmarshal("leader", &opts); err != nil {
+	if err := cfg.Unmarshal(path, &opts); err != nil {
 		return Options{}, fmt.Errorf("leader/pg: load options: %w", err)
 	}
 	return opts, nil
@@ -181,12 +154,43 @@ func Module(cb leader.Callbacks) fx.Option {
 		"golusoris.leader.pg",
 		fx.Provide(loadOptions),
 		fx.Invoke(func(lc fx.Lifecycle, opts Options, pool *pgxpool.Pool, clk clock.Clock, logger *slog.Logger) {
-			if !opts.Enabled {
-				return
-			}
-			hook.RunUntilStop(lc, logger, "leader/pg", func(ctx context.Context) error {
-				return Run(ctx, pool, opts, clk, cb)
-			})
+			wire(lc, opts, pool, clk, logger, "leader/pg", cb)
 		}),
 	)
+}
+
+// NamedModule wires one more election, keyed by key, alongside [Module] or
+// other NamedModules. Options load from leader.elections.<key> (same keys
+// as leader.*; leader.elections.<key>.name must differ per election) and a
+// *leader.Status tagged `name:"<key>"` reports its state. key must match
+// [a-z][a-z0-9]{0,62}.
+func NamedModule(key string, cb leader.Callbacks) fx.Option {
+	status, tag, err := hook.NamedStatus(key)
+	if err != nil {
+		return fx.Error(fmt.Errorf("leader/pg: %w", err))
+	}
+	return fx.Module(
+		"golusoris.leader.pg."+key,
+		status,
+		fx.Invoke(fx.Annotate(
+			func(lc fx.Lifecycle, cfg *config.Config, pool *pgxpool.Pool, clk clock.Clock, logger *slog.Logger, st *leader.Status) error {
+				opts, loadErr := loadOptionsAt(cfg, hook.ConfigPath(key))
+				if loadErr != nil {
+					return loadErr
+				}
+				wire(lc, opts, pool, clk, logger, "leader/pg["+key+"]", st.Observe(cb))
+				return nil
+			},
+			fx.ParamTags("", "", "", "", "", tag),
+		)),
+	)
+}
+
+func wire(lc fx.Lifecycle, opts Options, pool *pgxpool.Pool, clk clock.Clock, logger *slog.Logger, name string, cb leader.Callbacks) {
+	if !opts.Enabled {
+		return
+	}
+	hook.RunUntilStop(lc, logger, name, func(ctx context.Context) error {
+		return Run(ctx, pool, opts, clk, cb)
+	})
 }

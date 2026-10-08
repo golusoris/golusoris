@@ -17,7 +17,7 @@ exactly one (see also `leader/pg`).
 fx.New(
     golusoris.Core,
     // requires *rest.Config in the graph (from k8s/client)
-    k8s.Module("outbox-drainer", leader.Callbacks{
+    k8s.Module(leader.Callbacks{ // Lease name from leader.name
         OnStartedLeading: drainOutbox, // ctx canceled on lease loss — return promptly
     }),
 )
@@ -51,3 +51,4 @@ leader:
 - `OnStartedLeading`'s ctx is canceled on lease loss — handler code must exit on
  cancellation or risk concurrent leaders.
 - Empty `leader.name` with `enabled=true` fails construction.
+- `NamedModule(key, cb)` adds election per key (options `leader.elections.<key>`, `*leader.Status` tagged `name:"<key>"`); see `leader/AGENTS.md`.
