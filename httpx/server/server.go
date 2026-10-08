@@ -40,8 +40,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/drain"
 	"github.com/golusoris/golusoris/core/validate"
-	"github.com/golusoris/golusoris/k8s/health"
 )
 
 // Options tunes the server. Durations accept koanf strings like "30s".
@@ -166,14 +166,14 @@ type serverParams struct {
 	Logger    *slog.Logger
 	TLSConfig *tls.Config `optional:"true"`
 	// Gate, when k8s/health.Module is wired, holds Shutdown until readiness has drained.
-	Gate *health.ShutdownGate `optional:"true"`
+	Gate drain.Gate `optional:"true"`
 }
 
 // Module provides a *http.Server that listens during fx Start and is
 // gracefully shut down during fx Stop. Requires a [http.Handler] in the
 // graph (see [httpx/router.Module]). If a *tls.Config is provided
 // (optionally, via one of the httpx/autotls sub-modules), the server
-// listens over TLS. With [health.Module] wired, shutdown starts only after the
+// listens over TLS. With k8s/health.Module wired, shutdown starts only after the
 // readiness drain window, while the server keeps answering /readyz with 503.
 var Module = fx.Module(
 	"golusoris.httpx.server",
@@ -182,7 +182,7 @@ var Module = fx.Module(
 		srv := New(p.Handler, p.Opts)
 		srv.TLSConfig = p.TLSConfig
 
-		p.Lifecycle.Append(p.Gate.Wrap(fx.Hook{
+		p.Lifecycle.Append(drain.Wrap(p.Gate, fx.Hook{
 			OnStart: func(ctx context.Context) error {
 				rawLn, err := net.Listen("tcp", srv.Addr)
 				if err != nil {

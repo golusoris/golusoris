@@ -22,7 +22,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 - `health.Module` -> `*ShutdownGate` from `health.drain.delay` (env `APP_HEALTH_DRAIN_DELAY`; default 5s; 0 = no wait; negative rejected). Registers readiness check `shutdown` on app `*statuspage.Registry` (app supplies: `fx.Provide(statuspage.NewRegistry)`).
 - fx Stop: gate fails `/readyz` (503), holds stop for drain window, then servers drain. `/livez` + `/startupz` unaffected.
-- fx runs OnStop in reverse append order -> module order alone can't put gate first. `httpx/server` + `grpc` inject gate optional, wrap stop hook via `gate.Wrap(hook)` -> order-independent. App-owned servers: `lc.Append(gate.Wrap(fx.Hook{...}))`.
+- fx runs OnStop in reverse append order -> module order alone can't put gate first. Module also provides gate as `core/drain.Gate`; `httpx/server` + `grpc` take it optional, wrap stop hook via `drain.Wrap(gate, hook)` -> order-independent, servers never import `k8s/health`. App-owned servers: `lc.Append(drain.Wrap(gate, fx.Hook{...}))`.
 - Drain bounded by stop ctx. Ctx shorter than delay -> wrapped ctx error; wrapped OnStop still runs (best effort).
 - Budget: `fx.StopTimeout` (default 15s) > drain delay + `http.timeouts.shutdown`. Helm `terminationGracePeriodSeconds` > preStop sleep + drain delay + shutdown.
 - `jobs` not wrapped: river `Stop(ctx)` bounded by stop ctx; no routed traffic.

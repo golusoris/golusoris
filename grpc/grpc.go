@@ -50,7 +50,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/golusoris/golusoris/core/config"
-	"github.com/golusoris/golusoris/k8s/health"
+	"github.com/golusoris/golusoris/core/drain"
 )
 
 const (
@@ -165,7 +165,7 @@ type serverParams struct {
 	Logger  *slog.Logger
 	Options []grpc.ServerOption `group:"grpc.serveropts"`
 	// Gate, when k8s/health.Module is wired, holds GracefulStop until readiness has drained.
-	Gate *health.ShutdownGate `optional:"true"`
+	Gate drain.Gate `optional:"true"`
 }
 
 func newServer(p serverParams) (*grpc.Server, error) {
@@ -178,7 +178,7 @@ func newServer(p serverParams) (*grpc.Server, error) {
 	// framework's.
 	serverOpts = append(serverOpts, p.Options...)
 	srv := grpc.NewServer(serverOpts...)
-	p.LC.Append(p.Gate.Wrap(serverHook(srv, cfg, logger)))
+	p.LC.Append(drain.Wrap(p.Gate, serverHook(srv, cfg, logger)))
 	return srv, nil
 }
 

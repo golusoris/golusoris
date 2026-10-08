@@ -18,6 +18,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/drain"
 	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/observability/statuspage"
 )
@@ -165,6 +166,11 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
+var _ drain.Gate = (*ShutdownGate)(nil)
+
+// asDrainGate offers the gate to servers through core/drain, so they need not import this package.
+func asDrainGate(g *ShutdownGate) drain.Gate { return g }
+
 func newModuleGate(opts Options, clk clock.Clock, logger *slog.Logger) *ShutdownGate {
 	gate := NewShutdownGate(clk, opts.Drain.Delay)
 	gate.logger = logger
@@ -186,13 +192,13 @@ func registerShutdown(p shutdownParams) {
 
 // Module provides a [*ShutdownGate] configured from health.drain.delay
 // (env APP_HEALTH_DRAIN_DELAY, default 5s), registers its readiness check
-// on the app's [*statuspage.Registry], and drains on fx Stop. httpx/server
-// and grpc wrap their stop hooks with the gate, so they stop only after the
-// drain window regardless of module order; app components do the same with
-// [ShutdownGate.Wrap]. Requires *config.Config, clock.Clock, *slog.Logger,
+// on the app's [*statuspage.Registry], and drains on fx Stop. It also provides
+// the gate as a core/drain Gate: httpx/server and grpc wrap their stop hooks
+// with it, so they stop only after the drain window regardless of module
+// order; app components do the same with drain.Wrap. Requires *config.Config, clock.Clock, *slog.Logger,
 // and a *statuspage.Registry (e.g. fx.Provide(statuspage.NewRegistry)).
 var Module = fx.Module(
 	"golusoris.k8s.health",
-	fx.Provide(loadOptions, newModuleGate),
+	fx.Provide(loadOptions, newModuleGate, asDrainGate),
 	fx.Invoke(registerShutdown),
 )
