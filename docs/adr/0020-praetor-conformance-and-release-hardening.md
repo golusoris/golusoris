@@ -107,19 +107,12 @@ issue #429 and its per-area tasks #432–#434.
    (`380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`), corrected onto the
    current tagged release after an earlier automated dependency bump had
    landed the template on a broken pin (`#500`).
-8. **Admin merges on a green local gate are a documented, commented
-   exception while the ARC fleet is capacity-constrained.** The self-hosted
-   `arc-cauda-golusoris-golusoris` runner set is undersized for this
-   monorepo's lint/build/test cost under contention (`ci.yml`'s Lint job
-   comment records a measured ~810 CPU-s cold-cache cost against a
-   750 m-CPU-guaranteed runner, and a starved node pushing a run past the
-   original 20-minute budget). With a single maintainer and `review_mode:
-   single_maintainer` in effect, a merge is admin-merged only after the
-   documented local gate (`make verify-all`) has passed on the branch tip,
-   and the PR or commit records that as the reason; this is a stated
-   exception to waiting on GitHub's required checks, not a substitute for
-   the required checks once the ARC fleet resize referenced in the `ci.yml`
-   comment lands.
+8. **Withdrawn: admin merges while the ARC fleet was constrained.** This
+   decision covered the period when the self-hosted
+   `arc-cauda-golusoris-golusoris` runner set could not keep up with the
+   required checks. [ADR-0021](0021-github-hosted-runners.md) moved CI to
+   GitHub-hosted runners, so required checks no longer wait on that fleet
+   and no admin-merge exception remains.
 
 ## Alternatives considered
 
