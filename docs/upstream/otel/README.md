@@ -107,6 +107,9 @@ ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(req.Hea
   tracer and meter providers.
 - `core/log/` — slog factory; `otel.ModuleWithSlogBridge` installs the OTel
   bridge via `go.opentelemetry.io/contrib/bridges/otelslog`.
+- `otel.export.prometheus` adds `go.opentelemetry.io/otel/exporters/prometheus`
+  v0.68.0 (the release built against v1.46.0) as a pull reader on the app's
+  Prometheus registry.
 
 ## Links
 

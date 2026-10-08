@@ -194,6 +194,9 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
+| `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
 ### Kubernetes runtime
 
@@ -346,6 +349,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `media/game/` | Ebitengine 2D game loop scaffold | hajimehoshi/ebiten/v2 |
 | `media/3d/` | g3n 3D engine scaffold | g3n/engine |
 | `testutil/pact/` | Pact consumer-driven contract testing | pact-foundation/pact-go/v2 |
+| `testutil/promcheck/` | dashboard + rule queries vs emitted metrics gate (own go.mod) | prometheus/prometheus promql/parser |
 
 ### Misc utilities
 
@@ -402,9 +406,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 23 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 24 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 23 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 24 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec

@@ -30,6 +30,7 @@ modules:
   - github.com/golusoris/golusoris/science/numerical
   - github.com/golusoris/golusoris/science/plot
   - github.com/golusoris/golusoris/testutil/pact
+  - github.com/golusoris/golusoris/testutil/promcheck
   - github.com/golusoris/golusoris/web3/evm
   - github.com/golusoris/golusoris/web3/solana
 packages:
@@ -759,6 +760,15 @@ packages:
     capabilities: [notify.webpush]
     description: "Package webpush sends browser push notifications via the Web Push Protocol (RFC 8030 / draft-ietf-webpush-encryption-08)."
     replaces: [github.com/SherClockHolmes/webpush-go]
+  - import: github.com/golusoris/golusoris/observability/grafana
+    domain: telemetry
+    capabilities: [telemetry.dashboards]
+    description: "Package grafana builds Grafana dashboards in Go from github.com/golusoris/golusoris/observability/metricdef definitions, on the Grafana Foundation SDK."
+    replaces: [github.com/grafana/grafana-foundation-sdk/go]
+  - import: github.com/golusoris/golusoris/observability/metricdef
+    domain: telemetry
+    capabilities: [telemetry.metrics.catalog]
+    description: "Package metricdef declares Prometheus metrics once — name, help, unit, kind, labels, buckets and label-cardinality bounds — so services register typed handles from"
   - import: github.com/golusoris/golusoris/observability/pprof
     domain: telemetry
     capabilities: [telemetry.pprof]
@@ -769,6 +779,11 @@ packages:
     capabilities: [telemetry.profiling]
     description: "Package profiling wires grafana/pyroscope-go for continuous in-process profiling."
     replaces: [github.com/grafana/pyroscope-go]
+  - import: github.com/golusoris/golusoris/observability/rules
+    domain: telemetry
+    capabilities: [telemetry.alerting, telemetry.slo]
+    description: "Package rules builds Prometheus alerting and recording rules — as a prometheus-operator PrometheusRule (monitoring.coreos.com/v1) or a plain rule file for"
+    replaces: [github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring]
   - import: github.com/golusoris/golusoris/observability/sentry
     domain: telemetry
     capabilities: [telemetry.sentry]
@@ -793,7 +808,7 @@ packages:
     domain: telemetry
     capabilities: [telemetry.otel]
     description: "Package otel wires OpenTelemetry — tracer, meter, and logger — with an OTLP gRPC exporter."
-    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
+    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/exporters/prometheus, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
   - import: github.com/golusoris/golusoris/outbox
     domain: outbox
     capabilities: [jobs.outbox]
@@ -1007,6 +1022,12 @@ packages:
     capabilities: [test.pact]
     description: "Package pact provides helpers for Pact consumer-driven contract testing."
     replaces: [github.com/pact-foundation/pact-go/v2]
+  - import: github.com/golusoris/golusoris/testutil/promcheck
+    module: github.com/golusoris/golusoris/testutil/promcheck
+    domain: test
+    capabilities: [test.promql, telemetry.query.check]
+    description: "Package promcheck fails tests when a dashboard panel, template variable, annotation or Prometheus rule queries a metric or label that nothing emits."
+    replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
     capabilities: [test.pg]

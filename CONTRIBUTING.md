@@ -128,7 +128,7 @@ praetorctl state init --if-absent  # once per fresh checkout: seeds .workingdir/
                                     # ledger that already exists
 make dev    # air hot-reload (when implemented)
 make ci     # full local CI (root module)
-make verify-all  # all 23 Go modules + security, licensing, and governance
+make verify-all  # all 24 Go modules + security, licensing, and governance
 make python-lint python-test c-quality  # focused Python and C gates
 make gen    # sqlc / ogen / mockery codegen
 ```

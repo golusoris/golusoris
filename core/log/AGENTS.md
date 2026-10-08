@@ -25,6 +25,8 @@ configured handler.
 | `log.Format` consts | `FormatAuto` / `FormatTint` / `FormatJSON` |
 | `log.LevelFromString(s)` | parse level name → `(slog.Level, ok)` |
 | `log.FanoutHandler` | `slog.Handler` that fans record out to every wrapped handler — shared by otel and sentry bridge modules |
+| `log.HandlerMiddleware` | `{Name, Order, Wrap}` decorator for base handler; lower `Order` wraps closer to base; nil `Wrap` = no-op |
+| `log.AsMiddleware(ctor)` | annotate fx constructor so result joins `log.MiddlewareGroup`; `Module` applies group to injected logger |
 
 ## Config (env, read by `Module`)
 

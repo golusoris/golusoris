@@ -17,6 +17,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/lmittmann/tint"
@@ -50,6 +51,9 @@ type Options struct {
 	Output io.Writer
 	// AddSource adds source-file/line attributes. Default false (perf cost).
 	AddSource bool
+	// Middleware decorates the base handler; [Module] fills it from
+	// [MiddlewareGroup].
+	Middleware []HandlerMiddleware
 }
 
 // New builds a logger per opts. Pod metadata from POD_NAME, POD_NAMESPACE,
@@ -79,7 +83,7 @@ func New(opts Options) *slog.Logger {
 		})
 	}
 
-	logger := slog.New(h)
+	logger := slog.New(applyMiddleware(h, opts.Middleware))
 
 	// Default pod-info attrs if present.
 	if attrs := podInfoAttrs(); len(attrs) > 0 {
@@ -141,12 +145,15 @@ func loadOptions(cfg *config.Config) Options {
 }
 
 // Module provides a *slog.Logger driven by config keys log.level / log.format
-// (honoring the app's EnvPrefix, e.g. <PREFIX>_LOG_LEVEL). Sets it as the global
-// slog default for any code that hasn't migrated yet. Requires config.Module.
+// (honoring the app's EnvPrefix, e.g. <PREFIX>_LOG_LEVEL), decorated by every
+// [HandlerMiddleware] in [MiddlewareGroup]. Sets it as the global slog default
+// for any code that hasn't migrated yet. Requires config.Module.
 var Module = fx.Module(
 	"golusoris.log",
 	fx.Provide(loadOptions),
-	fx.Provide(func(opts Options) *slog.Logger {
+	fx.Provide(func(p moduleParams) *slog.Logger {
+		opts := p.Options
+		opts.Middleware = append(slices.Clone(opts.Middleware), p.Middleware...)
 		l := New(opts)
 		slog.SetDefault(l)
 		return l
