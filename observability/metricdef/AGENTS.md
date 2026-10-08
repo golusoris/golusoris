@@ -11,7 +11,7 @@ One metric definition shared by services, dashboard generator (`observability/gr
 ## API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Def{Name, Help, Unit, Kind, Labels, Buckets, Limits, External}` | one metric; `Validate()` reports every violation |
 | `KindCounter` / `KindGauge` / `KindHistogram` / `KindSummary` | metric type; summary External-only (Go collector), instrument with histograms |
 | `LabelLimit{Allow}` / `LabelLimit{MaxDistinct}` | cardinality bound; rejected value -> `OtherValue` (`"other"`) |

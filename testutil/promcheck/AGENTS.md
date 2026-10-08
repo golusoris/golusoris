@@ -11,7 +11,7 @@ Test gate: fail when dashboard panel, template variable, annotation or Prometheu
 ## API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `DashboardExprs(json, source)` | Grafana classic JSON (or API `{"dashboard": …}` wrapper) -> `[]Expr`: panel targets incl. collapsed rows, query variables, annotations; non-Prometheus datasources skipped |
 | `RuleExprs(yaml, source)` | PrometheusRule CR (`spec.groups`) or plain rule file, multi-doc `---` ok -> `[]Expr`; alerts carry `$labels.x` refs + static labels |
 | `Check(exprs, catalog, opts...)` | `[]Finding`: unknown metric, label matcher not on metric, `by()` label on no aggregated series, `$labels.x` not on result, parse error, nameless selector |

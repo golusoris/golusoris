@@ -11,7 +11,7 @@ Grafana dashboards generated in Go from `observability/metricdef` defs, on `gith
 ## API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `NewDashboard(uid, title, tags...)` | `*dashboard.DashboardBuilder` + `${datasource}` variable, crosshair, 30s refresh, 6h window |
 | `Render(b)` | build + indented JSON (`[]byte`, trailing newline) for provisioning |
 | `Query{Def, By, Filters, Matchers}` | PromQL source; every label must be in `Def.Labels` |

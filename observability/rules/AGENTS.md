@@ -11,7 +11,7 @@ Prometheus alerting + recording rules in Go: `monitoring.coreos.com/v1` Promethe
 ## API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `Alert{Name, Expr, For, Severity, Summary, Description, RunbookURL, Labels, Annotations}` | alerting rule; `Validate()` |
 | `Record{Name, Expr, Labels}` | recording rule; name must be `level:metric:operations` (contains colon) |
 | `Group{Name, Interval, Records, Alerts}` | rule group; records render before alerts; `RuleGroup()` -> operator type |
