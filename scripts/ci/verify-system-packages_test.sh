@@ -175,7 +175,9 @@ check_wiring() {
 		printf 'ci.yml must install cgo headers in the module sweep and apidiff jobs\n' >&2
 		return 1
 	fi
-	if grep -rHn 'libudev-dev' "$workflows"; then
+	# praetor-api.yml is Praetor's rendering of .standards.yaml api.system_packages,
+	# byte-locked by its audit; check_api_packages keeps that list equal to ours.
+	if grep -rHn --exclude=praetor-api.yml 'libudev-dev' "$workflows"; then
 		printf 'workflow inlines the cgo header list\n' >&2
 		return 1
 	fi
@@ -204,6 +206,35 @@ check_wiring() {
 }
 
 check_wiring "$repo_root/.github/workflows"
+
+# check_api_packages proves .standards.yaml api.system_packages, which Praetor
+# renders into praetor-api.yml, lists exactly the packages install-cgo-libs.sh installs.
+check_api_packages() {
+	local standards="$1" installer="$2" declared installed
+	declared="$(awk '/^api:/{a=1;next} a&&/^  system_packages:/{s=1;next} s&&/^    - /{print $2;next} s{exit}' "$standards" | sort)"
+	installed="$(grep -oE 'lib[a-z0-9+.-]+-dev' "$installer" | sort)"
+	if [[ -z "$declared" || "$declared" != "$installed" ]]; then
+		printf '.standards.yaml api.system_packages differs from install-cgo-libs.sh\n' >&2
+		printf 'declared:\n%s\ninstalled:\n%s\n' "$declared" "$installed" >&2
+		return 1
+	fi
+}
+
+check_api_packages "$repo_root/.standards.yaml" "$cgo_installer"
+expect_api_packages_rejection() {
+	local name="$1" expression="$2"
+	sed "$expression" "$repo_root/.standards.yaml" >"$suite_root/$name.yaml"
+	if cmp -s "$repo_root/.standards.yaml" "$suite_root/$name.yaml"; then
+		printf 'negative control %s did not mutate .standards.yaml\n' "$name" >&2
+		exit 1
+	fi
+	if check_api_packages "$suite_root/$name.yaml" "$cgo_installer" >/dev/null 2>&1; then
+		printf 'api package check accepted negative control %s\n' "$name" >&2
+		exit 1
+	fi
+}
+expect_api_packages_rejection api-package-missing '/^    - libxinerama-dev$/d'
+expect_api_packages_rejection api-package-extra 's/^    - libudev-dev$/    - libudev-dev\n    - libfoo-dev/'
 expect_wiring_rejection() {
 	local name="$1" file="$2" expression="$3"
 	cp -R "$repo_root/.github/workflows" "$suite_root/$name"
