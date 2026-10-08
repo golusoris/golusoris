@@ -36,6 +36,10 @@ cache.redis.tls  = false
 `addr` stays bare `host:port`; `tls = true` enables verified TLS 1.2+.
 Connection URLs belong at integration boundaries, not in `cache.redis.addr`.
 
+## Readiness
+
+Opt-in `redis.ReadinessModule` -> registers `ReadinessCheck(client, timeout, logger)` (name `redis`, PING within 1s) on app `*statuspage.Registry`.
+
 ## Distributed locks
 
 rueidis ships `rueidislock` — use it rather than hand-rolling SETNX. Import

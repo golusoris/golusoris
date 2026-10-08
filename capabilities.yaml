@@ -49,6 +49,11 @@ packages:
     capabilities: [clikit.cli, clikit.cobra, clikit.ioc]
     description: "Package clikit provides a cobra + fx-aware CLI builder."
     replaces: [github.com/alecthomas/kong, github.com/spf13/cobra, github.com/spf13/pflag, github.com/urfave/cli]
+  - import: github.com/golusoris/golusoris/core/drain
+    module: github.com/golusoris/golusoris/core
+    domain: lifecycle
+    capabilities: [lifecycle.drain]
+    description: "Package drain is the seam between a server and a readiness drain."
   - import: github.com/golusoris/golusoris/core/clock
     module: github.com/golusoris/golusoris/core
     domain: time

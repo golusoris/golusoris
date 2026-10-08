@@ -31,6 +31,7 @@ cloud, or CGO code lives here — those stay in root module and import core.
 | `gitx/`, `gitx/worktree/` | `git.runner`, `git.worktree` | bounded git exec; per-task worktrees |
 | `astx/` | `ast.analyzer`, `ast.rewrite` | source walker, import rewriter, func metrics, go.mod reader |
 | `capabilities/` | `needs.capabilities` | schema + loader for `capabilities.yaml` |
+| `drain/` | `lifecycle.drain` | stop-hook seam between servers and a readiness drain |
 
 ## Rules specific to core
 

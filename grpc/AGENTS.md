@@ -23,6 +23,7 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 - Interceptor chain (outermost first): OTel stats handler → slog logging → panic recovery, on both unary and stream.
 - TLS is opt-in (`grpc.tls=true` + cert/key paths); when on, it pins `MinVersion = TLS 1.3`.
 - Message size caps default to 4 MiB in and out; keepalive uses conservative internal-service defaults.
+- `k8s/health.Module` wired -> stop hook wrapped by its `core/drain.Gate` (no `k8s/health` import here): `GracefulStop` starts after `health.drain.delay`; stop ctx expiry -> hard `Stop`.
 - `ConnFactory` dials with insecure transport credentials by default — override per call with `grpc.WithTransportCredentials(...)`.
 
 ## Usage

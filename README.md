@@ -200,7 +200,7 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `k8s/podinfo/` | downward-API env → fx-provided `PodInfo` | stdlib |
-| `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry | stdlib |
+| `k8s/health/` | `/livez` `/readyz` `/startupz` backed by tagged check registry; shutdown gate fails readiness and drains before servers stop | stdlib |
 | `k8s/metrics/prom/` | Prometheus `/metrics` + per-check-status gauges | prometheus/client_golang |
 | `k8s/client/` | client-go — in-cluster + kubeconfig + GKE/EKS/Azure workload identity | k8s.io/client-go |
 | `k8s/operator/` | controller-runtime manager fx module + application-supplied CRD schemes | sigs.k8s.io/controller-runtime |
@@ -386,7 +386,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Path | Purpose |
 | --- | --- |
-| `deploy/helm/` | base Helm chart — Deployment, Service, HPA, PDB, NetworkPolicy, ServiceMonitor, backup CronJob |
+| `deploy/helm/` | base Helm chart — Deployment (preStop drain + validated termination grace), Service, HPA, PDB, NetworkPolicy, ServiceMonitor, backup CronJob |
 | `deploy/observability/` | PrometheusRule (5 alerts) + Grafana dashboard (request rate, error rate, P99 latency) |
 | `deploy/logging/` | Loki + Grafana Alloy config for structured log collection |
 | `deploy/terraform/` | Terraform modules — AWS RDS PostgreSQL and S3 bucket |

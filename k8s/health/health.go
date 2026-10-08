@@ -26,6 +26,10 @@
 //
 // Probe responses are intentionally terse — k8s only inspects the status
 // code. Append `?verbose=1` for a JSON dump of the per-check results.
+//
+// Graceful drain: [Module] wires a [ShutdownGate]. On fx Stop it fails
+// /readyz first, holds server shutdown for health.drain.delay so endpoint
+// removal propagates, then lets HTTP and gRPC drain within the stop budget.
 package health
 
 import (

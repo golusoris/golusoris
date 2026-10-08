@@ -90,6 +90,23 @@ startupProbe:
   failureThreshold: 30
   periodSeconds: 2
 
+# Graceful termination. delaySeconds is the window in which endpoint removal
+# reaches kube-proxy and load balancers before servers stop. With preStop the
+# kubelet sleeps that long before SIGTERM (native sleep action, Kubernetes
+# >= 1.30, no shell needed) and the app's own wait is 0s; without it the app
+# (k8s/health.Module) fails /readyz on SIGTERM and waits delaySeconds itself.
+# The app then drains HTTP/gRPC within shutdownSeconds. Rendered as
+# <envPrefix>HEALTH_DRAIN_DELAY and <envPrefix>HTTP_TIMEOUTS_SHUTDOWN; keep the
+# app's fx.StopTimeout (default 15s) above the in-app wait plus shutdownSeconds.
+drain:
+  delaySeconds: 5
+  preStop: true
+  shutdownSeconds: 10
+  envPrefix: APP_
+
+# Must exceed drain.delaySeconds + drain.shutdownSeconds; rendering fails otherwise.
+terminationGracePeriodSeconds: 30
+
 env: {}
 envFrom: []
 
