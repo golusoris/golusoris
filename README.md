@@ -102,6 +102,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/gitx/` | bounded git runner + `worktree/` per-task worktrees | stdlib |
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
 | `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
+| `core/tlsx/` | file-backed TLS: cert/key/CA reloaded lazily on handshake, client-auth policy parsing; `tlsxtest/` issues throwaway test certificates | stdlib |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data
@@ -125,11 +126,11 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `httpx/server/` | `*http.Server` with slow-loris guards, body limits, graceful shutdown | stdlib |
+| `httpx/server/` | `*http.Server` with slow-loris guards, body limits, graceful shutdown, file-based TLS/mTLS reloaded on rotation | stdlib |
 | `bootstrap/` | lean service entry point: Core + HTTP groupings without the rest of the framework | — |
 | `httpx/router/` | chi router + http.Handler provided to fx graph | go-chi/chi |
 | `httpx/middleware/` | logger, recovery, request-id, OTel, secure-headers, compress, ETag, trust-proxy | composite |
-| `httpx/client/` | retry + circuit-breaker + OTel-instrumented HTTP client | sony/gobreaker |
+| `httpx/client/` | retry + circuit-breaker + OTel-instrumented HTTP client; custom TLS config or transport | sony/gobreaker |
 | `httpx/extclient/` | typed, bounded external-API client over the resilient HTTP transport | custom on httpx/client |
 | `httpx/cors/` | CORS middleware | rs/cors |
 | `httpx/csrf/` | CSRF middleware | gorilla/csrf |
@@ -318,7 +319,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, keepalive | grpc/grpc-go |
+| `grpc/` | gRPC server + `ConnFactory` — OTel, slog logging, panic recovery, configurable keepalive, mTLS with cert rotation, readiness-fed `grpc.health.v1`; client TLS, keepalive, and UNAVAILABLE retry policy from config | grpc/grpc-go |
 | `graphql/` | gqlgen server — GET/POST/SSE/WebSocket, APQ, complexity limit, GraphiQL | 99designs/gqlgen |
 | `graphql/client/` | genqlient typed GraphQL client — auth transport, WebSocket opt-in | Khan/genqlient |
 | `pubsub/cloudevents/` | CloudEvents 1.0 envelope — validation, JSON event format, binary-mode header codecs | custom (stdlib) |

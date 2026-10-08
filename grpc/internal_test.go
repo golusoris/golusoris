@@ -66,8 +66,8 @@ func TestLoadConfig_defaults(t *testing.T) {
 
 func TestNewConnFactory_nonNil(t *testing.T) {
 	t.Parallel()
-	cf := newConnFactory()
-	if cf == nil {
-		t.Error("newConnFactory() returned nil")
+	cf, err := newConnFactory(clientParams{Config: Config{}.withDefaults()})
+	if err != nil || cf == nil {
+		t.Errorf("newConnFactory() = (%v, %v), want factory", cf, err)
 	}
 }

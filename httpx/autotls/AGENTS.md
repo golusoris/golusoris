@@ -18,4 +18,5 @@ Apps pick ONE sub-module and add it to fx graph. sub-module provides `*tls.Confi
 ## Don't
 
 - Don't wire both autocert + certmagic. They conflict — fx graph will get two providers for `*tls.Config`.
+- Don't combine autotls with `http.tls.cert`. `httpx/server` refuses two TLS sources.
 - Don't use autotls when terminating TLS at load balancer (k8s ingress, AWS ALB). LB already handles issuance + rotation.

@@ -20,6 +20,7 @@ package client
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -70,6 +71,15 @@ type Options struct {
 	// Logger is used for circuit-breaker state-change logs + retry backoff
 	// warnings. nil falls back to slog.Default().
 	Logger *slog.Logger
+
+	// TLSConfig sets TLS on a clone of http.DefaultTransport. A core/tlsx
+	// Reloader's ClientConfig keeps the client certificate current. Ignored
+	// when Transport is set.
+	TLSConfig *tls.Config
+
+	// Transport replaces the innermost transport; otelhttp, retry, and the
+	// breaker still wrap it. nil uses http.DefaultTransport.
+	Transport http.RoundTripper
 }
 
 // RetryOptions tunes retryablehttp. Max == 0 disables retries.
@@ -124,9 +134,9 @@ func resolveOptions(opts Options) resolvedOptions {
 func New(opts Options) *http.Client {
 	resolved := resolveOptions(opts)
 
-	// Innermost: stdlib transport wrapped by otelhttp.
+	// Innermost: stdlib (or caller) transport wrapped by otelhttp.
 	base := otelhttp.NewTransport(
-		http.DefaultTransport,
+		innerTransport(opts),
 		otelhttp.WithTracerProvider(resolved.tracerProvider),
 	)
 
@@ -171,6 +181,24 @@ func New(opts Options) *http.Client {
 	}
 
 	return &http.Client{Transport: transport, Timeout: resolved.timeout}
+}
+
+// innerTransport picks the caller's transport, a TLS-configured clone of the
+// default transport, or the default transport itself.
+func innerTransport(opts Options) http.RoundTripper {
+	if !validate.IsNil(opts.Transport) {
+		return opts.Transport
+	}
+	if opts.TLSConfig == nil {
+		return http.DefaultTransport
+	}
+	tr, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		tr = &http.Transport{Proxy: http.ProxyFromEnvironment, ForceAttemptHTTP2: true}
+	}
+	clone := tr.Clone()
+	clone.TLSClientConfig = opts.TLSConfig
+	return clone
 }
 
 // CloneBounded returns a shallow client clone whose timeout is always finite.

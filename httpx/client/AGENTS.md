@@ -22,6 +22,8 @@ circuit-breaker → retry → otelhttp → stdlib transport
  `ErrBodyNotReplayable` before network I/O; transport never buffers body.
 - Exhausted HTTP-status retries return final response. caller owns body.
 - OTel span per attempt.
+- `Options.TLSConfig` -> clone of `http.DefaultTransport` with that TLS config. `tlsx.Reloader.ClientConfig` keeps client cert current; CA pool = snapshot at call.
+- `Options.Transport` replaces innermost transport; otelhttp, retry, breaker still wrap it. Transport set -> TLSConfig ignored.
 
 ## Rules
 

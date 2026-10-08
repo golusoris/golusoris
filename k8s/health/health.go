@@ -84,7 +84,7 @@ func StartupzHandler(reg *statuspage.Registry) http.HandlerFunc {
 func probeHandler(reg *statuspage.Registry, tag string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results := reg.RunTagged(r.Context(), tag)
-		ok := serving(results)
+		ok := Serving(results)
 		status := http.StatusOK
 		body := "ok\n"
 		if !ok {
@@ -121,9 +121,10 @@ func writeVerbose(w http.ResponseWriter, status int, tag string, results []statu
 	}
 }
 
-// serving reports whether the probe should return 200: every check is up or
+// Serving reports whether a probe over results passes: every check is up or
 // degraded (degraded still serves). Any down or unknown check fails the probe.
-func serving(results []statuspage.Result) bool {
+// The gRPC health service shares this rule with /readyz.
+func Serving(results []statuspage.Result) bool {
 	for _, r := range results {
 		if r.Status != statuspage.StatusUp && r.Status != statuspage.StatusDegraded {
 			return false
