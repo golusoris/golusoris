@@ -4,9 +4,9 @@
 
 // Package mutation provides helpers for mutation testing via go-mutesting.
 //
-// go-mutesting must be installed separately:
+// This repository installs its reviewed go-mutesting version with:
 //
-//	go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest
+//	make tools-bootstrap
 //
 // If the binary is not found in PATH the test is automatically skipped.
 //
@@ -45,7 +45,7 @@ func Run(ctx context.Context, t *testing.T, pkg string) Report {
 	binPath, err := exec.LookPath("go-mutesting")
 	if err != nil {
 		t.Skip("go-mutesting not found in PATH; " +
-			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
+			"install the repository pin with make tools-bootstrap")
 	}
 	cmd := exec.CommandContext(ctx, binPath, pkg) // #nosec G204 -- pkg is a package path from trusted test code
 	out, _ := cmd.CombinedOutput()                // non-zero exit expected when mutants survive
@@ -60,7 +60,7 @@ func RunFiles(ctx context.Context, t *testing.T, files ...string) Report {
 	binPath, err := exec.LookPath("go-mutesting")
 	if err != nil {
 		t.Skip("go-mutesting not found in PATH; " +
-			"install: go install github.com/avito-tech/go-mutesting/cmd/go-mutesting@latest")
+			"install the repository pin with make tools-bootstrap")
 	}
 	args := append([]string{"--"}, files...)          //nolint:gocritic // appendAssign: not a bug; files not reused
 	cmd := exec.CommandContext(ctx, binPath, args...) // #nosec G204 -- files are from trusted test code

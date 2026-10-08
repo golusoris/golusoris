@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — testutil/pact/
 
 Helpers for Pact consumer-driven contract testing over `pact-foundation/pact-go/v2`:
-a consumer-side HTTP mock and a provider-side verifier. Stateless test utility —
+consumer-side HTTP mock and provider-side verifier. Stateless test utility —
 **no fx wiring**.
 
 ## API
@@ -25,13 +25,15 @@ pact.VerifyProvider(t, pact.ProviderOptions{
 })
 ```
 
-`AddInteraction` returns the raw pact-go builder, so the full V2 DSL is reachable.
+`AddInteraction` returns raw pact-go builder, so full V2 DSL is reachable.
 All helpers `t.Fatalf` on error.
 
 ## Notes
 
 - **Own go.mod sub-module** (`github.com/golusoris/golusoris/testutil/pact`):
-  pact-go v2 embeds a ~40 MB Ruby standalone binary, kept out of production
-  builds. Import the sub-module path directly.
+  pact-go v2 uses native Pact FFI, kept out of production builds. Import
+  sub-module path directly. CI installs reviewed FFI version; verifies
+  checked-in release-asset SHA-256 before build, vet, and test. Update
+  `scripts/ci/pact_ffi.py` alongside pact-go pin.
 - `ProviderOptions`: supply either `PactURLs` (local files / HTTP) **or**
-  `BrokerURL` + `ConsumerVersionSelectors` — broker takes precedence over URLs.
+ `BrokerURL` + `ConsumerVersionSelectors` — broker takes precedence over URLs.

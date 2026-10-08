@@ -10,9 +10,7 @@ Unified two-tier read-through cache: **L1** in-process ([cache/memory](../memory
 otter) → **L2** distributed ([cache/redis](../redis), rueidis) → origin loader,
 with [singleflight](../singleflight) de-duplication.
 
-A read short-circuits at the first tier that has the key and back-fills the
-faster tiers it skipped. A write fans out to both tiers. Concurrent reads of the
-same key share one loader call.
+read short-circuits at first tier that has key and back-fills faster tiers it skipped. write fans out to both tiers. Concurrent reads of same key share one loader call.
 
 ## Usage
 
@@ -41,7 +39,7 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `twotier.Module` | fx module — provides `*twotier.TwoTier` |
 | `twotier.NewTyped[V](tt, prefix)` | Type-safe view with a key prefix |
 | `Typed.Get(ctx, k, loader)` | Read-through L1 → L2 → loader; back-fills tiers |
@@ -52,44 +50,46 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
 
 ## Prefix invalidation
 
-`InvalidatePrefix` composes the prefix exactly like `Get`/`Set`/`Delete`
+`InvalidatePrefix` composes prefix exactly like `Get`/`Set`/`Delete`
 (`<view-prefix>:<prefix>`), then evicts from both tiers:
 
 - **L1 (otter)** has no native prefix delete, so it is scanned with `Keys()` and
-  matching entries are `Invalidate`d one by one (and forgotten from
-  singleflight). O(n) over the live L1 set — fine for the bounded in-process
-  cache, not for huge keyspaces.
-- **L2 (redis)** is cleared via the `l2` adapter's `DelPrefix`: cursor-paged
-  `SCAN MATCH "<prefix>*" COUNT 256` + batched `UNLINK` per page. `UNLINK`
-  reclaims memory off the main thread. The adapter refuses an empty composed
-  prefix to avoid scanning the whole keyspace.
+ matching entries are `Invalidate`d one by one. Mutation epochs fence older
+ singleflight work. O(n) over live L1 set — fine for bounded in-process
+ cache, not for huge keyspaces.
+- **L2 (redis)** is cleared via `l2` adapter's `DelPrefix`: cursor-paged
+ `SCAN MATCH "<prefix>*" COUNT 256` + batched `UNLINK` per page. `UNLINK`
+ reclaims memory off main thread. adapter refuses empty composed
+ prefix to avoid scanning whole keyspace.
 
 ## Values cross tiers as JSON
 
-L1 stores the live Go value; L2 stores its JSON encoding (Redis is a byte
-store, and JSON keeps the cache language-agnostic across replicas). Store
-JSON-round-trippable values only.
+L1 stores live Go value; L2 stores its JSON encoding (Redis is byte
+store, and JSON keeps cache language-agnostic across replicas). Store
+JSON-round-trippable values only. Invalid L2 JSON is deleted and repaired
+through the origin loader.
 
 ## Disabled / nil-passthrough mode
 
-A `nil *TwoTier` is a valid no-op cache. A view built from nil (`NewTyped[V](nil,
+`nil *TwoTier` is valid no-op cache. view built from nil (`NewTyped[V](nil,
 …)`) calls the loader on every `Get` and makes `Set`/`Delete`/`InvalidatePrefix`
 no-ops, so call sites never branch on whether caching is configured.
 
 ## Config
 
 ```
-cache.twotier.l1_ttl = 1m   # L1 TTL (also bounded by cache.memory.ttl)
+cache.twotier.l1_ttl = 1m   # positive value overrides L1 entry TTL; 0 inherits memory TTL
 cache.twotier.l2_ttl = 5m   # L2 TTL, 0 = no expiry
 ```
 
+Negative TTLs fail module construction. Failed explicit Set/Delete leaves L1
+unchanged. Successful mutation fences older in-flight loader cache writes.
+
 ## Don't
 
-- Don't use real Redis in tests — the L2 backend sits behind an unexported `l2`
-  interface; stub it (see `twotier_test.go`) and use `memory.NewForTest` for L1.
-- Don't treat an L2 outage as fatal — `Get` logs and falls through to the
-  loader; only `Set`/`Delete` surface L2 errors (the caller chose to write).
-- Don't store values that don't JSON-round-trip — L2 holds the JSON, not the
-  live object.
+- Don't use real Redis in tests — L2 backend sits behind unexported `l2`
+ interface; stub it (see `twotier_test.go`) and use `memory.NewForTest` for L1.
+- Don't treat L2 outage as fatal — `Get` logs and falls through to  loader; only `Set`/`Delete` surface L2 errors (caller chose to write).
+- Don't store values that don't JSON-round-trip — L2 holds JSON, not  live object.
 - Don't cache by floating-point keys — keys are plain strings; format floats
-  canonically before keying.
+ canonically before keying.

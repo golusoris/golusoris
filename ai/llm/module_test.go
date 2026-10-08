@@ -5,6 +5,7 @@
 package llm
 
 import (
+	"math"
 	"testing"
 
 	"github.com/golusoris/golusoris/core/config"
@@ -12,9 +13,23 @@ import (
 
 func TestNewClientReturnsOpenAIClient(t *testing.T) {
 	t.Parallel()
-	c := newClient(Options{BaseURL: "http://localhost", APIKey: "k", Model: "gpt-4o"})
+	c, err := newClient(Options{BaseURL: "http://localhost", APIKey: "k", Model: "gpt-4o"})
+	if err != nil {
+		t.Fatalf("newClient: %v", err)
+	}
 	if _, ok := c.(*OpenAIClient); !ok {
 		t.Fatalf("newClient = %T, want *OpenAIClient", c)
+	}
+}
+
+func TestNewClientPropagatesHTTPBounds(t *testing.T) {
+	t.Parallel()
+	client, err := newClient(Options{MaxResponseBytes: math.MaxInt64})
+	if err == nil {
+		t.Fatal("unbounded response limit accepted")
+	}
+	if client != nil {
+		t.Fatalf("client = %T; want nil after invalid configuration", client)
 	}
 }
 

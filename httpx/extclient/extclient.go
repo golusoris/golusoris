@@ -29,13 +29,19 @@ package extclient
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,9 +54,13 @@ import (
 // against a hostile or misbehaving upstream streaming an unbounded body.
 const maxResponseBytes = 8 << 20 // 8 MiB
 
-// ErrStatus is returned by the generic helpers when the upstream replies with
-// a non-2xx status. Inspect it with [APIError] via [errors.As].
-var ErrStatus = errors.New("extclient: non-2xx status")
+var (
+	// ErrStatus is returned by the generic helpers when the upstream replies
+	// with a non-2xx status. Inspect it with [APIError] via [errors.As].
+	ErrStatus = errors.New("extclient: non-2xx status")
+	// ErrResponseTooLarge means a successful response exceeded the body cap.
+	ErrResponseTooLarge = errors.New("extclient: response body exceeds limit")
+)
 
 // APIError carries the status code and (truncated) body of a non-2xx
 // response. It wraps [ErrStatus] so callers can branch on either.
@@ -89,12 +99,12 @@ type ServiceOptions struct {
 	Headers map[string]string `koanf:"headers"`
 
 	// Timeout caps a single request (default 30s, inherited from
-	// httpx/client when 0).
+	// httpx/client when non-positive).
 	Timeout time.Duration `koanf:"timeout"`
 
 	// CacheTTL, when > 0, enables a response cache for GET requests keyed by
-	// full URL. Requires a *memory.Cache passed to [New] via [WithCache];
-	// without one, caching is silently disabled.
+	// full URL plus effective request headers. Requires a *memory.Cache passed
+	// to [New] via [WithCache]; without one, caching is silently disabled.
 	CacheTTL time.Duration `koanf:"cache_ttl"`
 
 	// Retry mirrors httpx/client retry policy. Zero disables retries.
@@ -134,8 +144,8 @@ type Client struct {
 	name   string
 }
 
-// New builds a [Client] from opts. It validates BaseURL and constructs the
-// underlying httpx/client transport (retry/breaker/OTel/slog).
+// New builds a [Client] from opts. It validates BaseURL, clones caller-owned
+// header maps, and constructs the underlying transport stack.
 func New(opts ServiceOptions, options ...Option) (*Client, error) {
 	if strings.TrimSpace(opts.BaseURL) == "" {
 		return nil, errors.New("extclient: BaseURL is required")
@@ -147,6 +157,11 @@ func New(opts ServiceOptions, options ...Option) (*Client, error) {
 	if base.Scheme == "" || base.Host == "" {
 		return nil, fmt.Errorf("extclient: BaseURL %q must be absolute (scheme + host)", opts.BaseURL)
 	}
+	if base.User != nil {
+		return nil, fmt.Errorf("extclient: BaseURL %q must not contain userinfo", opts.BaseURL)
+	}
+	opts.AuthHeader = maps.Clone(opts.AuthHeader)
+	opts.Headers = maps.Clone(opts.Headers)
 
 	name := opts.Name
 	if name == "" {
@@ -155,7 +170,9 @@ func New(opts ServiceOptions, options ...Option) (*Client, error) {
 
 	cl := &Client{base: base, opts: opts, name: name}
 	for _, o := range options {
-		o(cl)
+		if o != nil {
+			o(cl)
+		}
 	}
 	if cl.logger == nil {
 		cl.logger = slog.Default()
@@ -168,7 +185,19 @@ func New(opts ServiceOptions, options ...Option) (*Client, error) {
 		Breaker: opts.Breaker,
 		Logger:  cl.logger,
 	})
+	cl.http.CheckRedirect = cl.checkRedirect
 	return cl, nil
+}
+
+func (c *Client) checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("extclient: stopped after 10 redirects")
+	}
+	if !strings.EqualFold(req.URL.Scheme, c.base.Scheme) ||
+		!strings.EqualFold(req.URL.Host, c.base.Host) {
+		return fmt.Errorf("extclient: redirect escapes configured upstream to %q", req.URL.Redacted())
+	}
+	return nil
 }
 
 // HTTPClient exposes the underlying *http.Client for callers that need raw
@@ -181,24 +210,36 @@ func (c *Client) resolve(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("extclient: parse path %q: %w", path, err)
 	}
-	return c.base.ResolveReference(ref).String(), nil
+	if ref.IsAbs() || ref.Host != "" || ref.User != nil {
+		return "", fmt.Errorf("extclient: path %q must be relative to configured upstream", path)
+	}
+	resolved := c.base.ResolveReference(ref)
+	if !strings.EqualFold(resolved.Scheme, c.base.Scheme) || !strings.EqualFold(resolved.Host, c.base.Host) {
+		return "", fmt.Errorf("extclient: path %q escapes configured upstream", path)
+	}
+	return resolved.String(), nil
 }
 
-// applyHeaders sets auth + default + per-request headers on req. Per-request
-// headers (passed to the helpers) take precedence over defaults.
-func (c *Client) applyHeaders(req *http.Request, perRequest map[string]string) {
-	for k, v := range c.opts.AuthHeader {
-		req.Header.Set(k, v)
-	}
-	if c.opts.Bearer != "" {
-		req.Header.Set("Authorization", "Bearer "+c.opts.Bearer)
+// requestHeaders builds the exact effective header set for one request.
+func (c *Client) requestHeaders(hasBody bool, perRequest map[string]string) http.Header {
+	headers := make(http.Header, len(c.opts.AuthHeader)+len(c.opts.Headers)+len(perRequest)+2)
+	headers.Set("Accept", "application/json")
+	if hasBody {
+		headers.Set("Content-Type", "application/json")
 	}
 	for k, v := range c.opts.Headers {
-		req.Header.Set(k, v)
+		headers.Set(k, v)
+	}
+	for k, v := range c.opts.AuthHeader {
+		headers.Set(k, v)
+	}
+	if c.opts.Bearer != "" {
+		headers.Set("Authorization", "Bearer "+c.opts.Bearer)
 	}
 	for k, v := range perRequest {
-		req.Header.Set(k, v)
+		headers.Set(k, v)
 	}
+	return headers
 }
 
 // doJSON performs the request and returns the raw 2xx body (or an *APIError).
@@ -220,29 +261,23 @@ func (c *Client) doJSON(
 	if err != nil {
 		return nil, fmt.Errorf("extclient: build request: %w", err)
 	}
-	req.Header.Set("Accept", "application/json")
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	c.applyHeaders(req, headers)
+	req.Header = c.requestHeaders(body != nil, headers)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("extclient: do %s %s: %w", method, rawURL, err)
 	}
-	// Read any unread tail (body beyond maxResponseBytes) so the connection
-	// returns to the pool, then close. Inlined rather than via client.Drain so
-	// bodyclose sees a literal Close.
 	defer func() {
-		if _, cerr := io.Copy(io.Discard, resp.Body); cerr != nil {
-			c.logger.DebugContext(ctx, "extclient: drain response body", slog.Any("err", cerr))
-		}
 		gerr.CloseInto(resp.Body, &err, "extclient: close response body")
 	}()
 
-	data, err = io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
+	data, err = io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("extclient: read body: %w", err)
+	}
+	overflow := len(data) > maxResponseBytes
+	if overflow {
+		data = data[:maxResponseBytes]
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		c.logger.WarnContext(
@@ -252,6 +287,13 @@ func (c *Client) doJSON(
 			slog.Int("status", resp.StatusCode),
 		)
 		return nil, &APIError{Status: resp.StatusCode, Body: truncate(string(data), 512)}
+	}
+	if overflow {
+		return nil, fmt.Errorf(
+			"extclient: response body exceeds %d bytes: %w",
+			maxResponseBytes,
+			ErrResponseTooLarge,
+		)
 	}
 	return data, nil
 }
@@ -279,10 +321,10 @@ func decode[T any](data []byte) (T, error) {
 
 // Get issues a GET to path (resolved against the client's BaseURL) and decodes
 // the JSON response into T. When the client's CacheTTL > 0 and a cache pool is
-// attached, successful responses are cached by URL.
+// attached, successful responses are cached by URL and effective headers.
 func Get[T any](ctx context.Context, c *Client, path string, headers map[string]string) (T, error) {
 	var zero T
-	cached, hit, key := c.cacheGet(path)
+	cached, hit, key := c.cacheGet(path, headers)
 	if hit {
 		return decode[T](cached)
 	}
@@ -334,14 +376,15 @@ func send[T any](
 // cacheGet returns the cached body for path's resolved URL. The third return
 // value is the cache key when caching is enabled (and empty when disabled), so
 // callers can distinguish "caching off" from "cache miss".
-func (c *Client) cacheGet(path string) ([]byte, bool, string) {
+func (c *Client) cacheGet(path string, headers map[string]string) ([]byte, bool, string) {
 	if c.cache == nil || c.opts.CacheTTL <= 0 {
 		return nil, false, ""
 	}
-	key, err := c.resolve(path)
+	rawURL, err := c.resolve(path)
 	if err != nil {
 		return nil, false, ""
 	}
+	key := cacheKey(rawURL, c.requestHeaders(false, headers))
 	store := memory.Typed[string, []byte](c.cache, "extclient:"+c.name)
 	if v, ok := store.Get(key); ok {
 		return v, true, key
@@ -357,5 +400,24 @@ func (c *Client) cacheSet(key string, data []byte) {
 	}
 	store := memory.Typed[string, []byte](c.cache, "extclient:"+c.name)
 	store.Set(key, data)
-	c.cache.SetExpiresAfter("extclient:"+c.name+":"+key, c.opts.CacheTTL)
+	store.SetExpiresAfter(key, c.opts.CacheTTL)
+}
+
+func cacheKey(rawURL string, headers http.Header) string {
+	keys := make([]string, 0, len(headers))
+	for key := range headers {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	var material strings.Builder
+	for _, key := range keys {
+		material.WriteString(strconv.Quote(key))
+		values := slices.Clone(headers.Values(key))
+		sort.Strings(values)
+		for _, value := range values {
+			material.WriteString(strconv.Quote(value))
+		}
+	}
+	digest := sha256.Sum256([]byte(material.String()))
+	return rawURL + "#headers=" + hex.EncodeToString(digest[:])
 }

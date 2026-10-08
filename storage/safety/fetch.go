@@ -17,14 +17,12 @@ import (
 	"time"
 
 	"code.dny.dev/ssrf"
-
-	"github.com/golusoris/golusoris/core/clock"
 )
 
-// Fetching errors.
+// Safety errors shared by bounded fetch and strip operations.
 var (
 	ErrBlockedAddress = errors.New("storage/safety: address blocked by SSRF guard")
-	ErrTooLarge       = errors.New("storage/safety: response exceeds max bytes")
+	ErrTooLarge       = errors.New("storage/safety: input exceeds max bytes")
 	ErrBadScheme      = errors.New("storage/safety: scheme not allowed")
 )
 
@@ -40,14 +38,14 @@ type Fetcher interface {
 type fetcher struct {
 	opts   FetchOptions
 	logger *slog.Logger
-	clk    clock.Clock
 	client *http.Client
 }
 
 // newFetcher builds the SSRF-guarded client eagerly. It holds no goroutines or
 // open connections at rest, so no fx.Lifecycle hook is needed.
-func newFetcher(opts Options, logger *slog.Logger, clk clock.Clock) (Fetcher, error) {
-	f := &fetcher{opts: opts.Fetch, logger: logger, clk: clk}
+func newFetcher(opts Options, logger *slog.Logger) (Fetcher, error) {
+	logger = loggerOrDiscard(logger)
+	f := &fetcher{opts: opts.Fetch, logger: logger}
 	guard := ssrf.New()
 	dialer := &net.Dialer{Control: guard.Safe}
 	if f.opts.AllowPrivate {
@@ -70,13 +68,16 @@ func newFetcher(opts Options, logger *slog.Logger, clk clock.Clock) (Fetcher, er
 	return f, nil
 }
 
-// checkRedirect re-validates the scheme on every hop and bounds hop count. The
-// SSRF IP check re-runs naturally because the client re-dials per hop.
+// checkRedirect re-validates scheme and hostname on every hop and bounds hop
+// count. The SSRF IP check re-runs naturally because the client re-dials.
 func (f *fetcher) checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= f.opts.MaxRedirects {
 		return fmt.Errorf("storage/safety: too many redirects (%d)", len(via))
 	}
-	return f.checkScheme(req.URL)
+	if err := f.checkScheme(req.URL); err != nil {
+		return err
+	}
+	return f.checkHost(req.URL)
 }
 
 // checkScheme enforces the scheme allowlist (default https only), blocking
@@ -103,7 +104,7 @@ func (f *fetcher) Fetch(
 	if err = f.checkHost(u); err != nil {
 		return nil, "", err
 	}
-	ctx, cancel := context.WithDeadline(ctx, f.clk.Now().Add(f.opts.Timeout))
+	ctx, cancel := context.WithTimeout(ctx, f.opts.Timeout)
 	//nolint:bodyclose // resp.Body is owned by the returned cappedBody; caller Closes it.
 	resp, err := f.do(ctx, u.String())
 	if err != nil {
@@ -173,8 +174,12 @@ func (c *cappedBody) Read(p []byte) (int, error) {
 	}
 	n, err := c.rc.Read(p)
 	c.remaining -= int64(n)
-	if c.remaining <= 0 && err == nil {
-		return n, ErrTooLarge
+	if c.remaining <= 0 {
+		if err != nil && !errors.Is(err, io.EOF) {
+			readErr := fmt.Errorf("storage/safety: read body: %w", err)
+			return n - 1, errors.Join(ErrTooLarge, readErr)
+		}
+		return n - 1, ErrTooLarge
 	}
 	if err != nil && !errors.Is(err, io.EOF) {
 		return n, fmt.Errorf("storage/safety: read body: %w", err)

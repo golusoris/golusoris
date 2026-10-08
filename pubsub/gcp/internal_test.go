@@ -50,6 +50,24 @@ func TestClientFromPubsub_DefaultLogger(t *testing.T) {
 	}
 }
 
+func TestClientFromPubsub_NilClientFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	c := ClientFromPubsub(nil)
+	if _, err := c.Publisher("topic"); !errors.Is(err, ErrNilClient) {
+		t.Fatalf("Publisher: got %v", err)
+	}
+	if _, err := c.Subscriber("subscription"); !errors.Is(err, ErrNilClient) {
+		t.Fatalf("Subscriber: got %v", err)
+	}
+	if err := c.Ping(context.Background()); !errors.Is(err, ErrNilClient) {
+		t.Fatalf("Ping: got %v", err)
+	}
+	if err := c.Close(); !errors.Is(err, ErrNilClient) {
+		t.Fatalf("Close: got %v", err)
+	}
+}
+
 // TestBoundedWait_ReturnsUnderlyingError is the positive case: when fn
 // finishes before ctx is done, boundedWait returns exactly fn's result.
 func TestBoundedWait_ReturnsUnderlyingError(t *testing.T) {

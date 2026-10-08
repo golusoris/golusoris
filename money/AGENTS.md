@@ -24,7 +24,7 @@ m := money.FromMajor(9.99, "USD")  // float64 major → minor units
 ## Operations
 
 | Method | Result |
-|---|---|
+| --- | --- |
 | `Add(other) (Money, error)` | sum; `ErrCurrencyMismatch` on currency mismatch |
 | `Sub(other) (Money, error)` | difference; `ErrCurrencyMismatch` on currency mismatch |
 | `Mul(factor float64)` | multiply + round |
@@ -42,4 +42,4 @@ KRW, VND, …). `New(150, "JPY").String()` returns `"150 JPY"`.
 - Don't store `Money` as float64 — rounding errors accumulate. Use minor units.
 - Don't compare `.MajorUnits()` for equality — use `m.Amount == other.Amount`.
 - Don't cross currencies — `Add`/`Sub` return `ErrCurrencyMismatch`; check
-  `SameCurrency` up front when you need to branch before arithmetic.
+ `SameCurrency` up front when you need to branch before arithmetic.

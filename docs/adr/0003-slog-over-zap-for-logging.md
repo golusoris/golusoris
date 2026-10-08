@@ -43,4 +43,4 @@ We will use stdlib `log/slog` as the canonical logger. The framework's `log/` pa
 
 - [slog proposal](https://go.googlesource.com/proposal/+/master/design/56345-structured-logging.md).
 - See `log/AGENTS.md` for handler choice guidelines.
-- [observability/sentry](../../observability/sentry/) — slog-bridge pattern that demonstrates handler composition.
+- [observability/sentry](https://github.com/golusoris/golusoris/tree/main/observability/sentry) — slog-bridge pattern that demonstrates handler composition.

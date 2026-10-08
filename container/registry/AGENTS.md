@@ -8,8 +8,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 OCI/Docker image-registry client over
 [google/go-containerregistry](https://github.com/google/go-containerregistry)'s
-`pkg/v1/remote`: parse a reference, resolve a tag to its content digest, fetch
-a manifest, list tags, and copy an image (or index) between registries.
+`pkg/v1/remote`: parse reference, resolve tag to its content digest, fetch
+manifest, list tags, and copy image (or index) between registries.
 
 ## API
 
@@ -24,9 +24,8 @@ err          = c.Copy(ctx, "gcr.io/distroless/static:nonroot", "my-registry.exam
 ref, err := registry.ParseReference("nginx:1.27") // pure parse, no I/O
 ```
 
-Every network method takes a `context.Context` **and** is additionally bounded
-by `Options.Timeout` (default `registry.DefaultTimeout`, 30s) — HISS-02: a
-caller that forgets a deadline still gets one.
+Every network method takes `context.Context` **and** is additionally bounded
+by `Options.Timeout` (default `registry.DefaultTimeout`, 30s) — HISS-02: caller that forgets deadline still gets one.
 
 ## fx wiring
 
@@ -51,7 +50,7 @@ container:
 ```
 
 `authn.Keychain` and `http.RoundTripper` are **optional** fx dependencies of
-the module — provide your own to override the defaults:
+module — provide your own to override defaults:
 
 ```go
 fx.Provide(func() authn.Keychain { return authn.NewMultiKeychain(ecrHelper, authn.DefaultKeychain) }),
@@ -60,40 +59,37 @@ fx.Provide(func() http.RoundTripper { return myMTLSTransport }),
 
 ## Why go-containerregistry
 
-Google's `go-containerregistry` is the reference Go implementation of the OCI
-distribution + image-spec client (it's what `crane`, `ko`, and `skopeo`'s Go
-callers build on) — correct digest verification, registry auth resolution
-matching `docker`/`crane`, and an in-process test registry
-(`pkg/registry`) this package's own tests run against. No credible
-alternative covers auth + manifest + copy semantics as completely.
+Google's `go-containerregistry` is reference Go implementation of OCI
+distribution and image-spec clients. `crane`, `ko`, and `skopeo`'s Go callers
+build on it. It provides digest verification, Docker-compatible registry auth,
+and in-process test registry (`pkg/registry`). This package tests against that
+registry. No credible alternative covers auth, manifest, and copy semantics as
+completely.
 
 ## Notes
 
 - **Own go.mod sub-module.** `go-containerregistry`'s dependency graph (docker
-  cli config parsing, credential helpers, OCI image-spec types) is not part of
-  the root module's graph; import via the full module path.
-- **`Client` is stateless config, safe for concurrent use** — it builds a
-  fresh `remote.Puller`/`remote.Pusher` per call rather than holding one open;
-  there is no connection lifecycle to manage (`Module` needs no `OnStop`).
-- **Auth**: `authn.DefaultKeychain` resolves credentials the way
-  `docker`/`crane` do (`~/.docker/config.json` + registered cloud credential
-  helpers). Pass an explicit `authn.Keychain` to pin credentials or run
-  anonymous (tests use `authn.NewMultiKeychain()`, which always resolves to
-  `authn.Anonymous`).
-- **`Copy`** does one `Get` + one `Push`: `remote.Puller.Get` returns a
-  `remote.Taggable` regardless of whether the source is a single-platform
-  image or a multi-platform index, so `Copy` doesn't need to type-switch —
-  it forwards whatever it fetched.
-- **Digest validation is go-containerregistry's, not ours.** When a reference
-  carries an explicit digest, `remote` hashes the response itself and errors
-  on mismatch before this package ever sees the bytes — see `copy_test.go`'s
-  `corruptingTransport` for how the boundary test forces that path.
+ cli config parsing, credential helpers, OCI image-spec types) is not part of
+ root module's graph; import via full module path.
+- **`Client` is stateless config, safe for concurrent use** — it builds  fresh `remote.Puller`/`remote.Pusher` per call rather than holding one open;
+ there is no connection lifecycle to manage (`Module` needs no `OnStop`).
+- **Auth**: `authn.DefaultKeychain` resolves credentials way
+ `docker`/`crane` do (`~/.docker/config.json` + registered cloud credential
+ helpers). Pass explicit `authn.Keychain` to pin credentials or run
+ anonymous (tests use `authn.NewMultiKeychain()`, which always resolves to
+ `authn.Anonymous`).
+- **`Copy`** does one `Get` + one `Push`: `remote.Puller.Get` returns  `remote.Taggable` regardless of whether source is single-platform
+ image or multi-platform index, so `Copy` doesn't need to type-switch —
+ it forwards whatever it fetched.
+- **Digest validation is go-containerregistry's, not ours.** For explicit
+ digests, `remote` hashes response and rejects mismatches before this package
+ sees bytes. `copy_test.go`'s `corruptingTransport` forces that boundary path.
 
 ## Don't
 
-- Don't add a persistent `*http.Client`/connection pool here — `Options.Transport`
-  is a `http.RoundTripper` the caller owns; this package never calls
-  `CloseIdleConnections` because it never opens a client of its own.
-- Don't reach for `crane` — it's a CLI-oriented convenience layer over the same
-  `remote` package; wrapping `remote` directly keeps auth/transport/context
-  injection explicit, which is the point of this package.
+- Don't add persistent `*http.Client`/connection pool here — `Options.Transport`
+ is `http.RoundTripper` caller owns; this package never calls
+ `CloseIdleConnections` because it never opens client of its own.
+- Don't reach for `crane` — it's CLI-oriented convenience layer over same
+ `remote` package; wrapping `remote` directly keeps auth/transport/context
+ injection explicit, which is point of this package.

@@ -11,6 +11,8 @@ import (
 	"github.com/golusoris/golusoris/flags"
 )
 
+type typedNilProvider struct{ flags.Provider }
+
 func TestBool(t *testing.T) {
 	t.Parallel()
 	p := flags.NewMemoryProvider()
@@ -78,6 +80,15 @@ func TestNoopProvider(t *testing.T) {
 	c := flags.New(flags.NoopProvider{})
 	if c.Bool(context.Background(), "anything", true) != true {
 		t.Fatal("noop should return default")
+	}
+}
+
+func TestNewTypedNilProviderUsesNoop(t *testing.T) {
+	t.Parallel()
+	var provider *typedNilProvider
+	client := flags.New(provider)
+	if !client.Bool(t.Context(), "anything", true) {
+		t.Fatal("typed-nil provider did not preserve the default")
 	}
 }
 

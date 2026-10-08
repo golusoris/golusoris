@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# redis/rueidis — v1.0.54 snapshot
+# redis/rueidis — v1.0.78 snapshot
 
-Pinned: **v1.0.54**
-Source: https://pkg.go.dev/github.com/redis/rueidis@v1.0.54
+Pinned: **v1.0.78**
+Source: [tagged source](https://github.com/redis/rueidis/tree/v1.0.78)
 
 ## Client construction
 
@@ -25,10 +25,10 @@ defer client.Close()
 ## Commands
 
 ```go
-ctx := context.Background()
-
 // SET / GET
-err := client.Do(ctx, client.B().Set().Key("k").Value("v").Ex(60).Build()).Error()
+err := client.Do(ctx,
+    client.B().Set().Key("k").Value("v").Ex(60*time.Second).Build(),
+).Error()
 val, err := client.Do(ctx, client.B().Get().Key("k").Build()).ToString()
 
 // Pipeline
@@ -39,9 +39,11 @@ cmds := []rueidis.Completed{
 results := client.DoMulti(ctx, cmds...)
 
 // Pub/Sub
-err = client.Receive(ctx, client.B().Subscribe().Channel("chan").Build(), func(msg rueidis.PubSubMessage) {
-    // handle msg.Message
-})
+err = client.Receive(
+    ctx,
+    client.B().Subscribe().Channel("chan").Build(),
+    func(msg rueidis.PubSubMessage) { handleMessage(msg.Message) },
+)
 ```
 
 ## Distributed lock (rueidislock)
@@ -53,9 +55,14 @@ locker, err := rueidislock.NewLocker(rueidislock.LockerOption{
     ClientOption: rueidis.ClientOption{InitAddress: []string{":6379"}},
 })
 ctx, cancel, err := locker.TryWithContext(ctx, "resource-name")
-if err != nil { /* lock not acquired */ }
+if err != nil {
+    return fmt.Errorf("acquire Redis lock: %w", err)
+}
 defer cancel()
 ```
+
+All Redis calls use the caller's bounded `ctx`; do not replace it with
+`context.Background()`.
 
 ## golusoris usage
 
@@ -63,5 +70,5 @@ defer cancel()
 
 ## Links
 
-- Changelog: https://github.com/redis/rueidis/blob/main/CHANGELOG.md
-- Examples: https://github.com/redis/rueidis/tree/main/examples
+- [Tagged source](https://github.com/redis/rueidis/tree/v1.0.78)
+- [Package documentation](https://pkg.go.dev/github.com/redis/rueidis@v1.0.78)

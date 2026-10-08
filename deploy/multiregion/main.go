@@ -24,18 +24,23 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
+
+	"github.com/golusoris/golusoris/deploy/internal/imageref"
 )
 
 // stackConfig is the resolved, typed view of the multiregion stack config.
 type stackConfig struct {
-	PrimaryRegion   string
-	SecondaryRegion string
-	Domain          string
-	DBInstanceClass string
-	DBEngineVersion string
-	AppImage        string
-	AppPort         int
-	DBPassword      pulumi.StringInput
+	PrimaryRegion           string
+	SecondaryRegion         string
+	Domain                  string
+	HostedZoneID            string
+	PrimaryCertificateARN   string
+	SecondaryCertificateARN string
+	DBInstanceClass         string
+	DBEngineVersion         string
+	AppImage                string
+	AppPort                 int
+	DBPassword              pulumi.StringInput
 }
 
 func main() {
@@ -54,40 +59,79 @@ func run(ctx *pulumi.Context) error {
 		return err
 	}
 
-	if _, err = newGlobalDB(ctx, primaryProvider, secondaryProvider, dbConfig{
+	primaryNet, secondaryNet, err := newRegionNetworks(ctx, primaryProvider, secondaryProvider, cfg)
+	if err != nil {
+		return err
+	}
+
+	database, err := newGlobalDB(ctx, primaryProvider, secondaryProvider, primaryNet, secondaryNet, dbConfig{
 		InstanceClass: cfg.DBInstanceClass,
 		EngineVersion: cfg.DBEngineVersion,
 		Password:      cfg.DBPassword,
-	}); err != nil {
-		return err
-	}
-
-	primary, err := newRegionStack(ctx, "golusoris-primary", primaryProvider, regionConfig{
-		Region: cfg.PrimaryRegion,
-		Image:  cfg.AppImage,
-		Port:   cfg.AppPort,
 	})
 	if err != nil {
 		return err
 	}
 
-	secondary, err := newRegionStack(ctx, "golusoris-secondary", secondaryProvider, regionConfig{
-		Region: cfg.SecondaryRegion,
-		Image:  cfg.AppImage,
-		Port:   cfg.AppPort,
+	primary, err := newRegionStack(ctx, "golusoris-primary", primaryProvider, primaryNet, regionConfig{
+		Region:         cfg.PrimaryRegion,
+		Image:          cfg.AppImage,
+		Port:           cfg.AppPort,
+		DBDSN:          database.PrimaryDSN,
+		CertificateARN: cfg.PrimaryCertificateARN,
 	})
 	if err != nil {
 		return err
 	}
 
-	if _, err = newGlobalDNS(ctx, primary, secondary, cfg.Domain); err != nil {
+	secondary, err := newRegionStack(ctx, "golusoris-secondary", secondaryProvider, secondaryNet, regionConfig{
+		Region:         cfg.SecondaryRegion,
+		Image:          cfg.AppImage,
+		Port:           cfg.AppPort,
+		DBDSN:          database.SecondaryDSN,
+		CertificateARN: cfg.SecondaryCertificateARN,
+	})
+	if err != nil {
 		return err
 	}
 
-	ctx.Export("primaryURL", pulumi.Sprintf("http://%s", primary.ALBDNS))
-	ctx.Export("secondaryURL", pulumi.Sprintf("http://%s", secondary.ALBDNS))
-	ctx.Export("globalDomain", pulumi.String(cfg.Domain))
+	if err = newGlobalDNS(
+		ctx, primaryProvider, primary, secondary, cfg.Domain, cfg.HostedZoneID,
+	); err != nil {
+		return err
+	}
+
+	ctx.Export("primaryALBDNS", primary.ALBDNS)
+	ctx.Export("secondaryALBDNS", secondary.ALBDNS)
+	ctx.Export("globalURL", pulumi.String("https://"+cfg.Domain))
 	return nil
+}
+
+// newRegionNetworks creates the application and database placement in both regions.
+func newRegionNetworks(
+	ctx *pulumi.Context,
+	primaryProvider, secondaryProvider *aws.Provider,
+	cfg stackConfig,
+) (*regionNetwork, *regionNetwork, error) {
+	primary, err := newRegionNetwork(
+		ctx,
+		"golusoris-primary",
+		cfg.PrimaryRegion,
+		pulumi.Provider(primaryProvider),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	secondary, err := newRegionNetwork(
+		ctx,
+		"golusoris-secondary",
+		cfg.SecondaryRegion,
+		pulumi.Provider(secondaryProvider),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+	return primary, secondary, nil
 }
 
 // newProviders builds one explicit aws.Provider per region — the canonical multi-region pattern.
@@ -116,22 +160,44 @@ func errorsWrap(role string, err error) error {
 func loadConfig(ctx *pulumi.Context) (stackConfig, error) {
 	cfg := config.New(ctx, "")
 	out := stackConfig{
-		PrimaryRegion:   orDefault(cfg.Get("primaryRegion"), "us-east-1"),
-		SecondaryRegion: orDefault(cfg.Get("secondaryRegion"), "us-west-2"),
-		Domain:          cfg.Get("domain"),
-		DBInstanceClass: orDefault(cfg.Get("dbInstanceClass"), "db.r6g.large"),
-		DBEngineVersion: orDefault(cfg.Get("dbEngineVersion"), "16.6"),
-		AppImage:        cfg.Get("appImage"),
-		AppPort:         orDefaultInt(cfg.GetInt("appPort"), 8080),
-		DBPassword:      cfg.RequireSecret("dbPassword"),
+		PrimaryRegion:           orDefault(cfg.Get("primaryRegion"), "us-east-1"),
+		SecondaryRegion:         orDefault(cfg.Get("secondaryRegion"), "us-west-2"),
+		Domain:                  cfg.Get("domain"),
+		HostedZoneID:            cfg.Get("hostedZoneId"),
+		PrimaryCertificateARN:   cfg.Get("primaryCertificateArn"),
+		SecondaryCertificateARN: cfg.Get("secondaryCertificateArn"),
+		DBInstanceClass:         orDefault(cfg.Get("dbInstanceClass"), "db.r6g.large"),
+		DBEngineVersion:         orDefault(cfg.Get("dbEngineVersion"), "16.6"),
+		AppImage:                cfg.Get("appImage"),
+		AppPort:                 orDefaultInt(cfg.GetInt("appPort"), 8080),
 	}
-	if out.Domain == "" {
-		return stackConfig{}, errors.New("pulumi: config golusoris-multiregion:domain is required")
+	if err := validateStackConfig(out); err != nil {
+		return stackConfig{}, err
 	}
-	if out.AppImage == "" {
-		return stackConfig{}, errors.New("pulumi: config golusoris-multiregion:appImage is required")
-	}
+	out.DBPassword = cfg.RequireSecret("dbPassword")
 	return out, nil
+}
+
+func validateStackConfig(cfg stackConfig) error {
+	if cfg.Domain == "" {
+		return errors.New("pulumi: config golusoris-multiregion:domain is required")
+	}
+	if cfg.HostedZoneID == "" {
+		return errors.New("pulumi: config golusoris-multiregion:hostedZoneId is required")
+	}
+	if cfg.PrimaryCertificateARN == "" {
+		return errors.New("pulumi: config golusoris-multiregion:primaryCertificateArn is required")
+	}
+	if cfg.SecondaryCertificateARN == "" {
+		return errors.New("pulumi: config golusoris-multiregion:secondaryCertificateArn is required")
+	}
+	if cfg.AppImage == "" {
+		return errors.New("pulumi: config golusoris-multiregion:appImage is required")
+	}
+	if err := imageref.ValidateImmutableSHA256(cfg.AppImage); err != nil {
+		return fmt.Errorf("pulumi: validate appImage: %w", err)
+	}
+	return nil
 }
 
 // orDefault returns fallback when v is empty.

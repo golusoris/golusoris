@@ -32,7 +32,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Event is a single usage record.
@@ -90,6 +93,12 @@ type Recorder struct {
 
 // NewRecorder returns a Recorder. logger may be nil.
 func NewRecorder(store Store, clk clock.Clock, logger *slog.Logger) *Recorder {
+	if validate.IsNil(store) {
+		store = nil
+	}
+	if validate.IsNil(clk) {
+		clk = clockwork.NewRealClock()
+	}
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -99,6 +108,9 @@ func NewRecorder(store Store, clk clock.Clock, logger *slog.Logger) *Recorder {
 // Record persists an event. Returns nil on success or duplicate (the
 // latter is logged at debug). Other Store errors propagate.
 func (r *Recorder) Record(ctx context.Context, e Event) error {
+	if r.store == nil {
+		return errors.New("payments/meter: store is required")
+	}
 	if e.ID == "" {
 		return errors.New("payments/meter: Event.ID is required for idempotency")
 	}
@@ -126,6 +138,9 @@ func (r *Recorder) Record(ctx context.Context, e Event) error {
 // Usage returns the summed Quantity for one customer/meter pair over
 // [since, until).
 func (r *Recorder) Usage(ctx context.Context, customerID, name string, since, until time.Time) (float64, error) {
+	if r.store == nil {
+		return 0, errors.New("payments/meter: store is required")
+	}
 	v, err := r.store.Sum(ctx, Filter{
 		CustomerID: customerID,
 		Meter:      name,
@@ -141,6 +156,9 @@ func (r *Recorder) Usage(ctx context.Context, customerID, name string, since, un
 // List returns raw events matching the filter. Use for audit /
 // reconciliation; for billing aggregates use [Recorder.Usage].
 func (r *Recorder) List(ctx context.Context, f Filter) ([]Event, error) {
+	if r.store == nil {
+		return nil, errors.New("payments/meter: store is required")
+	}
 	out, err := r.store.Query(ctx, f)
 	if err != nil {
 		return nil, fmt.Errorf("payments/meter: query: %w", err)

@@ -20,11 +20,25 @@ import (
 
 var errUpsertBoom = errors.New("boom")
 
+var errGetBoom = errors.New("get boom")
+
 // failingUpsertStore wraps a MemoryStore and fails Upsert for one ID so a
 // due-cancel sweep meets a bad row.
 type failingUpsertStore struct {
 	*subs.MemoryStore
 	failID string
+}
+
+type failingGetStore struct {
+	*subs.MemoryStore
+	failID string
+}
+
+func (f *failingGetStore) Get(ctx context.Context, id string) (*subs.Subscription, error) {
+	if id == f.failID {
+		return nil, errGetBoom
+	}
+	return f.MemoryStore.Get(ctx, id)
 }
 
 func (f *failingUpsertStore) Upsert(ctx context.Context, s *subs.Subscription) error {
@@ -98,4 +112,28 @@ func TestProcessDue_TrialEndCancelFailureIsLogged(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, subs.StatusTrialing, got.Status)
 	require.Contains(t, logs.String(), "trial ended without activation")
+}
+
+func TestProcessDue_GetFailureIsLoggedAndDoesNotStallSweep(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	mem := subs.NewMemoryStore()
+	store := &failingGetStore{MemoryStore: mem, failID: "unavailable"}
+	fc := clock.NewFake()
+	var logs bytes.Buffer
+	svc := subs.New(store, fc, slog.New(slog.NewTextHandler(&logs, nil)), subs.Options{})
+
+	due, err := svc.Start(ctx, subs.StartParams{CustomerID: "c1", Plan: "pro"})
+	require.NoError(t, err)
+	at := fc.Now().Add(time.Minute)
+	require.NoError(t, svc.Cancel(ctx, due.ID, at))
+	fc.Advance(time.Minute)
+
+	require.NoError(t, svc.ProcessDue(ctx, []string{store.failID, due.ID}))
+	got, err := mem.Get(ctx, due.ID)
+	require.NoError(t, err)
+	require.Equal(t, subs.StatusCanceled, got.Status)
+	require.Contains(t, logs.String(), "due subscription fetch failed")
+	require.Contains(t, logs.String(), store.failID)
+	require.Contains(t, logs.String(), errGetBoom.Error())
 }

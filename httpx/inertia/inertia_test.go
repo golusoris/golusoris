@@ -7,6 +7,7 @@ package inertia_test
 import (
 	"bytes"
 	"encoding/json"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,12 +16,17 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	gonertia "github.com/romsar/gonertia/v3"
 
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/inertia"
 )
+
+type typedNilRootFS struct{}
+
+func (*typedNilRootFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
 
 // rootTemplate is a minimal Inertia root shell with the required placeholders.
 const rootTemplate = `<!DOCTYPE html><html><head>{{ .inertiaHead }}</head>` +
@@ -46,6 +52,39 @@ func newFromMapFS(t *testing.T, opts inertia.Options) *inertia.Inertia {
 		t.Fatalf("NewForTest: %v", err)
 	}
 	return i
+}
+
+func TestNewForTestHandlesNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	t.Run("logger", func(t *testing.T) {
+		t.Parallel()
+		_, err := inertia.NewForTest(
+			inertia.Options{RootTemplate: "web/root.html", Version: "v1", ContainerID: "app"},
+			nil,
+			inertia.RootFS{FS: mapFS()},
+		)
+		if err != nil {
+			t.Fatalf("NewForTest with nil logger: %v", err)
+		}
+	})
+
+	t.Run("filesystem", func(t *testing.T) {
+		t.Parallel()
+		path := filepath.Join(t.TempDir(), "root.html")
+		if err := os.WriteFile(path, []byte(rootTemplate), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		var rootFS *typedNilRootFS
+		_, err := inertia.NewForTest(
+			inertia.Options{RootTemplate: path, Version: "v1", ContainerID: "app"},
+			discardLogger(),
+			inertia.RootFS{FS: rootFS},
+		)
+		if err != nil {
+			t.Fatalf("NewForTest with typed-nil filesystem: %v", err)
+		}
+	})
 }
 
 // assetVersion renders a JSON page directly (bypassing the middleware version
@@ -84,7 +123,10 @@ func TestLoadOptions_Defaults(t *testing.T) {
 		RootTemplate: "web/root.html",
 		ManifestPath: "web/dist/.vite/manifest.json",
 		ContainerID:  "app",
-		SSR:          inertia.SSROptions{URL: "http://127.0.0.1:13714"},
+		SSR: inertia.SSROptions{
+			URL:     "http://127.0.0.1:13714",
+			Timeout: 30 * time.Second,
+		},
 	}
 	if opts != want {
 		t.Fatalf("defaults = %+v, want %+v", opts, want)
@@ -100,6 +142,7 @@ func TestLoadOptions_Override(t *testing.T) {
 	t.Setenv("APP_INERTIA_ENCRYPT_HISTORY", "true")
 	t.Setenv("APP_INERTIA_SSR_ENABLED", "true")
 	t.Setenv("APP_INERTIA_SSR_URL", "http://ssr:9999")
+	t.Setenv("APP_INERTIA_SSR_TIMEOUT", "7s")
 
 	cfg, err := config.New(config.Options{
 		EnvPrefix: "APP_",
@@ -125,7 +168,11 @@ func TestLoadOptions_Override(t *testing.T) {
 		ManifestPath:   "dist/manifest.json",
 		ContainerID:    "root",
 		EncryptHistory: true,
-		SSR:            inertia.SSROptions{Enabled: true, URL: "http://ssr:9999"},
+		SSR: inertia.SSROptions{
+			Enabled: true,
+			URL:     "http://ssr:9999",
+			Timeout: 7 * time.Second,
+		},
 	}
 	if opts != want {
 		t.Fatalf("override = %+v, want %+v", opts, want)
@@ -194,6 +241,49 @@ func TestNewInertia_AllOptions(t *testing.T) {
 	}
 	if i == nil {
 		t.Fatal("nil inertia")
+	}
+}
+
+func TestSSRRequestHasFiniteTimeout(t *testing.T) {
+	t.Parallel()
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
+		close(started)
+		select {
+		case <-request.Context().Done():
+		case <-release:
+		}
+	}))
+	defer func() {
+		close(release)
+		server.Close()
+	}()
+
+	i := newFromMapFS(t, inertia.Options{
+		RootTemplate: "web/root.html",
+		Version:      "v1",
+		ContainerID:  "app",
+		SSR: inertia.SSROptions{
+			Enabled: true,
+			URL:     server.URL,
+			Timeout: 20 * time.Millisecond,
+		},
+	})
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	start := time.Now()
+	if err := i.Render(recorder, request, "Home"); err != nil {
+		t.Fatalf("Render() error = %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("Render() elapsed = %v, want bounded SSR fallback", elapsed)
+	}
+	select {
+	case <-started:
+	default:
+		t.Fatal("SSR sidecar was not called")
 	}
 }
 

@@ -66,9 +66,8 @@ func New(opts Options) (middleware.Middleware, error) {
 	return gcsrf.Protect(key), nil
 }
 
-// Token extracts the CSRF token for the current request. Embed in forms as
-// `<input name="gorilla.csrf.Token" value="{{ .CSRFToken }}">` or return in
-// an X-CSRF-Token response header for SPA clients.
+// Token returns compatibility random text. The middleware ignores its value;
+// same-origin request metadata is the authoritative check.
 func Token(r *http.Request) string { return gcsrf.Token(r) } //nolint:staticcheck // retained for template compatibility; token value is not authoritative
 
 func identity(next http.Handler) http.Handler { return next }

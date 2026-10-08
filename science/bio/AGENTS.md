@@ -4,31 +4,36 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — science/bio/
+# science/bio
 
-Bioinformatics helpers — sequence handling, FASTA parsing, and basic DNA/RNA
-utilities over biogo. Stateless utility — **no fx wiring**. Own go.mod
-sub-module; import directly: `github.com/golusoris/golusoris/science/bio`.
+Bounded FASTA parsing. DNA/RNA string helpers. Stdlib only. Stateless. No fx.
+Own module: `github.com/golusoris/golusoris/science/bio`.
 
 ## API
 
 ```go
-seqs, err := bio.ParseFASTA(r)          // []bio.Sequence{Name, Seq}
-rc := bio.ReverseComplement("ACGT")     // -> "ACGT"
-gc := bio.GCContent("GCGC")             // fraction 0–1
-
-s := bio.DNASeq("name", "ACGT")         // *biogo linear.Seq (DNA)
-s = bio.RNASeq("name", "ACGU")          // *biogo linear.Seq (RNA)
+seqs, err := bio.ParseFASTA(r)
+seqs, err = bio.ParseFASTAContext(ctx, r, bio.FASTAOptions{
+    MaxBytes: 64 << 20, MaxRecords: 100_000, MaxLineBytes: 1 << 20,
+})
+rc := bio.ReverseComplement("ACGT")
+gc := bio.GCContent("GCGC")
 ```
 
-## Why biogo/biogo
+## Parser contract
 
-Established Go bioinformatics toolkit; `DNASeq`/`RNASeq` hand back native
-`linear.Seq` values for callers that need biogo's alignment/alphabet machinery.
+- `ParseFASTA`: compatibility API. Finite exported defaults.
+- `ParseFASTAContext`: cancellation plus explicit byte, record, line limits.
+- Zero limit: default. Negative limit: `ErrInvalidFASTAOptions`.
+- Exact limit: accepted. Limit plus one: typed limit error.
+- Sequence lines: upper-case. Trailing CR: removed. Preamble: ignored.
+- Generic reader cancellation: checked before and after each read.
 
-## Notes
+## Migration
 
-- Separate go.mod because biogo's dependency graph is large and specialised.
-- `ParseFASTA` upper-cases sequence lines and trims CR; `ReverseComplement` /
-  `GCContent` are pure-stdlib and don't touch biogo.
-- `GCContent("")` returns 0; `ReverseComplement` passes through unknown bases.
+- Removed `DNASeq` and `RNASeq`. No repository caller used them.
+- Before: `dna := bio.DNASeq("sample", "ACGT")`.
+- After: `dna := linear.NewSeq("sample", []alphabet.Letter("ACGT"), alphabet.DNA)`
+  with direct `biogo/alphabet` and `biogo/seq/linear` imports.
+- RNA migration uses `alphabet.RNA` with the same `linear.NewSeq` call.
+- `GCContent("")`: `0`. Reverse complement: unknown bases unchanged.

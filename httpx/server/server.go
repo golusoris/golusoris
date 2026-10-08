@@ -19,7 +19,8 @@
 //	http.timeouts.idle       # keep-alive idle deadline (default 120s)
 //	http.timeouts.shutdown   # graceful-shutdown grace (default 30s)
 //	http.limits.header       # max header size in bytes (default 1 MiB)
-//	http.limits.body         # max request body in bytes, 0 disables (default 10 MiB)
+//	http.limits.body         # max request body in bytes (default 10 MiB)
+//	http.limits.unlimited    # explicitly disable the request-body cap
 //
 // Fields use single-word koanf keys grouped under sub-structs because the
 // default env→koanf transform ("_" → path separator) can't distinguish
@@ -39,6 +40,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options tunes the server. Durations accept koanf strings like "30s".
@@ -57,10 +59,11 @@ type TimeoutOptions struct {
 	Shutdown time.Duration `koanf:"shutdown"`
 }
 
-// LimitOptions groups the server's size limits. Body == 0 disables body cap.
+// LimitOptions groups the server's size limits.
 type LimitOptions struct {
-	Header int   `koanf:"header"` // max header size in bytes
-	Body   int64 `koanf:"body"`   // max request body in bytes
+	Header             int   `koanf:"header"`    // max header size in bytes
+	Body               int64 `koanf:"body"`      // max request body in bytes
+	AllowUnlimitedBody bool  `koanf:"unlimited"` // explicitly disable body limit
 }
 
 // DefaultOptions returns the opinionated defaults.
@@ -86,25 +89,29 @@ func (o Options) withDefaults() Options {
 	if o.Addr == "" {
 		o.Addr = d.Addr
 	}
-	if o.Timeouts.Read == 0 {
+	if o.Timeouts.Read <= 0 {
 		o.Timeouts.Read = d.Timeouts.Read
 	}
-	if o.Timeouts.Header == 0 {
+	if o.Timeouts.Header <= 0 {
 		o.Timeouts.Header = d.Timeouts.Header
 	}
-	if o.Timeouts.Write == 0 {
+	if o.Timeouts.Write <= 0 {
 		o.Timeouts.Write = d.Timeouts.Write
 	}
-	if o.Timeouts.Idle == 0 {
+	if o.Timeouts.Idle <= 0 {
 		o.Timeouts.Idle = d.Timeouts.Idle
 	}
-	if o.Timeouts.Shutdown == 0 {
+	if o.Timeouts.Shutdown <= 0 {
 		o.Timeouts.Shutdown = d.Timeouts.Shutdown
 	}
-	if o.Limits.Header == 0 {
+	if o.Limits.Header <= 0 {
 		o.Limits.Header = d.Limits.Header
 	}
-	// Limits.Body == 0 means "disabled" — don't override.
+	if o.Limits.AllowUnlimitedBody {
+		o.Limits.Body = 0
+	} else if o.Limits.Body <= 0 {
+		o.Limits.Body = d.Limits.Body
+	}
 	return o
 }
 
@@ -112,6 +119,9 @@ func (o Options) withDefaults() Options {
 // body-size enforcement.
 func New(handler http.Handler, opts Options) *http.Server {
 	opts = opts.withDefaults()
+	if validate.IsNil(handler) {
+		handler = http.NotFoundHandler()
+	}
 	if opts.Limits.Body > 0 {
 		handler = bodyLimitMiddleware(handler, opts.Limits.Body)
 	}
@@ -126,9 +136,8 @@ func New(handler http.Handler, opts Options) *http.Server {
 	}
 }
 
-// bodyLimitMiddleware caps request body size. Requests that exceed the limit
-// surface as io.ErrUnexpectedEOF to the handler on Read; apps should handle
-// that as a 413.
+// bodyLimitMiddleware caps request body size. Reads beyond the limit return
+// *http.MaxBytesError; apps should translate that error to HTTP 413.
 func bodyLimitMiddleware(next http.Handler, limit int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		r.Body = http.MaxBytesReader(w, r.Body, limit)

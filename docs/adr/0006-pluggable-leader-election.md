@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0006: Pluggable leader election (k8s Lease + pg advisory)
 
 - **Status**: Accepted
-- **Date**: 2026-04-13 (backfill — Step 6.5b refactor)
+- **Date**: 2026-04-13 (backfill)
 - **Deciders**: @lusoris
 - **Tags**: leader, runtime, k8s
 
@@ -47,4 +47,4 @@ Both backends share a `leader.Callbacks` struct (`OnNewLeader`, `OnStartedLeadin
 ## References
 
 - [`leader/pg/pg.go`](https://github.com/golusoris/golusoris/blob/main/leader/pg/pg.go) — pg backend.
-- [`leader/k8s/`](../../leader/k8s/) — k8s backend.
+- [`leader/k8s/`](https://github.com/golusoris/golusoris/tree/main/leader/k8s) — k8s backend.

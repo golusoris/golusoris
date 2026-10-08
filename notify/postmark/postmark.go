@@ -28,6 +28,7 @@ import (
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -49,8 +50,7 @@ type Options struct {
 	MessageStream string `koanf:"message_stream"`
 	// Endpoint overrides the API base — useful for tests.
 	Endpoint string `koanf:"endpoint"`
-	// HTTPClient is the optional HTTP client; defaults to a 10s-timeout
-	// client.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
 	HTTPClient *http.Client
 }
 
@@ -74,10 +74,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
-	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
 	return &Sender{opts: opts, endpoint: endpoint, hc: hc}, nil
 }
 

@@ -7,8 +7,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # go.uber.org/fx — v1.24.0 snapshot
 
 Pinned: **v1.24.0**
-Source: https://pkg.go.dev/go.uber.org/fx@v1.24.0
-Godoc: https://pkg.go.dev/go.uber.org/fx@v1.24.0#section-documentation
+Source: [tagged source](https://github.com/uber-go/fx/tree/v1.24.0)
+Godoc: [package documentation](https://pkg.go.dev/go.uber.org/fx@v1.24.0#section-documentation)
 
 ## Key API surface (v1.24.0)
 
@@ -30,8 +30,8 @@ fx.Decorate(decorator ...interface{})    // override a type in a scope
 fx.Supply(values ...interface{})         // provide concrete values directly
 fx.Module(name string, opts ...Option)   // named sub-scope
 fx.Options(opts ...Option)               // group options
-fx.WithLogger(log fxevent.Logger)        // override fx event logger
-fx.NopLogger                             // silence fx logs
+fx.WithLogger(func() fxevent.Logger { return logger }) // override Fx event logger
+fx.NopLogger                                        // silence Fx event logs
 ```
 
 ### Lifecycle hooks
@@ -51,7 +51,7 @@ fx.Annotate(f, fx.As(new(Interface)))          // bind to interface
 fx.Annotate(f, fx.ResultTags(`name:"foo"`))    // named result
 fx.Annotate(f, fx.ParamTags(`name:"foo"`))     // named param
 fx.Annotate(f, fx.From(new(Type)))             // explicit input type
-fx.Annotate(f, fx.Group("key"))                // value group
+fx.Annotate(f, fx.ResultTags(`group:"key"`))   // value group
 ```
 
 ### Value groups
@@ -86,6 +86,7 @@ type Result struct {
 ## Patterns used in golusoris
 
 Every subpackage exposes its capability via one of:
+
 - `fx.Module("name", fx.Provide(...), fx.Invoke(...))` — preferred
 - `fx.Options(fx.Provide(...))` — when no module name is needed
 
@@ -93,10 +94,10 @@ Never import internals directly; only compose via `fx.Module` or `fx.Options`.
 
 ## Breaking changes between v1.23 → v1.24
 
-- `fx.WithLogger` signature stable; no breaking changes.
+- `fx.WithLogger` takes a constructor that returns `fxevent.Logger`.
 - `fx.Decorate` added in v1.18 — safe to use.
 
 ## Links
 
-- Changelog: https://github.com/uber-go/fx/blob/master/CHANGELOG.md
-- Guide: https://uber-go.github.io/fx/
+- [Changelog](https://github.com/uber-go/fx/blob/v1.24.0/CHANGELOG.md)
+- [Package documentation](https://pkg.go.dev/go.uber.org/fx@v1.24.0)

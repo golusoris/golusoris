@@ -12,7 +12,7 @@ dead-letter queue, and replay.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Endpoint` | Registered subscription: URL, secret, event filter, active flag |
 | `Delivery` | Delivery record: attempts, status, last HTTP code, error |
 | `Store` | Persistence interface — implement with Postgres, SQLite, or `memStore` for tests |
@@ -46,9 +46,9 @@ matching `webhooks/in.HMAC`. Also sets `X-Webhook-Event` and `X-Webhook-Delivery
 - Default: 5 attempts with exponential backoff (1 s, 2 s, 4 s, 8 s, 5 min cap).
 - Override via `Options.Backoff` (return 0 in tests to avoid sleeping).
 - Dead-letter = `StatusFailed` delivery after all attempts exhausted.
-- Replay resets `Attempts` to 0 and re-runs the full retry loop.
+- Replay resets `Attempts` to 0 and re-runs full retry loop.
 
 ## Don't
 
-- Don't call `Dispatch` on the hot path without a background queue — it blocks.
+- Don't call `Dispatch` on hot path without background queue — it blocks.
 - Don't store raw secrets in `Endpoint.Secret` without encryption at rest.

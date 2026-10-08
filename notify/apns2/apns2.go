@@ -23,13 +23,14 @@
 // Message routing: each recipient in [notify.Message.To] is an APNs
 // device token (hex). [notify.Message.Subject] → alert title,
 // [notify.Message.Body] → alert body, [notify.Message.Metadata] → custom
-// top-level fields in the payload.
+// top-level fields in the payload except the reserved "aps" key.
 package apns2
 
 import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
@@ -46,6 +47,8 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -53,6 +56,8 @@ import (
 const (
 	ProductionHost = "https://api.push.apple.com"
 	SandboxHost    = "https://api.sandbox.push.apple.com"
+
+	defaultRequestTimeout = 15 * time.Second
 )
 
 // PushType categorises the notification per APNs spec. Apple requires
@@ -100,8 +105,8 @@ type Options struct {
 	// Expiration sets apns-expiration when > 0; 0 means "store and
 	// forward" (APNs default: one attempt, drop on failure).
 	Expiration time.Duration `koanf:"expiration"`
-	// HTTPClient is optional; NewSender will create an HTTP/2-capable
-	// client when this is nil.
+	// HTTPClient is optional and cloned when supplied. A non-positive timeout
+	// becomes 15s. nil creates an HTTP/2-capable client.
 	HTTPClient *http.Client
 	// Clock is optional; defaults to a real wall clock. Injected for
 	// testable JWT-expiry logic.
@@ -142,6 +147,8 @@ func NewSender(opts Options) (*Sender, error) {
 	hc := opts.HTTPClient
 	if hc == nil {
 		hc = defaultHTTPClient()
+	} else {
+		hc = httpclient.CloneBounded(hc, defaultRequestTimeout)
 	}
 	if opts.DefaultPushType == "" {
 		opts.DefaultPushType = PushTypeAlert
@@ -150,7 +157,7 @@ func NewSender(opts Options) (*Sender, error) {
 		opts.DefaultPriority = PriorityImmediate
 	}
 	clk := opts.Clock
-	if clk == nil {
+	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
 	return &Sender{opts: opts, key: key, host: host, hc: hc, clock: clk}, nil
@@ -180,6 +187,9 @@ func parseP8Key(p8Key []byte) (*ecdsa.PrivateKey, error) {
 	if !ok {
 		return nil, errors.New("notify/apns2: p8 key is not ECDSA")
 	}
+	if key.Curve != elliptic.P256() {
+		return nil, errors.New("notify/apns2: p8 key must use P-256")
+	}
 	return key, nil
 }
 
@@ -196,7 +206,7 @@ func defaultHTTPClient() *http.Client {
 		TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12},
 		Protocols:       protocols,
 	}
-	return &http.Client{Transport: tr, Timeout: 15 * time.Second}
+	return &http.Client{Transport: tr, Timeout: defaultRequestTimeout}
 }
 
 // Name implements [notify.Sender].
@@ -376,7 +386,7 @@ func buildPayload(msg notify.Message, body string) ([]byte, error) {
 // custom top-level payload field).
 func shouldSkipMetadataKey(k string) bool {
 	switch k {
-	case "apns-push-type", "apns-priority", "apns-id", "apns-collapse-id",
+	case "aps", "apns-push-type", "apns-priority", "apns-id", "apns-collapse-id",
 		"apns-sound", "apns-badge", "apns-thread-id", "apns-content-available":
 		return true
 	default:

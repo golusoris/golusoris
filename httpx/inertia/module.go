@@ -8,12 +8,17 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"time"
 
 	gonertia "github.com/romsar/gonertia/v3"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
+
+const defaultSSRTimeout = 30 * time.Second
 
 // Options is unmarshalled from cfg under the "inertia" prefix.
 type Options struct {
@@ -40,6 +45,8 @@ type SSROptions struct {
 	Enabled bool `koanf:"enabled"`
 	// URL is the SSR sidecar render endpoint.
 	URL string `koanf:"url"`
+	// Timeout caps one SSR sidecar render request.
+	Timeout time.Duration `koanf:"timeout"`
 }
 
 // RootFS is the optional fx-injected filesystem holding the root template and
@@ -53,7 +60,8 @@ func defaultOptions() Options {
 		ManifestPath: "web/dist/.vite/manifest.json",
 		ContainerID:  "app",
 		SSR: SSROptions{
-			URL: "http://127.0.0.1:13714",
+			URL:     "http://127.0.0.1:13714",
+			Timeout: defaultSSRTimeout,
 		},
 	}
 }
@@ -77,7 +85,20 @@ func buildOptions(opts Options, logger *slog.Logger, rootFS RootFS) []gonertia.O
 		gopts = append(gopts, gonertia.WithEncryptHistory())
 	}
 	if opts.SSR.Enabled {
-		gopts = append(gopts, gonertia.WithSSR(opts.SSR.URL))
+		timeout := opts.SSR.Timeout
+		if timeout <= 0 {
+			timeout = defaultSSRTimeout
+		}
+		ssrClient := httpclient.New(httpclient.Options{
+			Name:    "golusoris.httpx.inertia.ssr",
+			Timeout: timeout,
+			Logger:  logger,
+		})
+		gopts = append(
+			gopts,
+			gonertia.WithSSR(opts.SSR.URL),
+			gonertia.WithSSRHTTPClient(ssrClient),
+		)
 	}
 	switch {
 	case opts.Version != "":
@@ -104,6 +125,12 @@ type inertiaParams struct {
 // newInertia builds *Inertia from opts, selecting fs.FS vs disk constructors
 // and adapting *slog.Logger to gonertia's Logger interface.
 func newInertia(p inertiaParams) (*Inertia, error) {
+	if p.Logger == nil {
+		p.Logger = slog.New(slog.DiscardHandler)
+	}
+	if validate.IsNil(p.RootFS.FS) {
+		p.RootFS.FS = nil
+	}
 	gopts := buildOptions(p.Opts, p.Logger, p.RootFS)
 
 	var (

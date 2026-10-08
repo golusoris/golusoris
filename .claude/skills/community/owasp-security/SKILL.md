@@ -39,7 +39,7 @@ When reviewing code, check for these issues:
 - [ ] MFA available for sensitive operations
 
 ### Access Control
-- [ ] Check for framework-level auth middleware (e.g., Next.js middleware.ts, proxy.ts, Express middleware) before flagging missing per-route auth
+- [ ] Check for framework-level auth middleware (e.g, Next.js middleware.ts, proxy.ts, Express middleware) before flagging missing per-route auth
 - [ ] Authorization checked on every request
 - [ ] Using object references user cannot manipulate
 - [ ] Deny by default policy
@@ -191,9 +191,9 @@ When building or reviewing AI agent systems, check for:
 
 ## Language-Specific Security Quirks
 
-> **Important:** The examples below are illustrative starting points, not exhaustive. When reviewing code, think like a senior security researcher: consider the language's memory model, type system, standard library pitfalls, ecosystem-specific attack vectors, and historical CVE patterns. Each language has deeper quirks beyond what's listed here.
+> **Important:** examples below are illustrative starting points, not exhaustive. When reviewing code, think like senior security researcher: consider language's memory model, type system, standard library pitfalls, ecosystem-specific attack vectors, and historical CVE patterns. Each language has deeper quirks beyond what's listed here.
 
-Different languages have unique security pitfalls. Here are the top 20 languages with key security considerations. **Go deeper for the specific language you're working in:**
+Different languages have unique security pitfalls. Here are top 20 languages with key security considerations. **Go deeper for specific language you're working in:**
 
 ---
 
@@ -306,7 +306,7 @@ YAML.load(user_input)
 # SAFE: Use safe_load
 YAML.safe_load(user_input)
 ```
-**Watch for:** YAML.load, Marshal.load, eval, send with user input, .permit!
+**Watch for:** YAML.load, Marshal.load, eval, send with user input.permit!
 
 ---
 
@@ -338,7 +338,7 @@ guard let value = jsonDict["key"] else { return }
 String(format: userInput, args)
 // SAFE: Don't use user input as format
 ```
-**Watch for:** force unwrap (!), try!, ObjC bridging, NSSecureCoding misuse
+**Watch for:** force unwrap (!), try, ObjC bridging, NSSecureCoding misuse
 
 ---
 
@@ -506,20 +506,20 @@ Get-Content $userPath
 
 ## Deep Security Analysis Mindset
 
-When reviewing any language, think like a senior security researcher:
+When reviewing any language, think like senior security researcher:
 
-1. **Memory Model:** How does the language handle memory? Managed vs manual? GC pauses exploitable?
+1. **Memory Model:** How does language handle memory? Managed vs manual? GC pauses exploitable?
 2. **Type System:** Weak typing = type confusion attacks. Look for coercion exploits.
 3. **Serialization:** Every language has its pickle/Marshal equivalent. All are dangerous.
-4. **Concurrency:** Race conditions, TOCTOU, atomicity failures specific to the threading model.
+4. **Concurrency:** Race conditions, TOCTOU, atomicity failures specific to threading model.
 5. **FFI Boundaries:** Native interop is where type safety breaks down.
 6. **Standard Library:** Historic CVEs in std libs (Python urllib, Java XML, Ruby OpenSSL).
 7. **Package Ecosystem:** Typosquatting, dependency confusion, malicious packages.
 8. **Build System:** Makefile/gradle/npm script injection during builds.
 9. **Runtime Behavior:** Debug vs release differences (Rust overflow, C++ assertions).
-10. **Error Handling:** How does the language fail? Silently? With stack traces? Fail-open?
+10. **Error Handling:** How does language fail? Silently? With stack traces? Fail-open?
 
-**For any language not listed:** Research its specific CWE patterns, CVE history, and known footguns. The examples above are entry points, not complete coverage.
+**For any language not listed:** Research its specific CWE patterns, CVE history, and known footguns. examples above are entry points, not complete coverage.
 
 ## When to Apply This Skill
 
@@ -533,4 +533,4 @@ Use this skill when:
 - Configuring application security settings
 - Handling errors and exceptions
 - Working with third-party dependencies
-- **Working in any language** - apply the deep analysis mindset above
+- **Working in any language** - apply deep analysis mindset above

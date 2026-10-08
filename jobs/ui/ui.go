@@ -11,20 +11,20 @@
 //	fx.Invoke(func(r chi.Router, client *jobs.Client, logger *slog.Logger) error {
 //	    h, err := ui.NewHandler(ui.Options{
 //	        Client: client, Prefix: "/jobs/ui",
-//	        User:   "admin", Password: secret,
 //	    }, logger)
 //	    if err != nil { return err }
-//	    r.Mount("/jobs/ui", h)
+//	    r.Mount("/jobs/ui", ui.WithBasicAuth(h, "admin", secret))
 //	    return nil
 //	})
 //
 // The handler is stateful — it holds caches + background queries. Call
 // [Start] once to initialize; it stops when the supplied ctx is
-// canceled. For fx-managed lifecycle use [Module] instead.
+// canceled.
 package ui
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -35,6 +35,7 @@ import (
 	"github.com/riverqueue/river"
 	riverui "riverqueue.com/riverui"
 
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/jobs"
 )
 
@@ -45,19 +46,28 @@ type Options struct {
 	// Prefix is the URL path prefix the UI is served under (e.g.
 	// "/jobs/ui"). Required for the UI's asset paths to resolve.
 	Prefix string
-	// User + Password enable basic-auth. Both empty = no auth (only
-	// safe on localhost / behind a gated admin router).
+	// User and Password are retained for source compatibility but rejected by
+	// NewHandler because a riverui.Handler cannot contain middleware. Wrap the
+	// result with WithBasicAuth instead.
+	//
+	// Deprecated: use WithBasicAuth.
 	User     string
 	Password string
 	// HideJobArgs hides the Args column by default (args may carry PII).
 	HideJobArgs bool
 }
 
-// NewHandler builds the UI http.Handler. Callers MUST call handler.Start
-// exactly once before serving requests; [Module] handles that.
+// NewHandler builds the River UI handler. Callers MUST call Start exactly once
+// before serving requests and wrap the result with WithBasicAuth before mount.
 func NewHandler(opts Options, logger *slog.Logger) (*riverui.Handler, error) {
+	if opts.User != "" || opts.Password != "" {
+		return nil, errors.New("jobs/ui: Options.User and Options.Password are not handler middleware; use WithBasicAuth")
+	}
 	if opts.Client == nil {
 		return nil, errors.New("jobs/ui: Options.Client is required")
+	}
+	if riverui.NormalizePathPrefix(opts.Prefix) == "" {
+		return nil, errors.New("jobs/ui: Options.Prefix is required and must not be root")
 	}
 	endpoints := riverui.NewEndpoints[pgx.Tx](opts.Client, nil)
 	h, err := riverui.NewHandler(&riverui.HandlerOpts{
@@ -76,13 +86,24 @@ func NewHandler(opts Options, logger *slog.Logger) (*riverui.Handler, error) {
 // are empty, returns h unchanged. Useful for apps that don't have a
 // dedicated admin router + middleware stack.
 func WithBasicAuth(h http.Handler, user, pass string) http.Handler {
+	if validate.IsNil(h) {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "handler unavailable", http.StatusInternalServerError)
+		})
+	}
 	if user == "" && pass == "" {
 		return h
 	}
+	if user == "" || pass == "" {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("WWW-Authenticate", `Basic realm="river-ui"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		})
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, p, ok := r.BasicAuth()
-		userOK := subtle.ConstantTimeCompare([]byte(u), []byte(user)) == 1
-		passOK := subtle.ConstantTimeCompare([]byte(p), []byte(pass)) == 1
+		userOK := credentialEqual(u, user)
+		passOK := credentialEqual(p, pass)
 		if !ok || !userOK || !passOK {
 			w.Header().Set("WWW-Authenticate", `Basic realm="river-ui"`)
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -92,9 +113,21 @@ func WithBasicAuth(h http.Handler, user, pass string) http.Handler {
 	})
 }
 
+func credentialEqual(candidate, expected string) bool {
+	candidateHash := sha256.Sum256([]byte(candidate))
+	expectedHash := sha256.Sum256([]byte(expected))
+	return subtle.ConstantTimeCompare(candidateHash[:], expectedHash[:]) == 1
+}
+
 // Start initializes the handler's background services. Must be called
 // before serving requests. The returned cancel func stops them.
 func Start(ctx context.Context, h *riverui.Handler) (context.CancelFunc, error) {
+	if validate.IsNil(ctx) {
+		return nil, errors.New("jobs/ui: nil context")
+	}
+	if h == nil {
+		return nil, errors.New("jobs/ui: nil handler")
+	}
 	bgCtx, cancel := context.WithCancel(ctx)
 	if err := h.Start(bgCtx); err != nil {
 		cancel()

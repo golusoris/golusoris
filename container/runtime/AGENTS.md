@@ -23,17 +23,17 @@ distinct markers and apps on Podman usually expect RuntimePodman.
 
 ## Conventions
 
-- `runtime.Info` is the single truth for identity. log, otel, and metrics
-  should attribute records with `Info.Hostname` + `Info.ContainerID` +
-  platform-specific fields when populated.
+- `runtime.Info` is single truth for identity. log, otel, and metrics
+ should attribute records with `Info.Hostname` + `Info.ContainerID` +
+ platform-specific fields when populated.
 - k8s-specific fields (PodName, Namespace, …) are only populated when
-  `Runtime == RuntimeK8s`. Don't branch on them directly — check Runtime.
-- `k8s/podinfo` stays as a k8s-only view — use it when the code path is
-  already k8s-only (leader election, client-go users). Everywhere else,
-  prefer `runtime.Info`.
+ `Runtime == RuntimeK8s`. Don't branch on them directly — check Runtime.
+- `k8s/podinfo` stays as k8s-only view — use it when code path is
+ already k8s-only (leader election, client-go users). Everywhere else,
+ prefer `runtime.Info`.
 
 ## Don't
 
 - Don't add runtime-specific helpers here. Platform-specific logic belongs
-  in the platform's own package (`k8s/`, future `docker/`, `systemd/`).
-  This package is the detection + unified view only.
+ in platform's own package (`k8s/`, future `docker/`, `systemd/`).
+ This package is detection + unified view only.

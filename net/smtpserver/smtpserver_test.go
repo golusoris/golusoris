@@ -5,6 +5,7 @@
 package smtpserver_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -33,4 +34,12 @@ func TestHandlerBackend_NewSession(t *testing.T) {
 	})
 	require.NotNil(t, b)
 	_ = called
+}
+
+func TestHandlerBackend_NilHandlerFailsClosed(t *testing.T) {
+	t.Parallel()
+	session, err := smtpserver.NewHandlerBackend(nil).NewSession(nil)
+	require.NoError(t, err)
+	err = session.Data(strings.NewReader("Subject: test\r\n\r\nbody"))
+	require.ErrorContains(t, err, "nil handler")
 }

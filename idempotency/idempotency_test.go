@@ -7,6 +7,8 @@ package idempotency_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -17,31 +19,102 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/idempotency"
 )
+
+type typedNilStore struct{}
+
+func (s *typedNilStore) Claim(context.Context, string, string, time.Duration) (idempotency.ClaimResult, error) {
+	if s == nil {
+		panic("typed-nil store dereferenced")
+	}
+	return idempotency.ClaimResult{}, nil
+}
+
+func (s *typedNilStore) Commit(
+	context.Context,
+	string,
+	string,
+	string,
+	idempotency.CachedResponse,
+	time.Duration,
+) error {
+	if s == nil {
+		panic("typed-nil store dereferenced")
+	}
+	return nil
+}
+
+func (s *typedNilStore) Release(context.Context, string, string) error {
+	if s == nil {
+		panic("typed-nil store dereferenced")
+	}
+	return nil
+}
 
 // failingStore never finds a key and fails every Save with err.
 type failingStore struct{ err error }
 
-func (failingStore) Find(context.Context, string) (idempotency.CachedResponse, bool, error) {
-	return idempotency.CachedResponse{}, false, nil
+func (failingStore) Claim(context.Context, string, string, time.Duration) (idempotency.ClaimResult, error) {
+	return idempotency.ClaimResult{State: idempotency.ClaimAcquired, Token: "token"}, nil
 }
 
-func (s failingStore) Save(context.Context, string, idempotency.CachedResponse, time.Duration) error {
+func (s failingStore) Commit(
+	context.Context,
+	string,
+	string,
+	string,
+	idempotency.CachedResponse,
+	time.Duration,
+) error {
 	return s.err
 }
+
+func (failingStore) Release(context.Context, string, string) error { return nil }
 
 // findFailingStore fails every Find with err; Save is never expected to be
 // reached from these tests.
 type findFailingStore struct{ err error }
 
-func (s findFailingStore) Find(context.Context, string) (idempotency.CachedResponse, bool, error) {
-	return idempotency.CachedResponse{}, false, s.err
+func (s findFailingStore) Claim(context.Context, string, string, time.Duration) (idempotency.ClaimResult, error) {
+	return idempotency.ClaimResult{}, s.err
 }
 
-func (findFailingStore) Save(context.Context, string, idempotency.CachedResponse, time.Duration) error {
+func (findFailingStore) Commit(
+	context.Context,
+	string,
+	string,
+	string,
+	idempotency.CachedResponse,
+	time.Duration,
+) error {
 	return nil
 }
+
+func (findFailingStore) Release(context.Context, string, string) error { return nil }
+
+type fixedClaimStore struct {
+	claim idempotency.ClaimResult
+}
+
+func (s fixedClaimStore) Claim(context.Context, string, string, time.Duration) (idempotency.ClaimResult, error) {
+	return s.claim, nil
+}
+
+func (fixedClaimStore) Commit(
+	context.Context,
+	string,
+	string,
+	string,
+	idempotency.CachedResponse,
+	time.Duration,
+) error {
+	return nil
+}
+
+func (fixedClaimStore) Release(context.Context, string, string) error { return nil }
 
 func handler(body string, code int) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -81,6 +154,51 @@ func TestMiddleware_caches(t *testing.T) {
 	}
 	if r1.Body.String() != "created" || r2.Body.String() != "created" {
 		t.Fatalf("body mismatch: %q %q", r1.Body.String(), r2.Body.String())
+	}
+}
+
+func TestMiddleware_TypedNilStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+	var store *typedNilStore
+	called := false
+	h := idempotency.Middleware(store, idempotency.Options{})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		called = true
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("Idempotency-Key", "key-1")
+	rw := httptest.NewRecorder()
+	h.ServeHTTP(rw, req)
+	if called {
+		t.Fatal("next called without a usable idempotency store")
+	}
+	if rw.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d; want %d", rw.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestNewMemoryStoreWithClock_TypedNilFallsBack(t *testing.T) {
+	t.Parallel()
+	var clk *clockwork.FakeClock
+	store := idempotency.NewMemoryStoreWithClock(clk)
+	ctx := context.Background()
+	claim, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	err = store.Commit(
+		ctx,
+		"key",
+		claim.Token,
+		"fingerprint",
+		idempotency.CachedResponse{StatusCode: http.StatusCreated},
+		time.Minute,
+	)
+	if err != nil {
+		t.Fatalf("Commit: %v", err)
+	}
+	completed, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
+	if err != nil || completed.State != idempotency.ClaimCompleted {
+		t.Fatalf("Claim = (%+v, %v); want completed response", completed, err)
 	}
 }
 
@@ -241,7 +359,51 @@ func TestMiddleware_saveFailure(t *testing.T) {
 	if rw.Code != http.StatusCreated || rw.Body.String() != "created" {
 		t.Fatalf("response not delivered: %d %q", rw.Code, rw.Body.String())
 	}
-	if got := logs.String(); !strings.Contains(got, "idempotency: save response") || !strings.Contains(got, "disk full") {
-		t.Fatalf("save failure not logged: %q", got)
+	if got := logs.String(); !strings.Contains(got, "idempotency: commit response") || !strings.Contains(got, "disk full") {
+		t.Fatalf("commit failure not logged: %q", got)
 	}
+}
+
+func TestMiddlewareRejectsMalformedStoreClaims(t *testing.T) {
+	t.Parallel()
+	tests := map[string]idempotency.ClaimResult{
+		"acquired without token": {State: idempotency.ClaimAcquired},
+		"completed invalid status": {
+			State:       idempotency.ClaimCompleted,
+			Fingerprint: emptyRequestFingerprint(),
+			Response:    idempotency.CachedResponse{StatusCode: -1},
+		},
+	}
+	for name, claim := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			called := false
+			h := idempotency.Middleware(fixedClaimStore{claim: claim}, idempotency.Options{})(http.HandlerFunc(
+				func(http.ResponseWriter, *http.Request) { called = true },
+			))
+			req := httptest.NewRequest(http.MethodPost, "/", nil)
+			req.Header.Set("Idempotency-Key", "key")
+			rw := httptest.NewRecorder()
+			requireNoPanic(t, func() { h.ServeHTTP(rw, req) })
+			if called || rw.Code != http.StatusInternalServerError {
+				t.Fatalf("response = (%d, called %v); want 500 and no handler", rw.Code, called)
+			}
+		})
+	}
+}
+
+func emptyRequestFingerprint() string {
+	// fingerprintPayload prefixes both empty parts with an eight-byte length.
+	sum := sha256.Sum256(make([]byte, 16))
+	return hex.EncodeToString(sum[:])
+}
+
+func requireNoPanic(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			t.Fatalf("panicked: %v", recovered)
+		}
+	}()
+	fn()
 }

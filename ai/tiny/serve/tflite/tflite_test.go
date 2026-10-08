@@ -18,6 +18,7 @@ import (
 
 	"github.com/golusoris/golusoris/ai/tiny"
 	"github.com/golusoris/golusoris/ai/tiny/serve/tflite"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // newServer builds a LiteRT sidecar mock. /load records the request and
@@ -85,7 +86,9 @@ func TestPredictor_Predict_topK(t *testing.T) {
 	defer srv.Close()
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL, TopK: 2})
-	require.NoError(t, p.Load(t.Context(), classifyModel()))
+	model := classifyModel()
+	model.Labels = []string{"a", "b", "c"}
+	require.NoError(t, p.Load(t.Context(), model))
 	got, err := p.Predict(t.Context(), "x")
 	require.NoError(t, err)
 	require.Len(t, got.Labels, 2)
@@ -99,7 +102,9 @@ func TestPredictor_Predict_tieBrokenByLabel(t *testing.T) {
 	defer srv.Close()
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
-	require.NoError(t, p.Load(t.Context(), classifyModel()))
+	model := classifyModel()
+	model.Labels = []string{"apple", "zebra"}
+	require.NoError(t, p.Load(t.Context(), model))
 	got, err := p.Predict(t.Context(), "x")
 	require.NoError(t, err)
 	// Equal scores → deterministic order by label asc.
@@ -132,6 +137,30 @@ func TestPredictor_Load_rejectsEmptyURI(t *testing.T) {
 	m.URI = ""
 	err := p.Load(t.Context(), m)
 	require.ErrorContains(t, err, "URI empty")
+}
+
+func TestPredictor_Load_rejectsInvalidClassifierMetadata(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(*tiny.Model)
+		want   string
+	}{
+		{name: "unknown modality", mutate: func(m *tiny.Model) { m.Modality = tiny.Modality("video") }, want: "Modality"},
+		{name: "missing labels", mutate: func(m *tiny.Model) { m.Labels = nil }, want: "at least two"},
+		{name: "blank label", mutate: func(m *tiny.Model) { m.Labels = []string{"cat", " "} }, want: "non-empty"},
+		{name: "duplicate label", mutate: func(m *tiny.Model) { m.Labels = []string{"cat", "cat"} }, want: "unique"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			model := classifyModel()
+			tc.mutate(&model)
+			predictor := tflite.NewPredictor(tflite.Options{Endpoint: "http://127.0.0.1:9"})
+			err := predictor.Load(t.Context(), model)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
 }
 
 func TestPredictor_Load_sidecarError(t *testing.T) {
@@ -191,10 +220,35 @@ func TestPredictor_Predict_noScores(t *testing.T) {
 	require.ErrorContains(t, err, "no scores")
 }
 
-func TestPredictor_Predict_bodyLimitTruncation(t *testing.T) {
+func TestPredictor_Predict_rejectsScoresOutsideLoadedModel(t *testing.T) {
 	t.Parallel()
-	// A big-but-valid JSON body; MaxResponseBytes clips it and the JSON
-	// decode fails.
+	tests := []struct {
+		name   string
+		scores map[string]float32
+		want   string
+	}{
+		{name: "missing label", scores: map[string]float32{"spam": 1}, want: "label count"},
+		{name: "foreign label", scores: map[string]float32{"spam": 0.5, "other": 0.5}, want: "not loaded"},
+		{name: "negative probability", scores: map[string]float32{"spam": -0.1, "ham": 1}, want: "probability"},
+		{name: "probability above one", scores: map[string]float32{"spam": 1.1, "ham": 0}, want: "probability"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			srv, _ := newServer(t, tc.scores)
+			defer srv.Close()
+			predictor := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
+			require.NoError(t, predictor.Load(t.Context(), classifyModel()))
+			_, err := predictor.Predict(t.Context(), "x")
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+}
+
+func TestPredictor_Predict_rejectsOversizedBody(t *testing.T) {
+	t.Parallel()
+	// A big-but-valid JSON body; MaxResponseBytes rejects it before a
+	// truncated prefix can be decoded.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/load", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -208,7 +262,7 @@ func TestPredictor_Predict_bodyLimitTruncation(t *testing.T) {
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL, MaxResponseBytes: 32})
 	require.NoError(t, p.Load(t.Context(), classifyModel()))
 	_, err := p.Predict(t.Context(), "x")
-	require.ErrorContains(t, err, "decode")
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
 }
 
 func TestPredictor_Close_noop(t *testing.T) {
@@ -221,10 +275,12 @@ func TestNewPredictor_defaults(t *testing.T) {
 	t.Parallel()
 	// Zero options must not panic and must apply defaults (covered by a
 	// Predict against a live mock to exercise the default client).
-	srv, _ := newServer(t, map[string]float32{"a": 1})
+	srv, _ := newServer(t, map[string]float32{"a": 1, "b": 0})
 	defer srv.Close()
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
-	require.NoError(t, p.Load(t.Context(), classifyModel()))
+	model := classifyModel()
+	model.Labels = []string{"a", "b"}
+	require.NoError(t, p.Load(t.Context(), model))
 	got, err := p.Predict(t.Context(), "x")
 	require.NoError(t, err)
 	require.Equal(t, "a", got.Labels[0].Label)

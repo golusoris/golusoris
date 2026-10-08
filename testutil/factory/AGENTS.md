@@ -8,8 +8,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Deterministic test data factory backed by brianvoe/gofakeit v7.
 
-`factory.New(t)` seeds the faker from `t.Name()` so the same test always
-produces the same data. This makes snapshot tests + golden-file comparisons
+`factory.New(t)` seeds faker from `t.Name()` so same test always
+produces same data. This makes snapshot tests + golden-file comparisons
 stable across runs.
 
 ## Usage
@@ -35,9 +35,9 @@ f := factory.Random()
 `CreditCardNumber`, `Password`, `LoremIpsum`, `Number`, `Float64`, `Bool`,
 `Date`, `PhoneFormatted`, `Company`, `JobTitle`, `Username`, `Color`, etc.
 
-Full reference: https://pkg.go.dev/github.com/brianvoe/gofakeit/v7
+Full reference: <https://pkg.go.dev/github.com/brianvoe/gofakeit/v7>
 
 ## Don't
 
-- Don't share a single `*Faker` across parallel sub-tests — each sub-test
-  should call `factory.New(t)` with its own `*testing.T`.
+- Don't share single `*Faker` across parallel sub-tests — each sub-test
+ should call `factory.New(t)` with its own `*testing.T`.

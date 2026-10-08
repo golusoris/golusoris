@@ -4,12 +4,13 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — httpx/extclient
+# httpx/extclient
 
-Pragmatic typed external-API client factory built on `httpx/client` (retry +
-circuit-breaker + otelhttp + slog). The lightweight alternative to full
-ogen-codegen from a third-party OpenAPI spec: configure a `Client` per upstream
-host, then call generic JSON helpers that decode into your own caller types.
+JSON client per fixed upstream. Built on `httpx/client`. Bounded body. Optional
+GET cache.
+
+Redirects stay on the configured scheme and host. Cross-origin redirects fail
+before bearer, custom authentication, or default headers can leave that origin.
 
 ## Usage
 
@@ -41,15 +42,15 @@ fx.New(
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `extclient.New(opts, ...Option)` | Build a `*Client` for one host |
-| `extclient.Get[T](ctx, c, path, hdrs)` | GET → decode JSON into `T` (cacheable) |
-| `extclient.Post[T] / Put[T] / Delete[T]` | Mutating JSON request → decode into `T` |
+| `extclient.Get[T](ctx, c, path, hdrs)` | Decode cacheable GET JSON |
+| `extclient.Post[T] / Put[T] / Delete[T]` | Send mutation; decode JSON |
 | `extclient.WithCache(*memory.Cache)` | Attach pool for GET response caching |
 | `extclient.WithLogger(*slog.Logger)` | Override transport logger |
 | `extclient.Module` | fx module — provides `*Registry` |
 | `Registry.Client(name)` | Look up a configured client by name |
-| `extclient.APIError` / `ErrStatus` | Non-2xx error (`errors.As` / `errors.Is`) |
+| `extclient.APIError` / `ErrStatus` | Inspect non-2xx errors |
 
 Generic helpers are package-level functions, not methods — Go has no type
 params on methods, so `Client` stays non-generic and serves every response type.
@@ -58,7 +59,7 @@ params on methods, so `Client` stays non-generic and serves every response type.
 
 Prefix `httpx.extclient.services.<name>.*` (env `APP_HTTPX_EXTCLIENT_*`):
 
-```
+```toml
 httpx.extclient.services.github.base_url        = "https://api.github.com"
 httpx.extclient.services.github.bearer          = "${GH_TOKEN}"
 httpx.extclient.services.github.auth_header.x-api-key = "..."   # alt to bearer
@@ -69,23 +70,28 @@ httpx.extclient.services.github.retry.max       = 3
 httpx.extclient.services.github.breaker.max     = 5
 ```
 
-## Conventions
+## Rules
 
-- One `Client` per upstream host. Set a distinctive `Name` (or rely on the host
-  default) so breaker state-change logs + OTel spans identify the dependency.
-- `Bearer` wins over an `Authorization` entry in `AuthHeader`. Per-request
-  headers override `Headers` defaults.
-- Caching keys GET responses by resolved URL, only when `CacheTTL > 0` **and** a
-  `*memory.Cache` is attached (`WithCache` / `memory.Module` in fx). No pool →
-  caching is silently off.
-- Response bodies are bounded to 8 MiB; the body is fully drained + closed so the
-  connection returns to the pool.
+- One `Client` per upstream origin. Unique `Name`.
+- Helper path must be relative. Absolute URL, network path, userinfo, and
+  cross-origin resolution rejected before credentials attach.
+- `Bearer` wins over `Authorization` entry in `AuthHeader`. Per-request
+ header wins over default header.
+- Construction clones `Headers` and `AuthHeader`; caller mutation stays local.
+- GET cache key = resolved URL + SHA-256 of effective headers. caller headers,
+ credentials, and representations stay isolated. caching needs positive
+ `CacheTTL` plus attached `*memory.Cache`; no pool means off.
+- Response body cap: 8 MiB. exact limit accepted; successful overflow returns
+ `ErrResponseTooLarge`. Body closes; overflow connection not reused.
+- Unsafe retry follows `httpx/client`: idempotency key or explicit opt-in.
 
 ## Don't
 
-- Don't cache mutating verbs — only `Get` consults the cache.
-- Don't pass a relative `BaseURL`; `New` rejects anything without scheme + host.
-- Don't create a bare `*http.Client` without setting `Timeout` or use `http.DefaultClient` — all outbound HTTP must flow through `extclient` (which sets timeout, retry, circuit-breaker, and OTel).
-- Don't reach for full OpenAPI codegen here — this package is the deliberately
-  pragmatic path. If you truly need a generated typed client, that's a separate
-  ogen pipeline.
+- Don't cache mutating verbs — only `Get` consults cache.
+- Don't pass relative `BaseURL`; scheme plus host required. Userinfo forbidden.
+- Don't accept a caller-controlled absolute URL as helper path.
+- Don't create bare `*http.Client` or use `http.DefaultClient`. outbound HTTP
+ flows through `extclient`: timeout, retry, breaker, OTel.
+- Don't reach for full OpenAPI codegen here — this package is deliberately
+ pragmatic path. If you truly need generated typed client, that's separate
+ ogen pipeline.

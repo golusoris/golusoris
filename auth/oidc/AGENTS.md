@@ -4,44 +4,41 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — auth/oidc/
+# auth/oidc
 
-OIDC + OAuth 2.0 PKCE client via [coreos/go-oidc/v3]. Module provides
-`*oidc.Provider` to the fx graph after running OIDC discovery.
+OIDC plus OAuth 2.0 PKCE client. `coreos/go-oidc/v3`. Bounded discovery.
 
 ## Flow
 
-```
-1. handler: url, verifier, err := provider.AuthURL(state) → store verifier in session → redirect
-2. callback: set, err := provider.Exchange(ctx, code, verifier)
-3. callback: info, err := provider.UserInfo(ctx, set.AccessToken)
-```
+1. `AuthURL(state)` -> URL plus verifier; verifier into server-side session.
+2. Callback state validation.
+3. `Exchange(ctx, code, verifier)` -> verified token set.
+4. `UserInfo(ctx, accessToken)` -> claims.
 
 ## Config
 
-```
-auth.oidc.issuer_url    = "https://accounts.google.com"
-auth.oidc.client_id     = "…"
-auth.oidc.client_secret = "…"
-auth.oidc.redirect_url  = "https://app.example.com/auth/callback"
-auth.oidc.scopes        = ["openid", "email", "profile"]
-```
+- `auth.oidc.issuer_url`
+- `auth.oidc.client_id`
+- `auth.oidc.client_secret`
+- `auth.oidc.redirect_url`
+- `auth.oidc.scopes`; default `openid,email,profile`
+- `auth.oidc.discovery_timeout`; default `10s`
 
-## Integration Tests
+## Construction
 
-Added comprehensive integration tests using fxtest to verify:
-- Module wiring works correctly
-- Error conditions are properly handled
-- All auth flows work as expected
+- `Module` -> config-backed fx provider.
+- `NewProvider(ctx, opts, logger)` -> caller cancellation plus bounded discovery.
+- `Options.HTTPClient` -> injected transport; copied and timeout-bounded when needed.
+- Same client -> discovery, token exchange, JWKS, UserInfo.
 
 ## PKCE
 
-PKCE (S256) is always on. `AuthURL` returns the verifier; store it in
-`auth/session` under a key like `"pkce_verifier"` before redirecting.
-Pass it back to `Exchange` on the callback.
+S256 always on. Verifier stored in `auth/session`; never client cookie payload.
+Custom scopes are copied and always include `openid`.
 
-## Don't
+## Invariants
 
-- Don't skip state validation — always verify the `state` param on callback matches what you set.
-- Don't store the raw id_token in a cookie — store it server-side in `auth/session`.
-- Don't call `UserInfo` on every request — cache the result in `cache/memory` or `auth/session`.
+- Nonempty state and callback match mandatory.
+- Raw ID token server-side only.
+- UserInfo cached via `cache/memory` or `auth/session`; no per-request fetch.
+- Zero-timeout outbound client forbidden.

@@ -23,6 +23,15 @@ config:
   golusoris-multiregion:domain:
     type: string
     description: Public domain for the failover record set (e.g. app.example.com).
+  golusoris-multiregion:hostedZoneId:
+    type: string
+    description: ID of the caller-owned Route53 hosted zone containing domain.
+  golusoris-multiregion:primaryCertificateArn:
+    type: string
+    description: ACM certificate ARN in primaryRegion covering domain.
+  golusoris-multiregion:secondaryCertificateArn:
+    type: string
+    description: ACM certificate ARN in secondaryRegion covering domain.
   golusoris-multiregion:dbInstanceClass:
     type: string
     description: Aurora cluster instance class.
@@ -33,7 +42,7 @@ config:
     default: "16.6"
   golusoris-multiregion:appImage:
     type: string
-    description: OCI image reference deployed in both regions.
+    description: Immutable repository@sha256 image reference deployed in both regions.
   golusoris-multiregion:appPort:
     type: integer
     description: Container port the app listens on.

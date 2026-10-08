@@ -11,7 +11,9 @@
 //	func TestMyWorker(t *testing.T) {
 //	    rv := rivertest.Start(t, rivertest.Options{
 //	        Register: func(w *jobs.Workers) {
-//	            jobs.Register(w, &MyWorker{})
+//	            if err := jobs.Register(w, &MyWorker{}); err != nil {
+//	                t.Fatalf("Register: %v", err)
+//	            }
 //	        },
 //	    })
 //	    _, err := rv.Client.Insert(ctx, MyArgs{ID: "x"}, nil)

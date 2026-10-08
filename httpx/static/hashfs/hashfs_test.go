@@ -6,6 +6,7 @@ package hashfs_test
 
 import (
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +15,10 @@ import (
 
 	"github.com/golusoris/golusoris/httpx/static/hashfs"
 )
+
+type typedNilFS struct{}
+
+func (*typedNilFS) Open(string) (fs.File, error) { panic("typed-nil filesystem used") }
 
 func TestHashNameIsStableForContent(t *testing.T) {
 	t.Parallel()
@@ -28,6 +33,20 @@ func TestHashNameIsStableForContent(t *testing.T) {
 	}
 	if n1 == "logo.png" {
 		t.Errorf("HashName did not transform: %q", n1)
+	}
+}
+
+func TestTypedNilFilesystemFailsClosed(t *testing.T) {
+	t.Parallel()
+	var filesystem *typedNilFS
+	wrapped := hashfs.New(filesystem)
+	if got := wrapped.HashName("asset.js"); got != "asset.js" {
+		t.Fatalf("HashName = %q, want original name", got)
+	}
+	recorder := httptest.NewRecorder()
+	hashfs.Handler(filesystem).ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/asset.js", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
 	}
 }
 

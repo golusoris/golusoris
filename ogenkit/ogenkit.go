@@ -5,10 +5,8 @@
 // Package ogenkit is the glue between ogen-generated code and golusoris
 // conventions. It provides:
 //
-//   - [ErrorHandler] that translates golusoris [errors.Error] → proper HTTP
-//     status + JSON error body, falling back to ogen's default for other
-//     error types (including ogen's own DecodeRequestError, SecurityError,
-//     etc.).
+//   - [ErrorHandler] that translates golusoris coded errors and ogen errors
+//     into RFC 9457 Problem Details with their proper HTTP status.
 //   - [SlogMiddleware] / [RecoverMiddleware] — ogen middleware implementations
 //     that integrate with the framework's slog logger. Use alongside the
 //     httpx/middleware stack on the outer chi router; these cover spans
@@ -27,8 +25,6 @@ package ogenkit
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
@@ -39,35 +35,22 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
-// errorBody is the JSON shape written by [ErrorHandler]. Matches the
-// Problem-Details-lite convention used across the framework.
-type errorBody struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// ErrorHandler returns an ogenerrors.ErrorHandler that maps [*gerr.Error] to
-// its code's HTTP status + JSON body. Non-golusoris errors delegate to
-// ogen's DefaultErrorHandler, preserving ogen's own error types.
+// ErrorHandler returns an ogenerrors.ErrorHandler that emits RFC 9457 Problem
+// Details while preserving ogen's status classification for its own errors.
 //
 // Apps pass this via ogen's generated `WithErrorHandler` option.
 func ErrorHandler(logger *slog.Logger) ogenerrors.ErrorHandler {
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) {
-		var ge *gerr.Error
-		if errors.As(err, &ge) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(ge.Status())
-			if encErr := json.NewEncoder(w).Encode(errorBody{
-				Code:    string(ge.Code),
-				Message: ge.Message,
-			}); encErr != nil {
-				logger.ErrorContext(ctx, "ogenkit: encode error body",
-					slog.String("error", encErr.Error()))
-			}
-			return
+		problem := gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), r.URL.RequestURI())
+		if problem.Status >= http.StatusInternalServerError {
+			logger.ErrorContext(ctx, "ogenkit: handler error",
+				slog.String("error", err.Error()),
+				slog.Int("status", problem.Status))
 		}
-		// Fall back to ogen's default (handles DecodeRequestError, etc.).
-		ogenerrors.DefaultErrorHandler(ctx, w, r, err)
+		if encErr := gerr.WriteProblem(w, problem); encErr != nil {
+			logger.ErrorContext(ctx, "ogenkit: encode error body",
+				slog.String("error", encErr.Error()))
+		}
 	}
 }
 

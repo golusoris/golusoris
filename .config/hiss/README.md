@@ -20,8 +20,9 @@ demonstrates it.
   gap/        real violations that go undetected — what the claim does not cover
 ```
 
-`<language>` is `go`, `python` or `c`, matching the `language:` key of the claim. Only
-languages this repository actually contains are declared.
+`<language>` matches the claim: source-language cells use `go`, `python` or `c`, and the
+HISS-10 public-document cell uses `markdown`. Only languages this repository actually
+contains are declared.
 
 ## What the verifier checks
 
@@ -31,8 +32,9 @@ finding can never be attributed to a neighbouring file.
 - A claim whose `runner` is omitted is decided by the HISS scanner (`praetorctl audit`), and
   the verifier replays it: every `positive/` fixture must be reported for that rule id, every
   `negative/` and `gap/` fixture must not.
-- A claim naming any other `runner` — `golangci-lint`, `gitleaks`, `baseline`, `dedupe`, `ci`,
-  `compile-context`, `hiss-coverage`, `state` — is **delegated**. The verifier does not run
+- A claim naming any other `runner` — including `golangci-lint`, `ruff`, `clang`,
+  `python-unittest`, `gitleaks`, `baseline`, `dedupe`, `ci`, `compile-context`,
+  `hiss-coverage`, or `state` — is **delegated**. The verifier does not run
   that tool, so it checks the *attribution* instead: the HISS scanner must report none of the
   fixtures. A rule credited to semgrep while the scanner is quietly deciding it names the
   wrong mechanism, and that is what this direction catches.

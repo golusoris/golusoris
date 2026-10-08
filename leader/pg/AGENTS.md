@@ -6,9 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — leader/pg/
 
-Single-leader election via a PostgreSQL session-scoped advisory lock
-(`pg_try_advisory_lock`). Works anywhere the app already has a pg pool — Compose,
-Swarm, Nomad, bare Linux, or k8s without the Lease API. One of two `leader/`
+Single-leader election via PostgreSQL session-scoped advisory lock
+(`pg_try_advisory_lock`). Works anywhere app already has pg pool — Compose,
+Swarm, Nomad, bare Linux, or k8s without Lease API. One of two `leader/`
 backends — apps pick exactly one (see also `leader/k8s`).
 
 ## Wiring
@@ -24,14 +24,13 @@ fx.New(
 )
 ```
 
-`Module(cb)` **Provides** the loaded `Options`; **Requires** `*pgxpool.Pool`,
-`clock.Clock`, `*slog.Logger`, `fx.Lifecycle`. Election runs in a goroutine on
-`OnStart`; `OnStop` cancels it and closes the dedicated connection, releasing the
-lock. `Run(ctx, pool, opts, clk, cb)` is callable directly.
+`Module(cb)` **Provides** loaded `Options`; **Requires** `*pgxpool.Pool`,
+`clock.Clock`, `*slog.Logger`, `fx.Lifecycle`. Election runs in goroutine on
+`OnStart`; `OnStop` cancels it and closes dedicated connection, releasing lock. `Run(ctx, pool, opts, clk, cb)` is callable directly.
 
 ## Config
 
-Keys under the `leader` prefix (env `APP_LEADER_*`). `leader.enabled=false`
+Keys under `leader` prefix (env `APP_LEADER_*`). `leader.enabled=false`
 (default) skips wiring entirely.
 
 ```yaml
@@ -45,9 +44,8 @@ leader:
 
 ## Notes
 
-- Dedicates one pooled connection for the lock's whole lifetime — size the pool
-  accordingly. The lock auto-releases on session end (graceful close **or**
-  crash via TCP keepalive), so there's no TTL/renewal tuning.
-- `name` must be unique per elector: two electors with the same name hash to the
-  same key and contend (a caller config error, not a library bug).
+- Dedicates one pooled connection for lock's whole lifetime — size pool
+ accordingly. lock auto-releases on session end (graceful close **or**
+ crash via TCP keepalive), so there's no TTL/renewal tuning.
+- `name` must be unique per elector: two electors with same name hash to  same key and contend (caller config error, not library bug).
 - Empty `leader.name` with `enabled=true` fails construction.

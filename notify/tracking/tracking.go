@@ -12,7 +12,7 @@
 //
 // Usage:
 //
-//	svc := tracking.New(store, []byte(secret), logger) // nil logger → slog.Default()
+//	svc, err := tracking.New(store, []byte(secret), logger) // nil logger → slog.Default()
 //	mux.Handle("/t/open",  svc.PixelHandler())
 //	mux.Handle("/t/click", svc.ClickHandler())
 //
@@ -29,8 +29,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+
+	"github.com/golusoris/golusoris/core/validate"
+	tokenhash "github.com/golusoris/golusoris/hash"
 )
 
 // Event is a recorded open/click.
@@ -68,15 +72,20 @@ type Service struct {
 	logger *slog.Logger
 }
 
-// New returns a Service. secret must be stable; rotating it
-// invalidates outstanding tracking URLs. A nil logger falls back to
-// slog.Default(); store failures are logged, never surfaced to the mail
-// client.
-func New(store Store, secret []byte, logger *slog.Logger) *Service {
+// New returns a Service. The store must be non-nil and secret must contain at
+// least 32 bytes. The service clones secret; rotating the caller's slice does not
+// affect outstanding tracking URLs. A nil logger falls back to slog.Default().
+func New(store Store, secret []byte, logger *slog.Logger) (*Service, error) {
+	if validate.IsNil(store) {
+		return nil, errors.New("tracking: store must not be nil")
+	}
+	if err := tokenhash.ValidateHMACSHA256Key(secret); err != nil {
+		return nil, fmt.Errorf("tracking: secret: %w", err)
+	}
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Service{store: store, secret: secret, logger: logger}
+	return &Service{store: store, secret: append([]byte(nil), secret...), logger: logger}, nil
 }
 
 // PixelURL returns a signed URL for the 1×1 open-tracking pixel.
@@ -196,14 +205,9 @@ func validateRedirectURL(raw string) error {
 }
 
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// First value in X-Forwarded-For is the original client.
-		for i := range len(xff) {
-			if xff[i] == ',' {
-				return xff[:i]
-			}
-		}
-		return xff
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
 	}
 	return r.RemoteAddr
 }

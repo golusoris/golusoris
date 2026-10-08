@@ -12,7 +12,7 @@ Managed Postgres via AWS RDS with production defaults: Multi-AZ, encrypted stora
 
 ```hcl
 module "db" {
-  source = "github.com/golusoris/golusoris//deploy/terraform/modules/postgres?ref=v0.1.0"
+  source = "github.com/golusoris/golusoris//deploy/terraform/modules/postgres?ref=v0.12.0"
 
   name           = "myapp-prod"
   vpc_id         = module.network.vpc_id

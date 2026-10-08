@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — ogenkit
 
-Adapters so ogen-generated servers fit the golusoris conventions.
+Adapters so ogen-generated servers fit golusoris conventions.
 
 ## Usage
 
@@ -22,12 +22,17 @@ srv, err := api.NewServer(handler,
 
 ## Conventions
 
-- Handler code returns `*gerr.Error` via helpers like `gerr.NotFound`. ogenkit's `ErrorHandler` maps these to the right HTTP status + a JSON body `{code, message}`.
-- ogen's own errors (DecodeRequestError, SecurityError, ParameterError) fall through to ogen's DefaultErrorHandler so ogen retains its own 4xx classifications.
-- `SlogMiddleware` logs per ogen operation; it's separate from the outer `httpx/middleware.Logger` which logs per HTTP request.
-- `RecoverMiddleware` converts panics inside ogen handlers into `gerr.Internal`; the outer HTTP `Recover` middleware is a final safety net.
+- Handler code returns `*gerr.Error` via helpers like `gerr.NotFound`.
+  `ErrorHandler` emits RFC 9457 `application/problem+json`; legacy
+  `{code, message}` remains as extension fields.
+- Ogen errors retain status classification and emit `about:blank` Problem
+  Details; legacy `error_message` remains as extension field.
+- `SlogMiddleware` logs per ogen operation; it's separate from outer `httpx/middleware.Logger` which logs per HTTP request.
+- `RecoverMiddleware` converts panics inside ogen handlers into `gerr.Internal`; outer HTTP `Recover` middleware is final safety net.
 
 ## Don't
 
-- Don't return raw Go errors from handlers — wrap via `gerr.Wrap` or one of the convenience constructors. Raw errors go through ogen's default handler and show up as generic 500.
-- Don't layer `httpx/middleware.Recover` inside the ogen middleware chain — use the ogenkit variant there so the log has the operation ID.
+- Don't return raw Go errors from handlers. Wrap via `gerr.Wrap` or convenience
+  constructors. Raw errors become generic 500 Problem Details without internal
+  detail.
+- Don't layer `httpx/middleware.Recover` inside ogen middleware chain — use ogenkit variant there so log has operation ID.

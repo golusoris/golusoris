@@ -56,6 +56,8 @@ exclude_docs: |
 nav:
   - Home: index.md
   - Principles: principles.md
+  - Downstream CI: ci-downstream.md
+  - Fleet Go Demand: FLEET_GO_DEMAND.md
   - Architecture Decisions:
       - Overview: adr/README.md
       - "ADR-0001: fx over wire for DI": adr/0001-fx-over-wire-for-di.md
@@ -65,10 +67,25 @@ nav:
       - "ADR-0005: river over asynq for jobs": adr/0005-river-over-asynq-for-jobs.md
       - "ADR-0006: pluggable leader election": adr/0006-pluggable-leader-election.md
       - "ADR-0007: RFC 9457 problem details": adr/0007-rfc-9457-problem-details.md
+      - "ADR-0008: upload safety and SSRF": adr/0008-upload-safety-strip-and-ssrf.md
+      - "ADR-0009: gonertia adapter": adr/0009-gonertia-for-inertia-adapter.md
+      - "ADR-0010: goenvoy multi-module clients": adr/0010-goenvoy-multimodule-clients.md
+      - "ADR-0011: ClamAV upload scanning": adr/0011-clamd-upload-malware-scan.md
+      - "ADR-0012: tusd bucket datastore": adr/0012-tusd-handler-bucket-datastore.md
+      - "ADR-0013: pure-Go audio decoders": adr/0013-pure-go-audio-decoders.md
+      - "ADR-0014: html/template sprout seam": adr/0014-stdlib-html-template-sprout-seam.md
+      - "ADR-0015: torrent client backends": adr/0015-torrent-client-backends.md
+      - "ADR-0016: signed image-pipeline URLs": adr/0016-image-pipeline-signed-urls.md
+      - "ADR-0017: lean core sub-module": adr/0017-lean-core-submodule.md
+      - "ADR-0018: EUPL and REUSE": adr/0018-eupl-relicense-and-reuse.md
+      - "ADR-0019: praetor governance": adr/0019-praetor-governance-and-capability-contract.md
+      - "ADR-0020: conformance and release hardening": adr/0020-praetor-conformance-and-release-hardening.md
       - Template: adr/0000-template.md
   - Architecture: architecture/README.md
   - Migration Guides:
       - "v0.1.x": migrations/v0.1.x.md
+      - "v0.9.0": migrations/v0.9.0.md
+      - "v0.13.0": migrations/v0.13.0.md
   - Upstream Snapshots:
       - Overview: upstream/README.md
       - go.uber.org/fx: upstream/fx/README.md

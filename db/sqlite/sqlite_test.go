@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -63,6 +65,44 @@ func TestOpenFileWALRoundTrip(t *testing.T) {
 	}
 }
 
+func TestOpenPathWithURIDelimiters(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, file     string
+		windowsInvalid bool
+	}{
+		{name: "fragment and escape", file: "app#tenant%3F1.db"},
+		{name: "query", file: "app?tenant#1.db", windowsInvalid: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if tt.windowsInvalid && runtime.GOOS == "windows" {
+				t.Skip("Windows reserves '?' in file names; TestDSNEscapesURIDelimiters covers its encoding")
+			}
+			path := filepath.Join(t.TempDir(), tt.file)
+			db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path}, discard())
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			t.Cleanup(func() { _ = db.Close() })
+			if _, err := db.ExecContext(t.Context(), "CREATE TABLE marker (id INTEGER)"); err != nil {
+				t.Fatalf("create marker: %v", err)
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("database path was not preserved: %v", err)
+			}
+		})
+	}
+}
+
+func TestDSNEscapesURIDelimiters(t *testing.T) {
+	t.Parallel()
+	dsn := sqlite.Options{Path: "/data/app?tenant#1%3F.db"}.DSN()
+	if want := "file:/data/app%3Ftenant%231%253F.db?"; !strings.HasPrefix(dsn, want) {
+		t.Fatalf("DSN %q; want prefix %q", dsn, want)
+	}
+}
+
 func TestOpenMemoryAndReadOnly(t *testing.T) {
 	t.Parallel()
 	mem, err := sqlite.Open(t.Context(), sqlite.Options{Path: sqlite.MemoryPath}, discard())
@@ -104,6 +144,20 @@ func TestOpenErrors(t *testing.T) {
 	if _, err := sqlite.Open(t.Context(), sqlite.Options{}, discard()); !errors.Is(err, sqlite.ErrMissingPath) {
 		t.Fatalf("empty path: got %v", err)
 	}
+	if _, err := sqlite.Open(t.Context(), sqlite.Options{Path: sqlite.MemoryPath}, nil); err == nil || !strings.Contains(err.Error(), "nil logger") {
+		t.Fatalf("nil logger: got %v", err)
+	}
+	for name, opts := range map[string]sqlite.Options{
+		"negative busy timeout": {Path: sqlite.MemoryPath, BusyTimeout: -time.Second},
+		"negative pool size":    {Path: sqlite.MemoryPath, MaxOpenConns: -1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if db, err := sqlite.Open(t.Context(), opts, discard()); err == nil || db != nil {
+				t.Fatalf("Open() = (%v, %v), want validation error", db, err)
+			}
+		})
+	}
 	missingDir := filepath.Join(t.TempDir(), "nope", "x.db")
 	_, err := sqlite.Open(t.Context(), sqlite.Options{Path: missingDir}, discard())
 	if err == nil {
@@ -117,14 +171,18 @@ func TestOpenErrors(t *testing.T) {
 
 func TestDSN(t *testing.T) {
 	t.Parallel()
-	dsn := sqlite.Options{Path: "/tmp/x.db", ReadOnly: true, Pragmas: []string{"synchronous(NORMAL)"}}.DSN()
-	for _, want := range []string{"file:/tmp/x.db?", "mode=ro", "busy_timeout%285000%29", "journal_mode%28WAL%29", "foreign_keys%281%29", "synchronous%28NORMAL%29"} {
+	dsn := sqlite.Options{Path: "/tmp/x.db", Pragmas: []string{"synchronous(NORMAL)"}}.DSN()
+	for _, want := range []string{"file:/tmp/x.db?", "busy_timeout%285000%29", "journal_mode%28WAL%29", "foreign_keys%281%29", "synchronous%28NORMAL%29"} {
 		if !strings.Contains(dsn, want) {
 			t.Errorf("DSN %q missing %q", dsn, want)
 		}
 	}
 	if strings.Contains(sqlite.Options{Path: sqlite.MemoryPath}.DSN(), "journal_mode") {
 		t.Error("WAL must not be requested for :memory:")
+	}
+	readOnly := sqlite.Options{Path: "/tmp/readonly.db", ReadOnly: true}.DSN()
+	if !strings.Contains(readOnly, "mode=ro") || strings.Contains(readOnly, "journal_mode") {
+		t.Error("read-only DSN must not try to change journal mode")
 	}
 	off := sqlite.Options{Path: "/tmp/y.db", DisableWAL: true, DisableForeignKeys: true}.DSN()
 	if strings.Contains(off, "journal_mode") || strings.Contains(off, "foreign_keys") {

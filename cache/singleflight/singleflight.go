@@ -20,20 +20,28 @@ package singleflight
 
 import (
 	"context"
-	"fmt"
+	"sync"
 
 	"golang.org/x/sync/singleflight"
 )
 
+const sharedFlightKey = "flight"
+
+type keyedFlight struct {
+	group singleflight.Group
+	users int
+}
+
 // Group de-duplicates concurrent calls with the same key K.
 // V is the result type. Errors are propagated to every waiter.
 type Group[K comparable, V any] struct {
-	g singleflight.Group
+	mu      sync.Mutex
+	flights map[K]*keyedFlight
 }
 
 // New returns an initialised Group.
 func New[K comparable, V any]() *Group[K, V] {
-	return &Group[K, V]{}
+	return &Group[K, V]{flights: make(map[K]*keyedFlight)}
 }
 
 // Do executes fn exactly once for concurrent callers sharing the same
@@ -42,8 +50,9 @@ func New[K comparable, V any]() *Group[K, V] {
 // per-call context cancellation should check ctx.Done() after Do
 // returns.
 func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context) (V, error)) (V, bool, error) {
-	k := keyString(key)
-	v, err, shared := g.g.Do(k, func() (any, error) {
+	flight := g.acquire(key)
+	defer g.release(key, flight)
+	v, err, shared := flight.group.Do(sharedFlightKey, func() (any, error) {
 		return fn(ctx)
 	})
 	if err != nil {
@@ -56,9 +65,33 @@ func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context
 // Forget evicts the in-flight or cached result for key, so the next
 // caller will execute fn again.
 func (g *Group[K, V]) Forget(key K) {
-	g.g.Forget(keyString(key))
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if flight := g.flights[key]; flight != nil {
+		flight.group.Forget(sharedFlightKey)
+	}
 }
 
-func keyString[K comparable](k K) string {
-	return fmt.Sprintf("%v", k)
+func (g *Group[K, V]) acquire(key K) *keyedFlight {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.flights == nil {
+		g.flights = make(map[K]*keyedFlight)
+	}
+	flight := g.flights[key]
+	if flight == nil {
+		flight = &keyedFlight{}
+		g.flights[key] = flight
+	}
+	flight.users++
+	return flight
+}
+
+func (g *Group[K, V]) release(key K, flight *keyedFlight) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	flight.users--
+	if flight.users == 0 && g.flights[key] == flight {
+		delete(g.flights, key)
+	}
 }

@@ -15,6 +15,7 @@
 // every auth request. Store the verifier (returned by AuthURL) in the
 // session before redirecting.
 //
+// Discovery uses an injected, timeout-bounded HTTP client.
 // Config key prefix: auth.oidc.*
 package oidc
 
@@ -26,6 +27,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"slices"
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
@@ -35,6 +38,8 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
+
+const defaultDiscoveryTimeout = 10 * time.Second
 
 // Options configure the OIDC provider.
 type Options struct {
@@ -50,11 +55,33 @@ type Options struct {
 	RedirectURL string `koanf:"redirect_url"`
 	// Scopes requested in addition to "openid" (default: email, profile).
 	Scopes []string `koanf:"scopes"`
+	// DiscoveryTimeout bounds OIDC discovery and the default HTTP client.
+	DiscoveryTimeout time.Duration `koanf:"discovery_timeout"`
+	// HTTPClient performs discovery and subsequent OIDC requests. A copy gains
+	// DiscoveryTimeout when its Timeout is not already positive.
+	HTTPClient *http.Client `koanf:"-"`
 }
 
 func (o Options) withDefaults() Options {
 	if len(o.Scopes) == 0 {
 		o.Scopes = []string{gooidc.ScopeOpenID, "email", "profile"}
+	} else {
+		o.Scopes = append([]string(nil), o.Scopes...)
+		if !slices.Contains(o.Scopes, gooidc.ScopeOpenID) {
+			o.Scopes = append([]string{gooidc.ScopeOpenID}, o.Scopes...)
+		}
+	}
+	if o.DiscoveryTimeout <= 0 {
+		o.DiscoveryTimeout = defaultDiscoveryTimeout
+	}
+	if o.HTTPClient == nil {
+		o.HTTPClient = &http.Client{Timeout: o.DiscoveryTimeout}
+	} else {
+		client := *o.HTTPClient
+		if client.Timeout <= 0 {
+			client.Timeout = o.DiscoveryTimeout
+		}
+		o.HTTPClient = &client
 	}
 	return o
 }
@@ -91,14 +118,28 @@ type Provider struct {
 	cfg      oauth2.Config
 	verifier *gooidc.IDTokenVerifier
 	logger   *slog.Logger
+	client   *http.Client
 }
 
 func newProvider(opts Options, logger *slog.Logger) (*Provider, error) {
+	return NewProvider(context.Background(), opts, logger)
+}
+
+// NewProvider performs bounded OIDC discovery using opts.HTTPClient. The
+// supplied context controls startup cancellation in addition to the configured
+// discovery timeout.
+func NewProvider(ctx context.Context, opts Options, logger *slog.Logger) (*Provider, error) {
+	opts = opts.withDefaults()
 	if opts.IssuerURL == "" || opts.ClientID == "" || opts.RedirectURL == "" {
 		return nil, errors.New("auth/oidc: issuer_url, client_id, and redirect_url are required")
 	}
-	ctx := context.Background()
-	prov, err := gooidc.NewProvider(ctx, opts.IssuerURL)
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	discoveryCtx, cancel := context.WithTimeout(ctx, opts.DiscoveryTimeout)
+	defer cancel()
+	discoveryCtx = gooidc.ClientContext(discoveryCtx, opts.HTTPClient)
+	prov, err := gooidc.NewProvider(discoveryCtx, opts.IssuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("auth/oidc: discover provider: %w", err)
 	}
@@ -110,14 +151,17 @@ func newProvider(opts Options, logger *slog.Logger) (*Provider, error) {
 		Endpoint:     prov.Endpoint(),
 		Scopes:       opts.Scopes,
 	}
-	logger.Info("auth/oidc: provider ready", slog.String("issuer", opts.IssuerURL))
-	return &Provider{provider: prov, cfg: cfg, verifier: verifier, logger: logger}, nil
+	logger.InfoContext(ctx, "auth/oidc: provider ready", slog.String("issuer", opts.IssuerURL))
+	return &Provider{provider: prov, cfg: cfg, verifier: verifier, logger: logger, client: opts.HTTPClient}, nil
 }
 
 // AuthURL returns the IdP authorization URL and the PKCE verifier.
 // Store verifier in the session before redirecting; pass it to
 // [Exchange] on callback. Fails only when the OS entropy source does.
 func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
+	if state == "" {
+		return "", "", errors.New("auth/oidc: state must not be empty")
+	}
 	verifier, err = pkceVerifier()
 	if err != nil {
 		return "", "", err
@@ -135,6 +179,7 @@ func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
 // Exchange trades an authorization code for tokens. verifier must
 // match the one returned by [AuthURL] for this session.
 func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSet, error) {
+	ctx = gooidc.ClientContext(ctx, p.client)
 	tok, err := p.cfg.Exchange(
 		ctx, code,
 		oauth2.SetAuthURLParam("code_verifier", verifier),
@@ -160,6 +205,7 @@ func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSe
 // UserInfo fetches claims from the IdP's UserInfo endpoint using the
 // access token.
 func (p *Provider) UserInfo(ctx context.Context, accessToken string) (UserInfo, error) {
+	ctx = gooidc.ClientContext(ctx, p.client)
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
 	ui, err := p.provider.UserInfo(ctx, ts)
 	if err != nil {

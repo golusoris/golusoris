@@ -5,19 +5,19 @@ description: Stage, commit, and push git changes with conventional commit messag
 
 # Git Push Workflow
 
-Stage all changes, create a conventional commit, and push to the remote branch.
+Stage all changes, create conventional commit, and push to remote branch.
 
 ## When to Use
 
-Automatically activate when the user:
+Automatically activate when user:
 - Explicitly asks to push changes ("push this", "commit and push")
 - Mentions saving work to remote ("save to github", "push to remote")
-- Completes a feature and wants to share it
+- Completes feature and wants to share it
 - Says phrases like "let's push this up" or "commit these changes"
 
 ## Workflow
 
-**ALWAYS use the script** - do NOT use manual git commands:
+**ALWAYS use script** - do NOT use manual git commands:
 
 ```bash
 bash skills/git-pushing/scripts/smart_commit.sh

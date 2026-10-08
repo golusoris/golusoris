@@ -22,15 +22,28 @@ import (
 	"net/http"
 
 	bjh "github.com/benbjohnson/hashfs"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // FS mirrors the bjh.FS API so callers don't need to import both packages.
 type FS = bjh.FS
 
 // New wraps fsys so assets can be referenced by their hashed name.
-func New(fsys fs.FS) *FS { return bjh.NewFS(fsys) }
+func New(fsys fs.FS) *FS { return bjh.NewFS(availableFS(fsys)) }
 
 // Handler serves files from fsys with immutable cache headers. Requests with
 // a hashed name (e.g. /assets/logo-abc.png) are routed to the underlying
 // unhashed file transparently by hashfs.
-func Handler(fsys fs.FS) http.Handler { return bjh.FileServer(fsys) }
+func Handler(fsys fs.FS) http.Handler { return bjh.FileServer(availableFS(fsys)) }
+
+type unavailableFS struct{}
+
+func (unavailableFS) Open(string) (fs.File, error) { return nil, fs.ErrNotExist }
+
+func availableFS(fsys fs.FS) fs.FS {
+	if validate.IsNil(fsys) {
+		return unavailableFS{}
+	}
+	return fsys
+}

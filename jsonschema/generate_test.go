@@ -332,8 +332,7 @@ func TestRoundTrip_UnsupportedType(t *testing.T) {
 	if err == nil {
 		t.Fatal("RoundTrip(withChan{}) = nil, want error from Generate")
 	}
-	var unsupported *jsonschema.ErrUnsupportedType
-	if !errors.As(err, &unsupported) {
+	if _, ok := errors.AsType[*jsonschema.ErrUnsupportedType](err); !ok {
 		t.Fatalf("RoundTrip(withChan{}) error = %v (%T), want it to wrap *jsonschema.ErrUnsupportedType", err, err)
 	}
 }

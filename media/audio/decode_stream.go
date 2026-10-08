@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
-	"time"
 
 	gomp3 "github.com/hajimehoshi/go-mp3"
 	"github.com/jfreymuth/oggvorbis"
@@ -29,15 +27,15 @@ type mp3Stream struct {
 func openMP3(r io.Reader) (pcmStream, error) {
 	dec, err := gomp3.NewDecoder(r)
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return nil, fmt.Errorf("audio: mp3 input: %w", err)
+		}
 		return nil, fmt.Errorf("audio: mp3: %w: %w", ErrCorrupt, err)
 	}
 	// go-mp3 always yields 16-bit stereo; Length is bytes (4 per frame).
 	rate := dec.SampleRate()
 	frames := dec.Length() / 4
-	var dur time.Duration
-	if rate > 0 {
-		dur = time.Duration(frames) * time.Second / time.Duration(rate)
-	}
+	dur := durationForFrames(frames, rate)
 	return &mp3Stream{
 		dec: dec,
 		meta: Info{
@@ -63,7 +61,7 @@ func (s *mp3Stream) read(out []float32) (int, error) {
 	for i := range got {
 		lo := uint16(b[i*2])
 		hi := uint16(b[i*2+1])
-		//nolint:gosec // G115: intentional LE int16 PCM bit-reinterpret; full uint16 range maps to int16.
+		// #nosec G115 -- intentional LE PCM bit reinterpretation; every uint16 pattern maps to int16.
 		out[i] = int16ToFloat(int16(lo | hi<<8))
 	}
 	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
@@ -73,6 +71,9 @@ func (s *mp3Stream) read(out []float32) (int, error) {
 		return 0, io.EOF
 	}
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return got, fmt.Errorf("audio: mp3 input: %w", err)
+		}
 		return got, fmt.Errorf("audio: mp3 decode: %w: %w", ErrCorrupt, err)
 	}
 	return got, nil
@@ -89,14 +90,14 @@ type oggStream struct {
 func openOGG(r io.Reader) (pcmStream, error) {
 	rd, err := oggvorbis.NewReader(r)
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return nil, fmt.Errorf("audio: ogg input: %w", err)
+		}
 		return nil, fmt.Errorf("audio: ogg: %w: %w", ErrCorrupt, err)
 	}
 	rate := rd.SampleRate()
 	ch := rd.Channels()
-	var dur time.Duration
-	if rate > 0 {
-		dur = time.Duration(rd.Length()) * time.Second / time.Duration(rate)
-	}
+	dur := durationForFrames(rd.Length(), rate)
 	return &oggStream{
 		r: rd,
 		meta: Info{
@@ -123,6 +124,9 @@ func (s *oggStream) read(out []float32) (int, error) {
 		return 0, io.EOF
 	}
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return n, fmt.Errorf("audio: ogg input: %w", err)
+		}
 		return n, fmt.Errorf("audio: ogg decode: %w: %w", ErrCorrupt, err)
 	}
 	return n, nil
@@ -141,15 +145,15 @@ type flacStream struct {
 func openFLAC(r io.Reader) (pcmStream, error) {
 	st, err := flac.New(r)
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return nil, fmt.Errorf("audio: flac input: %w", err)
+		}
 		return nil, fmt.Errorf("audio: flac: %w: %w", ErrCorrupt, err)
 	}
 	si := st.Info
 	rate := int(si.SampleRate)
 	ch := int(si.NChannels)
-	var dur time.Duration
-	if rate > 0 && si.NSamples > 0 && si.NSamples <= math.MaxInt64 {
-		dur = time.Duration(si.NSamples) * time.Second / time.Duration(rate)
-	}
+	dur := durationForUnsignedFrames(si.NSamples, rate)
 	return &flacStream{
 		stream: st,
 		meta: Info{
@@ -191,6 +195,9 @@ func (s *flacStream) nextFrame() ([]float32, error) {
 		return nil, io.EOF
 	}
 	if err != nil {
+		if isInputBoundaryError(err) {
+			return nil, fmt.Errorf("audio: flac input: %w", err)
+		}
 		return nil, fmt.Errorf("audio: flac frame: %w: %w", ErrCorrupt, err)
 	}
 	return interleaveFLAC(fr, s.bitDepth), nil

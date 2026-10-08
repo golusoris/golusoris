@@ -5,8 +5,9 @@
 # Custom semgrep ruleset — golusoris-specific invariants that the AST-unaware
 # linters (golangci-lint forbidigo/depguard, gosec) cannot express. Each rule is
 # validated to produce ZERO findings on the current tree (the repo already obeys
-# every invariant); a hit means a regression, not a false positive. Run locally
-# via the pre-commit `custom-semgrep` hook; runs advisory (non-blocking) in CI.
+# every invariant); a hit means a regression, not a false positive. `make
+# semgrep-scan` runs the strict full-tree gate in the declared image digest; the
+# same wrapper is unconditional and required in GitHub and Gitea CI.
 #
 # Deliberately NOT duplicated here (golangci-lint already gates them — see
 # .golangci.yml): time.Now outside clock/ (forbidigo), fmt.Print* (forbidigo),
@@ -46,9 +47,8 @@ rules:
   # ── No http.DefaultClient ───────────────────────────────────────────────────
   # The package-global DefaultClient shares one timeout-less Transport process-
   # wide; mutating it leaks across callers. Use httpx/client (retry + breaker +
-  # timeout) or an explicit *http.Client. apidocs/ and selfupdate/ are the two
-  # sanctioned exceptions: both expose an injectable HTTPClient and fall back to
-  # DefaultClient only as an opt-in default, documented in their Options.
+  # timeout) or an explicit *http.Client. Injectable clients still need a
+  # bounded framework default so a nil option cannot silently remove HISS-02.
   - id: no-http-default-client
     languages: [go]
     severity: ERROR
@@ -58,8 +58,6 @@ rules:
     paths:
       exclude:
         - "*_test.go"
-        - "**/apidocs/apidocs.go"
-        - "**/selfupdate/selfupdate.go"
     pattern: http.DefaultClient
 
   # ── No http.ListenAndServe / ListenAndServeTLS ──────────────────────────────

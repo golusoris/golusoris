@@ -13,9 +13,434 @@
   "gomod": {
     "enabled": true
   },
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "dockerfile": {
+    "managerFilePatterns": [
+      "/^tools/Dockerfile(?:\\.media)?\\.template$/",
+      "/^ai/tiny/trainers/(?:gemma|litert)/Dockerfile$/"
+    ]
+  },
+  "pip_requirements": {
+    "managerFilePatterns": [
+      "/^ai/tiny/trainers/(?:gemma|litert)/requirements\\.in$/"
+    ]
+  },
+  "devcontainer": {
+    "managerFilePatterns": [
+      "/(^|/)\\.devcontainer/devcontainer\\.json$/"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track every repository-managed Go tool pin declared in the shell authority file.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) versioning=(?<versioning>\\S+)\\n[A-Z][A-Z0-9_]*_VERSION=(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update the rebuild QEMU installer tag and immutable digest as one pair.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/rebuild-on-base\\.yml$/"
+      ],
+      "matchStrings": [
+        "image: docker\\.io/tonistiigi/binfmt:(?<currentValue>qemu-v[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "tonistiigi/binfmt",
+      "versioningTemplate": "regex:^qemu-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
+      "autoReplaceStringTemplate": "image: docker.io/tonistiigi/binfmt:{{{newValue}}}@{{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the uv lock generator and immutable image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^scripts/ci/tiny-trainer-locks\\.sh$/"
+      ],
+      "matchStrings": [
+        "UV_VERSION=(?<currentValue>[^\\s]+)\\nUV_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/astral-sh/uv",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "UV_VERSION={{{newValue}}}\\nUV_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the exact pip-audit release used for hash-lock vulnerability scans.",
+      "managerFilePatterns": [
+        "/^scripts/ci/tiny-trainer-locks\\.sh$/"
+      ],
+      "matchStrings": [
+        "PIP_AUDIT_VERSION=(?<currentValue>[^\\s]+)"
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "pip-audit",
+      "versioningTemplate": "pep440"
+    },
+    {
+      "customType": "regex",
+      "description": "Update REUSE and its immutable compliance image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "REUSE_VERSION=(?<currentValue>[^\\s]+)\\nREUSE_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "fsfe/reuse",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "REUSE_VERSION={{{newValue}}}\\nREUSE_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update kubeconform and its immutable validation image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "KUBECONFORM_VERSION=(?<currentValue>[^\\s]+)\\nKUBECONFORM_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/yannh/kubeconform",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "KUBECONFORM_VERSION={{{newValue}}}\\nKUBECONFORM_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Refresh the immutable Kubernetes JSON-schema commit from master.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "KUBERNETES_SCHEMA_REF=(?<currentValue>[^\\s]+)\\nKUBERNETES_SCHEMA_COMMIT=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/yannh/kubernetes-json-schema.git",
+      "versioningTemplate": "git",
+      "autoReplaceStringTemplate": "KUBERNETES_SCHEMA_REF={{{newValue}}}\\nKUBERNETES_SCHEMA_COMMIT={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Refresh the immutable CRD catalog commit from main.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "CRD_SCHEMA_REF=(?<currentValue>[^\\s]+)\\nCRD_SCHEMA_COMMIT=(?<currentDigest>[a-f0-9]{40})"
+      ],
+      "datasourceTemplate": "git-refs",
+      "depNameTemplate": "https://github.com/datreeio/CRDs-catalog.git",
+      "versioningTemplate": "git",
+      "autoReplaceStringTemplate": "CRD_SCHEMA_REF={{{newValue}}}\\nCRD_SCHEMA_COMMIT={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Material for MkDocs and its immutable build image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "MKDOCS_MATERIAL_VERSION=(?<currentValue>[^\\s]+)\\nMKDOCS_MATERIAL_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "squidfunk/mkdocs-material",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "MKDOCS_MATERIAL_VERSION={{{newValue}}}\\nMKDOCS_MATERIAL_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Terraform and its immutable validation image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "TERRAFORM_VERSION=(?<currentValue>[^\\s]+)\\nTERRAFORM_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "hashicorp/terraform",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "TERRAFORM_VERSION={{{newValue}}}\\nTERRAFORM_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Semgrep version and immutable image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "SEMGREP_VERSION=(?<currentValue>[^\\s]+)\\nSEMGREP_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "semgrep/semgrep",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "SEMGREP_VERSION={{{newValue}}}\\nSEMGREP_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update the Trivy version and immutable image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "TRIVY_VERSION=(?<currentValue>[^\\s]+)\\nTRIVY_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "aquasec/trivy",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "TRIVY_VERSION={{{newValue}}}\\nTRIVY_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Ruff and its immutable Python-lint image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "RUFF_VERSION=(?<currentValue>[^\\s]+)\\nRUFF_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "ghcr.io/astral-sh/ruff",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "RUFF_VERSION={{{newValue}}}\\nRUFF_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update Clang and its immutable C-analysis image digest as one authority pair.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "CLANG_IMAGE_TAG=(?<currentValue>[^\\s]+)\\nCLANG_IMAGE_DIGEST=(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "silkeh/clang",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "CLANG_IMAGE_TAG={{{newValue}}}\\nCLANG_IMAGE_DIGEST={{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Update immutable integration-test image references in Go and the CI cache manifest.",
+      "managerFilePatterns": [
+        "/^internal/testimages/images\\.go$/",
+        "/^\\.github/testcontainers-images\\.txt$/"
+      ],
+      "matchStrings": [
+        "(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[^@\\\"\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "{{{depName}}}:{{{newValue}}}@{{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the root Dev Container Go and golangci-lint feature options.",
+      "managerFilePatterns": [
+        "/^\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"golangciLintVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "golangci/golangci-lint",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the root Dev Container Go feature option.",
+      "managerFilePatterns": [
+        "/^\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"version\"\\s*:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "golang-version",
+      "depNameTemplate": "go",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Docker Engine selected by the template Docker-in-Docker feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"ghcr.io/devcontainers/features/docker-in-docker:4\"\\s*:\\s*\\{\\s*\"version\"\\s*:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "docker/cli",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Buildx selected by the template Docker-in-Docker feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"mobyBuildxVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "docker/buildx",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Node selected by the template Dev Container feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"ghcr.io/devcontainers/features/node:2\"\\s*:\\s*\\{\\s*\"version\"\\s*:\\s*\"(?<currentValue>[0-9]+\\.[0-9]+\\.[0-9]+)\""
+      ],
+      "datasourceTemplate": "node-version",
+      "depNameTemplate": "node",
+      "versioningTemplate": "node"
+    },
+    {
+      "customType": "regex",
+      "description": "Track npm selected by the template Dev Container feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"npmVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "npm",
+      "versioningTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track pnpm selected by the template Dev Container feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"pnpmVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "pnpm",
+      "versioningTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "Track nvm selected by the template Dev Container feature.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "\"nvmVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "nvm-sh/nvm",
+      "versioningTemplate": "semver",
+      "extractVersionTemplate": "^v(?<version>.*)$"
+    },
+    {
+      "customType": "regex",
+      "description": "Track Air installed by the template Dev Container bootstrap command.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/air-verse/air@(?<currentValue>v[0-9A-Za-z.+-]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/air-verse/air",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track golangci-lint installed by the template Dev Container bootstrap command.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/golangci/golangci-lint/v2/cmd/golangci-lint@(?<currentValue>v[0-9A-Za-z.+-]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/golangci/golangci-lint/v2",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track govulncheck installed by the template Dev Container bootstrap command.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "go install golang\\.org/x/vuln/cmd/govulncheck@(?<currentValue>v[0-9A-Za-z.+-]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "golang.org/x/vuln",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track sqlc installed by the template Dev Container bootstrap command.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/devcontainer\\.json$/"
+      ],
+      "matchStrings": [
+        "go install github\\.com/sqlc-dev/sqlc/cmd/sqlc@(?<currentValue>v[0-9A-Za-z.+-]+)"
+      ],
+      "datasourceTemplate": "go",
+      "depNameTemplate": "github.com/sqlc-dev/sqlc",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the digest-only template devcontainer base without losing its pinned Go and Debian variant.",
+      "managerFilePatterns": [
+        "/^template/\\.devcontainer/docker-compose\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=docker depName=mcr\\.microsoft\\.com/devcontainers/go\\n\\s+# renovate-version: (?<currentValue>[^\\s]+)\\n\\s+image: mcr\\.microsoft\\.com/devcontainers/go@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "mcr.microsoft.com/devcontainers/go",
+      "versioningTemplate": "docker",
+      "autoReplaceStringTemplate": "# renovate: datasource=docker depName=mcr.microsoft.com/devcontainers/go\\n    # renovate-version: {{{newValue}}}\\n    image: mcr.microsoft.com/devcontainers/go@{{{newDigest}}}"
+    }
+  ],
   "packageRules": [
     {
-      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass \u2014 keeps the queue self-clearing.",
+      "description": "Resolve pinned Wolfi APK packages from the official x86_64 repository.",
+      "matchDatasources": [
+        "apk"
+      ],
+      "matchFileNames": [
+        "tools/Dockerfile.media.template"
+      ],
+      "registryUrls": [
+        "https://packages.wolfi.dev/os?arch=x86_64"
+      ]
+    },
+    {
+      "description": "The private Gitea job image is source-owned by lusoris/k8s apps/dev/gitea-actions-runner/job-image; coordinated source, runner-label, and workflow bumps replace unauthenticated Mend lookups.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "harbor.infra.cauda.dev/library/gitea-actions-job"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
       "matchUpdateTypes": [
         "pin",
         "pinDigest",
@@ -26,6 +451,58 @@
       "automerge": true,
       "automergeStrategy": "squash",
       "platformAutomerge": true
+    },
+    {
+      "description": "Review media image and APK updates as one ABI-tested set.",
+      "matchFileNames": [
+        "tools/Dockerfile.media.template"
+      ],
+      "groupName": "Wolfi media runtime",
+      "automerge": false
+    },
+    {
+      "description": "Require a build review for Chainguard Go and static image updates.",
+      "matchFileNames": [
+        "tools/Dockerfile.template"
+      ],
+      "groupName": "Chainguard Go runtime",
+      "automerge": false
+    },
+    {
+      "description": "Review trainer base images and Python pins with regenerated hash locks and both image builds.",
+      "matchFileNames": [
+        "ai/tiny/trainers/gemma/**",
+        "ai/tiny/trainers/litert/**"
+      ],
+      "groupName": "tiny trainer runtimes",
+      "rangeStrategy": "pin",
+      "automerge": false
+    },
+    {
+      "description": "The custom manager owns this digest-only image so its variant remains explicit.",
+      "matchManagers": [
+        "docker-compose"
+      ],
+      "matchFileNames": [
+        "template/.devcontainer/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "mcr.microsoft.com/devcontainers/go"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "Require review for template devcontainer base-image updates.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "template/.devcontainer/docker-compose.yml"
+      ],
+      "matchPackageNames": [
+        "mcr.microsoft.com/devcontainers/go"
+      ],
+      "automerge": false
     },
     {
       "description": "Group all GitHub Actions bumps into a single PR.",
@@ -49,6 +526,37 @@
       "automerge": false
     },
     {
+      "description": "core/ is its own module; the root and the other modules that use it list core's direct requirements as indirect. Update those lines in the same branch so the consuming modules stay tidy. scripts/ci/renovate-policy-test.py keeps this list equal to core/go.mod's direct requirements.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepTypes": [
+        "indirect"
+      ],
+      "matchPackageNames": [
+        "github.com/alexedwards/argon2id",
+        "github.com/go-faster/errors",
+        "github.com/go-playground/validator/v10",
+        "github.com/go-viper/mapstructure/v2",
+        "github.com/google/uuid",
+        "github.com/jonboulle/clockwork",
+        "github.com/knadh/koanf/parsers/json",
+        "github.com/knadh/koanf/parsers/yaml",
+        "github.com/knadh/koanf/providers/env/v2",
+        "github.com/knadh/koanf/providers/file",
+        "github.com/knadh/koanf/v2",
+        "github.com/lmittmann/tint",
+        "github.com/mattn/go-isatty",
+        "github.com/modelcontextprotocol/go-sdk",
+        "github.com/segmentio/ksuid",
+        "github.com/spf13/cobra",
+        "go.uber.org/fx",
+        "go.yaml.in/yaml/v3",
+        "golang.org/x/mod"
+      ],
+      "enabled": true
+    },
+    {
       "description": "Permit direct remediation of the vulnerable transitive archive module.",
       "matchManagers": [
         "gomod"
@@ -63,7 +571,7 @@
       "automerge": false
     },
     {
-      "description": "Major bumps are breaking \u2014 never auto-merge; leave for review.",
+      "description": "Major bumps are breaking — never auto-merge; leave for review.",
       "matchUpdateTypes": [
         "major"
       ],
@@ -74,23 +582,43 @@
       "automerge": false
     },
     {
-      "description": "Hold goldmark on v1: v2 (yuin/goldmark/v2) is 'still in the early stages of release' per its README, replaces the New/WithExtensions API markdown/ builds on, and third-party extensions lag. Revisit when v2 is declared stable.",
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchPackageNames": [
-        "github.com/yuin/goldmark",
-        "github.com/yuin/goldmark/v2"
-      ],
-      "matchUpdateTypes": [
-        "major"
+      "description": "praetor-managed files: praetorctl adopt ships their updates and praetorctl audit locks them byte for byte",
+      "matchFileNames": [
+        ".github/workflows/praetor-docs.yml",
+        "tools/markdownlint/package.json",
+        "tools/markdownlint/package-lock.json",
+        "tools/markdownlint/markdownlint-cli2.yaml",
+        "tools/markdownlint/verify.mjs",
+        "tools/markdownlint/no-private-scratch-links.mjs",
+        "tools/figures/core.mjs",
+        "tools/figures/checks.mjs",
+        "tools/figures/build.mjs",
+        "tools/figures/types.ts",
+        "tools/figures/third_party/interfig/vendor.json",
+        "tools/figures/third_party/interfig/VENDOR.md",
+        "tools/figures/third_party/interfig/upstream/LICENSE",
+        "tools/figures/third_party/interfig/upstream/src/svg.ts",
+        "tools/figures/third_party/interfig/upstream/src/geometry.ts",
+        "tools/figures/third_party/interfig/upstream/src/model.ts",
+        "tools/figures/dist/loader.js",
+        "tools/figures/dist/player.js",
+        "tools/figures/dist/THIRD-PARTY-LICENSES.txt",
+        "tools/figures/figures.css",
+        "tools/figures/mkdocs_hook.py",
+        "tools/figures/astro.mjs",
+        "tools/figures/serve.mjs",
+        "tools/figures/README.md",
+        ".github/workflows/praetor-api.yml",
+        "tools/apicompat/gate/main.go",
+        ".devcontainer/devcontainer.json",
+        ".devcontainer/Dockerfile.praetor"
       ],
       "enabled": false
     }
   ],
   "lockFileMaintenance": {
     "enabled": true,
-    "description": "Refresh lockfiles so transitive CVE fixes (e.g. brace-expansion, fast-uri under tools/spectral) land without Dependabot; Renovate updates direct deps only otherwise.",
+    "description": "Refresh repository tool lockfiles so transitive fixes land even when their direct pins stay unchanged.",
     "schedule": [
       "before 6am on monday"
     ],

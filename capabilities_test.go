@@ -85,7 +85,7 @@ func packageDirs(t *testing.T) map[string]string {
 		rel = filepath.ToSlash(rel)
 		if d.IsDir() {
 			name := d.Name()
-			if rel != "." && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "vendor" || name == "testdata" || name == "node_modules" || name == "internal" || name == "cmd" || name == "examples") {
+			if rel != "." && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "vendor" || name == "testdata" || name == "node_modules" || name == "internal" || name == "cmd" || name == "examples" || rel == "tools") {
 				return filepath.SkipDir
 			}
 			if rel != "." {

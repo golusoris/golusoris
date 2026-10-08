@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — hw/fssnap/
 
-ZFS and Btrfs snapshot helpers that shell out to the `zfs` / `btrfs` CLI tools.
+ZFS and Btrfs snapshot helpers that shell out to `zfs` / `btrfs` CLI tools.
 Stateless utility — **no fx wiring**. Own go.mod sub-module; import directly:
 `github.com/golusoris/golusoris/hw/fssnap`.
 
@@ -29,9 +29,13 @@ fssnap.Btrfs.Delete(ctx, path)
 
 ## Notes
 
-- Linux-specific; no meaning on other platforms (hence the separate go.mod).
-- Pure stdlib at runtime (`os/exec`); testify is a test-only dep.
-- Requires the `zfs` / `btrfs` binaries on `PATH` and the privileges to run them
-  (typically root or `CAP_SYS_ADMIN`). Errors wrap combined stdout+stderr.
-- Caller-supplied `dataset`/`tag`/`path` are passed as exec args (not a shell),
-  so no shell-injection — but still validate them; they reach a privileged tool.
+- Linux-specific; no meaning on other platforms (hence separate go.mod).
+- Pure stdlib at runtime (`os/exec`); testify is test-only dep.
+- Requires `zfs` / `btrfs` binaries on `PATH` and privileges to run them
+ (typically root or `CAP_SYS_ADMIN`). Errors wrap combined stdout+stderr.
+- Reject empty operands, control characters, and values starting with `-` before
+  invoking a privileged tool. Do not weaken this option-injection boundary.
+- ZFS destructive calls accept exactly one `dataset@tag`; never a dataset,
+  bookmark, range, or list.
+- Btrfs list output uses ` path ` as its field boundary. Preserve complete
+  suffix because snapshot paths may contain spaces.

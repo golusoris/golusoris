@@ -31,6 +31,7 @@ package gpio
 
 import (
 	"fmt"
+	"reflect"
 
 	"periph.io/x/conn/v3/driver/driverreg"
 	"periph.io/x/conn/v3/gpio"
@@ -69,7 +70,7 @@ type Pin struct {
 // OpenPin opens a named GPIO pin (e.g. "GPIO17") for output.
 func OpenPin(name string) (*Pin, error) {
 	p := gpioreg.ByName(name)
-	if p == nil {
+	if isNilHardwareHandle(p) {
 		return nil, fmt.Errorf("gpio: pin %q not found", name)
 	}
 	return &Pin{p: p}, nil
@@ -105,6 +106,9 @@ func OpenI2C(busNumber int) (*I2CBus, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gpio: open i2c %d: %w", busNumber, err)
 	}
+	if isNilHardwareHandle(b) {
+		return nil, fmt.Errorf("gpio: open i2c %d: nil bus", busNumber)
+	}
 	return &I2CBus{bus: b}, nil
 }
 
@@ -136,7 +140,18 @@ func OpenSPI(portName string) (*SPIPort, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gpio: open spi %s: %w", portName, err)
 	}
+	if isNilHardwareHandle(p) {
+		return nil, fmt.Errorf("gpio: open spi %s: nil port", portName)
+	}
 	return &SPIPort{port: p}, nil
+}
+
+func isNilHardwareHandle(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	return reflected.Kind() == reflect.Pointer && reflected.IsNil()
 }
 
 // Connect returns a full-duplex spi.Conn at the given speed and mode.

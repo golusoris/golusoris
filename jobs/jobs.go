@@ -13,6 +13,7 @@
 // Config keys (env: APP_JOBS_*):
 //
 //	jobs.enabled              # master switch (default true)
+//	jobs.producer_only        # enqueue jobs without starting workers
 //	jobs.queue.default.max    # max concurrent workers on the default queue (default 10)
 //	jobs.job.timeout          # per-job timeout (default 30s; workers can override)
 //	jobs.job.max_attempts     # default max attempts (default 25 = ~3 days retries)
@@ -24,8 +25,10 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -36,11 +39,15 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options tunes the river client.
 type Options struct {
-	Enabled       bool          `koanf:"enabled"`
+	Enabled bool `koanf:"enabled"`
+	// ProducerOnly builds an enqueue-only client and skips River's worker
+	// lifecycle. Use this when another service processes the queues.
+	ProducerOnly  bool          `koanf:"producer_only"`
 	Queue         QueueOptions  `koanf:"queue"`
 	Job           JobOptions    `koanf:"job"`
 	FetchCooldown time.Duration `koanf:"fetch_cooldown"`
@@ -109,10 +116,22 @@ type Workers = river.Workers
 // *Workers provided by [Module] instead and register via [Register].
 func NewWorkers() *Workers { return river.NewWorkers() }
 
-// Register adds a typed worker to the registry. Thin sugar over
-// river.AddWorker so apps don't import river directly.
-func Register[T river.JobArgs](w *Workers, worker river.Worker[T]) {
-	river.AddWorker(w, worker)
+// Register adds a typed worker to the registry without exposing River's panic
+// API to application startup.
+func Register[T river.JobArgs](w *Workers, worker river.Worker[T]) error {
+	if w == nil {
+		return errors.New("jobs: register: nil workers")
+	}
+	if reflect.ValueOf(*w).IsZero() {
+		return errors.New("jobs: register: uninitialized workers; use jobs.NewWorkers")
+	}
+	if validate.IsNil(worker) {
+		return errors.New("jobs: register: nil worker")
+	}
+	if err := river.AddWorkerSafely(w, worker); err != nil {
+		return fmt.Errorf("jobs: register: %w", err)
+	}
+	return nil
 }
 
 func (o Options) withDefaults() Options {
@@ -132,13 +151,21 @@ func (o Options) withDefaults() Options {
 	if o.RescueStuckAfter == 0 {
 		o.RescueStuckAfter = d.RescueStuckAfter
 	}
+	if validate.IsNil(o.Observer) {
+		o.Observer = nil
+	}
 	return o
 }
+
+func hasObserver(observer Observer) bool { return !validate.IsNil(observer) }
 
 // New constructs a river client. When workers is nil (no queues
 // registered) the client is insert-only — useful for producer-only
 // services that enqueue jobs for another service to work.
 func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger) (*Client, error) {
+	if logger == nil {
+		return nil, errors.New("jobs: nil logger")
+	}
 	opts = opts.withDefaults()
 	cfg := &river.Config{
 		Logger:                      logger,
@@ -150,7 +177,7 @@ func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger
 		CompletedJobRetentionPeriod: opts.CompletedJobRetention,
 		DiscardedJobRetentionPeriod: opts.DiscardedJobRetention,
 	}
-	if opts.Observer != nil {
+	if hasObserver(opts.Observer) {
 		cfg.Middleware = []rivertype.Middleware{&insertObserver{obs: opts.Observer}}
 	}
 	if workers != nil {
@@ -158,10 +185,10 @@ func New(pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger
 			river.QueueDefault: {MaxWorkers: opts.Queue.Default.Max},
 		}
 		for name, qc := range opts.Queue.Queues {
-			maxWorkers := qc.Max
-			if maxWorkers < 1 {
-				maxWorkers = 1
+			if qc.Max < 0 {
+				return nil, fmt.Errorf("jobs: queue %q: max workers must not be negative", name)
 			}
+			maxWorkers := max(qc.Max, 1)
 			queues[name] = river.QueueConfig{MaxWorkers: maxWorkers}
 		}
 		cfg.Queues = queues
@@ -188,42 +215,62 @@ func loadOptions(cfg *config.Config) (Options, error) {
 //
 // Apps register workers by injecting *Workers via fx.Invoke:
 //
-//	fx.Invoke(func(w *jobs.Workers) {
-//	    jobs.Register(w, &MyWorker{})
+//	fx.Invoke(func(w *jobs.Workers) error {
+//	    return jobs.Register(w, &MyWorker{})
 //	})
 var Module = fx.Module(
 	"golusoris.jobs",
 	fx.Provide(loadOptions),
 	fx.Provide(NewWorkers),
-	fx.Provide(func(lc fx.Lifecycle, pool *pgxpool.Pool, opts Options, workers *Workers, logger *slog.Logger) (*Client, error) {
-		if !opts.Enabled {
-			return nil, nil //nolint:nilnil // documented disabled contract
-		}
-		c, err := New(pool, opts, workers, logger)
-		if err != nil {
-			return nil, err
-		}
-		var obsCancel func()
-		lc.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				if err := c.Start(ctx); err != nil {
-					return fmt.Errorf("jobs: start: %w", err)
-				}
-				if opts.Observer != nil {
-					obsCancel = Observe(c, opts.Observer)
-				}
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				if obsCancel != nil {
-					obsCancel()
-				}
-				if err := c.Stop(ctx); err != nil {
-					return fmt.Errorf("jobs: stop: %w", err)
-				}
-				return nil
-			},
-		})
-		return c, nil
-	}),
+	fx.Provide(provideClient),
 )
+
+func provideClient(
+	lc fx.Lifecycle,
+	pool *pgxpool.Pool,
+	opts Options,
+	workers *Workers,
+	logger *slog.Logger,
+) (*Client, error) {
+	opts = opts.withDefaults()
+	if !opts.Enabled {
+		return nil, nil //nolint:nilnil // documented disabled contract
+	}
+	clientWorkers := workers
+	if opts.ProducerOnly {
+		clientWorkers = nil
+	}
+	c, err := New(pool, opts, clientWorkers, logger)
+	if err != nil {
+		return nil, err
+	}
+	if opts.ProducerOnly {
+		return c, nil
+	}
+	registerLifecycle(lc, c, opts.Observer)
+	return c, nil
+}
+
+func registerLifecycle(lc fx.Lifecycle, c *Client, observer Observer) {
+	var obsCancel func()
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			if err := c.Start(ctx); err != nil {
+				return fmt.Errorf("jobs: start: %w", err)
+			}
+			if hasObserver(observer) {
+				obsCancel = Observe(c, observer)
+			}
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			if obsCancel != nil {
+				obsCancel()
+			}
+			if err := c.Stop(ctx); err != nil {
+				return fmt.Errorf("jobs: stop: %w", err)
+			}
+			return nil
+		},
+	})
+}

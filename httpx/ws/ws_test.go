@@ -74,8 +74,7 @@ func TestAcceptRejectsCrossOrigin(t *testing.T) {
 func TestBroadcasterFansOut(t *testing.T) {
 	t.Parallel()
 	bc := ws.NewBroadcaster[int](4)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ch1, _ := bc.Subscribe(ctx)
 	ch2, _ := bc.Subscribe(ctx)
@@ -118,4 +117,17 @@ func TestBroadcasterUnsubscribeOnContextCancel(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Errorf("Count still %d after cancel", bc.Count())
+}
+
+func TestBroadcasterManualUnsubscribeClosesSubscription(t *testing.T) {
+	t.Parallel()
+	bc := ws.NewBroadcaster[int](1)
+	ch, unsubscribe := bc.Subscribe(context.Background())
+	unsubscribe()
+	if bc.Count() != 0 {
+		t.Fatalf("Count = %d after manual unsubscribe, want 0", bc.Count())
+	}
+	if _, open := <-ch; open {
+		t.Fatal("subscription channel remains open after manual unsubscribe")
+	}
 }

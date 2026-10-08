@@ -17,6 +17,10 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 )
 
+type collidingKey struct{ id int }
+
+func (collidingKey) String() string { return "same" }
+
 func TestTypedCacheSetGet(t *testing.T) {
 	t.Parallel()
 	c, err := memory.NewForTest(100, 0)
@@ -33,6 +37,24 @@ func TestTypedCacheSetGet(t *testing.T) {
 	}
 	if v != 42 {
 		t.Errorf("got %d, want 42", v)
+	}
+}
+
+func TestTypedCacheSetReportsInsertThenReplacement(t *testing.T) {
+	t.Parallel()
+	cache, err := memory.NewForTest(10, 0)
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	typed := memory.Typed[string, int](cache, "num")
+	if inserted := typed.Set("a", 1); !inserted {
+		t.Fatal("first Set reported replacement")
+	}
+	if inserted := typed.Set("a", 2); inserted {
+		t.Fatal("second Set reported insertion")
+	}
+	if value, ok := typed.Get("a"); !ok || value != 2 {
+		t.Fatalf("Get = (%d, %t), want replacement", value, ok)
 	}
 }
 
@@ -81,6 +103,23 @@ func TestPrefixIsolation(t *testing.T) {
 	vb, _ := b.Get("k")
 	if va != 1 || vb != 2 {
 		t.Errorf("prefix isolation broken: a=%d b=%d", va, vb)
+	}
+}
+
+func TestTypedCacheUsesExactGenericKeyIdentity(t *testing.T) {
+	t.Parallel()
+
+	cache, err := memory.NewForTest(10, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	typed := memory.Typed[collidingKey, string](cache, "collision")
+	typed.Set(collidingKey{id: 1}, "first")
+	typed.Set(collidingKey{id: 2}, "second")
+	first, firstOK := typed.Get(collidingKey{id: 1})
+	second, secondOK := typed.Get(collidingKey{id: 2})
+	if !firstOK || !secondOK || first != "first" || second != "second" {
+		t.Fatalf("values = (%q,%t) (%q,%t), want distinct exact keys", first, firstOK, second, secondOK)
 	}
 }
 

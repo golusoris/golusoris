@@ -2,7 +2,7 @@
 # Apps copy + adjust the `cmd` path. For media-heavy apps see Dockerfile.media.template.
 
 # ---- Build stage ----
-FROM cgr.dev/chainguard/go:latest AS builder
+FROM cgr.dev/chainguard/go:latest@sha256:e69d8becae614abc5037093bead1f40bd031dd3483657f0cbeaa7e2c9e044a66 AS builder
 
 WORKDIR /src
 
@@ -25,7 +25,7 @@ RUN CGO_ENABLED=0 go build \
     -o /out/app ./cmd/app
 
 # ---- Runtime stage ----
-FROM cgr.dev/chainguard/static:latest
+FROM cgr.dev/chainguard/static:latest@sha256:bf639cba19ba56329e6907ac26a7afcdde57a80b6aa66d5100da6883196e6b82
 
 WORKDIR /
 COPY --from=builder /out/app /app
@@ -34,10 +34,7 @@ USER nonroot:nonroot
 
 EXPOSE 8080
 
-# Healthcheck hits the framework's /livez endpoint. Chainguard/static
-# ships wget at /usr/bin/wget; apps may substitute `curl -f` if their
-# base image has it.
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD ["wget", "-qO-", "http://127.0.0.1:8080/livez"]
+# Chainguard/static has no HTTP client. Probe /livez from the orchestrator
+# instead of adding mutable packages or a permanently broken in-image probe.
 
 ENTRYPOINT ["/app"]

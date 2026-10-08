@@ -8,8 +8,7 @@
 //
 // Usage:
 //
-//	hub := sse.NewHub()
-//	go hub.Run(ctx) // starts the event loop
+//	hub := sse.NewHub(slog.Default())
 //
 //	// Mount the SSE endpoint:
 //	mux.Handle("/events", hub.Handler())
@@ -21,9 +20,11 @@ package sse
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -43,11 +44,17 @@ type Event struct {
 func (e Event) format() ([]byte, error) {
 	var buf []byte
 	if e.ID != "" {
+		if !validField(e.ID) {
+			return nil, errors.New("sse: invalid event id")
+		}
 		buf = append(buf, fmt.Sprintf("id: %s\n", e.ID)...)
 	}
 	name := e.Event
 	if name == "" {
 		name = "message"
+	}
+	if !validField(name) {
+		return nil, errors.New("sse: invalid event name")
 	}
 	buf = append(buf, fmt.Sprintf("event: %s\n", name)...)
 	if e.Retry > 0 {
@@ -66,8 +73,17 @@ func (e Event) format() ([]byte, error) {
 		}
 		data = string(b)
 	}
-	buf = append(buf, fmt.Sprintf("data: %s\n\n", data)...)
+	data = strings.ReplaceAll(data, "\r\n", "\n")
+	data = strings.ReplaceAll(data, "\r", "\n")
+	for line := range strings.SplitSeq(data, "\n") {
+		buf = append(buf, fmt.Sprintf("data: %s\n", line)...)
+	}
+	buf = append(buf, '\n')
 	return buf, nil
+}
+
+func validField(value string) bool {
+	return !strings.ContainsAny(value, "\r\n\x00")
 }
 
 // client is a connected SSE subscriber.
@@ -87,6 +103,9 @@ type Hub struct {
 // NewHub returns a Hub. Use [Hub.Handler] to get the HTTP handler and
 // [Hub.Publish] to push events.
 func NewHub(logger *slog.Logger) *Hub {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &Hub{
 		clients: make(map[*client]struct{}),
 		logger:  logger,
@@ -94,8 +113,8 @@ func NewHub(logger *slog.Logger) *Hub {
 	}
 }
 
-// Handler returns an http.Handler that upgrades the connection to SSE
-// and streams events to the client until it disconnects.
+// Handler returns an http.Handler that opens an SSE response and streams events
+// to the client until it disconnects.
 func (h *Hub) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fl, ok := w.(http.Flusher)
@@ -111,6 +130,7 @@ func (h *Hub) Handler() http.Handler {
 		}
 		h.add(c)
 		defer h.remove(c)
+		fl.Flush()
 
 		h.stream(r.Context(), w, fl, c)
 	})

@@ -6,8 +6,8 @@
 package p
 
 // Sum allocates a fresh slice per call instead of reusing a caller-owned
-// buffer. Nothing in this repository measures allocations as a gate: the three
-// b.ReportAllocs() benchmarks print counts and assert nothing.
+// buffer. The allocation-budget gate protects named benchmarks; it cannot find
+// an unbenchmarked hot path.
 func Sum(xs []int) []int {
 	out := make([]int, 0, len(xs))
 	running := 0

@@ -23,9 +23,8 @@ func newHub() *sse.Hub {
 }
 
 // TestHub_publishReachesConnectedClient: the handler streams events.
-// The response headers are not flushed until the first event arrives,
-// so we issue the request in a goroutine and publish from the main
-// test; the goroutine reads one frame and signals via the channel.
+// We issue the request in a goroutine and publish from the main test;
+// the goroutine reads one frame and signals via the channel.
 func TestHub_publishReachesConnectedClient(t *testing.T) {
 	t.Parallel()
 	h := newHub()
@@ -76,6 +75,38 @@ func TestHub_publishWithoutSubscribersIsNoop(t *testing.T) {
 	require.Equal(t, 0, h.ClientCount())
 }
 
+func TestHubNilLoggerUsesDiscardLogger(t *testing.T) {
+	t.Parallel()
+	h := sse.NewHub(nil)
+	srv := httptest.NewServer(h.Handler())
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	done := make(chan error, 1)
+	go func() {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+		if err != nil {
+			done <- err
+			return
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			_ = resp.Body.Close()
+		}
+		done <- err
+	}()
+
+	require.Eventually(t, func() bool { return h.ClientCount() == 1 },
+		time.Second, 10*time.Millisecond, "client should connect")
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("nil-logger connection did not stop")
+	}
+}
+
 // TestHub_handlerRejectsNonFlusher: a ResponseWriter that doesn't
 // implement http.Flusher should get a 500.
 func TestHub_handlerRejectsNonFlusher(t *testing.T) {
@@ -85,6 +116,20 @@ func TestHub_handlerRejectsNonFlusher(t *testing.T) {
 	h.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
 	require.Equal(t, http.StatusInternalServerError, rr.rec.Code)
 	require.Contains(t, strings.ToLower(rr.rec.Body.String()), "streaming")
+}
+
+func TestHubHandlerFlushesHeadersBeforeFirstEvent(t *testing.T) {
+	t.Parallel()
+	h := newHub()
+	rec := httptest.NewRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodGet, "/events", nil).WithContext(ctx)
+
+	h.Handler().ServeHTTP(rec, req)
+
+	require.True(t, rec.Flushed)
+	require.Equal(t, "text/event-stream", rec.Header().Get("Content-Type"))
 }
 
 // nonFlushingRecorder wraps httptest.ResponseRecorder *without*

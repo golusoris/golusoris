@@ -6,7 +6,10 @@ package inbound_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,11 +19,25 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/notify/inbound"
+	postmarkauth "github.com/golusoris/golusoris/notify/postmark"
 )
 
 type sink struct {
 	mu     sync.Mutex
 	emails []inbound.Email
+}
+
+func acceptSNS(*http.Request, []byte) error { return nil }
+
+func acceptPostmark(*http.Request, []byte) error { return nil }
+
+type repeatingReader byte
+
+func (r repeatingReader) Read(dst []byte) (int, error) {
+	for i := range dst {
+		dst[i] = byte(r)
+	}
+	return len(dst), nil
 }
 
 func (s *sink) handler() inbound.HandlerFunc {
@@ -47,7 +64,7 @@ func TestPostmark_parsesJSON(t *testing.T) {
 	s := &sink{}
 	req := httptest.NewRequest(http.MethodPost, "/pm", strings.NewReader(string(body)))
 	rec := httptest.NewRecorder()
-	inbound.Postmark(s.handler()).ServeHTTP(rec, req)
+	inbound.Postmark(acceptPostmark, s.handler()).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, s.emails, 1)
@@ -60,13 +77,102 @@ func TestPostmark_parsesJSON(t *testing.T) {
 	require.Contains(t, m.RawHeaders, "Received-SPF")
 }
 
+func TestHandlersRejectNilConsumer(t *testing.T) {
+	t.Parallel()
+	inner, _ := json.Marshal(map[string]any{
+		"mail": map[string]any{"messageId": "ses-1"},
+	})
+	sesEnvelope, _ := json.Marshal(map[string]any{
+		"Type":    "Notification",
+		"Message": string(inner),
+	})
+	tests := []struct {
+		name    string
+		handler http.Handler
+		body    string
+	}{
+		{
+			name:    "SES",
+			handler: inbound.SES(acceptSNS, nil),
+			body:    string(sesEnvelope),
+		},
+		{
+			name:    "Postmark",
+			handler: inbound.Postmark(acceptPostmark, nil),
+			body:    `{"MessageID":"postmark-1"}`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(test.body))
+			rec := httptest.NewRecorder()
+
+			test.handler.ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusInternalServerError, rec.Code)
+		})
+	}
+}
+
+func TestPostmarkRejectsUnverifiedPayloadBeforeParsing(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		body     string
+		verifier postmarkauth.WebhookVerifier
+	}{
+		{name: "nil verifier", body: `{"MessageID":"forged"}`},
+		{
+			name: "failed verifier before invalid JSON parse",
+			body: `{`,
+			verifier: func(*http.Request, []byte) error {
+				return errors.New("forged")
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &sink{}
+			req := httptest.NewRequest(http.MethodPost, "/pm", strings.NewReader(tt.body))
+			rec := httptest.NewRecorder()
+
+			inbound.Postmark(tt.verifier, s.handler()).ServeHTTP(rec, req)
+
+			require.Equal(t, http.StatusUnauthorized, rec.Code)
+			require.Empty(t, s.emails)
+		})
+	}
+}
+
+func TestPostmarkBodyLimitRunsBeforeVerifier(t *testing.T) {
+	t.Parallel()
+	const maxBodyBytes = 25 << 20
+	called := false
+	verify := func(*http.Request, []byte) error {
+		called = true
+		return nil
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/pm",
+		io.LimitReader(repeatingReader('x'), maxBodyBytes+1),
+	)
+	rec := httptest.NewRecorder()
+
+	inbound.Postmark(verify, (&sink{}).handler()).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.False(t, called)
+}
+
 func TestSES_subscriptionConfirmation(t *testing.T) {
 	t.Parallel()
 	env, _ := json.Marshal(map[string]any{"Type": "SubscriptionConfirmation"})
 	req := httptest.NewRequest(http.MethodPost, "/ses", strings.NewReader(string(env)))
 	rec := httptest.NewRecorder()
 	s := &sink{}
-	inbound.SES(s.handler()).ServeHTTP(rec, req)
+	inbound.SES(acceptSNS, s.handler()).ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Empty(t, s.emails)
 }
@@ -86,7 +192,7 @@ func TestSES_s3Action_deliversWithoutContent(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/ses", strings.NewReader(string(env)))
 	rec := httptest.NewRecorder()
 	s := &sink{}
-	inbound.SES(s.handler()).ServeHTTP(rec, req)
+	inbound.SES(acceptSNS, s.handler()).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, s.emails, 1)
@@ -111,13 +217,50 @@ func TestSES_snsAction_parsesMIME(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/ses", strings.NewReader(string(env)))
 	rec := httptest.NewRecorder()
 	s := &sink{}
-	inbound.SES(s.handler()).ServeHTTP(rec, req)
+	inbound.SES(acceptSNS, s.handler()).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 	require.Len(t, s.emails, 1)
 	require.Equal(t, "<m-1@example.com>", s.emails[0].MessageID)
 	require.Equal(t, "Hi there", s.emails[0].Subject)
 	require.Equal(t, []string{"bot@example.com"}, s.emails[0].To)
+}
+
+func TestSES_snsActionParsesBase64MIME(t *testing.T) {
+	t.Parallel()
+	raw := "From: alice@example.com\r\n" +
+		"To: bot@example.com\r\n" +
+		"Subject: Encoded\r\n" +
+		"Message-ID: <base64@example.com>\r\n\r\n" +
+		"binary-safe body\r\n"
+	inner, _ := json.Marshal(map[string]any{
+		"mail":    map[string]any{"messageId": "ses-base64"},
+		"content": base64.StdEncoding.EncodeToString([]byte(raw)),
+	})
+	env, _ := json.Marshal(map[string]any{"Type": "Notification", "Message": string(inner)})
+	req := httptest.NewRequest(http.MethodPost, "/ses", strings.NewReader(string(env)))
+	rec := httptest.NewRecorder()
+	s := &sink{}
+	inbound.SES(acceptSNS, s.handler()).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.Len(t, s.emails, 1)
+	require.Equal(t, "<base64@example.com>", s.emails[0].MessageID)
+	require.Equal(t, "Encoded", s.emails[0].Subject)
+	require.Contains(t, s.emails[0].Text, "binary-safe body")
+}
+
+func TestSESRejectsUnverifiedEnvelope(t *testing.T) {
+	t.Parallel()
+	inner, _ := json.Marshal(map[string]any{"mail": map[string]any{"messageId": "forged"}})
+	env, _ := json.Marshal(map[string]any{"Type": "Notification", "Message": string(inner)})
+	req := httptest.NewRequest(http.MethodPost, "/ses", strings.NewReader(string(env)))
+	rec := httptest.NewRecorder()
+	s := &sink{}
+	inbound.SES(nil, s.handler()).ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.Empty(t, s.emails)
 }
 
 func TestParseMIME_roundtrip(t *testing.T) {

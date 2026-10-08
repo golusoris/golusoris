@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — pubsub/kafka/
 
-fx-wired Kafka producer/consumer via twmb/franz-go v1.20.7.
+fx-wired Kafka producer/consumer via twmb/franz-go v1.22.0.
 
 ## fx wiring
 
@@ -17,7 +17,7 @@ fx.New(kafka.Module) // reads "kafka.*" from koanf config
 Config keys (prefix `kafka`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `brokers` | `["localhost:9092"]` | Seed broker list |
 | `group` | `""` | Consumer group ID (omit for producer-only) |
 | `tls` | `false` | Enable TLS with system CA pool |
@@ -53,10 +53,9 @@ kc := client.Kgo() // underlying *kgo.Client for transactions, admin API, etc.
 ## Testing
 
 Integration tests live in `pubsub/kafka/integration_test.go` and require Docker
-(testutil/kafka contract). They use `testutil/kafka.Addr(t)` to spin a
-Redpanda container per test run.
+(testutil/kafka contract). They use `testutil/kafka.Addr(t)` to spin Redpanda container per test run.
 
-For tests that need a `*kafka.Client` without the full fx stack:
+For tests that need `*kafka.Client` without full fx stack:
 
 ```go
 import (
@@ -77,7 +76,7 @@ func TestSomething(t *testing.T) {
 ## Don't
 
 - Don't call `Poll` before `Subscribe` — it will block indefinitely.
-- Don't share a single `Client` between producers and consumers in different
-  goroutines without understanding franz-go's thread-safety guarantees (it is
-  safe, but partition assignment may interfere).
+- Don't share single `Client` between producers and consumers in different
+ goroutines without understanding franz-go's thread-safety guarantees (it is
+ safe, but partition assignment may interfere).
 - Don't use `time.Now()` in record timestamps — `NewRecord` does it correctly.

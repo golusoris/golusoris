@@ -11,7 +11,10 @@ config:
   golusoris-multiregion:primaryRegion: us-east-1
   golusoris-multiregion:secondaryRegion: us-west-2
   golusoris-multiregion:domain: app.example.com
+  golusoris-multiregion:hostedZoneId: Z0123456789EXAMPLE
+  golusoris-multiregion:primaryCertificateArn: arn:aws:acm:us-east-1:123456789012:certificate/00000000-0000-0000-0000-000000000000
+  golusoris-multiregion:secondaryCertificateArn: arn:aws:acm:us-west-2:123456789012:certificate/11111111-1111-1111-1111-111111111111
   golusoris-multiregion:dbInstanceClass: db.r6g.large
   golusoris-multiregion:dbEngineVersion: "16.6"
-  golusoris-multiregion:appImage: ghcr.io/example/myapp:v1.0.0
+  golusoris-multiregion:appImage: ghcr.io/example/myapp@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   golusoris-multiregion:appPort: "8080"

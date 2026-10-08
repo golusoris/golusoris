@@ -22,12 +22,16 @@ jobs:
     name: CI gate
     runs-on: cauda-k8s-office-canary
     container:
+      # Source and bump authority: lusoris/k8s apps/dev/gitea-actions-runner/job-image.
       image: harbor.infra.cauda.dev/library/gitea-actions-job:2.335.1-cauda3-gitea3@sha256:ca08d1bee54628ae8713133ae4bf2fe7f06a20a6db6ffd1d184f6ac63660297b
-    timeout-minutes: 45
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
 
       - name: Check PR title
         if: github.event_name == 'pull_request'
@@ -50,68 +54,94 @@ jobs:
           path: |
             ~/.cache/go-build
             ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: ${{ runner.os }}-go-
 
       - name: Verify modules
         run: |
           set -euo pipefail
-          go mod verify
+          scripts/ci/go-modules.sh verify
+          scripts/ci/go-modules.sh tidy
+          scripts/ci/go-modules.sh fix
 
-      - name: Lint
-        run: golangci-lint run --config=.golangci.yml --timeout=5m
+      - name: Install pinned analysis tools
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+
+      - name: Format and lint every module
+        run: |
+          scripts/hooks/gofumpt.sh --all
+          scripts/ci/go-modules.sh lint
+          docker info
+          bash scripts/ci/python-lint.sh
 
       - name: Security and vulnerability gates
         run: |
           set -euo pipefail
-          govulncheck -version | grep -Fq 'Scanner: govulncheck@v1.7.0'
-          exclude_rules='testutil/.*:G115,G404,G204;search/typesense/.*:G704;notify/apns2/.*:G704;notify/fcm/.*:G101;notify/tracking/.*:G710;hash/.*:G304,G401,G505;auth/policy/.*:G401,G505;auth/oauth2server/.*:G117;storage/.*:G304;secrets/.*:G304;docs/epub/.*:G304;cmd/golusoris/.*:G204,G304;archive/.*:G302,G304;webhooks/in/.*:G505'
-          gosec -quiet -exclude-generated --exclude-rules="$exclude_rules" ./...
-          govulncheck ./...
+          . tools/tool-versions.env
+          scripts/ci/go-modules.sh gosec
+          scripts/ci/go-modules.sh vuln
           gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
-          semgrep scan --config .semgrep.yml --error --metrics=off --disable-version-check --oss-only
+          docker info
+          bash scripts/ci/semgrep-scan.sh
+          bash scripts/hiss/semgrep-fixtures.sh
+
+      - name: Shell and workflow policy gates
+        run: |
+          set -euo pipefail
+          bash scripts/ci/shellcheck.sh
+          ACTIONLINT_BIN="$(go env GOPATH)/bin/actionlint" bash scripts/ci/actionlint.sh
 
       - name: Test with race detector and coverage
         run: |
           set -euo pipefail
           docker info || true
-          go test -race -count=1 -timeout=10m -coverprofile=/tmp/coverage.out -covermode=atomic ./...
-          coverage=$(go tool cover -func=/tmp/coverage.out | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
+          bash scripts/ci/python-tests.sh
+          GO_MODULE_GROUP=primary GO_COVERAGE_DIR=/tmp/coverage-primary scripts/ci/go-modules.sh test
+          GO_MODULE_GROUP=split GO_COVERAGE_DIR=/tmp/coverage-split scripts/ci/go-modules.sh test
+          bash scripts/ci/allocation-budget.sh
+          coverage=$(go tool cover -func=/tmp/coverage-primary/coverage.out | awk '/^total:/ { gsub(/%/, "", $3); print $3 }')
           echo "Coverage: ${coverage}%"
           awk -v value="$coverage" 'BEGIN { exit !(value >= 70) }'
 
       - name: Build and generated-document gates
         run: |
           set -euo pipefail
-          go build ./...
-          bash scripts/changelog/render.sh --check
+          scripts/ci/go-modules.sh build
+          docker info
+          bash scripts/ci/c-quality.sh
+          bash scripts/ci/helm-chart_test.sh
+          node tools/markdownlint/verify.mjs
+          bash scripts/ci/mkdocs-build.sh
+          bash scripts/ci/terraform-validate.sh
+          bash scripts/ci/kubeconform.sh
+          bash scripts/ci/reuse-lint.sh
+          npm ci --prefix tools/spectral --ignore-scripts --no-audit --no-fund
+          scripts/ci/spectral-default-test.sh
           if [ -f examples/full/openapi.yaml ]; then
-            npm ci --prefix tools/spectral --no-audit --no-fund
+            tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral/oas.yaml --fail-severity warn
             tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
           fi
 
       - name: API compatibility against the previous tag
         run: |
           set -euo pipefail
-          previous_tag=$(git describe --tags --abbrev=0 HEAD^1 2>/dev/null || true)
+          previous_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' HEAD^1 2>/dev/null || true)
           if [ -z "$previous_tag" ]; then
             echo "No previous tag found; skipping apidiff for the first release."
             exit 0
           fi
 
-          go install golang.org/x/exp/cmd/apidiff@v0.0.0-20250218142911-aa4b98e5adaa
-          apidiff_bin="$(go env GOPATH)/bin/apidiff"
+          . tools/tool-versions.env
+          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+          apidiff_bin="$(go env GOPATH)/bin/go-apidiff"
           test -x "$apidiff_bin"
-          module=github.com/golusoris/golusoris
-          previous_worktree=$(mktemp -d /tmp/golusoris-apidiff.XXXXXX)
-          rmdir "$previous_worktree"
-          trap 'git worktree remove "$previous_worktree" --force >/dev/null 2>&1 || true' EXIT
-
-          "$apidiff_bin" -m -w /tmp/current-api.txt "$module"
-          git worktree add -q --detach "$previous_worktree" "$previous_tag"
-          (
-            cd "$previous_worktree"
-            go mod download
-            "$apidiff_bin" -m -w /tmp/previous-api.txt "$module"
-          )
-          "$apidiff_bin" /tmp/previous-api.txt /tmp/current-api.txt || true
+          GO_APIDIFF_BIN="$apidiff_bin" scripts/ci/go-apidiff.sh "$previous_tag" HEAD

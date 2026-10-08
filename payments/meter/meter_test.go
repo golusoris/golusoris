@@ -9,11 +9,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/payments/meter"
 )
+
+func TestNewRecorderHandlesTypedNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	t.Run("store", func(t *testing.T) {
+		t.Parallel()
+		var store *meter.MemoryStore
+		recorder := meter.NewRecorder(store, clock.NewFake(), nil)
+		err := recorder.Record(t.Context(), meter.Event{ID: "event", CustomerID: "customer", Meter: "usage"})
+		require.Error(t, err)
+	})
+
+	t.Run("clock", func(t *testing.T) {
+		t.Parallel()
+		var clk *clockwork.FakeClock
+		recorder := meter.NewRecorder(meter.NewMemoryStore(), clk, nil)
+		err := recorder.Record(t.Context(), meter.Event{ID: "event", CustomerID: "customer", Meter: "usage"})
+		require.NoError(t, err)
+	})
+}
 
 func TestRecord_Idempotent(t *testing.T) {
 	t.Parallel()

@@ -130,7 +130,9 @@ func oneShotRunE(o *cmdOptions) func(*cobra.Command, []string) error {
 func Command(use, short string, opts ...Option) *cobra.Command {
 	o := &cmdOptions{}
 	for _, opt := range opts {
-		opt(o)
+		if opt != nil {
+			opt(o)
+		}
 	}
 
 	cmd := &cobra.Command{Use: use, Short: short, SilenceUsage: true}

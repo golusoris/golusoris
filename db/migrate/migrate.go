@@ -135,6 +135,9 @@ func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, e
 	if dsn == "" {
 		return nil, errors.New("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
 	}
+	if logger == nil {
+		return nil, errors.New("db/migrate: nil logger")
+	}
 	dbURL, err := pgxToMigrateURL(dsn)
 	if err != nil {
 		return nil, err
@@ -157,13 +160,17 @@ func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, e
 		if path == "" {
 			path = "migrations"
 		}
-		m, err = migrate.New("file://"+path, dbURL)
+		m, err = migrate.New(fileSourceURL(path), dbURL)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("db/migrate: open: %w", err)
 	}
 
 	return &Migrator{m: m, logger: logger}, nil
+}
+
+func fileSourceURL(path string) string {
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
 // pgxToMigrateURL rewrites a pgx-style DSN ("postgres://...") into the

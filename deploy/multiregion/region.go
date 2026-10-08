@@ -13,14 +13,24 @@ import (
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ecs"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lb"
+	"github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 // regionConfig parameterizes one region's app stack.
 type regionConfig struct {
-	Region string
-	Image  string
-	Port   int
+	Region         string
+	Image          string
+	Port           int
+	DBDSN          pulumi.StringInput
+	CertificateARN string
+}
+
+// regionNetwork is the VPC placement shared by the app and its regional Aurora cluster.
+type regionNetwork struct {
+	VPC            *ec2.Vpc
+	PublicSubnets  []*ec2.Subnet
+	PrivateSubnets []*ec2.Subnet
 }
 
 // regionStack is the per-region app + ALB; reused for both primary and secondary.
@@ -28,6 +38,30 @@ type regionStack struct {
 	ALBDNS  pulumi.StringOutput
 	ALBZone pulumi.StringOutput
 }
+
+// regionFrontend keeps the ALB association edge required before ECS service creation.
+type regionFrontend struct {
+	LoadBalancer *lb.LoadBalancer
+	TargetGroup  *lb.TargetGroup
+	Listener     *lb.Listener
+}
+
+// regionSecret keeps the secret version in the task-definition dependency graph.
+type regionSecret struct {
+	Secret  *secretsmanager.Secret
+	Version *secretsmanager.SecretVersion
+}
+
+// regionExecutionRole keeps both resources required before ECS can use the role.
+type regionExecutionRole struct {
+	Role          *iam.Role
+	ManagedPolicy *iam.RolePolicyAttachment
+}
+
+const (
+	regionALBTLSPolicy = "ELBSecurityPolicy-TLS13-1-2-Res-PQ-2025-09"
+	regionALBHSTS      = "max-age=31536000; includeSubDomains; preload"
+)
 
 // regionAZs pins the two AZ letters per region for the 2-public-subnet layout.
 var regionAZs = []string{"a", "b"}
@@ -37,38 +71,36 @@ func newRegionStack(
 	ctx *pulumi.Context,
 	name string,
 	prov *aws.Provider,
+	net *regionNetwork,
 	cfg regionConfig,
 ) (*regionStack, error) {
 	opt := pulumi.Provider(prov)
 
-	vpc, subnets, err := newRegionNetwork(ctx, name, cfg.Region, opt)
+	albSG, taskSG, err := newRegionSecurityGroups(ctx, name, net.VPC, cfg.Port, opt)
 	if err != nil {
 		return nil, err
 	}
 
-	albSG, taskSG, err := newRegionSecurityGroups(ctx, name, vpc, cfg.Port, opt)
+	front, err := newRegionFrontend(
+		ctx, name, net.VPC, net.PublicSubnets, albSG, cfg.Port, cfg.CertificateARN, opt,
+	)
 	if err != nil {
 		return nil, err
 	}
 
-	alb, tg, err := newRegionFrontend(ctx, name, vpc, subnets, albSG, cfg.Port, opt)
-	if err != nil {
+	if err = newRegionService(ctx, name, net.PublicSubnets, taskSG, front, cfg, opt); err != nil {
 		return nil, err
 	}
 
-	if err = newRegionService(ctx, name, subnets, taskSG, tg, cfg, opt); err != nil {
-		return nil, err
-	}
-
-	return &regionStack{ALBDNS: alb.DnsName, ALBZone: alb.ZoneId}, nil
+	return &regionStack{ALBDNS: front.LoadBalancer.DnsName, ALBZone: front.LoadBalancer.ZoneId}, nil
 }
 
-// newRegionNetwork builds a VPC with 2 internet-facing public subnets + an IGW route.
+// newRegionNetwork builds separate public app and private database subnet tiers.
 func newRegionNetwork(
 	ctx *pulumi.Context,
 	name, region string,
 	opt pulumi.ResourceOption,
-) (*ec2.Vpc, []*ec2.Subnet, error) {
+) (*regionNetwork, error) {
 	vpc, err := ec2.NewVpc(ctx, name+"-vpc", &ec2.VpcArgs{
 		CidrBlock:          pulumi.String("10.0.0.0/16"),
 		EnableDnsHostnames: pulumi.Bool(true),
@@ -76,7 +108,7 @@ func newRegionNetwork(
 		Tags:               pulumi.StringMap{"Name": pulumi.String(name + "-vpc")},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create vpc %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create vpc %s: %w", name, err)
 	}
 
 	igw, err := ec2.NewInternetGateway(ctx, name+"-igw", &ec2.InternetGatewayArgs{
@@ -84,54 +116,86 @@ func newRegionNetwork(
 		Tags:  pulumi.StringMap{"Name": pulumi.String(name + "-igw")},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create igw %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create igw %s: %w", name, err)
 	}
 
-	rt, err := ec2.NewRouteTable(ctx, name+"-rt", &ec2.RouteTableArgs{
-		VpcId: vpc.ID(),
-		Routes: ec2.RouteTableRouteArray{ec2.RouteTableRouteArgs{
+	publicRT, err := newRegionRouteTable(ctx, name+"-public", vpc, ec2.RouteTableRouteArray{
+		ec2.RouteTableRouteArgs{
 			CidrBlock: pulumi.String("0.0.0.0/0"),
 			GatewayId: igw.ID(),
-		}},
-		Tags: pulumi.StringMap{"Name": pulumi.String(name + "-rt")},
+		},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create route table %s: %w", name, err)
+		return nil, err
 	}
-
-	subnets, err := newRegionSubnets(ctx, name, region, vpc, rt, opt)
+	privateRT, err := newRegionRouteTable(ctx, name+"-private", vpc, nil, opt)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return vpc, subnets, nil
+	publicSubnets, err := newRegionSubnets(ctx, name, region, "public", 0, true, vpc, publicRT, opt)
+	if err != nil {
+		return nil, err
+	}
+	privateSubnets, err := newRegionSubnets(ctx, name, region, "private", 10, false, vpc, privateRT, opt)
+	if err != nil {
+		return nil, err
+	}
+	return &regionNetwork{
+		VPC:            vpc,
+		PublicSubnets:  publicSubnets,
+		PrivateSubnets: privateSubnets,
+	}, nil
 }
 
-// newRegionSubnets creates the 2 public subnets and binds each to the public route table.
+// newRegionRouteTable creates one explicitly managed regional route table.
+func newRegionRouteTable(
+	ctx *pulumi.Context,
+	name string,
+	vpc *ec2.Vpc,
+	routes ec2.RouteTableRouteArray,
+	opt pulumi.ResourceOption,
+) (*ec2.RouteTable, error) {
+	rt, err := ec2.NewRouteTable(ctx, name+"-rt", &ec2.RouteTableArgs{
+		VpcId:  vpc.ID(),
+		Routes: routes,
+		Tags:   pulumi.StringMap{"Name": pulumi.String(name + "-rt")},
+	}, opt)
+	if err != nil {
+		return nil, fmt.Errorf("pulumi: create route table %s: %w", name, err)
+	}
+	return rt, nil
+}
+
+// newRegionSubnets creates one two-AZ subnet tier and binds its route table.
 func newRegionSubnets(
 	ctx *pulumi.Context,
 	name, region string,
+	kind string,
+	cidrOffset int,
+	mapPublicIP bool,
 	vpc *ec2.Vpc,
 	rt *ec2.RouteTable,
 	opt pulumi.ResourceOption,
 ) ([]*ec2.Subnet, error) {
 	subnets := make([]*ec2.Subnet, 0, len(regionAZs))
 	for i, az := range regionAZs {
-		sn, err := ec2.NewSubnet(ctx, fmt.Sprintf("%s-public-%s", name, az), &ec2.SubnetArgs{
+		subnetName := fmt.Sprintf("%s-%s-%s", name, kind, az)
+		sn, err := ec2.NewSubnet(ctx, subnetName, &ec2.SubnetArgs{
 			VpcId:               vpc.ID(),
-			CidrBlock:           pulumi.String(fmt.Sprintf("10.0.%d.0/24", i)),
+			CidrBlock:           pulumi.String(fmt.Sprintf("10.0.%d.0/24", i+cidrOffset)),
 			AvailabilityZone:    pulumi.String(region + az),
-			MapPublicIpOnLaunch: pulumi.Bool(true),
-			Tags:                pulumi.StringMap{"Name": pulumi.String(fmt.Sprintf("%s-public-%s", name, az))},
+			MapPublicIpOnLaunch: pulumi.Bool(mapPublicIP),
+			Tags:                pulumi.StringMap{"Name": pulumi.String(subnetName)},
 		}, opt)
 		if err != nil {
-			return nil, fmt.Errorf("pulumi: create subnet %s-%s: %w", name, az, err)
+			return nil, fmt.Errorf("pulumi: create subnet %s: %w", subnetName, err)
 		}
-		_, err = ec2.NewRouteTableAssociation(ctx, fmt.Sprintf("%s-rta-%s", name, az), &ec2.RouteTableAssociationArgs{
+		_, err = ec2.NewRouteTableAssociation(ctx, subnetName+"-rta", &ec2.RouteTableAssociationArgs{
 			SubnetId:     sn.ID(),
 			RouteTableId: rt.ID(),
 		}, opt)
 		if err != nil {
-			return nil, fmt.Errorf("pulumi: associate subnet %s-%s: %w", name, az, err)
+			return nil, fmt.Errorf("pulumi: associate subnet %s: %w", subnetName, err)
 		}
 		subnets = append(subnets, sn)
 	}
@@ -147,7 +211,7 @@ func subnetIDs(subnets []*ec2.Subnet) pulumi.StringArray {
 	return ids
 }
 
-// newRegionSecurityGroups returns (alb-sg open to internet on :80, task-sg open to the alb on app port).
+// newRegionSecurityGroups returns (alb-sg open to internet on :443, task-sg open to the alb on app port).
 func newRegionSecurityGroups(
 	ctx *pulumi.Context,
 	name string,
@@ -160,8 +224,8 @@ func newRegionSecurityGroups(
 		Description: pulumi.String("golusoris alb ingress from internet"),
 		Ingress: ec2.SecurityGroupIngressArray{ec2.SecurityGroupIngressArgs{
 			Protocol:   pulumi.String("tcp"),
-			FromPort:   pulumi.Int(80),
-			ToPort:     pulumi.Int(80),
+			FromPort:   pulumi.Int(443),
+			ToPort:     pulumi.Int(443),
 			CidrBlocks: pulumi.StringArray{pulumi.String("0.0.0.0/0")},
 		}},
 		Egress: ec2.SecurityGroupEgressArray{anyEgress()},
@@ -207,8 +271,9 @@ func newRegionFrontend(
 	subnets []*ec2.Subnet,
 	albSG *ec2.SecurityGroup,
 	port int,
+	certificateARN string,
 	opt pulumi.ResourceOption,
-) (*lb.LoadBalancer, *lb.TargetGroup, error) {
+) (*regionFrontend, error) {
 	alb, err := lb.NewLoadBalancer(ctx, name+"-alb", &lb.LoadBalancerArgs{
 		LoadBalancerType: pulumi.String("application"),
 		Internal:         pulumi.Bool(false),
@@ -217,7 +282,7 @@ func newRegionFrontend(
 		Tags:             pulumi.StringMap{"Name": pulumi.String(name + "-alb")},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create alb %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create alb %s: %w", name, err)
 	}
 
 	tg, err := lb.NewTargetGroup(ctx, name+"-tg", &lb.TargetGroupArgs{
@@ -234,22 +299,25 @@ func newRegionFrontend(
 		Tags: pulumi.StringMap{"Name": pulumi.String(name + "-tg")},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create target group %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create target group %s: %w", name, err)
 	}
 
-	_, err = lb.NewListener(ctx, name+"-listener", &lb.ListenerArgs{
+	listener, err := lb.NewListener(ctx, name+"-listener", &lb.ListenerArgs{
 		LoadBalancerArn: alb.Arn,
-		Port:            pulumi.Int(80),
-		Protocol:        pulumi.String("HTTP"),
+		Port:            pulumi.Int(443),
+		Protocol:        pulumi.String("HTTPS"),
+		CertificateArn:  pulumi.String(certificateARN),
+		SslPolicy:       pulumi.String(regionALBTLSPolicy),
+		RoutingHttpResponseStrictTransportSecurityHeaderValue: pulumi.String(regionALBHSTS),
 		DefaultActions: lb.ListenerDefaultActionArray{lb.ListenerDefaultActionArgs{
 			Type:           pulumi.String("forward"),
 			TargetGroupArn: tg.Arn,
 		}},
 	}, opt)
 	if err != nil {
-		return nil, nil, fmt.Errorf("pulumi: create listener %s: %w", name, err)
+		return nil, fmt.Errorf("pulumi: create listener %s: %w", name, err)
 	}
-	return alb, tg, nil
+	return &regionFrontend{LoadBalancer: alb, TargetGroup: tg, Listener: listener}, nil
 }
 
 // newRegionService runs the app on Fargate (rootless, read-only FS) registered with the ALB.
@@ -258,7 +326,7 @@ func newRegionService(
 	name string,
 	subnets []*ec2.Subnet,
 	taskSG *ec2.SecurityGroup,
-	tg *lb.TargetGroup,
+	front *regionFrontend,
 	cfg regionConfig,
 	opt pulumi.ResourceOption,
 ) error {
@@ -274,7 +342,7 @@ func newRegionService(
 		return fmt.Errorf("pulumi: create cluster %s: %w", name, err)
 	}
 
-	return newRegionFargateService(ctx, name, subnets, taskSG, tg, cfg, taskDef, cluster, opt)
+	return newRegionFargateService(ctx, name, subnets, taskSG, front, cfg, taskDef, cluster, opt)
 }
 
 // newRegionTaskDefinition builds the Fargate task definition (rootless ARM64,
@@ -290,10 +358,18 @@ func newRegionTaskDefinition(
 		return nil, err
 	}
 
-	containers, err := regionContainer(name, cfg)
+	dsn, err := newRegionSecret(ctx, name+"-dsn", cfg.DBDSN, opt)
 	if err != nil {
 		return nil, err
 	}
+	secretPolicy, err := grantRegionSecretRead(ctx, name, execRole.Role, dsn.Secret, opt)
+	if err != nil {
+		return nil, err
+	}
+
+	containers := dsn.Secret.Arn.ApplyT(func(arn string) (string, error) {
+		return regionContainer(name, cfg, arn)
+	}).(pulumi.StringOutput)
 
 	taskDef, err := ecs.NewTaskDefinition(ctx, name+"-task", &ecs.TaskDefinitionArgs{
 		Family:                  pulumi.String(name),
@@ -301,14 +377,14 @@ func newRegionTaskDefinition(
 		Memory:                  pulumi.String("512"),
 		NetworkMode:             pulumi.String("awsvpc"),
 		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-		ExecutionRoleArn:        execRole.Arn,
+		ExecutionRoleArn:        execRole.Role.Arn,
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
 			OperatingSystemFamily: pulumi.String("LINUX"),
 			CpuArchitecture:       pulumi.String("ARM64"),
 		},
-		ContainerDefinitions: pulumi.String(containers),
+		ContainerDefinitions: containers,
 		Tags:                 pulumi.StringMap{"Name": pulumi.String(name + "-task")},
-	}, opt)
+	}, opt, pulumi.DependsOn([]pulumi.Resource{dsn.Version, execRole.ManagedPolicy, secretPolicy}))
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create task definition %s: %w", name, err)
 	}
@@ -322,7 +398,7 @@ func newRegionFargateService(
 	name string,
 	subnets []*ec2.Subnet,
 	taskSG *ec2.SecurityGroup,
-	tg *lb.TargetGroup,
+	front *regionFrontend,
 	cfg regionConfig,
 	taskDef *ecs.TaskDefinition,
 	cluster *ecs.Cluster,
@@ -339,24 +415,24 @@ func newRegionFargateService(
 			AssignPublicIp: pulumi.Bool(true),
 		},
 		LoadBalancers: ecs.ServiceLoadBalancerArray{ecs.ServiceLoadBalancerArgs{
-			TargetGroupArn: tg.Arn,
+			TargetGroupArn: front.TargetGroup.Arn,
 			ContainerName:  pulumi.String(name),
 			ContainerPort:  pulumi.Int(cfg.Port),
 		}},
 		Tags: pulumi.StringMap{"Name": pulumi.String(name + "-svc")},
-	}, opt)
+	}, opt, pulumi.DependsOn([]pulumi.Resource{front.Listener}))
 	if err != nil {
 		return fmt.Errorf("pulumi: create service %s: %w", name, err)
 	}
 	return nil
 }
 
-// newRegionExecRole creates the ECS task execution role (image pull + log write) in-region.
+// newRegionExecRole creates the ECS task execution role and its managed policy attachment.
 func newRegionExecRole(
 	ctx *pulumi.Context,
 	name string,
 	opt pulumi.ResourceOption,
-) (*iam.Role, error) {
+) (*regionExecutionRole, error) {
 	role, err := iam.NewRole(ctx, name+"-exec-role", &iam.RoleArgs{
 		AssumeRolePolicy: pulumi.String(ecsAssumeRolePolicy),
 		Tags:             pulumi.StringMap{"Name": pulumi.String(name + "-exec-role")},
@@ -364,18 +440,79 @@ func newRegionExecRole(
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: create exec role %s: %w", name, err)
 	}
-	_, err = iam.NewRolePolicyAttachment(ctx, name+"-exec-attach", &iam.RolePolicyAttachmentArgs{
+	managedPolicy, err := iam.NewRolePolicyAttachment(ctx, name+"-exec-attach", &iam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"),
 	}, opt)
 	if err != nil {
 		return nil, fmt.Errorf("pulumi: attach exec policy %s: %w", name, err)
 	}
-	return role, nil
+	return &regionExecutionRole{Role: role, ManagedPolicy: managedPolicy}, nil
+}
+
+// newRegionSecret stores a regional Aurora DSN for ECS secret injection.
+func newRegionSecret(
+	ctx *pulumi.Context,
+	name string,
+	value pulumi.StringInput,
+	opt pulumi.ResourceOption,
+) (*regionSecret, error) {
+	secret, err := secretsmanager.NewSecret(ctx, name, &secretsmanager.SecretArgs{
+		NamePrefix:           pulumi.String(name + "-"),
+		RecoveryWindowInDays: pulumi.Int(0),
+		Tags:                 pulumi.StringMap{"Name": pulumi.String(name)},
+	}, opt)
+	if err != nil {
+		return nil, fmt.Errorf("pulumi: create secret %s: %w", name, err)
+	}
+	version, err := secretsmanager.NewSecretVersion(ctx, name+"-v", &secretsmanager.SecretVersionArgs{
+		SecretId:     secret.ID(),
+		SecretString: value,
+	}, opt)
+	if err != nil {
+		return nil, fmt.Errorf("pulumi: create secret version %s: %w", name, err)
+	}
+	return &regionSecret{Secret: secret, Version: version}, nil
+}
+
+// grantRegionSecretRead lets the ECS execution role resolve the regional DSN.
+func grantRegionSecretRead(
+	ctx *pulumi.Context,
+	name string,
+	role *iam.Role,
+	dsn *secretsmanager.Secret,
+	opt pulumi.ResourceOption,
+) (*iam.RolePolicy, error) {
+	policy := dsn.Arn.ApplyT(regionSecretReadPolicy).(pulumi.StringOutput)
+	rolePolicy, err := iam.NewRolePolicy(ctx, name+"-secret-read", &iam.RolePolicyArgs{
+		Role:   role.ID(),
+		Policy: policy,
+	}, opt)
+	if err != nil {
+		return nil, fmt.Errorf("pulumi: attach secret-read policy %s: %w", name, err)
+	}
+	return rolePolicy, nil
+}
+
+// regionSecretReadPolicy grants only the secret read needed at task start.
+func regionSecretReadPolicy(dsnARN string) (string, error) {
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []map[string]any{{
+			"Effect":   "Allow",
+			"Action":   []string{"secretsmanager:GetSecretValue"},
+			"Resource": []string{dsnARN},
+		}},
+	}
+	b, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("pulumi: marshal secret-read policy: %w", err)
+	}
+	return string(b), nil
 }
 
 // regionContainer renders the single-container JSON ECS expects (rootless, read-only FS).
-func regionContainer(name string, cfg regionConfig) (string, error) {
+func regionContainer(name string, cfg regionConfig, dsnARN string) (string, error) {
 	def := []map[string]any{{
 		"name":                   name,
 		"image":                  cfg.Image,
@@ -385,6 +522,9 @@ func regionContainer(name string, cfg regionConfig) (string, error) {
 		"portMappings":           []map[string]any{{"containerPort": cfg.Port, "protocol": "tcp"}},
 		"environment": []map[string]any{
 			{"name": "APP_HTTP_ADDR", "value": fmt.Sprintf(":%d", cfg.Port)},
+		},
+		"secrets": []map[string]any{
+			{"name": "APP_DB_DSN", "valueFrom": dsnARN},
 		},
 	}}
 	b, err := json.Marshal(def)

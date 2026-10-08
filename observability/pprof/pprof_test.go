@@ -54,3 +54,24 @@ func TestAuthRequiredWhenSet(t *testing.T) {
 		t.Errorf("wrong-pass status = %d", rr.Code)
 	}
 }
+
+func TestPartialCredentialsFailClosed(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		opts pprof.Options
+	}{
+		{name: "missing password", opts: pprof.Options{User: "admin"}},
+		{name: "missing user", opts: pprof.Options{Password: "s3cret"}},
+	}
+	for _, test := range tests {
+		h := pprof.Handler(test.opts)
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.SetBasicAuth(test.opts.User, test.opts.Password)
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusUnauthorized {
+			t.Errorf("%s returned %d, want 401", test.name, rr.Code)
+		}
+	}
+}

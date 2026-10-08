@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go.opentelemetry.io/otel — v1.35.0 snapshot
+# go.opentelemetry.io/otel — v1.46.0 snapshot
 
-Pinned: **v1.35.0** (semconv: v1.26.0)
-Source: https://pkg.go.dev/go.opentelemetry.io/otel@v1.35.0
+Pinned: **v1.46.0** (semconv API: **v1.26.0**)
+Source: [tagged source](https://github.com/open-telemetry/opentelemetry-go/tree/v1.46.0)
 
 ## Tracer
 
@@ -31,12 +31,18 @@ import "go.opentelemetry.io/otel/metric"
 
 meter := otel.Meter("github.com/golusoris/golusoris/mypackage")
 
-counter, _ := meter.Int64Counter("requests_total",
+counter, err := meter.Int64Counter("requests_total",
     metric.WithDescription("Total requests"),
     metric.WithUnit("{request}"))
+if err != nil {
+    return fmt.Errorf("create request counter: %w", err)
+}
 counter.Add(ctx, 1, metric.WithAttributes(attribute.String("method", "GET")))
 
-histogram, _ := meter.Float64Histogram("request_duration_seconds")
+histogram, err := meter.Float64Histogram("request_duration_seconds")
+if err != nil {
+    return fmt.Errorf("create request histogram: %w", err)
+}
 histogram.Record(ctx, duration.Seconds())
 ```
 
@@ -48,7 +54,10 @@ import (
     "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 )
 
-exp, _ := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint("localhost:4317"))
+exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint("localhost:4317"))
+if err != nil {
+    return fmt.Errorf("create OTLP trace exporter: %w", err)
+}
 tp := trace.NewTracerProvider(
     trace.WithBatcher(exp),
     trace.WithResource(resource.NewWithAttributes(
@@ -59,6 +68,9 @@ tp := trace.NewTracerProvider(
 )
 otel.SetTracerProvider(tp)
 ```
+
+Own `tp.Shutdown(ctx)` in an Fx lifecycle hook so queued spans are flushed on
+shutdown.
 
 ## Semantic conventions (v1.26)
 
@@ -91,11 +103,13 @@ ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(req.Hea
 
 ## golusoris usage
 
-- `otel/` — SDK init + OTLP exporter provided via fx; sets global tracer + meter providers.
-- `log/` — OTel log bridge via `go.opentelemetry.io/contrib/bridges/otelslog`.
+- `otel/` — SDK initialization and OTLP exporter provided via Fx; sets global
+  tracer and meter providers.
+- `core/log/` — slog factory; `otel.ModuleWithSlogBridge` installs the OTel
+  bridge via `go.opentelemetry.io/contrib/bridges/otelslog`.
 
 ## Links
 
-- Spec: https://opentelemetry.io/docs/specs/otel/
-- Semconv v1.26: https://opentelemetry.io/docs/specs/semconv/
-- Changelog: https://github.com/open-telemetry/opentelemetry-go/blob/main/CHANGELOG.md
+- [OpenTelemetry specification](https://opentelemetry.io/docs/specs/otel/)
+- [Semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
+- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/CHANGELOG.md)

@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — clikit/
 
-Cobra + fx-aware CLI builder. Wires cobra sub-commands into the fx lifecycle
+Cobra + fx-aware CLI builder. Wires cobra sub-commands into fx lifecycle
 so long-running commands call `app.Run()` naturally while one-shot commands
 skip fx entirely.
 
@@ -55,5 +55,5 @@ clikit.Command("migrate", "Run DB migrations",
 
 ## Don't
 
-- Don't call `os.Exit` inside `WithRunE` — return an error instead.
-- Don't mix `WithFx` and `WithRunE` on the same command (WithRunE takes precedence).
+- Don't call `os.Exit` inside `WithRunE` — return error instead.
+- Don't mix `WithFx` and `WithRunE` on same command (WithRunE takes precedence).

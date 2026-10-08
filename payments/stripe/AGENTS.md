@@ -19,7 +19,7 @@ fx.New(stripe.Module) // requires "payments.stripe.secret_key" in config
 Config keys (koanf prefix `payments.stripe`):
 
 | Key | Purpose |
-|---|---|
+| --- | --- |
 | `secret_key` | Stripe secret API key (`sk_live_…` or `sk_test_…`) |
 | `webhook_secret` | Webhook endpoint secret (used by `webhooks/in.Stripe`) |
 
@@ -53,6 +53,6 @@ pi, err := client.CreatePaymentIntent(ctx, 999, "usd", "cus_xxx")
 
 ## Don't
 
-- Don't log `pi.ClientSecret` — it grants access to the payment method.
-- Don't hardcode the secret key — always use env vars / `secrets/`.
+- Don't log `pi.ClientSecret` — it grants access to payment method.
+- Don't hardcode secret key — always use env vars / `secrets/`.
 - Don't call Stripe APIs in hot paths without timeouts.

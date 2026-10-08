@@ -15,6 +15,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/storage"
 )
@@ -24,12 +25,23 @@ import (
 // missing key to storage.ErrNotFound, which the handler turns into a 404.
 type bucketSource struct{ b storage.Bucket }
 
+var _ Source = bucketSource{}
+
 func (s bucketSource) Get(ctx context.Context, key string) (io.ReadCloser, error) {
 	rc, _, err := s.b.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("pipeline: bucket get: %w", err)
 	}
 	return rc, nil
+}
+
+// SourceFromBucket adapts bucket to the narrow [Source] accepted by [New]. It
+// returns nil for a nil bucket so New reports [ErrInvalidDependency].
+func SourceFromBucket(bucket storage.Bucket) Source {
+	if validate.IsNil(bucket) {
+		return nil
+	}
+	return bucketSource{b: bucket}
 }
 
 // loadOptions unmarshals the "media.img.pipeline" config prefix into Options.
@@ -41,31 +53,9 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts, nil
 }
 
-// newProcessor constructs the media/img processor. On a runner without libvips
-// this returns the CGO stub whose operations yield img.ErrCGORequired; the
-// pipeline still builds and serves signing/validation, surfacing a 415 on
-// resize. The processor is closed on fx stop.
-func newProcessor(lc fx.Lifecycle, log *slog.Logger) (img.Processor, error) {
-	proc, err := img.NewProcessor(img.Options{})
-	if err != nil {
-		// A missing CGO backend is not fatal at wiring time: keep the stub so
-		// the rest of the graph (signing, routing) stays available.
-		log.Warn("pipeline: image processor unavailable; resize will 415",
-			slog.String("err", err.Error()))
-		return proc, nil
-	}
-	lc.Append(fx.Hook{
-		OnStop: func(_ context.Context) error {
-			proc.Close()
-			return nil
-		},
-	})
-	return proc, nil
-}
-
 // newPipeline is the fx constructor for *Pipeline.
 func newPipeline(opts Options, proc img.Processor, b storage.Bucket, clk clock.Clock, log *slog.Logger) (*Pipeline, error) {
-	return New(opts, proc, bucketSource{b: b}, clk, log)
+	return New(opts, proc, SourceFromBucket(b), clk, log)
 }
 
 // Module provides *Pipeline to the fx graph and a named "media.img.pipeline"
@@ -80,11 +70,12 @@ func newPipeline(opts Options, proc img.Processor, b storage.Bucket, clk clock.C
 //	    pipeline.Module,       // provides *pipeline.Pipeline + the handler
 //	)
 //
-// Config keys live under the "media.img.pipeline" prefix; Secret is required.
+// Config keys live under the "media.img.pipeline" prefix; Secret and an
+// application-provided img.Processor are required. The provider that owns the
+// processor also owns its lifecycle.
 var Module = fx.Module(
 	"golusoris.media.img.pipeline",
 	fx.Provide(loadOptions),
-	fx.Provide(newProcessor),
 	fx.Provide(newPipeline),
 	fx.Provide(
 		fx.Annotate(

@@ -4,59 +4,68 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# maypok86/otter/v2 — v2.2.0 snapshot
+# maypok86/otter/v2 — v2.3.0 snapshot
 
-Pinned: **v2.2.0**
-Source: https://pkg.go.dev/github.com/maypok86/otter/v2@v2.2.0
+Pinned: **v2.3.0**
+Source: [tagged source](https://github.com/maypok86/otter/tree/v2.3.0)
 
 ## Building a cache
 
 ```go
-import "github.com/maypok86/otter/v2"
+import (
+    "github.com/maypok86/otter/v2"
+    "github.com/maypok86/otter/v2/stats"
+)
 
-c, err := otter.MustBuilder[string, User](10_000).
-    TTL(5 * time.Minute).
-    Build()
+c, err := otter.New(&otter.Options[string, User]{
+    MaximumSize:      10_000,
+    ExpiryCalculator: otter.ExpiryWriting[string, User](5 * time.Minute),
+    StatsRecorder:    stats.NewCounter(),
+})
 ```
 
 ## Operations
 
 ```go
-// Set
-c.Set("user:42", user)
-c.SetWithTTL("user:42", user, 30*time.Second)
+// Set; update this entry's configured expiry when needed.
+previous, replaced := c.Set("user:42", user)
+c.SetExpiresAfter("user:42", 30*time.Second)
 
-// Get
-val, ok := c.Get("user:42")
+// Cache-only lookup. Get is the loader-oriented operation.
+val, ok := c.GetIfPresent("user:42")
 
-// Delete
-c.Delete("user:42")
+// Invalidate
+value, invalidated := c.Invalidate("user:42")
 
-// Clear
-c.Clear()
+// Invalidate all entries
+c.InvalidateAll()
 
-// Close (stop background goroutines)
-c.Close()
+// Terminal shutdown for cache-owned goroutines
+stopped := c.StopAllGoroutines()
 ```
 
 ## Stats
 
 ```go
 stats := c.Stats()
-stats.Hits()
-stats.Misses()
-stats.Ratio()
+stats.Hits
+stats.Misses
+stats.HitRatio()
+stats.MissRatio()
 ```
 
 ## golusoris usage
 
-- `cache/memory/` — typed `*otter.Cache[K, V]` provided via fx; capacity + TTL from config.
+- `cache/memory/` — typed `*otter.Cache[K, V]` provided via Fx; capacity and
+  TTL come from configuration.
 
 ## Notes
 
-- Otter uses the S3-FIFO eviction algorithm. No `sync.Map` or mutex per entry.
-- `MustBuilder` panics on invalid config — use in `fx.Provide` (startup phase only).
+- Otter v2 uses adaptive W-TinyLFU admission and eviction.
+- Prefer `otter.New` in constructors so invalid options fail Fx startup cleanly.
+  `otter.Must` panics on invalid options and is appropriate only for static,
+  already-validated configuration.
 
 ## Links
 
-- Changelog: https://github.com/maypok86/otter/blob/main/CHANGELOG.md
+- [Changelog](https://github.com/maypok86/otter/blob/v2.3.0/CHANGELOG.md)

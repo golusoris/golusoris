@@ -16,6 +16,15 @@ import (
 	"github.com/golusoris/golusoris/core/gitx/worktree"
 )
 
+func TestNewIgnoresNilOption(t *testing.T) {
+	t.Parallel()
+	manager := worktree.New("/tmp/repository", nil)
+	// New cleans the root with filepath.Clean, which uses \ on Windows.
+	if want := filepath.Clean("/tmp/repository"); manager.Root() != want {
+		t.Fatalf("Root = %q, want %q", manager.Root(), want)
+	}
+}
+
 func initRepo(t *testing.T) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {

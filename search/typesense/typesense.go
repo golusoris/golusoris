@@ -28,12 +28,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/search"
+)
+
+const (
+	defaultRequestTimeout   = 10 * time.Second
+	defaultMaxResponseBytes = 16 << 20
 )
 
 // Options configures the Typesense backend.
@@ -45,13 +52,16 @@ type Options struct {
 	APIKey string `koanf:"api_key"`
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// MaxResponseBytes caps decoded search responses. Zero defaults to 16 MiB.
+	MaxResponseBytes int64 `koanf:"max_response_bytes"`
 }
 
 // Backend implements [search.Backend].
 type Backend struct {
-	base string
-	key  string
-	hc   *http.Client
+	base             string
+	key              string
+	hc               *http.Client
+	maxResponseBytes int64
 }
 
 // NewBackend returns a Typesense backend.
@@ -62,11 +72,20 @@ func NewBackend(opts Options) (*Backend, error) {
 	if opts.APIKey == "" {
 		return nil, errors.New("search/typesense: api_key is required")
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
+	if opts.MaxResponseBytes < 0 {
+		return nil, errors.New("search/typesense: max_response_bytes must not be negative")
 	}
-	return &Backend{base: strings.TrimRight(opts.URL, "/"), key: opts.APIKey, hc: hc}, nil
+	maxResponseBytes := opts.MaxResponseBytes
+	if maxResponseBytes == 0 {
+		maxResponseBytes = defaultMaxResponseBytes
+	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, defaultRequestTimeout)
+	return &Backend{
+		base:             strings.TrimRight(opts.URL, "/"),
+		key:              opts.APIKey,
+		hc:               hc,
+		maxResponseBytes: maxResponseBytes,
+	}, nil
 }
 
 // CreateCollection implements [search.Indexer].
@@ -133,6 +152,44 @@ func (b *Backend) Index(ctx context.Context, collection string, docs []search.Do
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("search/typesense: import status %d: %s", resp.StatusCode, raw)
 	}
+	raw, readErr := httpclient.ReadAllBounded(resp.Body, b.maxResponseBytes)
+	if readErr != nil {
+		return fmt.Errorf("search/typesense: read import response: %w", readErr)
+	}
+	return validateImportResponse(raw, len(docs))
+}
+
+type importResult struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
+
+func validateImportResponse(raw []byte, expected int) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	count := 0
+	for count < expected {
+		var result importResult
+		if err := decoder.Decode(&result); err != nil {
+			if errors.Is(err, io.EOF) {
+				return fmt.Errorf("search/typesense: import returned %d results for %d documents", count, expected)
+			}
+			return fmt.Errorf("search/typesense: decode import result %d: %w", count, err)
+		}
+		index := count
+		count++
+		if !result.Success {
+			if result.Error == "" {
+				result.Error = "unspecified import failure"
+			}
+			return fmt.Errorf("search/typesense: import document %d: %s", index, result.Error)
+		}
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err == nil {
+		return fmt.Errorf("search/typesense: import returned more than %d results", expected)
+	} else if !errors.Is(err, io.EOF) {
+		return fmt.Errorf("search/typesense: decode import result %d: %w", count, err)
+	}
 	return nil
 }
 
@@ -149,7 +206,10 @@ func (b *Backend) Delete(ctx context.Context, collection string, ids []string) e
 
 // Search implements [search.Searcher].
 func (b *Backend) Search(ctx context.Context, collection string, q search.Query) (search.Results, error) {
-	v := buildSearchParams(q)
+	v, err := buildSearchParams(q)
+	if err != nil {
+		return search.Results{}, err
+	}
 
 	path := "/collections/" + url.PathEscape(collection) + "/documents/search?" + v.Encode()
 	var out typesenseSearchResponse
@@ -166,7 +226,7 @@ func (b *Backend) Search(ctx context.Context, collection string, q search.Query)
 
 // buildSearchParams translates a [search.Query] into Typesense's
 // documents/search query parameters.
-func buildSearchParams(q search.Query) url.Values {
+func buildSearchParams(q search.Query) (url.Values, error) {
 	v := url.Values{}
 	if q.Q == "" {
 		v.Set("q", "*")
@@ -183,7 +243,11 @@ func buildSearchParams(q search.Query) url.Values {
 	if q.RawFilter != "" {
 		v.Set("filter_by", q.RawFilter)
 	} else if len(q.Filters) > 0 {
-		v.Set("filter_by", filtersToTypesense(q.Filters))
+		filter, err := filtersToTypesense(q.Filters)
+		if err != nil {
+			return nil, err
+		}
+		v.Set("filter_by", filter)
 	}
 	if q.SortBy != "" {
 		v.Set("sort_by", q.SortBy)
@@ -195,7 +259,7 @@ func buildSearchParams(q search.Query) url.Values {
 		// Typesense uses page (1-indexed) not offset.
 		v.Set("page", strconv.Itoa(q.Offset/nonZero(q.Limit, 10)+1))
 	}
-	return v
+	return v, nil
 }
 
 // hitsFromTypesense converts Typesense's raw hit list into [search.Hit]s,
@@ -270,32 +334,53 @@ func (b *Backend) exec(req *http.Request, dst any) (err error) {
 		return fmt.Errorf("search/typesense: status %d: %s", resp.StatusCode, raw)
 	}
 	if dst != nil {
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, b.maxResponseBytes)
+		if readErr != nil {
+			return fmt.Errorf("search/typesense: read response: %w", readErr)
+		}
+		if err := json.Unmarshal(raw, dst); err != nil {
 			return fmt.Errorf("search/typesense: decode: %w", err)
 		}
 	}
 	return nil
 }
 
-func filtersToTypesense(f map[string]any) string {
-	parts := make([]string, 0, len(f))
-	for k, v := range f {
-		switch val := v.(type) {
-		case string:
-			parts = append(parts, k+":="+val)
-		case bool:
-			parts = append(parts, k+":="+strconv.FormatBool(val))
-		case int:
-			parts = append(parts, k+":="+strconv.Itoa(val))
-		case int64:
-			parts = append(parts, k+":="+strconv.FormatInt(val, 10))
-		case float64:
-			parts = append(parts, k+":="+strconv.FormatFloat(val, 'f', -1, 64))
-		default:
-			parts = append(parts, fmt.Sprintf("%s:=%v", k, v))
-		}
+func filtersToTypesense(filters map[string]any) (string, error) {
+	keys := make([]string, 0, len(filters))
+	for key := range filters {
+		keys = append(keys, key)
 	}
-	return strings.Join(parts, " && ")
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if !search.ValidFilterField(key) {
+			return "", fmt.Errorf("search/typesense: invalid filter field %q", key)
+		}
+		value, err := typesenseFilterValue(filters[key])
+		if err != nil {
+			return "", fmt.Errorf("search/typesense: filter %q: %w", key, err)
+		}
+		parts = append(parts, key+":="+value)
+	}
+	return strings.Join(parts, " && "), nil
+}
+
+func typesenseFilterValue(value any) (string, error) {
+	switch typed := value.(type) {
+	case string:
+		return "`" + strings.ReplaceAll(typed, "`", "\\`") + "`", nil
+	case bool:
+		return strconv.FormatBool(typed), nil
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprint(typed), nil
+	case float32:
+		return strconv.FormatFloat(float64(typed), 'f', -1, 32), nil
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64), nil
+	default:
+		return "", fmt.Errorf("unsupported value type %T", value)
+	}
 }
 
 func nonZero(a, fallback int) int {

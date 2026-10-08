@@ -7,6 +7,7 @@ package outbox_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"testing"
@@ -102,13 +103,81 @@ func TestAddRequiresKind(t *testing.T) {
 	}
 }
 
+func TestMarkDispatchedInUpdatesOnlyConfiguredRelation(t *testing.T) {
+	t.Parallel()
+	pool := pgtest.Start(t)
+	applyOutboxMigration(t, pool.Config().ConnConfig.ConnString())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `
+		CREATE SCHEMA "Tenant One";
+		CREATE TABLE "Tenant One"."Custom Outbox"
+			(LIKE public.golusoris_outbox INCLUDING ALL);
+		INSERT INTO public.golusoris_outbox (id, kind, payload)
+			VALUES (42, 'default', '{}'::jsonb);
+		INSERT INTO "Tenant One"."Custom Outbox" (id, kind, payload)
+			VALUES (42, 'custom', '{}'::jsonb)
+	`); err != nil {
+		t.Fatalf("seed colliding outbox rows: %v", err)
+	}
+	if err := outbox.MarkDispatchedIn(ctx, pool, "Tenant One", "Custom Outbox", 42); err != nil {
+		t.Fatalf("MarkDispatchedIn: %v", err)
+	}
+	var defaultMarked bool
+	var customMarked bool
+	if err := pool.QueryRow(ctx, `
+		SELECT
+			(SELECT dispatched_at IS NOT NULL FROM public.golusoris_outbox WHERE id = 42),
+			(SELECT dispatched_at IS NOT NULL FROM "Tenant One"."Custom Outbox" WHERE id = 42)
+	`).Scan(&defaultMarked, &customMarked); err != nil {
+		t.Fatalf("read dispatch markers: %v", err)
+	}
+	if defaultMarked || !customMarked {
+		t.Fatalf("dispatch markers default=%t custom=%t; want false,true", defaultMarked, customMarked)
+	}
+}
+
+func TestPendingAppliesFiniteLimitPolicy(t *testing.T) {
+	t.Parallel()
+	pool := pgtest.Start(t)
+	applyOutboxMigration(t, pool.Config().ConnConfig.ConnString())
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO golusoris_outbox (kind, payload)
+		SELECT 'event', '{}'::jsonb FROM generate_series(1, $1)
+	`, outbox.MaxPendingLimit+1); err != nil {
+		t.Fatalf("seed outbox: %v", err)
+	}
+
+	if events, err := outbox.Pending(ctx, pool, -1); !errors.Is(err, outbox.ErrInvalidPendingLimit) {
+		t.Fatalf("Pending(-1) events = %d, error = %v; want ErrInvalidPendingLimit", len(events), err)
+	}
+	events, err := outbox.Pending(ctx, pool, 0)
+	if err != nil {
+		t.Fatalf("Pending(0): %v", err)
+	}
+	if len(events) != outbox.DefaultPendingLimit {
+		t.Fatalf("Pending(0) returned %d events, want default %d", len(events), outbox.DefaultPendingLimit)
+	}
+	events, err = outbox.Pending(ctx, pool, outbox.MaxPendingLimit+1)
+	if err != nil {
+		t.Fatalf("Pending(MaxPendingLimit+1): %v", err)
+	}
+	if len(events) != outbox.MaxPendingLimit {
+		t.Fatalf("Pending(MaxPendingLimit+1) returned %d events, want cap %d", len(events), outbox.MaxPendingLimit)
+	}
+}
+
 // TestDrainerDispatchesToRiver proves the full pipeline: Add → Pending
 // → Dispatcher → river.Insert → Worker runs.
 func TestDrainerDispatchesToRiver(t *testing.T) {
 	t.Parallel()
 	worker := &orderWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
-		Register: func(w *jobs.Workers) { jobs.Register(w, worker) },
+		Register: func(w *jobs.Workers) {
+			if err := jobs.Register(w, worker); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
+		},
 	})
 	applyOutboxMigration(t, rv.Pool.Config().ConnConfig.ConnString())
 

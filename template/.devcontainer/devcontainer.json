@@ -1,11 +1,33 @@
 {
   "name": "golusoris app",
-  "image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "app",
+  "workspaceFolder": "/workspace",
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/node:1": { "version": "lts" }
+    "ghcr.io/devcontainers/features/docker-in-docker:4": {
+      "version": "29.8.1",
+      "moby": true,
+      "mobyBuildxVersion": "0.37.1",
+      "dockerDashComposeVersion": "none",
+      "azureDnsAutoDetection": false,
+      "dockerDefaultAddressPool": "",
+      "dockerHostGatewayIP": "",
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": false,
+      "disableIp6tables": false,
+      "iptablesSwitchAtRuntime": true
+    },
+    "ghcr.io/devcontainers/features/node:2": {
+      "version": "24.21.0",
+      "nodeGypDependencies": true,
+      "nvmInstallPath": "/usr/local/share/nvm",
+      "npmVersion": "12.0.2",
+      "pnpmVersion": "12.4.2",
+      "nvmVersion": "0.40.7",
+      "installYarnUsingApt": false
+    }
   },
-  "postCreateCommand": "go install github.com/air-verse/air@latest && go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest && go install golang.org/x/vuln/cmd/govulncheck@latest && go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest",
+  "postCreateCommand": "go install github.com/air-verse/air@v1.67.4 && go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.14.0 && go install golang.org/x/vuln/cmd/govulncheck@v1.8.0 && go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.31.1",
   "customizations": {
     "vscode": {
       "extensions": [

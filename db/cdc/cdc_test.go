@@ -6,6 +6,7 @@ package cdc_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -18,6 +19,7 @@ func TestDefaultConfig(t *testing.T) {
 	require.Equal(t, "golusoris", d.Slot)
 	require.Equal(t, "golusoris", d.Publication)
 	require.Equal(t, 10, d.StandbyHz)
+	require.Equal(t, time.Second, d.ReconnectDelay)
 	require.Empty(t, d.DSN)
 }
 

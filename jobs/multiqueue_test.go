@@ -39,8 +39,12 @@ func TestMultiQueueJobsAreWorked(t *testing.T) {
 	t.Parallel()
 	w := &probeWorker{ran: make(chan struct{}, 1)}
 	rv := rivertest.Start(t, rivertest.Options{
-		Queues:   map[string]jobs.QueueConfig{"critical": {Max: 2}},
-		Register: func(workers *jobs.Workers) { jobs.Register(workers, w) },
+		Queues: map[string]jobs.QueueConfig{"critical": {Max: 2}},
+		Register: func(workers *jobs.Workers) {
+			if err := jobs.Register(workers, w); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
+		},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

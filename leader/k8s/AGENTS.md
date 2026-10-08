@@ -6,8 +6,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — leader/k8s/
 
-Single-leader election via the Kubernetes Lease API (client-go
-`leaderelection`). One pod wins the Lease and runs the leader callback; on
+Single-leader election via Kubernetes Lease API (client-go
+`leaderelection`). One pod wins Lease and runs leader callback; on
 loss/restart another pod takes over. One of two `leader/` backends — apps pick
 exactly one (see also `leader/pg`).
 
@@ -23,14 +23,14 @@ fx.New(
 )
 ```
 
-`Module(cb)` **Provides** the loaded `Options`; **Requires** `*rest.Config`,
-`*slog.Logger`, `fx.Lifecycle`. Election runs in a goroutine started on `OnStart`
+`Module(cb)` **Provides** loaded `Options`; **Requires** `*rest.Config`,
+`*slog.Logger`, `fx.Lifecycle`. Election runs in goroutine started on `OnStart`
 and stopped (lease released, `ReleaseOnCancel`) on `OnStop`. `Run(ctx, k, opts, cb)`
-is also callable directly with a `kubernetes.Interface`.
+is also callable directly with `kubernetes.Interface`.
 
 ## Config
 
-Keys under the `leader` prefix (env `APP_LEADER_*`). `leader.enabled=false`
+Keys under `leader` prefix (env `APP_LEADER_*`). `leader.enabled=false`
 (default) skips wiring entirely.
 
 ```yaml
@@ -47,8 +47,7 @@ leader:
 
 ## Notes
 
-- Requires RBAC for `coordination.k8s.io` Leases (get/create/update) in the
-  namespace; only runs meaningfully inside a cluster (needs a `*rest.Config`).
+- Requires RBAC for `coordination.k8s.io` Leases (get/create/update) in  namespace; only runs meaningfully inside cluster (needs `*rest.Config`).
 - `OnStartedLeading`'s ctx is canceled on lease loss — handler code must exit on
-  cancellation or risk concurrent leaders.
+ cancellation or risk concurrent leaders.
 - Empty `leader.name` with `enabled=true` fails construction.

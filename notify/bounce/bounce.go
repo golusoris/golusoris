@@ -15,8 +15,8 @@
 //	        _ = unsubSvc.Store.Add(ctx, ev.Email)
 //	    }
 //	})
-//	mux.Handle("/webhooks/ses",      bounce.SES(h))
-//	mux.Handle("/webhooks/postmark", bounce.Postmark(h))
+//	mux.Handle("/webhooks/ses",      bounce.SES(verifySNS, h))
+//	mux.Handle("/webhooks/postmark", bounce.Postmark(verifyPostmark, h))
 package bounce
 
 import (
@@ -29,6 +29,7 @@ import (
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	postmarkauth "github.com/golusoris/golusoris/notify/postmark"
 )
 
 // Kind describes the event type.
@@ -73,6 +74,11 @@ func (e Event) Permanent() bool { return e.PermanentFlag }
 // HandlerFunc receives parsed events.
 type HandlerFunc func(ctx context.Context, ev Event)
 
+// SNSVerifier authenticates the complete raw SNS envelope before it is parsed
+// or dispatched. Implementations must validate the SNS signature, certificate,
+// and expected TopicArn, or prove equivalent authentication at a trusted proxy.
+type SNSVerifier func(r *http.Request, body []byte) error
+
 // maxBodyBytes caps webhook request bodies.
 const maxBodyBytes = 1 << 20 // 1 MiB
 
@@ -81,11 +87,10 @@ const maxBodyBytes = 1 << 20 // 1 MiB
 // messages are acknowledged by fetching their SubscribeURL (see
 // https://docs.aws.amazon.com/sns/latest/dg/sns-message-and-json-formats.html).
 //
-// This handler verifies only the JSON shape; SNS signature verification
-// is outside scope — mount behind [webhooks/in] or an SNS-aware proxy
-// when exposed publicly.
-func SES(h HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// The verifier runs before subscription confirmations or notifications are
+// acknowledged. A nil or failing verifier rejects the request.
+func SES(verify SNSVerifier, h HandlerFunc) http.Handler {
+	return withConsumer(h, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -93,6 +98,10 @@ func SES(h HandlerFunc) http.Handler {
 		body, err := readBody(r)
 		if err != nil {
 			http.Error(w, "body error", http.StatusBadRequest)
+			return
+		}
+		if verify == nil || verify(r, body) != nil {
+			http.Error(w, "invalid sns signature", http.StatusUnauthorized)
 			return
 		}
 		var env snsEnvelope
@@ -167,11 +176,12 @@ func dispatchSESNotification(ctx context.Context, raw string, h HandlerFunc) err
 	return nil
 }
 
-// Postmark returns an http.Handler that accepts Postmark bounce
-// webhook payloads. Postmark POSTs JSON directly (no wrapper).
+// Postmark returns an http.Handler that accepts authenticated Postmark bounce
+// webhook payloads. The verifier runs after bounded body capture and before
+// payload parsing or dispatch. A nil or failing verifier rejects the request.
 // See https://postmarkapp.com/developer/webhooks/bounce-webhook.
-func Postmark(h HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func Postmark(verify postmarkauth.WebhookVerifier, h HandlerFunc) http.Handler {
+	return withConsumer(h, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -179,6 +189,10 @@ func Postmark(h HandlerFunc) http.Handler {
 		body, err := readBody(r)
 		if err != nil {
 			http.Error(w, "body error", http.StatusBadRequest)
+			return
+		}
+		if verify == nil || verify(r, body) != nil {
+			http.Error(w, "invalid postmark authentication", http.StatusUnauthorized)
 			return
 		}
 		var p postmarkBounce
@@ -206,6 +220,15 @@ func Postmark(h HandlerFunc) http.Handler {
 		})
 		w.WriteHeader(http.StatusOK)
 	})
+}
+
+func withConsumer(h HandlerFunc, handler http.HandlerFunc) http.Handler {
+	if h == nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "handler unavailable", http.StatusInternalServerError)
+		})
+	}
+	return handler
 }
 
 func readBody(r *http.Request) (b []byte, err error) {

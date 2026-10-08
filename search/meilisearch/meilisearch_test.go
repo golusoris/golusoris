@@ -10,10 +10,12 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/search"
 	"github.com/golusoris/golusoris/search/meilisearch"
 )
@@ -85,6 +87,27 @@ func TestNewBackend_RequiresURL(t *testing.T) {
 	t.Parallel()
 	_, err := meilisearch.NewBackend(meilisearch.Options{})
 	require.Error(t, err)
+	_, err = meilisearch.NewBackend(meilisearch.Options{URL: "http://example.test", MaxResponseBytes: -1})
+	require.Error(t, err)
+}
+
+func TestSearch_ResponseSizeBoundary(t *testing.T) {
+	t.Parallel()
+	payload := []byte(`{"hits":[],"estimatedTotalHits":0,"processingTimeMs":1}`)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	t.Cleanup(srv.Close)
+
+	exact, err := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL, MaxResponseBytes: int64(len(payload))})
+	require.NoError(t, err)
+	_, err = exact.Search(t.Context(), "products", search.Query{})
+	require.NoError(t, err)
+
+	over, err := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL, MaxResponseBytes: int64(len(payload) - 1)})
+	require.NoError(t, err)
+	_, err = over.Search(t.Context(), "products", search.Query{})
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
 }
 
 var _ search.Backend = (*meilisearch.Backend)(nil)
@@ -143,4 +166,49 @@ func TestSearch_WithFilter(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, results)
+}
+
+func TestSearch_EscapesAndOrdersStructuredFilters(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t,
+			`active = true AND brand = "nike OR active = true" AND note = "O\"Series" AND rank = 3`,
+			body["filter"],
+		)
+		_, _ = w.Write([]byte(`{"hits":[],"estimatedTotalHits":0,"processingTimeMs":1}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	b, err := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL})
+	require.NoError(t, err)
+	_, err = b.Search(t.Context(), "c", search.Query{Filters: map[string]any{
+		"rank":   3,
+		"note":   `O"Series`,
+		"brand":  "nike OR active = true",
+		"active": true,
+	}})
+	require.NoError(t, err)
+}
+
+func TestSearch_RejectsInvalidStructuredFilters(t *testing.T) {
+	t.Parallel()
+	var requests atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests.Add(1)
+		_, _ = w.Write([]byte(`{"hits":[],"estimatedTotalHits":0}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	b, err := meilisearch.NewBackend(meilisearch.Options{URL: srv.URL})
+	require.NoError(t, err)
+	for _, filters := range []map[string]any{
+		{"brand OR active": "nike"},
+		{"brand": []string{"nike"}},
+	} {
+		_, err = b.Search(t.Context(), "c", search.Query{Filters: filters})
+		require.Error(t, err)
+	}
+	require.Zero(t, requests.Load())
 }

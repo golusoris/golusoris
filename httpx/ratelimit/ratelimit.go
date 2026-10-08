@@ -4,19 +4,19 @@
 
 // Package ratelimit wraps ulule/limiter/v3 as a golusoris middleware.
 //
-// Defaults to an in-memory store keyed by client IP. For distributed apps
-// behind multiple replicas, swap in a redis-backed store via
-// [fx.Decorate] (cache/redis, Step 8).
+// Defaults to an in-memory store keyed by client IP. Distributed apps can
+// supply a shared [limiter.Store] through [Options.Store], directly or by
+// decorating Options in the fx graph.
 //
 // Config keys (env: APP_HTTP_RATELIMIT_*):
 //
 //	http.ratelimit.rate      # e.g. "100-M" (100/minute), "5-S" (5/second)
-//	http.ratelimit.trust_xff # trust X-Forwarded-For for peer IP (default false)
 //
 // Rate format: https://github.com/ulule/limiter?tab=readme-ov-file#usage
 package ratelimit
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -26,6 +26,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 
@@ -34,10 +35,14 @@ type Options struct {
 	// Rate is the limit per window, e.g. "100-M" for 100/minute, "5-S" for
 	// 5/second. See ulule/limiter docs for full grammar.
 	Rate string `koanf:"rate"`
-	// TrustXFF trusts X-Forwarded-For to identify the real client. Only
-	// enable behind a trusted reverse proxy (use httpx/middleware.TrustProxy
-	// for the canonical implementation).
+	// TrustXFF is retained for config compatibility but rejected as unsafe.
+	// Use httpx/middleware.TrustProxy before this middleware.
+	//
+	// Deprecated: forwarded-header trust must be CIDR-gated centrally.
 	TrustXFF bool `koanf:"trust_xff"`
+	// Store overrides the process-local in-memory store. Multi-replica
+	// deployments must provide a shared implementation.
+	Store limiter.Store `koanf:"-"`
 }
 
 // DefaultOptions returns no limit (Rate=""). The middleware is a no-op
@@ -47,6 +52,12 @@ func DefaultOptions() Options { return Options{} }
 // New returns a [middleware.Middleware] enforcing opts. Empty Rate returns
 // a pass-through middleware.
 func New(opts Options) (middleware.Middleware, error) {
+	if opts.TrustXFF {
+		return nil, errors.New("httpx/ratelimit: trust_xff is unsafe; use CIDR-gated middleware.TrustProxy")
+	}
+	if opts.Store != nil && validate.IsNil(opts.Store) {
+		return nil, errors.New("httpx/ratelimit: store is typed nil")
+	}
 	if opts.Rate == "" {
 		return identity, nil
 	}
@@ -54,11 +65,11 @@ func New(opts Options) (middleware.Middleware, error) {
 	if err != nil {
 		return nil, fmt.Errorf("httpx/ratelimit: parse rate %q: %w", opts.Rate, err)
 	}
-	store := memory.NewStore()
-	lim := limiter.New(
-		store, rate,
-		limiter.WithTrustForwardHeader(opts.TrustXFF),
-	)
+	store := opts.Store
+	if store == nil {
+		store = memory.NewStore()
+	}
+	lim := limiter.New(store, rate)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, err := lim.Get(r.Context(), limiter.GetIP(r).String())

@@ -4,11 +4,12 @@
 
 # actionlint config: https://github.com/rhysd/actionlint/blob/main/docs/config.md
 #
-# actionlint has no way to know about our ARC self-hosted runner-set labels,
-# so it flags every `runs-on: arc-cauda-golusoris-golusoris` as an unknown
-# label (the `runner-label` check). Declaring it here is the documented fix.
+# actionlint flags `runs-on` labels it does not know as GitHub-hosted (the
+# `runner-label` check). Declare the Gitea self-hosted label and the hosted
+# label praetor's managed workflows request ahead of actionlint's catalogue.
 # `runs-on: ${{ inputs.runs-on }}` (an expression) is unaffected either way —
 # actionlint only checks literal label strings.
 self-hosted-runner:
   labels:
-    - arc-cauda-golusoris-golusoris
+    - cauda-k8s-office-canary
+    - ubuntu-26.04

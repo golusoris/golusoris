@@ -40,4 +40,5 @@ We will use `github.com/knadh/koanf/v2` as the configuration loader, with the en
 
 ## References
 
-- koanf pinned at v2.3.4 — see [`docs/upstream/koanf/`](../upstream/koanf/).
+- The decision evaluated koanf v2.3.4. The maintained current pin is recorded in
+  [`docs/upstream/koanf/`](../upstream/koanf/README.md).

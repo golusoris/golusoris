@@ -6,10 +6,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — config/
 
-The config layer: a thin koanf v2 wrapper that loads from env + optional
-YAML/JSON files. File-watch is on by default, so a mounted k8s ConfigMap update
-(or `SIGHUP`) fires reload callbacks without a pod restart. Apps add structured
-config by `Unmarshal`-ing a config key into their own struct.
+config layer: thin koanf v2 wrapper that loads from env + optional
+YAML/JSON files. File-watch is on by default, so mounted k8s ConfigMap update
+(or `SIGHUP`) fires reload callbacks without pod restart. Apps add structured
+config by `Unmarshal`-ing config key into their own struct.
 
 ## API
 
@@ -35,17 +35,16 @@ func New(Options) (*Config, error)
 fx.New(golusoris.Core) // Module is part of Core; provides *config.Config + Options
 ```
 
-`Module` provides a `*Config` from default Options (`APP_` prefix, no files,
+`Module` provides `*Config` from default Options (`APP_` prefix, no files,
 watch on). Override by supplying your own `Options` ahead of it via `fx.Replace`
-/ `fx.Decorate`. File watchers + the SIGHUP handler start on `fx.Lifecycle`
+/ `fx.Decorate`. File watchers + SIGHUP handler start on `fx.Lifecycle`
 `OnStart` and stop on `OnStop`.
 
 ## Notes
 
-- Env mapping: `APP_DB_HOST` → `db.host`. Every underscore splits on the
-  delimiter unless the leaf key is listed in `CompoundKeys` (e.g.
-  `search.api_key` keeps `APP_SEARCH_API_KEY` → `search.api_key`).
+- Env mapping: `APP_DB_HOST` → `db.host`. Every underscore splits on  delimiter unless leaf key is listed in `CompoundKeys` (e.g.
+ `search.api_key` keeps `APP_SEARCH_API_KEY` → `search.api_key`).
 - Files load first (later override earlier); env loads on top. Missing files are
-  skipped silently; an unsupported extension is a hard error.
-- `OnChange` callbacks run synchronously in the watcher goroutine — keep them
-  quick or fan out to a worker.
+ skipped silently; unsupported extension is hard error.
+- `OnChange` callbacks run synchronously in watcher goroutine — keep them
+ quick or fan out to worker.

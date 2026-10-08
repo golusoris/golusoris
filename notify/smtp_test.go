@@ -13,9 +13,9 @@ import (
 func TestNewSMTPSender_Name(t *testing.T) {
 	t.Parallel()
 	s, err := notify.NewSMTPSender(notify.SMTPOptions{
-		Host: "localhost",
-		Port: 1025,
-		TLS:  false,
+		Host:                   "localhost",
+		Port:                   1025,
+		AllowInsecurePlaintext: true,
 	})
 	if err != nil {
 		t.Fatalf("NewSMTPSender: %v", err)
@@ -27,11 +27,10 @@ func TestNewSMTPSender_Name(t *testing.T) {
 
 func TestNewSMTPSender_DefaultPort(t *testing.T) {
 	t.Parallel()
-	// Port 0 triggers the default (587) code path.
+	// Port 0 triggers the secure default (587) code path.
 	s, err := notify.NewSMTPSender(notify.SMTPOptions{
 		Host: "localhost",
 		Port: 0,
-		TLS:  false,
 	})
 	if err != nil {
 		t.Fatalf("NewSMTPSender: %v", err)

@@ -31,39 +31,48 @@ set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 corpus="$root/.config/hiss/semgrep/testdata"
+# shellcheck source=/dev/null
+. "$root/tools/tool-versions.env"
 
-# SEMGREP_CMD lets a caller point at a pinned interpreter that is not on PATH,
-# e.g. SEMGREP_CMD="pipx run semgrep==1.166.0" (the pin CI's semgrep job uses).
-read -r -a semgrep_cmd <<<"${SEMGREP_CMD:-semgrep}"
-if ! command -v "${semgrep_cmd[0]}" >/dev/null 2>&1; then
-  # Hard failure on purpose: this script is a member of `make verify-all`, and a
-  # gate that passes because its tool is missing reports a green tree it never
-  # inspected. HISS_FIXTURES_OPTIONAL=1 is the explicit, visible opt-out.
-  if [[ "${HISS_FIXTURES_OPTIONAL:-0}" == "1" ]]; then
-    echo "${semgrep_cmd[0]} is not on PATH — HISS_FIXTURES_OPTIONAL=1, skipping the fixture replay" >&2
-    exit 0
-  fi
-  echo "${semgrep_cmd[0]} is not on PATH: the HISS fixture replay cannot run." >&2
-  echo "Install semgrep (pipx install semgrep), point SEMGREP_CMD at it, or set" >&2
-  echo "HISS_FIXTURES_OPTIONAL=1 to skip this gate deliberately." >&2
+docker_bin="${DOCKER_BIN:-}"
+if [[ -z "$docker_bin" ]] && command -v docker >/dev/null; then
+  docker_bin="$(command -v docker)"
+fi
+if [[ -z "$docker_bin" || ! -x "$docker_bin" ]]; then
+  echo "Docker is required for digest-pinned Semgrep $SEMGREP_VERSION" >&2
   exit 1
 fi
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 cp -R "$corpus/." "$work/"
+install -m 0644 "$root/.semgrep.yml" "$work/.semgrep.yml"
 
 report="$work/findings.json"
-"${semgrep_cmd[@]}" scan \
-  --config "$root/.semgrep.yml" \
-  --metrics=off \
-  --disable-version-check \
-  --oss-only \
-  --no-git-ignore \
-  --jobs 1 \
-  --json \
-  --output "$report" \
-  "$work" >/dev/null 2>&1 || true
+image="semgrep/semgrep:${SEMGREP_VERSION}@${SEMGREP_IMAGE_DIGEST}"
+set +e
+tar -C "$work" --exclude=findings.json -cf - . \
+  | "$docker_bin" run --rm -i --entrypoint sh "$image" -ec '
+      mkdir -p /src
+      tar -xf - -C /src
+      cd /src
+      exec semgrep scan \
+        --config .semgrep.yml \
+        --strict \
+        --metrics=off \
+        --disable-version-check \
+        --oss-only \
+        --no-git-ignore \
+        --jobs 1 \
+        --json .
+    ' >"$report"
+statuses=("${PIPESTATUS[@]}")
+set -e
+if (( statuses[0] != 0 || statuses[1] != 0 )); then
+  printf 'HISS fixture Semgrep pipeline failed: tar=%d docker=%d\n' \
+    "${statuses[0]}" "${statuses[1]}" >&2
+  exit 1
+fi
 
 python3 - "$work" "$report" <<'PY'
 import json
@@ -88,10 +97,10 @@ if payload.get("errors"):
     print("semgrep reported errors:", payload["errors"], file=sys.stderr)
     sys.exit(1)
 
-scanned = {pathlib.Path(p).resolve() for p in payload.get("paths", {}).get("scanned", [])}
+scanned = {pathlib.Path(p) for p in payload.get("paths", {}).get("scanned", [])}
 hits: dict[pathlib.Path, set[str]] = {}
 for item in payload.get("results", []):
-    hits.setdefault(pathlib.Path(item["path"]).resolve(), set()).add(
+    hits.setdefault(pathlib.Path(item["path"]), set()).add(
         item["check_id"].rsplit(".", 1)[-1]
     )
 
@@ -105,10 +114,11 @@ for fixture in sorted(work.rglob("*.go")):
     if invariant not in RULES:
         failures.append(f"{name}: {invariant} has no rule mapping in this script")
         continue
-    if fixture.resolve() not in scanned:
+    relative_fixture = fixture.relative_to(work)
+    if relative_fixture not in scanned:
         failures.append(f"{name}: never scanned by semgrep")
         continue
-    fired = sorted(hits.get(fixture.resolve(), set()))
+    fired = sorted(hits.get(relative_fixture, set()))
     if category == "positive" and not (RULES[invariant] & set(fired)):
         expected = ", ".join(sorted(RULES[invariant]))
         failures.append(f"{name}: expected a finding from [{expected}], got {fired or 'none'}")

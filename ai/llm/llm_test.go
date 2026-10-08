@@ -15,6 +15,14 @@ import (
 	"github.com/golusoris/golusoris/ai/llm"
 )
 
+func TestResolveIgnoresNilOption(t *testing.T) {
+	t.Parallel()
+	settings := llm.Resolve(llm.Settings{Model: "default"}, []llm.Option{nil})
+	if settings.Model != "default" {
+		t.Fatalf("Model = %q, want default", settings.Model)
+	}
+}
+
 func fakeOpenAI(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +61,7 @@ func TestChat(t *testing.T) {
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
-	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "test"})
+	client := newOpenAIClient(t, llm.Config{BaseURL: srv.URL, Model: "test"})
 	resp, err := client.Chat(context.Background(), []llm.Message{
 		{Role: llm.RoleUser, Content: "ping"},
 	})
@@ -73,7 +81,7 @@ func TestStream(t *testing.T) {
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
-	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "test"})
+	client := newOpenAIClient(t, llm.Config{BaseURL: srv.URL, Model: "test"})
 	ch := client.Stream(context.Background(), []llm.Message{
 		{Role: llm.RoleUser, Content: "hi"},
 	})
@@ -101,7 +109,7 @@ func TestStream_httpError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "test"})
+	client := newOpenAIClient(t, llm.Config{BaseURL: srv.URL, Model: "test"})
 	ch := client.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 
 	first, ok := <-ch
@@ -121,7 +129,7 @@ func TestEmbed(t *testing.T) {
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
-	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "embed-model"})
+	client := newOpenAIClient(t, llm.Config{BaseURL: srv.URL, Model: "embed-model"})
 	vec, err := client.Embed(context.Background(), "hello")
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +144,7 @@ func TestOptions(t *testing.T) {
 	srv := fakeOpenAI(t)
 	defer srv.Close()
 
-	client := llm.NewOpenAIClient(llm.Config{BaseURL: srv.URL, Model: "default"})
+	client := newOpenAIClient(t, llm.Config{BaseURL: srv.URL, Model: "default"})
 	_, err := client.Chat(
 		context.Background(),
 		[]llm.Message{{Role: llm.RoleUser, Content: "hi"}},

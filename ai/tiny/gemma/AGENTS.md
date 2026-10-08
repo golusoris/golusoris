@@ -4,51 +4,43 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# ai/tiny/gemma — AGENTS.md
+# ai/tiny/gemma
 
-LoRA fine-tune trainer for Gemma 3 / Gemma 3n. Implements `tiny.Trainer`.
+KerasHub Gemma 3 / Gemma 3n LoRA trainer.
 
-## Surface
+## Contract
 
-- `NewTrainer(Options) (*Trainer, error)` — validates `Runner` + `Bucket`.
-- `(*Trainer).Name() string` → `"gemma"`.
-- `(*Trainer).Train(ctx, tiny.Job) (tiny.Model, error)`.
+- Constructor: `NewTrainer(Options) (*Trainer, error)`.
+- Required: `Runner`, `Bucket`, digest-pinned `Image`, canonical absolute
+  `DatasetRoot`.
+- Job: `Modality=text`; `TaskKind=generate`; format `jsonl`.
+- Bases: `gemma3:270m`, `gemma3:1b`, `gemma3:4b-text`, `gemma3n:e2b`,
+  `gemma3n:e4b`.
+- Dataset: local `file:` only; regular file under
+  `<DatasetRoot>/<TenantID|_default>`; staged as `/work/input/dataset`.
+- JSONL: prompt/response record bytes, aggregate text bytes, examples bounded.
+- Runner: read-only input/root; process, tmpfs, output-file caps active;
+  network denied unless `AllowNetwork` is explicitly true.
+- Preset credentials: runner environment only; dataset cloud credentials
+  absent. Uncached KerasHub acquisition requires explicit network opt-in.
+- Output: fixed `adapter.lora.h5`; optional fixed `metrics.json`.
+- Artifact key:
+  `<KeyPrefix>/tenants/<tenant>/<name>/<job>/<sha256>/adapter.lora.h5`.
 
-## Flow
+## Limits
 
-1. `tiny.ValidateJob` + require `Modality=text`, `TaskKind=generate`,
-   `BaseModel` prefix `gemma3:` or `gemma3n:`.
-2. Stage tmpdir with `input/config.json` (job id, base model, dataset
-   URI, hyperparams, tags).
-3. Invoke `Runner.Run` with `/work/input` (ro) + `/work/output` (rw),
-   env seeded with `TINY_JOB_NAME` / `TINY_BASE_MODEL` plus `ExtraEnv`
-   (non-overridable reserved keys).
-4. Stream trainer stdout/stderr into a `bytes.Buffer`, drain into
-   `slog` after `Run` returns (success or failure).
-5. Read `output/lora.keras` + optional `output/metrics.json`, upload
-   bundle to `<KeyPrefix>/<job.Name>/<job.ID>/lora.keras`.
-6. Return `tiny.Model` with `Format=KerasLoRA`, metrics map, tag
-   metadata; `Version` left zero for `Registry.SaveModel`.
+- Timeout: 2h.
+- Logs: 1 MiB.
+- Artifact: 1 GiB.
+- Metrics: 1 MiB.
+- Dataset: 10 GiB.
+- JSONL record: 1 MiB.
+- Aggregate prompt/response UTF-8: 64 MiB.
+- Examples: 100,000.
 
-## Supported base models
+## Proof
 
-`gemma3:270m`, `gemma3:1b`, `gemma3:4b`, `gemma3n:e2b`, `gemma3n:e4b`.
-Container resolves checkpoints at runtime; expects `HF_TOKEN` in env.
-
-## Artifact
-
-- `lora.keras` (KerasNLP LoRA weight archive) in the bucket.
-- `metrics.json` parsed into `Model.Metrics` (best-effort — parse
-  failure only warns).
-
-## Defaults
-
-- `Image`: `ghcr.io/golusoris/tiny-gemma-trainer:v1`.
-- `KeyPrefix`: `models/gemma`.
-- `Logger`: `slog.Default()`.
-
-## Testing
-
-`StubRunner` simulates the container by writing `lora.keras` +
-`metrics.json` into `spec.OutputDir`. Round-trip through
-`storage.LocalBucket` exercises the upload path without Docker.
+- Go: `go test ./ai/tiny/gemma ./ai/tiny/internal/trainerio`.
+- Python: `PYTHONPATH=ai/tiny python3 -B -m unittest trainers.gemma.test_trainer`.
+- Container: `scripts/ci/tiny-trainer-smoke.sh gemma IMAGE`.
+- Release boundary: `ai/tiny/trainers/README.md`.

@@ -35,6 +35,7 @@ package plugin
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"sync"
 )
 
@@ -111,9 +112,7 @@ func (r *Registry[T]) All() map[string]T {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make(map[string]T, len(r.items))
-	for k, v := range r.items {
-		out[k] = v
-	}
+	maps.Copy(out, r.items)
 	return out
 }
 

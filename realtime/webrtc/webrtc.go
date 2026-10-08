@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 
 	pionwebrtc "github.com/pion/webrtc/v4"
@@ -87,11 +88,23 @@ func NewSignaler(opts Options) *Signaler {
 	}
 	return &Signaler{
 		api:          api,
-		cfg:          pionwebrtc.Configuration{ICEServers: opts.ICEServers},
+		cfg:          pionwebrtc.Configuration{ICEServers: cloneICEServers(opts.ICEServers)},
 		onConnect:    opts.OnConnect,
 		logger:       logger,
 		maxBodyBytes: maxBody,
 	}
+}
+
+func cloneICEServers(servers []pionwebrtc.ICEServer) []pionwebrtc.ICEServer {
+	if servers == nil {
+		return nil
+	}
+	cloned := make([]pionwebrtc.ICEServer, len(servers))
+	copy(cloned, servers)
+	for i := range cloned {
+		cloned[i].URLs = append([]string(nil), servers[i].URLs...)
+	}
+	return cloned
 }
 
 // Answer performs the offer → answer exchange. The returned SDP is the
@@ -100,7 +113,7 @@ func NewSignaler(opts Options) *Signaler {
 //
 // Ownership of pc is transferred to the caller on success — close it
 // when the session ends (usually via pc.OnConnectionStateChange
-// watching for Failed/Disconnected/Closed).
+// watching for Failed/Closed). Disconnected may recover and is not terminal.
 func (s *Signaler) Answer(ctx context.Context, offerSDP string) (answerSDP string, pc *pionwebrtc.PeerConnection, err error) {
 	pc, err = s.api.NewPeerConnection(s.cfg)
 	if err != nil {
@@ -171,7 +184,8 @@ func validateOfferRequest(w http.ResponseWriter, r *http.Request) bool {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return false
 	}
-	if ct := r.Header.Get("Content-Type"); ct != "" && ct != "application/sdp" {
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/sdp" || len(params) != 0 {
 		http.Error(w, "expected Content-Type application/sdp", http.StatusUnsupportedMediaType)
 		return false
 	}
@@ -234,8 +248,7 @@ func (s *Signaler) attachTeardown(ctx context.Context, pc *pionwebrtc.PeerConnec
 // connection's life (no further negotiation or data will occur on it).
 func isTerminalConnectionState(state pionwebrtc.PeerConnectionState) bool {
 	return state == pionwebrtc.PeerConnectionStateFailed ||
-		state == pionwebrtc.PeerConnectionStateClosed ||
-		state == pionwebrtc.PeerConnectionStateDisconnected
+		state == pionwebrtc.PeerConnectionStateClosed
 }
 
 // writeAnswer writes the SDP answer as the HTTP response.

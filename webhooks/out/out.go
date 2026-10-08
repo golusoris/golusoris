@@ -27,12 +27,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
+	"github.com/jonboulle/clockwork"
+
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Status is the delivery outcome.
@@ -96,13 +102,22 @@ type Options struct {
 	// SignHeader is the request header carrying "sha256=<hex>".
 	// Default: "X-Webhook-Signature".
 	SignHeader string
+	// AllowInsecureHTTP permits cleartext endpoint URLs. Default: false.
+	AllowInsecureHTTP bool
+	// AllowPrivateNetwork permits loopback, private, link-local, and other
+	// non-public endpoint addresses. Default: false.
+	AllowPrivateNetwork bool
 }
 
 func (o *Options) defaults() {
-	if o.MaxAttempts == 0 {
+	if o.MaxAttempts <= 0 {
 		o.MaxAttempts = 5
 	}
-	if o.Timeout == 0 {
+	const maxAttempts = 100
+	if o.MaxAttempts > maxAttempts {
+		o.MaxAttempts = maxAttempts
+	}
+	if o.Timeout <= 0 {
 		o.Timeout = 10 * time.Second
 	}
 	if o.Backoff == nil {
@@ -114,8 +129,11 @@ func (o *Options) defaults() {
 }
 
 func exponentialBackoff(attempt int) time.Duration {
-	d := time.Second << attempt // 1s, 2s, 4s, 8s, …
 	const maxBackoff = 5 * time.Minute
+	if attempt >= 9 {
+		return maxBackoff
+	}
+	d := time.Second << attempt // 1s, 2s, 4s, 8s, …
 	if d > maxBackoff {
 		return maxBackoff
 	}
@@ -134,10 +152,19 @@ type Dispatcher struct {
 // New returns a Dispatcher. clk should be clock.NewFake() in tests.
 func New(store Store, opts Options, logger *slog.Logger, clk clock.Clock) *Dispatcher {
 	opts.defaults()
+	if validate.IsNil(store) {
+		store = nil
+	}
+	if validate.IsNil(clk) {
+		clk = clockwork.NewRealClock()
+	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	return &Dispatcher{
 		store:  store,
 		opts:   opts,
-		client: &http.Client{Timeout: opts.Timeout},
+		client: newHTTPClient(opts),
 		clk:    clk,
 		logger: logger,
 	}
@@ -147,6 +174,9 @@ func New(store Store, opts Options, logger *slog.Logger, clk clock.Clock) *Dispa
 // subscribed to event. Each delivery runs synchronously; wrap in a goroutine
 // or a job queue for background delivery.
 func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) error {
+	if d.store == nil {
+		return errors.New("webhooks/out: store is required")
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("webhooks/out: marshal payload: %w", err)
@@ -157,37 +187,43 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event string, payload any) er
 		return fmt.Errorf("webhooks/out: list endpoints: %w", err)
 	}
 
-	now := d.clk.Now()
+	var dispatchErr error
 	for _, ep := range endpoints {
 		if !ep.Active {
 			continue
 		}
-		id, err := newID()
-		if err != nil {
-			return err
+		if err = d.dispatchEndpoint(ctx, ep, event, body); err != nil {
+			d.logger.WarnContext(ctx, "webhooks/out: dispatch endpoint", "endpoint", ep.ID, "err", err)
+			dispatchErr = errors.Join(dispatchErr, err)
 		}
-		del := Delivery{
-			ID:         id,
-			EndpointID: ep.ID,
-			Event:      event,
-			Payload:    body,
-			Status:     StatusPending,
-			CreatedAt:  now,
-			UpdatedAt:  now,
-		}
-		if saveErr := d.store.SaveDelivery(ctx, del); saveErr != nil {
-			d.logger.WarnContext(ctx, "webhooks/out: save delivery", "err", saveErr, "endpoint", ep.ID)
-			continue
-		}
-		if deliverErr := d.deliver(ctx, ep, &del); deliverErr != nil {
-			d.logger.WarnContext(ctx, "webhooks/out: delivery failed", "endpoint", ep.ID, "delivery", del.ID, "err", deliverErr)
-		}
+	}
+	return dispatchErr
+}
+
+func (d *Dispatcher) dispatchEndpoint(ctx context.Context, ep Endpoint, event string, body []byte) error {
+	id, err := newID()
+	if err != nil {
+		return err
+	}
+	now := d.clk.Now()
+	delivery := Delivery{
+		ID: id, EndpointID: ep.ID, Event: event, Payload: body,
+		Status: StatusPending, CreatedAt: now, UpdatedAt: now,
+	}
+	if err = d.store.SaveDelivery(ctx, delivery); err != nil {
+		return fmt.Errorf("webhooks/out: save initial delivery for endpoint %s: %w", ep.ID, err)
+	}
+	if err = d.deliver(ctx, ep, &delivery); err != nil {
+		return fmt.Errorf("webhooks/out: deliver endpoint %s: %w", ep.ID, err)
 	}
 	return nil
 }
 
 // Replay re-delivers a dead-lettered delivery from scratch.
 func (d *Dispatcher) Replay(ctx context.Context, deliveryID string) error {
+	if d.store == nil {
+		return errors.New("webhooks/out: store is required")
+	}
 	del, err := d.store.FindDelivery(ctx, deliveryID)
 	if err != nil {
 		return fmt.Errorf("webhooks/out: find delivery: %w", err)
@@ -212,7 +248,11 @@ func (d *Dispatcher) deliver(ctx context.Context, ep Endpoint, del *Delivery) er
 		}
 
 		code, err := d.post(ctx, ep.URL, del.ID, del.Event, sig, del.Payload)
-		if d.recordAttempt(ctx, del, code, err) {
+		delivered, recordErr := d.recordAttempt(ctx, del, code, err)
+		if recordErr != nil {
+			return recordErr
+		}
+		if delivered {
 			return nil
 		}
 	}
@@ -241,25 +281,25 @@ func (d *Dispatcher) waitBeforeRetry(ctx context.Context, attempts int) error {
 
 // recordAttempt updates del with the outcome of one delivery attempt,
 // persists it, and reports whether the delivery succeeded.
-func (d *Dispatcher) recordAttempt(ctx context.Context, del *Delivery, code int, err error) bool {
+func (d *Dispatcher) recordAttempt(ctx context.Context, del *Delivery, code int, err error) (bool, error) {
 	del.Attempts++
 	del.UpdatedAt = d.clk.Now()
 	del.StatusCode = code
 
-	if err == nil && code < 400 {
+	delivered := err == nil && code >= http.StatusOK && code < http.StatusMultipleChoices
+	switch {
+	case delivered:
 		del.Status = StatusDelivered
 		del.Error = ""
-		d.saveDelivery(ctx, del)
-		return true
-	}
-
-	if err != nil {
+	case err != nil:
 		del.Error = err.Error()
-	} else {
+	default:
 		del.Error = fmt.Sprintf("HTTP %d", code)
 	}
-	d.saveDelivery(ctx, del)
-	return false
+	if saveErr := d.saveDelivery(ctx, del); saveErr != nil {
+		return false, saveErr
+	}
+	return delivered, nil
 }
 
 // deadLetter marks del as permanently failed after all retries are
@@ -267,20 +307,27 @@ func (d *Dispatcher) recordAttempt(ctx context.Context, del *Delivery, code int,
 func (d *Dispatcher) deadLetter(ctx context.Context, del *Delivery) error {
 	del.Status = StatusFailed
 	del.UpdatedAt = d.clk.Now()
-	d.saveDelivery(ctx, del)
-	return fmt.Errorf("webhooks/out: delivery %s dead-lettered after %d attempts: %s", del.ID, del.Attempts, del.Error)
+	deadLetterErr := fmt.Errorf(
+		"webhooks/out: delivery %s dead-lettered after %d attempts: %s",
+		del.ID,
+		del.Attempts,
+		del.Error,
+	)
+	return errors.Join(deadLetterErr, d.saveDelivery(ctx, del))
 }
 
-// saveDelivery persists the attempt record; a store failure must not abort
-// the retry loop, so it is logged instead of returned.
-func (d *Dispatcher) saveDelivery(ctx context.Context, del *Delivery) {
+func (d *Dispatcher) saveDelivery(ctx context.Context, del *Delivery) error {
 	if err := d.store.SaveDelivery(ctx, *del); err != nil {
-		d.logger.WarnContext(ctx, "webhooks/out: save delivery", "delivery", del.ID, "err", err)
+		return fmt.Errorf("webhooks/out: save delivery %s: %w", del.ID, err)
 	}
+	return nil
 }
 
-func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig string, body []byte) (int, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+func (d *Dispatcher) post(ctx context.Context, endpointURL, deliveryID, event, sig string, body []byte) (int, error) {
+	if err := validateEndpointURL(endpointURL, d.opts); err != nil {
+		return 0, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointURL, bytes.NewReader(body))
 	if err != nil {
 		return 0, fmt.Errorf("build request: %w", err)
 	}
@@ -300,6 +347,74 @@ func (d *Dispatcher) post(ctx context.Context, url, deliveryID, event, sig strin
 		d.logger.DebugContext(ctx, "webhooks/out: close response body", "delivery", deliveryID, "err", cerr)
 	}
 	return resp.StatusCode, nil
+}
+
+func newHTTPClient(opts Options) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if !opts.AllowPrivateNetwork {
+		transport.Proxy = nil
+		dialer := &publicDialer{resolver: net.DefaultResolver, dialer: &net.Dialer{}}
+		transport.DialContext = dialer.dialContext
+	}
+	return &http.Client{
+		Timeout:   opts.Timeout,
+		Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+}
+
+func validateEndpointURL(rawURL string, opts Options) error {
+	parsed, err := url.ParseRequestURI(rawURL)
+	if err != nil {
+		return fmt.Errorf("webhooks/out: invalid endpoint URL: %w", err)
+	}
+	if parsed.User != nil || parsed.Hostname() == "" {
+		return errors.New("webhooks/out: endpoint URL must have a host and no user information")
+	}
+	if parsed.Scheme == "https" {
+		return nil
+	}
+	if parsed.Scheme == "http" && opts.AllowInsecureHTTP {
+		return nil
+	}
+	return fmt.Errorf("webhooks/out: endpoint URL scheme %q is not allowed", parsed.Scheme)
+}
+
+type publicDialer struct {
+	resolver *net.Resolver
+	dialer   *net.Dialer
+}
+
+func (d *publicDialer) dialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, fmt.Errorf("webhooks/out: split endpoint address: %w", err)
+	}
+	addresses, err := d.resolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return nil, fmt.Errorf("webhooks/out: resolve endpoint host: %w", err)
+	}
+	const maxAddresses = 32
+	if len(addresses) == 0 || len(addresses) > maxAddresses {
+		return nil, fmt.Errorf("webhooks/out: endpoint resolved to %d addresses", len(addresses))
+	}
+	for _, addressIP := range addresses {
+		if !addressIP.IsGlobalUnicast() || addressIP.IsPrivate() {
+			return nil, fmt.Errorf("webhooks/out: endpoint resolved to non-public address %s", addressIP)
+		}
+	}
+	var dialErr error
+	for _, addressIP := range addresses {
+		var connection net.Conn
+		connection, err = d.dialer.DialContext(ctx, network, net.JoinHostPort(addressIP.String(), port))
+		if err == nil {
+			return connection, nil
+		}
+		dialErr = errors.Join(dialErr, err)
+	}
+	return nil, fmt.Errorf("webhooks/out: dial endpoint: %w", dialErr)
 }
 
 // sign returns the hex-encoded HMAC-SHA256 of payload using secret.

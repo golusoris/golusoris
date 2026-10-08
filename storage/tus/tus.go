@@ -20,9 +20,11 @@
 //
 // Downstream wiring (e.g. enqueue a river job) hooks completion:
 //
-//	h.OnComplete(func(ctx context.Context, c tus.CompletedUpload) error {
+//	err := h.OnComplete("scan.enqueue.v1", func(ctx context.Context, c tus.CompletedUpload) error {
 //	    return jobs.Enqueue(ctx, scanJob{Key: c.Key})
 //	})
+//
+// Completion delivery is at-least-once; key durable side effects by upload ID.
 //
 // Scratch is node-local ("local"): a resumed PATCH must reach the same replica.
 // Run single-replica or with sticky sessions until a distributed scratch lands.
@@ -31,18 +33,19 @@ package tus
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
+	"math"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	tusd "github.com/tus/tusd/v2/pkg/handler"
-	"github.com/tus/tusd/v2/pkg/memorylocker"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -59,18 +62,30 @@ type CompletedUpload struct {
 	MetaData map[string]string // tus Upload-Metadata (filename, filetype, ...)
 }
 
+const (
+	maxCompletionCallbacks = 64
+	maxCallbackIDBytes     = 128
+)
+
+type completionCallback struct {
+	id string
+	fn completionFn
+}
+
 // Handler is the mountable tus component. It is an http.Handler covering the
 // whole tus sub-tree and also exposes Mount for explicit chi wiring.
 type Handler struct {
-	routed    *tusd.Handler
-	unrouted  *tusd.UnroutedHandler
-	store     *bucketStore
-	scratch   scratchStore
-	opts      Options
-	log       *slog.Logger
-	clk       clock.Clock
-	mu        sync.RWMutex
-	callbacks []completionFn
+	routed     *tusd.Handler
+	unrouted   *tusd.UnroutedHandler
+	store      *bucketStore
+	scratch    scratchStore
+	opts       Options
+	log        *slog.Logger
+	clk        clock.Clock
+	locker     *uploadLocker
+	mu         sync.RWMutex
+	callbacks  []completionCallback
+	deliveryMu sync.Mutex
 
 	drainCancel context.CancelFunc
 	drainDone   chan struct{}
@@ -83,6 +98,10 @@ func (h *Handler) BasePath() string { return h.opts.BasePath }
 // tusd's routed mux matches on the path relative to BasePath, so the public
 // prefix is stripped before delegating.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if !h.opts.Enabled {
+		http.NotFound(w, r)
+		return
+	}
 	h.stripped().ServeHTTP(w, r)
 }
 
@@ -90,6 +109,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // app middleware (auth, ratelimit) still wraps them. The routed tusd handler
 // sees paths relative to BasePath; tusd keeps BasePath for Location headers.
 func (h *Handler) Mount(r chi.Router) {
+	if !h.opts.Enabled {
+		return
+	}
 	base := strings.TrimSuffix(h.opts.BasePath, "/")
 	stripped := h.stripped()
 	r.Handle(base, stripped)
@@ -103,23 +125,40 @@ func (h *Handler) stripped() http.Handler {
 	return http.StripPrefix(base, h.routed)
 }
 
-// OnComplete registers a callback fired after FinishUpload persists to the
-// Bucket. Multiple callbacks are allowed; they run in registration order and a
-// callback error fails the upload's finish response.
-func (h *Handler) OnComplete(fn func(context.Context, CompletedUpload) error) {
+// OnComplete registers a stable callback ID delivered after FinishUpload
+// durably records the Bucket object. Successful IDs are checkpointed so
+// deployment-time callback reordering cannot replay them.
+func (h *Handler) OnComplete(id string, fn func(context.Context, CompletedUpload) error) error {
+	if err := validateCallbackID(id); err != nil {
+		return err
+	}
+	if fn == nil {
+		return fmt.Errorf("tus: completion callback %q is nil", id)
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.callbacks = append(h.callbacks, fn)
+	if len(h.callbacks) >= maxCompletionCallbacks {
+		return fmt.Errorf("tus: completion callback limit %d reached", maxCompletionCallbacks)
+	}
+	for _, callback := range h.callbacks {
+		if callback.id == id {
+			return fmt.Errorf("tus: duplicate completion callback id %q", id)
+		}
+	}
+	h.callbacks = append(h.callbacks, completionCallback{id: id, fn: fn})
+	return nil
 }
 
-// fireComplete runs every registered callback; the first error stops the chain.
-func (h *Handler) fireComplete(ctx context.Context, c CompletedUpload) error {
-	h.mu.RLock()
-	cbs := append([]completionFn(nil), h.callbacks...)
-	h.mu.RUnlock()
-	for _, fn := range cbs {
-		if err := fn(ctx, c); err != nil {
-			return err
+func validateCallbackID(id string) error {
+	if id == "" {
+		return errors.New("tus: completion callback id is empty")
+	}
+	if len(id) > maxCallbackIDBytes {
+		return fmt.Errorf("tus: completion callback id exceeds %d bytes", maxCallbackIDBytes)
+	}
+	for _, char := range id {
+		if unicode.IsControl(char) || unicode.IsSpace(char) {
+			return fmt.Errorf("tus: completion callback id %q contains whitespace or control", id)
 		}
 	}
 	return nil
@@ -136,25 +175,36 @@ type params struct {
 }
 
 func newHandler(p params) (*Handler, error) {
-	if !p.Opts.Enabled {
-		p.Logger.Debug("tus: module disabled (storage.tus.enabled=false)")
-	}
-	scratch, err := newLocalScratch(p.Opts.ScratchDir)
-	if err != nil {
-		return nil, err
-	}
 	h := &Handler{
-		scratch:   scratch,
 		opts:      p.Opts,
 		log:       p.Logger,
 		clk:       p.Clock,
 		drainDone: make(chan struct{}),
 	}
-	h.store = newBucketStore(
-		scratch, p.Bucket, defaultKeyFunc(p.Opts.KeyPrefix), p.Clock, p.Logger, h.fireComplete,
-	)
-	if err = h.buildTusd(); err != nil {
+	if !p.Opts.Enabled {
+		p.Logger.Debug("tus: module disabled (storage.tus.enabled=false)")
+		return h, nil
+	}
+	if p.Opts.Scratch != "local" {
+		return nil, fmt.Errorf("tus: unsupported scratch backend %q", p.Opts.Scratch)
+	}
+	if p.Opts.UploadExpiry <= 0 {
+		return nil, errors.New("tus: upload expiry must be positive")
+	}
+	if p.Opts.ExpirySweepInterval <= 0 {
+		return nil, errors.New("tus: expiry sweep interval must be positive")
+	}
+	if p.Opts.MaxSize <= 0 || p.Opts.MaxSize == math.MaxInt64 {
+		return nil, errors.New("tus: max size must be positive and less than MaxInt64")
+	}
+	scratch, err := newLocalScratch(p.Opts.ScratchDir)
+	if err != nil {
 		return nil, err
+	}
+	h.scratch = scratch
+	h.store = newBucketStore(scratch, p.Bucket, defaultKeyFunc(p.Opts.KeyPrefix), p.Logger, h.deliverCompletion)
+	if err = h.buildTusd(); err != nil {
+		return nil, errors.Join(err, scratch.Close())
 	}
 	h.wireLifecycle(p.LC)
 	return h, nil
@@ -166,7 +216,8 @@ func (h *Handler) buildTusd() error {
 	composer.UseCore(h.store)
 	composer.UseTerminater(h.store)
 	composer.UseLengthDeferrer(h.store)
-	memorylocker.New().UseIn(composer) // node-local lock; single-replica scope
+	h.locker = newUploadLocker()
+	composer.UseLocker(h.locker) // node-local lock; single-replica scope
 
 	cfg := tusd.Config{
 		StoreComposer:                    composer,
@@ -206,57 +257,181 @@ func (h *Handler) wireLifecycle(lc fx.Lifecycle) {
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
-			if h.drainCancel != nil {
-				h.drainCancel()
-			}
-			h.waitDrain(ctx)
-			h.sweepExpired(ctx)
-			return nil
+			return h.stop(ctx)
 		},
 	})
 }
 
-// drainCompletions consumes tusd's CompleteUploads channel and dispatches the
-// registered OnComplete callbacks. FinishUpload already fired the hooks inline;
-// this loop logs completions and keeps the channel from blocking the handler.
+func (h *Handler) stop(ctx context.Context) error {
+	if h.drainCancel != nil {
+		h.drainCancel()
+	}
+	if err := h.waitDrain(ctx); err != nil {
+		return err
+	}
+	h.sweepExpired(ctx)
+	if closer, ok := h.scratch.(interface{ CloseContext(context.Context) error }); ok {
+		if err := closer.CloseContext(ctx); err != nil {
+			return fmt.Errorf("tus: close scratch: %w", err)
+		}
+	} else if closer, ok := h.scratch.(io.Closer); ok {
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("tus: close scratch: %w", err)
+		}
+	}
+	return nil
+}
+
+// drainCompletions consumes tusd notifications and periodically retries durable
+// callbacks plus expired scratch cleanup. One worker bounds callback fan-out.
 func (h *Handler) drainCompletions(ctx context.Context) {
 	defer close(h.drainDone)
+	ticker := h.clk.NewTicker(h.opts.ExpirySweepInterval)
+	defer ticker.Stop()
+	h.retryCompletions(ctx)
 	ch := h.unrouted.CompleteUploads
 	for ctx.Err() == nil {
 		select {
 		case <-ctx.Done():
 			return
-		case ev := <-ch:
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
 			h.log.InfoContext(ctx, "tus: upload complete",
 				"id", ev.Upload.ID, "size", ev.Upload.Size)
+			h.attemptCompletion(ctx, ev.Upload.ID)
+		case <-ticker.Chan():
+			h.retryCompletions(ctx)
+			h.sweepExpired(ctx)
 		}
 	}
 }
 
+func (h *Handler) retryCompletions(ctx context.Context) {
+	ids, err := h.scratch.CompletionIDs(ctx, maxMaintenanceBatch)
+	if err != nil {
+		h.log.WarnContext(ctx, "tus: list durable completions failed", "err", err)
+		return
+	}
+	for _, id := range ids {
+		h.attemptCompletion(ctx, id)
+	}
+}
+
+func (h *Handler) attemptCompletion(ctx context.Context, id string) {
+	unlock, ok := h.tryMaintenanceLock(id)
+	if !ok {
+		return
+	}
+	defer unlock()
+	var err error
+	if h.store == nil {
+		err = h.deliverCompletion(ctx, id)
+	} else {
+		err = h.store.ResumeCompletion(ctx, id)
+	}
+	if err != nil {
+		h.log.WarnContext(ctx, "tus: durable completion failed", "id", id, "err", err)
+	}
+}
+
+func (h *Handler) tryMaintenanceLock(id string) (func(), bool) {
+	if h.locker == nil {
+		return func() {}, true
+	}
+	return h.locker.tryMaintenanceLock(id)
+}
+
+func (h *Handler) deliverCompletion(ctx context.Context, id string) error {
+	h.deliveryMu.Lock()
+	defer h.deliveryMu.Unlock()
+	record, err := h.scratch.Completion(ctx, id)
+	if errors.Is(err, tusd.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("load durable completion: %w", err)
+	}
+	if record.normalizedStage() != completionStagePersisted {
+		return fmt.Errorf("completion %s is not persisted", id)
+	}
+	if err = h.runCallbacks(ctx, &record); err != nil {
+		return err
+	}
+	if err = h.scratch.RemoveUpload(ctx, id); err != nil {
+		return fmt.Errorf("cleanup completion scratch: %w", err)
+	}
+	if err = h.scratch.DeleteCompletion(ctx, id); err != nil {
+		return fmt.Errorf("acknowledge completion: %w", err)
+	}
+	return nil
+}
+
+func (h *Handler) runCallbacks(ctx context.Context, record *completionRecord) error {
+	if err := record.validate(); err != nil {
+		return err
+	}
+	h.mu.RLock()
+	cbs := append([]completionCallback(nil), h.callbacks...)
+	h.mu.RUnlock()
+	completed := make(map[string]struct{}, len(record.CompletedCallbackIDs))
+	for _, id := range record.CompletedCallbackIDs {
+		completed[id] = struct{}{}
+	}
+	for _, callback := range cbs {
+		if _, done := completed[callback.id]; done {
+			continue
+		}
+		if err := callback.fn(ctx, record.Upload.completed()); err != nil {
+			return fmt.Errorf("callback %q: %w", callback.id, err)
+		}
+		record.CompletedCallbackIDs = append(record.CompletedCallbackIDs, callback.id)
+		completed[callback.id] = struct{}{}
+		if err := h.scratch.SaveCompletion(ctx, *record); err != nil {
+			return fmt.Errorf("checkpoint callback %q: %w", callback.id, err)
+		}
+	}
+	return nil
+}
+
 // waitDrain blocks until the drain goroutine exits or ctx is done.
-func (h *Handler) waitDrain(ctx context.Context) {
+func (h *Handler) waitDrain(ctx context.Context) error {
 	select {
 	case <-h.drainDone:
+		return nil
 	case <-ctx.Done():
 		h.log.WarnContext(ctx, "tus: drain did not stop before shutdown deadline")
+		return fmt.Errorf("tus: wait for completion drain: %w", ctx.Err())
 	}
 }
 
 // sweepExpired removes in-progress scratch entries older than the configured
 // upload expiry. Best-effort and bounded to the OnStop context.
 func (h *Handler) sweepExpired(ctx context.Context) {
-	ids, err := h.scratch.Expired(ctx, h.clk.Now(), h.opts.UploadExpiry)
+	now := h.clk.Now()
+	ids, err := h.scratch.Expired(ctx, now, h.opts.UploadExpiry)
 	if err != nil {
 		h.log.WarnContext(ctx, "tus: expiry sweep failed", "err", err)
 		return
 	}
 	for _, id := range ids {
-		entry, getErr := h.scratch.Get(ctx, id)
-		if getErr != nil {
+		unlock, ok := h.tryMaintenanceLock(id)
+		if !ok {
 			continue
 		}
-		if termErr := entry.Terminate(ctx); termErr != nil {
-			h.log.WarnContext(ctx, "tus: expire scratch failed", "id", id, "err", termErr)
+		expired, expiryErr := h.scratch.IsExpired(ctx, id, now, h.opts.UploadExpiry)
+		if expiryErr != nil && !errors.Is(expiryErr, tusd.ErrNotFound) {
+			h.log.WarnContext(ctx, "tus: recheck expiry failed", "id", id, "err", expiryErr)
+		}
+		if expiryErr == nil && expired {
+			if termErr := h.scratch.RemoveUpload(ctx, id); termErr != nil {
+				h.log.WarnContext(ctx, "tus: expire scratch failed", "id", id, "err", termErr)
+			}
+		}
+		unlock()
+		if ctx.Err() != nil {
+			return
 		}
 	}
 }
@@ -271,6 +446,7 @@ type Options struct {
 	Scratch                          string        `koanf:"scratch"`
 	ScratchDir                       string        `koanf:"scratch_dir"`
 	UploadExpiry                     time.Duration `koanf:"upload_expiry"`
+	ExpirySweepInterval              time.Duration `koanf:"expiry_sweep_interval"`
 	DisableDownload                  bool          `koanf:"disable_download"`
 	DisableTermination               bool          `koanf:"disable_termination"`
 	DisableConcatenation             bool          `koanf:"disable_concatenation"`
@@ -280,15 +456,18 @@ type Options struct {
 	GracefulRequestCompletionTimeout time.Duration `koanf:"graceful_completion_timeout"`
 }
 
+const defaultMaxSize int64 = 5 << 30
+
 func defaultOptions() Options {
 	return Options{
 		Enabled:                          false,
 		BasePath:                         "/files/",
-		MaxSize:                          0,
+		MaxSize:                          defaultMaxSize,
 		KeyPrefix:                        "uploads/",
 		Scratch:                          "local",
-		ScratchDir:                       defaultScratchDir(),
+		ScratchDir:                       "",
 		UploadExpiry:                     24 * time.Hour,
+		ExpirySweepInterval:              15 * time.Minute,
 		DisableDownload:                  true,
 		DisableTermination:               false,
 		DisableConcatenation:             true,
@@ -305,11 +484,6 @@ func loadOptions(cfg *config.Config) (Options, error) {
 		return Options{}, fmt.Errorf("tus: load options: %w", err)
 	}
 	return opts, nil
-}
-
-// defaultScratchDir is the per-host in-progress upload root.
-func defaultScratchDir() string {
-	return filepath.Join(os.TempDir(), "golusoris-tus")
 }
 
 // Module provides *tus.Handler to the fx graph. Requires storage.Bucket,

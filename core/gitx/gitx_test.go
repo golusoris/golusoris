@@ -14,6 +14,14 @@ import (
 	"github.com/golusoris/golusoris/core/gitx"
 )
 
+func TestNewIgnoresNilOption(t *testing.T) {
+	t.Parallel()
+	runner := gitx.New("/tmp/repository", nil)
+	if runner.Dir() != "/tmp/repository" {
+		t.Fatalf("Dir = %q, want /tmp/repository", runner.Dir())
+	}
+}
+
 // initRepo creates a throwaway repository with one commit and returns its path.
 func initRepo(t *testing.T) string {
 	t.Helper()

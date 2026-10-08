@@ -9,16 +9,15 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Extracts text from images using Tesseract via
 [gosseract](https://github.com/otiai10/gosseract) (**CGO**). Separate Go module
 (`github.com/golusoris/golusoris/ocr`) so its CGO/system-dep weight doesn't
-pull into the core build.
+pull into core build.
 
-Ships a no-op stub by default: `NewReader` returns `ErrCGORequired` until the
-real implementation is activated. There is no fx module — construct a `Reader`
+Ships no-op stub by default: `NewReader` returns `ErrCGORequired` until real implementation is activated. There is no fx module — construct `Reader`
 directly.
 
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `ocr.NewReader(Options)` | build a `Reader` (stub until activated) |
 | `ocr.Reader` | `Read(ctx, bytes)`, `ReadFile(ctx, path)`, `Close()` |
 | `ocr.Options` | `Language` (`"eng"`, `"eng+fra"`), `TessdataPrefix`, `AllowList` |
@@ -47,10 +46,10 @@ text, err := r.Read(ctx, imageBytes)
 
 ## Don't
 
-- Don't add gosseract to the root module — keep it in this nested module so
-  core builds stay CGO-free.
-- Don't share one `Reader` across goroutines — the Tesseract client is stateful
-  (it holds the current image); make one per worker or guard with a mutex.
-- Don't forget `Close()` — the client wraps native resources that leak otherwise.
-- Don't OCR untrusted/huge images without a bound — Tesseract is CPU-heavy; run
-  it off the request path (e.g. a `jobs/` worker) with a timeout.
+- Don't add gosseract to root module — keep it in this nested module so
+ core builds stay CGO-free.
+- Don't share one `Reader` across goroutines — Tesseract client is stateful
+ (it holds current image); make one per worker or guard with mutex.
+- Don't forget `Close()` — client wraps native resources that leak otherwise.
+- Don't OCR untrusted/huge images without bound — Tesseract is CPU-heavy; run
+ it off request path (e.g. `jobs/` worker) with timeout.

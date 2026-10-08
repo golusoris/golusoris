@@ -106,7 +106,9 @@ func New(root string, opts ...Option) *Manager {
 	clean := filepath.Clean(root)
 	m := &Manager{root: clean, dir: filepath.FromSlash(DefaultDir), prefix: DefaultBranchPrefix}
 	for _, o := range opts {
-		o(m)
+		if o != nil {
+			o(m)
+		}
 	}
 	if m.git == nil {
 		m.git = gitx.New(clean)

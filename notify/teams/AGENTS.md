@@ -6,8 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # notify/teams
 
-Microsoft Teams sender for `notify.Sender` — emits a MessageCard to a
-Teams incoming webhook (legacy connector or Power Automate / Workflow).
+Microsoft Teams sender for `notify.Sender` — emits MessageCard to Teams incoming webhook (legacy connector or Power Automate / Workflow).
 
 ## Surface
 
@@ -16,16 +15,14 @@ Teams incoming webhook (legacy connector or Power Automate / Workflow).
 
 ## Notes
 
-- Raw HTTP — no SDK. POSTs a MessageCard JSON document to the webhook
-  URL.
+- Raw HTTP — no SDK. POSTs MessageCard JSON document to webhook
+ URL.
 - `msg.Subject` → MessageCard `title`; `msg.Body` (fallback
-  `msg.Text`, then `msg.HTML`) → `text`. `summary` falls back to the
-  first line of the text when no subject is set.
+ `msg.Text`, then `msg.HTML`) → `text`. `summary` falls back to  first line of text when no subject is set.
 - Teams' legacy connector wire format uses `@type` / `@context` /
-  `themeColor` — tagliatelle's snake-case rule doesn't apply. This
-  package carries a linter exception via the file-level struct JSON
-  tags; add to `.golangci.yml` exclusions if tagliatelle starts
-  complaining.
-- Microsoft announced the legacy connector will be sunset in favour of
-  Workflow URLs, but MessageCard payloads remain supported by the
-  Workflow endpoint; no migration is needed for message format.
+ `themeColor` — tagliatelle's snake-case rule doesn't apply. This
+ package carries linter exception via file-level struct JSON
+ tags; add to `.golangci.yml` exclusions if tagliatelle starts
+ complaining.
+- Microsoft announced legacy connector will be sunset in favour of
+ Workflow URLs, but MessageCard payloads remain supported by  Workflow endpoint; no migration is needed for message format.

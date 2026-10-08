@@ -32,6 +32,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/httpx/middleware"
 )
 
@@ -90,8 +91,8 @@ type Record struct {
 // are empty, returns a no-op so geofence is fully opt-in. An empty
 // MmdbPath with a non-empty policy is an error.
 func New(opts Options) (middleware.Middleware, Reader, error) {
-	hasPolicy := len(opts.Allow) > 0 || len(opts.Deny) > 0
-	if !hasPolicy && opts.MmdbPath == "" {
+	hasPolicy := len(toSet(opts.Allow)) > 0 || len(toSet(opts.Deny)) > 0
+	if !hasPolicy {
 		return identity, nil, nil
 	}
 	if opts.MmdbPath == "" {
@@ -128,10 +129,15 @@ func NewFromReader(opts Options, r Reader) middleware.Middleware {
 }
 
 func permitted(r Reader, req *http.Request, allow, deny map[string]struct{}) bool {
+	if len(allow) == 0 && len(deny) == 0 {
+		return true
+	}
+	if validate.IsNil(r) {
+		return false
+	}
 	ip := clientIP(req)
 	if ip == nil {
-		// If we can't identify the peer, fail open only when no policy is set.
-		return len(allow) == 0 && len(deny) == 0
+		return false
 	}
 	var rec Record
 	if err := r.Lookup(ip, &rec); err != nil {

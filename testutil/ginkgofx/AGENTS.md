@@ -6,10 +6,10 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/ginkgofx/
 
-Wires a `go.uber.org/fx` application into a `github.com/onsi/ginkgo/v2` spec
-suite's lifecycle: starts the app before specs run and stops it afterwards,
-each bounded by an explicit `context.WithTimeout` (HISS-02), and gives specs
-a way to resolve fx-provided values via `Populate`.
+Wires `go.uber.org/fx` application into `github.com/onsi/ginkgo/v2` spec
+suite's lifecycle: starts app before specs run and stops it afterwards,
+each bounded by explicit `context.WithTimeout` (HISS-02), and gives specs
+way to resolve fx-provided values via `Populate`.
 
 ## API
 
@@ -41,64 +41,58 @@ err := ginkgofx.StartApp(ctx, app, timeout)
 err  = ginkgofx.StopApp(ctx, app, timeout)
 ```
 
-`Setup`/`SetupWithOptions` register Ginkgo's `BeforeSuite`/`AfterSuite`;
+`Setup`/`SetupWithOptions` register Ginkgo's `BeforeSuite`/`AfterSuite`.
 `SetupEach`/`SetupEachWithOptions` register `BeforeEach`/`AfterEach`. Ginkgo
-allows only one `BeforeSuite` and one `AfterSuite` handler per suite, so call
-`Setup`/`SetupWithOptions` at most once per suite (same restriction as
-`ginkgo.BeforeSuite` itself), and **only from the suite's true top level**
-(a package-level `var`, as in the example above, or an `init` func) — never
-nested inside a `Describe`/`Context`/`When` closure. `BeforeSuite`/
-`AfterSuite` are Ginkgo suite-level nodes that may only be registered while
-Ginkgo is still in its top-level tree-construction phase; a container's
-closure body doesn't run until later, once `RunSpecs` starts walking the
-tree, and by then Ginkgo rejects a nested `BeforeSuite`/`AfterSuite`
-outright — it prints "can only be called at the top level" and exits the
-process, rather than silently misbehaving. `SetupEach`/`SetupEachWithOptions`
+allows one `BeforeSuite` and one `AfterSuite` handler per suite. Call
+`Setup`/`SetupWithOptions` at most once per suite, matching
+`ginkgo.BeforeSuite` restriction. Call only from suite's true top level:
+package-level `var` or `init` func. Never nest it inside
+`Describe`/`Context`/`When` closure. Ginkgo permits suite nodes only during
+top-level tree construction. Container closures run later, after `RunSpecs`
+starts walking tree. Ginkgo then rejects nested suite nodes, prints
+"can only be called at the top level", and exits process.
+`SetupEach`/`SetupEachWithOptions`
 have no such restriction: `BeforeEach`/`AfterEach` are ordinary container
-nodes, meant to be called from inside the `Describe`/`Context` they scope
-to (see below). `ginkgofx_wrongpattern_test.go` exercises the `Setup`
-failure mode end to end via a re-exec'd subprocess (Ginkgo's `os.Exit(1)`
-would otherwise tear down the whole package's test run). A failed
-start/stop calls `ginkgo.Fail`, which panics to end the current spec —
+nodes, meant to be called from inside `Describe`/`Context` they scope
+to (see below). `ginkgofx_wrongpattern_test.go` exercises `Setup`
+failure mode end to end via re-exec'd subprocess (Ginkgo's `os.Exit(1)`
+would otherwise tear down whole package's test run). failed
+start/stop calls `ginkgo.Fail`, which panics to end current spec —
 Ginkgo catches it, same as any other assertion failure.
 
 ## Root module, not a nested go.mod
 
-Unlike `testutil/pact` (own go.mod because `pact-go` embeds a ~40 MB Ruby
-standalone binary), `ginkgo`/`gomega` are pure Go with no embedded binaries
-and were already indirect dependencies of this module (pulled in via
-`sigs.k8s.io/controller-runtime`'s own test requirements) before this
-package existed — promoting them to direct requirements added no new build
-weight. Every other heavy test-only dependency in `testutil/`
+Unlike `testutil/pact`, whose go.mod isolates `pact-go`'s ~40 MB Ruby binary,
+`ginkgo` and `gomega` are pure Go with no embedded binaries. They were already indirect dependencies via
+`sigs.k8s.io/controller-runtime` tests. Promoting them to direct requirements
+added no build weight. Every other heavy test-only dependency in `testutil/`
 (`testcontainers-go`, `tsenart/vegeta`, `leanovate/gopter`, `go-mutesting`,
-`gofakeit`) already lives directly in the root `go.mod` for the same reason.
-Root placement also keeps this package inside `make verify-all`'s default
-gate (`MODULES := . core`); nested/native sub-modules build only on demand
-and are skipped by that default gate, which would be the wrong trade for a
-package that carries its own tests.
+`gofakeit`) already lives directly in root `go.mod` for same reason.
+Root placement avoids separate module solely for pure-Go test helper.
+`make verify-all` discovers and gates all 23 modules, including
+`testutil/pact` and native submodules.
 
 ## Don't
 
 - Don't call `Setup`/`SetupWithOptions` more than once per suite — Ginkgo
-  only allows one `BeforeSuite`/`AfterSuite` handler.
-- Don't call `Setup`/`SetupWithOptions` from inside a `Describe`/`Context`/
-  `When` closure — they register Ginkgo's `BeforeSuite`/`AfterSuite`, which
-  Ginkgo only accepts at the suite's true top level; nesting them makes
-  Ginkgo exit the process with "can only be called at the top level"
-  instead of registering the hook.
+ only allows one `BeforeSuite`/`AfterSuite` handler.
+- Don't call `Setup`/`SetupWithOptions` from inside `Describe`/`Context`/
+ `When` closure — they register Ginkgo's `BeforeSuite`/`AfterSuite`, which
+ Ginkgo only accepts at suite's true top level; nesting them makes
+ Ginkgo exit process with "can only be called at the top level"
+ instead of registering hook.
 - Don't call `SetupEach` at package level when you mean to scope it to one
-  `Describe` — register it inside that Describe's closure.
-- Don't rely on `fx.StartTimeout`/`fx.StopTimeout` fx options for the bound:
-  `fx.App.Start`/`Stop` only honor those through `fx.App.Run`, not a direct
-  `Start(ctx)`/`Stop(ctx)` call, so `Options.StartTimeout`/`StopTimeout` (via
-  `context.WithTimeout`) are what actually bound these calls.
+ `Describe` — register it inside that Describe's closure.
+- Don't rely on `fx.StartTimeout`/`fx.StopTimeout` fx options for bound:
+ `fx.App.Start`/`Stop` only honor those through `fx.App.Run`, not direct
+ `Start(ctx)`/`Stop(ctx)` call, so `Options.StartTimeout`/`StopTimeout` (via
+ `context.WithTimeout`) are what bound these calls.
 
 ## Naming: why this isn't `testutil/pact`
 
 `docs/FLEET_GO_DEMAND.md`'s sprint list (cluster table and "First sprint"
-list, item 3) names this sprint item `testutil/pact` as shorthand for "the
-ginkgo fx-aware BDD lifecycle wrapper." That name was never meant literally:
-`testutil/pact` already exists as an unrelated package (Pact consumer-driven
+list, item 3) names this sprint item `testutil/pact` as shorthand for "ginkgo fx-aware BDD lifecycle wrapper." That name was never meant literally:
+`testutil/pact` already exists as unrelated package (Pact consumer-driven
 contract testing, wrapping `pact-go`). This package landed as
-`testutil/ginkgofx` instead, named for what it actually wraps
+`testutil/ginkgofx` instead, named for what it wraps
 (`onsi/ginkgo`), to avoid colliding with that existing package.

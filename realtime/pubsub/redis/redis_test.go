@@ -10,9 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/rueidis"
+
 	"github.com/golusoris/golusoris/realtime/pubsub"
 	redistest "github.com/golusoris/golusoris/testutil/redis"
 )
+
+type typedNilClient struct{ rueidis.Client }
 
 func TestEncode(t *testing.T) {
 	t.Parallel()
@@ -39,6 +43,15 @@ func TestEncode(t *testing.T) {
 				t.Errorf("encode(%v) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNewNormalizesTypedNilClient(t *testing.T) {
+	t.Parallel()
+	var client *typedNilClient
+	bus := New(client, nil)
+	if bus.client != nil {
+		t.Fatal("typed-nil client was retained")
 	}
 }
 

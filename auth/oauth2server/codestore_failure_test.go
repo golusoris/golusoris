@@ -6,6 +6,8 @@ package oauth2server_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -36,8 +38,8 @@ func TestServer_AuthorizeCodeStoreFailure(t *testing.T) {
 	t.Parallel()
 
 	clients := oauth2server.NewMemoryClientStore()
-	clients.Add(oauth2server.Client{ID: "c", RedirectURIs: []string{"http://x/cb"}, PublicClient: true})
-	signer, err := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-long-enough"), time.Hour)
+	require.NoError(t, clients.Register(oauth2server.Client{ID: "c", RedirectURIs: []string{"https://app.example/cb"}, PublicClient: true}))
+	signer, err := jwt.NewHMACSigner(jwt.HS256, []byte("topsecret-and-at-least-32-bytes-long"), time.Hour)
 	require.NoError(t, err)
 	srv, err := oauth2server.New(oauth2server.Options{
 		Issuer:       "iss",
@@ -53,8 +55,10 @@ func TestServer_AuthorizeCodeStoreFailure(t *testing.T) {
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", "c")
-	q.Set("redirect_uri", "http://x/cb")
-	q.Set("code_challenge", "challenge-x")
+	q.Set("redirect_uri", "https://app.example/cb")
+	verifier := "store-failure-verifier-with-at-least-43-characters"
+	sum := sha256.Sum256([]byte(verifier))
+	q.Set("code_challenge", base64.RawURLEncoding.EncodeToString(sum[:]))
 	q.Set("code_challenge_method", "S256")
 
 	noFollow := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}

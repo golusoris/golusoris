@@ -59,7 +59,7 @@ func TestFleet_endToEnd(t *testing.T) {
 		// with the client (harness builds river queues from this map).
 		Queues: map[string]jobs.QueueConfig{"tiny-gpu": {Max: 2}},
 		Register: func(w *jobs.Workers) {
-			jobs.Register(w, worker)
+			require.NoError(t, jobs.Register(w, worker))
 		},
 	})
 
@@ -103,7 +103,7 @@ func TestFleet_dynamicQueueAdd(t *testing.T) {
 
 	// Start with NO capability queue; add it dynamically after start.
 	rv := rivertest.Start(t, rivertest.Options{
-		Register: func(w *jobs.Workers) { jobs.Register(w, worker) },
+		Register: func(w *jobs.Workers) { require.NoError(t, jobs.Register(w, worker)) },
 	})
 	require.NoError(t, rv.Client.Queues().Add("tiny-cpu", river.QueueConfig{MaxWorkers: 2}))
 

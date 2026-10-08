@@ -12,8 +12,8 @@
 //	h := inbound.Handler(func(ctx context.Context, m inbound.Email) {
 //	    log.Info("got mail", "from", m.From, "subject", m.Subject)
 //	})
-//	mux.Handle("/webhooks/ses-inbound",      inbound.SES(h))
-//	mux.Handle("/webhooks/postmark-inbound", inbound.Postmark(h))
+//	mux.Handle("/webhooks/ses-inbound",      inbound.SES(verifySNS, h))
+//	mux.Handle("/webhooks/postmark-inbound", inbound.Postmark(verifyPostmark, h))
 //
 //	// SMTP handoff:
 //	m, err := inbound.ParseMIME(raw)
@@ -21,10 +21,12 @@ package inbound
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"mime"
 	"net/http"
 	"net/mail"
@@ -32,6 +34,7 @@ import (
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	postmarkauth "github.com/golusoris/golusoris/notify/postmark"
 )
 
 // Email is a normalized inbound message.
@@ -53,6 +56,11 @@ type Email struct {
 // HandlerFunc receives parsed inbound emails.
 type HandlerFunc func(ctx context.Context, m Email)
 
+// SNSVerifier authenticates the complete raw SNS envelope before it is parsed
+// or dispatched. Implementations must validate the SNS signature, certificate,
+// and expected TopicArn, or prove equivalent authentication at a trusted proxy.
+type SNSVerifier func(r *http.Request, body []byte) error
+
 // maxBodyBytes caps webhook bodies. Raise via [MaxBodyBytes] before
 // mounting if you need larger.
 const maxBodyBytes = 25 << 20 // 25 MiB (typical provider cap)
@@ -62,8 +70,8 @@ const maxBodyBytes = 25 << 20 // 25 MiB (typical provider cap)
 // notification carries the full MIME blob inline as `content`. When
 // configured with "action: S3", `content` is empty — apps must fetch
 // the S3 object themselves.
-func SES(h HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func SES(verify SNSVerifier, h HandlerFunc) http.Handler {
+	return withConsumer(h, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -71,6 +79,10 @@ func SES(h HandlerFunc) http.Handler {
 		body, err := readBody(r)
 		if err != nil {
 			http.Error(w, "body error", http.StatusBadRequest)
+			return
+		}
+		if verify == nil || verify(r, body) != nil {
+			http.Error(w, "invalid sns signature", http.StatusUnauthorized)
 			return
 		}
 		n, ok, err := decodeSESNotification(body)
@@ -129,7 +141,7 @@ func sesEmailFromNotification(n sesInbound) (Email, error) {
 			Provider:   "ses",
 		}, nil
 	}
-	m, err := ParseMIME([]byte(n.Content))
+	m, err := parseSESContent(n.Content)
 	if err != nil {
 		return Email{}, fmt.Errorf("mime parse: %w", err)
 	}
@@ -140,10 +152,28 @@ func sesEmailFromNotification(n sesInbound) (Email, error) {
 	return m, nil
 }
 
-// Postmark returns an http.Handler for Postmark inbound email webhooks.
+func parseSESContent(content string) (Email, error) {
+	m, rawErr := ParseMIME([]byte(content))
+	if rawErr == nil {
+		return m, nil
+	}
+	decoded, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		return Email{}, rawErr
+	}
+	m, err = ParseMIME(decoded)
+	if err != nil {
+		return Email{}, rawErr
+	}
+	return m, nil
+}
+
+// Postmark returns an http.Handler for authenticated Postmark inbound email
+// webhooks. The verifier runs after bounded body capture and before payload
+// parsing or dispatch. A nil or failing verifier rejects the request.
 // See https://postmarkapp.com/developer/webhooks/inbound-webhook.
-func Postmark(h HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func Postmark(verify postmarkauth.WebhookVerifier, h HandlerFunc) http.Handler {
+	return withConsumer(h, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -151,6 +181,10 @@ func Postmark(h HandlerFunc) http.Handler {
 		body, err := readBody(r)
 		if err != nil {
 			http.Error(w, "body error", http.StatusBadRequest)
+			return
+		}
+		if verify == nil || verify(r, body) != nil {
+			http.Error(w, "invalid postmark authentication", http.StatusUnauthorized)
 			return
 		}
 		var p postmarkInbound
@@ -182,6 +216,15 @@ func Postmark(h HandlerFunc) http.Handler {
 	})
 }
 
+func withConsumer(h HandlerFunc, handler http.HandlerFunc) http.Handler {
+	if h == nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "handler unavailable", http.StatusInternalServerError)
+		})
+	}
+	return handler
+}
+
 // ParseMIME parses a raw RFC 5322 message. Useful when accepting email
 // directly from an SMTP server (e.g. via net/smtpserver).
 func ParseMIME(raw []byte) (Email, error) {
@@ -190,9 +233,7 @@ func ParseMIME(raw []byte) (Email, error) {
 		return Email{}, fmt.Errorf("notify/inbound: parse mime: %w", err)
 	}
 	headers := make(map[string][]string, len(msg.Header))
-	for k, v := range msg.Header {
-		headers[k] = v
-	}
+	maps.Copy(headers, msg.Header)
 	subject, _ := decodeHeader(msg.Header.Get("Subject"))
 	receivedAt, _ := mail.ParseDate(msg.Header.Get("Date"))
 	body, err := io.ReadAll(msg.Body)

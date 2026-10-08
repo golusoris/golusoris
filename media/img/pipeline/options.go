@@ -16,6 +16,8 @@ const (
 	DefaultMaxHeight = 4096
 	// DefaultMaxPixels caps width*height when Options.MaxPixels is 0 (16 MP).
 	DefaultMaxPixels = 16 << 20
+	// DefaultMaxSourceBytes caps one encoded source image buffered for resize.
+	DefaultMaxSourceBytes int64 = 32 << 20
 	// DefaultCacheControl is the Cache-Control header for served variants.
 	DefaultCacheControl = "public, max-age=31536000, immutable"
 	// DefaultDefaultTTL is the signed-URL lifetime used by Sign(0).
@@ -36,21 +38,24 @@ type Options struct {
 	Secret string `koanf:"secret"`
 	// AllowedFormats is the output-format allowlist. Empty => DefaultAllowedFormats.
 	AllowedFormats []string `koanf:"allowed_formats"`
-	// MaxWidth caps requested output width. 0 => DefaultMaxWidth.
+	// MaxWidth caps requested output width. Non-positive => DefaultMaxWidth.
 	MaxWidth int `koanf:"max_width"`
-	// MaxHeight caps requested output height. 0 => DefaultMaxHeight.
+	// MaxHeight caps requested output height. Non-positive => DefaultMaxHeight.
 	MaxHeight int `koanf:"max_height"`
-	// MaxPixels caps width*height. 0 => DefaultMaxPixels.
+	// MaxPixels caps width*height. Non-positive => DefaultMaxPixels.
 	MaxPixels int `koanf:"max_pixels"`
-	// CacheControl is the Cache-Control header on served variants.
+	// MaxSourceBytes caps the encoded source image. Non-positive => DefaultMaxSourceBytes.
+	MaxSourceBytes int64 `koanf:"max_source_bytes"`
+	// CacheControl is the Cache-Control policy on served variants. Handler
+	// freshness is capped by each signed token's remaining lifetime.
 	// Empty => DefaultCacheControl.
 	CacheControl string `koanf:"cache_control"`
 	// DefaultTTL is the signed-URL lifetime when Sign is called with ttl<=0.
-	// 0 => DefaultDefaultTTL.
+	// Non-positive => DefaultDefaultTTL.
 	DefaultTTL time.Duration `koanf:"default_ttl"`
 }
 
-// withDefaults returns a copy with zero fields replaced by package defaults.
+// withDefaults returns a copy with non-positive bounds replaced by defaults.
 // Secret is intentionally left untouched: it is validated by [New].
 func (o Options) withDefaults() Options {
 	if len(o.AllowedFormats) == 0 {
@@ -64,6 +69,9 @@ func (o Options) withDefaults() Options {
 	}
 	if o.MaxPixels <= 0 {
 		o.MaxPixels = DefaultMaxPixels
+	}
+	if o.MaxSourceBytes <= 0 {
+		o.MaxSourceBytes = DefaultMaxSourceBytes
 	}
 	if o.CacheControl == "" {
 		o.CacheControl = DefaultCacheControl

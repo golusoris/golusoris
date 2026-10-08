@@ -8,7 +8,7 @@ set -euo pipefail
 
 files=$(go_files "$@")
 [ -n "$files" ] || skip "no staged Go files"
-need_tool gci "go install github.com/daixiang0/gci@latest"
+need_tool gci "run make tools-bootstrap"
 
 # Sections mirror linters.settings.gci in .golangci.yml.
 sections=(-s standard -s default -s 'prefix(github.com/golusoris/golusoris)' --custom-order)

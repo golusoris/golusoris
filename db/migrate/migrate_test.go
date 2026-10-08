@@ -46,6 +46,21 @@ func TestNewInheritsPgxDSN(t *testing.T) {
 	}
 }
 
+func TestNewRejectsNilLoggerBeforeOpeningResources(t *testing.T) {
+	t.Parallel()
+	_, err := dbmigrate.New(
+		dbmigrate.Options{Path: "/nonexistent-migrations-dir-for-test"},
+		dbpgx.Options{DSN: "postgres://app:app@127.0.0.1:1/app?sslmode=disable"},
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected nil logger error, got nil")
+	}
+	if !strings.Contains(err.Error(), "nil logger") {
+		t.Errorf("error %q missing %q", err, "nil logger")
+	}
+}
+
 func TestLoadOptionsFromConfig(t *testing.T) {
 	t.Setenv("APP_DB_MIGRATE_PATH", "db/migrations")
 	t.Setenv("APP_DB_MIGRATE_AUTO", "true")

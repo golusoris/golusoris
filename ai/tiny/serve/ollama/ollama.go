@@ -29,7 +29,9 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/ai/tiny"
+	"github.com/golusoris/golusoris/ai/tiny/serve/internal/httpoptions"
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // DefaultEndpoint is the ollama HTTP API root.
@@ -40,11 +42,13 @@ const DefaultEndpoint = "http://127.0.0.1:11434"
 // fine-tuned task-specific models.
 const DefaultMaxResponseBytes int64 = 256 << 10
 
+const defaultRequestTimeout = 60 * time.Second
+
 // Options configures a [Predictor].
 type Options struct {
 	// Endpoint is the ollama HTTP API root (default [DefaultEndpoint]).
 	Endpoint string
-	// HTTPClient defaults to a client with a 60s timeout.
+	// HTTPClient is cloned; a non-positive timeout becomes 60s.
 	HTTPClient *http.Client
 	// MaxResponseBytes caps the response body read size
 	// (default [DefaultMaxResponseBytes]).
@@ -68,15 +72,14 @@ type Predictor struct {
 
 // NewPredictor returns a Predictor with the given options.
 func NewPredictor(opts Options) *Predictor {
-	if opts.Endpoint == "" {
-		opts.Endpoint = DefaultEndpoint
-	}
-	if opts.HTTPClient == nil {
-		opts.HTTPClient = &http.Client{Timeout: 60 * time.Second}
-	}
-	if opts.MaxResponseBytes <= 0 {
-		opts.MaxResponseBytes = DefaultMaxResponseBytes
-	}
+	opts.Endpoint, opts.HTTPClient, opts.MaxResponseBytes = httpoptions.Normalize(
+		opts.Endpoint, opts.HTTPClient, opts.MaxResponseBytes,
+		httpoptions.Defaults{
+			Endpoint:         DefaultEndpoint,
+			RequestTimeout:   defaultRequestTimeout,
+			MaxResponseBytes: DefaultMaxResponseBytes,
+		},
+	)
 	return &Predictor{opts: opts}
 }
 
@@ -139,7 +142,7 @@ func (p *Predictor) Predict(ctx context.Context, input any) (_ tiny.Prediction, 
 		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/ollama: request: %w", dErr)
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/ollama: close generate body") }()
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, p.opts.MaxResponseBytes))
+	body, readErr := httpclient.ReadAllBounded(resp.Body, p.opts.MaxResponseBytes)
 	if readErr != nil {
 		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/ollama: read body: %w", readErr)
 	}

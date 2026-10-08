@@ -14,6 +14,8 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/media/img/pipeline"
 )
 
@@ -56,6 +58,77 @@ func TestNew_rejectsShortSecret(t *testing.T) {
 			}
 			if !tc.wantOK && !errors.Is(err, pipeline.ErrNoSecret) {
 				t.Fatalf("want ErrNoSecret, got %v", err)
+			}
+		})
+	}
+}
+
+func TestNew_rejectsNilDependencies(t *testing.T) {
+	t.Parallel()
+	validProcessor := img.Processor(stubProcessor{})
+	validSource := pipeline.Source(emptySource{})
+	validClock := clock.Clock(clockwork.NewFakeClock())
+	validLogger := slog.New(slog.DiscardHandler)
+	tests := []struct {
+		name      string
+		processor img.Processor
+		source    pipeline.Source
+		clock     clock.Clock
+		logger    *slog.Logger
+	}{
+		{name: "processor", source: validSource, clock: validClock, logger: validLogger},
+		{name: "source", processor: validProcessor, clock: validClock, logger: validLogger},
+		{name: "clock", processor: validProcessor, source: validSource, logger: validLogger},
+		{name: "logger", processor: validProcessor, source: validSource, clock: validClock},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := pipeline.New(
+				pipeline.Options{Secret: testSecret},
+				tc.processor,
+				tc.source,
+				tc.clock,
+				tc.logger,
+			)
+			if !errors.Is(err, pipeline.ErrInvalidDependency) {
+				t.Fatalf("New() error = %v, want ErrInvalidDependency", err)
+			}
+		})
+	}
+}
+
+func TestNew_rejectsTypedNilDependencies(t *testing.T) {
+	t.Parallel()
+	var typedNilProcessor *stubProcessor
+	var typedNilSource *emptySource
+	var typedNilClock *clockwork.FakeClock
+	validProcessor := img.Processor(stubProcessor{})
+	validSource := pipeline.Source(emptySource{})
+	validClock := clock.Clock(clockwork.NewFakeClock())
+	validLogger := slog.New(slog.DiscardHandler)
+	tests := []struct {
+		name      string
+		processor img.Processor
+		source    pipeline.Source
+		clock     clock.Clock
+	}{
+		{name: "processor", processor: typedNilProcessor, source: validSource, clock: validClock},
+		{name: "source", processor: validProcessor, source: typedNilSource, clock: validClock},
+		{name: "clock", processor: validProcessor, source: validSource, clock: typedNilClock},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := pipeline.New(
+				pipeline.Options{Secret: testSecret},
+				tc.processor,
+				tc.source,
+				tc.clock,
+				validLogger,
+			)
+			if !errors.Is(err, pipeline.ErrInvalidDependency) {
+				t.Fatalf("New() error = %v, want ErrInvalidDependency", err)
 			}
 		})
 	}
@@ -173,6 +246,11 @@ func TestSign_validation(t *testing.T) {
 		{"oversize width", pipeline.Transform{Width: 5000}, false},
 		{"oversize height", pipeline.Transform{Height: 5000}, false},
 		{"pixel bomb", pipeline.Transform{Width: 1000, Height: 1000}, false},
+		{"zero width exact pixel budget", pipeline.Transform{Height: 500}, true},
+		{"zero width pixel bomb", pipeline.Transform{Height: 501}, false},
+		{"zero height exact pixel budget", pipeline.Transform{Width: 500}, true},
+		{"zero height pixel bomb", pipeline.Transform{Width: 501}, false},
+		{"both dimensions zero use effective maxima", pipeline.Transform{}, false},
 		{"negative", pipeline.Transform{Width: -1}, false},
 		{"bad quality high", pipeline.Transform{Width: 10, Quality: 101}, false},
 		{"bad quality neg", pipeline.Transform{Width: 10, Quality: -5}, false},

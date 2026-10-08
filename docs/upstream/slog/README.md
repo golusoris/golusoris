@@ -4,9 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# log/slog — Go 1.26.2 stdlib snapshot
+# log/slog — go1.27.1 stdlib snapshot
 
-Source: https://pkg.go.dev/log/slog (stdlib, go1.26.2)
+Pinned: **go1.27.1**
+Source: [Go 1.27.1 source](https://cs.opensource.google/go/go/+/refs/tags/go1.27.1:src/log/slog/)
 
 ## Core usage
 
@@ -19,7 +20,7 @@ slog.Error("failed", "err", err)
 slog.Warn("retrying", "attempt", 3)
 slog.Debug("detail", "id", id)
 
-// Context-aware (preferred — carries trace context)
+// Context-aware: makes ctx available to the installed Handler.
 slog.InfoContext(ctx, "message", "key", "value")
 slog.ErrorContext(ctx, "failed", "err", err)
 ```
@@ -94,11 +95,13 @@ type Handler interface {
 
 ## golusoris usage
 
-- `log/` — slog factory: tint handler (dev) / JSON handler (prod) + OTel bridge.
-- `fmt.Println` and `log.Printf` are **banned** — always use slog via `log/`.
-- Pass `ctx` to `slog.*Context` so OTel trace IDs propagate automatically.
+- `core/log/` — slog factory: tint handler in development, JSON in production.
+- `fmt.Println` and `log.Printf` are banned; always use slog via `core/log/`.
+- Pass `ctx` to `slog.*Context` so handlers can inspect it. Trace export occurs
+  only when the application installs `otel.ModuleWithSlogBridge`; slog does not
+  propagate trace IDs automatically.
 
 ## Links
 
-- Stdlib godoc: https://pkg.go.dev/log/slog
-- Design doc: https://go.googlesource.com/proposal/+/master/design/56345-structured-logging.md
+- [Standard-library documentation](https://pkg.go.dev/log/slog)
+- [Structured logging design](https://go.googlesource.com/proposal/+/master/design/56345-structured-logging.md)

@@ -38,7 +38,7 @@ include $(GOLUSORIS)/tools/Makefile.shared
 Targets after inclusion:
 
 | Target | What it runs |
-|---|---|
+| --- | --- |
 | `make ci` | `lint` + `sec` + `test` — the full local gate |
 | `make lint` | `golangci-lint run --config $(GOLANGCI_CONFIG)` (default `.golangci.yml`) |
 | `make sec` | `vuln` + `gosec` (`govulncheck` then `gosec -quiet`) |
@@ -67,7 +67,12 @@ make test PKG=./internal/payments/...
 
 ### Multi-module repositories
 
-The framework itself is two gated Go modules (root + `core/`). `make ci-all`, `make build-all`, and `make verify-all` in the framework `Makefile` loop over both; downstream apps that adopt the same shape can copy the `MODULES` loop.
+The framework discovers and gates all 23 Go modules through
+`scripts/ci/go-modules.sh`. `make ci-all`, `make build-all`, and
+`make verify-all` all use that single discovery path, so a newly tracked
+`go.mod` cannot silently miss the local or hosted module sweep. Downstream
+multi-module apps can adopt the same discovery pattern or call the reusable
+workflow once per module.
 
 ## 2. Reusable CI workflow — `ci-go.yml`
 
@@ -97,7 +102,7 @@ jobs:
   ci:
     uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
     with:
-      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
+      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
       working-directory: .                  # dir holding go.mod; "." for a root module
       go-version-file: go.mod
       coverage-threshold: 70          # 85 for security-critical packages
@@ -126,11 +131,11 @@ upload.
 ### Pinning the reusable-workflow reference
 
 The example above uses `@main` for readability. The app template this
-framework ships under [`template/`](../template/) pins the same calls to a
+framework ships under [`template/`](https://github.com/golusoris/golusoris/tree/main/template) pins the same calls to a
 full commit SHA with a version comment instead —
 [`template/.github/workflows/ci.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/ci.yml)
 and [`release.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/release.yml) both reference
-`golusoris/golusoris/.github/workflows/<workflow>.yml@380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`.
+`golusoris/golusoris/.github/workflows/<workflow>.yml@4b22fc0dc3c1f9c779b77e78a292539655d2dc69 # v0.12.0`.
 Do the same in a real app: pin to a released tag's commit SHA (and bump it
 deliberately) rather than floating on `@main`, so an unreviewed change to
 this repository's default branch cannot silently change your CI.
@@ -139,24 +144,29 @@ Common inputs (all optional except where noted; see the `workflow_call` block
 at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 
 | Input | Default | Purpose |
-|---|---|---|
-| `runs-on` | `arc-cauda-golusoris-golusoris` | self-hosted runner-set label every job runs on; set to your own app's ARC label |
+| --- | --- | --- |
+| `runs-on` | `ubuntu-24.04` | runner label every job runs on: GitHub-hosted by default, or your own self-hosted runner-set label |
 | `working-directory` | `.` | directory holding your module's go.mod, relative to the repo root; set for apps whose module is not at the repo root |
 | `go-version-file` | `go.mod` | where the Go version is resolved from — **relative to the repo root**, not `working-directory` (see the input's own description in `ci-go.yml`); a non-root module must pass e.g. `<working-directory>/go.mod` |
 | `coverage-threshold` | `70` | minimum total coverage %; `0` skips the check |
-| `golangci-version` | `v2.12.2` | golangci-lint version to install |
+| `golangci-version` | `v2.13.2` | golangci-lint version to install |
 | `golangci-config` | *(empty)* | path to a shared ruleset, relative to `working-directory`; empty = auto-discover the app's `.golangci.yml` in that same directory |
 | `module-path` | *(empty)* | module path for the apidiff check, e.g. `github.com/myorg/myapp` |
+| `apidiff-base-ref` | *(empty)* | exact comparison base for apidiff; empty selects the previous root `vN` tag |
 | `needs-docker` | `true` | verify Docker before tests; set `false` if no testcontainers |
 | `container` | *(empty)* | image to run the Go jobs in (cgo/system-lib builds) |
-| `system-packages` | *(empty)* | Debian packages that the rootless ARC image must already contain |
+| `system-packages` | *(empty)* | Debian packages (`name` or `name=version`) every Go job needs |
+| `install-system-packages` | `true` | install `system-packages` with bounded `apt-get` calls before verifying them; set `false` on a self-hosted image that already contains them |
 | `openapi-spec` | *(empty)* | path to an OpenAPI spec for spectral lint; empty = skip |
 | `skip-apidiff` | `false` | set `true` for a first release with no prior tag |
 
 ## 3. Reusable release workflow — `release-go.yml`
 
-Runs on `v*.*.*` tags and produces a multi-arch OCI image (GHCR), an SPDX SBOM
-via syft, a keyless cosign signature, and SLSA build provenance.
+`release-go.yml` runs only when a caller invokes it through `workflow_call`.
+The caller below selects `v*.*.*` tags. The reusable workflow publishes the
+multi-arch OCI image configured by the caller's GoReleaser file, signs its
+digest with keyless cosign, and publishes build-provenance and SPDX SBOM
+attestations. It makes no SLSA level claim.
 
 ```yaml
 # myapp/.github/workflows/release.yml
@@ -170,30 +180,98 @@ permissions:
   contents: write     # attach release assets
   packages: write     # push image to GHCR
   id-token: write     # keyless cosign + provenance attestation
+  attestations: write
+  artifact-metadata: write
 
 jobs:
   release:
-    uses: golusoris/golusoris/.github/workflows/release-go.yml@main
+    uses: golusoris/golusoris/.github/workflows/release-go.yml@fedcba9876543210fedcba9876543210fedcba98
     with:
-      runs-on: arc-cauda-golusoris-myapp   # your own ARC runner-set label
+      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
       image-name: ghcr.io/myorg/myapp     # required
       goreleaser-config: tools/.goreleaser.yml
-    secrets: inherit                       # COSIGN_PASSWORD is optional
 ```
+
+Replace the example `fedcba...` value with a reviewed full commit SHA from
+`golusoris/golusoris`. Keep that SHA for provenance verification; a branch or
+tag does not provide an immutable reusable-workflow identity.
+
+The caller must grant all five permissions: a called workflow can reduce a
+caller's token permissions but cannot add missing ones. The reusable workflow
+rejects non-tag and non-SemVer refs, then reads the image digest from the
+current `dist/artifacts.json` GoReleaser receipt and confirms that the registry
+tag resolves to that same digest before signing or attesting it. The SPDX SBOM
+is an OCI attestation on that digest. GoReleaser leaves the GitHub Release as a
+draft; only the final workflow step publishes it after all three supply-chain
+claims succeed, so immutable releases cannot become public first.
+
+The caller's GoReleaser config must publish the exact image name passed to the
+workflow and include its default `{{ .Tag }}` tag. It must also make failed
+draft releases resumable:
+
+```yaml
+dockers_v2:
+  - images:
+      - ghcr.io/myorg/myapp
+    tags:
+      - "{{ .Tag }}"
+
+release:
+  use_existing_draft: true
+  replace_existing_artifacts: true
+```
+
+The `image-name` input must match the `images` value. The workflow accepts only
+SemVer tags that are also valid OCI tags: build metadata containing `+` and
+tags longer than 128 characters are rejected before the build. It forces draft
+mode; on a retry, the release settings reuse the draft and replace any assets
+uploaded by the failed attempt. A successful final publish then makes the
+release immutable when that repository setting is enabled.
+
+Gate a deploy with the matching signature, provenance, and SPDX SBOM claims:
+
+```yaml
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  verify:
+    uses: golusoris/golusoris/.github/workflows/verify-provenance.yml@fedcba9876543210fedcba9876543210fedcba98
+    with:
+      image: ghcr.io/myorg/myapp
+      digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      repository: myorg/myapp
+      source-ref: refs/tags/v1.2.3
+      source-digest: 0123456789abcdef0123456789abcdef01234567
+      signer-workflow: golusoris/golusoris/.github/workflows/release-go.yml
+      signer-digest: fedcba9876543210fedcba9876543210fedcba98
+```
+
+`verify-provenance.yml` fails if every verification mode is disabled. By
+default it verifies the keyless signature plus the SLSA provenance and SPDX
+SBOM predicates. The signer path and digest must match the commit-pinned
+`release-go.yml` call. Verification constrains the Fulcio certificate SAN and
+both attestations to that reusable signer, then independently constrains the
+source ref, source commit, and image digest.
+
+The verifier uses the caller's GitHub token only for `ghcr.io`. Set `registry`
+to an empty string when verifying a public image on another registry; the
+workflow never forwards the GitHub token to a caller-selected host.
 
 ## 4. Required tools + versions
 
-`make ci` expects these on `PATH` locally. In CI, `ci-go.yml` installs its own
-pinned copies (the versions below match what the reusable workflow pins as of
-this writing — check the workflow for the current pins):
+`make ci` expects these on `PATH` locally. `tools/tool-versions.env` is the
+repository authority; `make tools-bootstrap` installs that complete pinned set.
+The reusable workflow installs its required subset from explicit inputs.
 
-| Tool | Version pinned in `ci-go.yml` | Install locally |
-|---|---|---|
-| `golangci-lint` | `v2.12.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2` |
-| `gosec` | `v2.27.1` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.27.1` |
-| `govulncheck` | `v1.4.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.4.0` |
-| `mockery` | — | `go install github.com/vektra/mockery/v2@latest` |
-| `air` | — | `go install github.com/air-verse/air@latest` |
+| Tool | Repository pin | Install locally |
+| --- | --- | --- |
+| `golangci-lint` | `v2.13.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2` |
+| `gosec` | `v2.29.0` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0` |
+| `govulncheck` | `v1.8.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.8.0` |
+| `mockery` | `v3.8.0` | `go install github.com/vektra/mockery/v3@v3.8.0` |
+| `air` | `v1.67.4` | `go install github.com/air-verse/air@v1.67.4` |
 
 ## 5. golangci-lint config
 

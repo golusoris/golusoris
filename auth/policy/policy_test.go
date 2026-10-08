@@ -21,19 +21,40 @@ import (
 
 func TestPolicy_RejectsShort(t *testing.T) {
 	t.Parallel()
-	p := policy.New(policy.Options{MinLength: 12, MinScore: 3})
+	p := newPolicy(t, policy.Options{MinLength: 12, MinScore: 3})
 	require.Error(t, p.Validate(context.Background(), "short"))
+}
+
+func TestPolicy_MinLengthCountsUnicodeCharacters(t *testing.T) {
+	t.Parallel()
+	p := newPolicy(t, policy.Options{MinLength: 5, MinScore: 1})
+	err := p.Validate(context.Background(), "🔒🔒")
+	require.ErrorContains(t, err, "at least 5 chars")
+}
+
+func TestPolicy_RejectsInvalidUTF8(t *testing.T) {
+	t.Parallel()
+	p := newPolicy(t, policy.Options{MinLength: 2, DisableStrengthCheck: true})
+	err := p.Validate(context.Background(), string([]byte{0xff, 0xfe}))
+	require.ErrorContains(t, err, "valid UTF-8")
 }
 
 func TestPolicy_RejectsWeak(t *testing.T) {
 	t.Parallel()
-	p := policy.New(policy.Options{MinLength: 4, MinScore: 4})
+	p := newPolicy(t, policy.Options{MinLength: 4, MinScore: 4})
 	require.Error(t, p.Validate(context.Background(), "password"))
+}
+
+func TestPolicy_CanExplicitlyDisableStrengthCheck(t *testing.T) {
+	t.Parallel()
+	p := newPolicy(t, policy.Options{MinLength: 4, DisableStrengthCheck: true})
+	require.Zero(t, p.Score("aaaa"))
+	require.NoError(t, p.Validate(context.Background(), "aaaa"))
 }
 
 func TestPolicy_AcceptsStrong(t *testing.T) {
 	t.Parallel()
-	p := policy.New(policy.Options{MinLength: 12, MinScore: 3})
+	p := newPolicy(t, policy.Options{MinLength: 12, MinScore: 3})
 	require.NoError(t, p.Validate(context.Background(), "Tr0ub4dor&3-purple-monkey"))
 }
 
@@ -47,7 +68,7 @@ func TestPolicy_HIBPRejectsBreached(t *testing.T) {
 
 	body := "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEAD:7\r\n" + suffix + ":42\r\n"
 
-	p := policy.New(policy.Options{
+	p := newPolicy(t, policy.Options{
 		MinLength:      4,
 		MinScore:       3,
 		CheckHIBP:      true,
@@ -64,7 +85,7 @@ func TestPolicy_HIBPAllowsClean(t *testing.T) {
 
 	body := "DEADBEEFDEADBEEFDEADBEEFDEADBEEFDEAD:7\r\n"
 
-	p := policy.New(policy.Options{
+	p := newPolicy(t, policy.Options{
 		MinLength:      4,
 		MinScore:       3,
 		CheckHIBP:      true,
@@ -82,6 +103,36 @@ func (c cannedTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 		Body:       io.NopCloser(strings.NewReader(c.body)),
 		Header:     make(http.Header),
 	}, nil
+}
+
+func TestNewRejectsInvalidOptions(t *testing.T) {
+	t.Parallel()
+	tests := []policy.Options{
+		{MinLength: -1},
+		{MinScore: -1},
+		{MinScore: 5},
+		{MinScore: 1, DisableStrengthCheck: true},
+		{MaxBreachCount: -1},
+	}
+	for _, opts := range tests {
+		_, err := policy.New(opts)
+		require.Error(t, err)
+	}
+}
+
+func TestPolicy_HIBPBoundsInjectedClientAndRejectsOversizedResponse(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Transport: cannedTransport{body: strings.Repeat("x", (1<<20)+1)}}
+	p, err := policy.New(policy.Options{
+		MinLength:  4,
+		MinScore:   3,
+		CheckHIBP:  true,
+		HTTPClient: client,
+	})
+	require.NoError(t, err)
+	require.Zero(t, client.Timeout)
+	err = p.Validate(context.Background(), "Tr0ub4dor&3-purple-monkey")
+	require.ErrorContains(t, err, "response body too large")
 }
 
 // errClose is returned by failCloser.Close to exercise the deferred
@@ -111,7 +162,7 @@ func (c failCloseTransport) RoundTrip(_ *http.Request) (*http.Response, error) {
 func TestPolicy_HIBPCloseErrorSurfaces(t *testing.T) {
 	t.Parallel()
 
-	p := policy.New(policy.Options{
+	p := newPolicy(t, policy.Options{
 		MinLength:  4,
 		MinScore:   3,
 		CheckHIBP:  true,
@@ -125,7 +176,7 @@ func TestPolicy_HIBPCloseErrorSurfaces(t *testing.T) {
 func TestPolicy_HIBPPrimaryErrorWinsOverClose(t *testing.T) {
 	t.Parallel()
 
-	p := policy.New(policy.Options{
+	p := newPolicy(t, policy.Options{
 		MinLength:  4,
 		MinScore:   3,
 		CheckHIBP:  true,
@@ -134,4 +185,11 @@ func TestPolicy_HIBPPrimaryErrorWinsOverClose(t *testing.T) {
 	err := p.Validate(context.Background(), "Tr0ub4dor&3-purple-monkey")
 	require.ErrorContains(t, err, "hibp: status 503")
 	require.NotErrorIs(t, err, errClose)
+}
+
+func newPolicy(t *testing.T, opts policy.Options) *policy.Policy {
+	t.Helper()
+	p, err := policy.New(opts)
+	require.NoError(t, err)
+	return p
 }

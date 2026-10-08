@@ -7,10 +7,13 @@ package tiny_test
 import (
 	"context"
 	"log/slog"
+	"math"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
@@ -82,11 +85,10 @@ func TestPGRegistry_SaveGetJob_roundTrip(t *testing.T) {
 	reg, clk := newPGRegistry(t)
 	ctx := context.Background()
 
-	// SaveJob assigns an ID on its own copy, so pin a deterministic ID to
-	// fetch back. With a non-empty ID, SaveJob upserts under that ID.
+	// Pin a deterministic ID to verify the upserted record.
 	job := sampleJob()
 	job.ID = "job-fixed"
-	require.NoError(t, reg.SaveJob(ctx, job))
+	require.NoError(t, reg.SaveJob(ctx, &job))
 
 	got, err := reg.GetJob(ctx, "job-fixed")
 	require.NoError(t, err)
@@ -99,6 +101,26 @@ func TestPGRegistry_SaveGetJob_roundTrip(t *testing.T) {
 	require.Equal(t, "support", got.Tags["team"])
 	// pgx scans TIMESTAMPTZ into the local zone; compare the instant.
 	require.True(t, clk.Now().Equal(got.CreatedAt))
+}
+
+func TestPGRegistry_SaveJobPreservesCreatedAtOnUpdate(t *testing.T) {
+	t.Parallel()
+	reg, clk := newPGRegistry(t)
+	ctx := context.Background()
+	job := sampleJob()
+	job.ID = "job-update"
+	require.NoError(t, reg.SaveJob(ctx, &job))
+	createdAt := job.CreatedAt
+	clk.Advance(time.Hour)
+	update := job
+	update.Name = "updated-name"
+	update.CreatedAt = time.Time{}
+	require.NoError(t, reg.SaveJob(ctx, &update))
+	require.True(t, createdAt.Equal(update.CreatedAt))
+	stored, err := reg.GetJob(ctx, job.ID)
+	require.NoError(t, err)
+	require.Equal(t, "updated-name", stored.Name)
+	require.True(t, createdAt.Equal(stored.CreatedAt))
 }
 
 func TestPGRegistry_GetJob_notFound(t *testing.T) {
@@ -275,4 +297,214 @@ func TestPGRegistry_NewPGRegistry_rejectsNil(t *testing.T) {
 	require.ErrorContains(t, err, "nil pool")
 	_, err = tiny.NewPGRegistryWithClock(nil, clockwork.NewRealClock())
 	require.ErrorContains(t, err, "nil pool")
+}
+
+type typedNilClock struct{ clockwork.Clock }
+
+func TestPGRegistry_NewPGRegistryWithClockRejectsTypedNil(t *testing.T) {
+	t.Parallel()
+	var clock *typedNilClock
+	_, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clock)
+	require.ErrorContains(t, err, "nil clock")
+}
+
+func TestRegistries_RejectInvalidUTF8Metadata(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+
+	mutations := map[string]func(*tiny.Job){
+		"colliding map key": func(job *tiny.Job) {
+			job.Hyperparams = map[string]any{string([]byte{0xff}): "first", "\uFFFD": "second"}
+		},
+		"nested string": func(job *tiny.Job) {
+			job.Hyperparams = map[string]any{"value": string([]byte{0xff})}
+		},
+		"tag key": func(job *tiny.Job) {
+			job.Tags = map[string]string{string([]byte{0xff}): "value"}
+		},
+		"tag value": func(job *tiny.Job) {
+			job.Tags = map[string]string{"key": string([]byte{0xff})}
+		},
+	}
+	registries := map[string]tiny.Registry{
+		"memory":   tiny.NewMemoryRegistry(),
+		"postgres": pgRegistry,
+	}
+	for registryName, registry := range registries {
+		for mutationName, mutate := range mutations {
+			t.Run(registryName+"/"+mutationName, func(t *testing.T) {
+				t.Parallel()
+				job := sampleJob()
+				job.ID = "job-invalid-utf8"
+				mutate(&job)
+				require.ErrorContains(t, registry.SaveJob(t.Context(), &job), "invalid UTF-8")
+			})
+		}
+	}
+}
+
+func TestRegistriesRejectJobSerializedByteOverflow(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+	for name, registry := range map[string]tiny.Registry{
+		"memory": tiny.NewMemoryRegistry(), "postgres": pgRegistry,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			job := jobAtSerializedByteLimit(t)
+			job.Dataset.URI += "x"
+			require.ErrorContains(
+				t, registry.SaveJob(t.Context(), &job), "exceed 1048576 encoded bytes",
+			)
+		})
+	}
+}
+
+func TestRegistriesRejectJobValueOverflow(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+	for name, registry := range map[string]tiny.Registry{
+		"memory": tiny.NewMemoryRegistry(), "postgres": pgRegistry,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			job := sampleJob()
+			job.Hyperparams = map[string]any{"values": make([]any, 100_000)}
+			require.ErrorContains(
+				t, registry.SaveJob(t.Context(), &job), "exceeds 100000 nested values",
+			)
+		})
+	}
+}
+
+func TestRegistries_RejectMetadataBeyondDepthLimit(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+	for name, registry := range map[string]tiny.Registry{
+		"memory":   tiny.NewMemoryRegistry(),
+		"postgres": pgRegistry,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			job := sampleJob()
+			job.ID = "job-too-deep"
+			job.Hyperparams = nestedMetadata(513)
+			require.ErrorContains(t, registry.SaveJob(t.Context(), &job), "exceeds nesting depth 512")
+		})
+	}
+}
+
+func TestMemoryRegistry_AcceptsMetadataAtDepthLimit(t *testing.T) {
+	t.Parallel()
+	job := sampleJob()
+	job.Hyperparams = nestedMetadata(512)
+	require.NoError(t, tiny.NewMemoryRegistry().SaveJob(t.Context(), &job))
+}
+
+func TestMemoryRegistry_RejectsOversizedNestedMap(t *testing.T) {
+	t.Parallel()
+	children := make(map[string]any, 100_001)
+	for index := range 100_001 {
+		children[strconv.Itoa(index)] = nil
+	}
+	job := sampleJob()
+	job.Hyperparams = map[string]any{"nested": children}
+	require.ErrorContains(t, tiny.NewMemoryRegistry().SaveJob(t.Context(), &job), "exceeds 100000 nested values")
+}
+
+func TestRegistries_RejectInvalidModelJSONValues(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+	tests := map[string]struct {
+		mutate func(*tiny.Model)
+		want   string
+	}{
+		"metadata collision": {
+			mutate: func(model *tiny.Model) {
+				model.Metadata = map[string]string{string([]byte{0xff}): "first", "\uFFFD": "second"}
+			},
+			want: "invalid UTF-8",
+		},
+		"label": {
+			mutate: func(model *tiny.Model) { model.Labels = []string{string([]byte{0xff})} },
+			want:   "invalid UTF-8",
+		},
+		"metric key": {
+			mutate: func(model *tiny.Model) {
+				model.Metrics = map[string]float64{string([]byte{0xff}): 1}
+			},
+			want: "invalid UTF-8",
+		},
+		"metric value": {
+			mutate: func(model *tiny.Model) { model.Metrics = map[string]float64{"loss": math.NaN()} },
+			want:   "non-finite float64",
+		},
+	}
+	for name, registry := range map[string]tiny.Registry{
+		"memory":   tiny.NewMemoryRegistry(),
+		"postgres": pgRegistry,
+	} {
+		for testName, test := range tests {
+			t.Run(name+"/"+testName, func(t *testing.T) {
+				t.Parallel()
+				model := sampleModel("invalid-json", "tenant")
+				test.mutate(model)
+				require.ErrorContains(t, registry.SaveModel(t.Context(), model), test.want)
+			})
+		}
+	}
+}
+
+func TestRegistriesRejectModelJSONBounds(t *testing.T) {
+	t.Parallel()
+	pgRegistry, err := tiny.NewPGRegistryWithClock(&pgxpool.Pool{}, clockwork.NewFakeClock())
+	require.NoError(t, err)
+	tests := map[string]func(*testing.T) *tiny.Model{
+		"byte overflow": func(t *testing.T) *tiny.Model {
+			t.Helper()
+			model := modelAtJSONByteLimit(t, "model-byte-overflow")
+			model.Metadata["payload"] += "x"
+			return model
+		},
+		"value overflow": func(_ *testing.T) *tiny.Model {
+			return modelWithMetadataValues("model-value-overflow", 100_001)
+		},
+	}
+	for registryName, registry := range map[string]tiny.Registry{
+		"memory": tiny.NewMemoryRegistry(), "postgres": pgRegistry,
+	} {
+		for testName, build := range tests {
+			t.Run(registryName+"/"+testName, func(t *testing.T) {
+				t.Parallel()
+				err := registry.SaveModel(t.Context(), build(t))
+				require.ErrorContains(t, err, "model JSON fields exceed")
+			})
+		}
+	}
+}
+
+func TestPGRegistryAcceptsRegistryJSONBoundaries(t *testing.T) {
+	t.Parallel()
+	reg, _ := newPGRegistry(t)
+	job := jobAtSerializedByteLimit(t)
+	require.NoError(t, reg.SaveJob(t.Context(), &job))
+	valueJob := jobAtJSONValueLimit()
+	require.NoError(t, reg.SaveJob(t.Context(), &valueJob))
+	require.NoError(t, reg.SaveModel(t.Context(), modelAtJSONByteLimit(t, "model-byte-limit")))
+	require.NoError(t, reg.SaveModel(
+		t.Context(), modelWithMetadataValues("model-value-limit", 100_000),
+	))
+}
+
+func nestedMetadata(depth int) map[string]any {
+	var value any = "leaf"
+	for range depth {
+		value = map[string]any{"child": value}
+	}
+	return value.(map[string]any)
 }

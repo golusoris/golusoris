@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/search"
 )
@@ -24,6 +25,19 @@ type scoredSearcher struct{ hits []search.Hit }
 
 func (s scoredSearcher) Search(_ context.Context, _ string, _ search.Query) (search.Results, error) {
 	return search.Results{Hits: s.hits, Total: int64(len(s.hits)), Took: 7}, nil
+}
+
+type typedNilBackend struct{ search.Backend }
+
+type blockingSearcher struct {
+	started chan<- struct{}
+	release <-chan struct{}
+}
+
+func (s blockingSearcher) Search(_ context.Context, _ string, _ search.Query) (search.Results, error) {
+	close(s.started)
+	<-s.release
+	return search.Results{}, nil
 }
 
 func hit(id string, score float64) search.Hit {
@@ -165,6 +179,74 @@ func TestMultiSearcher_FailFast(t *testing.T) {
 	}
 }
 
+func TestMultiSearcher_FailFastDoesNotWaitForBlockedBackend(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+
+	boom := errors.New("boom")
+	failAfterStart := searcherFunc(func(_ context.Context, _ string, _ search.Query) (search.Results, error) {
+		<-started
+		return search.Results{}, boom
+	})
+	m := search.NewMultiSearcher([]search.Searcher{
+		blockingSearcher{started: started, release: release},
+		failAfterStart,
+	}, search.WithFailFast(), search.WithMaxFanOut(2))
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.Search(context.Background(), "c", search.Query{Q: "*"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, boom) {
+			t.Fatalf("error = %v, want %v", err, boom)
+		}
+	case <-time.After(time.Second):
+		close(release)
+		<-done
+		t.Fatal("fail-fast waited for blocked backend")
+	}
+}
+
+func TestMultiSearcher_FailFastHonorsPreCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	m := search.NewMultiSearcher([]search.Searcher{
+		scoredSearcher{}, scoredSearcher{},
+	}, search.WithFailFast())
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.Search(ctx, "c", search.Query{Q: "*"})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error = %v, want context.Canceled", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("fail-fast deadlocked on pre-canceled context")
+	}
+}
+
+type searcherFunc func(context.Context, string, search.Query) (search.Results, error)
+
+func (f searcherFunc) Search(ctx context.Context, collection string, query search.Query) (search.Results, error) {
+	return f(ctx, collection, query)
+}
+
 func TestMultiSearcher_Pagination(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -294,6 +376,19 @@ func TestGate_NilBackendDisabled(t *testing.T) {
 	}
 	if len(res.Hits) != 0 {
 		t.Fatalf("nil backend should gate to empty results, got %d", len(res.Hits))
+	}
+}
+
+func TestGate_TypedNilBackendDisabled(t *testing.T) {
+	t.Parallel()
+	var backend *typedNilBackend
+	gated := search.Gate(backend, true)
+	res, err := gated.Search(context.Background(), "c", search.Query{Q: "*"})
+	if err != nil {
+		t.Fatalf("Search: %v", err)
+	}
+	if len(res.Hits) != 0 {
+		t.Fatalf("typed-nil backend should gate to empty results, got %d", len(res.Hits))
 	}
 }
 

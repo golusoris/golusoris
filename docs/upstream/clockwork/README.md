@@ -7,19 +7,20 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # jonboulle/clockwork — v0.5.0 snapshot
 
 Pinned: **v0.5.0**
-Source: https://pkg.go.dev/github.com/jonboulle/clockwork@v0.5.0
+Source: [tagged source](https://github.com/jonboulle/clockwork/tree/v0.5.0)
 
 ## Interface
 
 ```go
 type Clock interface {
+    After(d time.Duration) <-chan time.Time
+    Sleep(d time.Duration)
     Now() time.Time
     Since(t time.Time) time.Duration
     Until(t time.Time) time.Duration
-    Sleep(d time.Duration)
-    NewTicker(d time.Duration) *time.Ticker
-    NewTimer(d time.Duration) *time.Timer
-    AfterFunc(d time.Duration, f func()) *time.Timer
+    NewTicker(d time.Duration) Ticker
+    NewTimer(d time.Duration) Timer
+    AfterFunc(d time.Duration, f func()) Timer
 }
 ```
 
@@ -33,12 +34,14 @@ now := clk.Now()   // calls time.Now() internally
 ## Fake clock (tests)
 
 ```go
-fc := clockwork.NewFakeClock()           // starts at 2015-01-01 00:00:00 UTC
-fc := clockwork.NewFakeClockAt(t)        // starts at specific time
+fc := clockwork.NewFakeClock()           // starts at current system time
+fc := clockwork.NewFakeClockAt(t)        // deterministic start time
 
 now := fc.Now()
 fc.Advance(5 * time.Minute)             // advance time
-fc.BlockUntil(1)                        // wait until 1 goroutine is sleeping
+if err := fc.BlockUntilContext(ctx, 1); err != nil {
+    return fmt.Errorf("wait for clock consumer: %w", err)
+}
 ```
 
 ## Usage pattern
@@ -54,16 +57,17 @@ func (s *Service) IsExpired(t time.Time) bool {
 }
 
 // Test
-fc := clockwork.NewFakeClock()
+fc := clockwork.NewFakeClockAt(time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
 svc := NewService(fc)
 fc.Advance(time.Hour)
 ```
 
 ## golusoris usage
 
-- `clock/` — `clockwork.Clock` provided via fx (real in prod, fake in tests via `fxtest`).
-- `time.Now()` is **banned** outside `clock/` — use `clk.Now()` everywhere.
+- `core/clock/` — `clockwork.Clock` provided via fx (real in production, fake
+  in tests via `fxtest`).
+- `time.Now()` is banned outside `core/clock/`; use `clk.Now()` everywhere.
 
 ## Links
 
-- Changelog: https://github.com/jonboulle/clockwork/blob/master/CHANGELOG.md
+- [Package documentation](https://pkg.go.dev/github.com/jonboulle/clockwork@v0.5.0)

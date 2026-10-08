@@ -5,10 +5,9 @@
 package crypto
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/golusoris/golusoris/core/config"
 )
@@ -26,7 +25,7 @@ func NewEncryptor(key []byte) (*Encryptor, error) {
 	if _, err := newGCM(key); err != nil {
 		return nil, err
 	}
-	return &Encryptor{key: key}, nil
+	return &Encryptor{key: append([]byte(nil), key...)}, nil
 }
 
 // Seal encrypts plaintext under the bound key (see [Seal]).
@@ -46,11 +45,9 @@ func SecureToken(nBytes int) (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-// newEncryptor is the fx provider. It resolves the AES key from config:
-//  1. crypto.key (hex-encoded 16/24/32 bytes) — preferred, a dedicated key;
-//  2. else SHA-256(auth.jwt.secret) — reuse the app's JWT secret;
-//  3. else an INSECURE built-in dev key (logged loudly — never for production).
-func newEncryptor(cfg *config.Config, logger *slog.Logger) (*Encryptor, error) {
+// newEncryptor is the fx provider. It requires crypto.key to contain a
+// dedicated hex-encoded 16, 24, or 32-byte AES key.
+func newEncryptor(cfg *config.Config) (*Encryptor, error) {
 	if hexKey := cfg.String("crypto.key"); hexKey != "" {
 		key, err := hex.DecodeString(hexKey)
 		if err != nil {
@@ -58,12 +55,5 @@ func newEncryptor(cfg *config.Config, logger *slog.Logger) (*Encryptor, error) {
 		}
 		return NewEncryptor(key)
 	}
-	if secret := cfg.String("auth.jwt.secret"); secret != "" {
-		logger.Warn("crypto: deriving the encryption key from auth.jwt.secret; set crypto.key for a dedicated key")
-		sum := sha256.Sum256([]byte(secret))
-		return NewEncryptor(sum[:])
-	}
-	logger.Error("crypto: no crypto.key or auth.jwt.secret set — using an INSECURE built-in dev key; DO NOT run this in production")
-	sum := sha256.Sum256([]byte("golusoris-insecure-dev-key"))
-	return NewEncryptor(sum[:])
+	return nil, errors.New("crypto: crypto.key is required for Encryptor")
 }

@@ -7,6 +7,7 @@ package webrtc_test
 import (
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,7 +24,9 @@ import (
 func TestSignaler_Answer_dataChannelRoundtrip(t *testing.T) {
 	t.Parallel()
 	received := make(chan string, 1)
+	api := loopbackAPI()
 	s := webrtc.NewSignaler(webrtc.Options{
+		API: api,
 		OnConnect: func(pc *pionwebrtc.PeerConnection) {
 			pc.OnDataChannel(func(dc *pionwebrtc.DataChannel) {
 				dc.OnMessage(func(msg pionwebrtc.DataChannelMessage) {
@@ -34,7 +37,7 @@ func TestSignaler_Answer_dataChannelRoundtrip(t *testing.T) {
 	})
 
 	// Build a browser-side offerer with a pre-negotiated data channel.
-	offerPC, err := pionwebrtc.NewPeerConnection(pionwebrtc.Configuration{})
+	offerPC, err := api.NewPeerConnection(pionwebrtc.Configuration{})
 	require.NoError(t, err)
 	defer func() { _ = offerPC.Close() }()
 
@@ -49,12 +52,14 @@ func TestSignaler_Answer_dataChannelRoundtrip(t *testing.T) {
 	gather := pionwebrtc.GatheringCompletePromise(offerPC)
 	require.NoError(t, offerPC.SetLocalDescription(offer))
 	<-gather
+	requireLoopbackHostCandidates(t, offerPC.LocalDescription().SDP)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	answer, answerPC, err := s.Answer(ctx, offerPC.LocalDescription().SDP)
 	require.NoError(t, err)
 	defer func() { _ = answerPC.Close() }()
+	requireLoopbackHostCandidates(t, answer)
 
 	require.NoError(t, offerPC.SetRemoteDescription(pionwebrtc.SessionDescription{
 		Type: pionwebrtc.SDPTypeAnswer,
@@ -95,6 +100,15 @@ func TestSignaler_Handler_rejectsWrongContentType(t *testing.T) {
 	require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
 }
 
+func TestSignaler_Handler_rejectsMissingContentType(t *testing.T) {
+	t.Parallel()
+	s := webrtc.NewSignaler(webrtc.Options{})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/whip", strings.NewReader("v=0\r\n"))
+	s.Handler().ServeHTTP(rec, req)
+	require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+}
+
 func TestSignaler_Handler_rejectsEmptyBody(t *testing.T) {
 	t.Parallel()
 	s := webrtc.NewSignaler(webrtc.Options{})
@@ -129,7 +143,9 @@ func TestSignaler_Handler_endToEnd(t *testing.T) {
 	// answer is valid SDP.
 	got := make(chan struct{}, 1)
 	var once sync.Once
+	api := loopbackAPI()
 	s := webrtc.NewSignaler(webrtc.Options{
+		API: api,
 		OnConnect: func(pc *pionwebrtc.PeerConnection) {
 			pc.OnDataChannel(func(*pionwebrtc.DataChannel) {
 				once.Do(func() { got <- struct{}{} })
@@ -139,7 +155,7 @@ func TestSignaler_Handler_endToEnd(t *testing.T) {
 	srv := httptest.NewServer(s.Handler())
 	defer srv.Close()
 
-	offerPC, err := pionwebrtc.NewPeerConnection(pionwebrtc.Configuration{})
+	offerPC, err := api.NewPeerConnection(pionwebrtc.Configuration{})
 	require.NoError(t, err)
 	defer func() { _ = offerPC.Close() }()
 	_, err = offerPC.CreateDataChannel("chat", nil)
@@ -149,6 +165,7 @@ func TestSignaler_Handler_endToEnd(t *testing.T) {
 	gather := pionwebrtc.GatheringCompletePromise(offerPC)
 	require.NoError(t, offerPC.SetLocalDescription(offer))
 	<-gather
+	requireLoopbackHostCandidates(t, offerPC.LocalDescription().SDP)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
@@ -164,4 +181,29 @@ func TestSignaler_Handler_endToEnd(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Contains(t, string(body), "v=0")
+	requireLoopbackHostCandidates(t, string(body))
+}
+
+func loopbackAPI() *pionwebrtc.API {
+	var settingEngine pionwebrtc.SettingEngine
+	settingEngine.SetIncludeLoopbackCandidate(true)
+	settingEngine.SetIPFilter(func(ip net.IP) bool { return ip.IsLoopback() })
+	settingEngine.SetNetworkTypes([]pionwebrtc.NetworkType{pionwebrtc.NetworkTypeUDP4})
+	return pionwebrtc.NewAPI(pionwebrtc.WithSettingEngine(settingEngine))
+}
+
+func requireLoopbackHostCandidates(t *testing.T, sessionDescription string) {
+	t.Helper()
+	hostCandidates := 0
+	for line := range strings.SplitSeq(sessionDescription, "\n") {
+		fields := strings.Fields(strings.TrimSpace(line))
+		if len(fields) < 8 || !strings.HasPrefix(fields[0], "a=candidate:") || fields[7] != "host" {
+			continue
+		}
+		hostCandidates++
+		ip := net.ParseIP(fields[4])
+		require.NotNil(t, ip, "host candidate address %q is not an IP", fields[4])
+		require.True(t, ip.IsLoopback(), "host candidate %s is not loopback", ip)
+	}
+	require.Positive(t, hostCandidates, "SDP has no host candidates")
 }

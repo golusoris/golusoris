@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // ErrAllBackendsFailed is returned by [MultiSearcher.Search] when every
@@ -24,7 +26,7 @@ var ErrAllBackendsFailed = errors.New("search: all backends failed")
 // Per-backend errors are tolerated: a backend that fails is skipped and its
 // error recorded. Search only returns an error when every backend failed
 // (wrapping [ErrAllBackendsFailed]); a partial failure still yields the hits
-// from the backends that succeeded. Set [Options.FailFast] to instead fail the
+// from the backends that succeeded. Set [WithFailFast] to instead fail the
 // whole query as soon as any backend errors.
 //
 // The fan-out is bounded: at most [DefaultMaxFanOut] backends are queried at
@@ -68,13 +70,15 @@ func WithMaxFanOut(n int) MultiOption {
 func NewMultiSearcher(backends []Searcher, opts ...MultiOption) *MultiSearcher {
 	kept := make([]Searcher, 0, len(backends))
 	for _, b := range backends {
-		if b != nil {
+		if !validate.IsNil(b) {
 			kept = append(kept, b)
 		}
 	}
 	m := &MultiSearcher{backends: kept, maxFanOut: DefaultMaxFanOut}
 	for _, opt := range opts {
-		opt(m)
+		if opt != nil {
+			opt(m)
+		}
 	}
 	return m
 }
@@ -125,13 +129,13 @@ func (m *MultiSearcher) Search(ctx context.Context, collection string, q Query) 
 // fanOut runs every backend's Search concurrently and returns the per-backend
 // outcomes in backend order.
 func (m *MultiSearcher) fanOut(ctx context.Context, collection string, q Query) []backendResult {
-	fanCtx := ctx
-	var cancel context.CancelFunc
 	if m.failFast {
-		fanCtx, cancel = context.WithCancel(ctx)
-		defer cancel()
+		return m.fanOutFailFast(ctx, collection, q)
 	}
+	return m.fanOutAll(ctx, collection, q)
+}
 
+func (m *MultiSearcher) fanOutAll(ctx context.Context, collection string, q Query) []backendResult {
 	out := make([]backendResult, len(m.backends))
 	// Bounded fan-out (HISS-06): the send blocks the spawning loop once the
 	// pool is full, so at most fanOutLimit backends are in flight regardless
@@ -144,23 +148,66 @@ func (m *MultiSearcher) fanOut(ctx context.Context, collection string, q Query) 
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			res, err := b.Search(fanCtx, collection, q)
+			res, err := b.Search(ctx, collection, q)
 			out[i] = backendResult{idx: i, results: res, err: err}
-			if err != nil && m.failFast && cancel != nil {
-				cancel()
-			}
 		}()
 	}
 	wg.Wait()
+	return out
+}
 
-	if m.failFast {
-		for _, r := range out {
-			if r.err != nil {
-				return []backendResult{r}
+func (m *MultiSearcher) fanOutFailFast(ctx context.Context, collection string, q Query) []backendResult {
+	if err := ctx.Err(); err != nil {
+		return []backendResult{{idx: -1, err: err}}
+	}
+	fanCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	results := make(chan backendResult, len(m.backends))
+	workers := m.fanOutLimit()
+	sem := make(chan struct{}, workers)
+	for worker := range workers {
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem }()
+			m.searchWorker(fanCtx, collection, q, worker, workers, results)
+		}()
+	}
+
+	out := make([]backendResult, len(m.backends))
+	for range len(m.backends) {
+		select {
+		case <-ctx.Done():
+			return []backendResult{{idx: -1, err: ctx.Err()}}
+		case result := <-results:
+			if result.err != nil {
+				cancel()
+				return []backendResult{result}
 			}
+			out[result.idx] = result
 		}
 	}
 	return out
+}
+
+func (m *MultiSearcher) searchWorker(
+	ctx context.Context,
+	collection string,
+	q Query,
+	start int,
+	stride int,
+	results chan<- backendResult,
+) {
+	for idx := start; idx < len(m.backends); idx += stride {
+		if ctx.Err() != nil {
+			return
+		}
+		result, err := m.backends[idx].Search(ctx, collection, q)
+		results <- backendResult{idx: idx, results: result, err: err}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // fanOutLimit is the size of the fan-out semaphore: the configured bound,
@@ -289,7 +336,7 @@ func Disabled() Backend {
 // search-backend selection be gated by an "enabled" flag without the caller
 // having to nil-check or branch at every call site.
 func Gate(b Backend, enabled bool) Backend {
-	if enabled && b != nil {
+	if enabled && !validate.IsNil(b) {
 		return b
 	}
 	return Disabled()

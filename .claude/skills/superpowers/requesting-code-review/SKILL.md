@@ -5,7 +5,7 @@ description: Use when completing tasks, implementing major features, or before m
 
 # Requesting Code Review
 
-Dispatch superpowers:code-reviewer subagent to catch issues before they cascade. The reviewer gets precisely crafted context for evaluation — never your session's history. This keeps the reviewer focused on the work product, not your thought process, and preserves your own context for continued work.
+Dispatch superpowers:code-reviewer subagent to catch issues before they cascade. reviewer gets precisely crafted context for evaluation — never your session's history. This keeps reviewer focused on work product, not your thought process, and preserves your own context for continued work.
 
 **Core principle:** Review early, review often.
 
@@ -34,7 +34,7 @@ HEAD_SHA=$(git rev-parse HEAD)
 Use Task tool with superpowers:code-reviewer type, fill template at `code-reviewer.md`
 
 **Placeholders:**
-- `{WHAT_WAS_IMPLEMENTED}` - What you just built
+- `{WHAT_WAS_IMPLEMENTED}` - What you built
 - `{PLAN_OR_REQUIREMENTS}` - What it should do
 - `{BASE_SHA}` - Starting commit
 - `{HEAD_SHA}` - Ending commit

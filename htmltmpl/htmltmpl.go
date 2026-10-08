@@ -30,12 +30,14 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"path"
 	"strings"
 	"sync"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // maxWalkEntries bounds the fs.FS walk so a hostile or misconfigured tree can
@@ -100,11 +102,14 @@ func New(
 	if logger == nil {
 		return nil, errors.New("htmltmpl: nil logger")
 	}
-	if clk == nil {
+	if validate.IsNil(clk) {
 		return nil, errors.New("htmltmpl: nil clock")
 	}
-	if fsys == nil {
+	if validate.IsNil(fsys) {
 		return nil, errors.New("htmltmpl: nil fs.FS (set htmltmpl.dir or fx.Supply an fs.FS)")
+	}
+	if provider != nil && validate.IsNil(provider) {
+		return nil, errors.New("htmltmpl: nil FuncProvider")
 	}
 	r := &Renderer{
 		opts:   opts.withDefaults(),
@@ -114,9 +119,8 @@ func New(
 	}
 	r.funcs = r.defaultFuncs()
 	if provider != nil {
-		for name, fn := range provider.Funcs() {
-			r.funcs[name] = fn // app funcs win on name clash — documented seam
-		}
+		// app funcs win on name clash — documented seam
+		maps.Copy(r.funcs, provider.Funcs())
 	}
 	p, err := r.parse()
 	if err != nil {
@@ -276,9 +280,9 @@ func matchDoubleStar(pat, p string) bool {
 		return err == nil && ok
 	}
 	// Split on the first ** and require prefix/suffix to match around it.
-	idx := strings.Index(pat, "**")
-	prefix := strings.TrimSuffix(pat[:idx], "/")
-	suffix := strings.TrimPrefix(pat[idx+2:], "/")
+	before, after, _ := strings.Cut(pat, "**")
+	prefix := strings.TrimSuffix(before, "/")
+	suffix := strings.TrimPrefix(after, "/")
 	if prefix != "" && !strings.HasPrefix(p, prefix) {
 		return false
 	}

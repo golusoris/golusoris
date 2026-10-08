@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -22,6 +23,27 @@ func newSvc(t *testing.T) (*subs.Service, *subs.MemoryStore, clock.Clock) {
 	fc := clock.NewFake()
 	fc.Advance(time.Hour) // start at a non-zero time
 	return subs.New(store, fc, nil, subs.Options{}), store, fc
+}
+
+func TestNewHandlesTypedNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	t.Run("store", func(t *testing.T) {
+		t.Parallel()
+		var store *subs.MemoryStore
+		service := subs.New(store, clock.NewFake(), nil, subs.Options{})
+		_, err := service.Start(t.Context(), subs.StartParams{CustomerID: "customer", Plan: "plan"})
+		require.Error(t, err)
+		require.Error(t, service.ProcessDue(t.Context(), []string{"subscription"}))
+	})
+
+	t.Run("clock", func(t *testing.T) {
+		t.Parallel()
+		var clk *clockwork.FakeClock
+		service := subs.New(subs.NewMemoryStore(), clk, nil, subs.Options{})
+		_, err := service.Start(t.Context(), subs.StartParams{CustomerID: "customer", Plan: "plan"})
+		require.NoError(t, err)
+	})
 }
 
 func TestStart_WithTrial(t *testing.T) {
@@ -181,6 +203,65 @@ func TestOnChangeCallback(t *testing.T) {
 	require.Equal(t, subs.StatusPaused, events[2].To)
 }
 
+func TestOnChangeCallbackReceivesIndependentSubscriptionSnapshot(t *testing.T) {
+	t.Parallel()
+	store := subs.NewMemoryStore()
+	svc := subs.New(store, clock.NewFake(), nil, subs.Options{
+		OnChange: func(_ context.Context, event subs.ChangeEvent) {
+			event.Subscription.Plan = "callback mutation"
+			event.Subscription.Metadata["tier"] = "callback mutation"
+		},
+	})
+
+	started, err := svc.Start(context.Background(), subs.StartParams{
+		CustomerID: "c1",
+		Plan:       "pro",
+		Metadata:   map[string]string{"tier": "original"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "pro", started.Plan)
+	require.Equal(t, "original", started.Metadata["tier"])
+
+	persisted, err := store.Get(context.Background(), started.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pro", persisted.Plan)
+	require.Equal(t, "original", persisted.Metadata["tier"])
+}
+
+func TestOnChangeCallbackCoversResumeRenewAndChangePlan(t *testing.T) {
+	t.Parallel()
+	var events []subs.ChangeEvent
+	clk := clock.NewFake()
+	svc := subs.New(subs.NewMemoryStore(), clk, nil, subs.Options{
+		OnChange: func(_ context.Context, e subs.ChangeEvent) { events = append(events, e) },
+	})
+	sub, err := svc.Start(context.Background(), subs.StartParams{
+		CustomerID: "c1",
+		Plan:       "basic",
+		Trial:      time.Hour,
+	})
+	require.NoError(t, err)
+
+	future := clk.Now().Add(time.Hour)
+	require.NoError(t, svc.Cancel(context.Background(), sub.ID, future))
+	events = nil
+
+	require.NoError(t, svc.Resume(context.Background(), sub.ID))
+	require.NoError(t, svc.ChangePlan(context.Background(), sub.ID, "pro", 2))
+	clk.Advance(time.Hour)
+	require.NoError(t, svc.Renew(context.Background(), sub.ID))
+
+	require.Len(t, events, 3)
+	require.Equal(t, subs.StatusTrialing, events[0].From)
+	require.Equal(t, subs.StatusTrialing, events[0].To)
+	require.Equal(t, "basic", events[0].Subscription.Plan)
+	require.Equal(t, subs.StatusTrialing, events[1].From)
+	require.Equal(t, subs.StatusTrialing, events[1].To)
+	require.Equal(t, "pro", events[1].Subscription.Plan)
+	require.Equal(t, subs.StatusTrialing, events[2].From)
+	require.Equal(t, subs.StatusActive, events[2].To)
+}
+
 func TestChangePlan(t *testing.T) {
 	t.Parallel()
 	svc, store, _ := newSvc(t)
@@ -212,4 +293,32 @@ func TestStart_IDGenFailureAborts(t *testing.T) {
 	got, err := store.GetByCustomer(context.Background(), "c1")
 	require.NoError(t, err)
 	require.Empty(t, got)
+}
+
+func TestMemoryStoreSnapshotsMutableSubscriptionFields(t *testing.T) {
+	t.Parallel()
+	store := subs.NewMemoryStore()
+	when := time.Unix(1_700_000_000, 0)
+	wantWhen := when
+	sub := &subs.Subscription{
+		ID:       "sub-1",
+		Metadata: map[string]string{"tier": "original"},
+		CancelAt: &when,
+	}
+	require.NoError(t, store.Upsert(context.Background(), sub))
+
+	sub.Metadata["tier"] = "caller mutation"
+	*sub.CancelAt = when.Add(time.Hour)
+	first, err := store.GetByCustomer(context.Background(), "")
+	require.NoError(t, err)
+	require.Len(t, first, 1)
+	require.Equal(t, "original", first[0].Metadata["tier"])
+	require.Equal(t, wantWhen, *first[0].CancelAt)
+
+	first[0].Metadata["tier"] = "result mutation"
+	*first[0].CancelAt = when.Add(2 * time.Hour)
+	again, err := store.Get(context.Background(), sub.ID)
+	require.NoError(t, err)
+	require.Equal(t, "original", again.Metadata["tier"])
+	require.Equal(t, wantWhen, *again.CancelAt)
 }

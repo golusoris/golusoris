@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -18,6 +20,41 @@ import (
 
 	"github.com/golusoris/golusoris/auth/scim"
 )
+
+func TestHandlerPreservesLegacyFunctionType(t *testing.T) {
+	t.Parallel()
+
+	legacy := requireLegacyHandler(scim.Handler)
+	require.NotNil(t, legacy(newMemStore()))
+}
+
+func TestHandlerMissingStoreFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]scim.Store{
+		"nil":       nil,
+		"typed nil": (*memStore)(nil),
+	}
+	for name, store := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/Users", nil)
+			require.NotPanics(t, func() {
+				scim.Handler(store).ServeHTTP(response, request)
+			})
+			require.Equal(t, http.StatusInternalServerError, response.Code)
+			require.Equal(t, "application/scim+json", response.Header().Get("Content-Type"))
+			var body scim.Error
+			require.NoError(t, json.NewDecoder(response.Body).Decode(&body))
+			require.Equal(t, "internal server error", body.Detail)
+		})
+	}
+}
+
+func requireLegacyHandler(handler func(scim.Store) http.Handler) func(scim.Store) http.Handler {
+	return handler
+}
 
 func TestUsers_CreateGetDelete(t *testing.T) {
 	t.Parallel()
@@ -73,6 +110,61 @@ func TestUsers_List(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&lr))
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, 2, lr.TotalResults)
+}
+
+func TestUsers_CreateRequiresUserSchema(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		body string
+	}{
+		{name: "missing", body: `{"userName":"alice"}`},
+		{name: "wrong", body: `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"userName":"alice"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/Users", strings.NewReader(test.body))
+			scim.Handler(newMemStore()).ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusBadRequest, w.Code)
+			var response scim.Error
+			require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+			require.Equal(t, "invalidValue", response.ScimErr)
+		})
+	}
+}
+
+func TestUsers_CreateRejectsTrailingJSONValue(t *testing.T) {
+	t.Parallel()
+
+	body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice"} {}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/Users", strings.NewReader(body))
+	scim.Handler(newMemStore()).ServeHTTP(w, r)
+
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	var response scim.Error
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+	require.Equal(t, "invalidSyntax", response.ScimErr)
+}
+
+func TestUsers_CreateRequestLimitBoundary(t *testing.T) {
+	t.Parallel()
+
+	body := `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice","externalId":"` +
+		strings.Repeat("x", 32) + `"}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/Users", strings.NewReader(body))
+	scim.HandlerWithOptions(newMemStore(), scim.WithMaxRequestBodyBytes(int64(len(body)))).ServeHTTP(w, r)
+	require.Equal(t, http.StatusCreated, w.Code)
+
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest(http.MethodPost, "/Users", strings.NewReader(body))
+	scim.HandlerWithOptions(newMemStore(), scim.WithMaxRequestBodyBytes(int64(len(body)-1))).ServeHTTP(w, r)
+	require.Equal(t, http.StatusRequestEntityTooLarge, w.Code)
 }
 
 // --- in-memory store ---
@@ -212,7 +304,7 @@ func TestGroups_CreateGetUpdateDelete(t *testing.T) {
 	require.NoError(t, resp2.Body.Close())
 
 	// PUT update
-	upd := bytes.NewBufferString(`{"displayName":"platform"}`)
+	upd := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"platform"}`)
 	reqPut, _ := http.NewRequest(http.MethodPut, srv.URL+"/Groups/"+g.ID, upd)
 	reqPut.Header.Set("Content-Type", "application/scim+json")
 	resp3, err := http.DefaultClient.Do(reqPut)
@@ -260,7 +352,7 @@ func TestUsers_Update(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(store))
 	t.Cleanup(srv.Close)
 
-	body := bytes.NewBufferString(`{"userName":"alice-updated","active":false}`)
+	body := bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"alice-updated","active":false}`)
 	req, _ := http.NewRequest(http.MethodPut, srv.URL+"/Users/"+u.ID, body)
 	req.Header.Set("Content-Type", "application/scim+json")
 	resp, err := http.DefaultClient.Do(req)
@@ -394,13 +486,23 @@ func (s genericErrStore) DeleteGroup(_ context.Context, _ string) error {
 
 func TestUserItem_GetStoreError(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("db unavailable")}))
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, nil))
+	srv := httptest.NewServer(scim.HandlerWithOptions(
+		genericErrStore{memStore: newMemStore(), err: errors.New("db-secret-unavailable")},
+		scim.WithLogger(logger),
+	))
 	t.Cleanup(srv.Close)
 
 	resp, err := http.Get(srv.URL + "/Users/any-id")
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	var body scim.Error
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.NoError(t, resp.Body.Close())
+	require.Equal(t, "internal server error", body.Detail)
+	require.NotContains(t, body.Detail, "db-secret-unavailable")
+	require.Contains(t, logs.String(), "db-secret-unavailable")
 }
 
 func TestUserItem_PutStoreError(t *testing.T) {
@@ -408,12 +510,12 @@ func TestUserItem_PutStoreError(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("constraint violated")}))
 	t.Cleanup(srv.Close)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Users/any-id", bytes.NewBufferString(`{"userName":"x"}`))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Users/any-id", bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"x"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/scim+json")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 }
 
@@ -446,12 +548,12 @@ func TestGroupItem_PutStoreError(t *testing.T) {
 	srv := httptest.NewServer(scim.Handler(genericErrStore{memStore: newMemStore(), err: errors.New("constraint violated")}))
 	t.Cleanup(srv.Close)
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Groups/any-id", bytes.NewBufferString(`{"displayName":"x"}`))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/Groups/any-id", bytes.NewBufferString(`{"schemas":["urn:ietf:params:scim:schemas:core:2.0:Group"],"displayName":"x"}`))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/scim+json")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 }
 
@@ -486,6 +588,75 @@ func TestPaging_QueryParams(t *testing.T) {
 	require.NoError(t, resp.Body.Close())
 	require.Equal(t, 5, lr.TotalResults)
 }
+
+func TestPaging_CountSemanticsAndResponseCap(t *testing.T) {
+	t.Parallel()
+	store := &pagingCaptureStore{memStore: newMemStore()}
+	for range 3 {
+		_, _ = store.CreateUser(context.Background(), scim.User{UserName: "u"})
+	}
+	handler := scim.Handler(store)
+	tests := []struct {
+		query     string
+		wantCount int
+		wantItems int
+	}{
+		{query: "count=0", wantCount: 0, wantItems: 0},
+		{query: "count=-1", wantCount: 0, wantItems: 0},
+		{query: "count=1", wantCount: 1, wantItems: 1},
+		{query: "count=2000", wantCount: 1000, wantItems: 3},
+	}
+	for _, test := range tests {
+		request := httptest.NewRequest(http.MethodGet, "/Users?"+test.query, nil)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		require.Equal(t, http.StatusOK, response.Code)
+		var page scim.ListResponse
+		require.NoError(t, json.NewDecoder(response.Body).Decode(&page))
+		require.Equal(t, test.wantCount, store.lastCount)
+		require.Equal(t, test.wantItems, page.ItemsPerPage)
+		require.Len(t, page.Resources, test.wantItems)
+		require.Equal(t, 3, page.TotalResults)
+	}
+}
+
+func TestResponseEncodingFailureIsLogged(t *testing.T) {
+	t.Parallel()
+	store := newMemStore()
+	_, _ = store.CreateUser(context.Background(), scim.User{UserName: "u"})
+	var logs bytes.Buffer
+	handler := scim.HandlerWithOptions(store, scim.WithLogger(slog.New(slog.NewTextHandler(&logs, nil))))
+	handler.ServeHTTP(newFailingResponseWriter(), httptest.NewRequest(http.MethodGet, "/Users", nil))
+	require.Contains(t, logs.String(), "encode response failed")
+}
+
+type pagingCaptureStore struct {
+	*memStore
+	lastCount int
+}
+
+func (s *pagingCaptureStore) ListUsers(
+	ctx context.Context,
+	start, count int,
+	filter string,
+) ([]scim.User, int, error) {
+	s.lastCount = count
+	return s.memStore.ListUsers(ctx, start, count, filter)
+}
+
+type failingResponseWriter struct{ header http.Header }
+
+func newFailingResponseWriter() *failingResponseWriter {
+	return &failingResponseWriter{header: make(http.Header)}
+}
+
+func (w *failingResponseWriter) Header() http.Header { return w.header }
+
+func (w *failingResponseWriter) Write([]byte) (int, error) {
+	return 0, errors.New("response write failed")
+}
+
+func (w *failingResponseWriter) WriteHeader(int) {}
 
 // itoa avoids strconv import in the test file.
 func itoa(i int) string {

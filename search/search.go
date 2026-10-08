@@ -19,8 +19,11 @@ package search
 
 import (
 	"context"
+	"maps"
+	"reflect"
 	"strings"
 	"sync"
+	"unicode"
 )
 
 // Document is a key-value map representing a single indexed record.
@@ -74,6 +77,20 @@ type Query struct {
 	// Limit and Offset control pagination.
 	Limit  int
 	Offset int
+}
+
+// ValidFilterField reports whether field is a safe dotted identifier for
+// backend-generated filter expressions.
+func ValidFilterField(field string) bool {
+	if field == "" || strings.HasPrefix(field, ".") || strings.HasSuffix(field, ".") || strings.Contains(field, "..") {
+		return false
+	}
+	for _, char := range field {
+		if !unicode.IsLetter(char) && !unicode.IsDigit(char) && char != '_' && char != '.' {
+			return false
+		}
+	}
+	return true
 }
 
 // Hit is a single search result.
@@ -149,7 +166,26 @@ func (m *MemorySearcher) DeleteCollection(_ context.Context, name string) error 
 func (m *MemorySearcher) Index(_ context.Context, collection string, docs []Document) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.collections[collection] = append(m.collections[collection], docs...)
+	stored := m.collections[collection]
+	positions := make(map[string]int, len(stored)+len(docs))
+	for i, doc := range stored {
+		if id, _ := doc["id"].(string); id != "" {
+			positions[id] = i
+		}
+	}
+	for _, doc := range docs {
+		cloned := cloneDocument(doc)
+		id, _ := cloned["id"].(string)
+		if position, ok := positions[id]; id != "" && ok {
+			stored[position] = cloned
+			continue
+		}
+		if id != "" {
+			positions[id] = len(stored)
+		}
+		stored = append(stored, cloned)
+	}
+	m.collections[collection] = stored
 	return nil
 }
 
@@ -176,23 +212,28 @@ func (m *MemorySearcher) Delete(_ context.Context, collection string, ids []stri
 }
 
 // Search implements [Searcher].
-func (m *MemorySearcher) Search(_ context.Context, collection string, q Query) (Results, error) {
+func (m *MemorySearcher) Search(ctx context.Context, collection string, q Query) (Results, error) {
+	if err := ctx.Err(); err != nil {
+		return Results{}, err
+	}
 	m.mu.RLock()
-	docs := m.collections[collection]
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 
 	qLower := strings.ToLower(q.Q)
 	matchAll := qLower == "" || qLower == "*"
 
 	var hits []Hit
-	for _, doc := range docs {
+	for _, doc := range m.collections[collection] {
+		if err := ctx.Err(); err != nil {
+			return Results{}, err
+		}
 		if !matchAll && !docContains(doc, qLower) {
 			continue
 		}
 		if !filterMatch(doc, q.Filters) {
 			continue
 		}
-		hits = append(hits, Hit{Document: doc})
+		hits = append(hits, Hit{Document: cloneDocument(doc)})
 	}
 
 	total := int64(len(hits))
@@ -221,9 +262,18 @@ func filterMatch(doc Document, filters map[string]any) bool {
 		if !ok {
 			return false
 		}
-		if got != want {
+		if !reflect.DeepEqual(got, want) {
 			return false
 		}
 	}
 	return true
+}
+
+func cloneDocument(doc Document) Document {
+	if doc == nil {
+		return nil
+	}
+	cloned := make(Document, len(doc))
+	maps.Copy(cloned, doc)
+	return cloned
 }

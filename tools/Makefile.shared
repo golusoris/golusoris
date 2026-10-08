@@ -7,6 +7,7 @@ GOLANGCI    ?= golangci-lint
 GOVULNCHECK ?= govulncheck
 GOSEC       ?= gosec
 MOCKERY     ?= mockery
+MOCKERY_CONFIG ?= tools/mockery.yaml
 AIR         ?= air
 SQLC        ?= sqlc
 OGEN        ?= ogen
@@ -47,14 +48,14 @@ cover: ## go test with coverage
 ci: lint sec test ## Full CI: lint + sec + test
 
 .PHONY: gen
-gen: ## sqlc + ogen + mockery
-	-$(SQLC) generate
-	-$(OGEN) -package api -target internal/api -clean openapi.yaml || true
-	$(MOCKERY)
+gen: mocks ## sqlc + ogen + mockery
+	@if [ -f sqlc.yaml ] || [ -f sqlc.yml ]; then $(SQLC) generate; fi
+	@if [ -f openapi.yaml ]; then $(OGEN) -package api -target internal/api -clean openapi.yaml; fi
 
 .PHONY: mocks
-mocks: ## mockery (.mockery.yaml)
-	$(MOCKERY)
+mocks: ## mockery (tools/mockery.yaml)
+	$(MOCKERY) --config $(MOCKERY_CONFIG) showconfig >/dev/null
+	@if ! grep -Eq '^packages:[[:space:]]*\{\}[[:space:]]*$$' $(MOCKERY_CONFIG); then $(MOCKERY) --config $(MOCKERY_CONFIG); fi
 
 .PHONY: migrate-up
 migrate-up: ## golang-migrate up

@@ -20,8 +20,9 @@
 package watch
 
 import (
+	"errors"
 	"fmt"
-	"sync"
+	"sort"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -39,6 +40,9 @@ type Options struct {
 	Debounce time.Duration
 	// BufferSize is the Events channel capacity. Default: 16.
 	BufferSize int
+	// MaxPaths bounds unique paths retained during one debounce window.
+	// Default: 1024. A full batch is emitted before accepting another path.
+	MaxPaths int
 }
 
 func (o *Options) defaults() {
@@ -48,33 +52,41 @@ func (o *Options) defaults() {
 	if o.BufferSize == 0 {
 		o.BufferSize = 16
 	}
+	if o.MaxPaths == 0 {
+		o.MaxPaths = 1024
+	}
 }
 
 // Watcher watches one or more directories for changes.
 type Watcher struct {
-	inner   *fsnotify.Watcher
-	events  chan Event
-	opts    Options
-	mu      sync.Mutex
-	pending map[string]struct{}
-	timer   *time.Timer
-	done    chan struct{}
+	inner  *fsnotify.Watcher
+	events chan Event
+	opts   Options
+	done   chan struct{}
 }
 
 // New creates a Watcher. Call [Watcher.Add] to register directories, then
 // read from [Watcher.Events].
 func New(opts Options) (*Watcher, error) {
+	if opts.Debounce < 0 {
+		return nil, errors.New("watch: debounce must not be negative")
+	}
+	if opts.BufferSize < 0 {
+		return nil, errors.New("watch: buffer size must not be negative")
+	}
+	if opts.MaxPaths < 0 {
+		return nil, errors.New("watch: max paths must not be negative")
+	}
 	opts.defaults()
 	inner, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, fmt.Errorf("watch: create watcher: %w", err)
 	}
 	w := &Watcher{
-		inner:   inner,
-		events:  make(chan Event, opts.BufferSize),
-		opts:    opts,
-		pending: map[string]struct{}{},
-		done:    make(chan struct{}),
+		inner:  inner,
+		events: make(chan Event, opts.BufferSize),
+		opts:   opts,
+		done:   make(chan struct{}),
 	}
 	go w.run()
 	return w, nil
@@ -112,54 +124,73 @@ func (w *Watcher) Close() error {
 
 func (w *Watcher) run() {
 	defer close(w.done)
+	defer close(w.events)
+	pending := make(map[string]struct{})
+	var timer *time.Timer
 	for open := true; open; {
-		open = w.step()
+		timer, open = w.step(timer, pending)
 	}
+	stopTimer(timer)
+	w.emit(pending)
 }
 
 // step handles one inner fsnotify event; it reports false once either inner
 // channel is closed, which ends the run loop.
-func (w *Watcher) step() bool {
+func (w *Watcher) step(timer *time.Timer, pending map[string]struct{}) (*time.Timer, bool) {
+	var timerC <-chan time.Time
+	if timer != nil {
+		timerC = timer.C
+	}
 	select {
 	case ev, ok := <-w.inner.Events:
 		if !ok {
-			w.flush()
-			return false
+			return timer, false
 		}
 		if ev.Op == fsnotify.Chmod {
-			return true // ignore pure permission changes
+			return timer, true // ignore pure permission changes
 		}
-		w.schedule(ev.Name)
-
-	case _, ok := <-w.inner.Errors:
-		if !ok {
-			return false
+		if _, exists := pending[ev.Name]; !exists && len(pending) == w.opts.MaxPaths {
+			w.emit(pending)
 		}
-		// Errors are surfaced as a closed channel; callers can reopen.
-	}
-	return true
-}
+		pending[ev.Name] = struct{}{}
+		return resetTimer(timer, w.opts.Debounce), true
 
-func (w *Watcher) schedule(path string) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.pending[path] = struct{}{}
-	if w.timer != nil {
-		w.timer.Reset(w.opts.Debounce)
-	} else {
-		w.timer = time.AfterFunc(w.opts.Debounce, w.flush)
+	case <-w.inner.Errors:
+		// Errors are surfaced by closing Events; callers can reopen a watcher.
+		return timer, false
+
+	case <-timerC:
+		w.emit(pending)
+		return nil, true
 	}
 }
 
-func (w *Watcher) flush() {
-	w.mu.Lock()
-	paths := make([]string, 0, len(w.pending))
-	for p := range w.pending {
+func resetTimer(timer *time.Timer, debounce time.Duration) *time.Timer {
+	if timer == nil {
+		return time.NewTimer(debounce)
+	}
+	stopTimer(timer)
+	timer.Reset(debounce)
+	return timer
+}
+
+func stopTimer(timer *time.Timer) {
+	if timer == nil || timer.Stop() {
+		return
+	}
+	select {
+	case <-timer.C:
+	default:
+	}
+}
+
+func (w *Watcher) emit(pending map[string]struct{}) {
+	paths := make([]string, 0, len(pending))
+	for p := range pending {
 		paths = append(paths, p)
+		delete(pending, p)
 	}
-	w.pending = map[string]struct{}{}
-	w.timer = nil
-	w.mu.Unlock()
+	sort.Strings(paths)
 
 	if len(paths) == 0 {
 		return

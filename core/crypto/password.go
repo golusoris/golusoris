@@ -12,6 +12,8 @@
 package crypto
 
 import (
+	"fmt"
+
 	"github.com/alexedwards/argon2id"
 )
 
@@ -30,7 +32,7 @@ var DefaultPasswordParams = &argon2id.Params{
 func HashPassword(plain string) (string, error) {
 	h, err := argon2id.CreateHash(plain, DefaultPasswordParams)
 	if err != nil {
-		return "", err //nolint:wrapcheck // pure crypto error path
+		return "", fmt.Errorf("crypto: hash password: %w", err)
 	}
 	return h, nil
 }
@@ -39,7 +41,7 @@ func HashPassword(plain string) (string, error) {
 func HashPasswordWith(plain string, p *argon2id.Params) (string, error) {
 	h, err := argon2id.CreateHash(plain, p)
 	if err != nil {
-		return "", err //nolint:wrapcheck
+		return "", fmt.Errorf("crypto: hash password with parameters: %w", err)
 	}
 	return h, nil
 }
@@ -50,7 +52,7 @@ func HashPasswordWith(plain string, p *argon2id.Params) (string, error) {
 func VerifyPassword(plain, hash string) (match, needsRehash bool, err error) {
 	match, params, err := argon2id.CheckHash(plain, hash)
 	if err != nil {
-		return false, false, err //nolint:wrapcheck
+		return false, false, fmt.Errorf("crypto: verify password: %w", err)
 	}
 	if !match {
 		return false, false, nil

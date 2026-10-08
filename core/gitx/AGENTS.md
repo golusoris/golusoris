@@ -6,16 +6,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — core/gitx
 
-Bounded `git` runner + repository facts. Every invocation has a deadline
-(`DefaultTimeout` 30 s when the ctx has none), NUL-checked arguments, and
-output capped at `MaxOutput` (16 MiB) — a runaway `git log` fails closed
+Bounded `git` runner + repository facts. Every invocation has deadline
+(`DefaultTimeout` 30 s when ctx has none), NUL-checked arguments, and
+output capped at `MaxOutput` (16 MiB) — runaway `git log` fails closed
 instead of eating memory. Sub-package `worktree/` manages per-task worktrees.
 Capability key: `git.worktree`.
 
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `New(dir, opts...)` | runner rooted at `dir`; `WithTimeout`, `WithBinary`, `WithMaxOutput` |
 | `(*Runner).Run(ctx, args...)` / `Output` | raw stdout bytes / trimmed string; stderr folded into the error |
 | `TopLevel` · `Head` · `Branch` · `RemoteURL(remote)` · `IsDirty` | common repository facts |
@@ -27,9 +27,9 @@ Capability key: `git.worktree`.
 
 ## Don't
 
-- Don't call `os/exec` for git anywhere else in the fleet — use this runner so
-  timeouts and output bounds are uniform.
-- Don't pass unvalidated refs/remotes: a leading `-` is an option injection.
-  `RemoteURL` and `worktree.Create` already reject them; keep it that way.
-- Don't hold the `Manager` mutex across long operations of your own — it only
-  serialises git calls.
+- Don't call `os/exec` for git anywhere else in fleet — use this runner so
+ timeouts and output bounds are uniform.
+- Don't pass unvalidated refs/remotes: leading `-` is option injection.
+ `RemoteURL` and `worktree.Create` already reject them; keep it that way.
+- Don't hold `Manager` mutex across long operations of your own — it only
+ serialises git calls.

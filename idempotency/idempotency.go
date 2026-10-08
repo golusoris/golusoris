@@ -4,9 +4,9 @@
 
 // Package idempotency provides HTTP middleware that enforces the
 // Idempotency-Key header (draft-ietf-httpapi-idempotency-key-header).
-// On the first request for a key the middleware captures the response and
-// stores it. Subsequent requests with the same key receive the cached
-// response verbatim without invoking the handler again.
+// On the first request for a key the middleware reserves the scoped key,
+// captures a bounded response, and stores it. Completed retries replay the
+// response; concurrent retries fail with HTTP 409.
 //
 // Usage:
 //
@@ -19,12 +19,29 @@ package idempotency
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"hash"
+	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/jonboulle/clockwork"
+
+	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/tenancy"
+)
+
+const (
+	defaultBodyLimit  = int64(1 << 20)
+	storeWriteTimeout = 5 * time.Second
 )
 
 // CachedResponse is the stored representation of a completed response.
@@ -34,12 +51,58 @@ type CachedResponse struct {
 	Body       []byte
 }
 
-// Store persists idempotency records keyed by the Idempotency-Key header value.
+// ClaimState describes the atomic result of [Store.Claim].
+type ClaimState uint8
+
+const (
+	// ClaimAcquired grants the caller ownership of a new in-flight reservation.
+	ClaimAcquired ClaimState = iota + 1
+	// ClaimInFlight reports that another request owns the reservation.
+	ClaimInFlight
+	// ClaimCompleted returns the response and fingerprint from a completed request.
+	ClaimCompleted
+	// ClaimFingerprintMismatch reports reuse of a key for a different payload.
+	ClaimFingerprintMismatch
+)
+
+// ClaimResult is the atomic result of claiming a scoped idempotency key.
+type ClaimResult struct {
+	State       ClaimState
+	Token       string
+	Fingerprint string
+	Response    CachedResponse
+}
+
+// Store atomically reserves and completes scoped idempotency keys.
 type Store interface {
-	// Find returns the cached response for key, or (zero, false, nil) when not yet set.
-	Find(ctx context.Context, key string) (CachedResponse, bool, error)
-	// Save stores resp under key for ttl. A second call with the same key is a no-op.
-	Save(ctx context.Context, key string, resp CachedResponse, ttl time.Duration) error
+	// Claim atomically returns an existing record or creates an in-flight
+	// reservation. Token is set only when State is ClaimAcquired.
+	Claim(ctx context.Context, key string, fingerprint string, ttl time.Duration) (ClaimResult, error)
+	// Commit completes the reservation owned by token. A failed Commit leaves
+	// the reservation releasable by the same token.
+	Commit(
+		ctx context.Context,
+		key string,
+		token string,
+		fingerprint string,
+		resp CachedResponse,
+		ttl time.Duration,
+	) error
+	// Release removes an in-flight reservation only when token still owns it.
+	Release(ctx context.Context, key string, token string) error
+}
+
+// ScopeFunc returns an additional caller scope for an idempotency key.
+// Use it for principals outside the golusoris tenancy context.
+type ScopeFunc func(r *http.Request) (string, error)
+
+// NewScopeFunc stores scope behind a comparable pointer for [Options].
+// A nil callback returns nil.
+func NewScopeFunc(scope ScopeFunc) *ScopeFunc {
+	if scope == nil {
+		return nil
+	}
+	return &scope
 }
 
 // Options tunes middleware behaviour.
@@ -47,13 +110,22 @@ type Options struct {
 	// Header is the request header carrying the idempotency key.
 	// Default: "Idempotency-Key".
 	Header string
-	// TTL is how long a cached response is retained. Default: 24h.
+	// TTL is how long reservations and completed responses are retained.
+	// Default: 24h.
 	TTL time.Duration
 	// Required, when true, rejects requests without the header (HTTP 400).
 	// Default: false (header is optional; requests without it pass through).
 	Required bool
-	// Logger receives store-save and replay-write failures (the response is
-	// still delivered either way). nil falls back to slog.Default().
+	// MaxRequestBody bounds the payload buffered for fingerprinting.
+	// Default: 1 MiB.
+	MaxRequestBody int64
+	// MaxResponseBody bounds the response retained for replay. Larger responses
+	// still reach the first caller but are not cached. Default: 1 MiB.
+	MaxResponseBody int64
+	// Scope adds a principal or application scope to the built-in method,
+	// host, target, and tenancy-ID scope.
+	Scope *ScopeFunc
+	// Logger receives store and replay-write failures. nil uses slog.Default().
 	Logger *slog.Logger
 }
 
@@ -61,11 +133,21 @@ func (o *Options) defaults() {
 	if o.Header == "" {
 		o.Header = "Idempotency-Key"
 	}
-	if o.TTL == 0 {
+	if o.TTL <= 0 {
 		o.TTL = 24 * time.Hour
+	}
+	if o.MaxRequestBody <= 0 {
+		o.MaxRequestBody = defaultBodyLimit
+	}
+	if o.MaxResponseBody <= 0 {
+		o.MaxResponseBody = defaultBodyLimit
 	}
 	if o.Logger == nil {
 		o.Logger = slog.Default()
+	}
+	if o.Scope != nil && *o.Scope != nil {
+		scope := *o.Scope
+		o.Scope = &scope
 	}
 }
 
@@ -74,6 +156,9 @@ func (o *Options) defaults() {
 func Middleware(store Store, opts Options) func(http.Handler) http.Handler {
 	opts.defaults()
 	return func(next http.Handler) http.Handler {
+		if validate.IsNil(next) {
+			return unavailableHandler()
+		}
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isSafeMethod(r.Method) {
 				next.ServeHTTP(w, r)
@@ -89,8 +174,13 @@ func Middleware(store Store, opts Options) func(http.Handler) http.Handler {
 	}
 }
 
-// isSafeMethod reports whether method is exempt from idempotency
-// enforcement (GET, HEAD, OPTIONS).
+func unavailableHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "idempotency: middleware dependency unavailable", http.StatusInternalServerError)
+	})
+}
+
+// isSafeMethod reports whether method is exempt from idempotency enforcement.
 func isSafeMethod(method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -100,9 +190,6 @@ func isSafeMethod(method string) bool {
 	}
 }
 
-// handleMissingKey handles a non-safe-method request that carries no
-// idempotency key: reject it when the header is Required, otherwise pass it
-// straight through.
 func handleMissingKey(w http.ResponseWriter, r *http.Request, next http.Handler, opts Options) {
 	if opts.Required {
 		http.Error(w, "missing "+opts.Header, http.StatusBadRequest)
@@ -111,88 +198,313 @@ func handleMissingKey(w http.ResponseWriter, r *http.Request, next http.Handler,
 	next.ServeHTTP(w, r)
 }
 
-// serveWithKey serves a request that carries an idempotency key: replay a
-// cached response when one already exists for key, otherwise capture next's
-// response, cache it when appropriate, and write it out.
-func serveWithKey(w http.ResponseWriter, r *http.Request, next http.Handler, store Store, opts Options, key string) {
-	cached, found, err := store.Find(r.Context(), key)
+func serveWithKey(w http.ResponseWriter, r *http.Request, next http.Handler, store Store, opts Options, rawKey string) {
+	if validate.IsNil(store) {
+		http.Error(w, "idempotency: store error", http.StatusInternalServerError)
+		return
+	}
+	fingerprint, err := fingerprintRequest(r, opts.MaxRequestBody)
+	if err != nil {
+		writeFingerprintError(w, err)
+		return
+	}
+	key, err := scopedKey(r, rawKey, opts.Scope)
+	if err != nil {
+		http.Error(w, "idempotency: scope error", http.StatusInternalServerError)
+		return
+	}
+	claim, err := store.Claim(r.Context(), key, fingerprint, opts.TTL)
 	if err != nil {
 		http.Error(w, "idempotency: store error", http.StatusInternalServerError)
 		return
 	}
-	if found {
-		replay(r.Context(), w, cached, opts.Logger)
+	handleClaim(w, r, next, store, opts, key, fingerprint, claim)
+}
+
+func handleClaim(
+	w http.ResponseWriter,
+	r *http.Request,
+	next http.Handler,
+	store Store,
+	opts Options,
+	key string,
+	fingerprint string,
+	claim ClaimResult,
+) {
+	switch claim.State {
+	case ClaimAcquired:
+		if claim.Token == "" {
+			http.Error(w, "idempotency: invalid store claim", http.StatusInternalServerError)
+			return
+		}
+		serveClaimed(w, r, next, store, opts, key, fingerprint, claim.Token)
+	case ClaimInFlight:
+		http.Error(w, ErrConflict.Error(), http.StatusConflict)
+	case ClaimFingerprintMismatch:
+		http.Error(w, ErrFingerprintMismatch.Error(), http.StatusUnprocessableEntity)
+	case ClaimCompleted:
+		if claim.Fingerprint != fingerprint {
+			http.Error(w, ErrFingerprintMismatch.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		if claim.Response.StatusCode < http.StatusOK || claim.Response.StatusCode > 599 {
+			http.Error(w, "idempotency: invalid stored response", http.StatusInternalServerError)
+			return
+		}
+		replay(r.Context(), w, claim.Response, opts.Logger)
+	default:
+		http.Error(w, "idempotency: invalid store claim", http.StatusInternalServerError)
+	}
+}
+
+func serveClaimed(
+	w http.ResponseWriter,
+	r *http.Request,
+	next http.Handler,
+	store Store,
+	opts Options,
+	key string,
+	fingerprint string,
+	token string,
+) {
+	held := true
+	defer func(ctx context.Context) {
+		if held {
+			releaseClaim(ctx, store, key, token, opts.Logger)
+		}
+	}(r.Context())
+	resp, overflow := captureResponse(w, next, r, opts.MaxResponseBody)
+	if overflow || resp.StatusCode >= http.StatusInternalServerError {
 		return
 	}
-
-	resp := captureResponse(next, r)
-	saveIfCacheable(r.Context(), store, key, resp, opts)
-	replay(r.Context(), w, resp, opts.Logger)
-}
-
-// captureResponse runs next against an in-memory recorder and returns the
-// captured response.
-func captureResponse(next http.Handler, r *http.Request) CachedResponse {
-	rec := &responseRecorder{header: make(http.Header), code: http.StatusOK}
-	next.ServeHTTP(rec, r)
-	return CachedResponse{
-		StatusCode: rec.code,
-		Header:     rec.header,
-		Body:       rec.body.Bytes(),
-	}
-}
-
-// saveIfCacheable stores resp under key unless it is a 5xx — those are left
-// uncached so transient failures can be retried. A save failure is logged,
-// not returned: the response has already been produced and must still reach
-// the caller.
-func saveIfCacheable(ctx context.Context, store Store, key string, resp CachedResponse, opts Options) {
-	if resp.StatusCode >= 500 {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), storeWriteTimeout)
+	defer cancel()
+	if err := store.Commit(ctx, key, token, fingerprint, resp, opts.TTL); err != nil {
+		opts.Logger.WarnContext(ctx, "idempotency: commit response", slog.Any("err", err))
 		return
 	}
-	if err := store.Save(ctx, key, resp, opts.TTL); err != nil {
-		opts.Logger.WarnContext(ctx, "idempotency: save response", slog.Any("err", err))
+	held = false
+}
+
+func releaseClaim(parent context.Context, store Store, key, token string, logger *slog.Logger) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), storeWriteTimeout)
+	defer cancel()
+	if err := store.Release(ctx, key, token); err != nil && !errors.Is(err, ErrReservationLost) {
+		logger.WarnContext(ctx, "idempotency: release claim", slog.Any("err", err))
 	}
 }
 
-// replay writes a captured response onto w. A write error only means the
-// client went away — headers are already sent, so it is logged, not returned.
-func replay(ctx context.Context, w http.ResponseWriter, r CachedResponse, logger *slog.Logger) {
-	for k, vs := range r.Header {
-		for _, v := range vs {
-			w.Header().Add(k, v)
+func fingerprintRequest(r *http.Request, limit int64) (string, error) {
+	if limit < 0 {
+		return "", errors.New("idempotency: invalid request body limit")
+	}
+	if r.Body == nil {
+		return fingerprintPayload(r.Header.Get("Content-Type"), nil)
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
+	closeErr := r.Body.Close()
+	if err != nil {
+		return "", fmt.Errorf("idempotency: read request body: %w", err)
+	}
+	if closeErr != nil {
+		return "", fmt.Errorf("idempotency: close request body: %w", closeErr)
+	}
+	if int64(len(body)) > limit {
+		return "", ErrRequestBodyTooLarge
+	}
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	return fingerprintPayload(r.Header.Get("Content-Type"), body)
+}
+
+func fingerprintPayload(contentType string, body []byte) (string, error) {
+	digest := sha256.New()
+	if err := writeHashPart(digest, []byte(contentType)); err != nil {
+		return "", fmt.Errorf("idempotency: hash content type: %w", err)
+	}
+	if err := writeHashPart(digest, body); err != nil {
+		return "", fmt.Errorf("idempotency: hash request body: %w", err)
+	}
+	return hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func scopedKey(r *http.Request, rawKey string, scope *ScopeFunc) (string, error) {
+	extraScope := ""
+	if scope != nil {
+		if *scope == nil {
+			return "", errors.New("idempotency: nil scope callback")
+		}
+		var err error
+		extraScope, err = (*scope)(r)
+		if err != nil {
+			return "", fmt.Errorf("idempotency: resolve scope: %w", err)
 		}
 	}
-	w.WriteHeader(r.StatusCode)
-	if _, err := w.Write(r.Body); err != nil {
+	tenantID := ""
+	if tenant, ok := tenancy.FromContext(r.Context()); ok {
+		tenantID = tenant.ID
+	}
+	path := r.URL.EscapedPath()
+	if path == "" {
+		path = "/"
+	}
+	target := path
+	if query := r.URL.Query().Encode(); query != "" {
+		target += "?" + query
+	}
+	digest := sha256.New()
+	for _, part := range []string{
+		strings.ToUpper(r.Method),
+		strings.ToLower(r.Host),
+		target,
+		tenantID,
+		extraScope,
+		rawKey,
+	} {
+		if err := writeHashPart(digest, []byte(part)); err != nil {
+			return "", fmt.Errorf("idempotency: hash scoped key: %w", err)
+		}
+	}
+	return "v1:" + hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+// Request-derived parts only ever feed a digest, never a response or log writer.
+func writeHashPart(dst hash.Hash, value []byte) error {
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
+	if err := writeHashBytes(dst, size[:]); err != nil {
+		return err
+	}
+	return writeHashBytes(dst, value)
+}
+
+func writeHashBytes(dst hash.Hash, value []byte) error {
+	written, err := dst.Write(value)
+	if err != nil {
+		return fmt.Errorf("write digest input: %w", err)
+	}
+	if written != len(value) {
+		return io.ErrShortWrite
+	}
+	return nil
+}
+
+func writeFingerprintError(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrRequestBodyTooLarge) {
+		http.Error(w, ErrRequestBodyTooLarge.Error(), http.StatusRequestEntityTooLarge)
+		return
+	}
+	http.Error(w, "idempotency: request body error", http.StatusBadRequest)
+}
+
+func captureResponse(
+	w http.ResponseWriter,
+	next http.Handler,
+	r *http.Request,
+	limit int64,
+) (CachedResponse, bool) {
+	recorder := &responseRecorder{target: w, limit: limit}
+	next.ServeHTTP(recorder, r)
+	if !recorder.wroteHeader {
+		recorder.WriteHeader(http.StatusOK)
+	}
+	return recorder.response(), recorder.overflow
+}
+
+func replay(ctx context.Context, w http.ResponseWriter, response CachedResponse, logger *slog.Logger) {
+	for key, values := range response.Header {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+	status := response.StatusCode
+	if status == 0 {
+		status = http.StatusOK
+	}
+	w.WriteHeader(status)
+	if _, err := w.Write(response.Body); err != nil {
 		logger.DebugContext(ctx, "idempotency: write response", slog.Any("err", err))
 	}
 }
 
-// responseRecorder captures an http.Handler's output.
 type responseRecorder struct {
-	header http.Header
-	code   int
-	body   bytes.Buffer
+	target      http.ResponseWriter
+	header      http.Header
+	code        int
+	body        []byte
+	limit       int64
+	wroteHeader bool
+	overflow    bool
 }
 
-func (r *responseRecorder) Header() http.Header         { return r.header }
-func (r *responseRecorder) WriteHeader(code int)        { r.code = code }
-func (r *responseRecorder) Write(b []byte) (int, error) { return r.body.Write(b) }
+func (r *responseRecorder) Header() http.Header { return r.target.Header() }
 
-// --- MemoryStore ---
+func (r *responseRecorder) WriteHeader(code int) {
+	if r.wroteHeader {
+		return
+	}
+	r.wroteHeader = true
+	r.code = code
+	r.header = r.target.Header().Clone()
+	r.target.WriteHeader(code)
+}
+
+func (r *responseRecorder) Write(body []byte) (int, error) {
+	if !r.wroteHeader {
+		r.WriteHeader(http.StatusOK)
+	}
+	written, err := r.target.Write(body)
+	r.capture(body[:written])
+	if err != nil {
+		return written, fmt.Errorf("idempotency: write response: %w", err)
+	}
+	return written, nil
+}
+
+func (r *responseRecorder) Unwrap() http.ResponseWriter { return r.target }
+
+func (r *responseRecorder) capture(body []byte) {
+	remaining := r.limit - int64(len(r.body))
+	if remaining <= 0 {
+		r.overflow = r.overflow || len(body) > 0
+		return
+	}
+	if int64(len(body)) > remaining {
+		body = body[:remaining]
+		r.overflow = true
+	}
+	r.body = append(r.body, body...)
+}
+
+func (r *responseRecorder) response() CachedResponse {
+	return CachedResponse{
+		StatusCode: r.code,
+		Header:     r.header.Clone(),
+		Body:       bytes.Clone(r.body),
+	}
+}
 
 // MemoryStore is a simple in-memory [Store] for tests. Not suitable for
 // multi-replica deployments.
 type MemoryStore struct {
-	mu      chan struct{}
-	entries map[string]memEntry
-	clk     clockwork.Clock
+	mu       sync.Mutex
+	entries  map[string]memEntry
+	clk      clockwork.Clock
+	sequence uint64
 }
 
+type entryState uint8
+
+const (
+	entryInFlight entryState = iota + 1
+	entryCompleted
+)
+
 type memEntry struct {
-	resp      CachedResponse
-	expiresAt time.Time
+	state       entryState
+	token       string
+	fingerprint string
+	resp        CachedResponse
+	expiresAt   time.Time
 }
 
 // NewMemoryStore returns an empty MemoryStore using the real clock.
@@ -202,37 +514,129 @@ func NewMemoryStore() *MemoryStore {
 
 // NewMemoryStoreWithClock returns an empty MemoryStore with an injected clock.
 func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
-	mu := make(chan struct{}, 1)
-	mu <- struct{}{}
-	return &MemoryStore{
-		mu:      mu,
-		entries: map[string]memEntry{},
-		clk:     clk,
+	if validate.IsNil(clk) {
+		clk = clockwork.NewRealClock()
 	}
+	return &MemoryStore{entries: map[string]memEntry{}, clk: clk}
 }
 
-// Find returns the cached response for key, or (zero, false, nil) when not yet set.
-func (s *MemoryStore) Find(_ context.Context, key string) (CachedResponse, bool, error) {
-	<-s.mu
-	defer func() { s.mu <- struct{}{} }()
-	e, ok := s.entries[key]
-	if !ok || s.clk.Now().After(e.expiresAt) {
-		return CachedResponse{}, false, nil
+// Claim atomically finds or reserves key.
+func (s *MemoryStore) Claim(
+	ctx context.Context,
+	key string,
+	fingerprint string,
+	ttl time.Duration,
+) (ClaimResult, error) {
+	if err := ctx.Err(); err != nil {
+		return ClaimResult{}, fmt.Errorf("idempotency: claim: %w", err)
 	}
-	return e.resp, true, nil
+	if key == "" || fingerprint == "" {
+		return ClaimResult{}, errors.New("idempotency: claim: key and fingerprint required")
+	}
+	if ttl <= 0 {
+		return ClaimResult{}, errors.New("idempotency: claim: positive TTL required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.clk.Now()
+	entry, found := s.entries[key]
+	if found && !now.Before(entry.expiresAt) {
+		delete(s.entries, key)
+		found = false
+	}
+	if !found {
+		s.sequence++
+		token := strconv.FormatUint(s.sequence, 10)
+		s.entries[key] = memEntry{
+			state:       entryInFlight,
+			token:       token,
+			fingerprint: fingerprint,
+			expiresAt:   now.Add(ttl),
+		}
+		return ClaimResult{State: ClaimAcquired, Token: token}, nil
+	}
+	if entry.fingerprint != fingerprint {
+		return ClaimResult{State: ClaimFingerprintMismatch}, nil
+	}
+	if entry.state == entryInFlight {
+		return ClaimResult{State: ClaimInFlight}, nil
+	}
+	return ClaimResult{
+		State:       ClaimCompleted,
+		Fingerprint: entry.fingerprint,
+		Response:    cloneResponse(entry.resp),
+	}, nil
 }
 
-// Save stores resp under key for ttl. A second call with the same key is a no-op.
-func (s *MemoryStore) Save(_ context.Context, key string, resp CachedResponse, ttl time.Duration) error {
-	<-s.mu
-	defer func() { s.mu <- struct{}{} }()
-	if _, exists := s.entries[key]; exists {
-		return nil // idempotent
+// Commit completes the reservation owned by token.
+func (s *MemoryStore) Commit(
+	ctx context.Context,
+	key string,
+	token string,
+	fingerprint string,
+	response CachedResponse,
+	ttl time.Duration,
+) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("idempotency: commit: %w", err)
 	}
-	s.entries[key] = memEntry{resp: resp, expiresAt: s.clk.Now().Add(ttl)}
+	if key == "" || token == "" {
+		return errors.New("idempotency: commit: key and token required")
+	}
+	if ttl <= 0 {
+		return errors.New("idempotency: commit: positive TTL required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.clk.Now()
+	entry, found := s.entries[key]
+	if !found || entry.state != entryInFlight || entry.token != token || !now.Before(entry.expiresAt) {
+		return ErrReservationLost
+	}
+	if entry.fingerprint != fingerprint {
+		return ErrFingerprintMismatch
+	}
+	s.entries[key] = memEntry{
+		state:       entryCompleted,
+		token:       token,
+		fingerprint: fingerprint,
+		resp:        cloneResponse(response),
+		expiresAt:   now.Add(ttl),
+	}
 	return nil
 }
 
-// ErrConflict is returned when a concurrent in-flight request with the same
-// key is still being processed. Callers should respond 409.
-var ErrConflict = errors.New("idempotency: concurrent request with same key")
+// Release removes the in-flight reservation owned by token.
+func (s *MemoryStore) Release(ctx context.Context, key string, token string) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("idempotency: release: %w", err)
+	}
+	if key == "" || token == "" {
+		return errors.New("idempotency: release: key and token required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, found := s.entries[key]
+	if !found || entry.state != entryInFlight || entry.token != token {
+		return ErrReservationLost
+	}
+	delete(s.entries, key)
+	return nil
+}
+
+func cloneResponse(response CachedResponse) CachedResponse {
+	response.Header = response.Header.Clone()
+	response.Body = bytes.Clone(response.Body)
+	return response
+}
+
+var (
+	// ErrConflict reports an in-flight request for the same scoped key.
+	ErrConflict = errors.New("idempotency: request with this key is still in progress")
+	// ErrFingerprintMismatch reports key reuse with a different payload.
+	ErrFingerprintMismatch = errors.New("idempotency: key reused with a different payload")
+	// ErrRequestBodyTooLarge reports a payload larger than MaxRequestBody.
+	ErrRequestBodyTooLarge = errors.New("idempotency: request body too large")
+	// ErrReservationLost reports that a token no longer owns its reservation.
+	ErrReservationLost = errors.New("idempotency: reservation lost")
+)

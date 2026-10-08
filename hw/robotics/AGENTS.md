@@ -26,12 +26,10 @@ type Device = gobot.Device
 
 ## Why gobot.io/x/gobot/v2
 
-Single API across many hardware adapters (Firmata, GPIO, drone SDKs); the
-`Manager` lifecycle (add robots → Start/Stop) maps cleanly onto a wrapper.
+Single API across many hardware adapters (Firmata, GPIO, drone SDKs); `Manager` lifecycle (add robots → Start/Stop) maps cleanly onto wrapper.
 
 ## Notes
 
 - Separate go.mod because gobot pulls CGO adapters for each hardware platform.
-- `Master.Start` blocks — run it on its own goroutine if the app does other work.
-- `NewRobot` wires an empty connection/device set; add hardware via the
-  re-exported `gobot.Connection` / `gobot.Device` types directly.
+- `Master.Start` blocks — run it on its own goroutine if app does other work.
+- `NewRobot` wires empty connection/device set; add hardware via  re-exported `gobot.Connection` / `gobot.Device` types directly.

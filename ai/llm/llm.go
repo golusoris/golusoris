@@ -11,11 +11,14 @@
 //
 // Usage:
 //
-//	client := llm.NewOpenAIClient(llm.Config{
+//	client, err := llm.NewOpenAIClient(llm.Config{
 //	    BaseURL: "https://api.openai.com/v1",
 //	    APIKey:  os.Getenv("OPENAI_API_KEY"),
 //	    Model:   "gpt-4o-mini",
 //	})
+//	if err != nil {
+//	    // Handle invalid configuration.
+//	}
 //
 //	resp, err := client.Chat(ctx, []llm.Message{
 //	    {Role: llm.RoleUser, Content: "Summarise this article: " + text},
@@ -34,9 +37,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"time"
+
+	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // Role is the speaker role in a conversation.
@@ -73,19 +80,139 @@ type Chunk struct {
 // absorb a burst of deltas without the producer blocking on a slow consumer.
 const streamBuffer = 32
 
+// DefaultMaxResponseBytes caps one non-streaming provider response at 4 MiB.
+const DefaultMaxResponseBytes int64 = 4 << 20
+
+// DefaultMaxErrorBytes caps one provider error response at 64 KiB.
+const DefaultMaxErrorBytes int64 = 64 << 10
+
+// DefaultMaxStreamFrameBytes caps one SSE or NDJSON frame at 1 MiB while
+// deliberately accepting provider frames larger than Scanner's 64 KiB default.
+const DefaultMaxStreamFrameBytes = 1 << 20
+
+// DefaultHTTPTimeout caps one provider request at two minutes.
+const DefaultHTTPTimeout = 120 * time.Second
+
+// ErrStreamFrameTooLarge identifies a provider stream frame rejected at its
+// configured byte cap.
+var ErrStreamFrameTooLarge = errors.New("llm: stream frame exceeds byte cap")
+
+// ErrStreamTruncated identifies a provider stream that reached clean EOF
+// without its protocol completion marker.
+var ErrStreamTruncated = errors.New("llm: stream ended before protocol terminator")
+
+// HTTPBounds configures transport and response memory limits shared by LLM
+// provider clients.
+type HTTPBounds struct {
+	Timeout             time.Duration
+	MaxResponseBytes    int64
+	MaxErrorBytes       int64
+	MaxStreamFrameBytes int
+}
+
+// NormalizeHTTPBounds selects finite defaults and rejects negative or
+// sentinel-overflow limits.
+func NormalizeHTTPBounds(bounds HTTPBounds) (HTTPBounds, error) {
+	if err := validateHTTPBounds(bounds); err != nil {
+		return HTTPBounds{}, err
+	}
+	return defaultHTTPBounds(bounds), nil
+}
+
+func validateHTTPBounds(bounds HTTPBounds) error {
+	if bounds.Timeout < 0 {
+		return errors.New("llm: Timeout must not be negative")
+	}
+	if bounds.MaxResponseBytes < 0 || bounds.MaxResponseBytes == math.MaxInt64 {
+		return errors.New("llm: MaxResponseBytes must be positive and bounded")
+	}
+	if bounds.MaxErrorBytes < 0 || bounds.MaxErrorBytes == math.MaxInt64 {
+		return errors.New("llm: MaxErrorBytes must be positive and bounded")
+	}
+	if bounds.MaxStreamFrameBytes < 0 || bounds.MaxStreamFrameBytes > math.MaxInt-2 {
+		return errors.New("llm: MaxStreamFrameBytes must be positive and bounded")
+	}
+	return nil
+}
+
+func defaultHTTPBounds(bounds HTTPBounds) HTTPBounds {
+	if bounds.Timeout == 0 {
+		bounds.Timeout = DefaultHTTPTimeout
+	}
+	if bounds.MaxResponseBytes == 0 {
+		bounds.MaxResponseBytes = DefaultMaxResponseBytes
+	}
+	if bounds.MaxErrorBytes == 0 {
+		bounds.MaxErrorBytes = DefaultMaxErrorBytes
+	}
+	if bounds.MaxStreamFrameBytes == 0 {
+		bounds.MaxStreamFrameBytes = DefaultMaxStreamFrameBytes
+	}
+	return bounds
+}
+
 // RunStream is the one goroutine wrapper behind every backend's Stream
 // (HISS-19): it hands fn a fresh buffered channel, forwards fn's error as a
 // terminal Chunk{Err}, and closes the channel once fn returns. fn must only
 // send on ch and return; it must not close it.
 func RunStream(fn func(ch chan<- Chunk) error) <-chan Chunk {
+	return RunStreamContext(context.Background(), fn)
+}
+
+// RunStreamContext is [RunStream] with cancellation-aware terminal delivery.
+// Stream producers must use [SendChunk] so caller cancellation also releases a
+// producer blocked behind an abandoned output channel.
+func RunStreamContext(ctx context.Context, fn func(ch chan<- Chunk) error) <-chan Chunk {
 	ch := make(chan Chunk, streamBuffer)
 	go func() {
 		defer close(ch)
 		if err := fn(ch); err != nil {
-			ch <- Chunk{Err: err}
+			if sendErr := SendChunk(ctx, ch, Chunk{Err: err}); sendErr != nil {
+				return
+			}
 		}
 	}()
 	return ch
+}
+
+// SendChunk sends one stream chunk or returns when ctx is cancelled.
+func SendChunk(ctx context.Context, ch chan<- Chunk, chunk Chunk) error {
+	select {
+	case ch <- chunk:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("llm: send stream chunk: %w", ctx.Err())
+	}
+}
+
+// ScanStreamLines scans bounded newline-delimited provider frames. The visit
+// callback returns done=true for a protocol terminator; clean EOF before that
+// marker returns [ErrStreamTruncated].
+func ScanStreamLines(body io.Reader, maxFrameBytes int, visit func([]byte) (done bool, err error)) error {
+	if maxFrameBytes <= 0 || maxFrameBytes > math.MaxInt-2 {
+		return errors.New("llm: positive bounded stream frame size is required")
+	}
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, min(64<<10, maxFrameBytes+2)), maxFrameBytes+2)
+	for scanner.Scan() {
+		if len(scanner.Bytes()) > maxFrameBytes {
+			return fmt.Errorf("%w: limit %d", ErrStreamFrameTooLarge, maxFrameBytes)
+		}
+		done, err := visit(scanner.Bytes())
+		if err != nil {
+			return fmt.Errorf("llm: handle stream frame: %w", err)
+		}
+		if done {
+			return nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, bufio.ErrTooLong) {
+			return fmt.Errorf("%w: limit %d", ErrStreamFrameTooLarge, maxFrameBytes)
+		}
+		return fmt.Errorf("llm: scan stream: %w", err)
+	}
+	return ErrStreamTruncated
 }
 
 // Settings are the per-request generation knobs an [Option] mutates.
@@ -125,7 +252,9 @@ func Resolve(defaults Settings, opts []Option) Settings {
 		s.Temperature = 1.0
 	}
 	for _, o := range opts {
-		o(&s)
+		if o != nil {
+			o(&s)
+		}
 	}
 	return s
 }
@@ -153,6 +282,18 @@ type Config struct {
 	EmbedModel string
 	// Timeout is the HTTP client timeout. Default: 120s.
 	Timeout time.Duration
+	// HTTPClient supplies transport, redirect, and cookie policy. Constructor
+	// clones it and applies Timeout when source timeout is non-positive.
+	HTTPClient *http.Client
+	// MaxResponseBytes caps each successful non-streaming response. Zero uses
+	// [DefaultMaxResponseBytes].
+	MaxResponseBytes int64
+	// MaxErrorBytes caps each non-success response. Zero uses
+	// [DefaultMaxErrorBytes].
+	MaxErrorBytes int64
+	// MaxStreamFrameBytes caps one SSE frame. Zero uses
+	// [DefaultMaxStreamFrameBytes].
+	MaxStreamFrameBytes int
 }
 
 // OpenAIClient is an HTTP Client implementing the OpenAI chat completions API.
@@ -162,15 +303,23 @@ type OpenAIClient struct {
 }
 
 // NewOpenAIClient returns a Client targeting any OpenAI-compatible endpoint.
-func NewOpenAIClient(cfg Config) *OpenAIClient {
-	if cfg.Timeout == 0 {
-		cfg.Timeout = 120 * time.Second
+func NewOpenAIClient(cfg Config) (*OpenAIClient, error) {
+	bounds, err := NormalizeHTTPBounds(HTTPBounds{
+		Timeout: cfg.Timeout, MaxResponseBytes: cfg.MaxResponseBytes,
+		MaxErrorBytes: cfg.MaxErrorBytes, MaxStreamFrameBytes: cfg.MaxStreamFrameBytes,
+	})
+	if err != nil {
+		return nil, err
 	}
-	return &OpenAIClient{cfg: cfg, http: &http.Client{Timeout: cfg.Timeout}}
+	cfg.Timeout = bounds.Timeout
+	cfg.MaxResponseBytes = bounds.MaxResponseBytes
+	cfg.MaxErrorBytes = bounds.MaxErrorBytes
+	cfg.MaxStreamFrameBytes = bounds.MaxStreamFrameBytes
+	return &OpenAIClient{cfg: cfg, http: httpclient.CloneBounded(cfg.HTTPClient, cfg.Timeout)}, nil
 }
 
 // Chat implements [Client].
-func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Option) (Response, error) {
+func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Option) (_ Response, err error) {
 	o := c.applyOpts(opts)
 	body, err := json.Marshal(chatRequest(o.Model, messages, o, false))
 	if err != nil {
@@ -186,10 +335,13 @@ func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Opt
 	if err != nil {
 		return Response{}, fmt.Errorf("llm: request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer func() { gerr.CloseInto(resp.Body, &err, "llm: close chat response body") }()
 
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return Response{}, fmt.Errorf("llm: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return Response{}, fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, raw)
 	}
 
@@ -205,7 +357,11 @@ func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Opt
 			CompletionTokens int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	raw, err := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxResponseBytes)
+	if err != nil {
+		return Response{}, fmt.Errorf("llm: read response: %w", err)
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return Response{}, fmt.Errorf("llm: decode: %w", err)
 	}
 	content := ""
@@ -222,21 +378,17 @@ func (c *OpenAIClient) Chat(ctx context.Context, messages []Message, opts ...Opt
 
 // Stream implements [Client]. The channel is closed when streaming ends.
 func (c *OpenAIClient) Stream(ctx context.Context, messages []Message, opts ...Option) <-chan Chunk {
-	ch := make(chan Chunk, 32)
 	o := c.applyOpts(opts)
-	go func() {
-		defer close(ch)
+	return RunStreamContext(ctx, func(ch chan<- Chunk) (err error) {
 		resp, err := c.streamRequest(ctx, o, messages)
 		if resp != nil {
-			defer resp.Body.Close() //nolint:errcheck // best-effort close; the stream has already been fully read (or the error already reported)
+			defer func() { gerr.CloseInto(resp.Body, &err, "llm: close stream response body") }()
 		}
 		if err != nil {
-			ch <- Chunk{Err: err}
-			return
+			return err
 		}
-		emitSSEChunks(resp.Body, ch)
-	}()
-	return ch
+		return emitSSEChunks(ctx, resp.Body, c.cfg.MaxStreamFrameBytes, ch)
+	})
 }
 
 // streamRequest issues the streaming chat/completions call and validates
@@ -257,7 +409,10 @@ func (c *OpenAIClient) streamRequest(ctx context.Context, o Settings, messages [
 		return nil, fmt.Errorf("llm: request: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return resp, fmt.Errorf("llm: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return resp, fmt.Errorf("llm: HTTP %d: %s", resp.StatusCode, raw)
 	}
 	return resp, nil
@@ -266,34 +421,42 @@ func (c *OpenAIClient) streamRequest(ctx context.Context, o Settings, messages [
 // emitSSEChunks scans an OpenAI-format SSE body line by line, forwarding
 // each non-empty content delta on ch, until the stream ends or a
 // "[DONE]" sentinel line is seen.
-func emitSSEChunks(body io.Reader, ch chan<- Chunk) {
-	scanner := bufio.NewScanner(body)
-	for scanner.Scan() {
-		content, done, ok := parseSSELine(scanner.Text())
+func emitSSEChunks(ctx context.Context, body io.Reader, maxFrameBytes int, ch chan<- Chunk) error {
+	return ScanStreamLines(body, maxFrameBytes, func(line []byte) (bool, error) {
+		content, done, ok, err := parseSSELine(string(line))
+		if err != nil {
+			return false, err
+		}
 		if done {
-			return
+			return true, nil
 		}
 		if !ok {
-			continue
+			return false, nil
 		}
 		if content != "" {
-			ch <- Chunk{Content: content}
+			if err := SendChunk(ctx, ch, Chunk{Content: content}); err != nil {
+				return false, err
+			}
 		}
-	}
+		return false, nil
+	})
 }
 
 // parseSSELine parses one line of an OpenAI-format SSE stream. done is
 // true for the "[DONE]" sentinel line. ok is false for lines the caller
-// should skip: anything that isn't a "data: " line, or a data line whose
-// JSON payload doesn't decode. When ok is true, content is the delta
-// text (possibly empty).
-func parseSSELine(line string) (content string, done, ok bool) {
+// should skip, such as comments and non-data lines. Malformed data and provider
+// error events return an error. When ok is true, content is the delta text
+// (possibly empty).
+func parseSSELine(line string) (content string, done, ok bool, parseErr error) {
 	if !strings.HasPrefix(line, "data: ") {
-		return "", false, false
+		return "", false, false, nil
 	}
 	data := strings.TrimPrefix(line, "data: ")
 	if data == "[DONE]" {
-		return "", true, false
+		return "", true, false, nil
+	}
+	if data == "" {
+		return "", false, false, nil
 	}
 	var ev struct {
 		Choices []struct {
@@ -301,19 +464,28 @@ func parseSSELine(line string) (content string, done, ok bool) {
 				Content string `json:"content"`
 			} `json:"delta"`
 		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
 	}
 	if err := json.Unmarshal([]byte(data), &ev); err != nil {
-		return "", false, false
+		return "", false, false, fmt.Errorf("invalid OpenAI stream event: %w", err)
+	}
+	if ev.Error != nil {
+		if ev.Error.Message == "" {
+			return "", false, false, errors.New("OpenAI stream provider error")
+		}
+		return "", false, false, fmt.Errorf("OpenAI stream provider error: %s", ev.Error.Message)
 	}
 	if len(ev.Choices) == 0 {
-		return "", false, true
+		return "", false, true, nil
 	}
-	return ev.Choices[0].Delta.Content, false, true
+	return ev.Choices[0].Delta.Content, false, true, nil
 }
 
 // Embed implements [Client]. Returns a 1536-dim vector for text-embedding-3-small
 // or whatever the configured EmbedModel supports.
-func (c *OpenAIClient) Embed(ctx context.Context, text string) ([]float32, error) {
+func (c *OpenAIClient) Embed(ctx context.Context, text string) (_ []float32, err error) {
 	model := c.cfg.EmbedModel
 	if model == "" {
 		model = c.cfg.Model
@@ -333,10 +505,13 @@ func (c *OpenAIClient) Embed(ctx context.Context, text string) ([]float32, error
 	if err != nil {
 		return nil, fmt.Errorf("llm: embed request: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
+	defer func() { gerr.CloseInto(resp.Body, &err, "llm: close embed response body") }()
 
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(resp.Body)
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return nil, fmt.Errorf("llm: embed HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("llm: embed HTTP %d: %s", resp.StatusCode, raw)
 	}
 	var out struct {
@@ -344,7 +519,11 @@ func (c *OpenAIClient) Embed(ctx context.Context, text string) ([]float32, error
 			Embedding []float32 `json:"embedding"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	raw, err := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxResponseBytes)
+	if err != nil {
+		return nil, fmt.Errorf("llm: embed read response: %w", err)
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("llm: embed decode: %w", err)
 	}
 	if len(out.Data) == 0 {

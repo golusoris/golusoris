@@ -6,14 +6,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — flags/
 
-Typed feature-flag evaluation with a pluggable [Provider]. Mirrors the
-OpenFeature evaluation contract so migrating to the official OpenFeature Go SDK
+Typed feature-flag evaluation with pluggable [Provider]. Mirrors OpenFeature evaluation contract so migrating to official OpenFeature Go SDK
 is straightforward.
 
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Provider` | `Evaluate(ctx, key, default, evalCtx) (any, error)` + `Metadata()` |
 | `EvalContext` | `map[string]any` — targeting attributes (userID, tenantID, …) |
 | `Client` | `Bool / String / Int / Float` typed evaluators |
@@ -41,5 +40,5 @@ ver := client.String(ctx, "api-version", "v1")
 ## Don't
 
 - Don't cache flag values across requests — evaluation should be cheap but fresh.
-- Don't use `MemoryProvider` in production without a persistence backend.
-- Don't gate on flags in DB migrations — flag evaluation requires the DB to be up.
+- Don't use `MemoryProvider` in production without persistence backend.
+- Don't gate on flags in DB migrations — flag evaluation requires DB to be up.

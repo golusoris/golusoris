@@ -23,8 +23,7 @@ raw := c.Raw()                          // *gonum/plot.Plot for advanced use
 
 ## Why gonum.org/v1/plot
 
-Pure-Go plotting that pairs with `science/numerical`; `Raw()` exposes the
-underlying `*plot.Plot` so callers can drop down to the full gonum API.
+Pure-Go plotting that pairs with `science/numerical`; `Raw()` exposes underlying `*plot.Plot` so callers can drop down to full gonum API.
 
 ## Notes
 

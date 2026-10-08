@@ -7,9 +7,11 @@ package cdc_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -66,6 +68,60 @@ func TestWebhookSink_ErrorStatus(t *testing.T) {
 	sink := outboxcdc.NewWebhookSink(srv.URL)
 	ev := outbox.Event{Kind: "x", Payload: json.RawMessage(`{}`)}
 	require.Error(t, sink.Send(context.Background(), ev))
+}
+
+func TestWebhookSink_RejectsRedirectsWithoutForwardingPayload(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{
+		http.StatusMovedPermanently,
+		http.StatusFound,
+		http.StatusSeeOther,
+		http.StatusTemporaryRedirect,
+		http.StatusPermanentRedirect,
+	} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			var targetRequests atomic.Int32
+			mux := http.NewServeMux()
+			mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("initial method = %s, want POST", r.Method)
+				}
+				http.Redirect(w, r, "/target", status)
+			})
+			mux.HandleFunc("/target", func(http.ResponseWriter, *http.Request) {
+				targetRequests.Add(1)
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			for _, opts := range [][]outboxcdc.WebhookOption{
+				nil,
+				{outboxcdc.WithWebhookSecret("secret")},
+			} {
+				sink := outboxcdc.NewWebhookSink(server.URL+"/start", opts...)
+				err := sink.Send(context.Background(), outbox.Event{Kind: "x", Payload: json.RawMessage(`{}`)})
+				if !errors.Is(err, outboxcdc.ErrWebhookRedirect) {
+					t.Fatalf("Send() error = %v; want ErrWebhookRedirect", err)
+				}
+			}
+			if got := targetRequests.Load(); got != 0 {
+				t.Fatalf("redirect target requests = %d; want 0", got)
+			}
+		})
+	}
+}
+
+func TestWebhookSink_NilHTTPClientFallsBackToDefault(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	sink := outboxcdc.NewWebhookSink(srv.URL, outboxcdc.WithWebhookHTTPClient(nil))
+	if err := sink.Send(context.Background(), outbox.Event{Kind: "x", Payload: json.RawMessage(`{}`)}); err != nil {
+		t.Fatalf("Send(): %v", err)
+	}
 }
 
 // newTestGCPClient starts an in-process pstest fake server, dials it, and

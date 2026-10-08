@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -112,6 +113,12 @@ func (idx *Index) Validate() error {
 	modules := make(map[string]bool, len(idx.Modules)+1)
 	modules[idx.Framework] = true
 	for _, m := range idx.Modules {
+		if m == idx.Framework || !withinModule(m, idx.Framework) {
+			return fmt.Errorf("%w: invalid module %q for framework %s", ErrInvalid, m, idx.Framework)
+		}
+		if modules[m] {
+			return fmt.Errorf("%w: duplicate module %s", ErrInvalid, m)
+		}
 		modules[m] = true
 	}
 	seen := make(map[string]bool, len(idx.Packages))
@@ -124,10 +131,33 @@ func (idx *Index) Validate() error {
 }
 
 func (idx *Index) validatePackage(p *Package, seen, modules map[string]bool) error {
+	if err := idx.validatePackageIdentity(p, seen, modules); err != nil {
+		return err
+	}
+	seen[p.Import] = true
+	if err := validateCapabilities(p); err != nil {
+		return err
+	}
+	if err := validateReplacements(p); err != nil {
+		return err
+	}
+	switch p.Status {
+	case "", StatusStable, StatusBeta, StatusExperimental:
+		return nil
+	default:
+		return fmt.Errorf("%w: %s: unknown status %q", ErrInvalid, p.Import, p.Status)
+	}
+}
+
+func (idx *Index) validatePackageIdentity(p *Package, seen, modules map[string]bool) error {
+	owner := p.Module
+	if owner == "" {
+		owner = idx.Framework
+	}
 	switch {
 	case p.Import == "":
 		return fmt.Errorf("%w: package with empty import", ErrInvalid)
-	case !strings.HasPrefix(p.Import, idx.Framework):
+	case !withinModule(p.Import, idx.Framework):
 		return fmt.Errorf("%w: %s is outside %s", ErrInvalid, p.Import, idx.Framework)
 	case seen[p.Import]:
 		return fmt.Errorf("%w: duplicate import %s", ErrInvalid, p.Import)
@@ -135,19 +165,52 @@ func (idx *Index) validatePackage(p *Package, seen, modules map[string]bool) err
 		return fmt.Errorf("%w: %s declares no capabilities", ErrInvalid, p.Import)
 	case p.Module != "" && !modules[p.Module]:
 		return fmt.Errorf("%w: %s references undeclared module %s", ErrInvalid, p.Import, p.Module)
+	case owner != mostSpecificModule(p.Import, modules):
+		return fmt.Errorf("%w: %s belongs to module %s, not %s", ErrInvalid, p.Import, mostSpecificModule(p.Import, modules), owner)
 	}
-	seen[p.Import] = true
+	return nil
+}
+
+func validateCapabilities(p *Package) error {
+	capabilities := make(map[string]bool, len(p.Capabilities))
 	for _, k := range p.Capabilities {
 		if !keyRE.MatchString(k) {
 			return fmt.Errorf("%w: %s: malformed capability key %q", ErrInvalid, p.Import, k)
 		}
-	}
-	switch p.Status {
-	case "", StatusStable, StatusBeta, StatusExperimental:
-	default:
-		return fmt.Errorf("%w: %s: unknown status %q", ErrInvalid, p.Import, p.Status)
+		if capabilities[k] {
+			return fmt.Errorf("%w: %s: duplicate capability %q", ErrInvalid, p.Import, k)
+		}
+		capabilities[k] = true
 	}
 	return nil
+}
+
+func validateReplacements(p *Package) error {
+	replacements := make(map[string]bool, len(p.Replaces))
+	for _, replacement := range p.Replaces {
+		if replacement == "" {
+			return fmt.Errorf("%w: %s: empty replacement", ErrInvalid, p.Import)
+		}
+		if replacements[replacement] {
+			return fmt.Errorf("%w: %s: duplicate replacement %q", ErrInvalid, p.Import, replacement)
+		}
+		replacements[replacement] = true
+	}
+	return nil
+}
+
+func withinModule(importPath, module string) bool {
+	return importPath == module || strings.HasPrefix(importPath, module+"/")
+}
+
+func mostSpecificModule(importPath string, modules map[string]bool) string {
+	owner := ""
+	for module := range modules {
+		if withinModule(importPath, module) && len(module) > len(owner) {
+			owner = module
+		}
+	}
+	return owner
 }
 
 // ByCapability maps each key to the sorted import paths providing it.
@@ -167,10 +230,8 @@ func (idx *Index) ByCapability() map[string][]string {
 // Covers reports whether at least one package provides key.
 func (idx *Index) Covers(key string) bool {
 	for _, p := range idx.Packages {
-		for _, k := range p.Capabilities {
-			if k == key {
-				return true
-			}
+		if slices.Contains(p.Capabilities, key) {
+			return true
 		}
 	}
 	return false
@@ -187,14 +248,32 @@ func (idx *Index) Lookup(importPath string) (Package, bool) {
 }
 
 // Replacements maps every third-party module path listed in Replaces to the
-// framework import that supersedes it. Consumers resolve their own imports
-// against these keys with longest-prefix matching (see astx.Resolve).
+// last framework import that declares it. It preserves the legacy declaration-
+// order behavior; new consumers should use ReplacementCandidates.
 func (idx *Index) Replacements() map[string]string {
 	out := make(map[string]string)
 	for _, p := range idx.Packages {
 		for _, r := range p.Replaces {
 			out[r] = p.Import
 		}
+	}
+	return out
+}
+
+// ReplacementCandidates maps every third-party module path listed in Replaces
+// to every sorted framework import that supersedes it. Consumers resolve their
+// own imports against these keys with longest-prefix matching (see
+// astx.Resolve), then choose a provider using the demanded capability rather
+// than declaration order.
+func (idx *Index) ReplacementCandidates() map[string][]string {
+	out := make(map[string][]string)
+	for _, p := range idx.Packages {
+		for _, r := range p.Replaces {
+			out[r] = append(out[r], p.Import)
+		}
+	}
+	for replacement := range out {
+		sort.Strings(out[replacement])
 	}
 	return out
 }

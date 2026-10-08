@@ -6,8 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — realtime/pubsub/
 
-In-process pub/sub bus (`LocalBus`). For cross-replica use, implement
-`pubsub.Bus` backed by Redis SUBSCRIBE or Postgres LISTEN/NOTIFY.
+In-process pub/sub bus (`LocalBus`). For cross-replica use,
+`realtime/pubsub/redis` implements `pubsub.Bus` with Redis SUBSCRIBE;
+Postgres LISTEN/NOTIFY remains extension point.
 
 ## Usage
 
@@ -27,7 +28,8 @@ bus.Publish(ctx, pubsub.Message{Topic: "order.created", Data: order})
 
 ## Bus interface
 
-Both `LocalBus` and future Redis/Postgres backends implement:
+`LocalBus` and `realtime/pubsub/redis.Bus` implement; future Postgres backend
+uses same contract:
 
 ```go
 type Bus interface {
@@ -36,12 +38,12 @@ type Bus interface {
 }
 ```
 
-Wire the interface into fx so backends are swappable without changing
+Wire interface into fx so backends are swappable without changing
 subscribers.
 
 ## Don't
 
-- Don't block in a Handler — it blocks the Publish caller.
+- Don't block in Handler — it blocks Publish caller.
 - Don't use `LocalBus` in multi-replica deployments — events won't
-  cross replica boundaries. Use `cache/redis` pubsub or Postgres
-  LISTEN/NOTIFY instead.
+ cross replica boundaries. Use `realtime/pubsub/redis` or Postgres
+ LISTEN/NOTIFY implementation instead.

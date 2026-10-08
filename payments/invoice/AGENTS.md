@@ -17,32 +17,30 @@ billing. PDF rendering is intentionally not bundled — see Notes below.
 - `invoice.Renderer` interface + `NewHTMLRenderer(*template.Template)`.
 - `invoice.Validate(Invoice) error` — structural check before render.
 - `invoice.DefaultHTMLTemplate` — minimal stylable HTML; override via
-  `HTMLRenderer.SetTemplate`.
+ `HTMLRenderer.SetTemplate`.
 
 ## Numbering rules
 
-`Numberer.Next` MUST be gap-free under concurrent calls. The
-`MemoryNumberer` uses a per-tenant counter behind a mutex. A
-Postgres-backed Numberer should use either a `SERIAL` per tenant or
-a `next_invoice_number` row updated inside `SELECT … FOR UPDATE`.
+`Numberer.Next` MUST be gap-free under concurrent calls. `MemoryNumberer` uses per-tenant counter behind mutex. Postgres-backed Numberer should use either `SERIAL` per tenant or
+`next_invoice_number` row updated inside `SELECT … FOR UPDATE`.
 Never use UUIDs or random IDs as invoice numbers — auditors and tax
 authorities expect strict sequential numbering per tenant.
 
 `Reset(tenantID)` exists for tests only — calling it in production
 breaks audit trails.
 
-## PDF — not here, by design
+## PDF composition
 
-The framework's `pdf/` module (chromedp/HTML→PDF) is in the CGO-
-deferred sub-module list (PLAN §3.16b). Until it lands, options:
+`payments/invoice` stays renderer-neutral. Framework's shipped `pdf/` module
+uses chromedp for HTML→PDF in its own Go submodule. Options:
 
-1. Apps run a stand-alone HTML→PDF microservice (Gotenberg, weasyprint
-   container) and feed it the bytes from `HTMLRenderer.Render`.
-2. Apps store the HTML directly — most jurisdictions accept HTML/PDF
-   equivalents for digital invoices, and modern email clients render
-   inline HTML well.
-3. When `pdf/` lands, wire a `PDFRenderer` that wraps `HTMLRenderer`
-   and pipes through chromedp.
+1. Apps run stand-alone HTML→PDF microservice (Gotenberg, weasyprint
+ container) and feed it bytes from `HTMLRenderer.Render`.
+2. Apps store HTML directly — most jurisdictions accept HTML/PDF
+ equivalents for digital invoices, and modern email clients render
+ inline HTML well.
+3. Wire app-level `PDFRenderer` that wraps `HTMLRenderer` and sends output
+ through `pdf/`.
 
 ## Composition
 

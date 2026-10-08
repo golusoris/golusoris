@@ -55,6 +55,13 @@ func TestDockerRunner_nameIsDocker(t *testing.T) {
 	require.Equal(t, "docker", (&tiny.DockerRunner{}).Name())
 }
 
+func TestDockerRunner_isComparable(t *testing.T) {
+	t.Parallel()
+	runner := tiny.DockerRunner{DockerPath: "docker"}
+	set := map[tiny.DockerRunner]struct{}{runner: {}}
+	require.Contains(t, set, runner)
+}
+
 // TestStubRunner_writesOutput validates the expected stub pattern:
 // the Fn materializes an artifact in spec.OutputDir, which higher-level
 // Trainer packages then upload to object storage.
@@ -70,10 +77,9 @@ func TestStubRunner_writesOutput(t *testing.T) {
 	require.Len(t, data, 4)
 }
 
-// TestDockerRunner_buildsArgs exercises the arg-composition path by
-// pointing DockerPath at /bin/true (accepts any args, exits 0). This
-// covers the full Run path including Pull/Network/UserNSRemap/GPUs/Env
-// branches without requiring Docker.
+// TestDockerRunner_buildsArgs exercises the arg-composition path by pointing
+// DockerPath at /bin/true. A command that does not honor --cidfile must fail
+// closed because the runner cannot prove daemon-side container cleanup.
 func TestDockerRunner_buildsArgs(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/true"); err != nil {
@@ -86,13 +92,14 @@ func TestDockerRunner_buildsArgs(t *testing.T) {
 		UserNSRemap: true,
 	}
 	err := r.Run(t.Context(), tiny.RunSpec{
-		Image:     "ghcr.io/test:1",
-		Env:       map[string]string{"K": "V"},
-		InputDir:  t.TempDir(),
-		OutputDir: t.TempDir(),
-		GPUs:      1,
+		Image:              "ghcr.io/test:1",
+		Env:                map[string]string{"K": "V"},
+		InputDir:           t.TempDir(),
+		OutputDir:          t.TempDir(),
+		GPUs:               1,
+		AllowUnpinnedImage: true,
 	})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "container ID file")
 }
 
 // TestDockerRunner_execFailure surfaces non-zero exits as wrapped errors.
@@ -103,15 +110,16 @@ func TestDockerRunner_execFailure(t *testing.T) {
 	}
 	r := &tiny.DockerRunner{DockerPath: "/bin/false"}
 	err := r.Run(t.Context(), tiny.RunSpec{
-		Image:     "x",
-		InputDir:  t.TempDir(),
-		OutputDir: t.TempDir(),
+		Image:              "x",
+		InputDir:           t.TempDir(),
+		OutputDir:          t.TempDir(),
+		AllowUnpinnedImage: true,
 	})
 	require.ErrorContains(t, err, "docker run")
 }
 
-// TestDockerRunner_timeoutWrapsCtx ensures the spec Timeout derives a
-// sub-context (covers the `if spec.Timeout > 0` branch).
+// TestDockerRunner_timeoutWrapsCtx ensures an explicit timeout still reaches
+// the command path; /bin/true then fails the required CID-file contract.
 func TestDockerRunner_timeoutWrapsCtx(t *testing.T) {
 	t.Parallel()
 	if _, err := os.Stat("/bin/true"); err != nil {
@@ -119,10 +127,11 @@ func TestDockerRunner_timeoutWrapsCtx(t *testing.T) {
 	}
 	r := &tiny.DockerRunner{DockerPath: "/bin/true"}
 	err := r.Run(t.Context(), tiny.RunSpec{
-		Image:     "x",
-		InputDir:  t.TempDir(),
-		OutputDir: t.TempDir(),
-		Timeout:   5 * time.Second,
+		Image:              "x",
+		InputDir:           t.TempDir(),
+		OutputDir:          t.TempDir(),
+		Timeout:            5 * time.Second,
+		AllowUnpinnedImage: true,
 	})
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "container ID file")
 }

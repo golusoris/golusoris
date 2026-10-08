@@ -120,19 +120,42 @@ func mapResponses(responses []*clamd.Response) (Verdict, error) {
 	if len(responses) == 0 {
 		return Verdict{}, fmt.Errorf("storage/scan: empty clamd response: %w", ErrUnavailable)
 	}
+	if found := firstResponseWithStatus(responses, clamdStatusFound); found != nil {
+		return Verdict{Clean: false, Signature: found.Signature, Raw: found.Raw}, nil
+	}
+	firstOK, err := validateCleanResponses(responses)
+	if err != nil {
+		return Verdict{}, err
+	}
+	return Verdict{Clean: true, Raw: firstOK.Raw}, nil
+}
+
+func firstResponseWithStatus(responses []*clamd.Response, status string) *clamd.Response {
+	for _, resp := range responses {
+		if resp != nil && resp.Status == status {
+			return resp
+		}
+	}
+	return nil
+}
+
+func validateCleanResponses(responses []*clamd.Response) (*clamd.Response, error) {
+	var firstOK *clamd.Response
 	for _, resp := range responses {
 		if resp == nil {
-			continue
+			return nil, fmt.Errorf("storage/scan: nil clamd response: %w", ErrUnavailable)
 		}
-		if resp.Status == clamdStatusFound {
-			return Verdict{Clean: false, Signature: resp.Signature, Raw: resp.Raw}, nil
+		if resp.Status != clamdStatusOK {
+			return nil, fmt.Errorf(
+				"storage/scan: unexpected clamd status %q: %w", resp.Status, ErrUnavailable,
+			)
+		}
+		if firstOK == nil {
+			firstOK = resp
 		}
 	}
-	first := responses[0]
-	if first.Status != clamdStatusOK {
-		return Verdict{}, fmt.Errorf(
-			"storage/scan: unexpected clamd status %q: %w", first.Status, ErrUnavailable,
-		)
+	if firstOK == nil {
+		return nil, fmt.Errorf("storage/scan: no clean clamd response: %w", ErrUnavailable)
 	}
-	return Verdict{Clean: true, Raw: first.Raw}, nil
+	return firstOK, nil
 }

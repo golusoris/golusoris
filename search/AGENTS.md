@@ -11,20 +11,21 @@ Provider-agnostic full-text and vector search abstraction.
 ## Core types
 
 | Type | Purpose |
-|---|---|
+| --- | --- |
 | `Indexer` | `CreateCollection / DeleteCollection / Index / Delete` |
 | `Searcher` | `Search(ctx, collection, Query) Results` |
 | `Backend` | `Indexer + Searcher` combined |
 | `Query` | `Q`, `Fields`, `Filters`, `RawFilter`, `SortBy`, `Limit`, `Offset` |
 | `Results` | `Hits []Hit`, `Total int64` |
+| `ValidFilterField` | Shared dotted-identifier check for generated backend filters |
 | `MemorySearcher` | In-memory backend; case-insensitive substring match; for tests |
-| `MultiSearcher` | Federated search: fans a `Query` to N `Searcher`s concurrently, dedupes hits by document `id` (best score wins), sorts by score desc, error-tolerant (`ErrAllBackendsFailed` only when all fail; `WithFailFast` to opt out) |
-| `Disabled` / `Gate` | No-op `Backend` for a configured-off search; `Gate(b, enabled)` passes `b` through or substitutes the no-op |
+| `MultiSearcher` | Federated search: bounded concurrent fan-out, ID dedupe, score sort, tolerant partial failures, immediate `WithFailFast` cancellation |
+| `Disabled` / `Gate` | No-op `Backend` for configured-off search; `Gate(b, enabled)` passes `b` through or substitutes no-op |
 
-## Planned backends (sub-packages)
+## Backends (subpackages)
 
 | Sub-package | Backend |
-|---|---|
+| --- | --- |
 | `search/typesense/` | typesense-go/v2 |
 | `search/meilisearch/` | meilisearch-go |
 | `search/pgfts/` | Postgres `tsvector` / `tsquery` |

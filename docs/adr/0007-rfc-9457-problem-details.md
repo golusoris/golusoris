@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ADR-0007: RFC 9457 Problem Details for HTTP error bodies
 
 - **Status**: Accepted
-- **Date**: 2026-04-13 (backfill — Step 3c)
+- **Date**: 2026-04-13 (backfill)
 - **Deciders**: @lusoris
 - **Tags**: http, api, errors
 
@@ -23,9 +23,13 @@ Apps in [principles.md §2.5](../principles.md) compliance scope (NIS2, GDPR, BS
 
 ## Decision
 
-We will emit `application/problem+json` (RFC 9457) for every HTTP error response in framework-provided handlers. `ogenkit.ErrorHandler` is the single source of truth — generated ogen handlers funnel errors through it; framework middleware (`httpx/middleware/Recover`) emits the same shape on panics.
+We will emit `application/problem+json` (RFC 9457) for every HTTP error response in framework-provided handlers. `core/errors.ProblemFromError` and `WriteProblem` are the single source of truth. Generated ogen handlers funnel errors through `ogenkit.ErrorHandler`; framework middleware (`httpx/middleware/Recover`) uses the same encoder on panics.
 
-The framework's `errors/` package maps `gerr.Code` → `(status, type-URI, title)` so app code only deals with `gerr.Wrap(err, gerr.CodeNotFound)`.
+`core/errors.ProblemFromError` maps `gerr.Code` → `(status, type-URI, title)` so app
+code only deals with `gerr.Wrap(err, gerr.CodeNotFound)`. Existing `code` /
+`message` and ogen `error_message` fields remain RFC extension members for
+wire compatibility. Details and legacy message fields are sanitized for every
+5xx status, including coded `internal` and `unavailable` errors.
 
 ## Alternatives considered
 
@@ -44,5 +48,5 @@ The framework's `errors/` package maps `gerr.Code` → `(status, type-URI, title
 ## References
 
 - [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) — Problem Details for HTTP APIs (supersedes RFC 7807).
-- `ogenkit.ErrorHandler` — implementation.
+- `core/errors.ProblemFromError` and `WriteProblem` — canonical implementation.
 - [principles.md §2.6](../principles.md) — adopted wire-protocol standards.

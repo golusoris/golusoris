@@ -8,8 +8,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 Snapshot testing backed by gkampitakis/go-snaps.
 
-Snapshots are stored in `__snapshots__/` next to the test file and committed
-to the repository. On the first run (or after deletion) the snapshot is
+Snapshots are stored in `__snapshots__/` next to test file and committed
+to repository. On first run (or after deletion) snapshot is
 created automatically.
 
 ## Usage
@@ -35,6 +35,6 @@ UPDATE_SNAPS=true go test ./...
 ## Don't
 
 - Don't snapshot non-deterministic output (timestamps, UUIDs, random values).
-  Seed randomness with `testutil/factory.New(t)` first.
-- Don't delete `__snapshots__/` — it's the source of truth for the test.
-  Update it with `UPDATE_SNAPS=true` when intentional changes occur.
+ Seed randomness with `testutil/factory.New(t)` first.
+- Don't delete `__snapshots__/` — it's source of truth for test.
+ Update it with `UPDATE_SNAPS=true` when intentional changes occur.

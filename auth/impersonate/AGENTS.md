@@ -6,17 +6,22 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # auth/impersonate
 
-Audited admin-as-user impersonation with a one-click revert.
+Admin-as-user session projection. Audit hooks. Terminal exit flow.
 
 ## Surface
 
-- `impersonate.Middleware(opts)` → `(func(http.Handler) http.Handler, error)` — injects `Principal{Current, Original}` into the request context; errors when `SessionGet`/`SessionSet` are nil.
-- `impersonate.Begin(w, r, opts, targetUserID)` — start (no nesting allowed).
-- Header `X-Impersonating` is set on every response while impersonating; UI renders a banner.
-- Query `?exit_impersonation=1` reverts via `SessionSet`.
+- `Middleware(opts)` -> request `Principal{Current, Original}`.
+- `Begin(w, r, opts, targetUserID)` -> start; nesting forbidden.
+- `ExitHandler(opts)` -> POST-only terminal endpoint; success `204`.
+- `X-Impersonating` -> active target ID for UI banner.
+- `QueryParamExit` -> deprecated compatibility symbol; no state change.
 
-## Notes
+## Invariants
 
-- App must wire `SessionGet` / `SessionSet` to its session store.
-- App must wire `OnImpersonate` / `OnExit` to its audit log (`audit/`).
-- Authorization (which admins may impersonate) is the app's responsibility — call `Begin` only after the policy check.
+- Exit route behind `httpx/csrf` or equivalent CSRF middleware.
+- Exit request never reaches downstream business handler after actor restore.
+- `SessionGet` plus `SessionSet` backed by application session store.
+- `OnImpersonate` plus `OnExit` wired to `audit/`.
+- Mutation requires relevant audit hook; audit failure blocks session change.
+- Audit hooks receive request context and return persistence errors.
+- `Begin` only after application authorization check.

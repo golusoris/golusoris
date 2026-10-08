@@ -5,20 +5,35 @@
     "context": "."
   },
   "features": {
-    "ghcr.io/devcontainers/features/common-utils:2": {},
-    "ghcr.io/devcontainers/features/go:1": {}
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZshAsDefaultShell": false,
+      "installOhMyZsh": false,
+      "installOhMyZshConfig": false,
+      "installSsl": true,
+      "installZsh": false,
+      "nonFreePackages": false,
+      "sudoers": true,
+      "upgradePackages": true,
+      "userGid": "1000",
+      "userUid": "1000",
+      "username": "vscode"
+    },
+    "ghcr.io/devcontainers/features/go:1": {
+      "golangciLintVersion": "2.13.2",
+      "version": "1.27.1"
+    }
   },
   "customizations": {
     "praetor": {
       "bootstrap": {
         "version": 1,
         "state": "source-bundle",
-        "builderImage": "docker.io/library/golang:1.27-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125",
-        "baseImage": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04@sha256:d94c97dd9cacf183d0a6fd12a8e87b526e9e928307674ae9c94139139c0c6eae",
-        "sourceSHA256": "sha256:4bf808aa37d466d7556016c37abd09dae1859b386c0fa4918a6f3a41673a5141",
-        "archiveSHA256": "sha256:abc4673ce99ff915ff754a7b4cb53833d16a6b5760ea27c035288930b47cb0f1",
-        "archiveParts": 3,
-        "dockerfileSHA256": "sha256:76023d4ced039d0c41d89ee220885827fdd11a46f423e447926bb2afb00d03d6"
+        "builderImage": "docker.io/library/golang:1.27-alpine@sha256:4cb7ac979db5fcc41cae44b2227ba5ab8a51e8807f40d9ba4dee20a0ad960b5b",
+        "baseImage": "mcr.microsoft.com/devcontainers/base@sha256:edfb983aab9c579a385dc23c57d7d3703f5ec920124d99c16204a2cac465aab4",
+        "sourceSHA256": "sha256:97e9179b3c0c576459e2b1793d42f1f0c61c9260cc67478802d49948bf7cacea",
+        "archiveSHA256": "sha256:7a10586f06435c6a6aa8a1285fffa884bfabe945dff402f2826d31e5e5f47053",
+        "archiveParts": 6,
+        "dockerfileSHA256": "sha256:84703038d89bf7c8ef2beebd4007143a9a0fce43868ed939b0441f84fc28bb63"
       }
     },
     "vscode": {
@@ -36,7 +51,7 @@
         "editor.formatOnSave": true,
         "go.lintOnSave": "package",
         "go.lintTool": "golangci-lint",
-        "go.toolsManagement.autoUpdate": true,
+        "go.toolsManagement.autoUpdate": false,
         "go.useLanguageServer": true,
         "security.workspace.trust.enabled": true
       }

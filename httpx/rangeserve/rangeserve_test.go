@@ -32,6 +32,12 @@ type nopReadSeekCloser struct{ *bytes.Reader }
 
 func (nopReadSeekCloser) Close() error { return nil }
 
+type nilContentOpener struct{}
+
+func (nilContentOpener) Open(context.Context, string) (io.ReadSeekCloser, time.Time, error) {
+	return nil, time.Time{}, nil
+}
+
 func (m *memOpener) Open(_ context.Context, _ string) (io.ReadSeekCloser, time.Time, error) {
 	if m.err != nil {
 		return nil, time.Time{}, m.err
@@ -79,7 +85,41 @@ func TestHandler_500OnOtherError(t *testing.T) {
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/any", nil))
 	require.Equal(t, http.StatusInternalServerError, rr.Code)
-	require.Contains(t, rr.Body.String(), "boom")
+	require.Equal(t, "application/problem+json", rr.Header().Get("Content-Type"))
+	require.NotContains(t, rr.Body.String(), "boom")
+	require.Contains(t, rr.Body.String(), "internal server error")
+}
+
+func TestHandlerMissingDependenciesFailClosed(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]http.Handler{
+		"nil key function": rangeserve.Handler(&memOpener{}, nil),
+		"nil opener":       rangeserve.Handler(nil, keyFromPath),
+		"typed nil opener": rangeserve.Handler((*memOpener)(nil), keyFromPath),
+	}
+	for name, handler := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			rr := httptest.NewRecorder()
+			require.NotPanics(t, func() {
+				handler.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/any", nil))
+			})
+			require.Equal(t, http.StatusInternalServerError, rr.Code)
+			require.Equal(t, "application/problem+json", rr.Header().Get("Content-Type"))
+		})
+	}
+}
+
+func TestHandlerNilOpenedContentFailsClosed(t *testing.T) {
+	t.Parallel()
+	h := rangeserve.Handler(nilContentOpener{}, keyFromPath)
+	rr := httptest.NewRecorder()
+	require.NotPanics(t, func() {
+		h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/any", nil))
+	})
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+	require.Equal(t, "application/problem+json", rr.Header().Get("Content-Type"))
 }
 
 func TestServeReader(t *testing.T) {
@@ -89,6 +129,18 @@ func TestServeReader(t *testing.T) {
 		"f.txt", time.Unix(42, 0), strings.NewReader("abc"))
 	require.Equal(t, http.StatusOK, rr.Code)
 	require.Equal(t, "abc", rr.Body.String())
+}
+
+func TestServeReaderTypedNilContentFailsClosed(t *testing.T) {
+	t.Parallel()
+	var content *bytes.Reader
+	rr := httptest.NewRecorder()
+	require.NotPanics(t, func() {
+		rangeserve.ServeReader(rr, httptest.NewRequest(http.MethodGet, "/", nil),
+			"f.txt", time.Unix(42, 0), content)
+	})
+	require.Equal(t, http.StatusInternalServerError, rr.Code)
+	require.Equal(t, "application/problem+json", rr.Header().Get("Content-Type"))
 }
 
 func TestServeFile(t *testing.T) {

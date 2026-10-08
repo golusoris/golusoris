@@ -7,7 +7,7 @@ description: Use when starting feature work that needs isolation from current wo
 
 ## Overview
 
-Git worktrees create isolated workspaces sharing the same repository, allowing work on multiple branches simultaneously without switching.
+Git worktrees create isolated workspaces sharing same repository, allowing work on multiple branches simultaneously without switching.
 
 **Core principle:** Systematic directory selection + safety verification = reliable isolation.
 
@@ -62,15 +62,15 @@ git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/d
 **If NOT ignored:**
 
 Per Jesse's rule "Fix broken things immediately":
-1. Add appropriate line to .gitignore
-2. Commit the change
+1. Add appropriate line to.gitignore
+2. Commit change
 3. Proceed with worktree creation
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
 
 ### For Global Directory (~/.config/superpowers/worktrees)
 
-No .gitignore verification needed - outside project entirely.
+No.gitignore verification needed - outside project entirely.
 
 ## Creation Steps
 
@@ -215,4 +215,4 @@ Ready to implement auth feature
 - Any skill needing isolated workspace
 
 **Pairs with:**
-- **finishing-a-development-branch** - REQUIRED for cleanup after work complete
+- **finishing--development-branch** - REQUIRED for cleanup after work complete

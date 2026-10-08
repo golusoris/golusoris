@@ -4,98 +4,106 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — media/img/pipeline/
+# media/img/pipeline
 
-On-demand image resize + **signed-URL** serving on top of the `media/img`
-govips transforms. An app mounts one handler and hands out short-lived signed
-tokens; the endpoint is **not** an open resize proxy (SSRF / decompression-bomb
-DoS guard). Sub-package of the `media/img` module (same `go.mod`).
-
-See [ADR-0016](../../../docs/adr/0016-image-pipeline-signed-urls.md) for the
-HMAC-token rationale.
+Signed resize route. Injected `img.Processor`. No runtime backend bundled.
+Decision: `docs/adr/0016-image-pipeline-signed-urls.md`.
 
 ## API
 
 ```go
-p, err := pipeline.New(opts, processor, source, clk, logger) // err if secret < 16 bytes
-tok, err := p.Sign("avatars/u42.png", pipeline.Transform{Width: 256, Format: "webp"}, 5*time.Minute)
-key, t, err := p.Verify(tok)        // ErrBadToken | ErrBadSignature | ErrExpired | ErrInvalidParams
+source := pipeline.SourceFromBucket(bucket)
+p, err := pipeline.New(opts, processor, source, clk, logger)
+tok, err := p.Sign(
+    "avatars/u42.png",
+    pipeline.Transform{Width: 256, Format: "webp"},
+    5*time.Minute,
+)
+key, transform, err := p.Verify(tok)
 mux.Handle("/img/{signed}", p.Handler())
 ```
 
-`Transform{Width, Height, Quality, Format}` — a 0 dimension means "unbounded on
-that axis" (aspect ratio preserved); empty `Format` keeps the source format.
+`Transform{Width, Height, Quality, Format}`. Zero axis uses configured axis
+maximum. Effective pixel count must fit `max_pixels`. Empty format keeps source
+encoding; handler inspects rendered bytes for MIME.
 
 ## Token format
 
-`base64url(payload) "." base64url(hmac-sha256)`, where `payload` is the stable
-canonical string `escape(key)|w|h|q|format|expiryUnix`. The key is URL-escaped so
-the `|` separator can never appear inside it. Verification is **constant-time**
-(`hmac.Equal`) and re-validates bounds (defense in depth if `Options` tightened
-after the token was minted).
+`base64url(payload).base64url(HMAC-SHA256)`.
+
+- Payload: `escape(key)|w|h|q|format|expiryUnix`.
+- Compare: `hmac.Equal`.
+- Verify: signature, expiry, all current bounds.
 
 ## Handler status mapping
 
 | Status | Cause |
-|---|---|
+| --- | --- |
 | 200 | variant served (correct `Content-Type` + `Cache-Control`) |
 | 400 | malformed token / invalid params (`ErrBadToken`, `ErrInvalidParams`) |
-| 403 | bad signature or expired (`ErrBadSignature`, `ErrExpired`) — indistinguishable to a prober |
+| 403 | bad signature or expired |
 | 404 | source key not found (`storage.ErrNotFound`) |
-| 415 | resize backend unavailable (`img.ErrCGORequired` — no libvips) |
+| 405 | method outside GET/HEAD; no token, source, or processor work |
+| 415 | injected backend reports `img.ErrCGORequired` |
 | 500 | source read / resize failure |
 
-## CGO + build tags
+Public cache freshness never exceeds signed-token remaining lifetime. Existing
+shorter `max-age` stays shorter; `s-maxage` receives same cap.
 
-The **signing, validation, and routing logic is CGO-independent** and lives in
-non-CGO files (`sign.go`, `options.go`, `pipeline.go`, `handler.go`,
-`format.go`, `module.go`) — it builds and tests on a runner without libvips. The
-actual resize delegates to the injected `img.Processor`; the parent
-`img.NewProcessor` ships stubbed (returns `img.ErrCGORequired`) until govips is
-activated, so on a stock build the handler returns **415** rather than failing.
+## Backend
 
-The real libvips round-trip lives in `resize_vips_test.go`, gated by the
-`imgvips` build tag (mirrors `media/img`'s activation pattern):
+- Runtime: application provides `img.Processor`.
+- Lifecycle: provider owns `Processor.Close`.
+- Parent `img.NewProcessor`: compatibility stub only. Do not wire it.
+- `imgvips` tag: test-only govips adapter; not product activation.
 
-```
-go get github.com/davidbyttow/govips/v2
+```console
 go test -tags imgvips -race ./pipeline/...
 ```
 
 ## fx wiring
 
-`pipeline.Module` (`golusoris.media.img.pipeline`) provides `*Pipeline` and a
-**named** `http.Handler` (`name:"media.img.pipeline"`). It depends on
-`storage.Bucket`, `clock.Clock`, `*config.Config`, `*slog.Logger`.
+`pipeline.Module` provides `*Pipeline` plus named handler
+`name:"media.img.pipeline"`.
+
+Required graph:
+
+- `img.Processor`: application backend.
+- `storage.Bucket`.
+- `clock.Clock`.
+- `*config.Config`.
+- `*slog.Logger`.
+- `New`: rejects nil dependencies with `ErrInvalidDependency`.
 
 ```go
 fx.New(
     golusoris.Core,
-    storage.Module,   // storage.Bucket
-    clock.Module,     // clock.Clock
-    pipeline.Module,  // *pipeline.Pipeline + the handler
+    storage.Module,
+    myimage.Module, // provides img.Processor and owns lifecycle
+    pipeline.Module,
 )
 ```
 
-The processor is closed on fx stop; **no `init()`** — lifecycle only.
-
 ## Config (`media.img.pipeline` prefix)
 
-```
-media.img.pipeline.secret          = "<>=16 bytes>"   # REQUIRED; boot fails without it
-media.img.pipeline.allowed_formats = jpeg,png,webp,gif  # default: jpeg,png,webp,gif
+```ini
+media.img.pipeline.secret           = "<>=16 bytes>"
+media.img.pipeline.allowed_formats  = jpeg,png,webp,gif
 media.img.pipeline.max_width       = 4096
 media.img.pipeline.max_height      = 4096
-media.img.pipeline.max_pixels      = 16777216          # 16 MP — decompression-bomb cap
+media.img.pipeline.max_pixels       = 16777216
+media.img.pipeline.max_source_bytes = 33554432
 media.img.pipeline.cache_control   = "public, max-age=31536000, immutable"
-media.img.pipeline.default_ttl     = 5m                # Sign(ttl<=0) lifetime
+media.img.pipeline.default_ttl      = 5m
 ```
 
-## Don't
+## Never
 
-- Don't ship without a real `secret` — `New` rejects secrets shorter than 16
-  bytes so an app can't accidentally expose an unauthenticated resize proxy.
-- Don't widen `max_*` bounds without thinking about decompression-bomb resizes
-  (Power-of-10 rule 2: every allocation is bounded).
-- Don't compare MACs with `==`/`bytes.Equal` — always `hmac.Equal` (constant-time).
-- Don't reach for `time.Now()` — the expiry clock is injected (`clock.Clock`).
+- No secret below 16 bytes.
+- No open resize proxy.
+- No unbounded source bytes, dimensions, pixels, or TTL.
+- No direct MAC compare.
+- No `time.Now`; injected clock only.
+- No inert default processor in fx graph.
+- Source reads check request cancellation before and after every read.
+- `storage.Bucket` needs `SourceFromBucket`; `Bucket.Get` also returns metadata.

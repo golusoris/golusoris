@@ -10,15 +10,29 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
+
+	"github.com/golusoris/golusoris/notify"
 )
+
+func testP8Key(t *testing.T) []byte {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	return pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+}
 
 // TestNewSender_DefaultTransportSpeaksH2 pins the default client shape: APNs
 // is HTTP/2-only, so the transport must advertise h2 (HTTP/1.1 kept as ALPN
@@ -26,13 +40,7 @@ import (
 // deprecated http2.ConfigureTransport.
 func TestNewSender_DefaultTransportSpeaksH2(t *testing.T) {
 	t.Parallel()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	require.NoError(t, err)
-	p8 := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
-
-	s, err := NewSender(Options{KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app", P8Key: p8})
+	s, err := NewSender(Options{KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app", P8Key: testP8Key(t)})
 	require.NoError(t, err)
 
 	tr, ok := s.hc.Transport.(*http.Transport)
@@ -42,6 +50,71 @@ func TestNewSender_DefaultTransportSpeaksH2(t *testing.T) {
 	require.True(t, tr.Protocols.HTTP1(), "HTTP/1.1 stays as ALPN fallback")
 	require.False(t, tr.Protocols.UnencryptedHTTP2(), "h2c must not be offered")
 	require.GreaterOrEqual(t, tr.TLSClientConfig.MinVersion, uint16(tls.VersionTLS12))
+}
+
+func TestNewSenderClonesAndBoundsInjectedHTTPClient(t *testing.T) {
+	t.Parallel()
+	injected := &http.Client{Transport: http.DefaultTransport}
+	s, err := NewSender(Options{
+		KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app",
+		P8Key: testP8Key(t), HTTPClient: injected,
+	})
+	require.NoError(t, err)
+	require.NotSame(t, injected, s.hc)
+	require.Zero(t, injected.Timeout)
+	require.Equal(t, defaultRequestTimeout, s.hc.Timeout)
+	require.Same(t, injected.Transport, s.hc.Transport)
+
+	const customTimeout = 23 * time.Second
+	s, err = NewSender(Options{
+		KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app",
+		P8Key: testP8Key(t), HTTPClient: &http.Client{Timeout: customTimeout},
+	})
+	require.NoError(t, err)
+	require.Equal(t, customTimeout, s.hc.Timeout)
+}
+
+func TestNewSenderTreatsTypedNilClockAsAbsent(t *testing.T) {
+	t.Parallel()
+	var typedNilClock *clockwork.FakeClock
+	s, err := NewSender(Options{
+		KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app",
+		P8Key: testP8Key(t), Clock: typedNilClock,
+	})
+	require.NoError(t, err)
+	require.NotPanics(t, func() {
+		_, err = s.authJWT()
+	})
+	require.NoError(t, err)
+}
+
+func TestNewSenderRejectsNonP256Key(t *testing.T) {
+	t.Parallel()
+	key, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	p8 := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+
+	_, err = NewSender(Options{
+		KeyID: "ABC1234567", TeamID: "TEAM123456", Topic: "com.example.app",
+		P8Key: p8,
+	})
+	require.Error(t, err)
+}
+
+func TestBuildPayloadKeepsReservedAPSObject(t *testing.T) {
+	t.Parallel()
+	payload, err := buildPayload(notify.Message{
+		Subject:  "title",
+		Metadata: map[string]string{"aps": "attacker-controlled", "custom": "value"},
+	}, "body")
+	require.NoError(t, err)
+
+	var root map[string]any
+	require.NoError(t, json.Unmarshal(payload, &root))
+	require.IsType(t, map[string]any{}, root["aps"])
+	require.Equal(t, "value", root["custom"])
 }
 
 // closeErrRoundTripper is a fake http.RoundTripper that returns a synthetic

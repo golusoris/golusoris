@@ -11,7 +11,21 @@
 //
 // # Composing an app
 //
-// Apps import this package and pick the modules they need:
+// This root package is the full-framework umbrella: importing it links every
+// subsystem its groupings reference, so the module graph and govulncheck see
+// all of them even when an app wires only [Core]. Services that need part of
+// the framework import the sub-packages' modules directly:
+//
+//	fx.New(
+//	    config.Module,   // github.com/golusoris/golusoris/core/config
+//	    log.Module,      // github.com/golusoris/golusoris/core/log
+//	    clock.Module,    // github.com/golusoris/golusoris/core/clock
+//	    router.Module,   // github.com/golusoris/golusoris/httpx/router
+//	    server.Module,   // github.com/golusoris/golusoris/httpx/server
+//	).Run()
+//
+// Apps that want the whole framework import this package and pick its
+// groupings:
 //
 //	package main
 //

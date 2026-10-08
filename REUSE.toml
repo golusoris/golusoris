@@ -33,7 +33,6 @@ path = [
   "**/README.md",
   "docs/**",
   ".workingdir/**",
-  "changelog.d/**",
   ".claude/skills/*.md",
   ".claude/hooks/README.md",
   "template/.github/**/*.md",
@@ -55,6 +54,18 @@ path = [".claude/skills/superpowers/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "2025 Jesse Vincent <https://github.com/obra/superpowers>"
 SPDX-License-Identifier = "MIT"
+
+# Praetor register skills, locally adapted for Golusoris contracts and Caveman lint.
+[[annotations]]
+path = [
+  ".agents/skills/adhd-format/**",
+  ".agents/skills/caveman/**",
+  ".agents/skills/social-text/**",
+  ".agents/plugins/praetor/**",
+]
+precedence = "override"
+SPDX-FileCopyrightText = "2026 Lusoris <lusoris@proton.me>"
+SPDX-License-Identifier = "EUPL-1.2"
 
 [[annotations]]
 path = [".claude/skills/community/owasp-security/**"]

@@ -25,12 +25,19 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/search"
+)
+
+const (
+	defaultRequestTimeout   = 10 * time.Second
+	defaultMaxResponseBytes = 16 << 20
 )
 
 // Options configures the Meilisearch backend.
@@ -41,13 +48,16 @@ type Options struct {
 	APIKey string `koanf:"api_key"`
 	// HTTPClient is optional; defaults to a 10s-timeout client.
 	HTTPClient *http.Client
+	// MaxResponseBytes caps decoded search responses. Zero defaults to 16 MiB.
+	MaxResponseBytes int64 `koanf:"max_response_bytes"`
 }
 
 // Backend implements [search.Backend].
 type Backend struct {
-	base string
-	key  string
-	hc   *http.Client
+	base             string
+	key              string
+	hc               *http.Client
+	maxResponseBytes int64
 }
 
 // NewBackend returns a Meilisearch backend.
@@ -55,11 +65,20 @@ func NewBackend(opts Options) (*Backend, error) {
 	if opts.URL == "" {
 		return nil, errors.New("search/meilisearch: url is required")
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
+	if opts.MaxResponseBytes < 0 {
+		return nil, errors.New("search/meilisearch: max_response_bytes must not be negative")
 	}
-	return &Backend{base: strings.TrimRight(opts.URL, "/"), key: opts.APIKey, hc: hc}, nil
+	maxResponseBytes := opts.MaxResponseBytes
+	if maxResponseBytes == 0 {
+		maxResponseBytes = defaultMaxResponseBytes
+	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, defaultRequestTimeout)
+	return &Backend{
+		base:             strings.TrimRight(opts.URL, "/"),
+		key:              opts.APIKey,
+		hc:               hc,
+		maxResponseBytes: maxResponseBytes,
+	}, nil
 }
 
 // CreateCollection implements [search.Indexer]. Meilisearch infers its
@@ -129,7 +148,11 @@ func (b *Backend) Search(ctx context.Context, collection string, q search.Query)
 	if q.RawFilter != "" {
 		body["filter"] = q.RawFilter
 	} else if len(q.Filters) > 0 {
-		body["filter"] = filtersToMeili(q.Filters)
+		filter, err := filtersToMeili(q.Filters)
+		if err != nil {
+			return search.Results{}, err
+		}
+		body["filter"] = filter
 	}
 	if q.SortBy != "" {
 		body["sort"] = strings.Split(q.SortBy, ",")
@@ -184,37 +207,54 @@ func (b *Backend) do(ctx context.Context, method, path string, body, dst any) (e
 		return fmt.Errorf("search/meilisearch: request: %w", err)
 	}
 	defer gerr.CloseInto(resp.Body, &err, "search/meilisearch: close response body")
+	return b.decodeResponse(resp, dst)
+}
+
+func (b *Backend) decodeResponse(resp *http.Response, dst any) error {
 	if resp.StatusCode/100 != 2 {
 		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
 		return fmt.Errorf("search/meilisearch: status %d: %s", resp.StatusCode, raw)
 	}
 	if dst != nil {
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, b.maxResponseBytes)
+		if readErr != nil {
+			return fmt.Errorf("search/meilisearch: read response: %w", readErr)
+		}
+		if err := json.Unmarshal(raw, dst); err != nil {
 			return fmt.Errorf("search/meilisearch: decode: %w", err)
 		}
 	}
 	return nil
 }
 
-func filtersToMeili(f map[string]any) string {
-	parts := make([]string, 0, len(f))
-	for k, v := range f {
-		switch val := v.(type) {
+func filtersToMeili(filters map[string]any) (string, error) {
+	keys := make([]string, 0, len(filters))
+	for key := range filters {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if !search.ValidFilterField(key) {
+			return "", fmt.Errorf("search/meilisearch: invalid filter field %q", key)
+		}
+		switch val := filters[key].(type) {
 		case string:
-			parts = append(parts, fmt.Sprintf("%s = %q", k, val))
+			parts = append(parts, fmt.Sprintf("%s = %q", key, val))
 		case bool:
-			parts = append(parts, k+" = "+strconv.FormatBool(val))
-		case int:
-			parts = append(parts, k+" = "+strconv.Itoa(val))
-		case int64:
-			parts = append(parts, k+" = "+strconv.FormatInt(val, 10))
+			parts = append(parts, key+" = "+strconv.FormatBool(val))
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+			parts = append(parts, fmt.Sprintf("%s = %v", key, val))
+		case float32:
+			parts = append(parts, key+" = "+strconv.FormatFloat(float64(val), 'f', -1, 32))
 		case float64:
-			parts = append(parts, k+" = "+strconv.FormatFloat(val, 'f', -1, 64))
+			parts = append(parts, key+" = "+strconv.FormatFloat(val, 'f', -1, 64))
 		default:
-			parts = append(parts, fmt.Sprintf("%s = %v", k, v))
+			return "", fmt.Errorf("search/meilisearch: filter %q: unsupported value type %T", key, filters[key])
 		}
 	}
-	return strings.Join(parts, " AND ")
+	return strings.Join(parts, " AND "), nil
 }
 
 type meiliSearchResponse struct {

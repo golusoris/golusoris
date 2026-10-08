@@ -18,6 +18,7 @@ import (
 
 	"github.com/golusoris/golusoris/ai/tiny"
 	"github.com/golusoris/golusoris/ai/tiny/serve/ollama"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // newServer builds an ollama mock. show returns 200 for `knownTag`, 404
@@ -179,10 +180,10 @@ func TestPredictor_Predict_serverError(t *testing.T) {
 	require.ErrorContains(t, err, "status 500")
 }
 
-func TestPredictor_Predict_bodyLimitTruncation(t *testing.T) {
+func TestPredictor_Predict_rejectsOversizedBody(t *testing.T) {
 	t.Parallel()
-	// Send a big-but-valid JSON body; MaxResponseBytes=64 clips it and
-	// JSON decode should fail with a decode error.
+	// Send a big-but-valid JSON body; MaxResponseBytes rejects it before
+	// a truncated prefix can be decoded.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/show", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{}`))
@@ -200,7 +201,7 @@ func TestPredictor_Predict_bodyLimitTruncation(t *testing.T) {
 		TaskKind: tiny.TaskGenerate,
 	}))
 	_, err := p.Predict(t.Context(), "hi")
-	require.ErrorContains(t, err, "decode response")
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
 }
 
 func TestPredictor_Close_noop(t *testing.T) {

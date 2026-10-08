@@ -50,8 +50,8 @@ var (
 	// ErrUnknownFormat means no decoder recognized the input header. Wrapped
 	// errors carry the "audio:" package prefix; the sentinels do not.
 	ErrUnknownFormat = errors.New("unknown or unsupported format")
-	// ErrInputTooLarge means decoded PCM would exceed Options.MaxDecodedBytes.
-	ErrInputTooLarge = errors.New("decoded size exceeds limit")
+	// ErrInputTooLarge means encoded input or decoded PCM exceeds its option cap.
+	ErrInputTooLarge = errors.New("input or decoded size exceeds limit")
 	// ErrTooLong means the input duration exceeds Options.MaxDuration.
 	ErrTooLong = errors.New("duration exceeds limit")
 	// ErrCorrupt means a decoder rejected the bytes as malformed.
@@ -108,10 +108,23 @@ func NewAnalyzer(opts Options, logger *slog.Logger) (Analyzer, error) {
 		return nil, errors.New("audio: nil logger")
 	}
 	opts = opts.withDefaults() // non-positive caps fall back to package defaults
+	if opts.Backend != "pureGo" {
+		return nil, fmt.Errorf("audio: unsupported backend %q", opts.Backend)
+	}
+	if opts.DefaultPeakBuckets > opts.MaxPeakBuckets {
+		return nil, fmt.Errorf(
+			"audio: default peak buckets %d exceed maximum %d",
+			opts.DefaultPeakBuckets,
+			opts.MaxPeakBuckets,
+		)
+	}
 	logger.Debug(
 		"audio: analyzer ready",
+		slog.Int64("max_input_bytes", opts.MaxInputBytes),
 		slog.Int64("max_decoded_bytes", opts.MaxDecodedBytes),
+		slog.Int("max_channels", opts.MaxChannels),
 		slog.Int("default_peak_buckets", opts.DefaultPeakBuckets),
+		slog.Int("max_peak_buckets", opts.MaxPeakBuckets),
 	)
 	return &analyzer{opts: opts, logger: logger}, nil
 }
@@ -121,7 +134,7 @@ func (a *analyzer) Probe(ctx context.Context, r io.Reader, hint Format) (Info, e
 	if err := ctx.Err(); err != nil {
 		return Info{}, fmt.Errorf("audio: probe: %w", err)
 	}
-	st, err := a.open(r, hint)
+	st, err := a.open(ctx, r, hint)
 	if err != nil {
 		return Info{}, err
 	}
@@ -134,10 +147,21 @@ func (a *analyzer) Probe(ctx context.Context, r io.Reader, hint Format) (Info, e
 
 // Waveform decodes the stream into buckets min/max peaks.
 func (a *analyzer) Waveform(ctx context.Context, r io.Reader, hint Format, buckets int) (PeakSet, error) {
-	if buckets <= 0 {
+	if buckets < 0 {
+		return PeakSet{}, fmt.Errorf("audio: waveform buckets %d must not be negative: %w", buckets, ErrInputTooLarge)
+	}
+	if buckets == 0 {
 		buckets = a.opts.DefaultPeakBuckets
 	}
-	st, err := a.open(r, hint)
+	if buckets > a.opts.MaxPeakBuckets {
+		return PeakSet{}, fmt.Errorf(
+			"audio: waveform buckets %d exceed maximum %d: %w",
+			buckets,
+			a.opts.MaxPeakBuckets,
+			ErrInputTooLarge,
+		)
+	}
+	st, err := a.open(ctx, r, hint)
 	if err != nil {
 		return PeakSet{}, err
 	}
@@ -149,7 +173,7 @@ func (a *analyzer) Waveform(ctx context.Context, r io.Reader, hint Format, bucke
 
 // Loudness decodes, resamples to 48k stereo, and runs EBU R128.
 func (a *analyzer) Loudness(ctx context.Context, r io.Reader, hint Format) (Loudness, error) {
-	st, err := a.open(r, hint)
+	st, err := a.open(ctx, r, hint)
 	if err != nil {
 		return Loudness{}, err
 	}

@@ -4,32 +4,32 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-Generate an ogen handler stub from an OpenAPI operationId.
+Generate ogen handler stub from OpenAPI operationId.
 
 ## Task
 
-Implement the ogen handler for operationId: `$ARGUMENTS`
+Implement ogen handler for operationId: `$ARGUMENTS`
 
 ## Steps
 
-1. **Find the operation** in the OpenAPI spec (usually `api/openapi.yaml`).
-   Note the HTTP method, path, request body schema, response schemas.
+1. **Find operation** in OpenAPI spec (usually `api/openapi.yaml`).
+ Note HTTP method, path, request body schema, response schemas.
 
-2. **Find the generated interface** in the ogen output directory (usually `gen/`).
-   The method signature is: `func (h *Handler) <OperationId>(ctx context.Context, req *gen.<OpId>Req) (gen.<OpId>Res, error)`.
+2. **Find generated interface** in ogen output directory (usually `gen/`).
+ method signature is: `func (h *Handler) <OperationId>(ctx context.Context, req *gen.<OpId>Req) (gen.<OpId>Res, error)`.
 
-3. **Implement the handler** in `internal/handler/<resource>.go`:
-   - Accept the generated request type, return the generated response type.
-   - Use `*slog.Logger` for logging (injected via fx).
-   - Validate inputs beyond ogen's structural validation if needed.
-   - Map domain errors to ogen error response types (RFC 9457 Problem Details).
-   - Use `clock.Now(ctx)` — never `time.Now()`.
+3. **Implement handler** in `internal/handler/<resource>.go`:
+ - Accept generated request type, return generated response type.
+ - Use `*slog.Logger` for logging (injected via fx).
+ - Validate inputs beyond ogen's structural validation if needed.
+ - Map domain errors to ogen error response types (RFC 9457 Problem Details).
+ - Use `clock.Now(ctx)` — never `time.Now()`.
 
-4. **Register** the handler in the fx module that provides `gen.Handler`.
+4. **Register** handler in fx module that provides `gen.Handler`.
 
-5. **Write a test** in `internal/handler/<resource>_test.go`:
-   - Use `testutil/fxtest.New` to wire the full handler.
-   - Use `net/http/httptest` to call the generated server.
+5. **Write test** in `internal/handler/<resource>_test.go`:
+ - Use `testutil/fxtest.New` to wire full handler.
+ - Use `net/http/httptest` to call generated server.
 
 6. **Lint**: `golangci-lint run ./internal/...` → 0 issues.
 

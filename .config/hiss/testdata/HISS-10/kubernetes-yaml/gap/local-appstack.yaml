@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+# Local XRD claims need generated schema support; AppStack is explicitly skipped.
+apiVersion: platform.golusoris.io/v1alpha1
+kind: AppStack
+metadata:
+  name: unvalidated-local-claim
+spec:
+  unknownField: accepted-gap

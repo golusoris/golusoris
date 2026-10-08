@@ -5,6 +5,7 @@
 package nats_test
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -81,8 +82,10 @@ func TestIntegration_PublishSubscribe(t *testing.T) {
 	t.Cleanup(func() { _ = sub.Unsubscribe() })
 
 	want := []byte("hello-nats")
-	if err := c.Publish("test.subject", want); err != nil {
-		t.Fatalf("Publish: %v", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.PublishSync(ctx, "test.subject", want); err != nil {
+		t.Fatalf("PublishSync: %v", err)
 	}
 
 	select {

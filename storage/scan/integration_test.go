@@ -19,12 +19,9 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/storage/scan"
 )
-
-// clamavImage is the _base variant (~75MB, no baked DB). The wait strategy
-// allows a generous deadline because freshclam/DB load is slow.
-const clamavImage = "clamav/clamav:1.5_base-debian"
 
 // startClamd boots a real clamd container and returns its host:port address.
 // Skips cleanly when Docker is unavailable.
@@ -37,7 +34,8 @@ func startClamd(t *testing.T) string {
 
 	req := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        clamavImage,
+			Image:        testimages.ClamAV,
+			ReaperImage:  testimages.Ryuk,
 			ExposedPorts: []string{"3310/tcp"},
 			WaitingFor: wait.ForAll(
 				wait.ForListeningPort("3310/tcp"),
@@ -51,7 +49,11 @@ func startClamd(t *testing.T) string {
 		t.Fatalf("storage/scan: start clamav container: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = container.Terminate(context.Background())
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer stopCancel()
+		if termErr := container.Terminate(stopCtx); termErr != nil {
+			t.Logf("storage/scan: terminate clamav container: %v", termErr)
+		}
 	})
 
 	host, err := container.Host(ctx)

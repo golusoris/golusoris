@@ -2,6 +2,15 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+{{ $imageRepository := required "image.repository is required" .Values.image.repository }}
+{{ $imageDigest := required "image.digest is required" .Values.image.digest }}
+{{ $imageRepositoryPattern := "^([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]{1,5})?/)?[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$" }}
+{{ if not (regexMatch $imageRepositoryPattern $imageRepository) }}
+{{ fail "image.repository must be a lowercase OCI repository without a tag or digest" }}
+{{ end }}
+{{ if not (regexMatch "^sha256:[0-9a-f]{64}$" $imageDigest) }}
+{{ fail "image.digest must be a sha256 digest" }}
+{{ end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -39,7 +48,7 @@ spec:
         - name: {{ .Chart.Name }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ printf "%s@%s" $imageRepository $imageDigest | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - name: http

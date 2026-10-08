@@ -15,7 +15,6 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
-	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/storage/safety"
 )
@@ -41,7 +40,6 @@ func bootSafety(t *testing.T, cfg *config.Config) (safety.Stripper, safety.Fetch
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
-		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		safety.Module,
 		fx.Populate(&strip, &fetch),
 	)
@@ -113,7 +111,6 @@ func TestModule_BadConfigFailsStart(t *testing.T) {
 		fx.NopLogger,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
-		fx.Provide(func() clock.Clock { return clock.NewFake() }),
 		safety.Module,
 		fx.Invoke(func(safety.Stripper, safety.Fetcher) {}),
 	)

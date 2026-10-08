@@ -97,7 +97,7 @@ func newTestTwoTier(t *testing.T, l2 l2) *TwoTier {
 		l2:     l2,
 		logger: slog.New(slog.DiscardHandler),
 		l2TTL:  time.Minute,
-		group:  singleflight.New[string, []byte](),
+		group:  singleflight.New[flightKey, []byte](),
 	}
 }
 
@@ -188,6 +188,32 @@ func TestGet_l2FailureFallsThroughToLoader(t *testing.T) {
 	}
 }
 
+func TestGet_corruptL2EntryFallsThroughAndRepairs(t *testing.T) {
+	t.Parallel()
+	l2 := newStubL2()
+	l2.data["n:a"] = []byte("not-json")
+	tt := newTestTwoTier(t, l2)
+	view := NewTyped[int](tt, "n")
+
+	var loads atomic.Int32
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		loads.Add(1)
+		return 7, nil
+	})
+	if err != nil || value != 7 {
+		t.Fatalf("Get = (%d, %v), want repaired value", value, err)
+	}
+	if loads.Load() != 1 {
+		t.Fatalf("loader calls = %d, want 1", loads.Load())
+	}
+	l2.mu.Lock()
+	repaired := string(l2.data["n:a"])
+	l2.mu.Unlock()
+	if repaired != "7" {
+		t.Fatalf("repaired L2 value = %q, want 7", repaired)
+	}
+}
+
 func TestGet_loaderErrorPropagates(t *testing.T) {
 	t.Parallel()
 	tt := newTestTwoTier(t, newStubL2())
@@ -218,13 +244,11 @@ func TestGet_singleflightDeduplicatesLoader(t *testing.T) {
 	const n = 20
 	var wg sync.WaitGroup
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if v, err := view.Get(context.Background(), "k", loader); err != nil || v != 99 {
 				t.Errorf("Get = (%d, %v), want (99, nil)", v, err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -267,6 +291,81 @@ func TestSet_l2FailurePropagates(t *testing.T) {
 	}
 }
 
+func TestSet_l2FailureDoesNotPublishL1Value(t *testing.T) {
+	t.Parallel()
+	l2 := newStubL2()
+	l2.failSet = true
+	tt := newTestTwoTier(t, l2)
+	view := NewTyped[int](tt, "n")
+
+	if err := view.Set(context.Background(), "a", 1); !errors.Is(err, errStub) {
+		t.Fatalf("Set = %v, want wrap of errStub", err)
+	}
+	loaded := false
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		loaded = true
+		return 9, nil
+	})
+	if err != nil || value != 9 || !loaded {
+		t.Fatalf("Get after failed Set = (%d, %v), loader=%t", value, err, loaded)
+	}
+}
+
+func TestSetAppliesConfiguredL1TTL(t *testing.T) {
+	t.Parallel()
+	l2 := newStubL2()
+	tt := newTestTwoTier(t, l2)
+	tt.l1TTL = 20 * time.Millisecond
+	view := NewTyped[int](tt, "n")
+	if err := view.Set(context.Background(), "a", 5); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	before := l2.getCalls.Load()
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		t.Fatal("loader ran despite L2 value")
+		return 0, nil
+	})
+	if err != nil || value != 5 {
+		t.Fatalf("Get = (%d, %v)", value, err)
+	}
+	if got := l2.getCalls.Load(); got != before+1 {
+		t.Fatalf("L2 reads = %d, want %d after L1 expiry", got, before+1)
+	}
+}
+
+func TestSetSupersedesInFlightLoaderCacheWrites(t *testing.T) {
+	t.Parallel()
+	tt := newTestTwoTier(t, newStubL2())
+	view := NewTyped[int](tt, "n")
+	loaderStarted := make(chan struct{})
+	releaseLoader := make(chan struct{})
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+			close(loaderStarted)
+			<-releaseLoader
+			return 1, nil
+		})
+		firstResult <- err
+	}()
+	<-loaderStarted
+	if err := view.Set(context.Background(), "a", 2); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	close(releaseLoader)
+	if err := <-firstResult; err != nil {
+		t.Fatalf("in-flight Get: %v", err)
+	}
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		t.Fatal("loader ran after successful Set")
+		return 0, nil
+	})
+	if err != nil || value != 2 {
+		t.Fatalf("final Get = (%d, %v), want Set value", value, err)
+	}
+}
+
 func TestDelete_removesFromBothTiers(t *testing.T) {
 	t.Parallel()
 	l2 := newStubL2()
@@ -292,6 +391,64 @@ func TestDelete_removesFromBothTiers(t *testing.T) {
 	}
 	if !ran {
 		t.Error("Delete did not remove from L1 (loader did not run)")
+	}
+}
+
+func TestDelete_l2FailurePreservesL1Value(t *testing.T) {
+	t.Parallel()
+	l2 := newStubL2()
+	tt := newTestTwoTier(t, l2)
+	view := NewTyped[int](tt, "n")
+	if err := view.Set(context.Background(), "a", 3); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	l2.failDel = true
+	if err := view.Delete(context.Background(), "a"); !errors.Is(err, errStub) {
+		t.Fatalf("Delete = %v, want wrap of errStub", err)
+	}
+	before := l2.getCalls.Load()
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		t.Fatal("loader ran after failed Delete")
+		return 0, nil
+	})
+	if err != nil || value != 3 {
+		t.Fatalf("Get after failed Delete = (%d, %v)", value, err)
+	}
+	if got := l2.getCalls.Load(); got != before {
+		t.Fatalf("L2 reads = %d, want unchanged %d", got, before)
+	}
+}
+
+func TestDeleteFencesInFlightLoaderCacheWrites(t *testing.T) {
+	t.Parallel()
+	tt := newTestTwoTier(t, newStubL2())
+	view := NewTyped[int](tt, "n")
+	loaderStarted := make(chan struct{})
+	releaseLoader := make(chan struct{})
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+			close(loaderStarted)
+			<-releaseLoader
+			return 1, nil
+		})
+		firstResult <- err
+	}()
+	<-loaderStarted
+	if err := view.Delete(context.Background(), "a"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	close(releaseLoader)
+	if err := <-firstResult; err != nil {
+		t.Fatalf("in-flight Get: %v", err)
+	}
+	loaded := false
+	value, err := view.Get(context.Background(), "a", func(context.Context) (int, error) {
+		loaded = true
+		return 3, nil
+	})
+	if err != nil || value != 3 || !loaded {
+		t.Fatalf("Get after Delete = (%d, %v), loader=%t", value, err, loaded)
 	}
 }
 

@@ -2,7 +2,21 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-{{- if .Values.backup.enabled -}}
+{{ if .Values.backup.enabled }}
+{{ $backupRepository := required "backup.image.repository is required when backup.enabled=true" .Values.backup.image.repository }}
+{{ $backupDigest := required "backup.image.digest is required when backup.enabled=true" .Values.backup.image.digest }}
+{{ $backupBucket := required "backup.s3.bucket is required when backup.enabled=true" .Values.backup.s3.bucket }}
+{{ $backupDBName := required "backup.dbName is required when backup.enabled=true" .Values.backup.dbName }}
+{{ $imageRepositoryPattern := "^([a-z0-9]+([.-][a-z0-9]+)*(:[0-9]{1,5})?/)?[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$" }}
+{{ if not (regexMatch $imageRepositoryPattern $backupRepository) }}
+{{ fail "backup.image.repository must be a lowercase OCI repository without a tag or digest" }}
+{{ end }}
+{{ if not (regexMatch "^sha256:[0-9a-f]{64}$" $backupDigest) }}
+{{ fail "backup.image.digest must be a sha256 digest" }}
+{{ end }}
+{{ if not (regexMatch "^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$" $backupDBName) }}
+{{ fail "backup.dbName must be a 1-63 character safe object stem" }}
+{{ end }}
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -34,7 +48,7 @@ spec:
             fsGroup: {{ .Values.podSecurityContext.fsGroup | default 65534 }}
           containers:
             - name: backup
-              image: "{{ .Values.backup.image.repository }}:{{ .Values.backup.image.tag }}"
+              image: {{ printf "%s@%s" $backupRepository $backupDigest | quote }}
               imagePullPolicy: {{ .Values.backup.image.pullPolicy | default "IfNotPresent" }}
               securityContext:
                 allowPrivilegeEscalation: false
@@ -44,23 +58,41 @@ spec:
               command: [/bin/sh, -c]
               args:
                 - |
-                  set -euo pipefail
+                  set -eu
                   ts=$(date -u +%Y%m%dT%H%M%SZ)
-                  out="/tmp/{{ .Values.backup.dbName }}-${ts}.sql.gz"
-                  echo "pg_dump → ${out}"
-                  pg_dump --no-owner --no-privileges --format=plain "$DATABASE_URL" | gzip -9 > "${out}"
-                  echo "aws s3 cp ${out} s3://${BUCKET}/"
-                  aws s3 cp "${out}" "s3://${BUCKET}/${BUCKET_PREFIX}/{{ .Values.backup.dbName }}-${ts}.sql.gz" \
-                    {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }}
-                  # Retention: delete backups older than RETENTION_DAYS.
+                  dump="/tmp/${DB_NAME}-${ts}.sql"
+                  archive="${dump}.gz"
+                  listing="/tmp/${DB_NAME}-${ts}.list"
+                  expired="/tmp/${DB_NAME}-${ts}.expired"
+                  echo "pg_dump -> ${archive}"
+                  pg_dump --no-owner --no-privileges --format=plain "$DATABASE_URL" > "${dump}"
+                  gzip -9 "${dump}"
+                  echo "aws s3 cp ${archive} s3://${BUCKET}/"
+                  if [ -n "${S3_ENDPOINT}" ]; then
+                    aws s3 cp "${archive}" "s3://${BUCKET}/${BUCKET_PREFIX}/${DB_NAME}-${ts}.sql.gz" --endpoint-url "${S3_ENDPOINT}"
+                  else
+                    aws s3 cp "${archive}" "s3://${BUCKET}/${BUCKET_PREFIX}/${DB_NAME}-${ts}.sql.gz"
+                  fi
                   echo "pruning > ${RETENTION_DAYS} days"
-                  aws s3 ls "s3://${BUCKET}/${BUCKET_PREFIX}/" \
-                    {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }} \
-                    | awk -v cutoff="$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d 2>/dev/null || date -u -v -${RETENTION_DAYS}d +%Y-%m-%d)" \
-                        '$1 < cutoff {print $4}' \
-                    | xargs -r -n1 -I{} aws s3 rm "s3://${BUCKET}/${BUCKET_PREFIX}/{}" \
-                        {{- if .Values.backup.s3.endpoint }} --endpoint-url "${S3_ENDPOINT}" {{- end }}
+                  if [ -n "${S3_ENDPOINT}" ]; then
+                    aws s3 ls "s3://${BUCKET}/${BUCKET_PREFIX}/" --endpoint-url "${S3_ENDPOINT}" > "${listing}"
+                  else
+                    aws s3 ls "s3://${BUCKET}/${BUCKET_PREFIX}/" > "${listing}"
+                  fi
+                  cutoff=$(date -u -d "-${RETENTION_DAYS} days" +%Y-%m-%d 2>/dev/null || date -u -v "-${RETENTION_DAYS}d" +%Y-%m-%d)
+                  awk -v cutoff="${cutoff}" '$1 < cutoff {print $4}' "${listing}" > "${expired}"
+                  pruned=0
+                  while IFS= read -r key && [ "${pruned}" -lt 1000 ]; do
+                    if [ -n "${S3_ENDPOINT}" ]; then
+                      aws s3 rm "s3://${BUCKET}/${BUCKET_PREFIX}/${key}" --endpoint-url "${S3_ENDPOINT}"
+                    else
+                      aws s3 rm "s3://${BUCKET}/${BUCKET_PREFIX}/${key}"
+                    fi
+                    pruned=$((pruned + 1))
+                  done < "${expired}"
               env:
+                - name: DB_NAME
+                  value: {{ $backupDBName | quote }}
                 - name: DATABASE_URL
                   valueFrom:
                     secretKeyRef:
@@ -79,13 +111,11 @@ spec:
                 - name: AWS_DEFAULT_REGION
                   value: {{ .Values.backup.s3.region | default "us-east-1" | quote }}
                 - name: BUCKET
-                  value: {{ .Values.backup.s3.bucket | quote }}
+                  value: {{ $backupBucket | quote }}
                 - name: BUCKET_PREFIX
                   value: {{ .Values.backup.s3.prefix | default (printf "%s-backups" (include "golusoris-app.fullname" .)) | quote }}
-                {{- if .Values.backup.s3.endpoint }}
                 - name: S3_ENDPOINT
-                  value: {{ .Values.backup.s3.endpoint | quote }}
-                {{- end }}
+                  value: {{ .Values.backup.s3.endpoint | default "" | quote }}
                 - name: RETENTION_DAYS
                   value: {{ .Values.backup.retentionDays | default 14 | quote }}
               resources:
@@ -101,4 +131,4 @@ spec:
           volumes:
             - name: tmp
               emptyDir: {}
-{{- end -}}
+{{ end }}

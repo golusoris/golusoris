@@ -29,10 +29,10 @@ raw := f.Raw()                                    // *excelize.File for advanced
 ## Why xuri/excelize/v2
 
 - Most complete pure-Go XLSX library (styles, formulas, streaming) — no CGO,
-  no external spreadsheet engine.
+ no external spreadsheet engine.
 
 ## Notes
 
-- `AppendRow` writes at `len(GetRows)+1` — trailing blank rows shift the index.
+- `AppendRow` writes at `len(GetRows)+1` — trailing blank rows shift index.
 - `Close` releases excelize resources on opened/read files.
 - Drop to `Raw()` for styling, charts, and streaming writers not surfaced here.

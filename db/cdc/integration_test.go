@@ -22,7 +22,7 @@ import (
 // TestConsumer_StreamsWAL exercises the full decode path against a real
 // logical-replication Postgres and asserts the decoded [Event] stream for
 // INSERT/UPDATE/DELETE: connect → runSetup → ensureSlot → StartReplication →
-// handleMessage → dispatch → Parse → tupleToMap, none of which carry unit
+// handleMessage → dispatch → Parse → tupleToValues, none of which carry unit
 // coverage.
 //
 // The slot is created and all DML committed BEFORE replication starts, so the
@@ -89,10 +89,10 @@ func drainEvents(ctx context.Context, t *testing.T, c *Consumer, want int) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = conn.Close(ctx) })
 
-	_, ok := c.runSetup(ctx, conn)
-	require.True(t, ok, "runSetup must succeed")
+	require.NoError(t, c.runSetup(ctx, conn), "runSetup must succeed")
 
 	relations := map[uint32]*pglogrepl.RelationMessage{}
+	transaction := transactionState{}
 	clientXLogPos := pglogrepl.LSN(0)
 	nextStandby := c.clk.Now().Add(time.Hour) // never auto-send in this driver
 
@@ -113,7 +113,7 @@ func drainEvents(ctx context.Context, t *testing.T, c *Consumer, want int) {
 			require.True(t, pgconn.Timeout(rerr), "cdc: receive: %v", rerr)
 			continue
 		}
-		c.handleMessage(ctx, raw, relations, &clientXLogPos, &nextStandby)
+		c.handleMessage(ctx, raw, relations, &transaction, &clientXLogPos, &nextStandby)
 	}
 }
 

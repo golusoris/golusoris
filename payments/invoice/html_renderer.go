@@ -87,13 +87,22 @@ type HTMLRenderer struct {
 // template or [DefaultHTMLTemplate] when nil.
 func NewHTMLRenderer(t *template.Template) *HTMLRenderer {
 	if t == nil {
-		t = template.Must(template.New("invoice").Parse(DefaultHTMLTemplate))
+		t = defaultTemplate()
 	}
 	return &HTMLRenderer{tmpl: t}
 }
 
 // SetTemplate replaces the renderer's template (e.g. branded version).
-func (r *HTMLRenderer) SetTemplate(t *template.Template) { r.tmpl = t }
+func (r *HTMLRenderer) SetTemplate(t *template.Template) {
+	if t == nil {
+		t = defaultTemplate()
+	}
+	r.tmpl = t
+}
+
+func defaultTemplate() *template.Template {
+	return template.Must(template.New("invoice").Parse(DefaultHTMLTemplate))
+}
 
 // Render implements [Renderer].
 func (r *HTMLRenderer) Render(_ context.Context, inv Invoice) ([]byte, error) {

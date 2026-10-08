@@ -5,6 +5,7 @@
 package scan
 
 import (
+	"math"
 	"testing"
 	"time"
 )
@@ -24,6 +25,12 @@ func TestParseSize(t *testing.T) {
 		{"gigabytes lower", "2gb", 2 << 30, false},
 		{"bytes suffix", "512b", 512, false},
 		{"fractional mb", "1.5MB", int64(1.5 * (1 << 20)), false},
+		{"maximum int64 bytes", "9223372036854775807B", math.MaxInt64, false},
+		{"overflowing suffix", "8388608TiB", 0, true},
+		{"huge finite suffix", "1e300MB", 0, true},
+		{"not a number", "NaNMB", 0, true},
+		{"infinity", "InfMB", 0, true},
+		{"positive sub-byte", "0.5B", 0, true},
 		{"unparseable", "abc", 0, true},
 		{"negative", "-1MB", 0, true},
 		{"bad number with suffix", "xMB", 0, true},

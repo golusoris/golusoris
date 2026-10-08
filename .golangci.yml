@@ -3,9 +3,8 @@
 version: "2"
 
 run:
-  # Sized to the measured cold-cache cost of the root module (~810 CPU-s) on a
-  # 750m-CPU-guaranteed ARC runner, plus headroom for the one office worker
-  # losing cores to hypervisor steal; see the Lint job comment in ci.yml.
+  # Sized to the measured cold-cache cost of the root module (~810 CPU-s) on
+  # the retired 750m-CPU self-hosted runners; see the Lint job comment in ci.yml.
   timeout: 30m
   go: "1.27"
   tests: true
@@ -321,7 +320,9 @@ linters:
 
 formatters:
   enable:
-    - gofumpt
+    # gofumpt is intentionally standalone: the repository pins v0.12.0 in
+    # tools/tool-versions.env instead of inheriting golangci-lint's bundled
+    # formatter version.
     - gci
     - goimports
   settings:

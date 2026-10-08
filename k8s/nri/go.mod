@@ -36,6 +36,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/golusoris/golusoris => ../..
-
 replace github.com/golusoris/golusoris/core => ../../core

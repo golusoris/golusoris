@@ -6,18 +6,24 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # auth/linking
 
-Maps external (provider, subject) IdP identities to local user IDs.
+External `(provider, subject)` identity -> local user ID.
 
 ## Surface
 
-- `linking.New(store)` → `*Service`.
-- `Link(ctx, userID, provider, subject, email)` — idempotent, conflict-on-rebind.
-- `Lookup(ctx, provider, subject)` — returns the local UserID.
-- `List(ctx, userID)` — all linked identities for a user.
-- `Unlink(ctx, provider, subject)`.
-- `MemoryStore` for tests.
+- `New(store)` -> `(*Service, error)`; nil dependencies rejected.
+- `Link(...)` -> atomic claim; same-owner idempotence; cross-owner conflict.
+- `Lookup(...)` -> local user ID.
+- `List(...)` -> identities for user.
+- `Unlink(ctx, userID, provider, subject)` -> atomic owner-checked removal.
+- `MemoryStore` -> race-safe test store.
 
-## Notes
+## Store contract
 
-- A given `(provider, subject)` belongs to exactly one local user; rebinding to a different user returns `gerr.Conflict`.
-- App stores back the `Identity` records in Postgres typically via sqlc.
+- `Store.Claim` = single atomic owner decision; never overwrite owner.
+- `Store.DeleteOwned` = single atomic owner check plus delete.
+- Unique key: `(provider, subject)`.
+- Nonblank provider, subject, and user ID bytes remain exact; never trim or normalize opaque identity keys.
+- Claim result = authoritative stored identity, whether inserted or existing.
+- PostgreSQL: conflict-safe insert plus authoritative return in one statement
+  or transaction.
+- `MemoryStore.Save` deprecated compatibility helper; owner overwrite forbidden.

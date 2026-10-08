@@ -6,7 +6,10 @@ package subs
 
 import (
 	"context"
+	"maps"
 	"sync"
+
+	"github.com/golusoris/golusoris/internal/ptr"
 )
 
 // MemoryStore is an in-memory [Store] for tests and local dev.
@@ -28,9 +31,7 @@ func (m *MemoryStore) Get(_ context.Context, id string) (*Subscription, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	// Return a copy so callers don't mutate the stored record.
-	c := *s
-	return &c, nil
+	return cloneSubscription(s), nil
 }
 
 // GetByCustomer implements [Store].
@@ -40,8 +41,7 @@ func (m *MemoryStore) GetByCustomer(_ context.Context, customerID string) ([]*Su
 	var out []*Subscription
 	for _, s := range m.subs {
 		if s.CustomerID == customerID {
-			c := *s
-			out = append(out, &c)
+			out = append(out, cloneSubscription(s))
 		}
 	}
 	return out, nil
@@ -51,9 +51,19 @@ func (m *MemoryStore) GetByCustomer(_ context.Context, customerID string) ([]*Su
 func (m *MemoryStore) Upsert(_ context.Context, s *Subscription) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	c := *s
-	m.subs[c.ID] = &c
+	cloned := cloneSubscription(s)
+	m.subs[cloned.ID] = cloned
 	return nil
+}
+
+func cloneSubscription(source *Subscription) *Subscription {
+	cloned := *source
+	cloned.Metadata = maps.Clone(source.Metadata)
+	cloned.TrialEndsAt = ptr.Clone(source.TrialEndsAt)
+	cloned.CancelAt = ptr.Clone(source.CancelAt)
+	cloned.CanceledAt = ptr.Clone(source.CanceledAt)
+	cloned.PausedAt = ptr.Clone(source.PausedAt)
+	return &cloned
 }
 
 // Delete implements [Store].

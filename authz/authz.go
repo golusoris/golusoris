@@ -35,6 +35,8 @@ import (
 	"github.com/casbin/casbin/v3/persist"
 	fileadapter "github.com/casbin/casbin/v3/persist/file-adapter"
 	"go.uber.org/fx"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // ModelRBAC is a standard RBAC model DSL.
@@ -131,8 +133,11 @@ func newEnforcer(opts Options, logger *slog.Logger) (*Enforcer, error) {
 	if opts.Model == "" {
 		opts.Model = ModelRBAC
 	}
-	if opts.Adapter == nil {
+	if validate.IsNil(opts.Adapter) {
 		return nil, errors.New("authz: Options.Adapter is required")
+	}
+	if logger == nil {
+		return nil, errors.New("authz: logger is required")
 	}
 	m, err := model.NewModelFromString(opts.Model)
 	if err != nil {

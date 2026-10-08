@@ -169,11 +169,13 @@ func TestE2E_FullUpload(t *testing.T) {
 	var completes atomic.Int32
 	var gotKey atomic.Value
 	gotKey.Store("")
-	h.OnComplete(func(_ context.Context, c tus.CompletedUpload) error {
+	if err := h.OnComplete("e2e.persisted", func(_ context.Context, c tus.CompletedUpload) error {
 		completes.Add(1)
 		gotKey.Store(c.Key)
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("OnComplete: %v", err)
+	}
 
 	srv := mountServer(t, h)
 	base := srv.URL + h.BasePath()

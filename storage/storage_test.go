@@ -7,14 +7,107 @@ package storage_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"testing/iotest"
 
 	"github.com/golusoris/golusoris/storage"
 )
+
+func TestLocalBucketRemainsComparable(t *testing.T) {
+	t.Parallel()
+	bucket, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	set := map[storage.LocalBucket]struct{}{*bucket: {}}
+	if _, ok := set[*bucket]; !ok {
+		t.Fatal("LocalBucket value is not usable as a comparable key")
+	}
+}
+
+func TestLocalBucket_ListFiniteDefaultAndLimitBoundaries(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range storage.DefaultListLimit + 1 {
+		name := filepath.Join(dir, fmt.Sprintf("%04d", i))
+		if writeErr := os.WriteFile(name, []byte("x"), 0o600); writeErr != nil {
+			t.Fatalf("seed object %d: %v", i, writeErr)
+		}
+	}
+
+	objects, err := b.List(context.Background(), storage.ListOptions{})
+	if err != nil {
+		t.Fatalf("List default: %v", err)
+	}
+	if len(objects) != storage.DefaultListLimit {
+		t.Fatalf("List default returned %d objects; want %d", len(objects), storage.DefaultListLimit)
+	}
+
+	objects, err = b.List(context.Background(), storage.ListOptions{Limit: 1})
+	if err != nil {
+		t.Fatalf("List limit one: %v", err)
+	}
+	if len(objects) != 1 {
+		t.Fatalf("List limit one returned %d objects", len(objects))
+	}
+
+	for _, limit := range []int{-1, storage.MaxListLimit + 1} {
+		if _, listErr := b.List(context.Background(), storage.ListOptions{Limit: limit}); listErr == nil {
+			t.Fatalf("List limit %d: expected validation error", limit)
+		}
+	}
+}
+
+func TestLocalBucket_ListHonorsCancellation(t *testing.T) {
+	t.Parallel()
+	b, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = b.List(ctx, storage.ListOptions{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("List canceled error = %v; want context.Canceled", err)
+	}
+}
+
+func TestLocalBucket_ListHidesStagedObjects(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Mkdir(filepath.Join(dir, "nested"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "nested", ".golusoris-put-interrupted.tmp"), []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(dir, "nested", "stable"), []byte("ready"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	objects, err := b.List(context.Background(), storage.ListOptions{Prefix: "nested/"})
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(objects) != 1 || objects[0].Key != "nested/stable" {
+		t.Fatalf("List returned %+v; want only nested/stable", objects)
+	}
+}
 
 func TestLocalBucket(t *testing.T) {
 	t.Parallel()
@@ -90,6 +183,80 @@ func TestLocalBucket(t *testing.T) {
 	}
 }
 
+func TestLocalBucket_PutOptionsPersistAcrossReopen(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metadata := map[string]string{"owner": "alice", "trace": "42"}
+	wantMetadata := map[string]string{"owner": "alice", "trace": "42"}
+	obj, err := b.Put(context.Background(), "object", strings.NewReader("body"), storage.PutOptions{
+		ContentType: "text/plain",
+		Metadata:    metadata,
+	})
+	if err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	metadata["owner"] = "mutated"
+	if obj.ContentType != "text/plain" || !reflect.DeepEqual(obj.Metadata, wantMetadata) {
+		t.Fatalf("Put object = %+v; want persisted options", obj)
+	}
+
+	reopened, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rc, got, err := reopened.Get(context.Background(), "object")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if err = rc.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	if got.ContentType != "text/plain" || !reflect.DeepEqual(got.Metadata, wantMetadata) {
+		t.Fatalf("Get object = %+v; want persisted options", got)
+	}
+	got.Metadata["owner"] = "returned-map-mutation"
+	stat, err := reopened.Stat(context.Background(), "object")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if stat.ContentType != "text/plain" || !reflect.DeepEqual(stat.Metadata, wantMetadata) {
+		t.Fatalf("Stat object = %+v; want isolated persisted options", stat)
+	}
+}
+
+func TestLocalBucket_FailedReplacementPreservesMetadata(t *testing.T) {
+	t.Parallel()
+	b, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err = b.Put(ctx, "object", strings.NewReader("old"), storage.PutOptions{
+		ContentType: "text/old",
+		Metadata:    map[string]string{"generation": "old"},
+	}); err != nil {
+		t.Fatalf("seed Put: %v", err)
+	}
+	src := io.MultiReader(strings.NewReader("partial"), iotest.ErrReader(errors.New("injected read failure")))
+	if _, err = b.Put(ctx, "object", src, storage.PutOptions{
+		ContentType: "text/new",
+		Metadata:    map[string]string{"generation": "new"},
+	}); err == nil {
+		t.Fatal("replacement Put: expected error")
+	}
+	obj, err := b.Stat(ctx, "object")
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if obj.ContentType != "text/old" || !reflect.DeepEqual(obj.Metadata, map[string]string{"generation": "old"}) {
+		t.Fatalf("failed replacement metadata = %+v", obj)
+	}
+}
+
 func TestLocalBucket_pathTraversal(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -112,6 +279,156 @@ func TestLocalBucket_notFound(t *testing.T) {
 	}
 }
 
+func TestLocalBucket_failedReplacementPreservesObject(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	if _, err = b.Put(ctx, "dir/file.txt", strings.NewReader("original"), storage.PutOptions{}); err != nil {
+		t.Fatalf("initial Put: %v", err)
+	}
+
+	src := io.MultiReader(strings.NewReader("partial"), iotest.ErrReader(errors.New("injected read failure")))
+	if _, err = b.Put(ctx, "dir/file.txt", src, storage.PutOptions{}); err == nil {
+		t.Fatal("replacement Put: expected error")
+	}
+	assertLocalObject(t, b, "dir/file.txt", "original")
+	assertDirectoryNames(t, filepath.Join(dir, "dir"), "file.txt")
+}
+
+func TestLocalBucket_cancelledReplacementPreservesObject(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = b.Put(context.Background(), "file.txt", strings.NewReader("original"), storage.PutOptions{}); err != nil {
+		t.Fatalf("initial Put: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = b.Put(ctx, "file.txt", strings.NewReader("replacement"), storage.PutOptions{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled Put error = %v; want context.Canceled", err)
+	}
+	assertLocalObject(t, b, "file.txt", "original")
+	assertDirectoryNames(t, dir, "file.txt")
+}
+
+func TestLocalBucket_PreCanceledOperationsHaveNoSideEffects(t *testing.T) {
+	t.Parallel()
+	b, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = b.Put(context.Background(), "object", strings.NewReader("stable"), storage.PutOptions{}); err != nil {
+		t.Fatalf("seed Put: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	rc, _, getErr := b.Get(ctx, "object")
+	if rc != nil {
+		_ = rc.Close()
+		t.Fatal("pre-canceled Get returned reader")
+	}
+	if !errors.Is(getErr, context.Canceled) {
+		t.Fatalf("Get error = %v; want context.Canceled", getErr)
+	}
+	if exists, existsErr := b.Exists(ctx, "object"); exists || !errors.Is(existsErr, context.Canceled) {
+		t.Fatalf("Exists = %t, %v; want false, context.Canceled", exists, existsErr)
+	}
+	if _, statErr := b.Stat(ctx, "object"); !errors.Is(statErr, context.Canceled) {
+		t.Fatalf("Stat error = %v; want context.Canceled", statErr)
+	}
+	if _, urlErr := b.URL(ctx, "object"); !errors.Is(urlErr, context.Canceled) {
+		t.Fatalf("URL error = %v; want context.Canceled", urlErr)
+	}
+	if deleteErr := b.Delete(ctx, "object"); !errors.Is(deleteErr, context.Canceled) {
+		t.Fatalf("Delete error = %v; want context.Canceled", deleteErr)
+	}
+	assertLocalObject(t, b, "object", "stable")
+}
+
+func TestLocalBucket_URLescapesReservedCharacters(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	b, err := storage.NewLocalBucket(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const key = "dir/a b#c.txt"
+	if _, err = b.Put(context.Background(), key, strings.NewReader("x"), storage.PutOptions{}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	value, err := b.URL(context.Background(), key)
+	if err != nil {
+		t.Fatalf("URL: %v", err)
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+	wantPath := filepath.ToSlash(filepath.Join(dir, filepath.FromSlash(key)))
+	if !strings.HasPrefix(wantPath, "/") {
+		wantPath = "/" + wantPath
+	}
+	if parsed.Scheme != "file" || parsed.Host != "" || parsed.Path != wantPath {
+		t.Fatalf("URL = %q (scheme=%q host=%q path=%q); want file URL path %q", value, parsed.Scheme, parsed.Host, parsed.Path, wantPath)
+	}
+	if parsed.Fragment != "" || parsed.RawQuery != "" {
+		t.Fatalf("URL reserved characters leaked into fragment/query: %q", value)
+	}
+}
+
+func assertLocalObject(t *testing.T, b *storage.LocalBucket, key, want string) {
+	t.Helper()
+	rc, _, err := b.Get(context.Background(), key)
+	if err != nil {
+		t.Fatalf("Get(%q): %v", key, err)
+	}
+	defer func() {
+		if closeErr := rc.Close(); closeErr != nil {
+			t.Errorf("close %q: %v", key, closeErr)
+		}
+	}()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read %q: %v", key, err)
+	}
+	if string(got) != want {
+		t.Fatalf("object %q = %q; want %q", key, got, want)
+	}
+}
+
+func assertDirectoryNames(t *testing.T, dir string, want ...string) {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir(%q): %v", dir, err)
+	}
+	visible := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == ".golusoris-lock" || name == ".golusoris-staging" ||
+			(strings.HasPrefix(name, ".golusoris-meta-") && strings.HasSuffix(name, ".json")) {
+			continue
+		}
+		visible = append(visible, name)
+	}
+	if len(visible) != len(want) {
+		t.Fatalf("ReadDir(%q) visible names = %v; want %v", dir, visible, want)
+	}
+	for i := range want {
+		if visible[i] != want[i] {
+			t.Fatalf("ReadDir(%q)[%d] = %q; want %q", dir, i, visible[i], want[i])
+		}
+	}
+}
+
 func TestLocalBucket_StatNotFound(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -123,11 +440,8 @@ func TestLocalBucket_StatNotFound(t *testing.T) {
 	}
 }
 
-// TestLocalBucket_abs_nestedKeyRoundTrip is the positive case for the
-// path-traversal guard behind abs(): a legitimate nested key must resolve
-// under base, create the file at the expected nested location, and round
-// trip through Put/Get unchanged.
-func TestLocalBucket_abs_nestedKeyRoundTrip(t *testing.T) {
+// TestLocalBucket_nestedKeyRoundTrip covers a normal key through os.Root.
+func TestLocalBucket_nestedKeyRoundTrip(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	b, err := storage.NewLocalBucket(dir)
@@ -168,16 +482,7 @@ func TestLocalBucket_abs_nestedKeyRoundTrip(t *testing.T) {
 	}
 }
 
-// TestLocalBucket_abs_boundaryDotAndEmptyKey pins the CURRENT boundary
-// behaviour of abs() for "." and "" — it does not change it. For both keys,
-// filepath.Join(base, key) cleans to base itself, and abs()'s own guard
-// (`clean != b.base`) explicitly treats that as acceptable: abs() does NOT
-// return the path-traversal error for either key. Put still ends up
-// failing, but only because the resolved path is a directory (base itself),
-// which OpenFile refuses — a distinct failure from the traversal guard. The
-// assertions below pin exactly that: an error occurs, but it is never the
-// "path traversal attempt" error.
-func TestLocalBucket_abs_boundaryDotAndEmptyKey(t *testing.T) {
+func TestLocalBucket_rejectsRootKeys(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{".", ""} {
@@ -189,42 +494,40 @@ func TestLocalBucket_abs_boundaryDotAndEmptyKey(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, putErr := b.Put(context.Background(), key, strings.NewReader("x"), storage.PutOptions{})
-			if putErr == nil {
-				t.Fatalf("Put(%q): expected an error (base is a directory), got nil", key)
+			ctx := context.Background()
+			if _, putErr := b.Put(ctx, key, strings.NewReader("x"), storage.PutOptions{}); putErr == nil {
+				t.Fatalf("Put(%q): expected unsafe-key error", key)
 			}
-			if strings.Contains(putErr.Error(), "path traversal attempt") {
-				t.Fatalf("Put(%q): abs() must accept this key (resolves to base), not reject it as traversal: %v", key, putErr)
+			if _, _, getErr := b.Get(ctx, key); getErr == nil {
+				t.Fatalf("Get(%q): expected unsafe-key error", key)
+			}
+			if deleteErr := b.Delete(ctx, key); deleteErr == nil {
+				t.Fatalf("Delete(%q): expected unsafe-key error", key)
+			}
+			if _, existsErr := b.Exists(ctx, key); existsErr == nil {
+				t.Fatalf("Exists(%q): expected unsafe-key error", key)
+			}
+			if _, statErr := b.Stat(ctx, key); statErr == nil {
+				t.Fatalf("Stat(%q): expected unsafe-key error", key)
+			}
+			if _, urlErr := b.URL(ctx, key); urlErr == nil {
+				t.Fatalf("URL(%q): expected unsafe-key error", key)
 			}
 		})
 	}
 }
 
-// TestLocalBucket_abs_negativeTraversalVariants covers keys that attempt to
-// escape base. It proves the two genuinely rejected variants never open or
-// create a file, and it separately pins the CURRENT (unchanged) behaviour
-// for an absolute-looking key: filepath.Join(base, "/etc/passwd") does not
-// treat the leading slash as an absolute-path override — it Cleans the
-// concatenation of base+"/etc/passwd" into <base>/etc/passwd, which passes
-// abs()'s own prefix check. That key is therefore accepted, not rejected —
-// but it stays confined under base and never reaches the real /etc/passwd.
-// This test documents that actual behaviour rather than asserting the
-// (incorrect) assumption that abs() rejects it.
-func TestLocalBucket_abs_negativeTraversalVariants(t *testing.T) {
+func TestLocalBucket_rejectsTraversalVariants(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name    string
-		key     string
-		wantErr bool
-	}{
-		{name: "multi-level dotdot escapes above base", key: "../../x", wantErr: true},
-		{name: "mid-path dotdot escapes above base", key: "a/../../x", wantErr: true},
-		{name: "absolute-looking key stays confined under base", key: "/etc/passwd", wantErr: false},
+	tests := []string{
+		"../../x",
+		"a/../../x",
+		"/etc/passwd",
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, key := range tests {
+		t.Run(key, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
 			b, err := storage.NewLocalBucket(dir)
@@ -232,20 +535,10 @@ func TestLocalBucket_abs_negativeTraversalVariants(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, putErr := b.Put(context.Background(), tc.key, strings.NewReader("x"), storage.PutOptions{})
-			switch {
-			case tc.wantErr && putErr == nil:
-				t.Fatalf("Put(%q): expected a path-traversal rejection, got nil", tc.key)
-			case tc.wantErr && !strings.Contains(putErr.Error(), "path traversal attempt"):
-				t.Fatalf("Put(%q): expected the path-traversal error, got: %v", tc.key, putErr)
-			case !tc.wantErr && putErr != nil:
-				t.Fatalf("Put(%q): expected no error (confined under base), got: %v", tc.key, putErr)
+			if _, putErr := b.Put(context.Background(), key, strings.NewReader("x"), storage.PutOptions{}); putErr == nil {
+				t.Fatalf("Put(%q): expected unsafe-key error", key)
 			}
 
-			// No file may ever land outside base. t.TempDir() gives each
-			// (sub)test its own uniquely named parent directory, so
-			// scanning dir's own parent is a reliable, isolated check even
-			// under t.Parallel().
 			parent := filepath.Dir(dir)
 			entries, readErr := os.ReadDir(parent)
 			if readErr != nil {
@@ -253,41 +546,22 @@ func TestLocalBucket_abs_negativeTraversalVariants(t *testing.T) {
 			}
 			for _, e := range entries {
 				if e.Name() != filepath.Base(dir) {
-					t.Fatalf("Put(%q) leaked entry %q outside base", tc.key, e.Name())
+					t.Fatalf("Put(%q) leaked entry %q outside base", key, e.Name())
 				}
 			}
 
-			// For the rejected keys specifically: abs() must fail before
-			// Put ever calls MkdirAll/OpenFile, so base itself must remain
-			// empty.
-			if tc.wantErr {
-				baseEntries, baseReadErr := os.ReadDir(dir)
-				if baseReadErr != nil {
-					t.Fatalf("ReadDir(base): %v", baseReadErr)
-				}
-				if len(baseEntries) != 0 {
-					t.Fatalf("Put(%q): expected no file created under base, found %d entries", tc.key, len(baseEntries))
-				}
+			baseEntries, baseReadErr := os.ReadDir(dir)
+			if baseReadErr != nil {
+				t.Fatalf("ReadDir(base): %v", baseReadErr)
+			}
+			if len(baseEntries) != 0 {
+				t.Fatalf("Put(%q): expected no file created under base, found %d entries", key, len(baseEntries))
 			}
 		})
 	}
 }
 
-// TestLocalBucket_abs_symlinkInsideBaseFollowsToOutsideTarget documents
-// current, unchanged behaviour: abs() performs a purely LEXICAL check on the
-// requested key (filepath.Join plus a string-prefix comparison) — it never
-// calls filepath.EvalSymlinks or otherwise inspects what a path component
-// resolves to on disk. A symlink that lives inside base but points outside
-// it therefore passes abs() unchanged (the key is lexically under base),
-// and Get's underlying os.Open then follows that symlink at the OS level,
-// actually reading content from outside base.
-//
-// storage/AGENTS.md documents LocalBucket only as "path-traversal
-// protected" and says nothing about symlinks, so this symlink-follow
-// behaviour is an undocumented gap in the bucket's stated threat model, not
-// a violation of a documented guarantee. This test pins what the code does
-// today; it is not an endorsement that this is safe.
-func TestLocalBucket_abs_symlinkInsideBaseFollowsToOutsideTarget(t *testing.T) {
+func TestLocalBucket_blocksSymlinkEscape(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -308,17 +582,31 @@ func TestLocalBucket_abs_symlinkInsideBaseFollowsToOutsideTarget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rc, _, err := b.Get(context.Background(), "link")
-	if err != nil {
-		t.Fatalf("Get(link): %v", err)
+	ctx := context.Background()
+	if _, _, getErr := b.Get(ctx, "link"); getErr == nil {
+		t.Fatal("Get(link): expected symlink escape error")
 	}
-	defer func() { _ = rc.Close() }()
+	if _, statErr := b.Stat(ctx, "link"); statErr == nil {
+		t.Fatal("Stat(link): expected symlink escape error")
+	}
+	if _, existsErr := b.Exists(ctx, "link"); existsErr == nil {
+		t.Fatal("Exists(link): expected symlink escape error")
+	}
+	if _, urlErr := b.URL(ctx, "link"); urlErr == nil {
+		t.Fatal("URL(link): expected symlink escape error")
+	}
 
-	got, err := io.ReadAll(rc)
-	if err != nil {
-		t.Fatalf("ReadAll: %v", err)
+	outsideDir := filepath.Join(outside, "dir")
+	if err = os.Mkdir(outsideDir, 0o750); err != nil {
+		t.Fatalf("Mkdir outside: %v", err)
 	}
-	if string(got) != "outside-content" {
-		t.Fatalf("expected Get to follow the symlink to outside content, got %q", got)
+	if err = os.Symlink(outsideDir, filepath.Join(base, "dir-link")); err != nil {
+		t.Skipf("directory symlink not supported: %v", err)
+	}
+	if _, putErr := b.Put(ctx, "dir-link/escaped.txt", strings.NewReader("x"), storage.PutOptions{}); putErr == nil {
+		t.Fatal("Put through directory symlink: expected escape error")
+	}
+	if _, statErr := os.Stat(filepath.Join(outsideDir, "escaped.txt")); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("outside file state = %v; want not exist", statErr)
 	}
 }

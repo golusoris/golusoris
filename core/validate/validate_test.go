@@ -61,3 +61,26 @@ func TestValidateFails(t *testing.T) {
 		t.Errorf("expected json field names in error: %s", err.Error())
 	}
 }
+
+func TestIsNil(t *testing.T) {
+	t.Parallel()
+	var typedNil *user
+	for _, test := range []struct {
+		name  string
+		value any
+		want  bool
+	}{
+		{name: "nil", value: nil, want: true},
+		{name: "typed nil pointer", value: typedNil, want: true},
+		{name: "nil map", value: map[string]string(nil), want: true},
+		{name: "value", value: user{}, want: false},
+		{name: "non-nil pointer", value: &user{}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := validate.IsNil(test.value); got != test.want {
+				t.Fatalf("IsNil(%T) = %v, want %v", test.value, got, test.want)
+			}
+		})
+	}
+}

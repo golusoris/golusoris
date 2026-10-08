@@ -1,8 +1,258 @@
 {
   "version": 1,
-  "generated_at": "2026-09-15T00:43:36Z",
-  "repository": "",
-  "commit_sha": "",
-  "total_infractions": 0,
-  "infractions": []
+  "generated_at": "2026-10-07T16:36:50Z",
+  "repository": "golusoris/golusoris",
+  "commit_sha": "9dac7d00f15433e4cde7f6d0f328c75b3bcd482d",
+  "total_infractions": 31,
+  "increase_rationale": "31 HISS-02 findings from the Go I/O deadline rule (praetor #510) are lifecycle-owned fx service loops, log/channel sinks, callee-bounded calls or context-ignoring constructors, not unbounded I/O; reported upstream as https://github.com/cordanaLLM/praetor/issues/841. The two genuine findings (systemd sd_notify dial, testutil/pg teardown) were fixed. Remove these entries when the rule handles these shapes.",
+  "infractions": [
+    {
+      "rule_id": "HISS-02",
+      "file_path": "ai/llm/llm.go",
+      "line_number": 159,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:RunStream",
+      "fingerprint": "ai/llm/llm.go:HISS-02:fn:RunStream#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "auth/oidc/oidc.go",
+      "line_number": 125,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:newProvider",
+      "fingerprint": "auth/oidc/oidc.go:HISS-02:fn:newProvider#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "core/mcp/module.go",
+      "line_number": 77,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:runStdio",
+      "fingerprint": "core/mcp/module.go:HISS-02:fn:runStdio#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "core/mcp/module.go",
+      "line_number": 83,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:runStdio",
+      "fingerprint": "core/mcp/module.go:HISS-02:fn:runStdio#2"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "db/cdc/cdc.go",
+      "line_number": 309,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:newConsumer",
+      "fingerprint": "db/cdc/cdc.go:HISS-02:fn:newConsumer#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "db/pgx/pgx.go",
+      "line_number": 323,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:9209e3811ff6",
+      "fingerprint": "db/pgx/pgx.go:HISS-02:text:9209e3811ff6#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "db/sqlite/sqlite.go",
+      "line_number": 171,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:83a61ca3dbdd",
+      "fingerprint": "db/sqlite/sqlite.go:HISS-02:text:83a61ca3dbdd#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "integrations/goenvoy/module.go",
+      "line_number": 151,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:registryClient",
+      "fingerprint": "integrations/goenvoy/module.go:HISS-02:fn:registryClient#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "k8s/nri/module.go",
+      "line_number": 73,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:runPlugin",
+      "fingerprint": "k8s/nri/module.go:HISS-02:fn:runPlugin#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "k8s/operator/operator.go",
+      "line_number": 170,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:runManager",
+      "fingerprint": "k8s/operator/operator.go:HISS-02:fn:runManager#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "leader/internal/hook/hook.go",
+      "line_number": 27,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:RunUntilStop",
+      "fingerprint": "leader/internal/hook/hook.go:HISS-02:fn:RunUntilStop#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "leader/internal/hook/hook.go",
+      "line_number": 28,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:RunUntilStop",
+      "fingerprint": "leader/internal/hook/hook.go:HISS-02:fn:RunUntilStop#2"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "net/dnsserver/dnsserver.go",
+      "line_number": 127,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:startServers",
+      "fingerprint": "net/dnsserver/dnsserver.go:HISS-02:fn:startServers#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "net/dnsserver/dnsserver.go",
+      "line_number": 128,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:startServers",
+      "fingerprint": "net/dnsserver/dnsserver.go:HISS-02:fn:startServers#2"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "net/smtpserver/smtpserver.go",
+      "line_number": 164,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:startServer",
+      "fingerprint": "net/smtpserver/smtpserver.go:HISS-02:fn:startServer#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "net/wol/wol.go",
+      "line_number": 45,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:Wake",
+      "fingerprint": "net/wol/wol.go:HISS-02:fn:Wake#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "net/wol/wol.go",
+      "line_number": 51,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:WakeTo",
+      "fingerprint": "net/wol/wol.go:HISS-02:fn:WakeTo#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "otel/otel.go",
+      "line_number": 377,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:61cdd28c36bf",
+      "fingerprint": "otel/otel.go:HISS-02:text:61cdd28c36bf#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "outbox/drainer.go",
+      "line_number": 261,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:f4537d1abb82",
+      "fingerprint": "outbox/drainer.go:HISS-02:text:f4537d1abb82#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "outbox/drainer.go",
+      "line_number": 262,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:4f351c47bd33",
+      "fingerprint": "outbox/drainer.go:HISS-02:text:4f351c47bd33#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "pdf/pdf.go",
+      "line_number": 122,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:NewRenderer",
+      "fingerprint": "pdf/pdf.go:HISS-02:fn:NewRenderer#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "realtime/pubsub/redis/redis.go",
+      "line_number": 79,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:Bus.Subscribe",
+      "fingerprint": "realtime/pubsub/redis/redis.go:HISS-02:fn:Bus.Subscribe#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "realtime/pubsub/redis/redis.go",
+      "line_number": 83,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:Bus.Subscribe",
+      "fingerprint": "realtime/pubsub/redis/redis.go:HISS-02:fn:Bus.Subscribe#2"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "realtime/webrtc/webrtc.go",
+      "line_number": 242,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:Signaler.attachTeardown",
+      "fingerprint": "realtime/webrtc/webrtc.go:HISS-02:fn:Signaler.attachTeardown#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "science/bio/fasta.go",
+      "line_number": 56,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:ParseFASTA",
+      "fingerprint": "science/bio/fasta.go:HISS-02:fn:ParseFASTA#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/tus/scratch.go",
+      "line_number": 698,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:localScratch.Close",
+      "fingerprint": "storage/tus/scratch.go:HISS-02:fn:localScratch.Close#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "storage/tus/tus.go",
+      "line_number": 256,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:Handler.wireLifecycle",
+      "fingerprint": "storage/tus/tus.go:HISS-02:fn:Handler.wireLifecycle#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "systemd/systemd.go",
+      "line_number": 138,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "text:a5380a128d71",
+      "fingerprint": "systemd/systemd.go:HISS-02:text:a5380a128d71#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "testutil/ginkgofx/ginkgofx.go",
+      "line_number": 170,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:startHarness",
+      "fingerprint": "testutil/ginkgofx/ginkgofx.go:HISS-02:fn:startHarness#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "testutil/ginkgofx/ginkgofx.go",
+      "line_number": 179,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:stopHarness",
+      "fingerprint": "testutil/ginkgofx/ginkgofx.go:HISS-02:fn:stopHarness#1"
+    },
+    {
+      "rule_id": "HISS-02",
+      "file_path": "testutil/river/river.go",
+      "line_number": 140,
+      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
+      "anchor": "fn:startHarness",
+      "fingerprint": "testutil/river/river.go:HISS-02:fn:startHarness#1"
+    }
+  ]
 }

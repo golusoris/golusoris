@@ -10,13 +10,16 @@ Passwordless sign-in via single-use email links.
 
 ## Surface
 
-- `magiclink.New(store, clk, secret, ttl)` → `(*Service, error)`; errors when `secret` is empty.
-- `Issue(ctx, email)` — returns the raw token; embed in URL, email it.
-- `Verify(ctx, raw)` — returns the email + consumes the link.
-- `MemoryStore` — for tests.
+- `magiclink.New(store, clk, secret, ttl)` → `(*Service, error)`; requires nonnil store, 32-byte secret minimum, and nonnegative TTL.
+- `Issue(ctx, email)` — returns raw token; embed in URL, email it.
+- `Verify(ctx, raw)` — returns email + consumes link.
+- `Store.Consume` — atomic unused-link claim. Never split lookup + mark.
+- `MemoryStore` — concurrency-safe test / single-process store.
+- `NewMemoryStoreWithClock`: nil and typed-nil clock -> real clock.
 
 ## Notes
 
 - Storage holds HMAC-SHA256 hashes only.
-- Single-use; replay returns `gerr.Unauthorized`.
-- Default TTL 15 minutes.
+- Constructor secrets are copied; caller mutation cannot change issued-token verification.
+- Single-use under concurrent verification; replay returns `gerr.Unauthorized`.
+- Default TTL 15 minutes; tokens expire exactly at `ExpiresAt`.

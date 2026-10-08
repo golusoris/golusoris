@@ -44,8 +44,8 @@ func TestDB_Lifecycle(t *testing.T) {
 	require.True(t, hasJob(ctx, t, pool, "policy_compression"), "compression policy missing")
 }
 
-// TestDB_RetentionHours covers the sub-day interval branch of formatInterval
-// (hours not divisible by 24) end-to-end against TimescaleDB.
+// TestDB_RetentionHours covers a sub-day interval end-to-end against
+// TimescaleDB.
 func TestDB_RetentionHours(t *testing.T) {
 	t.Parallel()
 	pool := pgtest.StartTimescale(t)

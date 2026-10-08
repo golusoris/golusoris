@@ -3,14 +3,13 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package invoice provides invoice modelling, sequential numbering,
-// and HTML rendering for SaaS billing. PDF rendering is intentionally
-// not bundled — when the framework's pdf/ module lands (CGO chromedp
-// sub-module), apps can pipe the HTML through it; for now most apps
-// either store HTML directly or use a stand-alone HTML→PDF microservice.
+// and HTML rendering for SaaS billing. PDF rendering stays decoupled: apps can
+// pipe the HTML through the shipped pdf/ submodule, store it directly, or use
+// a stand-alone HTML-to-PDF service.
 //
 // Numbering is sequential per tenant and gap-free under concurrency
 // (the contract on [Numberer.Next] requires this; the in-memory impl
-// uses a per-tenant counter, the Postgres impl uses a SERIAL or a
+// uses a per-tenant counter; a Postgres implementation can use a sequence or a
 // row-locked next-number table).
 //
 // Usage:

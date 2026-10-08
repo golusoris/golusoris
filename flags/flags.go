@@ -25,6 +25,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // EvalContext carries arbitrary attributes used by providers to target
@@ -53,6 +55,9 @@ type Client struct {
 
 // New returns a Client backed by provider.
 func New(provider Provider) *Client {
+	if validate.IsNil(provider) {
+		provider = NoopProvider{}
+	}
 	return &Client{provider: provider}
 }
 

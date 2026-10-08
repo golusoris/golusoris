@@ -7,13 +7,13 @@
 // without hand-rolling the transport boilerplate.
 //
 // The module provides a [*Server] (the official SDK's server) with no tools of
-// its own; the app registers tools after the fact:
+// its own; the app registers typed, schema-validated tools after the fact:
 //
 //	fx.New(
 //	    golusoris.Core,
 //	    mcp.Module,                                  // provides *mcp.Server
 //	    fx.Invoke(func(s *mcp.Server) {              // app registers its tools
-//	        s.AddTool(&mcp.Tool{Name: "ping"}, pingHandler)
+//	        mcp.AddTool(s, &mcp.Tool{Name: "ping"}, pingHandler)
 //	    }),
 //	)
 //
@@ -54,7 +54,8 @@ type (
 	Server = sdkmcp.Server
 	// Tool describes a single MCP tool.
 	Tool = sdkmcp.Tool
-	// ToolHandler handles a tools/call invocation.
+	// ToolHandler is the SDK's low-level handler. It performs no schema
+	// validation; prefer AddTool with a typed handler.
 	ToolHandler = sdkmcp.ToolHandler
 	// CallToolRequest is the inbound tools/call request.
 	CallToolRequest = sdkmcp.CallToolRequest
@@ -65,6 +66,13 @@ type (
 	// TextContent is a text content block.
 	TextContent = sdkmcp.TextContent
 )
+
+// AddTool registers a typed tool handler with SDK-managed schema inference,
+// input validation, unmarshalling, and output handling. Invalid input is
+// rejected before the handler runs.
+func AddTool[In, Out any](s *Server, t *Tool, h sdkmcp.ToolHandlerFor[In, Out]) {
+	sdkmcp.AddTool(s, t, h)
+}
 
 // Transport selects the MCP transport.
 type Transport string

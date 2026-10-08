@@ -17,6 +17,6 @@ WebAuthn (passkeys) + TOTP MFA wrappers around go-webauthn/webauthn and pquerna/
 
 ## Notes
 
-- `User` is the `webauthn.User` interface — apps adapt their model.
-- Persisting `Credential`s and round-tripping `SessionData` is the app's responsibility.
-- TOTP uses SHA-1 / 6 digits / 30s period (the standard Google Authenticator profile) and accepts ±1 period clock skew.
+- `User` is `webauthn.User` interface — apps adapt their model.
+- Persisting `Credential`s and round-tripping `SessionData` is app's responsibility.
+- TOTP uses SHA-1 / 6 digits / 30s period (standard Google Authenticator profile) and accepts ±1 period clock skew.

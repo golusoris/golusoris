@@ -110,5 +110,5 @@ func SOLToLamports(sol float64) uint64 {
 	return uint64(sol * 1e9)
 }
 
-// ensure binary is used (it's an indirect dep that some linters require referenced)
+// Ensure binary is used (it's an indirect dep that some linters require referenced).
 var _ *bin.Decoder

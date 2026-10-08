@@ -44,6 +44,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/leader"
+	"github.com/golusoris/golusoris/leader/internal/hook"
 )
 
 // Options tunes the elector.
@@ -183,23 +184,8 @@ func Module(cb leader.Callbacks) fx.Option {
 			if !opts.Enabled {
 				return
 			}
-			ctx, cancel := context.WithCancel(context.Background())
-			done := make(chan struct{})
-			lc.Append(fx.Hook{
-				OnStart: func(_ context.Context) error {
-					go func() {
-						defer close(done)
-						if runErr := Run(ctx, pool, opts, clk, cb); runErr != nil {
-							logger.ErrorContext(ctx, "leader/pg: run failed", slog.String("error", runErr.Error()))
-						}
-					}()
-					return nil
-				},
-				OnStop: func(_ context.Context) error {
-					cancel()
-					<-done
-					return nil
-				},
+			hook.RunUntilStop(lc, logger, "leader/pg", func(ctx context.Context) error {
+				return Run(ctx, pool, opts, clk, cb)
 			})
 		}),
 	)

@@ -40,6 +40,4 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 )
 
-replace github.com/golusoris/golusoris => ../..
-
 replace github.com/golusoris/golusoris/core => ../../core

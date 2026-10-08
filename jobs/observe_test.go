@@ -40,7 +40,11 @@ func TestObserverSeesInsertAndCompletion(t *testing.T) {
 	obs := &recordingObserver{finished: make(chan string, 1)}
 	rv := rivertest.Start(t, rivertest.Options{
 		Observer: obs,
-		Register: func(workers *jobs.Workers) { jobs.Register(workers, &greetWorker{}) },
+		Register: func(workers *jobs.Workers) {
+			if err := jobs.Register(workers, &greetWorker{}); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
+		},
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

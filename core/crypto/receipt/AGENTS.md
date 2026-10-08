@@ -6,18 +6,18 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — core/crypto/receipt
 
-> Security-relevant. Receipts are *proof of a passing gate*; never sign
+> Security-relevant. Receipts are *proof of passing gate*; never sign
 > anything you did not run.
 
 Ed25519-signed **Exit-0 execution receipts**: command, exit code (always 0),
-UTC timestamp, commit SHA, repository, SHA-256 of the output, the signer's
+UTC timestamp, commit SHA, repository, SHA-256 of output, signer's
 public key, signature. Canonical payload is wire-compatible with praetor
 `lockdown.ExecutionReceipt`. Capability key: `crypto.receipt`.
 
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `GenerateKey()` | fresh Ed25519 key pair (crypto/rand) |
 | `NewSigner(priv, clock)` · `NewSignerFromSeed(seed32, clock)` | signer; time is injected (`clock.Clock`), never `time.Now` |
 | `(*Signer).Sign(Run)` | returns `*Receipt`; refuses `ExitCode != 0` (`ErrNonZeroExit`) and empty commands |
@@ -34,6 +34,6 @@ crypto.receipt.seed   # hex-encoded 32-byte Ed25519 seed — QUOTE it in YAML (a
 
 ## Don't
 
-- Don't sign failures. A failed gate produces no receipt — that is the signal.
-- Don't change `Payload()` field order; it is the interop contract.
-- Don't ship with the ephemeral fallback in production — nobody can verify it.
+- Don't sign failures. failed gate produces no receipt — that is signal.
+- Don't change `Payload()` field order; it is interop contract.
+- Don't ship with ephemeral fallback in production — nobody can verify it.

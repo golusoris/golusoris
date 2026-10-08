@@ -12,7 +12,7 @@
 //
 // Usage:
 //
-//	svc := unsub.New(store, []byte(secret))
+//	svc, err := unsub.New(store, []byte(secret))
 //
 //	// When building an email:
 //	url := svc.URL("https://app.example.com/unsubscribe", "user@example.com")
@@ -28,11 +28,15 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/golusoris/golusoris/core/validate"
+	tokenhash "github.com/golusoris/golusoris/hash"
 )
 
 // maxUnsubBytes caps form-encoded request bodies on the unsubscribe
@@ -55,10 +59,20 @@ type Service struct {
 	secret []byte
 }
 
-// New returns a Service. secret must be kept stable — changing it
-// invalidates all existing unsubscribe URLs.
-func New(store Store, secret []byte) *Service {
-	return &Service{store: store, secret: secret}
+// ErrStoreRequired reports a nil suppression store.
+var ErrStoreRequired = errors.New("unsub: store is required")
+
+// New returns a Service. The store must be non-nil and secret must contain at
+// least 32 bytes. The service clones secret so caller mutation cannot invalidate
+// existing unsubscribe URLs.
+func New(store Store, secret []byte) (*Service, error) {
+	if validate.IsNil(store) {
+		return nil, ErrStoreRequired
+	}
+	if err := tokenhash.ValidateHMACSHA256Key(secret); err != nil {
+		return nil, fmt.Errorf("unsub: secret: %w", err)
+	}
+	return &Service{store: store, secret: append([]byte(nil), secret...)}, nil
 }
 
 // URL returns a signed one-click unsubscribe URL for email.
@@ -74,6 +88,10 @@ func (s *Service) URL(baseURL, email string) string {
 // response is returned.
 func (s *Service) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.store == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxUnsubBytes)
 		email := r.FormValue("email")
 		sig := r.FormValue("sig")
@@ -104,6 +122,9 @@ func (s *Service) Handler() http.Handler {
 // IsSuppressed returns true if email is on the suppression list.
 // Use before sending to avoid re-emailing unsubscribed users.
 func (s *Service) IsSuppressed(ctx context.Context, email string) (bool, error) {
+	if s.store == nil {
+		return false, ErrStoreRequired
+	}
 	ok, err := s.store.IsSuppressed(ctx, strings.ToLower(email))
 	if err != nil {
 		return false, fmt.Errorf("unsub: check: %w", err)

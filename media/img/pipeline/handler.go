@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/storage"
@@ -40,12 +42,19 @@ func tokenFromRequest(r *http.Request) string {
 //   - 400: malformed token or invalid params ([ErrBadToken], [ErrInvalidParams]).
 //   - 403: bad signature or expired token ([ErrBadSignature], [ErrExpired]).
 //   - 404: source key not found.
+//   - 405: method other than GET or HEAD.
 //   - 415: resize backend unavailable (img.ErrCGORequired — no libvips).
 //   - 500: source read / resize failure.
 func (p *Pipeline) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		token := tokenFromRequest(r)
-		key, t, err := p.Verify(token)
+		key, t, exp, err := p.verify(token)
 		if err != nil {
 			p.writeVerifyError(w, r, err)
 			return
@@ -58,7 +67,7 @@ func (p *Pipeline) Handler() http.Handler {
 		}
 
 		w.Header().Set("Content-Type", out.contentType)
-		w.Header().Set("Cache-Control", p.opts.CacheControl)
+		w.Header().Set("Cache-Control", cacheControlUntil(p.opts.CacheControl, exp.Sub(p.clk.Now())))
 		w.Header().Set("Content-Length", strconv.Itoa(len(out.body)))
 		w.WriteHeader(http.StatusOK)
 		if r.Method != http.MethodHead {
@@ -68,6 +77,51 @@ func (p *Pipeline) Handler() http.Handler {
 			}
 		}
 	})
+}
+
+// cacheControlUntil preserves configured directives while ensuring freshness
+// never extends past the authenticated URL lifetime.
+func cacheControlUntil(configured string, remaining time.Duration) string {
+	maxAge := max(int64(remaining/time.Second), int64(0))
+	directives := strings.Split(configured, ",")
+	out := make([]string, 0, len(directives)+1)
+	hasMaxAge := false
+	hasSharedMaxAge := false
+	for _, raw := range directives {
+		directive := strings.TrimSpace(raw)
+		name, value, found := strings.Cut(directive, "=")
+		normalizedName := strings.TrimSpace(name)
+		if strings.EqualFold(normalizedName, "max-age") {
+			if !hasMaxAge {
+				out = append(out, boundedCacheAge("max-age", value, found, maxAge))
+				hasMaxAge = true
+			}
+			continue
+		}
+		if strings.EqualFold(normalizedName, "s-maxage") {
+			if !hasSharedMaxAge {
+				out = append(out, boundedCacheAge("s-maxage", value, found, maxAge))
+				hasSharedMaxAge = true
+			}
+			continue
+		}
+		out = append(out, directive)
+	}
+	if !hasMaxAge {
+		out = append(out, "max-age="+strconv.FormatInt(maxAge, 10))
+	}
+	return strings.Join(out, ", ")
+}
+
+func boundedCacheAge(name, value string, hasValue bool, ceiling int64) string {
+	want := ceiling
+	if hasValue {
+		configured, err := strconv.ParseInt(strings.Trim(strings.TrimSpace(value), `"`), 10, 64)
+		if err == nil && configured >= 0 {
+			want = min(want, configured)
+		}
+	}
+	return name + "=" + strconv.FormatInt(want, 10)
 }
 
 // writeVerifyError maps a Verify error to the right status. Malformed input is a

@@ -32,6 +32,35 @@ func newNotifier(senders ...notify.Sender) *notify.Notifier {
 	return notify.New(discardLogger(), opts...)
 }
 
+func TestNewHandlesNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	t.Run("logger", func(t *testing.T) {
+		t.Parallel()
+		notifier := notify.New(nil)
+		if err := notifier.Send(t.Context(), notify.Message{}); err != nil {
+			t.Fatalf("Send with no senders: %v", err)
+		}
+	})
+
+	t.Run("sender", func(t *testing.T) {
+		t.Parallel()
+		var sender *mockSender
+		notifier := notify.New(discardLogger(), notify.WithSender(sender))
+		if err := notifier.Send(t.Context(), notify.Message{}); err != nil {
+			t.Fatalf("Send with typed-nil sender: %v", err)
+		}
+	})
+
+	t.Run("option", func(t *testing.T) {
+		t.Parallel()
+		notifier := notify.New(discardLogger(), nil)
+		if err := notifier.Send(t.Context(), notify.Message{}); err != nil {
+			t.Fatalf("Send with nil option: %v", err)
+		}
+	})
+}
+
 func TestSendFirstSucceeds(t *testing.T) {
 	t.Parallel()
 	a := &mockSender{name: "a"}

@@ -20,6 +20,7 @@ package pg
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"testing"
 	"time"
@@ -28,17 +29,17 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 // Defaults for the spawned container — kept small + deterministic.
 const (
-	defaultImage    = "postgres:17-alpine"
 	defaultDB       = "test"
 	defaultUser     = "test"
 	defaultPassword = "test"
 	// startTimeout bounds one container start (HISS-02) — image pull included.
-	// It is deliberately generous: the CI ARC runners begin every job with an
+	// It is deliberately generous: the CI runners begin every job with an
 	// empty Docker image cache (docker info: "Images: 0") and `go test ./...`
 	// launches every testcontainers-backed package at once, so one pull
 	// competes with half a dozen others (timescaledb alone is >2 GB
@@ -47,11 +48,14 @@ const (
 	// fallback for cold caches, not the expected path. The other testutil
 	// container helpers (clickhouse, kafka, nats, redis) use the same value.
 	startTimeout = 3 * time.Minute
+	// terminateTimeout bounds teardown (HISS-02): testcontainers' 10 s stop
+	// grace plus container and volume removal.
+	terminateTimeout = 30 * time.Second
 )
 
 // Options tweak the container. Zero value uses defaults.
 type Options struct {
-	// Image is the postgres image tag. Default "postgres:17-alpine".
+	// Image is an immutable Postgres image reference. Empty uses the repository pin.
 	Image string
 	// Database is the initial database name. Default "test".
 	Database string
@@ -65,7 +69,7 @@ type Options struct {
 
 func (o Options) withDefaults() Options {
 	if o.Image == "" {
-		o.Image = defaultImage
+		o.Image = testimages.Postgres
 	}
 	if o.Database == "" {
 		o.Database = defaultDB
@@ -99,23 +103,7 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	customizers := append([]testcontainers.ContainerCustomizer{
-		tcpostgres.WithDatabase(o.Database),
-		tcpostgres.WithUsername(o.User),
-		tcpostgres.WithPassword(o.Password),
-		tcpostgres.BasicWaitStrategies(),
-	}, o.Customizers...)
-
-	container, err := tcpostgres.Run(ctx, o.Image, customizers...)
-	if err != nil {
-		t.Fatalf("testutil/pg: start container: %v", err)
-	}
-	t.Cleanup(func() {
-		// Use background ctx — the test ctx may be cancelled already.
-		if termErr := container.Terminate(context.Background()); termErr != nil {
-			t.Logf("testutil/pg: terminate container: %v", termErr)
-		}
-	})
+	container := runContainer(ctx, t, o)
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
@@ -133,15 +121,6 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	}
 	return pool
 }
-
-// Defaults for the specialised replication + TimescaleDB containers.
-const (
-	// defaultTimescaleImage is pinned to a released TimescaleDB tag rather than
-	// the floating latest-pg17 so runs are reproducible and CI can pre-pull the
-	// exact image. Bump deliberately, and keep the CI pre-pull list
-	// (.github/workflows/ci.yml) and testutil/pg/AGENTS.md in sync.
-	defaultTimescaleImage = "timescale/timescaledb:2.30.0-pg17"
-)
 
 // StartReplication boots a Postgres container configured for logical
 // replication (wal_level=logical) and returns a connected pool together with
@@ -210,7 +189,7 @@ func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
 		o = opts[0]
 	}
 	if o.Image == "" {
-		o.Image = defaultTimescaleImage
+		o.Image = testimages.Timescale
 	}
 	o = o.withDefaults()
 
@@ -247,24 +226,43 @@ func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.Post
 	if testing.Short() {
 		t.Skip("testutil/pg: container-backed; skipped under -short")
 	}
+	if err := testimages.Validate(o.Image); err != nil {
+		t.Fatalf("testutil/pg: validate image: %v", err)
+	}
 	customizers := append([]testcontainers.ContainerCustomizer{
 		tcpostgres.WithDatabase(o.Database),
 		tcpostgres.WithUsername(o.User),
 		tcpostgres.WithPassword(o.Password),
 		tcpostgres.BasicWaitStrategies(),
 	}, o.Customizers...)
+	customizers = append(customizers, testimages.WithPinnedReaper())
 
 	container, err := tcpostgres.Run(ctx, o.Image, customizers...)
 	if err != nil {
 		t.Fatalf("testutil/pg: start container: %v", err)
 	}
-	// context.Background() not ctx: teardown must outlive the cancelled start ctx.
+	// Fresh ctx, not the start ctx: teardown must outlive the cancelled start ctx.
 	t.Cleanup(func() { //nolint:contextcheck // cleanup intentionally uses a fresh context, not the start ctx
-		if termErr := container.Terminate(context.Background()); termErr != nil {
-			t.Logf("testutil/pg: terminate container: %v", termErr)
+		if termErr := terminate(container, terminateTimeout); termErr != nil {
+			t.Logf("%v", termErr)
 		}
 	})
 	return container
+}
+
+// terminator is the container teardown surface [terminate] needs.
+type terminator interface {
+	Terminate(ctx context.Context, opts ...testcontainers.TerminateOption) error
+}
+
+// terminate stops and removes ctr under its own timeout.
+func terminate(ctr terminator, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	if err := ctr.Terminate(ctx); err != nil {
+		return fmt.Errorf("testutil/pg: terminate container: %w", err)
+	}
+	return nil
 }
 
 // DSN starts a container and returns its DSN (sslmode=disable). Use this when
@@ -287,22 +285,7 @@ func DSN(t *testing.T, opts ...Options) string {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	customizers := append([]testcontainers.ContainerCustomizer{
-		tcpostgres.WithDatabase(o.Database),
-		tcpostgres.WithUsername(o.User),
-		tcpostgres.WithPassword(o.Password),
-		tcpostgres.BasicWaitStrategies(),
-	}, o.Customizers...)
-
-	container, err := tcpostgres.Run(ctx, o.Image, customizers...)
-	if err != nil {
-		t.Fatalf("testutil/pg: start container: %v", err)
-	}
-	t.Cleanup(func() {
-		if termErr := container.Terminate(context.Background()); termErr != nil {
-			t.Logf("testutil/pg: terminate container: %v", termErr)
-		}
-	})
+	container := runContainer(ctx, t, o)
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {

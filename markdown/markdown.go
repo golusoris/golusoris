@@ -14,35 +14,47 @@ package markdown
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/v2/extension"
+	"github.com/yuin/goldmark/v2/parser"
+	"github.com/yuin/goldmark/v2/renderer/html"
 )
 
-var gm = goldmark.New(
-	goldmark.WithExtensions(
-		extension.GFM,         // tables, strikethrough, task lists, linkify
-		extension.Footnote,    // [^1] footnotes
-		extension.Typographer, // smart quotes, dashes
-	),
-	goldmark.WithParserOptions(
-		parser.WithAutoHeadingID(), // <h2 id="hello">
-	),
-	goldmark.WithRendererOptions(
+var (
+	gmParser = parser.New(
+		parser.WithAutoHeadingID(),
+		parser.WithExtensions(
+			extension.GFMParser,
+			extension.FootnoteParser,
+			extension.TypographerParser,
+		),
+	)
+	gmRenderer = html.New(
 		html.WithHardWraps(),
 		html.WithXHTML(),
-	),
+		html.WithExtensions(
+			extension.GFMHTMLRenderer,
+			extension.FootnoteHTMLRenderer,
+		),
+	)
 )
+
+func renderTo(buf *bytes.Buffer, src []byte) error {
+	doc := gmParser.Parse(src)
+	if err := gmRenderer.Render(buf, src, doc); err != nil {
+		return fmt.Errorf("goldmark render: %w", err)
+	}
+	return nil
+}
 
 // Render converts Markdown src to HTML. The output is not sanitized — callers
 // should run output through a sanitizer (e.g. bluemonday) when rendering
 // untrusted user content.
 func Render(src []byte) ([]byte, error) {
 	var buf bytes.Buffer
-	if err := gm.Convert(src, &buf); err != nil {
+	if err := renderTo(&buf, src); err != nil {
 		return nil, fmt.Errorf("markdown: render: %w", err)
 	}
 	return buf.Bytes(), nil
@@ -59,7 +71,10 @@ func RenderString(src string) (string, error) {
 
 // RenderTo writes the HTML representation of src to buf.
 func RenderTo(buf *bytes.Buffer, src []byte) error {
-	if err := gm.Convert(src, buf); err != nil {
+	if buf == nil {
+		return errors.New("markdown: convert: nil output buffer")
+	}
+	if err := renderTo(buf, src); err != nil {
 		return fmt.Errorf("markdown: convert: %w", err)
 	}
 	return nil

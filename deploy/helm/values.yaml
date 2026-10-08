@@ -9,7 +9,8 @@ replicaCount: 2
 image:
   repository: ghcr.io/example/myapp
   pullPolicy: IfNotPresent
-  tag: ""  # Defaults to chart appVersion
+  # Required at render time. Never substitute a tag.
+  digest: ""
 
 imagePullSecrets: []
 nameOverride: ""
@@ -101,9 +102,6 @@ networkPolicy:
   ingressNamespaceSelector: {}
   ingressPodSelector: {}
 
-ciliumNetworkPolicy:
-  enabled: false
-
 serviceMonitor:
   enabled: false
   interval: 15s
@@ -131,12 +129,11 @@ backup:
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
 
-  # Image with psql + aws CLI + coreutils. Default: amazonlinux-based
-  # runner that bundles both. Swap for any image that has pg_dump and
-  # aws CLI v2 on PATH.
+  # Supply an owned image with pg_dump, gzip, coreutils, and AWS CLI v2.
+  # Enabling backup without both fields makes Helm rendering fail closed.
   image:
-    repository: ghcr.io/golusoris/pg-backup
-    tag: "17.2"
+    repository: ""
+    digest: ""
     pullPolicy: IfNotPresent
 
   # Secret holding the database DSN. Key is the secret key name inside.

@@ -147,7 +147,6 @@ capability golusoris could add, or a deliberate non-goal worth recording as one.
 
 ## Proposal
 
-
 Synthesis of 58 classified fleet-demand gaps (Task N14) against the pre-migration epic (#429: #431 decoupling, #432 dependency substitution, #433 verification, #434 activation). Verified against the actual `golusoris` package tree and `go.mod` rather than taken at face value — several classified `nearest_golusoris` paths referenced a `core/` prefix and packages (`core/gitx`, `core/codec/yaml`) that do not exist anywhere in the repository; those are corrected below.
 
 **Scale**: 58 items, 51 VMAFx/vmafx-only, 7 shared with other fleet repos (lusoris/20-watts-was-enough ×4, lusoris/k8s ×2, cordanaLLM/imago + lusoris/venio ×1 via testify).
@@ -155,7 +154,7 @@ Synthesis of 58 classified fleet-demand gaps (Task N14) against the pre-migratio
 ### By cluster (consumers desc, effort asc within cluster)
 
 | Cluster | Items | Real target package | Effort | Unblocks |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | auth-crypto | 7 | new `supplychain` + `auth/oauth2client` | L | VMAFx, 20-watts-was-enough |
 | cli-tui | 5 | `clikit/tui` (mostly non-goals) | S | VMAFx |
 | cloud-provider-sdk | 6 | `pubsub` (GCP backend) + new `container/registry` | M | VMAFx |

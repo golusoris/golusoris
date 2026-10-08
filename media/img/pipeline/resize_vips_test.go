@@ -5,8 +5,8 @@
 //go:build imgvips
 
 // This integration test exercises a real libvips-backed resize through the
-// pipeline. It is gated behind the `imgvips` build tag (mirroring media/img's
-// activation pattern) and requires libvips + the govips dep:
+// pipeline. It is gated behind the `imgvips` build tag and requires libvips +
+// the test-only govips adapter:
 //
 //	go get github.com/davidbyttow/govips/v2
 //	go test -tags imgvips -race ./pipeline/...
@@ -35,8 +35,7 @@ import (
 	"github.com/golusoris/golusoris/media/img/pipeline"
 )
 
-// vipsProcessor is a minimal libvips-backed img.Processor for the integration
-// test (the parent media/img processor ships stubbed until govips is activated).
+// vipsProcessor is a minimal test-only libvips-backed img.Processor.
 type vipsProcessor struct{}
 
 func (vipsProcessor) Resize(_ context.Context, src []byte, w, h int, opts img.ResizeOptions) ([]byte, error) {

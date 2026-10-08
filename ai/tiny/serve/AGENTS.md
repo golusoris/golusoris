@@ -6,22 +6,22 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ai/tiny/serve — AGENTS.md
 
-Inference adapters for `tiny.Predictor`. Each subpackage wraps a
-specific runtime so loaded `tiny.Model` artifacts can be served via
-the unified `tiny.Predictor` interface.
+Inference adapters for `tiny.Predictor`. Each subpackage wraps specific runtime so loaded `tiny.Model` artifacts can be served via
+unified `tiny.Predictor` interface.
 
 ## Layout
 
 ```
 serve/
+  internal/httpoptions/ # shared bounded HTTP option normalization
   ollama/   # Ollama HTTP API → Gemma / Gemma 3n (text, generate)
-  tflite/   # Python sidecar → LiteRT classifiers (text/image/audio, classify)
+  tflite/   # HTTP client protocol for app-supplied LiteRT classifier sidecar
   fleet/    # distributed-inference recipe: Predictor over jobs/ + leader/
 ```
 
-The `fleet/` subpackage is not an adapter — it is a recipe that wires
-any `tiny.Predictor` behind a river worker + capability-matched queue so
-apps serve inference across a replica set without a bespoke controller.
+`fleet/` subpackage is not adapter — it is recipe that wires
+any `tiny.Predictor` behind river worker + capability-matched queue so
+apps serve inference across replica set without bespoke controller.
 
 ## Contract
 
@@ -35,14 +35,16 @@ type Predictor interface {
 }
 ```
 
-Each adapter validates the incoming `tiny.Model` against the modality
+Each adapter validates incoming `tiny.Model` against modality
 and task kind it supports, then serves predictions against its
 runtime. `Close` frees runtime resources; for stateless HTTP adapters
-it is a no-op.
+it is no-op.
+
+HTTP clients: clone caller client. Preserve positive timeout. Replace zero
+timeout with adapter bound: Ollama 60s; LiteRT 30s.
 
 ## Why separate from the trainers
 
 Training and inference have different runtime shapes: trainers are
-one-shot batch containers, serving is a long-running process (or HTTP
-client). Keeping them in sibling packages lets apps opt into just the
-predictor they need without pulling in training deps.
+one-shot batch containers, serving is long-running process (or HTTP
+client). Keeping them in sibling packages lets apps opt into predictor they need without pulling in training deps.

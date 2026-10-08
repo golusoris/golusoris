@@ -6,9 +6,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — media/3d/
 
-Thin wrapper over g3n/engine for 3D rendering. Package name is `threed` (the dir
-is `3d`). Direct-import constructor — **no fx wiring**; this is a windowed render
-loop, not a server component.
+Thin wrapper over g3n/engine for 3D rendering. Package name is `threed` (dir
+is `3d`). Direct-import constructor — **no fx wiring**; this is windowed render
+loop, not server component.
 
 ## API
 
@@ -18,18 +18,19 @@ scene := threed.NewScene()    // *core.Node root; add meshes/lights/cameras
 err = app.Run(scene)          // blocks on the g3n render loop; first render error
 ```
 
-`threed.Scene` is an alias for g3n `core.Node`. g3n v0.2 owns a single global
+`threed.Scene` is alias for g3n `core.Node`. g3n v0.2 owns single global
 window via `app.App()` — title/size are g3n-managed, not constructor args.
 
 ## Why g3n/engine
 
-- The most complete pure-Go 3D engine (scene graph, shaders, GLTF loaders) that
-  binds OpenGL directly rather than wrapping a C engine.
+- most complete pure-Go 3D engine (scene graph, shaders, GLTF loaders) that
+ binds OpenGL directly rather than wrapping C engine.
 
 ## Notes
 
-- **CGO-gated, own go.mod sub-module.** Pulls OpenGL/GLFW drivers — needs a GPU and
-  a display server; will not run on a headless CI box. Import directly:
+- **Linux+CGO renderer, own go.mod sub-module.** Pulls OpenGL/GLFW drivers and
+  needs GPU plus display server. Other builds keep scene types available;
+  `NewApp` and `Run` return `ErrUnsupported`. Import directly:
   `github.com/golusoris/golusoris/media/3d`.
-- `App.Run` blocks the calling goroutine until the window closes — own the main
-  goroutine; do not call it from inside an fx lifecycle hook.
+- `App.Run` blocks calling goroutine until window closes — own main
+ goroutine; do not call it from inside fx lifecycle hook.

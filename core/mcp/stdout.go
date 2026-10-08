@@ -11,6 +11,8 @@ import (
 	"os"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // stdin is the reader the stdio transport reads JSON-RPC from. It is a package
@@ -48,7 +50,7 @@ type stdoutRedirect struct {
 // sink, and returns the redirect handle plus the pinned real stdout writer.
 // Callers must call Close to restore os.Stdout. A nil sink defaults to stderr.
 func installStdoutRedirect(sink io.Writer) (*stdoutRedirect, *os.File, error) {
-	if sink == nil {
+	if validate.IsNil(sink) {
 		sink = os.Stderr
 	}
 	readEnd, writeEnd, err := os.Pipe()

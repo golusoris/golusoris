@@ -11,8 +11,8 @@ Decodes HTML form submissions into Go structs via go-playground/form/v4.
 ## Conventions
 
 - App code calls `r.ParseForm()` then `dec.Decode(&req, r.PostForm)`.
-- Struct tags: `form:"field_name"`. Missing-field errors flow through as `*gerr.Error` with `CodeBadRequest` — app handlers can return them directly through ogenkit / the JSON error path.
-- Validation is a separate step: after Decode, run the struct through `validate.Validator` (in `golusoris/validate`).
+- Struct tags: `form:"field_name"`. Missing-field errors flow through as `*gerr.Error` with `CodeBadRequest` — app handlers can return them directly through ogenkit / JSON error path.
+- Validation is separate step: after Decode, run struct through `validate.Validator` in `github.com/golusoris/golusoris/core/validate`.
 
 ## Don't
 

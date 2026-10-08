@@ -21,6 +21,7 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
+	"encoding/base32"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -30,6 +31,7 @@ import (
 	"github.com/jonboulle/clockwork"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate"
 	tokenhash "github.com/golusoris/golusoris/hash"
 )
 
@@ -56,15 +58,17 @@ type Token struct {
 // CodeStore persists recovery-code records.
 type CodeStore interface {
 	SaveBatch(ctx context.Context, codes []Code) error
-	FindForUser(ctx context.Context, userID string) ([]Code, error)
-	MarkUsed(ctx context.Context, userID string, hash []byte) error
+	// Consume atomically returns and marks one matching unused code as used.
+	// Missing and already-used codes return an error.
+	Consume(ctx context.Context, userID string, hash []byte) (Code, error)
 }
 
 // TokenStore persists reset-token records.
 type TokenStore interface {
 	Save(ctx context.Context, t Token) error
-	Find(ctx context.Context, hash []byte) (Token, error)
-	MarkUsed(ctx context.Context, hash []byte) error
+	// Consume atomically returns and marks one matching unused token as used.
+	// Missing and already-used tokens return an error.
+	Consume(ctx context.Context, hash []byte) (Token, error)
 }
 
 // Service issues + validates recovery codes and reset tokens.
@@ -77,15 +81,30 @@ type Service struct {
 
 // New returns a Service. secret is the HMAC key used to hash codes and
 // tokens before storage; an empty secret is an error. Either store may
-// be nil if the corresponding flow is not used.
+// be nil if the corresponding flow is not used, but at least one store
+// must be configured.
 func New(codes CodeStore, tokens TokenStore, clk clockwork.Clock, secret []byte) (*Service, error) {
-	if len(secret) == 0 {
-		return nil, errors.New("recovery: secret must not be empty")
+	if validate.IsNil(codes) {
+		codes = nil
 	}
-	if clk == nil {
+	if validate.IsNil(tokens) {
+		tokens = nil
+	}
+	if codes == nil && tokens == nil {
+		return nil, errors.New("recovery: at least one store must be configured")
+	}
+	if err := tokenhash.ValidateHMACSHA256Key(secret); err != nil {
+		return nil, fmt.Errorf("recovery: secret: %w", err)
+	}
+	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
-	return &Service{codes: codes, tokens: tokens, clk: clk, secret: secret}, nil
+	return &Service{
+		codes:  codes,
+		tokens: tokens,
+		clk:    clk,
+		secret: append([]byte(nil), secret...),
+	}, nil
 }
 
 // IssueCodes generates n one-time recovery codes for userID. Returns the
@@ -93,6 +112,10 @@ func New(codes CodeStore, tokens TokenStore, clk clockwork.Clock, secret []byte)
 func (s *Service) IssueCodes(ctx context.Context, userID string, n int) ([]string, error) {
 	if s.codes == nil {
 		return nil, errors.New("recovery: no code store configured")
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return nil, gerr.Validation("recovery: userID required")
 	}
 	if n < 1 || n > 32 {
 		return nil, gerr.Validation("recovery: n must be 1..32")
@@ -120,22 +143,14 @@ func (s *Service) VerifyCode(ctx context.Context, userID, raw string) error {
 		return errors.New("recovery: no code store configured")
 	}
 	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
-	all, err := s.codes.FindForUser(ctx, userID)
+	code, err := s.codes.Consume(ctx, userID, hash)
 	if err != nil {
-		return fmt.Errorf("recovery: lookup: %w", err)
+		return fmt.Errorf("%w: recovery: consume code: %w", gerr.Unauthorized("recovery: invalid code"), err)
 	}
-	for _, c := range all {
-		if c.UsedAt != nil {
-			continue
-		}
-		if hmac.Equal(c.Hash, hash) {
-			if markErr := s.codes.MarkUsed(ctx, userID, hash); markErr != nil {
-				return fmt.Errorf("recovery: mark used: %w", markErr)
-			}
-			return nil
-		}
+	if !hmac.Equal(code.Hash, hash) {
+		return gerr.Unauthorized("recovery: code mismatch")
 	}
-	return gerr.Unauthorized("recovery: invalid code")
+	return nil
 }
 
 // IssueResetToken creates a single-use reset token valid for ttl.
@@ -143,6 +158,13 @@ func (s *Service) VerifyCode(ctx context.Context, userID, raw string) error {
 func (s *Service) IssueResetToken(ctx context.Context, userID string, ttl time.Duration) (string, error) {
 	if s.tokens == nil {
 		return "", errors.New("recovery: no token store configured")
+	}
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return "", gerr.Validation("recovery: userID required")
+	}
+	if ttl <= 0 {
+		return "", gerr.Validation("recovery: ttl must be positive")
 	}
 	raw, err := randomToken()
 	if err != nil {
@@ -167,18 +189,15 @@ func (s *Service) VerifyResetToken(ctx context.Context, raw string) (string, err
 		return "", errors.New("recovery: no token store configured")
 	}
 	hash := tokenhash.HMACSHA256(s.secret, []byte(raw))
-	t, err := s.tokens.Find(ctx, hash)
+	t, err := s.tokens.Consume(ctx, hash)
 	if err != nil {
-		return "", fmt.Errorf("%w: recovery: find: %w", gerr.Unauthorized("invalid reset token"), err)
+		return "", fmt.Errorf("%w: recovery: consume token: %w", gerr.Unauthorized("invalid reset token"), err)
 	}
-	if t.UsedAt != nil {
-		return "", gerr.Unauthorized("reset token already used")
-	}
-	if s.clk.Now().After(t.ExpiresAt) {
+	if !s.clk.Now().Before(t.ExpiresAt) {
 		return "", gerr.Unauthorized("reset token expired")
 	}
-	if useErr := s.tokens.MarkUsed(ctx, hash); useErr != nil {
-		return "", fmt.Errorf("recovery: mark used: %w", useErr)
+	if !hmac.Equal(t.Hash, hash) {
+		return "", gerr.Unauthorized("reset token mismatch")
 	}
 	return t.UserID, nil
 }
@@ -189,7 +208,7 @@ func randomCode() (string, error) {
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("recovery: rand: %w", err)
 	}
-	return strings.TrimRight(base64.RawURLEncoding.EncodeToString(b), "="), nil
+	return strings.TrimRight(base32.StdEncoding.EncodeToString(b), "="), nil
 }
 
 func randomToken() (string, error) {

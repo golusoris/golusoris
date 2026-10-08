@@ -15,29 +15,29 @@
 //
 // Usage:
 //
-//	c := anthropic.New(anthropic.Config{
+//	c, err := anthropic.New(anthropic.Config{
 //	    APIKey: os.Getenv("ANTHROPIC_API_KEY"),
 //	    Model:  "claude-opus-4-1",
 //	})
+//	if err != nil { /* handle invalid configuration */ }
 //	resp, _ := c.Chat(ctx, []llm.Message{
 //	    {Role: llm.RoleUser, Content: "Hello"},
 //	})
 package anthropic
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golusoris/golusoris/ai/llm"
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // DefaultEndpoint is Anthropic's v1 Messages API.
@@ -62,8 +62,18 @@ type Config struct {
 	Version string `koanf:"version"`
 	// Timeout is the HTTP client timeout. Default 120s.
 	Timeout time.Duration `koanf:"timeout"`
-	// HTTPClient is optional; when set, replaces the default client.
+	// HTTPClient supplies transport, redirect, and cookie policy. New clones it
+	// and applies Timeout when source timeout is non-positive.
 	HTTPClient *http.Client
+	// MaxResponseBytes caps each successful non-streaming response. Zero uses
+	// [llm.DefaultMaxResponseBytes].
+	MaxResponseBytes int64 `koanf:"max_response_bytes"`
+	// MaxErrorBytes caps each non-success response. Zero uses
+	// [llm.DefaultMaxErrorBytes].
+	MaxErrorBytes int64 `koanf:"max_error_bytes"`
+	// MaxStreamFrameBytes caps one SSE frame. Zero uses
+	// [llm.DefaultMaxStreamFrameBytes].
+	MaxStreamFrameBytes int `koanf:"max_stream_frame_bytes"`
 }
 
 // Client implements [llm.Client] against Anthropic's API.
@@ -75,7 +85,18 @@ type Client struct {
 }
 
 // New returns an Anthropic client.
-func New(cfg Config) *Client {
+func New(cfg Config) (*Client, error) {
+	bounds, err := llm.NormalizeHTTPBounds(llm.HTTPBounds{
+		Timeout: cfg.Timeout, MaxResponseBytes: cfg.MaxResponseBytes,
+		MaxErrorBytes: cfg.MaxErrorBytes, MaxStreamFrameBytes: cfg.MaxStreamFrameBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: validate HTTP bounds: %w", err)
+	}
+	cfg.Timeout = bounds.Timeout
+	cfg.MaxResponseBytes = bounds.MaxResponseBytes
+	cfg.MaxErrorBytes = bounds.MaxErrorBytes
+	cfg.MaxStreamFrameBytes = bounds.MaxStreamFrameBytes
 	endpoint := cfg.Endpoint
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
@@ -84,18 +105,11 @@ func New(cfg Config) *Client {
 	if version == "" {
 		version = DefaultVersion
 	}
-	timeout := cfg.Timeout
-	if timeout == 0 {
-		timeout = 120 * time.Second
-	}
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: timeout}
-	}
+	hc := httpclient.CloneBounded(cfg.HTTPClient, cfg.Timeout)
 	if cfg.MaxTokens == 0 {
 		cfg.MaxTokens = 1024
 	}
-	return &Client{cfg: cfg, endpoint: endpoint, version: version, hc: hc}
+	return &Client{cfg: cfg, endpoint: endpoint, version: version, hc: hc}, nil
 }
 
 // Chat implements [llm.Client].
@@ -115,11 +129,18 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "anthropic: close response body") }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return llm.Response{}, fmt.Errorf("anthropic: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return llm.Response{}, fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, raw)
 	}
 	var out messagesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	raw, err := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxResponseBytes)
+	if err != nil {
+		return llm.Response{}, fmt.Errorf("anthropic: read response: %w", err)
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return llm.Response{}, fmt.Errorf("anthropic: decode: %w", err)
 	}
 	var sb strings.Builder
@@ -138,7 +159,9 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 
 // Stream implements [llm.Client]. Uses Anthropic's SSE streaming.
 func (c *Client) Stream(ctx context.Context, messages []llm.Message, opts ...llm.Option) <-chan llm.Chunk {
-	return llm.RunStream(func(ch chan<- llm.Chunk) error { return c.stream(ctx, messages, opts, ch) })
+	return llm.RunStreamContext(ctx, func(ch chan<- llm.Chunk) error {
+		return c.stream(ctx, messages, opts, ch)
+	})
 }
 
 // stream performs one SSE request and forwards text deltas onto ch.
@@ -158,19 +181,25 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "anthropic: close stream body") }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return fmt.Errorf("anthropic: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("anthropic: HTTP %d: %s", resp.StatusCode, raw)
 	}
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for scanner.Scan() {
-		if text, ok := textDelta(scanner.Text()); ok {
-			ch <- llm.Chunk{Content: text}
+	scanErr := llm.ScanStreamLines(resp.Body, c.cfg.MaxStreamFrameBytes, func(line []byte) (bool, error) {
+		text, done, parseErr := parseStreamLine(string(line))
+		if parseErr != nil {
+			return false, parseErr
 		}
-	}
-	// A dropped connection, a cancelled ctx or an over-long line ends
-	// Scan early; surface it instead of reporting a clean end-of-stream.
-	if scanErr := scanner.Err(); scanErr != nil {
+		if text != "" {
+			if err := llm.SendChunk(ctx, ch, llm.Chunk{Content: text}); err != nil {
+				return false, fmt.Errorf("anthropic: send delta: %w", err)
+			}
+		}
+		return done, nil
+	})
+	if scanErr != nil {
 		return fmt.Errorf("anthropic: stream: %w", scanErr)
 	}
 	return nil
@@ -178,22 +207,36 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 
 // textDelta reports the text carried by one SSE line. Only a
 // content_block_delta event with a non-empty text_delta yields ok; a line
-// without the "data: " prefix, the [DONE] sentinel, an unparsable payload
-// and any other event type are all skipped, exactly as the stream loop
-// used to skip them inline.
+// without the "data: " prefix, a terminator, an unparsable payload, and any
+// other event type yield no text. The stream loop uses parseStreamLine so
+// malformed and provider-error payloads remain fatal.
 func textDelta(line string) (string, bool) {
+	text, done, err := parseStreamLine(line)
+	return text, err == nil && !done && text != ""
+}
+
+func parseStreamLine(line string) (string, bool, error) {
 	data, found := strings.CutPrefix(line, "data: ")
-	if !found || data == "" || data == "[DONE]" {
-		return "", false
+	if !found || data == "" {
+		return "", false, nil
 	}
 	var ev streamEvent
 	if err := json.Unmarshal([]byte(data), &ev); err != nil {
-		return "", false
+		return "", false, fmt.Errorf("invalid Anthropic stream event: %w", err)
+	}
+	if ev.Type == "message_stop" {
+		return "", true, nil
+	}
+	if ev.Type == "error" {
+		if ev.Error.Message == "" {
+			return "", false, errors.New("anthropic stream provider error")
+		}
+		return "", false, fmt.Errorf("anthropic stream provider error: %s", ev.Error.Message)
 	}
 	if ev.Type != "content_block_delta" || ev.Delta.Type != "text_delta" {
-		return "", false
+		return "", false, nil
 	}
-	return ev.Delta.Text, ev.Delta.Text != ""
+	return ev.Delta.Text, false, nil
 }
 
 // Embed implements [llm.Client]. Anthropic does not expose an
@@ -262,4 +305,8 @@ type streamEvent struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	} `json:"delta"`
+	Error struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error"`
 }

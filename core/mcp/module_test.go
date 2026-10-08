@@ -6,7 +6,6 @@ package mcp_test
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net"
 	"os"
@@ -24,6 +23,8 @@ import (
 
 // discardLogger returns a stderr-safe no-op logger for tests.
 func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
+
+type pingInput struct{}
 
 // freeAddr reserves a loopback TCP port, closes the listener, and returns the
 // address. There is a small reuse race, but it is the standard way to get a
@@ -70,14 +71,14 @@ func TestModule_HTTPTransport(t *testing.T) {
 		fx.Provide(discardLogger),
 		mcp.Module,
 		fx.Invoke(func(s *mcp.Server) {
-			s.AddTool(
+			mcp.AddTool[pingInput, any](
+				s,
 				&mcp.Tool{
 					Name:        "ping",
 					Description: "returns pong",
-					InputSchema: json.RawMessage(`{"type":"object"}`),
 				},
-				func(context.Context, *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "pong"}}}, nil
+				func(context.Context, *mcp.CallToolRequest, pingInput) (*mcp.CallToolResult, any, error) {
+					return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: "pong"}}}, nil, nil
 				},
 			)
 		}),
@@ -108,6 +109,17 @@ func TestModule_HTTPTransport(t *testing.T) {
 	}
 	if got := textOf(t, res); got != "pong" {
 		t.Fatalf("expected 'pong', got %q", got)
+	}
+
+	invalid, err := session.CallTool(ctx, &sdkmcp.CallToolParams{
+		Name:      "ping",
+		Arguments: map[string]any{"unexpected": true},
+	})
+	if err != nil {
+		t.Fatalf("call schema-invalid tool: %v", err)
+	}
+	if !invalid.IsError {
+		t.Fatalf("schema-invalid call returned success; content=%v", invalid.Content)
 	}
 }
 

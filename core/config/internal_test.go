@@ -144,6 +144,7 @@ func TestFire_invokesListeners(t *testing.T) {
 	}
 	var called int
 	c.OnChange(func() { called++ })
+	c.OnChange(nil)
 	c.fire()
 	c.fire()
 	if called != 2 {

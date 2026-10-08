@@ -31,6 +31,7 @@ package pgx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -42,6 +43,7 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/validate"
 )
 
 // Options configures the pgx pool. Zero value is mostly usable after
@@ -143,16 +145,63 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	if opts.DSN == "" {
 		return Options{}, errMissingDSN
 	}
+	if err := validateOptions(opts); err != nil {
+		return Options{}, err
+	}
 	return opts, nil
+}
+
+func validateOptions(opts Options) error {
+	if err := validatePoolOptions(opts.Pool); err != nil {
+		return err
+	}
+	if opts.ConnectTimeout <= 0 {
+		return errors.New("db/pgx: connect timeout must be positive")
+	}
+	if opts.Tracing.Slow < 0 {
+		return errors.New("db/pgx: slow-query threshold must not be negative")
+	}
+	return validateRetryOptions(opts.Retry)
+}
+
+func validatePoolOptions(opts PoolOptions) error {
+	if opts.Min < 0 || opts.Max <= 0 {
+		return errors.New("db/pgx: pool minimum must be nonnegative and maximum positive")
+	}
+	if opts.Min > opts.Max {
+		return errors.New("db/pgx: pool minimum exceeds maximum")
+	}
+	if opts.Lifetime < 0 || opts.Idle < 0 || opts.Healthcheck < 0 {
+		return errors.New("db/pgx: pool durations must not be negative")
+	}
+	return nil
+}
+
+func validateRetryOptions(opts RetryOptions) error {
+	if opts.Attempts <= 0 {
+		return errors.New("db/pgx: retry attempts must be positive")
+	}
+	if opts.Initial <= 0 || opts.Max <= 0 {
+		return errors.New("db/pgx: retry delays must be positive")
+	}
+	if opts.Initial > opts.Max {
+		return errors.New("db/pgx: initial retry delay exceeds maximum")
+	}
+	return nil
 }
 
 // composeTracer combines the optional built-in slow-query tracer with any
 // app-supplied tracers into one pgx.QueryTracer (nil when there are none,
 // the single tracer when there is one, else a multitracer).
 func composeTracer(slow pgx.QueryTracer, custom []pgx.QueryTracer) pgx.QueryTracer {
-	tracers := custom
-	if slow != nil {
-		tracers = append([]pgx.QueryTracer{slow}, custom...)
+	tracers := make([]pgx.QueryTracer, 0, len(custom)+1)
+	if !validate.IsNil(slow) {
+		tracers = append(tracers, slow)
+	}
+	for _, tracer := range custom {
+		if !validate.IsNil(tracer) {
+			tracers = append(tracers, tracer)
+		}
 	}
 	switch len(tracers) {
 	case 0:
@@ -171,6 +220,15 @@ func New(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock
 	opts = opts.withDefaults()
 	if opts.DSN == "" {
 		return nil, errMissingDSN
+	}
+	if err := validateOptions(opts); err != nil {
+		return nil, err
+	}
+	if logger == nil {
+		return nil, errors.New("db/pgx: nil logger")
+	}
+	if validate.IsNil(clk) {
+		return nil, errors.New("db/pgx: nil clock")
 	}
 
 	cfg, err := pgxpool.ParseConfig(opts.DSN)
@@ -239,12 +297,16 @@ func connectWithRetry(
 			return nil, fmt.Errorf("db/pgx: connect canceled: %w", ctx.Err())
 		case <-clk.After(delay):
 		}
-		delay *= 2
-		if delay > opts.Retry.Max {
-			delay = opts.Retry.Max
-		}
+		delay = nextRetryDelay(delay, opts.Retry.Max)
 	}
 	return nil, fmt.Errorf("db/pgx: connect failed after %d attempts: %w", opts.Retry.Attempts, lastErr)
+}
+
+func nextRetryDelay(delay, maximum time.Duration) time.Duration {
+	if delay >= maximum || delay > maximum/2 {
+		return maximum
+	}
+	return delay * 2
 }
 
 // Module provides a [*pgxpool.Pool] built from config.Config["db"], with

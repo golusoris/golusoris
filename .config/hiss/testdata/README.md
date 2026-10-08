@@ -17,39 +17,30 @@ fixture that demonstrates it. This tree is that demonstration, laid out the way
               stay silent, and the day it fires the declaration is wrong
 ```
 
-`scripts/hiss/semgrep-fixtures.sh` (`make hiss-fixtures`, and a step in CI's
-semgrep lane) replays the corpus against `.semgrep.yml` in all three
-directions. A rule that stops firing on its positive fixtures fails; so does a
-rule that starts matching the legitimate shape its negative fixtures pin; so
-does a rule that quietly grows past a declared gap. The catalogue therefore
-fails when it becomes too optimistic, when it becomes too pessimistic, **and**
-when a documented limit stops being true — which is the only way a rule comment
-that says "this shape is not decided" can stay honest.
+`praetorctl hiss coverage --verify` replays scanner claims. Delegated runner
+claims use focused policy tests for each declared runner. A
+rule that stops firing on its positive fixture fails; so does one that reports
+its negative or grows past a declared gap. The catalogue then fails when it
+overstates or understates coverage.
 
-A positive fixture must be reported by a rule the script maps to that
-invariant, not merely by some rule: firing for an unrelated reason proves
-nothing about the invariant the fixture is filed under. The map lives at the top
-of the replay script, and an invariant directory with no entry there fails.
+A positive fixture must be reported by its declared invariant, not merely by an
+unrelated rule: an unrelated finding proves nothing about the claim.
 
 ## Conventions
 
-- Fixtures are ordinary `.go` files in `package p`. They are never compiled:
-  the Go tool skips directories beginning with `.` (and any `testdata`), so
-  `go build ./...`, `go vet` and golangci-lint never see them.
-- They are excluded from the two semgrep gates that scan the repository itself:
-  a `paths.exclude` entry on each rule in `.semgrep.yml`, and a
-  `--exclude .config/hiss/testdata` on the registry-ruleset scan in
-  `.github/workflows/security-scan.yml`. The positive and gap fixtures are
-  violations by construction — `p/golang` and `p/security-audit` report the
-  `unsafe` and `reflect.MakeFunc` ones just as readily as our own rules do — and
-  that job gates. The replay works around its own exclusion by scanning a
-  temporary copy.
+- Go fixtures use `package p`. The Go tool skips dot-prefixed testdata, so
+  build, vet, and golangci-lint never compile them.
+- Shell and workflow-YAML fixtures stay outside the production selectors. Their
+  policy tests invoke the pinned tools directly.
+- Custom Semgrep fixtures live separately under
+  `.config/hiss/semgrep/testdata/`; `scripts/hiss/semgrep-fixtures.sh` replays
+  them from a temporary copy using the declared Semgrep image digest.
 - One shape per fixture, named after the shape (`plugin-open.go`,
   `semaphore-channel.go`), with a doc comment saying why it is or is not a
   violation, and — for a `gap/` fixture — what would have to change for the rule
   to decide it.
 
-## Covered today
+## Custom Semgrep coverage
 
 | Rule | Invariant | semgrep rule id |
 | --- | --- | --- |
@@ -62,7 +53,29 @@ the shapes it does not** — an absent claim is honest, an unbacked one is the
 defect this mechanism exists to prevent. The `gap/` fixtures are what hold the
 second half of that comment to account.
 
-No `.config/hiss/coverage.yaml` is shipped here yet, so `praetorctl hiss
-coverage --verify` has nothing to consume: this corpus is exercised by
-`scripts/hiss/semgrep-fixtures.sh` alone. The catalogue file that declares
-per-rule, per-language states over these fixtures is a separate change.
+## Delegated HISS-10 coverage
+
+| Language | Runner | Replay |
+| --- | --- | --- |
+| Python | Ruff | `scripts/ci/python-lint-policy_test.sh` |
+| C | Clang + clang-tidy | `scripts/ci/c-quality-policy_test.sh` |
+| Markdown | Praetor documentation gate (`tools/markdownlint/verify.mjs`) | Praetor's locked `node tools/markdownlint/verify.mjs --self-test` |
+| MkDocs Markdown | MkDocs strict build | `scripts/ci/mkdocs-build-policy_test.sh` |
+| Shell | ShellCheck | `scripts/ci/shellcheck-policy_test.sh` |
+| Workflow YAML | actionlint | `scripts/ci/actionlint-policy_test.sh` |
+| HCL | Terraform | `scripts/ci/terraform-policy_test.sh` |
+| Kubernetes YAML | kubeconform | `scripts/ci/kubeconform-policy_test.sh` |
+
+`.config/hiss/coverage.yaml` declares scanner and delegated states.
+`praetorctl hiss coverage --verify` verifies scanner claims and attribution;
+each delegated policy test proves its tool's positive, negative, and gap
+fixtures.
+
+HISS-15 Python execution is replayed by
+`scripts/ci/python-tests-policy_test.sh`; its passing positive-only gap records
+that unittest execution cannot decide 3D test shape.
+
+HISS-21 Go portability is replayed by `scripts/ci/portability_test.py` and the
+three-OS workflow. Its gap records that a successful `go test -short` can still
+contain only a stated platform skip; the driver prevents zero modules, packages,
+or phases, but does not reinterpret Go test events.

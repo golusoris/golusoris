@@ -41,6 +41,7 @@ We will use `github.com/riverqueue/river` as the background job system. The fram
 
 ## References
 
-- river pinned at v0.34.0 — see [`docs/upstream/river/`](../upstream/river/).
+- The decision evaluated river v0.34.0. The maintained current pin is recorded in
+  [`docs/upstream/river/`](../upstream/river/README.md).
 - [`outbox/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/outbox/AGENTS.md) — dispatcher contract.
 - [`jobs/AGENTS.md`](https://github.com/golusoris/golusoris/blob/main/jobs/AGENTS.md) — worker registration patterns.

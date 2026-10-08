@@ -12,7 +12,7 @@
     },
     {
       "name": "Standards: Audit",
-      "shell_cmd": "standardsctl audit",
+      "shell_cmd": "praetorctl audit",
       "working_dir": "$project_path"
     }
   ],

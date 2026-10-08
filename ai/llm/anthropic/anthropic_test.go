@@ -8,17 +8,137 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/ai/llm"
 	"github.com/golusoris/golusoris/ai/llm/anthropic"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
+
+func TestNewRejectsNegativeTimeout(t *testing.T) {
+	t.Parallel()
+	client, err := anthropic.New(anthropic.Config{Timeout: -time.Second})
+	require.Error(t, err)
+	require.Nil(t, client)
+}
+
+func TestNewAcceptsTypedNilHTTPClient(t *testing.T) {
+	t.Parallel()
+	var clientWithType *http.Client
+	client, err := anthropic.New(anthropic.Config{HTTPClient: clientWithType})
+	require.NoError(t, err)
+	require.NotNil(t, client)
+}
+
+func TestNewClonesInjectedUnboundedClientWithFiniteTimeout(t *testing.T) {
+	t.Parallel()
+	var deadline time.Time
+	var hasDeadline bool
+	source := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		deadline, hasDeadline = req.Context().Deadline()
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				`{"model":"m","content":[],"usage":{"input_tokens":0,"output_tokens":0}}`,
+			)),
+		}, nil
+	})}
+	client := newAnthropic(t, anthropic.Config{
+		APIKey: "k", Model: "m", Timeout: time.Hour, HTTPClient: source,
+	})
+	_, err := client.Chat(context.Background(), nil)
+	require.NoError(t, err)
+	require.True(t, hasDeadline)
+	remaining := time.Until(deadline)
+	require.Positive(t, remaining)
+	require.LessOrEqual(t, remaining, time.Hour)
+	require.Zero(t, source.Timeout)
+}
+
+func newAnthropic(t *testing.T, cfg anthropic.Config) *anthropic.Client {
+	t.Helper()
+	client, err := anthropic.New(cfg)
+	require.NoError(t, err)
+	return client
+}
+
+func responseClient(status int, payload string) *http.Client {
+	return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode: status,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(payload)),
+		}, nil
+	})}
+}
+
+func TestChatHonorsExactResponseBoundaryAndRejectsOverflow(t *testing.T) {
+	t.Parallel()
+	const payload = `{"model":"m","content":[{"type":"text","text":"ok"}],"usage":{}}`
+	newClient := func(maxBytes int64) *anthropic.Client {
+		return newAnthropic(t, anthropic.Config{
+			APIKey: "k", Model: "m", MaxResponseBytes: maxBytes,
+			HTTPClient: responseClient(http.StatusOK, payload),
+		})
+	}
+	response, err := newClient(int64(len(payload))).Chat(context.Background(), nil)
+	require.NoError(t, err)
+	require.Equal(t, "ok", response.Content)
+	_, err = newClient(int64(len(payload)-1)).Chat(context.Background(), nil)
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestChatHonorsExactErrorBoundaryAndRejectsOverflow(t *testing.T) {
+	t.Parallel()
+	newClient := func(body string, maxBytes int64) *anthropic.Client {
+		return newAnthropic(t, anthropic.Config{
+			APIKey: "k", Model: "m", MaxErrorBytes: maxBytes,
+			HTTPClient: responseClient(http.StatusBadRequest, body),
+		})
+	}
+	_, err := newClient("1234", 4).Chat(context.Background(), nil)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, httpclient.ErrBodyTooLarge)
+	require.Contains(t, err.Error(), "1234")
+	_, err = newClient("12345", 4).Chat(context.Background(), nil)
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestStreamRejectsErrorResponseOverflow(t *testing.T) {
+	t.Parallel()
+	client := newAnthropic(t, anthropic.Config{
+		APIKey: "k", Model: "m", MaxErrorBytes: 4,
+		HTTPClient: responseClient(http.StatusTooManyRequests, "12345"),
+	})
+	_, err := drain(t, client.Stream(context.Background(), nil))
+	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestStreamHonorsExactFrameBoundaryBeyond64KiB(t *testing.T) {
+	t.Parallel()
+	content := strings.Repeat("x", 70<<10)
+	line := fmt.Sprintf(`data: {"type":"content_block_delta","delta":{"type":"text_delta","text":%q}}`, content)
+	newClient := func(maxFrameBytes int) *anthropic.Client {
+		return newAnthropic(t, anthropic.Config{
+			APIKey: "k", Model: "m", MaxStreamFrameBytes: maxFrameBytes,
+			HTTPClient: responseClient(http.StatusOK, line+"\ndata: {\"type\":\"message_stop\"}\n"),
+		})
+	}
+	got, err := drain(t, newClient(len(line)).Stream(context.Background(), nil))
+	require.NoError(t, err)
+	require.Len(t, got, len(content))
+	_, err = drain(t, newClient(len(line)-1).Stream(context.Background(), nil))
+	require.ErrorIs(t, err, llm.ErrStreamFrameTooLarge)
+}
 
 func TestChat(t *testing.T) {
 	t.Parallel()
@@ -43,7 +163,7 @@ func TestChat(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := anthropic.New(anthropic.Config{
+	c := newAnthropic(t, anthropic.Config{
 		APIKey:    "test-key",
 		Model:     "claude-opus-4-6",
 		MaxTokens: 256,
@@ -77,7 +197,7 @@ func TestStream(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := anthropic.New(anthropic.Config{
+	c := newAnthropic(t, anthropic.Config{
 		APIKey: "k", Model: "m", Endpoint: srv.URL,
 	})
 
@@ -93,7 +213,7 @@ func TestStream(t *testing.T) {
 
 func TestEmbed_Unsupported(t *testing.T) {
 	t.Parallel()
-	c := anthropic.New(anthropic.Config{APIKey: "k"})
+	c := newAnthropic(t, anthropic.Config{APIKey: "k"})
 	_, err := c.Embed(context.Background(), "text")
 	require.Error(t, err)
 }
@@ -106,7 +226,7 @@ func TestChat_ErrorStatus(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	c := anthropic.New(anthropic.Config{APIKey: "k", Model: "m", Endpoint: srv.URL})
+	c := newAnthropic(t, anthropic.Config{APIKey: "k", Model: "m", Endpoint: srv.URL})
 	_, err := c.Chat(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "401")
@@ -172,7 +292,7 @@ const deltaLine = `data: {"type":"content_block_delta","delta":{"type":"text_del
 
 func streamHi(t *testing.T, hc *http.Client) (string, error) {
 	t.Helper()
-	c := anthropic.New(anthropic.Config{APIKey: "k", Model: "m", HTTPClient: hc})
+	c := newAnthropic(t, anthropic.Config{APIKey: "k", Model: "m", HTTPClient: hc})
 	return drain(t, c.Stream(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}}))
 }
 
@@ -186,10 +306,31 @@ func TestStream_readErrorSurfacesErrChunk(t *testing.T) {
 	require.Contains(t, err.Error(), "anthropic: stream")
 }
 
+func TestStream_cleanEOFBeforeMessageStopSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	out, err := streamHi(t, faultyClient(deltaLine, nil, nil))
+	require.Equal(t, "Hello", out)
+	require.ErrorIs(t, err, llm.ErrStreamTruncated)
+}
+
+func TestStream_openAISentinelDoesNotReplaceMessageStop(t *testing.T) {
+	t.Parallel()
+	out, err := streamHi(t, faultyClient(deltaLine+"data: [DONE]\n", nil, nil))
+	require.Equal(t, "Hello", out)
+	require.ErrorContains(t, err, "invalid Anthropic stream event")
+}
+
+func TestStream_providerErrorEventSurfacesErrChunk(t *testing.T) {
+	t.Parallel()
+	payload := `data: {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}` + "\n"
+	_, err := streamHi(t, faultyClient(payload, nil, nil))
+	require.ErrorContains(t, err, "overloaded")
+}
+
 // Negative: a failed body close surfaces as the error chunk.
 func TestStream_closeErrorSurfacesErrChunk(t *testing.T) {
 	t.Parallel()
-	out, err := streamHi(t, faultyClient(deltaLine, nil, errBoom))
+	out, err := streamHi(t, faultyClient(deltaLine+`data: {"type":"message_stop"}`+"\n", nil, errBoom))
 	require.Equal(t, "Hello", out)
 	require.ErrorIs(t, err, errBoom)
 	require.Contains(t, err.Error(), "close stream body")
@@ -209,7 +350,7 @@ func TestStream_readErrorWinsOverCloseError(t *testing.T) {
 func TestChat_closeErrorReturnsErr(t *testing.T) {
 	t.Parallel()
 	const payload = `{"model":"m","content":[{"type":"text","text":"Hi"}],"usage":{"input_tokens":1,"output_tokens":1}}`
-	c := anthropic.New(anthropic.Config{APIKey: "k", Model: "m", HTTPClient: faultyClient(payload, nil, errBoom)})
+	c := newAnthropic(t, anthropic.Config{APIKey: "k", Model: "m", HTTPClient: faultyClient(payload, nil, errBoom)})
 	_, err := c.Chat(context.Background(), []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 	require.ErrorIs(t, err, errBoom)
 	require.Contains(t, err.Error(), "close response body")

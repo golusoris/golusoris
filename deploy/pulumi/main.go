@@ -12,16 +12,18 @@
 //	pulumi config set --secret golusoris-app:dbPassword <strong-password>
 //	pulumi up
 //
-// Stack outputs (dsn, redisURL) map onto the app's APP_DB_DSN / APP_CACHE_ADDR
-// env vars — the same keys deploy/helm injects, so config never drifts between
-// Helm- and Pulumi-deployed instances.
+// Stack outputs map dsn/redisURL onto APP_DB_DSN/APP_CACHE_REDIS_ADDR and
+// expose appURL as the configured HTTPS domain.
 package main
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
+
+	"github.com/golusoris/golusoris/deploy/internal/imageref"
 )
 
 // stackConfig is the resolved, typed view of the Pulumi stack config.
@@ -35,6 +37,8 @@ type stackConfig struct {
 	AppReplicas        int
 	AppPort            int
 	Domain             string
+	HostedZoneID       string
+	CertificateARN     string
 	MultiAZ            bool
 	DeletionProtection bool
 	DBPassword         pulumi.StringInput
@@ -77,16 +81,20 @@ func run(ctx *pulumi.Context) error {
 	}
 
 	application, err := newApp(ctx, "golusoris", net, db, cache, appConfig{
-		Image:    cfg.AppImage,
-		Replicas: cfg.AppReplicas,
-		Port:     cfg.AppPort,
-		Region:   cfg.Region,
+		Image:          cfg.AppImage,
+		Replicas:       cfg.AppReplicas,
+		Port:           cfg.AppPort,
+		Region:         cfg.Region,
+		Domain:         cfg.Domain,
+		HostedZoneID:   cfg.HostedZoneID,
+		CertificateARN: cfg.CertificateARN,
 	})
 	if err != nil {
 		return err
 	}
 
 	ctx.Export("dsn", db.DSN)
+	ctx.Export("redisAddress", cache.Address)
 	ctx.Export("redisURL", cache.URL)
 	ctx.Export("appURL", application.URL)
 	return nil
@@ -104,16 +112,36 @@ func loadConfig(ctx *pulumi.Context) (stackConfig, error) {
 		AppReplicas:        orDefaultInt(cfg.GetInt("appReplicas"), 2),
 		AppPort:            orDefaultInt(cfg.GetInt("appPort"), 8080),
 		Domain:             cfg.Get("domain"),
+		HostedZoneID:       cfg.Get("hostedZoneId"),
+		CertificateARN:     cfg.Get("certificateArn"),
 		MultiAZ:            cfg.GetBool("multiAZ"),
 		DeletionProtection: cfg.GetBool("deletionProtection"),
-		DBPassword:         cfg.RequireSecret("dbPassword"),
+		AppImage:           cfg.Get("appImage"),
 	}
-
-	out.AppImage = cfg.Get("appImage")
-	if out.AppImage == "" {
-		return stackConfig{}, errors.New("pulumi: config golusoris-app:appImage is required")
+	if err := validateStackConfig(out); err != nil {
+		return stackConfig{}, err
 	}
+	out.DBPassword = cfg.RequireSecret("dbPassword")
 	return out, nil
+}
+
+func validateStackConfig(cfg stackConfig) error {
+	if cfg.AppImage == "" {
+		return errors.New("pulumi: config golusoris-app:appImage is required")
+	}
+	if err := imageref.ValidateImmutableSHA256(cfg.AppImage); err != nil {
+		return fmt.Errorf("pulumi: validate appImage: %w", err)
+	}
+	if cfg.Domain == "" {
+		return errors.New("pulumi: config golusoris-app:domain is required")
+	}
+	if cfg.HostedZoneID == "" {
+		return errors.New("pulumi: config golusoris-app:hostedZoneId is required")
+	}
+	if cfg.CertificateARN == "" {
+		return errors.New("pulumi: config golusoris-app:certificateArn is required")
+	}
+	return nil
 }
 
 // orDefault returns fallback when v is empty.

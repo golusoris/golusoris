@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package pubsub provides a lightweight in-process pub/sub bus. For
-// cross-replica pub/sub use the redis sub-package (backed by rueidis
-// SUBSCRIBE) or the pg sub-package (backed by LISTEN/NOTIFY) — both
-// implement the same [Bus] interface.
+// cross-replica pub/sub use the redis sub-package, backed by rueidis
+// SUBSCRIBE and the same [Bus] interface.
 //
 // Usage:
 //
@@ -58,6 +57,9 @@ func New() *LocalBus {
 // Subscribe registers h for topic. The returned func removes the
 // subscription when called.
 func (b *LocalBus) Subscribe(topic string, h Handler) func() {
+	if h == nil {
+		return func() {}
+	}
 	b.mu.Lock()
 	if b.subs[topic] == nil {
 		b.subs[topic] = make(map[uint64]Handler)
@@ -81,9 +83,13 @@ func (b *LocalBus) Subscribe(topic string, h Handler) func() {
 // in the calling goroutine. Handlers must not block.
 func (b *LocalBus) Publish(_ context.Context, msg Message) {
 	b.mu.RLock()
-	handlers := b.subs[msg.Topic]
+	topicSubscribers := b.subs[msg.Topic]
+	handlers := make([]Handler, 0, len(topicSubscribers))
+	for _, handler := range topicSubscribers {
+		handlers = append(handlers, handler)
+	}
 	b.mu.RUnlock()
-	for _, h := range handlers {
-		h(msg)
+	for _, handler := range handlers {
+		handler(msg)
 	}
 }

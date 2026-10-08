@@ -55,7 +55,9 @@ func TestEndToEnd(t *testing.T) {
 	w := &greetWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
 		Register: func(workers *jobs.Workers) {
-			jobs.Register(workers, w)
+			if err := jobs.Register(workers, w); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
 		},
 	})
 

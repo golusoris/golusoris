@@ -6,18 +6,18 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — db/cdc/
 
-PostgreSQL logical-replication (WAL) consumer over [jackc/pglogrepl]. Decodes
-`pgoutput` messages into structured `Event` values and delivers them to a
-caller-supplied `Handler`. Push-based CDC — the building block under
-`outbox/cdc`.
+Postgres WAL consumer. Uses `pglogrepl`. Decodes `pgoutput`. Calls one handler.
+Feeds `outbox/cdc`.
 
 ## API
 
 ```go
 type Event struct {
     Schema, Table string
-    Op            Op                 // INSERT | UPDATE | DELETE | TRUNCATE
-    Old, New      map[string]string  // column → text value
+    Op            Op                          // INSERT | UPDATE | DELETE | TRUNCATE
+    OldValues     map[string]ColumnValue      // canonical typed old values
+    NewValues     map[string]ColumnValue      // canonical typed new values
+    Old, New      map[string]string           // deprecated lossy text projection
     LSN           pglogrepl.LSN
     CommitTime    time.Time
 }
@@ -43,23 +43,27 @@ fx.New(
 cdc.dsn          # replication DSN — REQUIRED, must include replication=database
 cdc.slot         # replication slot (default: golusoris)
 cdc.publication  # PUBLICATION name (default: golusoris)
-cdc.standby_hz   # standby status updates/sec (default: 10)
+cdc.standby_hz   # standby status updates/sec (default: 10; range: 1-1000)
+cdc.reconnect_delay # positive retry delay after failed session (default: 1s)
 ```
 
 ## Postgres prerequisites
 
-`wal_level = logical`; a logical replication slot (`pgoutput`); a `PUBLICATION`
-covering the watched tables. The consumer creates the slot if missing
-(SQLSTATE 42710 "already exists" is tolerated).
+Need `wal_level = logical`, `pgoutput` slot, and publication. Consumer creates
+missing slot. Existing slot is fine.
 
 ## Notes
 
-- **Empty `cdc.dsn` disables the consumer** (logs and no-ops at start) — safe
-  default for apps that don't use CDC.
-- Replication starts at LSN 0 to **resume from the slot's
-  `confirmed_flush_lsn`**; passing the current WAL head would silently skip
-  retained changes (data loss on restart).
-- `Old` is only populated for DELETE and for UPDATE under `REPLICA IDENTITY
-  FULL`. Unchanged-TOAST columns are omitted from the map. NULLs decode to `""`.
-- A handler returning a non-nil error **stops** the consumer.
-- Uses `clock.Clock` for standby timing — no `time.Now()`.
+- Empty DSN disables consumer.
+- Start LSN is 0. Server resumes slot `confirmed_flush_lsn`.
+- Acknowledge only after commit and successful handlers.
+- Configured startup requires a non-nil handler.
+- Missing relation metadata ends replication without acknowledging commit.
+- Handler error ends session. Consumer reconnects. Delivery is at least once.
+- Handler must be idempotent.
+- Fx startup context does not own long run. Fx stop cancels and joins it.
+- Key tuples map only replica-identity columns. Full tuples map relation order.
+- Missing tuples remain nil in typed and legacy projections.
+- `ColumnValue.Kind` distinguishes text, binary, SQL NULL, and unchanged TOAST.
+- Runtime I/O deadlines use real context time. Domain `clock.Clock` schedules retry and standby cadence only.
+- Slot names follow Postgres lowercase slot grammar. Publication names are quoted as one identifier.

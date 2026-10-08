@@ -71,6 +71,15 @@ func TestHTMLRenderer_Render(t *testing.T) {
 	require.Equal(t, "text/html; charset=utf-8", r.ContentType())
 }
 
+func TestHTMLRenderer_SetNilTemplateUsesDefault(t *testing.T) {
+	t.Parallel()
+	renderer := invoice.NewHTMLRenderer(nil)
+	renderer.SetTemplate(nil)
+	if _, err := renderer.Render(t.Context(), sampleInvoice(t)); err != nil {
+		t.Fatalf("Render after SetTemplate(nil): %v", err)
+	}
+}
+
 func TestMemoryNumberer_Sequential(t *testing.T) {
 	t.Parallel()
 	n := invoice.NewMemoryNumberer("INV", 6)

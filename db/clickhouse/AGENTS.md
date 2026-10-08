@@ -17,12 +17,14 @@ fx.New(clickhouse.Module) // reads "db.clickhouse.*" from koanf config
 Config keys (prefix `db.clickhouse`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `addr` | `["localhost:9000"]` | ClickHouse server(s) |
 | `database` | `"default"` | Target database |
 | `username` | `"default"` | Auth username |
 | `password` | `""` | Auth password |
 | `tls` | `false` | Enable TLS |
+
+TLS true -> verified server certificate; TLS 1.2 minimum. Driver logs -> injected slog logger.
 
 ## Usage
 
@@ -47,7 +49,7 @@ _ = batch.Send()
 
 ## Testing
 
-Integration tests require Docker. Use `testutil/clickhouse.Start(t)` to boot a container:
+Integration tests require Docker. Use `testutil/clickhouse.Start(t)` to boot container:
 
 ```go
 import chtestutil "github.com/golusoris/golusoris/testutil/clickhouse"
@@ -64,4 +66,4 @@ func TestMyQuery(t *testing.T) {
 ## Don't
 
 - Don't use this for transactional workloads — ClickHouse is append-optimised OLAP.
-- Don't issue frequent small INSERTs — batch with `PrepareBatch` or use an async insert buffer.
+- Don't issue frequent small INSERTs — batch with `PrepareBatch` or use async insert buffer.

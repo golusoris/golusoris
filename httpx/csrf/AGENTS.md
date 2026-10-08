@@ -4,16 +4,17 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Agent guide — httpx/csrf
+# httpx/csrf
 
-Double-submit cookie CSRF via gorilla/csrf.
+Browser same-origin CSRF enforcement via `filippo.io/csrf/gorilla`.
 
-## Conventions
+## Contract
 
-- `http.csrf.secret` must decode to 32 bytes (hex or base64). Apps generate one per-deployment, rotated via the usual secret-management workflow. No secret → middleware is a no-op.
-- In templates: `<input name="gorilla.csrf.Token" value="{{ csrf.Token . }}">`. For SPAs: read `X-CSRF-Token` from a preceding GET + echo on unsafe requests.
-- Cookie is `Secure` by default — disable only for localhost dev via `http.csrf.secure=false`.
+- `http.csrf.secret` empty -> no-op middleware.
+- Nonempty secret must decode to 32 bytes; compatibility enable switch only. Pinned dependency ignores key value.
+- Unsafe cross-site browser requests -> 403 via `Sec-Fetch-Site` / `Origin` checks.
+- Requests without browser origin metadata -> allowed as non-browser traffic.
+- `Token` returns compatibility random text; token, form field, and `X-CSRF-Token` never authorize requests.
+- `Secure`, `Domain`, `Path` = ignored compatibility fields; no CSRF cookie exists.
 
-## Don't
-
-- Don't also enable CSRF for API-token-authenticated endpoints — the bearer token already proves intent. Route those past the middleware via a separate sub-router.
+Bearer-only API routes -> separate sub-router outside middleware.

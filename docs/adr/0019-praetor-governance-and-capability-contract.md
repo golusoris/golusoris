@@ -27,7 +27,7 @@ that praetor's transpiler would have overwritten.
 ## Decision
 
 1. **Publish the contract.** Repo-root [`capabilities.yaml`](https://github.com/golusoris/golusoris/blob/main/capabilities.yaml)
-   (schema: [`core/capabilities`](../../core/capabilities/)) lists every
+   (schema: [`core/capabilities`](https://github.com/golusoris/golusoris/tree/main/core/capabilities)) lists every
    importable package, its Go module, the capability keys it satisfies (the
    praetor taxonomy: `db.postgres`, `cache.redis`, `mcp.server`, …) and the
    third-party modules it `replaces`. `capabilities_test.go` fails when the

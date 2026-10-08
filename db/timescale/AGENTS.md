@@ -8,8 +8,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 TimescaleDB hypertable + retention helpers for pgx/v5.
 
-TimescaleDB is a PostgreSQL extension — the same pgxpool from `db/pgx/` is
-reused. This package adds thin wrappers around the TimescaleDB SQL API.
+TimescaleDB is PostgreSQL extension — same pgxpool from `db/pgx/` is
+reused. This package adds thin wrappers around TimescaleDB SQL API.
 
 ## Usage
 
@@ -34,8 +34,10 @@ pool.QueryRow(ctx,
 
 ## Don't
 
-- Don't call `CreateHypertable` on a table that already has data in chunks —
-  TimescaleDB requires the table to be empty or to use `migrate_data => true`.
+- Don't call `CreateHypertable` on table that already has data in chunks —
+ TimescaleDB requires table to be empty or to use `migrate_data => true`.
 - Don't use `SetRetention` without `CreateHypertable` first.
-- Don't use `Pool()` to bypass timescale helpers for DDL — the helpers add
-  `if_not_exists => true` to make them startup-safe.
+- Don't use `Pool()` to bypass timescale helpers for DDL — helpers add
+ `if_not_exists => true` to make them startup-safe.
+- Policy durations must be positive and microsecond-aligned. Helpers preserve full interval; no hour truncation.
+- Compression table names use pgx identifier quoting; pass `table` or `schema.table`, not raw SQL.

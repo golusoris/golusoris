@@ -23,6 +23,18 @@ import (
 // Validator wraps *validator.Validate.
 type Validator struct{ v *validator.Validate }
 
+// IsNil reports whether value is nil, including an interface that contains a
+// typed-nil channel, function, map, pointer, or slice.
+func IsNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	kind := reflected.Kind()
+	return (kind == reflect.Chan || kind == reflect.Func || kind == reflect.Interface ||
+		kind == reflect.Map || kind == reflect.Pointer || kind == reflect.Slice) && reflected.IsNil()
+}
+
 // New returns a Validator with sane defaults: tag name "validate", json-name
 // extraction so error messages reference the wire field name not the Go
 // field.
@@ -30,7 +42,7 @@ func New() *Validator {
 	v := validator.New(validator.WithRequiredStructEnabled())
 
 	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
-		name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
+		name, _, _ := strings.Cut(fld.Tag.Get("json"), ",")
 		if name == "-" {
 			return ""
 		}

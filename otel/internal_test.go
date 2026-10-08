@@ -5,11 +5,49 @@
 package otel
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
+	otelapi "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/resource"
+
 	"github.com/golusoris/golusoris/core/config"
 )
+
+func TestPartialProviderFailureNeverPublishesGlobals(t *testing.T) {
+	t.Parallel()
+	previousTracer := otelapi.GetTracerProvider()
+	providers := &Providers{}
+	valid := Options{
+		Insecure: true,
+		Endpoint: "127.0.0.1:1",
+		Sample:   SampleOptions{Ratio: 1},
+		Export:   ExportOptions{Traces: true},
+	}
+	if err := buildTracer(context.Background(), resource.Empty(), valid, providers); err != nil {
+		t.Fatalf("buildTracer: %v", err)
+	}
+	if got := otelapi.GetTracerProvider(); got != previousTracer {
+		t.Fatalf("tracer global changed before complete construction: %T", got)
+	}
+
+	invalid := Options{
+		Insecure: true,
+		Endpoint: "bad\x00host",
+		Export:   ExportOptions{Metrics: true},
+	}
+	buildErr := buildMeter(context.Background(), resource.Empty(), invalid, providers)
+	if buildErr == nil {
+		t.Fatal("buildMeter: expected invalid endpoint error")
+	}
+	if err := cleanupPartialProviders(context.Background(), providers, buildErr); err == nil {
+		t.Fatal("cleanupPartialProviders: expected original build error")
+	}
+	if got := otelapi.GetTracerProvider(); got != previousTracer {
+		t.Fatalf("tracer global changed after partial failure: %T", got)
+	}
+}
 
 func TestDefaultOptions_enabled(t *testing.T) {
 	t.Parallel()

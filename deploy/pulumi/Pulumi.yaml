@@ -6,8 +6,8 @@ name: golusoris-app
 runtime: go
 description: >-
   Reference Pulumi (Go) program deploying a golusoris app on AWS: VPC + RDS
-  PostgreSQL + ElastiCache Redis + ECS Fargate behind an ALB. Copy-and-adapt;
-  see README.md.
+  PostgreSQL + ElastiCache Redis + ECS Fargate behind a TLS-only ALB and a
+  Route53 alias in a caller-owned zone. Copy-and-adapt; see README.md.
 
 # Stack config schema. Override per stack in Pulumi.<stack>.yaml or via
 # `pulumi config set golusoris-app:<key> <value>`. Secrets (db master
@@ -35,7 +35,7 @@ config:
     default: cache.t3.micro
   golusoris-app:appImage:
     type: string
-    description: OCI image reference for the app container.
+    description: Immutable repository@sha256 image reference for the app container.
   golusoris-app:appReplicas:
     type: integer
     description: Desired ECS task count.
@@ -46,8 +46,13 @@ config:
     default: 8080
   golusoris-app:domain:
     type: string
-    description: Optional public domain (informational; ALB DNS is exported regardless).
-    default: ""
+    description: Required public domain served by the application (e.g. app.example.com).
+  golusoris-app:hostedZoneId:
+    type: string
+    description: Required ID of the caller-owned Route53 hosted zone for domain.
+  golusoris-app:certificateArn:
+    type: string
+    description: Required regional ACM certificate ARN covering domain.
   golusoris-app:multiAZ:
     type: boolean
     description: Provision RDS Multi-AZ and ElastiCache automatic failover.

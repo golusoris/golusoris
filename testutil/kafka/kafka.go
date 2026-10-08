@@ -25,14 +25,13 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	redpandacontainer "github.com/testcontainers/testcontainers-go/modules/redpanda"
 
+	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/internal/startgate"
 )
 
 const (
-	// redpandaImage is Kafka-API-compatible without ZooKeeper.
-	redpandaImage = "redpandadata/redpanda:v24.3.1"
 	// startTimeout bounds one container start including a cold image pull;
-	// same value as testutil/pg (see the rationale there: cold ARC runners).
+	// same value as testutil/pg (see the rationale there: cold CI runners).
 	startTimeout = 3 * time.Minute
 )
 
@@ -53,7 +52,12 @@ func Addr(t *testing.T) string {
 	// The module renders Redpanda's advertised listener with Docker's mapped
 	// host port. A hand-written localhost:9092 advertisement breaks as soon as
 	// Docker assigns an ephemeral port (and races when tests run in parallel).
-	ctr, err := redpandacontainer.Run(ctx, redpandaImage, redpandacontainer.WithAutoCreateTopics())
+	ctr, err := redpandacontainer.Run(
+		ctx,
+		testimages.Redpanda,
+		redpandacontainer.WithAutoCreateTopics(),
+		testimages.WithPinnedReaper(),
+	)
 	if err != nil {
 		t.Fatalf("testutil/kafka: start container: %v", err)
 	}

@@ -2,27 +2,25 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-version: "3.9"
 services:
   app:
-    build:
-      context: .
-      dockerfile: .devcontainer/Dockerfile
+    # renovate: datasource=docker depName=mcr.microsoft.com/devcontainers/go
+    # renovate-version: 2.3.1-1.27-bookworm
+    image: mcr.microsoft.com/devcontainers/go@sha256:adc326255c019241228f9da4a1cb5d6a89abaaa0eb8d926a355b00af7daafd00
     volumes:
       - ..:/workspace:cached
-      - /var/run/docker.sock:/var/run/docker.sock
     command: sleep infinity
     environment:
-      - POSTGRES_DSN=postgres://dev:dev@db:5432/dev?sslmode=disable
-      - REDIS_URL=redis://cache:6379
-      - NATS_URL=nats://nats:4222
+      - APP_DB_DSN=postgres://dev:dev@db:5432/dev?sslmode=disable
+      - APP_CACHE_REDIS_ADDR=cache:6379
+      - APP_NATS_URL=nats://nats:4222
     depends_on:
       - db
       - cache
       - nats
 
   db:
-    image: postgres:18-alpine
+    image: postgres:18-alpine@sha256:6c538e7206ea40ff740ef27883529390a690b6ead6ba96b44c67a9f7c638e8fd
     restart: unless-stopped
     environment:
       POSTGRES_USER: dev
@@ -31,16 +29,16 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
 
   cache:
-    image: redis:8-alpine
+    image: redis:8-alpine@sha256:bd999b5cfee25fb24b8320a31fddbd69f462df44c8138c66e369582937beebc0
     restart: unless-stopped
     ports:
       - "6379:6379"
 
   nats:
-    image: nats:2-alpine
+    image: nats:2-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
     restart: unless-stopped
     ports:
       - "4222:4222"

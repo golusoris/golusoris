@@ -20,28 +20,34 @@ fx.New(golusoris.Core, sqlite.Module, fx.Invoke(func(db *sql.DB) { … }))
 ## Config keys (prefix `db.sqlite`)
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `path` | **required** | file path or `:memory:` |
 | `read_only` | `false` | open with `mode=ro` |
-| `busy_timeout` | `5s` | wait on a locked database before `SQLITE_BUSY` |
-| `max_open_conns` | `4` | pool bound (`:memory:` is pinned to 1 so every statement sees the same DB) |
+| `busy_timeout` | `5s` | wait on locked database before `SQLITE_BUSY` |
+| `max_open_conns` | `4` | pool bound (`:memory:` is pinned to 1 so every statement sees same DB) |
 | `disable_wal` | `false` | WAL (`journal_mode=WAL`) is on by default — concurrent readers while one writer proceeds |
 | `disable_foreign_keys` | `false` | declared FKs are enforced by default (SQLite itself defaults to off) |
-| `pragmas` | `[]` | extra `name(value)` pragmas appended to the DSN |
+| `pragmas` | `[]` | extra `name(value)` pragmas appended to DSN |
 
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
-| `Open(ctx, Options, logger)` | open + ping; caller owns the `*sql.DB` |
-| `Options.DSN()` | the `file:…?_pragma=…` connection string |
+| --- | --- |
+| `Open(ctx, Options, logger)` | open + ping; caller owns `*sql.DB` |
+| `Options.DSN()` | `file:…?_pragma=…` connection string |
 | `Module` | provides `*sql.DB`, closes on fx stop |
 | `ErrMissingPath` | no path configured |
 
+## Bounds
+
+- Path bytes `?` and `#` -> percent-escaped inside DSN; remain filename bytes.
+- Read-only mode -> no WAL pragma.
+- Negative busy timeout or connection bound -> construction error.
+
 ## Don't
 
-- Don't run migrations here; wire `db/migrate` with the sqlite driver source,
-  or ship schema with `CREATE TABLE IF NOT EXISTS` in an `fx.Invoke`.
+- Don't run migrations here; wire `db/migrate` with sqlite driver source,
+ or ship schema with `CREATE TABLE IF NOT EXISTS` in `fx.Invoke`.
 - Don't raise `max_open_conns` expecting write parallelism — SQLite has one
-  writer; WAL only parallelises readers.
+ writer; WAL only parallelises readers.
 - Don't use `:memory:` for anything but tests and throwaway caches.

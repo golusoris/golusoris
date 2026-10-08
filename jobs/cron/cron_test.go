@@ -5,12 +5,44 @@
 package cron_test
 
 import (
+	"log/slog"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/riverqueue/river"
+
+	"github.com/golusoris/golusoris/jobs"
 	"github.com/golusoris/golusoris/jobs/cron"
 )
+
+type registerArgs struct{}
+
+func (registerArgs) Kind() string { return "cron-register-probe" }
+
+func TestRegisterRejectsNilDependencies(t *testing.T) {
+	t.Parallel()
+
+	if err := cron.Register[registerArgs](nil, "@hourly", nil); err == nil || !strings.Contains(err.Error(), "constructor") {
+		t.Fatalf("nil constructor error = %v", err)
+	}
+	if err := cron.Register(nil, "@hourly", func() registerArgs { return registerArgs{} }); err == nil || !strings.Contains(err.Error(), "client") {
+		t.Fatalf("nil client error = %v", err)
+	}
+	var _ river.JobArgs = registerArgs{}
+}
+
+func TestRegisterRejectsProducerOnlyClient(t *testing.T) {
+	t.Parallel()
+
+	client, err := jobs.New(nil, jobs.DefaultOptions(), nil, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatalf("new producer-only client: %v", err)
+	}
+	if err := cron.Register(client, "@hourly", func() registerArgs { return registerArgs{} }); err == nil || !strings.Contains(err.Error(), "periodic jobs") {
+		t.Fatalf("producer-only registration error = %v", err)
+	}
+}
 
 func TestValidate(t *testing.T) {
 	t.Parallel()

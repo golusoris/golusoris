@@ -4,15 +4,15 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-Add a river job worker registered in fx.
+Add river job worker registered in fx.
 
 ## Task
 
-Add a River worker for job kind: `$ARGUMENTS`
+Add River worker for job kind: `$ARGUMENTS`
 
 ## Steps
 
-1. **Define the args struct** in `jobs/<kind>/args.go`:
+1. **Define args struct** in `jobs/<kind>/args.go`:
 
 ```go
 type Args struct {
@@ -23,7 +23,7 @@ type Args struct {
 func (Args) Kind() string { return "<kind>" }
 ```
 
-2. **Implement the worker** in `jobs/<kind>/worker.go`:
+2. **Implement worker** in `jobs/<kind>/worker.go`:
 
 ```go
 type Worker struct {
@@ -39,21 +39,21 @@ func (w *Worker) Work(ctx context.Context, job *river.Job[Args]) error {
 }
 ```
 
-3. **Register in fx** — add to the workers registry in `jobs/jobs.go`:
+3. **Register in fx** — add to workers registry in `jobs/jobs.go`:
 
 ```go
 river.AddWorker(workers, &mykind.Worker{...})
 ```
 
-Or expose an fx.Option in the jobs subpackage:
+Or expose fx.Option in jobs subpackage:
 
 ```go
 var WorkerModule = fx.Provide(newWorker) // newWorker returns *Worker with fx deps
 ```
 
-And add to the worker registry via fx.Invoke.
+And add to worker registry via fx.Invoke.
 
-4. **Write a test** using `testutil/river`:
+4. **Write test** using `testutil/river`:
 
 ```go
 rc := rivtest.NewTestClient(t, pool, workers)
@@ -67,6 +67,6 @@ rc.Work(t)
 
 ## Rules
 
-- Never `panic` inside a worker — return an error.
-- Use `river.JobCancel(err)` only when the job can never succeed (bad input).
+- Never `panic` inside worker — return error.
+- Use `river.JobCancel(err)` only when job can never succeed (bad input).
 - Use `clock.Clock` via injection — never `time.Now()`.

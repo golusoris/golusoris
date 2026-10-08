@@ -5,6 +5,7 @@
 package memory
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
@@ -42,5 +43,46 @@ func TestLoadOptions_defaults(t *testing.T) {
 	}
 	if opts.TTL != 5*time.Minute {
 		t.Errorf("TTL = %v, want 5m", opts.TTL)
+	}
+}
+
+func TestNewCache_RejectsNilLogger(t *testing.T) {
+	t.Parallel()
+	c, err := newCache(defaultOptions(), nil)
+	if err == nil {
+		t.Fatal("newCache accepted a nil logger")
+	}
+	if c != nil {
+		t.Fatal("newCache returned a cache with nil logger")
+	}
+}
+
+func TestNewCacheRejectsUnboundedOrNegativeOptions(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.DiscardHandler)
+	for name, opts := range map[string]Options{
+		"zero maximum": {MaxSize: 0},
+		"negative TTL": {MaxSize: 1, TTL: -time.Second},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if cache, err := newCache(opts, logger); err == nil || cache != nil {
+				t.Fatalf("newCache() = (%v, %v), want validation error", cache, err)
+			}
+		})
+	}
+}
+
+func TestZeroDefaultTTLStillSupportsPerEntryExpiry(t *testing.T) {
+	t.Parallel()
+	cache, err := NewForTest(10, 0)
+	if err != nil {
+		t.Fatalf("NewForTest: %v", err)
+	}
+	cache.Set("key", 1)
+	cache.SetExpiresAfter("key", 10*time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
+	if _, ok := cache.GetIfPresent("key"); ok {
+		t.Fatal("entry remained after explicit per-entry expiry")
 	}
 }

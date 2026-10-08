@@ -7,10 +7,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — integrations/goenvoy/
 
 Thin fx adapter that wires opt-in [goenvoy](https://github.com/golusoris/goenvoy)
-service clients (Sonarr, TMDb, AniList, Trakt, ...) onto the framework's
+service clients (Sonarr, TMDb, AniList, Trakt.) onto framework's
 resilient outbound `*http.Client` (`httpx/client`: retry + circuit-breaker +
-otelhttp + slog). **It does NOT reimplement goenvoy** — it only injects the
-framework transport, optional response cache, and config into goenvoy's own
+otelhttp + slog). **It does NOT reimplement goenvoy** — it only injects framework transport, optional response cache, and config into goenvoy's own
 clients.
 
 ## API
@@ -46,49 +45,45 @@ integrations:
       trakt:  { provider: trakt,  client_id: ${TRAKT_ID}, client_secret: ${TRAKT_SECRET}, access_token: ${TRAKT_TOKEN} }
 ```
 
-Leaf keys contain underscores (`base_url`, `api_key`, `access_token`, ...). The
-env loader splits on `_`, so to override a leaf from an env var declare it as a
-`config.Options.CompoundKeys` entry (e.g. for secret interpolation of
-`api_key`). YAML/JSON files keep the keys verbatim.
+Leaf keys contain underscores (`base_url`, `api_key`, `access_token`.). env loader splits on `_`, so to override leaf from env var declare it as `config.Options.CompoundKeys` entry (e.g. for secret interpolation of
+`api_key`). YAML/JSON files keep keys verbatim.
 
 ## Why goenvoy (and why an adapter, not a reimpl)
 
 - **Mandated upstream** + near-ideal adapter target: zero external transitive
-  deps, MIT, every client takes `WithHTTPClient(*http.Client)` — the exact seam
-  to inject the framework's resilient client uniformly across arr + metadata.
+ deps, MIT, every client takes `WithHTTPClient(*http.Client)` — exact seam
+ to inject framework's resilient client uniformly across arr + metadata.
 - Alternatives rejected: `starr` (arr-only, no tmdb/anilist/trakt; two
-  ecosystems); per-provider libs (4+ unrelated http-injection stories);
-  reimplementing on `httpx/extclient` generics (task says wire, don't reimpl).
+ ecosystems); per-provider libs (4+ unrelated http-injection stories);
+ reimplementing on `httpx/extclient` generics (task says wire, don't reimpl).
 
 ## Notes
 
 - **One `*http.Client` per service — never shared.** goenvoy's
-  `arr.WithTimeout` / `metadata.WithTimeout` mutate `httpClient.Timeout` *in
-  place*; a shared transport would corrupt timeouts. Timeout is therefore set
-  via `client.Options.Timeout`, and goenvoy's `WithTimeout` is never passed.
-- **HTTP cache** (`cache.go`): a `RoundTripper` over `cache/memory`, GET-only,
-  2xx-only, TTL driven by injected `clock.Clock` (deterministic in tests). Keys
-  include the credential header (`Authorization` / `X-Api-Key` /
-  `Trakt-Api-Key`) so a response is never served across distinct credentials.
-  Disabled when `cache_ttl == 0` or no `memory.Cache` is wired.
+ `arr.WithTimeout` / `metadata.WithTimeout` mutate `httpClient.Timeout` *in
+ place*; shared transport would corrupt timeouts. Timeout is therefore set
+ via `client.Options.Timeout`, and goenvoy's `WithTimeout` is never passed.
+- **HTTP cache** (`cache.go`): `RoundTripper` over `cache/memory`, GET-only,
+ 2xx-only, TTL driven by injected `clock.Clock` (deterministic in tests). Keys
+ include credential header (`Authorization` / `X-Api-Key` /
+ `Trakt-Api-Key`) so response is never served across distinct credentials.
+ Disabled when `cache_ttl == 0` or no `memory.Cache` is wired.
 - **Credentials** (`api_key` / `access_token` / `client_secret`) flow through
-  config — resolve via the framework's `secrets/` interpolation and keep them
-  out of slog lines (the `started` Debug line logs only counts + a cache bool).
+ config — resolve via framework's `secrets/` interpolation and keep them
+ out of slog lines (`started` Debug line logs only counts + cache bool).
 - **Trakt OAuth**: `SetClientSecret` / `SetAccessToken` are applied at build.
-  Refresh-token rotation/persistence is the app's responsibility — this thin
-  adapter does not persist rotated tokens.
+ Refresh-token rotation/persistence is app's responsibility — this thin
+ adapter does not persist rotated tokens.
 - `OnStop` calls `CloseIdleConnections()` on every built client. No `init()` —
-  all construction is in fx constructors.
+ all construction is in fx constructors.
 
 ## Don't
 
-- Don't create any bare `*http.Client` without a `Timeout`, and never use `http.DefaultClient` — all outbound HTTP must flow through the parent `httpx` / `extclient` package (which sets timeout, retry, circuit-breaker, and OTel).
+- Don't create any bare `*http.Client` without `Timeout`, and never use `http.DefaultClient` — all outbound HTTP must flow through parent `httpx` / `extclient` package (which sets timeout, retry, circuit-breaker, and OTel).
 
 ## Version caveat (flag to maintainers)
 
-The per-service subpackages (`arr/sonarr`, `metadata/video/tmdb`,
-`metadata/anime/anilist`, `metadata/tracking/trakt`) are pinned to **HEAD
-pseudo-versions** (`v1.3.1-0.20260619...`) because they are not yet covered by
-the tagged category modules (`arr@v1.2.1`, `metadata@v1.3.0`). Pin each service
-module to its own tag once cut. Also note the `LUSORIS` vs `golusoris` import
-path mismatch on the old `arr@v1.x` tag — keep using the `golusoris/...` paths.
+`metadata/anime/anilist` remains pinned to the reviewed pseudo-version
+`v1.3.1-0.20260906000323-66546eaf9315`; pin it to its own tag once cut.
+Sonarr, TMDb, and Trakt use `v1.3.1` tags. Category modules use `arr/v2`
+`v2.1.0` and `metadata` `v1.3.1`; keep `golusoris/...` import paths.

@@ -29,7 +29,7 @@ packages:
     domain: db
     capabilities: [db.postgres]
     status: stable
-    replaces: [github.com/jackc/pgx, github.com/lib/pq]
+    replaces: [github.com/jackc/pgx, github.com/lib/pq, github.com/spf13/viper]
 `
 
 func TestParseValid(t *testing.T) {
@@ -48,9 +48,20 @@ func TestParseValid(t *testing.T) {
 	if got := strings.Join(idx.Keys(), ","); got != "config.env,config.loader,db.postgres" {
 		t.Fatalf("Keys: %s", got)
 	}
-	rep := idx.Replacements()
-	if rep["github.com/lib/pq"] != "github.com/golusoris/golusoris/db/pgx" || len(rep) != 3 {
+	legacyReplacements := requireLegacyReplacements(idx.Replacements)
+	legacy := legacyReplacements()
+	if got := legacy["github.com/spf13/viper"]; got != "github.com/golusoris/golusoris/db/pgx" {
+		t.Fatalf("legacy Replacements last provider = %q", got)
+	}
+	rep := idx.ReplacementCandidates()
+	if got := rep["github.com/lib/pq"]; len(got) != 1 || got[0] != "github.com/golusoris/golusoris/db/pgx" {
 		t.Fatalf("Replacements: %v", rep)
+	}
+	if got := strings.Join(rep["github.com/spf13/viper"], ","); got != "github.com/golusoris/golusoris/core/config,github.com/golusoris/golusoris/db/pgx" {
+		t.Fatalf("shared Replacements: %v", rep)
+	}
+	if len(rep) != 3 {
+		t.Fatalf("Replacements keys: %v", rep)
 	}
 	if p, ok := idx.Lookup("github.com/golusoris/golusoris/db/pgx"); !ok || p.Domain != "db" {
 		t.Fatalf("Lookup: %+v %v", p, ok)
@@ -58,6 +69,10 @@ func TestParseValid(t *testing.T) {
 	if _, ok := idx.Lookup("nope"); ok {
 		t.Fatal("Lookup of unknown import must fail")
 	}
+}
+
+func requireLegacyReplacements(replacements func() map[string]string) func() map[string]string {
+	return replacements
 }
 
 func TestParseRejects(t *testing.T) {
@@ -71,9 +86,16 @@ func TestParseRejects(t *testing.T) {
 		{"missing framework", strings.Replace(valid, "framework: github.com/golusoris/golusoris\n", "", 1), capabilities.ErrInvalid},
 		{"duplicate import", valid + "  - import: github.com/golusoris/golusoris/db/pgx\n    domain: db\n    capabilities: [db.x]\n", capabilities.ErrInvalid},
 		{"foreign import", valid + "  - import: github.com/other/x\n    domain: x\n    capabilities: [x.y]\n", capabilities.ErrInvalid},
+		{"sibling framework prefix", strings.Replace(valid, "github.com/golusoris/golusoris/db/pgx", "github.com/golusoris/golusoris-evil/db/pgx", 1), capabilities.ErrInvalid},
 		{"no capabilities", valid + "  - import: github.com/golusoris/golusoris/z\n    domain: z\n    capabilities: []\n", capabilities.ErrInvalid},
 		{"bad key", valid + "  - import: github.com/golusoris/golusoris/z\n    domain: z\n    capabilities: [NoDot]\n", capabilities.ErrInvalid},
+		{"duplicate capability", strings.Replace(valid, "[db.postgres]", "[db.postgres, db.postgres]", 1), capabilities.ErrInvalid},
+		{"duplicate replacement", strings.Replace(valid, "[github.com/jackc/pgx, github.com/lib/pq, github.com/spf13/viper]", "[github.com/jackc/pgx, github.com/lib/pq, github.com/lib/pq]", 1), capabilities.ErrInvalid},
 		{"undeclared module", valid + "  - import: github.com/golusoris/golusoris/z\n    module: github.com/golusoris/golusoris/zz\n    domain: z\n    capabilities: [z.a]\n", capabilities.ErrInvalid},
+		{"wrong module owner", strings.Replace(valid, "    domain: db\n    capabilities: [db.postgres]", "    module: github.com/golusoris/golusoris/core\n    domain: db\n    capabilities: [db.postgres]", 1), capabilities.ErrInvalid},
+		{"nested module omitted", strings.Replace(valid, "    module: github.com/golusoris/golusoris/core\n    domain: config", "    domain: config", 1), capabilities.ErrInvalid},
+		{"duplicate module", strings.Replace(valid, "modules:\n  - github.com/golusoris/golusoris/core", "modules:\n  - github.com/golusoris/golusoris/core\n  - github.com/golusoris/golusoris/core", 1), capabilities.ErrInvalid},
+		{"foreign module", strings.Replace(valid, "github.com/golusoris/golusoris/core", "github.com/golusoris/golusoris-evil/core", 1), capabilities.ErrInvalid},
 		{"unknown status", valid + "  - import: github.com/golusoris/golusoris/z\n    domain: z\n    capabilities: [z.a]\n    status: alpha\n", capabilities.ErrInvalid},
 		{"unknown field (strict yaml)", valid + "extra: 1\n", nil},
 	}

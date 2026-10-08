@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -25,6 +26,8 @@ import (
 
 	"github.com/golusoris/golusoris/core/config"
 )
+
+const defaultPublishFlushTimeout = 5 * time.Second
 
 // Config holds NATS connection settings.
 type Config struct {
@@ -99,6 +102,28 @@ func newFromConfig(p params) (*Client, error) {
 func (c *Client) Publish(subject string, data []byte) error {
 	if err := c.nc.Publish(subject, data); err != nil {
 		return fmt.Errorf("nats: publish %s: %w", subject, err)
+	}
+	return nil
+}
+
+// PublishSync publishes a core NATS message and waits until the server has
+// processed the client buffer. Caller cancellation is honored; a five-second
+// deadline is applied when ctx has none.
+func (c *Client) PublishSync(ctx context.Context, subject string, data []byte) error {
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("nats: publish %s: %w", subject, err)
+	}
+	if err := c.Publish(subject, data); err != nil {
+		return err
+	}
+	flushCtx := ctx
+	cancel := func() {}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		flushCtx, cancel = context.WithTimeout(ctx, defaultPublishFlushTimeout)
+	}
+	defer cancel()
+	if err := c.nc.FlushWithContext(flushCtx); err != nil {
+		return fmt.Errorf("nats: flush publish %s: %w", subject, err)
 	}
 	return nil
 }

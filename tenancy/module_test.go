@@ -6,6 +6,7 @@ package tenancy_test
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -65,7 +66,9 @@ func TestModule_DefaultsHeaderExtractor(t *testing.T) {
 	if !ok {
 		t.Fatalf("default store is %T, want *tenancy.MemoryStore", store)
 	}
-	ms.Add(tenancy.Tenant{ID: "t1", Slug: "acme"})
+	if err := ms.Add(tenancy.Tenant{ID: "t1", Slug: "acme"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
 	var got tenancy.Tenant
 	var seen bool
@@ -118,13 +121,17 @@ func TestModule_SubdomainExtractor(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = app.Stop(ctx) })
 
-	// Subdomain extractor resolves by ID using the slug label; seed an
-	// id matching the subdomain label.
-	store.(*tenancy.MemoryStore).Add(tenancy.Tenant{ID: "acme", Slug: "acme"})
+	// Keep ID distinct from the label to prove the extractor selects slug lookup.
+	if err := store.(*tenancy.MemoryStore).Add(tenancy.Tenant{ID: "tenant-42", Slug: "acme"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
-	var seen bool
+	var (
+		seen bool
+		got  tenancy.Tenant
+	)
 	h := mw(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		_, seen = tenancy.FromContext(r.Context())
+		got, seen = tenancy.FromContext(r.Context())
 	}))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Host = "acme.example.com"
@@ -133,6 +140,9 @@ func TestModule_SubdomainExtractor(t *testing.T) {
 
 	if !seen {
 		t.Fatal("expected tenant resolved from subdomain")
+	}
+	if got.ID != "tenant-42" {
+		t.Fatalf("tenant ID = %q; want tenant-42", got.ID)
 	}
 }
 
@@ -150,7 +160,9 @@ func TestMemoryStore_NotFound(t *testing.T) {
 func TestMemoryStore_RoundTrip(t *testing.T) {
 	t.Parallel()
 	s := tenancy.NewMemoryStore()
-	s.Add(tenancy.Tenant{ID: "id1", Slug: "slug1", Plan: "pro"})
+	if err := s.Add(tenancy.Tenant{ID: "id1", Slug: "slug1", Plan: "pro"}); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 
 	byID, err := s.FindByID(context.Background(), "id1")
 	if err != nil {
@@ -165,5 +177,32 @@ func TestMemoryStore_RoundTrip(t *testing.T) {
 	}
 	if bySlug.ID != "id1" {
 		t.Errorf("id = %q, want id1", bySlug.ID)
+	}
+}
+
+func TestMemoryStore_UpsertMaintainsUniqueSlugIndex(t *testing.T) {
+	t.Parallel()
+	s := tenancy.NewMemoryStore()
+	if err := s.Add(tenancy.Tenant{ID: "id1", Slug: "Old"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Add(tenancy.Tenant{ID: "id1", Slug: "New"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.FindBySlug(context.Background(), "old"); !errors.Is(err, tenancy.ErrTenantNotFound) {
+		t.Fatalf("old slug error = %v; want ErrTenantNotFound", err)
+	}
+	if got, err := s.FindBySlug(context.Background(), "NEW"); err != nil || got.ID != "id1" {
+		t.Fatalf("new slug = (%+v, %v); want id1", got, err)
+	}
+	if err := s.Add(tenancy.Tenant{ID: "id2", Slug: "new"}); !errors.Is(err, tenancy.ErrTenantSlugConflict) {
+		t.Fatalf("conflicting Add error = %v; want ErrTenantSlugConflict", err)
+	}
+}
+
+func TestMemoryStore_AddRejectsEmptyID(t *testing.T) {
+	t.Parallel()
+	if err := tenancy.NewMemoryStore().Add(tenancy.Tenant{Slug: "orphan"}); !errors.Is(err, tenancy.ErrInvalidTenant) {
+		t.Fatalf("Add error = %v; want ErrInvalidTenant", err)
 	}
 }

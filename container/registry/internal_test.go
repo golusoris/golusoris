@@ -5,12 +5,25 @@
 package registry
 
 import (
+	"errors"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 )
+
+type typedNilKeychain struct{}
+
+func (*typedNilKeychain) Resolve(authn.Resource) (authn.Authenticator, error) {
+	return authn.Anonymous, nil
+}
+
+type typedNilTransport struct{}
+
+func (*typedNilTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("typed-nil transport must not be called")
+}
 
 // TestNew_defaults asserts the zero-value Options plus nil keychain/transport
 // still produce a fully usable Client (authn.DefaultKeychain,
@@ -50,6 +63,19 @@ func TestNew_explicitValues(t *testing.T) {
 	}
 	if c.timeout != 3*time.Second {
 		t.Errorf("timeout = %v, want %v", c.timeout, 3*time.Second)
+	}
+}
+
+func TestNew_typedNilDependenciesUseDefaults(t *testing.T) {
+	t.Parallel()
+	var keychain *typedNilKeychain
+	var transport *typedNilTransport
+	c := New(Options{}, keychain, transport)
+	if c.keychain != authn.DefaultKeychain {
+		t.Errorf("keychain = %T, want authn.DefaultKeychain", c.keychain)
+	}
+	if c.transport != http.DefaultTransport {
+		t.Errorf("transport = %T, want http.DefaultTransport", c.transport)
 	}
 }
 

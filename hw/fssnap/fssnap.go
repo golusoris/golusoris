@@ -11,21 +11,24 @@
 //
 // # ZFS
 //
-//	err := fssnap.ZFS.Snapshot("tank/data", "2025-01-01")
-//	snaps, err := fssnap.ZFS.List("tank/data")
-//	err  = fssnap.ZFS.Destroy("tank/data@2025-01-01")
+//	ctx := context.Background()
+//	err := fssnap.ZFS.Snapshot(ctx, "tank/data", "2025-01-01")
+//	snaps, err := fssnap.ZFS.List(ctx, "tank/data")
+//	err = fssnap.ZFS.Destroy(ctx, "tank/data@2025-01-01")
 //
 // # Btrfs
 //
-//	err := fssnap.Btrfs.Snapshot("/mnt/data", "/mnt/snaps/2025-01-01")
-//	err  = fssnap.Btrfs.Delete("/mnt/snaps/2025-01-01")
+//	err := fssnap.Btrfs.Snapshot(ctx, "/mnt/data", "/mnt/snaps/2025-01-01")
+//	err = fssnap.Btrfs.Delete(ctx, "/mnt/snaps/2025-01-01")
 package fssnap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
+	"unicode"
 )
 
 // ZFS provides ZFS snapshot operations.
@@ -35,18 +38,27 @@ type zfsOps struct{}
 
 // Snapshot creates a ZFS snapshot: dataset@tag.
 func (zfsOps) Snapshot(ctx context.Context, dataset, tag string) error {
+	if err := validateZFSDataset(dataset); err != nil {
+		return err
+	}
+	if err := validateZFSTag(tag); err != nil {
+		return err
+	}
 	name := dataset + "@" + tag
-	return run(ctx, "zfs", "snapshot", name)
+	return run(ctx, toolZFS, "snapshot", name)
 }
 
 // List returns snapshot names for dataset.
 func (zfsOps) List(ctx context.Context, dataset string) ([]string, error) {
-	out, err := output(ctx, "zfs", "list", "-H", "-t", "snapshot", "-o", "name", "-r", dataset)
+	if err := validateZFSDataset(dataset); err != nil {
+		return nil, err
+	}
+	out, err := output(ctx, toolZFS, "list", "-H", "-t", "snapshot", "-o", "name", "-r", dataset)
 	if err != nil {
 		return nil, err
 	}
 	var snaps []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSuffix(out, "\n"), "\n") {
 		if line != "" {
 			snaps = append(snaps, line)
 		}
@@ -56,12 +68,18 @@ func (zfsOps) List(ctx context.Context, dataset string) ([]string, error) {
 
 // Destroy removes a snapshot (format: dataset@tag).
 func (zfsOps) Destroy(ctx context.Context, snapshot string) error {
-	return run(ctx, "zfs", "destroy", snapshot)
+	if err := validateZFSSnapshot(snapshot); err != nil {
+		return err
+	}
+	return run(ctx, toolZFS, "destroy", snapshot)
 }
 
 // Rollback rolls back dataset to snapshot.
 func (zfsOps) Rollback(ctx context.Context, snapshot string) error {
-	return run(ctx, "zfs", "rollback", snapshot)
+	if err := validateZFSSnapshot(snapshot); err != nil {
+		return err
+	}
+	return run(ctx, toolZFS, "rollback", snapshot)
 }
 
 // Btrfs provides Btrfs snapshot operations.
@@ -71,30 +89,53 @@ type btrfsOps struct{}
 
 // Snapshot creates a read-only Btrfs snapshot of src at dst.
 func (btrfsOps) Snapshot(ctx context.Context, src, dst string) error {
-	return run(ctx, "btrfs", "subvolume", "snapshot", "-r", src, dst)
+	if err := validateOperand("Btrfs source", src); err != nil {
+		return err
+	}
+	if err := validateOperand("Btrfs destination", dst); err != nil {
+		return err
+	}
+	return run(ctx, toolBtrfs, "subvolume", "snapshot", "-r", src, dst)
 }
 
 // Delete removes a Btrfs snapshot at path.
 func (btrfsOps) Delete(ctx context.Context, path string) error {
-	return run(ctx, "btrfs", "subvolume", "delete", path)
+	if err := validateOperand("Btrfs snapshot path", path); err != nil {
+		return err
+	}
+	return run(ctx, toolBtrfs, "subvolume", "delete", path)
 }
 
 // List returns snapshot paths under subvolume.
 func (btrfsOps) List(ctx context.Context, subvolume string) ([]string, error) {
-	out, err := output(ctx, "btrfs", "subvolume", "list", "-rs", subvolume)
+	if err := validateOperand("Btrfs subvolume", subvolume); err != nil {
+		return nil, err
+	}
+	out, err := output(ctx, toolBtrfs, btrfsListArgs(subvolume)...)
 	if err != nil {
 		return nil, err
 	}
+	return parseBtrfsList(out)
+}
+
+func btrfsListArgs(subvolume string) []string {
+	return []string{"subvolume", "list", "-r", "-s", "-o", subvolume}
+}
+
+func parseBtrfsList(out string) ([]string, error) {
 	var snaps []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+	lineNumber := 0
+	for line := range strings.SplitSeq(strings.TrimSuffix(out, "\n"), "\n") {
+		lineNumber++
 		if line == "" {
 			continue
 		}
 		// format: "ID N gen G top level T path <path>"
-		parts := strings.Fields(line)
-		if len(parts) > 0 {
-			snaps = append(snaps, parts[len(parts)-1])
+		metadata, path, found := strings.Cut(line, " path ")
+		if !found || !strings.HasPrefix(metadata, "ID ") || path == "" {
+			return nil, fmt.Errorf("fssnap: malformed Btrfs list output at line %d", lineNumber)
 		}
+		snaps = append(snaps, path)
 	}
 	return snaps, nil
 }
@@ -103,19 +144,102 @@ func (btrfsOps) List(ctx context.Context, subvolume string) ([]string, error) {
 // helpers
 // ---------------------------------------------------------------------------
 
-func run(ctx context.Context, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+type tool string
+
+const (
+	toolZFS   tool = "zfs"
+	toolBtrfs tool = "btrfs"
+)
+
+var (
+	errNilContext       = errors.New("context is nil")
+	errZFSDatasetSyntax = errors.New("dataset contains a snapshot, bookmark, range, or list separator")
+	errZFSTagSyntax     = errors.New("snapshot tag contains a dataset, snapshot, bookmark, range, or list separator")
+	errZFSSnapshotName  = errors.New("snapshot must be one dataset@tag")
+)
+
+func command(ctx context.Context, name tool, args ...string) (*exec.Cmd, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("fssnap: command: %w", errNilContext)
+	}
+	switch name {
+	case toolZFS:
+		// #nosec G204 -- executable is a fixed literal; args are passed directly without a shell.
+		return exec.CommandContext(ctx, "zfs", args...), nil
+	case toolBtrfs:
+		// #nosec G204 -- executable is a fixed literal; args are passed directly without a shell.
+		return exec.CommandContext(ctx, "btrfs", args...), nil
+	default:
+		return nil, fmt.Errorf("fssnap: unsupported tool %q", name)
+	}
+}
+
+func validateZFSDataset(dataset string) error {
+	if err := validateOperand("ZFS dataset", dataset); err != nil {
+		return err
+	}
+	if strings.ContainsAny(dataset, "@#,%") {
+		return fmt.Errorf("fssnap: validate ZFS dataset: %w", errZFSDatasetSyntax)
+	}
+	return nil
+}
+
+func validateZFSTag(tag string) error {
+	if err := validateOperand("ZFS snapshot tag", tag); err != nil {
+		return err
+	}
+	if strings.ContainsAny(tag, "/@#,%") {
+		return fmt.Errorf("fssnap: validate ZFS tag: %w", errZFSTagSyntax)
+	}
+	return nil
+}
+
+func validateZFSSnapshot(snapshot string) error {
+	if err := validateOperand("ZFS snapshot", snapshot); err != nil {
+		return err
+	}
+	dataset, tag, found := strings.Cut(snapshot, "@")
+	if !found || dataset == "" || tag == "" || strings.Contains(tag, "@") {
+		return fmt.Errorf("fssnap: validate ZFS snapshot: %w", errZFSSnapshotName)
+	}
+	if err := validateZFSDataset(dataset); err != nil {
+		return err
+	}
+	return validateZFSTag(tag)
+}
+
+func validateOperand(label, value string) error {
+	if value == "" {
+		return fmt.Errorf("fssnap: %s is empty", label)
+	}
+	if strings.HasPrefix(value, "-") {
+		return fmt.Errorf("fssnap: %s starts with an option prefix", label)
+	}
+	if strings.IndexFunc(value, unicode.IsControl) >= 0 {
+		return fmt.Errorf("fssnap: %s contains a control character", label)
+	}
+	return nil
+}
+
+func run(ctx context.Context, name tool, args ...string) error {
+	cmd, err := command(ctx, name, args...)
+	if err != nil {
+		return err
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("fssnap: %s %v: %w\n%s", name, args, err, out)
 	}
 	return nil
 }
 
-func output(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	out, err := cmd.Output()
+func output(ctx context.Context, name tool, args ...string) (string, error) {
+	cmd, err := command(ctx, name, args...)
 	if err != nil {
-		return "", fmt.Errorf("fssnap: %s %v: %w", name, args, err)
+		return "", err
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("fssnap: %s %v: %w\n%s", name, args, err, out)
 	}
 	return string(out), nil
 }

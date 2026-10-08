@@ -17,27 +17,27 @@
 //
 // Usage:
 //
-//	c := ollama.New(ollama.Config{
+//	c, err := ollama.New(ollama.Config{
 //	    BaseURL: "http://localhost:11434",
 //	    Model:   "llama3.3",
 //	})
+//	if err != nil { /* handle invalid configuration */ }
 //	resp, _ := c.Chat(ctx, []llm.Message{{Role: llm.RoleUser, Content: "hi"}})
 package ollama
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/golusoris/golusoris/ai/llm"
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // DefaultBaseURL is Ollama's default local endpoint.
@@ -57,8 +57,18 @@ type Config struct {
 	KeepAlive string `koanf:"keep_alive"`
 	// Timeout is the HTTP client timeout. Default 120s.
 	Timeout time.Duration `koanf:"timeout"`
-	// HTTPClient is optional; when set, replaces the default client.
+	// HTTPClient supplies transport, redirect, and cookie policy. New clones it
+	// and applies Timeout when source timeout is non-positive.
 	HTTPClient *http.Client
+	// MaxResponseBytes caps each successful non-streaming response. Zero uses
+	// [llm.DefaultMaxResponseBytes].
+	MaxResponseBytes int64 `koanf:"max_response_bytes"`
+	// MaxErrorBytes caps each non-success response. Zero uses
+	// [llm.DefaultMaxErrorBytes].
+	MaxErrorBytes int64 `koanf:"max_error_bytes"`
+	// MaxStreamFrameBytes caps one NDJSON frame. Zero uses
+	// [llm.DefaultMaxStreamFrameBytes].
+	MaxStreamFrameBytes int `koanf:"max_stream_frame_bytes"`
 }
 
 // Client implements [llm.Client] against Ollama's native API.
@@ -69,18 +79,23 @@ type Client struct {
 }
 
 // New returns an Ollama client.
-func New(cfg Config) *Client {
+func New(cfg Config) (*Client, error) {
+	bounds, err := llm.NormalizeHTTPBounds(llm.HTTPBounds{
+		Timeout: cfg.Timeout, MaxResponseBytes: cfg.MaxResponseBytes,
+		MaxErrorBytes: cfg.MaxErrorBytes, MaxStreamFrameBytes: cfg.MaxStreamFrameBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ollama: validate HTTP bounds: %w", err)
+	}
+	cfg.Timeout = bounds.Timeout
+	cfg.MaxResponseBytes = bounds.MaxResponseBytes
+	cfg.MaxErrorBytes = bounds.MaxErrorBytes
+	cfg.MaxStreamFrameBytes = bounds.MaxStreamFrameBytes
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = DefaultBaseURL
 	}
-	if cfg.Timeout == 0 {
-		cfg.Timeout = 120 * time.Second
-	}
-	hc := cfg.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: cfg.Timeout}
-	}
-	return &Client{cfg: cfg, base: strings.TrimRight(cfg.BaseURL, "/"), hc: hc}
+	hc := httpclient.CloneBounded(cfg.HTTPClient, cfg.Timeout)
+	return &Client{cfg: cfg, base: strings.TrimRight(cfg.BaseURL, "/"), hc: hc}, nil
 }
 
 // Chat implements [llm.Client].
@@ -97,11 +112,18 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close response body") }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return llm.Response{}, fmt.Errorf("ollama: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return llm.Response{}, fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, raw)
 	}
 	var out chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	raw, err := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxResponseBytes)
+	if err != nil {
+		return llm.Response{}, fmt.Errorf("ollama: read response: %w", err)
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return llm.Response{}, fmt.Errorf("ollama: decode: %w", err)
 	}
 	return llm.Response{
@@ -115,7 +137,9 @@ func (c *Client) Chat(ctx context.Context, messages []llm.Message, opts ...llm.O
 // Stream implements [llm.Client]. Ollama emits NDJSON — one JSON object
 // per line, terminated by {"done":true}.
 func (c *Client) Stream(ctx context.Context, messages []llm.Message, opts ...llm.Option) <-chan llm.Chunk {
-	return llm.RunStream(func(ch chan<- llm.Chunk) error { return c.stream(ctx, messages, opts, ch) })
+	return llm.RunStreamContext(ctx, func(ch chan<- llm.Chunk) error {
+		return c.stream(ctx, messages, opts, ch)
+	})
 }
 
 // stream performs one NDJSON request and forwards content onto ch.
@@ -131,29 +155,46 @@ func (c *Client) stream(ctx context.Context, messages []llm.Message, opts []llm.
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close stream body") }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return fmt.Errorf("ollama: HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, raw)
 	}
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	for scanner.Scan() {
-		var ev chatResponse
-		if err := json.Unmarshal(scanner.Bytes(), &ev); err != nil {
-			continue
-		}
-		if ev.Message.Content != "" {
-			ch <- llm.Chunk{Content: ev.Message.Content}
-		}
-		if ev.Done {
-			return nil
-		}
-	}
-	// A dropped connection, a cancelled ctx or an over-long line ends
-	// Scan early; surface it instead of reporting a clean end-of-stream.
-	if scanErr := scanner.Err(); scanErr != nil {
+	scanErr := llm.ScanStreamLines(resp.Body, c.cfg.MaxStreamFrameBytes, func(line []byte) (bool, error) {
+		return handleStreamLine(ctx, ch, line)
+	})
+	if scanErr != nil {
 		return fmt.Errorf("ollama: stream: %w", scanErr)
 	}
 	return nil
+}
+
+func handleStreamLine(ctx context.Context, ch chan<- llm.Chunk, line []byte) (bool, error) {
+	event, ok, err := parseStreamLine(line)
+	if err != nil || !ok {
+		return false, err
+	}
+	if event.Error != "" {
+		return false, fmt.Errorf("ollama stream provider error: %s", event.Error)
+	}
+	if event.Message.Content != "" {
+		if err = llm.SendChunk(ctx, ch, llm.Chunk{Content: event.Message.Content}); err != nil {
+			return false, fmt.Errorf("ollama: send delta: %w", err)
+		}
+	}
+	return event.Done, nil
+}
+
+func parseStreamLine(line []byte) (chatResponse, bool, error) {
+	if len(strings.TrimSpace(string(line))) == 0 {
+		return chatResponse{}, false, nil
+	}
+	var event chatResponse
+	if err := json.Unmarshal(line, &event); err != nil {
+		return chatResponse{}, false, fmt.Errorf("invalid Ollama stream event: %w", err)
+	}
+	return event, true, nil
 }
 
 // Embed implements [llm.Client].
@@ -175,13 +216,20 @@ func (c *Client) Embed(ctx context.Context, text string) (_ []float32, err error
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ollama: close embed body") }()
 	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
+		raw, readErr := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxErrorBytes)
+		if readErr != nil {
+			return nil, fmt.Errorf("ollama: embed HTTP %d error body: %w", resp.StatusCode, readErr)
+		}
 		return nil, fmt.Errorf("ollama: embed HTTP %d: %s", resp.StatusCode, raw)
 	}
 	var out struct {
 		Embedding []float32 `json:"embedding"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	raw, err := httpclient.ReadAllBounded(resp.Body, c.cfg.MaxResponseBytes)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: embed read response: %w", err)
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
 		return nil, fmt.Errorf("ollama: embed decode: %w", err)
 	}
 	if len(out.Embedding) == 0 {
@@ -236,6 +284,7 @@ func (c *Client) buildChatRequest(s llm.Settings, messages []llm.Message, stream
 type chatResponse struct {
 	Model   string `json:"model"`
 	Done    bool   `json:"done"`
+	Error   string `json:"error"`
 	Message struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`

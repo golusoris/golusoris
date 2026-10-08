@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,12 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/server"
 )
+
+type typedNilHandler struct{ status int }
+
+func (h *typedNilHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	w.WriteHeader(h.status)
+}
 
 func TestDefaultOptions(t *testing.T) {
 	t.Parallel()
@@ -48,6 +55,17 @@ func TestNewAppliesTimeouts(t *testing.T) {
 	}
 	if srv.ReadHeaderTimeout != 1*time.Second {
 		t.Errorf("ReadHeaderTimeout = %v", srv.ReadHeaderTimeout)
+	}
+}
+
+func TestNewTypedNilHandlerFailsClosed(t *testing.T) {
+	t.Parallel()
+	var handler *typedNilHandler
+	server := server.New(handler, server.Options{})
+	recorder := httptest.NewRecorder()
+	server.Handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusNotFound)
 	}
 }
 

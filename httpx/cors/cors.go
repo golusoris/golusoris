@@ -17,8 +17,10 @@
 package cors
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"time"
 
 	rscors "github.com/rs/cors"
@@ -49,16 +51,40 @@ func DefaultOptions() Options {
 }
 
 // New returns a [middleware.Middleware] with the configured CORS policy.
-func New(opts Options) middleware.Middleware {
+// It rejects credentialed match-all policies because browsers cannot accept
+// Access-Control-Allow-Origin: * together with credentials.
+func New(opts Options) (middleware.Middleware, error) {
+	maxAge, err := maxAgeSeconds(opts.MaxAge)
+	if err != nil {
+		return nil, err
+	}
+	if opts.Credentials && slices.Contains(opts.Origins, "*") {
+		return nil, errors.New("httpx/cors: wildcard origin cannot allow credentials")
+	}
+	if len(opts.Origins) == 0 {
+		return func(next http.Handler) http.Handler { return next }, nil
+	}
 	c := rscors.New(rscors.Options{
-		AllowedOrigins:   opts.Origins,
-		AllowedMethods:   opts.Methods,
-		AllowedHeaders:   opts.Headers,
-		ExposedHeaders:   opts.Expose,
+		AllowedOrigins:   slices.Clone(opts.Origins),
+		AllowedMethods:   slices.Clone(opts.Methods),
+		AllowedHeaders:   slices.Clone(opts.Headers),
+		ExposedHeaders:   slices.Clone(opts.Expose),
 		AllowCredentials: opts.Credentials,
-		MaxAge:           int(opts.MaxAge.Seconds()),
+		MaxAge:           maxAge,
 	})
-	return c.Handler
+	return c.Handler, nil
+}
+
+func maxAgeSeconds(maxAge time.Duration) (int, error) {
+	if maxAge < 0 {
+		return -1, nil
+	}
+	seconds := int64(maxAge / time.Second)
+	maxInt := int64(^uint(0) >> 1)
+	if seconds > maxInt {
+		return 0, fmt.Errorf("httpx/cors: max age %s overflows int seconds", maxAge)
+	}
+	return int(seconds), nil
 }
 
 func loadOptions(cfg *config.Config) (Options, error) {

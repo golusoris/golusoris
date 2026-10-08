@@ -47,6 +47,18 @@ func TestNoopScanner_DrainError(t *testing.T) {
 	}
 }
 
+func TestNoopScanner_NilLoggerUsesSafeDefault(t *testing.T) {
+	t.Parallel()
+	s := scan.NewNoopScanner(nil)
+	v, err := s.Scan(context.Background(), strings.NewReader("clean"))
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if !v.Clean {
+		t.Fatalf("noop verdict = %+v, want Clean", v)
+	}
+}
+
 // TestErrUnsupported_WrapsStdlib pins the documented contract that the
 // non-unix sentinel is recognisable through the stdlib errors.ErrUnsupported
 // on every platform, not only where the clamd stub is compiled.

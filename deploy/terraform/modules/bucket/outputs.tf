@@ -16,3 +16,8 @@ output "regional_domain_name" {
   description = "Region-qualified S3 hostname (for presigned URLs)."
   value       = aws_s3_bucket.this.bucket_regional_domain_name
 }
+
+output "kms_key_arn" {
+  description = "Customer-managed KMS key used for bucket encryption."
+  value       = local.kms_key_arn
+}

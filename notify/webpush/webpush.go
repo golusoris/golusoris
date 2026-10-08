@@ -36,11 +36,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	wp "github.com/SherClockHolmes/webpush-go"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -64,7 +67,7 @@ type Options struct {
 	Urgency string `koanf:"urgency"`
 	// Topic collapses older messages with the same topic. Optional.
 	Topic string `koanf:"topic"`
-	// HTTPClient is optional; defaults to a 10s-timeout client.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
 	HTTPClient *http.Client
 }
 
@@ -82,10 +85,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if opts.VAPIDPrivateKey == "" {
 		return nil, errors.New("notify/webpush: vapid_private_key is required")
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
-	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
 	return &Sender{opts: opts, hc: hc}, nil
 }
 
@@ -104,6 +104,9 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) (err error) {
 	var sub wp.Subscription
 	if uerr := json.Unmarshal([]byte(subJSON), &sub); uerr != nil {
 		return fmt.Errorf("notify/webpush: subscription: %w", uerr)
+	}
+	if uerr := validateEndpoint(sub.Endpoint); uerr != nil {
+		return uerr
 	}
 	if msg.Body == "" {
 		return errors.New("notify/webpush: msg.Body required (payload sent verbatim to the service worker)")
@@ -144,9 +147,12 @@ func NewVAPIDKeys() (privateKey, publicKey string, err error) {
 	return priv, pub, nil
 }
 
-// EncodeSubscription is a convenience for apps that want to stash a
-// JSON-encoded Subscription into [notify.Message.Metadata].
+// EncodeSubscription validates an absolute HTTPS endpoint and returns a
+// JSON-encoded Subscription for [notify.Message.Metadata].
 func EncodeSubscription(endpoint, p256dh, auth string) (string, error) {
+	if err := validateEndpoint(endpoint); err != nil {
+		return "", err
+	}
 	sub := wp.Subscription{
 		Endpoint: endpoint,
 		Keys: wp.Keys{
@@ -159,4 +165,15 @@ func EncodeSubscription(endpoint, p256dh, auth string) (string, error) {
 		return "", fmt.Errorf("notify/webpush: encode: %w", err)
 	}
 	return string(b), nil
+}
+
+func validateEndpoint(raw string) error {
+	endpoint, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("notify/webpush: endpoint: %w", err)
+	}
+	if !strings.EqualFold(endpoint.Scheme, "https") || endpoint.Host == "" {
+		return errors.New("notify/webpush: endpoint must be an absolute HTTPS URL")
+	}
+	return nil
 }

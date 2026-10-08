@@ -13,6 +13,8 @@ import (
 	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/log/global"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	nooptrace "go.opentelemetry.io/otel/trace/noop"
 	"go.uber.org/fx"
@@ -104,8 +106,7 @@ func TestLoadOptionsFromConfig(t *testing.T) {
 // TestNewRegistersGlobalTracer boots the SDK against an unreachable
 // endpoint — it should still construct successfully because the exporter
 // is lazy-dialed. The global tracer provider should become non-noop.
-func TestNewRegistersGlobalTracer(t *testing.T) {
-	t.Parallel()
+func TestNewRegistersGlobalTracer(t *testing.T) { //nolint:paralleltest // Mutates the global tracer provider.
 	// Capture current global to restore later.
 	prev := otelapi.GetTracerProvider()
 	t.Cleanup(func() { otelapi.SetTracerProvider(prev) })
@@ -130,8 +131,7 @@ func TestNewRegistersGlobalTracer(t *testing.T) {
 	}
 }
 
-func TestNewWithMetrics(t *testing.T) {
-	t.Parallel()
+func TestNewWithMetrics(t *testing.T) { //nolint:paralleltest // Mutates the global meter provider.
 	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
 		Enabled:  true,
 		Insecure: true,
@@ -148,8 +148,7 @@ func TestNewWithMetrics(t *testing.T) {
 	}
 }
 
-func TestNewWithLogs(t *testing.T) {
-	t.Parallel()
+func TestNewWithLogs(t *testing.T) { //nolint:paralleltest // Mutates the global logger provider.
 	providers, err := golusoris_otel.New(context.Background(), golusoris_otel.Options{
 		Enabled:  true,
 		Insecure: true,
@@ -163,6 +162,67 @@ func TestNewWithLogs(t *testing.T) {
 	t.Cleanup(func() { _ = providers.Shutdown(context.Background()) })
 	if providers.Logger == nil {
 		t.Error("expected Logger to be set")
+	}
+}
+
+func TestShutdownDetachesGlobalProviders(t *testing.T) { //nolint:paralleltest // Mutates all OTel globals.
+	previousTracer := otelapi.GetTracerProvider()
+	previousMeter := otelapi.GetMeterProvider()
+	previousLogger := global.GetLoggerProvider()
+	t.Cleanup(func() {
+		otelapi.SetTracerProvider(previousTracer)
+		otelapi.SetMeterProvider(previousMeter)
+		global.SetLoggerProvider(previousLogger)
+	})
+
+	providers := &golusoris_otel.Providers{}
+	providers.Tracer = sdktrace.NewTracerProvider()
+	providers.Meter = sdkmetric.NewMeterProvider()
+	providers.Logger = sdklog.NewLoggerProvider()
+	otelapi.SetTracerProvider(providers.Tracer)
+	otelapi.SetMeterProvider(providers.Meter)
+	global.SetLoggerProvider(providers.Logger)
+	if otelapi.GetTracerProvider() != providers.Tracer ||
+		otelapi.GetMeterProvider() != providers.Meter ||
+		global.GetLoggerProvider() != providers.Logger {
+		t.Fatal("constructed providers were not installed as globals")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := providers.Shutdown(ctx); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if otelapi.GetTracerProvider() == providers.Tracer ||
+		otelapi.GetMeterProvider() == providers.Meter ||
+		global.GetLoggerProvider() == providers.Logger {
+		t.Fatal("shutdown left a stopped SDK provider installed globally")
+	}
+	if _, span := otelapi.Tracer("after-shutdown").Start(ctx, "noop"); span == nil {
+		t.Fatal("replacement global tracer returned a nil span")
+	} else {
+		span.End()
+	}
+	if _, err := otelapi.Meter("after-shutdown").Int64Counter("noop.counter"); err != nil {
+		t.Fatalf("replacement global meter: %v", err)
+	}
+	if logger := global.GetLoggerProvider().Logger("after-shutdown"); logger == nil {
+		t.Fatal("replacement global logger returned nil")
+	}
+}
+
+func TestShutdownDoesNotClobberNewerGlobalProvider(t *testing.T) { //nolint:paralleltest // Mutates the global tracer provider.
+	previousTracer := otelapi.GetTracerProvider()
+	t.Cleanup(func() { otelapi.SetTracerProvider(previousTracer) })
+	providers := &golusoris_otel.Providers{Tracer: sdktrace.NewTracerProvider()}
+	otelapi.SetTracerProvider(providers.Tracer)
+	replacement := nooptrace.NewTracerProvider()
+	otelapi.SetTracerProvider(replacement)
+	if err := providers.Shutdown(context.Background()); err != nil {
+		t.Fatalf("Shutdown: %v", err)
+	}
+	if got := otelapi.GetTracerProvider(); got != replacement {
+		t.Fatalf("Shutdown replaced newer global provider: %T", got)
 	}
 }
 

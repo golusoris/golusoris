@@ -36,8 +36,10 @@ string `escape(key)|w|h|q|format|expiryUnix` and the mac authenticates all of it
 under a required `>=16`-byte secret. The handler verifies the mac in constant
 time (`hmac.Equal`), rejects expired tokens against an injected `clock.Clock`,
 and re-validates the transform against configured bounds (max width/height,
-max-pixels, format allowlist) before any decode. The token is self-describing, so
-**no server-side state** (DB row, cache) is needed to authorize a request. The
+max-pixels, format allowlist) before any decode. The encoded source is also
+read through a configurable byte cap (32 MiB by default) before resize. The
+token is self-describing, so **no server-side state** (DB row, cache) is needed
+to authorize a request. The
 signing/validation/routing logic lives in **CGO-independent files**; the resize
 delegates to an injected `img.Processor`, and a stock build (govips not
 activated) returns HTTP 415 rather than failing to compile.
@@ -56,19 +58,20 @@ activated) returns HTTP 415 rather than failing to compile.
 
 - **Positive**: The endpoint is safe to expose publicly and front with a CDN —
   tokens are unforgeable, expiring, and self-validating with no per-request state.
-  Output dimensions are bounded before decode (decompression-bomb guard,
-  Power-of-10 rule 2). The access-control path has zero CGO, so signing/validation
-  is testable and shippable on a no-libvips runner (≥70% coverage of the non-CGO
-  logic; this package lands at 85%).
+  Source bytes and output dimensions are bounded before decode
+  (decompression-bomb guard, Power-of-10 rule 2). The access-control path has
+  zero CGO, so signing/validation is testable and shippable on a no-libvips
+  runner (≥70% coverage of the non-CGO logic; this package lands at 85%).
 - **Negative**: Rotating the signing secret invalidates all outstanding URLs at
   once (mitigate with a short `default_ttl` and, if needed, a future
   multi-secret verify list). The canonical-string format is now a compatibility
   surface: changing field order/encoding breaks live tokens, so it is frozen by
   this ADR. The transform params travel in the clear (acceptable — they are not
   secret; the key is URL-escaped so the separator cannot be injected).
-- **Neutral / follow-ups**: The real libvips resize is exercised only under the
-  `imgvips` build tag (mirrors `media/img`'s govips activation); CI without
-  libvips covers the stub (415) path. Secret is required at boot — `New` rejects
+- **Neutral / follow-ups**: A real libvips resize is exercised only under the
+  `imgvips` build tag through a test-only govips adapter; CI without libvips
+  covers the unavailable-backend (415) path. The parent `media/img` package
+  ships an interface, not a runtime backend. Secret is required at boot — `New` rejects
   secrets shorter than 16 bytes so an app cannot accidentally ship an
   unauthenticated proxy. A future secret-rotation window (overlapping verify
   keys) wires via config, not `init()`.
@@ -80,4 +83,4 @@ activated) returns HTTP 415 rather than failing to compile.
 - ADR-0008 — upload-side SSRF + decompression hardening (sibling concern on ingest).
 - [principles.md §2.5 / §2.6](../principles.md) — security + wire-protocol standards.
 - `media/img/pipeline/AGENTS.md` — API, token format, config keys, build tags.
-- `media/img/AGENTS.md` — the govips processor this pipeline delegates resize to.
+- `media/img/AGENTS.md` — the processor contract callers inject.

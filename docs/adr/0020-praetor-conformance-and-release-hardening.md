@@ -36,7 +36,7 @@ issue #429 and its per-area tasks #432–#434.
 ## Decision
 
 1. **`.workingdir/` becomes private (HISS-17).** The directory (12 tracked
-   files: routing ledger, `PLAN.md`/`STATE.md`/`QUESTIONS.md`, archive) is
+   files: routing ledger, `OPEN.md`/`STATE.md`/`QUESTIONS.md`, archive) is
    untracked and `.gitignore` gains praetor's exact `/.workingdir/` rule plus
    a nested `.workingdir/` rule for per-package copies (`#495`). This
    reverses a convention that had been declared only in a `.gitignore`
@@ -76,26 +76,30 @@ issue #429 and its per-area tasks #432–#434.
    `.standards.yaml` sets `branch_protection.review_mode:
    single_maintainer`; praetor renders this to zero required approving
    reviews and no code-owner review, matching praetor's own dogfooded
-   policy for a solo maintainer. `.github/rulesets/main.json` is regenerated
-   from that declared policy by `standardsctl sync`: required status checks
-   Build, Security (gosec), Lint, Test (race + coverage) and Vulnerabilities
-   (govulncheck), strict status checks, linear history, required signatures,
-   no bypass actors (`#509`). Applying the ruleset to GitHub
-   (`standardsctl sync --remote`) is deferred until the fleet-gated pull
-   requests already in flight land, since a ruleset carries no admin bypass;
-   until then GitHub enforces the pre-existing classic branch protection
-   (required checks "CI success", "PR title (Conventional Commits)",
-   "Analyze (go)"; strict; linear history).
-6. **Releases are immutable, with source-tree SBOM attestations.** GitHub
+   policy for a solo maintainer. `praetorctl sync` regenerates
+   `.github/rulesets/main.json` from that policy and the workflow tree; current
+   `fae37a35d44e` renders 24 exact unconditional contexts, including matrix
+   legs. It cannot render `CI success` (`if: always()`) or the conditional
+   pull-request gates for PR title, DCO, and dependency review because
+   `RequiredStatusContexts` excludes those job conditions
+   (`cordanaLLM/praetor#76`). Applying the declaration with
+   `praetorctl sync --remote` would therefore weaken the live gate and remains
+   blocked. GitHub continues to enforce classic branch protection with
+   `CI success`, `PR title (Conventional Commits)`, and `Analyze (go)`; no
+   active branch ruleset targets `main`.
+6. **Releases are immutable, with a source-tree SBOM attestation workflow.** GitHub
    immutable releases are enabled for this repository (`v0.10.1` is the
    first release published under it). Because an immutable release accepts
    no assets after publication, `sbom.yml` generates SPDX and CycloneDX
-   SBOMs for the tagged source tree and publishes them as GitHub
-   attestations (`actions/attest-sbom`, Sigstore keyless) and workflow
+   SBOMs for the tagged source tree and attempts to publish them as GitHub
+   attestations (`actions/attest`, Sigstore keyless) and workflow
    artifacts, rather than as release-asset uploads (`#508`). This is in
    addition to the per-archive SPDX SBOMs `release.yml` already emits
    through goreleaser and signs with cosign keyless signatures and
-   `actions/attest-build-provenance`.
+   `actions/attest-build-provenance`. Hosted publication remains an observed
+   result, not a configuration guarantee: the v0.12.0 release and per-archive
+   SBOMs succeeded, while its separate source-tree workflow failed during
+   Rekor publication. The added retry path must be proven by a later tag.
 7. **`template/` pins the reusable workflows at a tagged commit, not a
    floating ref.** `template/.github/workflows/{ci,release}.yml` reference
    `golusoris/golusoris/.github/workflows/{ci-go,release-go,scorecard}.yml`
@@ -103,26 +107,19 @@ issue #429 and its per-area tasks #432–#434.
    (`380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`), corrected onto the
    current tagged release after an earlier automated dependency bump had
    landed the template on a broken pin (`#500`).
-8. **Admin merges on a green local gate are a documented, commented
-   exception while the ARC fleet is capacity-constrained.** The self-hosted
-   `arc-cauda-golusoris-golusoris` runner set is undersized for this
-   monorepo's lint/build/test cost under contention (`ci.yml`'s Lint job
-   comment records a measured ~810 CPU-s cold-cache cost against a
-   750 m-CPU-guaranteed runner, and a starved node pushing a run past the
-   original 20-minute budget). With a single maintainer and `review_mode:
-   single_maintainer` in effect, a merge is admin-merged only after the
-   documented local gate (`make verify-all`) has passed on the branch tip,
-   and the PR or commit records that as the reason; this is a stated
-   exception to waiting on GitHub's required checks, not a substitute for
-   the required checks once the ARC fleet resize referenced in the `ci.yml`
-   comment lands.
+8. **Withdrawn: admin merges while the ARC fleet was constrained.** This
+   decision covered the period when the self-hosted
+   `arc-cauda-golusoris-golusoris` runner set could not keep up with the
+   required checks. [ADR-0021](0021-github-hosted-runners.md) moved CI to
+   GitHub-hosted runners, so required checks no longer wait on that fleet
+   and no admin-merge exception remains.
 
 ## Alternatives considered
 
 | Option | Pros | Cons | Why not chosen |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Keep `.workingdir/` tracked, ask praetor to special-case golusoris | No git-history churn; state stays inspectable in-tree | HISS-17 is a fleet-wide invariant enforced by praetor's own Git metadata gate; a per-repo exception defeats "one behavior, one implementation" | Fleet-wide conformance (HISS-19) over a local carve-out |
-| Replace `lefthook.yml` wholesale with praetor's generated scaffold | Zero merge work, always in sync with praetor | Drops golusoris's stricter multi-module `govet.sh` and gofumpt-over-gofmt reasoning; silently loses coverage in a 21-module monorepo | Verified check-by-check merge, kept where golusoris's script covers strictly more |
+| Replace `lefthook.yml` wholesale with praetor's generated scaffold | Zero merge work, always in sync with praetor | Drops golusoris's stricter multi-module `govet.sh` and gofumpt-over-gofmt reasoning; silently loses coverage in the multi-module repository | Verified check-by-check merge, kept where golusoris's script covers strictly more |
 | Suppress the flavor mismatch (patch praetor's flavor detector locally, or fake the manifest) | `flavor-audit`/`gate` could stay enabled today | Masks a real upstream bug (praetor#36) instead of fixing it; a local patch on a fleet-wide tool re-diverges the fleet | Held back with an explicit re-enable condition tied to the upstream fix |
 | Leave `.golangci.yml`/`.gosec.json` under `tools/` and symlink from root | Avoids repointing every consumer | Praetor's flavor definitions look for the file at the root path, not a symlink target, by name; `standardsctl gate run` failed before reaching the security scan | Canonical root paths, every consumer repointed |
 | Mutable releases, SBOMs attached as release assets | One artifact surface (the release page) | Immutable releases (once enabled) reject post-publication asset uploads outright | GitHub attestations for source-tree SBOMs instead of release assets |
@@ -131,26 +128,32 @@ issue #429 and its per-area tasks #432–#434.
 
 ## Consequences
 
-- **Positive**: `standardsctl audit` runs green against the HISS-16 baseline
-  (0 since #503); `standardsctl gate run` passes stages 1–3; the devcontainer
-  builds and `standardsctl devcontainer --verify` passes; the branch
+- **Positive**: the HISS baseline remains zero. Current Praetor
+  `fae37a35d44e` reaches only its two false-positive HISS-07 findings for the
+  canonical `panic(http.ErrAbortHandler)` connection-abort path; upstream
+  `cordanaLLM/praetor#331` tracks the scanner fix and #393 tracks the missing
+  signed-waiver verifier. No baseline or gate bypass masks either finding.
+  `standardsctl gate run` passes stages 1–3; the devcontainer builds and
+  `standardsctl devcontainer --verify` passes; the branch
   protection policy is declared in a file (`.github/rulesets/main.json`)
-  instead of only existing as a GitHub UI setting; releases carry SLSA-3
-  provenance, cosign signatures and both per-archive and source-tree SBOM
-  attestations; downstream apps pin reproducible, verifiable workflow
-  versions instead of a floating branch ref.
+  instead of only existing as a GitHub UI setting; releases carry build
+  provenance attestations, cosign signatures, and per-archive SBOMs, while a
+  separate workflow attempts source-tree SBOM attestations; downstream apps
+  pin reproducible, verifiable workflow versions instead of a floating branch
+  ref.
 - **Negative**: `flavor-audit` and `gate` stay disabled in `lefthook.yml`
   pending an external fix (cordanaLLM/praetor#36), so stage 4 (flavor
   conformance) of praetor's gate is not locally enforced until then;
   `.workingdir/` state is no longer versioned in git, so continuity across
-  sessions depends entirely on tooling outside the repository; the declared
-  ruleset is not yet the ruleset GitHub enforces, so the two can drift out
-  of sync until `standardsctl sync --remote` runs; the admin-merge exception
-  is a human judgment call recorded in prose (PR/commit rationale), not a
-  machine-checked gate.
-- **Neutral / follow-ups**: apply `.github/rulesets/main.json` to GitHub via
-  `standardsctl sync --remote` once the fleet-gated pull requests in flight
-  land (tracked in epic task #434); re-enable `flavor-audit` and `gate` once
+  sessions depends entirely on tooling outside the repository; the generated
+  ruleset cannot yet preserve the live aggregate and conditional PR checks;
+  the admin-merge exception is a human judgment call recorded in prose
+  (PR/commit rationale), not a machine-checked gate.
+- **Neutral / follow-ups**: keep remote ruleset reconciliation blocked until
+  `cordanaLLM/praetor#76` can preserve the live gate and every newly declared
+  matrix context has a hosted green; then regenerate and review the exact
+  payload before `praetorctl sync --remote` (epic task #434). Re-enable
+  `flavor-audit` and `gate` once
   cordanaLLM/praetor#36 is fixed and `praetorctl flavor audit .` exits 0 on
   `main`; retire the admin-merge exception once the ARC runner resize noted
   in the `ci.yml` Lint job comment is applied.

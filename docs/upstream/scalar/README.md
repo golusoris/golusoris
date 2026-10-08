@@ -4,25 +4,32 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Scalar API reference UI — snapshot
+# Scalar API reference UI — v1.25.52 snapshot
 
-Source: https://scalar.com / https://github.com/scalar/scalar
-Used via: embedded JS in `apidocs/` handler
+Pinned: **v1.25.52**
+Source: [published package v1.25.52](https://www.npmjs.com/package/@scalar/api-reference/v/1.25.52)
+Used via: `apidocs/embed/scalar.js`; version authority is
+`apidocs/embed/SCALAR_VERSION` and the bundle header.
 
 ## Usage in golusoris
 
 ```go
-// apidocs/ mounts:
-//   GET /docs        → Scalar UI (HTML page loading the JS bundle)
-//   GET /mcp         → MCP-from-OpenAPI tool list
-//   GET /openapi.json → spec passthrough
-
-// Mount alongside ogen server:
-r.Mount("/docs", apidocs.Handler(apidocs.Config{
-    SpecURL: "/openapi.json",
-    Title:   "My API",
-}))
+err := apidocs.Mount(r, apidocs.Options{
+    Title: "My API",
+    Spec:  openAPISpec,
+})
+if err != nil {
+    return fmt.Errorf("mount API docs: %w", err)
+}
 ```
+
+`apidocs.Module` is the Fx alternative: supply the same `apidocs.Options` and
+include the module. Mounting adds `/docs`, `/docs/scalar.js`, and
+`/openapi.json` or `/openapi.yaml` according to the supplied spec.
+
+MCP remains absent by default. Set `EnableMCP`, `BaseURL`, and a per-request
+`MCPAuthorize` callback to mount authenticated `/mcp`. Supply `HTTPClient` when
+the bounded framework default is not suitable.
 
 ## Scalar HTML embed pattern
 
@@ -33,27 +40,16 @@ r.Mount("/docs", apidocs.Handler(apidocs.Config{
 <body>
   <script
     id="api-reference"
-    data-url="/openapi.json"
-    src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    data-url="/openapi.json"></script>
+  <script src="/docs/scalar.js"></script>
 </body>
 </html>
 ```
 
-In production the JS is embedded via `embed.FS` to avoid external CDN dependency.
-
-## Configuration options
-
-```js
-document.getElementById('api-reference').dataset.configuration = JSON.stringify({
-  theme: 'default',         // 'default' | 'dark' | 'solarized' | etc.
-  layout: 'modern',         // 'modern' | 'classic'
-  hideModels: false,
-  hideDownloadButton: false,
-  showSidebar: true,
-})
-```
+The shipped handler always serves the embedded bundle; it has no runtime CDN
+dependency.
 
 ## Links
 
-- Docs: https://github.com/scalar/scalar/tree/main/packages/api-reference
-- Themes: https://github.com/scalar/scalar/tree/main/packages/themes
+- [Published package](https://www.npmjs.com/package/@scalar/api-reference/v/1.25.52)
+- [Scalar documentation](https://guides.scalar.com/scalar/scalar-api-references)

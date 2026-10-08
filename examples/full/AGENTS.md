@@ -6,20 +6,19 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — examples/full/
 
-Runnable example: a production-shaped golusoris app composing the major
-modules. Not a library — `package main`, no exports. Copy it and remove the
-modules you don't need.
+Runnable example: production-shaped golusoris app composing major
+modules. Not library — `package main`, no exports. Copy it and remove modules you don't need.
 
 ## What it wires
 
 ```go
 fx.New(
     golusoris.Core,        // config + log + clock + id + errors + validate + crypto
-    golusoris.DB,          // pgx pool + migrations + sqlc
+    golusoris.DB,          // pgx pool + migrations
     otel.Module,           // tracer + meter + OTLP
-    golusoris.HTTP,        // server + middleware + Scalar docs
-    golusoris.K8s,         // /livez /readyz /startupz + /metrics
-    golusoris.Jobs,        // river queue + cron
+    golusoris.HTTP,        // chi router + HTTP server
+    golusoris.K8s,         // pod metadata + Kubernetes client
+    golusoris.Jobs,        // river client + worker registry
     golusoris.CacheMemory, // otter L1
     golusoris.CacheRedis,  // rueidis L2
     golusoris.AuthOIDC, authz.Module,   // PKCE OIDC + Casbin RBAC
@@ -32,7 +31,6 @@ Required config (env, `APP_` prefix): `APP_DB_DSN`, `APP_HTTP_ADDR`
 
 ## Notes
 
-- Demonstration surface — keep it in sync with the exported `golusoris.*` fx
-  vars and module set; it doubles as wiring documentation.
-- Needs live Postgres + Redis (+ OIDC/Stripe creds) to actually `Run`; for the
-  smaller smoke-test composition see `examples/minimal/`.
+- Demonstration surface — keep it in sync with exported `golusoris.*` fx
+ vars and module set; it doubles as wiring documentation.
+- Needs live Postgres + Redis (+ OIDC/Stripe creds) to `Run`; for  smaller smoke-test composition see `examples/minimal/`.

@@ -5,7 +5,7 @@ description: Process and implement code review feedback systematically. Use when
 
 # Review Feedback Implementation
 
-Systematically process and implement changes based on code review feedback.
+Systematically process and implement changes from code review feedback.
 
 ## When to Use
 
@@ -20,7 +20,7 @@ Systematically process and implement changes based on code review feedback.
 ### 1. Parse Reviewer Notes
 
 Identify individual feedback items:
-- Split numbered lists (1., 2., etc.)
+- Split numbered lists (1, 2, etc.)
 - Handle bullet points or unnumbered feedback
 - Extract distinct change requests
 - Clarify ambiguous items before starting
@@ -62,7 +62,7 @@ For each todo item:
 
 **Update status:**
 - Mark todo as `completed` immediately after finishing
-- Move to next todo (only one `in_progress` at a time)
+- Move to next todo (only one `in_progress` at time)
 
 ### 4. Handle Different Feedback Types
 

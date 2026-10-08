@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-Add a new opt-in fx module to the golusoris framework.
+Add new opt-in fx module to golusoris framework.
 
 ## Task
 
-Create the package at `$ARGUMENTS` (e.g. `notify/slack`).
+Create package at `$ARGUMENTS` (e.g. `notify/slack`).
 
 Follow these rules exactly:
 
@@ -23,8 +23,8 @@ Follow these rules exactly:
 9. **AGENTS.md** — write per-subpackage guide: fx wiring, config table, usage example, Don't section.
 10. **Tests** — table-driven, race-clean, integration over mocks. Use `testutil/fxtest` for fx lifecycle tests.
 11. **Lint** — `golangci-lint run ./path/...` must report 0 issues before declaring done.
-12. **Contract** — add the package to `capabilities.yaml` (import, module, domain, capability keys, `replaces`); `go test -run TestCapabilitiesContract .` must pass.
-13. **Header** — every new file starts with the SPDX header (`LICENSING.md`).
+12. **Contract** — add package to `capabilities.yaml` (import, module, domain, capability keys, `replaces`); `go test -run TestCapabilitiesContract .` must pass.
+13. **Header** — every new file starts with SPDX header (`LICENSING.md`).
 
 ## Template structure
 

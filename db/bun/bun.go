@@ -20,6 +20,8 @@
 package bun
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -50,15 +52,36 @@ func loadOptions(cfg *config.Config) (Options, error) {
 }
 
 // New builds a [*bun.DB] over the shared pgx pool. The returned DB borrows the
-// pool — db/pgx owns the connection lifecycle, so it is intentionally not
-// closed here (closing it would tear down the shared pool).
-func New(pool *pgxpool.Pool, opts Options, logger *slog.Logger) *bun.DB {
+// pool. Direct callers close the Bun adapter when done; that does not close the
+// shared pool.
+func New(pool *pgxpool.Pool, opts Options, logger *slog.Logger) (*bun.DB, error) {
+	if err := validatePool(pool); err != nil {
+		return nil, err
+	}
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
 	db := bun.NewDB(stdlib.OpenDBFromPool(pool), pgdialect.New())
 	if opts.Verbose {
 		db.AddQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
 	}
 	logger.Debug("db/bun: ORM ready", slog.Bool("verbose", opts.Verbose))
-	return db
+	return db, nil
+}
+
+func validatePool(pool *pgxpool.Pool) (err error) {
+	if pool == nil {
+		return errors.New("db/bun: nil pool")
+	}
+	defer func() {
+		if recover() != nil {
+			err = errors.New("db/bun: invalid pool")
+		}
+	}()
+	if pool.Config() == nil {
+		return errors.New("db/bun: invalid pool")
+	}
+	return nil
 }
 
 // Module provides a [*bun.DB] built over the db/pgx [*pgxpool.Pool]. Requires
@@ -67,4 +90,18 @@ var Module = fx.Module(
 	"golusoris.db.bun",
 	fx.Provide(loadOptions),
 	fx.Provide(New),
+	fx.Invoke(registerLifecycle),
 )
+
+func registerLifecycle(lc fx.Lifecycle, db *bun.DB) error {
+	if db == nil {
+		return errors.New("db/bun: nil database")
+	}
+	lc.Append(fx.Hook{OnStop: func(context.Context) error {
+		if err := db.Close(); err != nil {
+			return fmt.Errorf("db/bun: close adapter: %w", err)
+		}
+		return nil
+	}})
+	return nil
+}

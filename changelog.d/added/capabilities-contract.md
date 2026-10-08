@@ -1,1 +1,0 @@
-- `capabilities.yaml` + `core/capabilities`: machine-readable capability contract (package → capability keys → replaced third-party modules) consumed by cordanallm/praetor `needs`; root drift test keeps it in sync (ADR-0019).

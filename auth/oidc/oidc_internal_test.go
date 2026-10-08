@@ -5,10 +5,19 @@
 package oidc
 
 import (
+	"context"
 	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
 
 	"github.com/golusoris/golusoris/core/config"
 )
@@ -27,6 +36,53 @@ func TestOptions_withDefaults_preservesExplicitScopes(t *testing.T) {
 	require.Equal(t, []string{"openid", "groups"}, got.Scopes)
 }
 
+func TestOptions_withDefaults_requiresOpenIDAndClonesScopes(t *testing.T) {
+	t.Parallel()
+	scopes := []string{"groups"}
+	got := (Options{Scopes: scopes}).withDefaults()
+	scopes[0] = "mutated"
+	require.Equal(t, []string{"openid", "groups"}, got.Scopes)
+}
+
+func TestProvider_AuthURLRejectsEmptyState(t *testing.T) {
+	t.Parallel()
+	provider := &Provider{cfg: oauth2.Config{
+		ClientID: "client",
+		Endpoint: oauth2.Endpoint{AuthURL: "https://issuer.example.test/authorize"},
+	}}
+	authURL, verifier, err := provider.AuthURL("")
+	require.Error(t, err)
+	require.Empty(t, authURL)
+	require.Empty(t, verifier)
+
+	authURL, _, err = provider.AuthURL("opaque-state")
+	require.NoError(t, err)
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	require.Equal(t, "opaque-state", parsed.Query().Get("state"))
+}
+
+func TestOptions_withDefaults_boundsInjectedHTTPClient(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{}
+	got := (Options{DiscoveryTimeout: 25 * time.Millisecond, HTTPClient: client}).withDefaults()
+
+	require.Equal(t, 25*time.Millisecond, got.DiscoveryTimeout)
+	require.Equal(t, 25*time.Millisecond, got.HTTPClient.Timeout)
+	require.Zero(t, client.Timeout, "defaults must not mutate the caller's client")
+}
+
+func TestOptions_withDefaults_clonesBoundedHTTPClient(t *testing.T) {
+	t.Parallel()
+	client := &http.Client{Timeout: time.Minute}
+	got := (Options{DiscoveryTimeout: time.Second, HTTPClient: client}).withDefaults()
+
+	require.NotSame(t, client, got.HTTPClient)
+	require.Equal(t, time.Minute, got.HTTPClient.Timeout)
+	client.Timeout = 2 * time.Minute
+	require.Equal(t, time.Minute, got.HTTPClient.Timeout)
+}
+
 func TestLoadOptions_appliesDefaultsOnEmpty(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{})
@@ -34,6 +90,8 @@ func TestLoadOptions_appliesDefaultsOnEmpty(t *testing.T) {
 	opts, err := loadOptions(cfg)
 	require.NoError(t, err)
 	require.NotEmpty(t, opts.Scopes, "defaults should populate Scopes")
+	require.Equal(t, defaultDiscoveryTimeout, opts.DiscoveryTimeout)
+	require.Equal(t, defaultDiscoveryTimeout, opts.HTTPClient.Timeout)
 }
 
 // TestPKCEVerifier_isRFC7636Compliant: RFC 7636 §4.1 specifies the
@@ -69,4 +127,77 @@ func TestPKCEChallenge_deterministic(t *testing.T) {
 	const want = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
 	got := pkceChallenge(verifier)
 	require.Equal(t, want, got)
+}
+
+func TestNewProvider_DiscoveryUsesInjectedDeadlineContext(t *testing.T) {
+	t.Parallel()
+
+	var deadlineRemaining time.Duration
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		deadline, ok := request.Context().Deadline()
+		if ok {
+			deadlineRemaining = time.Until(deadline)
+		}
+		return nil, errors.New("stop after deadline inspection")
+	}), Timeout: time.Minute}
+	provider, err := NewProvider(context.Background(), Options{
+		IssuerURL:        "https://issuer.example.test",
+		ClientID:         "client-id",
+		RedirectURL:      "https://app.example.test/callback",
+		DiscoveryTimeout: time.Second,
+		HTTPClient:       client,
+	}, slog.New(slog.DiscardHandler))
+
+	require.Error(t, err)
+	require.Nil(t, provider)
+	require.Positive(t, deadlineRemaining)
+	require.LessOrEqual(t, deadlineRemaining, time.Second)
+	require.Equal(t, time.Minute, client.Timeout)
+}
+
+func TestNewProvider_UsesInjectedHTTPClient(t *testing.T) {
+	t.Parallel()
+
+	requestSeen := make(chan bool, 1)
+	var issuer string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		requestSeen <- request.Header.Get("X-Test-Client") == "injected"
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"issuer":                 issuer,
+			"authorization_endpoint": issuer + "/authorize",
+			"token_endpoint":         issuer + "/token",
+			"jwks_uri":               issuer + "/jwks",
+		}); err != nil {
+			return
+		}
+	}))
+	t.Cleanup(server.Close)
+	issuer = server.URL
+	baseTransport := server.Client().Transport
+	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+		request = request.Clone(request.Context())
+		request.Header.Set("X-Test-Client", "injected")
+		return baseTransport.RoundTrip(request)
+	})}
+
+	provider, err := NewProvider(t.Context(), Options{
+		IssuerURL:        issuer,
+		ClientID:         "client-id",
+		RedirectURL:      "https://app.example.test/callback",
+		DiscoveryTimeout: time.Second,
+		HTTPClient:       client,
+	}, slog.New(slog.DiscardHandler))
+
+	require.NoError(t, err)
+	require.NotNil(t, provider)
+	require.True(t, <-requestSeen)
+	require.Equal(t, time.Second, provider.client.Timeout)
+	require.Zero(t, client.Timeout)
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
 }

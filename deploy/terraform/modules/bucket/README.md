@@ -6,13 +6,13 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # terraform/modules/bucket
 
-Object-store bucket with sane defaults: AES-256 at rest, public access blocked, optional versioning + lifecycle.
+Object-store bucket with customer-managed KMS encryption, public access blocked, optional versioning, and lifecycle cleanup.
 
 ## Usage
 
 ```hcl
 module "storage" {
-  source = "github.com/golusoris/golusoris//deploy/terraform/modules/bucket?ref=v0.1.0"
+  source = "github.com/golusoris/golusoris//deploy/terraform/modules/bucket?ref=v0.12.0"
 
   name        = "myapp-prod-storage"
   versioning  = true
@@ -24,6 +24,9 @@ module "storage" {
   }
 }
 ```
+
+Omitting `kms_key_arn` creates a dedicated rotating KMS key. Set it to an
+existing customer-managed key ARN when applications share key administration.
 
 ## Provider
 

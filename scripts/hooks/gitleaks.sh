@@ -6,7 +6,7 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-need_tool gitleaks "https://github.com/gitleaks/gitleaks#installing (CI pins 8.30.1)"
+need_tool gitleaks "https://github.com/gitleaks/gitleaks#installing (CI pins GITLEAKS_VERSION in tools/tool-versions.env)"
 
 cd "$(git rev-parse --show-toplevel)"
 gitleaks git --pre-commit --staged --redact --no-banner -c .gitleaks.toml ||

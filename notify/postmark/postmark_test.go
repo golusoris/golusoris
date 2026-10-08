@@ -7,9 +7,11 @@ package postmark_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,6 +19,61 @@ import (
 	"github.com/golusoris/golusoris/notify"
 	"github.com/golusoris/golusoris/notify/postmark"
 )
+
+func TestNewBasicAuthVerifier(t *testing.T) {
+	t.Parallel()
+	verify, err := postmark.NewBasicAuthVerifier("postmark-user", strings.Repeat("p", 32))
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name     string
+		username string
+		password string
+		wantErr  bool
+	}{
+		{name: "matching credentials", username: "postmark-user", password: strings.Repeat("p", 32)},
+		{name: "wrong username", username: "forged-user", password: strings.Repeat("p", 32), wantErr: true},
+		{name: "wrong password", username: "postmark-user", password: strings.Repeat("x", 32), wantErr: true},
+		{name: "prefix of the password", username: "postmark-user", password: strings.Repeat("p", 31), wantErr: true},
+		{name: "missing credentials", wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			req := httptest.NewRequest(http.MethodPost, "/webhook", nil)
+			if tt.username != "" || tt.password != "" {
+				req.SetBasicAuth(tt.username, tt.password)
+			}
+
+			err := verify(req, nil)
+
+			if tt.wantErr {
+				require.ErrorIs(t, err, postmark.ErrWebhookUnauthorized)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestNewBasicAuthVerifierRejectsEmptyCredentials(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		username string
+		password string
+	}{
+		{name: "empty username", password: "password"},
+		{name: "empty password", username: "username"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			verify, err := postmark.NewBasicAuthVerifier(tt.username, tt.password)
+			require.Error(t, err)
+			require.Nil(t, verify)
+			require.False(t, errors.Is(err, postmark.ErrWebhookUnauthorized))
+		})
+	}
+}
 
 func TestSender_Send(t *testing.T) {
 	t.Parallel()

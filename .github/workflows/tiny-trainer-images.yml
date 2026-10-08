@@ -1,0 +1,419 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: tiny trainer images
+
+on:
+  pull_request:
+  push:
+    tags:
+      - 'tiny-trainers-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish immutable images instead of build-only validation'
+        required: true
+        default: false
+        type: boolean
+      version:
+        description: 'Immutable vX.Y.Z image tag; required when publish is true'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tiny-trainers-${{ inputs.version || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    name: Python contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+
+      - name: Run positive, negative, and boundary contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ai/tiny \
+            python -m unittest discover -s ai/tiny/trainers -p 'test_*.py' -v
+
+      - name: Verify direct pins and hash locks are coupled
+        shell: bash
+        run: bash scripts/ci/tiny-trainer-locks.sh --check
+
+      - name: Audit hash-locked dependencies
+        shell: bash
+        run: bash scripts/ci/tiny-trainer-locks.sh --audit
+
+  build-only:
+    name: Build and smoke (${{ matrix.trainer }})
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        trainer: [gemma, litert]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        with:
+          version: v0.37.1
+
+      - name: Build without pushing
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/trainers/${{ matrix.trainer }}
+          file: ai/tiny/trainers/${{ matrix.trainer }}/Dockerfile
+          build-contexts: |
+            common=ai/tiny/trainers/common
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: local/tiny-${{ matrix.trainer }}-trainer:${{ github.sha }}
+
+      - name: Smoke fixed non-root I/O contract
+        shell: bash
+        env:
+          IMAGE: local/tiny-${{ matrix.trainer }}-trainer:${{ github.sha }}
+          TRAINER: ${{ matrix.trainer }}
+        run: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-trainer-smoke.sh "$TRAINER" "$IMAGE"
+
+  publish-policy:
+    name: Verify publication controls
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require explicit remote-control enablement
+        shell: bash
+        env:
+          PUBLISH_ENABLED: ${{ vars.TINY_TRAINER_PUBLISH_ENABLED }}
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_ENABLED" != true ]]; then
+            printf '%s\n' 'trainer publication is blocked until the protected environment and tag ruleset exist' >&2
+            exit 1
+          fi
+
+  publish:
+    name: Publish (${{ matrix.trainer }})
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: [contracts, publish-policy]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    environment: tiny-trainer-publish
+    concurrency:
+      group: tiny-trainers-publish-${{ matrix.trainer }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - trainer: gemma
+            image: ghcr.io/golusoris/tiny-gemma-trainer
+          - trainer: litert
+            image: ghcr.io/golusoris/tiny-litert-trainer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Resolve and validate immutable version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == push ]]; then
+            version=${REF_NAME#tiny-trainers-}
+          else
+            version=$DISPATCH_VERSION
+          fi
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'version must match vX.Y.Z, got %q\n' "$version" >&2
+            exit 1
+          fi
+          expected_tag="tiny-trainers-$version"
+          if [[ "$REF_TYPE" != tag || "$REF_NAME" != "$expected_tag" || \
+            "$FULL_REF" != "refs/tags/$expected_tag" ]]; then
+            printf 'publication requires exact tag refs/tags/%s, got %q\n' \
+              "$expected_tag" "$FULL_REF" >&2
+            exit 1
+          fi
+          checked_out_sha=$(git rev-parse HEAD)
+          if [[ "$checked_out_sha" != "$SOURCE_SHA" ]]; then
+            printf 'checked-out SHA %s differs from event SHA %s\n' \
+              "$checked_out_sha" "$SOURCE_SHA" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        with:
+          version: v0.37.1
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install pinned cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Install pinned Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.52.0
+
+      - name: Verify supply-chain tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cosign
+          command -v gh
+          command -v syft
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.52\.0([[:space:]]|$)'
+
+      - name: Build exact publish candidate locally
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/trainers/${{ matrix.trainer }}
+          file: ai/tiny/trainers/${{ matrix.trainer }}/Dockerfile
+          build-contexts: |
+            common=ai/tiny/trainers/common
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: local/tiny-${{ matrix.trainer }}-publish:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+
+      - name: Smoke exact publish candidate
+        shell: bash
+        env:
+          IMAGE: local/tiny-${{ matrix.trainer }}-publish:${{ github.sha }}
+          TRAINER: ${{ matrix.trainer }}
+        run: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-trainer-smoke.sh "$TRAINER" "$IMAGE"
+
+      - name: Record tested local image identity
+        id: tested
+        shell: bash
+        env:
+          LOCAL_IMAGE: local/tiny-${{ matrix.trainer }}-publish:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image_id=$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")
+          if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'local image returned invalid config digest: %q\n' "$image_id" >&2
+            exit 1
+          fi
+          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve trusted resumable immutable tag
+        id: existing
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          SOURCE_SHA: ${{ github.sha }}
+          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          error_file="$RUNNER_TEMP/${{ matrix.trainer }}-inspect-error"
+          if digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" \
+            --format '{{json .Manifest.Digest}}' 2>"$error_file" | tr -d '"'); then
+            if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              printf 'registry returned invalid digest: %q\n' "$digest" >&2
+              exit 1
+            fi
+            docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
+            docker pull "$IMAGE@$digest"
+            published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
+            revision=$(docker image inspect --format \
+              '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
+            image_version=$(docker image inspect --format \
+              '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
+            if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
+              "$image_version" != "$VERSION" ]]; then
+              printf '%s exists but differs from the tested source image; refusing reuse\n' \
+                "$IMAGE:$VERSION" >&2
+              exit 1
+            fi
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          elif grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
+
+      - name: Push tested image
+        id: push
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}
+          LOCAL_IMAGE: local/tiny-${{ matrix.trainer }}-publish:${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
+          push_log="$RUNNER_TEMP/${{ matrix.trainer }}-push.log"
+          docker push "$IMAGE:$VERSION" 2>&1 | tee "$push_log"
+          mapfile -t digests < <(sed -nE \
+            's/^.*digest: (sha256:[a-f0-9]{64}) size:.*$/\1/p' "$push_log")
+          if (( ${#digests[@]} != 1 )); then
+            printf 'docker push returned %d manifest digests, expected one\n' \
+              "${#digests[@]}" >&2
+            exit 1
+          fi
+          echo "digest=${digests[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify immutable published image
+        id: image
+        shell: bash
+        env:
+          EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+          IMAGE: ${{ matrix.image }}
+          PUSHED_DIGEST: ${{ steps.push.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          expected_digest=${EXISTING_DIGEST:-$PUSHED_DIGEST}
+          if [[ ! "$expected_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'publish path did not produce one expected digest: %q\n' \
+              "$expected_digest" >&2
+            exit 1
+          fi
+          digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'registry returned invalid digest: %q\n' "$digest" >&2
+            exit 1
+          fi
+          if [[ "$digest" != "$expected_digest" ]]; then
+            printf 'published digest differs from tested push: %s != %s\n' \
+              "$digest" "$expected_digest" >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
+          docker pull "$IMAGE@$digest"
+          published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
+          revision=$(docker image inspect --format \
+            '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
+          image_version=$(docker image inspect --format \
+            '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
+          if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
+            "$image_version" != "$VERSION" ]]; then
+            printf 'published image does not match tested config digest and source labels\n' >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image digest
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}@${{ steps.image.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate SPDX SBOM
+        shell: bash
+        env:
+          IMAGE: ${{ matrix.image }}@${{ steps.image.outputs.digest }}
+          TRAINER: ${{ matrix.trainer }}
+        run: |
+          set -euo pipefail
+          syft packages "$IMAGE" -o spdx-json > "$TRAINER.spdx.json"
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ matrix.image }}
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: ${{ matrix.trainer }}.spdx.json
+          push-to-registry: true
+
+      - name: Verify published supply-chain identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ${{ matrix.image }}@${{ steps.image.outputs.digest }}
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bash scripts/ci/tiny-trainer-verify-image.sh \
+            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF"
+
+      - name: Record immutable digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE: ${{ matrix.image }}
+          TRAINER: ${{ matrix.trainer }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > "$TRAINER.digest.txt"
+          printf '%s\n' "### $TRAINER trainer" '' "\`$IMAGE:$VERSION@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload digest and SBOM
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: tiny-${{ matrix.trainer }}-${{ steps.version.outputs.value }}
+          path: |
+            ${{ matrix.trainer }}.digest.txt
+            ${{ matrix.trainer }}.spdx.json
+          if-no-files-found: error
+          retention-days: 90

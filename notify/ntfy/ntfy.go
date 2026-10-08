@@ -29,6 +29,7 @@ import (
 	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/notify"
 )
 
@@ -48,7 +49,7 @@ type Options struct {
 	// Username and Password are optional HTTP basic-auth credentials.
 	Username string `koanf:"username"`
 	Password string `koanf:"password"`
-	// HTTPClient is optional; defaults to a 10s-timeout client.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
 	HTTPClient *http.Client
 }
 
@@ -66,10 +67,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if opts.Topic == "" {
 		return nil, errors.New("notify/ntfy: topic is required")
 	}
-	hc := opts.HTTPClient
-	if hc == nil {
-		hc = &http.Client{Timeout: 10 * time.Second}
-	}
+	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
 	return &Sender{opts: opts, hc: hc}, nil
 }
 

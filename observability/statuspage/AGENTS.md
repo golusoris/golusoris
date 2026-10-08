@@ -6,15 +6,17 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — observability/statuspage
 
-Public `/status` endpoint rendering the check registry + uptime as HTML or JSON.
+Public `/status` endpoint rendering check registry + uptime as HTML or JSON.
 
 ## Conventions
 
-- The same `Registry` powers `/livez` / `/readyz` (k8s/health, Step 6). Register each check once — share the registry across endpoints.
-- Every check has a 2s per-call timeout. Design check functions to fail fast; long checks block the whole render.
-- Format negotiation: `Accept: application/json` or `?format=json` → JSON. Otherwise HTML. JSON response is 503 on overall down so uptime probes can use the same endpoint.
+- same `Registry` powers `/livez` / `/readyz` through `k8s/health`. Register each check once — share registry across endpoints.
+- Every check has 2s per-call timeout. Design check functions to fail fast; long checks block whole render.
+- Format negotiation: `Accept: application/json` or `?format=json` → JSON. Otherwise HTML. JSON response is 503 on overall down so uptime probes can use same endpoint.
+- `Details` must be safely cloneable and JSON-serializable. Registry preserves
+  concrete types across separate provider, hook, caller, and cache snapshots.
 
 ## Don't
 
-- Don't register checks that hit downstream APIs on every request. Run them on a ticker + write results into the registry's cache, then serve `Cached()` from the handler.
-- Don't put sensitive detail in `err.Error()` of a check — the message is surfaced on the public page.
+- Don't register checks that hit downstream APIs on every request. Run them on schedule, write results into registry cache, then serve `Cached()` from handler.
+- Don't put sensitive detail in `err.Error()` of check — message is surfaced on public page.

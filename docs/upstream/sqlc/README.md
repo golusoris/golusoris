@@ -4,11 +4,11 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# sqlc-dev/sqlc — v1.29.0 snapshot
+# sqlc-dev/sqlc — v1.31.1 snapshot
 
-Pinned: **v1.29.0**
-Source: https://pkg.go.dev/github.com/sqlc-dev/sqlc@v1.29.0
-Docs: https://docs.sqlc.dev
+Pinned: **v1.31.1**
+Source: [tagged source](https://github.com/sqlc-dev/sqlc/tree/v1.31.1)
+Docs: [sqlc documentation](https://docs.sqlc.dev)
 
 ## sqlc.yaml (v2 format)
 
@@ -68,16 +68,20 @@ err = q.DeleteUser(ctx, id)
 
 ```go
 // golusoris db/sqlc WithTx helper
-err = sqlcutil.WithTx(ctx, pool, func(q *db.Queries) error {
-    _, err := q.CreateUser(ctx, params)
-    return err
+err = sqlcutil.WithTx(ctx, pool, func(txCtx context.Context, tx pgx.Tx) error {
+    queries := db.New(pool).WithTx(tx)
+    if _, err := queries.CreateUser(txCtx, params); err != nil {
+        return fmt.Errorf("create user: %w", err)
+    }
+    return nil
 })
 ```
 
 ## golusoris usage
 
-- `db/sqlc/` — `WithTx` + `MapError` helpers; `tools/sqlc.yaml.fragment` shared config.
+- `db/sqlc/` — `WithTx` and `MapError` helpers;
+  `tools/sqlc.yaml.fragment` shared configuration.
 
 ## Links
 
-- Changelog: https://github.com/sqlc-dev/sqlc/blob/main/CHANGELOG.md
+- [Tagged source](https://github.com/sqlc-dev/sqlc/tree/v1.31.1)

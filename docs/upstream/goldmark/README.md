@@ -4,40 +4,42 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# yuin/goldmark — v1.7.12 snapshot
+# yuin/goldmark — v2.1.5 snapshot
 
-Pinned: **v1.7.12**
-Source: https://pkg.go.dev/github.com/yuin/goldmark@v1.7.12
+Pinned: **v2.1.5**
+Source: [tagged source](https://github.com/yuin/goldmark/tree/v2.1.5)
 
 ## Basic usage
 
 ```go
-import "github.com/yuin/goldmark"
+import (
+    "bytes"
 
-md := goldmark.New(
-    goldmark.WithExtensions(
-        extension.GFM,              // GitHub Flavoured Markdown
-        extension.Table,
-        extension.Strikethrough,
-        extension.TaskList,
-        extension.DefinitionList,
-        extension.Footnote,
-        highlighting.NewHighlighting(  // syntax highlighting
-            highlighting.WithStyle("github"),
-        ),
+    "github.com/yuin/goldmark/v2/extension"
+    "github.com/yuin/goldmark/v2/parser"
+    "github.com/yuin/goldmark/v2/renderer/html"
+)
+
+p := parser.New(
+    parser.WithAutoHeadingID(),
+    parser.WithExtensions(
+        extension.GFMParser,
+        extension.FootnoteParser,
+        extension.TypographerParser,
     ),
-    goldmark.WithRendererOptions(
-        html.WithHardWraps(),
-        html.WithXHTML(),
-        html.WithUnsafe(),   // allow raw HTML in source
-    ),
-    goldmark.WithParserOptions(
-        parser.WithAutoHeadingID(),
+)
+r := html.New(
+    html.WithHardWraps(),
+    html.WithXHTML(),
+    html.WithExtensions(
+        extension.GFMHTMLRenderer,
+        extension.FootnoteHTMLRenderer,
     ),
 )
 
 var buf bytes.Buffer
-if err := md.Convert(src, &buf); err != nil {
+doc := p.Parse(src)
+if err := r.Render(&buf, src, doc); err != nil {
     return err
 }
 htmlOutput := buf.Bytes()
@@ -46,25 +48,30 @@ htmlOutput := buf.Bytes()
 ## Custom renderer
 
 ```go
-import "github.com/yuin/goldmark/renderer"
+type myHTMLRendererExtension struct{}
 
-md := goldmark.New(
-    goldmark.WithRenderer(
-        renderer.NewRenderer(renderer.WithNodeRenderers(
-            util.Prioritized(myCustomRenderer, 1000),
-        )),
-    ),
-)
+func (e *myHTMLRendererExtension) RendererOptions(_ *html.Config) []html.Option {
+    return []html.Option{
+        html.WithNodeRenderers(map[ast.NodeKind]html.NodeRenderer{
+            KindMyNode: html.NodeRendererFunc(renderMyNode),
+        }),
+    }
+}
+
+r := html.New(html.WithExtensions(&myHTMLRendererExtension{}))
 ```
 
 ## Sanitization
 
-goldmark does not sanitize HTML output. Wrap with a sanitizer (e.g. `microcosm-cc/bluemonday`) when rendering untrusted input.
+Goldmark does not sanitize HTML output. Keep `html.WithUnsafe` disabled and
+sanitize output at the application boundary when rendering untrusted input.
 
 ## golusoris usage
 
-- `markdown/` — goldmark instance with GFM + syntax highlighting provided via fx.
+- `markdown/` — Goldmark with GFM, footnotes, typographer, automatic heading
+  IDs, hard wraps, and XHTML. GFM already includes tables, strikethrough, task
+  lists, and linkification; do not register them twice.
 
 ## Links
 
-- Changelog: https://github.com/yuin/goldmark/blob/master/CHANGELOG.md
+- [Package documentation](https://pkg.go.dev/github.com/yuin/goldmark/v2@v2.1.5)

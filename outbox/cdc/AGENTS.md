@@ -6,31 +6,43 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — outbox/cdc/
 
-A **CDC-based** drain for the transactional outbox. Instead of polling the outbox
-table (as `outbox.Drainer` does), it subscribes to the PostgreSQL WAL via
-`db/cdc.Consumer` and forwards each committed outbox row to a `Sink` — lower
-latency, no poll interval, no `SELECT ... FOR UPDATE` contention.
+CDC outbox drain. Watches Postgres WAL. Sends committed inserts to sinks.
+Lower latency than polling.
 
 ## API
 
 ```go
 fx.New(
     golusoris.Core, golusoris.DB,
-    cdc.Module,                       // provides *cdc.Drainer
-    fx.Supply(cdc.NewKafkaSink(kc, "events")), // or NewNATSSink(...), NewGCPSink(...)
+    dbcdc.Module,
+    cdc.Module,                       // provides *cdc.Drainer, installs handler
+    cdc.ProvideSinkFn(func(kc *kafka.Client) cdc.Sink {
+        return cdc.NewKafkaSink(kc, "events")
+    }),
 )
 ```
 
-- **Provides**: `*cdc.Drainer` (runs under fx.Lifecycle; must run under a leader).
-- **Requires**: `db/cdc.Consumer` (logical replication) + a `Sink`.
-- **Config**: `DefaultConfig()`; prefix `outbox.cdc`.
+- Provides `*cdc.Drainer`.
+- Requires `*dbcdc.Consumer`, `*pgxpool.Pool`, and at least one grouped sink.
+- Module installs handler. It has no lifecycle hook.
+- Config prefix: `outbox.cdc`.
 
 ```go
-type Sink interface { Send(ctx, []Message) error }   // KafkaSink, NATSSink, GCPSink provided
+type Sink interface { Send(ctx context.Context, ev outbox.Event) error }
 ```
 
 ## Notes
 
-- Run under `leader/` so exactly one replica consumes the WAL slot.
-- Complements (does not replace) the poll-based `outbox.Drainer` — pick one per app.
-- Requires a Postgres logical-replication slot; see `db/cdc/AGENTS.md`.
+- Pick CDC or polling drainer per app. Do not wire both.
+- Replicas sharing one slot form active/standby sessions through reconnect.
+- Sink failure leaves commit unacknowledged. WAL replays after reconnect.
+- Successful delivery marks source row dispatched before WAL acknowledgement.
+- NATS delivery flushes core-NATS output before source row is marked. Use
+ JetStream when broker persistence is required.
+- Webhooks reject redirects before forwarding method, payload, or secret.
+- Webhook clients are cloned and receive 10-second timeout when unset.
+- Sink order is unspecified. A successful sink can see duplicates when another
+ sink fails. All sinks must be idempotent.
+- Malformed outbox row fails handler. Never acknowledge silent loss.
+- Outbox decoding consumes canonical CDC column values and rejects NULL, binary, or unchanged required fields.
+- Requires Postgres logical replication. See `db/cdc/AGENTS.md`.
