@@ -528,6 +528,8 @@ jobs:
       - name: Check module metadata
         run: go mod tidy -diff
       - run: go build ./...
+      # Explicit, so a caller's lint config cannot drop vet (HISS-10).
+      - run: go vet ./...
 
   # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
   # Caller-driven: lints the spec named by `openapi-spec` from the CALLER's

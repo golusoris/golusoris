@@ -9,6 +9,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # The merge queue tests each group before it lands; PR-only jobs skip there.
+  merge_group:
   workflow_dispatch:
 
 permissions:
