@@ -440,7 +440,7 @@
       "enabled": false
     },
     {
-      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing. Paused while the RC4 pull requests land through the merge queue; re-enable per #649.",
+      "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
       "matchUpdateTypes": [
         "pin",
         "pinDigest",
@@ -448,7 +448,7 @@
         "patch",
         "minor"
       ],
-      "automerge": false,
+      "automerge": true,
       "automergeStrategy": "squash",
       "platformAutomerge": true
     },
@@ -624,7 +624,7 @@
     "schedule": [
       "before 6am on monday"
     ],
-    "automerge": false,
+    "automerge": true,
     "automergeStrategy": "squash",
     "platformAutomerge": true
   }

@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generated_at": "2026-10-08T08:38:19Z",
+  "generated_at": "2026-10-08T20:01:36Z",
   "repository": "golusoris/golusoris",
-  "commit_sha": "f148fd6bbfbb2a6fd6aceb5df07260f5bc2af42b",
-  "total_infractions": 7,
+  "commit_sha": "ea4d1a1b2d6708b01217a92e18e6981c59d001f6",
+  "total_infractions": 6,
   "infractions": [
     {
       "rule_id": "HISS-02",
@@ -12,14 +12,6 @@
       "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
       "anchor": "fn:registryClient",
       "fingerprint": "integrations/goenvoy/module.go:HISS-02:fn:registryClient#1"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "otel/otel.go",
-      "line_number": 377,
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "text:61cdd28c36bf",
-      "fingerprint": "otel/otel.go:HISS-02:text:61cdd28c36bf#1"
     },
     {
       "rule_id": "HISS-02",
@@ -32,7 +24,7 @@
     {
       "rule_id": "HISS-02",
       "file_path": "realtime/pubsub/redis/redis.go",
-      "line_number": 79,
+      "line_number": 87,
       "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
       "anchor": "fn:Bus.Subscribe",
       "fingerprint": "realtime/pubsub/redis/redis.go:HISS-02:fn:Bus.Subscribe#1"
