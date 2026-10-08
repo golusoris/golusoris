@@ -550,6 +550,7 @@
         "github.com/modelcontextprotocol/go-sdk",
         "github.com/segmentio/ksuid",
         "github.com/spf13/cobra",
+        "github.com/spf13/pflag",
         "go.uber.org/fx",
         "go.yaml.in/yaml/v3",
         "golang.org/x/mod"
