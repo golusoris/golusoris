@@ -204,17 +204,31 @@ func innerTransport(opts Options) http.RoundTripper {
 // CloneBounded returns a shallow client clone whose timeout is always finite.
 // A nil source creates a fresh client. Positive source timeouts are preserved;
 // otherwise fallback is used, with the package 30-second default when fallback
-// is non-positive. Transports, cookie jars, and redirect policy remain shared.
+// is non-positive. An explicit transport, cookie jar, and redirect policy remain
+// shared; a missing transport becomes a private clone of http.DefaultTransport.
 func CloneBounded(source *http.Client, fallback time.Duration) *http.Client {
 	timeout := valOrDefault(fallback, defaultRequestTimeout)
 	if source == nil {
-		return &http.Client{Timeout: timeout}
+		return &http.Client{Timeout: timeout, Transport: ownTransport()}
 	}
 	clone := *source
 	if clone.Timeout <= 0 {
 		clone.Timeout = timeout
 	}
+	if clone.Transport == nil {
+		clone.Transport = ownTransport()
+	}
 	return &clone
+}
+
+// ownTransport clones http.DefaultTransport so the client's idle connections
+// are its own: any code may call CloseIdleConnections on the process-wide
+// transport (httptest.Server.Close does), which breaks requests mid-flight.
+func ownTransport() http.RoundTripper {
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		return base.Clone()
+	}
+	return http.DefaultTransport
 }
 
 // ReadAllBounded reads at most maxBytes plus one sentinel byte. Exact-boundary

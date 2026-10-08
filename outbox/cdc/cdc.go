@@ -53,6 +53,7 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/validate"
 	dbcdc "github.com/golusoris/golusoris/db/cdc"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/outbox"
 	"github.com/golusoris/golusoris/pubsub/gcp"
 	"github.com/golusoris/golusoris/pubsub/kafka"
@@ -473,25 +474,12 @@ func NewWebhookSink(url string, opts ...WebhookOption) *WebhookSink {
 	return s
 }
 
-func boundedWebhookClient(client *http.Client) *http.Client {
-	if client == nil {
-		client = &http.Client{Timeout: defaultWebhookTimeout}
-	}
-	bounded := *client
-	if bounded.Timeout <= 0 {
-		bounded.Timeout = defaultWebhookTimeout
-	}
-	// A nil Transport means the process-wide http.DefaultTransport, whose idle
-	// connections any other code may close mid-request; own a clone instead.
-	if bounded.Transport == nil {
-		if base, ok := http.DefaultTransport.(*http.Transport); ok {
-			bounded.Transport = base.Clone()
-		}
-	}
+func boundedWebhookClient(source *http.Client) *http.Client {
+	bounded := httpclient.CloneBounded(source, defaultWebhookTimeout)
 	bounded.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}
-	return &bounded
+	return bounded
 }
 
 // Send implements [Sink].

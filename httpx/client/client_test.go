@@ -80,6 +80,25 @@ func TestCloneBounded(t *testing.T) {
 	}
 }
 
+// TestCloneBoundedOwnsMissingTransport pins that a client without a transport
+// never shares http.DefaultTransport, whose idle connections any code may close.
+func TestCloneBoundedOwnsMissingTransport(t *testing.T) {
+	t.Parallel()
+	for name, source := range map[string]*http.Client{
+		"nil source":    nil,
+		"nil transport": {Timeout: time.Second},
+	} {
+		got := client.CloneBounded(source, 7*time.Second).Transport
+		if _, ok := got.(*http.Transport); !ok || got == http.DefaultTransport {
+			t.Fatalf("%s: transport = %T shared=%v, want a private *http.Transport", name, got, got == http.DefaultTransport)
+		}
+	}
+	first := client.CloneBounded(nil, time.Second).Transport
+	if second := client.CloneBounded(nil, time.Second).Transport; first == second {
+		t.Fatal("two clients share one transport")
+	}
+}
+
 func TestReadAllBounded(t *testing.T) {
 	t.Parallel()
 	data, err := client.ReadAllBounded(strings.NewReader("1234"), 4)
