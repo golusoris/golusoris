@@ -164,7 +164,7 @@ def download_archive(asset: Asset, directory: Path) -> Path:
     failure: InstallError | None = None
     try:
         url = f"{RELEASE_BASE}/{asset.filename}"
-        with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310 - fixed HTTPS release origin and locked asset names.
+        with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310 - fixed HTTPS release origin and locked asset names.  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- RELEASE_BASE is a fixed HTTPS origin and asset names come from the lock
             with temporary:
                 copy_bounded(response, temporary, MAX_ARCHIVE_BYTES, "archive")
         actual = archive_digest(archive)

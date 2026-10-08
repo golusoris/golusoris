@@ -311,7 +311,7 @@ func serializeCookieValue(value parameterValue, explode bool) (string, error) {
 func appendRequestCookie(parts *callParts, name, value string) error {
 	//nolint:gosec // G124 response-cookie attributes do not apply to outbound Cookie headers.
 	// #nosec G124 -- This validates and forwards a request Cookie, not a Set-Cookie response.
-	cookie := http.Cookie{Name: name, Value: value}
+	cookie := http.Cookie{Name: name, Value: value} // nosemgrep: go.lang.security.audit.net.cookie-missing-httponly.cookie-missing-httponly, go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- outbound request Cookie header; HttpOnly and Secure are Set-Cookie attributes
 	if err := cookie.Valid(); err != nil {
 		return fmt.Errorf("apidocs: invalid request cookie %q: %w", name, err)
 	}
