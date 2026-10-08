@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# KEDA's externalscaler.proto is vendored verbatim: its package and service
+# names are the wire contract KEDA dials, so tools/buf.yaml lint rules
+# (versioned package, Service suffix) cannot apply.
+version: v2

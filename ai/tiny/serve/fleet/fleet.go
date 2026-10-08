@@ -69,7 +69,7 @@ const DefaultQueuePrefix = "tiny"
 // names, so a hyphen is used.
 const queueSep = "-"
 
-// maxQueueNameBytes mirrors River v0.47.0's queue-name limit.
+// maxQueueNameBytes mirrors River v0.49.0's queue-name limit.
 const maxQueueNameBytes = 64
 
 // DefaultMaxInputBytes caps the JSON-encoded job input. Tiny task

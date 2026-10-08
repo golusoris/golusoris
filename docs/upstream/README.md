@@ -24,7 +24,7 @@ mapping authority; its authority column says where each pin is resolved.
 | `go.uber.org/fx` | `v1.24.0` | root + core | [fx/](fx/README.md) |
 | `github.com/jackc/pgx/v5` | `v5.11.0` | root | [pgx/](pgx/README.md) |
 | `github.com/ogen-go/ogen` | `v1.24.0` | root | [ogen/](ogen/README.md) |
-| `github.com/riverqueue/river` | `v0.47.0` | root | [river/](river/README.md) |
+| `github.com/riverqueue/river` | `v0.49.0` | root | [river/](river/README.md) |
 | `github.com/knadh/koanf/v2` | `v2.3.6` | root + core | [koanf/](koanf/README.md) |
 | `github.com/maypok86/otter/v2` | `v2.3.0` | root | [otter/](otter/README.md) |
 | `github.com/redis/rueidis` | `v1.0.78` | root | [rueidis/](rueidis/README.md) |

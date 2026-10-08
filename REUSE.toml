@@ -100,3 +100,10 @@ path = ["tools/figures/third_party/interfig/upstream/**"]
 precedence = "override"
 SPDX-FileCopyrightText = "2025 Vectorize AI, Inc. <https://github.com/vectorize-io/hindsight>"
 SPDX-License-Identifier = "MIT"
+
+# KEDA external scaler protocol, vendored verbatim, and the stubs generated from it.
+[[annotations]]
+path = ["k8s/keda/internal/externalscalerpb/externalscaler.proto", "k8s/keda/internal/externalscalerpb/*.pb.go"]
+precedence = "override"
+SPDX-FileCopyrightText = "The KEDA Authors <https://github.com/kedacore/keda>"
+SPDX-License-Identifier = "Apache-2.0"

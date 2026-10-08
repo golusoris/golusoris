@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# riverqueue/river — v0.47.0 snapshot
+# riverqueue/river — v0.49.0 snapshot
 
-Pinned: **v0.47.0**
-Source: [tagged source](https://github.com/riverqueue/river/tree/v0.47.0)
+Pinned: **v0.49.0**
+Source: [tagged source](https://github.com/riverqueue/river/tree/v0.49.0)
 
 ## Key API surface
 
@@ -89,6 +89,39 @@ func (w *MyWorker) Work(ctx context.Context, job *river.Job[MyArgs]) error {
 }
 ```
 
+### Stop, retry, and fetch controls
+
+```go
+cfg := &river.Config{
+    RetryPolicy:            myPolicy,      // river.ClientRetryPolicy: NextRetry(*rivertype.JobRow) time.Time
+    SoftStopTimeout:        30 * time.Second, // Stop escalates to job-context cancel after this
+    LeaderElectionDisabled: false,         // v0.48: work jobs without leading maintenance
+    FetchOnlyKnownKinds:    false,         // v0.48: fetch only registered worker kinds
+}
+err = client.Stop(ctx)          // soft: stop fetching, wait for running jobs
+err = client.StopAndCancel(ctx) // hard: cancel running job contexts, then wait
+```
+
+### SQLite driver
+
+```go
+import "github.com/riverqueue/river/riverdriver/riversqlite"
+
+db.SetMaxOpenConns(1) // upstream advice: avoids SQLITE_BUSY from parallel maintenance
+client, err := river.NewClient(riversqlite.New(db), cfg) // *river.Client[*sql.Tx]
+```
+
+`JobListParams.Metadata` is unsupported on SQLite. Migration version 8 only
+changes SQLite (`river_job` id gains `AUTOINCREMENT`).
+
+### Behaviour changes since v0.47.0
+
+- v0.49: transactional helpers reuse the caller's transaction instead of a
+  savepoint; callers must roll back on error (`outbox/drainer.go` already wraps
+  `InsertTx` in its own savepoint).
+- v0.48: `UniqueOpts.ByPeriod` buckets on the effective scheduled time in UTC;
+  `UniqueOpts{ExcludeKind: true}` alone is rejected at insert.
+
 ### Transaction helper
 
 ```go
@@ -106,5 +139,5 @@ driver := riverpgxv5.New(pool)
 
 ## Links
 
-- [Changelog](https://github.com/riverqueue/river/blob/v0.47.0/CHANGELOG.md)
+- [Changelog](https://github.com/riverqueue/river/blob/v0.49.0/CHANGELOG.md)
 - [River documentation](https://riverqueue.com/docs)
