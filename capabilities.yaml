@@ -253,6 +253,10 @@ packages:
     capabilities: [authz.casbin]
     description: "Package authz provides RBAC/ABAC policy enforcement via casbin/casbin/v3."
     replaces: [github.com/casbin/casbin, github.com/casbin/casbin/v3]
+  - import: github.com/golusoris/golusoris/bootstrap
+    domain: bootstrap
+    capabilities: [bootstrap.core, bootstrap.http]
+    description: "Package bootstrap is the lean service entry point: the Core and HTTP fx groupings without linking the rest of the framework."
   - import: github.com/golusoris/golusoris/cache/memory
     domain: cache
     capabilities: [cache.inmemory]
