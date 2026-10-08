@@ -48,6 +48,10 @@ for value in \
 	fi
 done
 
+if [[ ! "$SHELLCHECK_LINUX_X64_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+	printf 'invalid ShellCheck archive digest: %s\n' "$SHELLCHECK_LINUX_X64_SHA256" >&2
+	exit 1
+fi
 if [[ ! "$GITLEAKS_LINUX_X64_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
 	printf 'invalid gitleaks archive digest: %s\n' "$GITLEAKS_LINUX_X64_SHA256" >&2
 	exit 1

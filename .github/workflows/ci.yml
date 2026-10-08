@@ -462,6 +462,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install pinned ShellCheck
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
+          echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
       - name: Lint repository-owned shell scripts
         run: bash scripts/ci/shellcheck.sh
 
@@ -479,6 +484,11 @@ jobs:
         run: |
           . tools/tool-versions.env
           go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+      - name: Install pinned ShellCheck
+        run: |
+          set -euo pipefail
+          bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
+          echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
       - name: Lint GitHub and Gitea workflows
         run: ACTIONLINT_BIN="$(go env GOPATH)/bin/actionlint" bash scripts/ci/actionlint.sh
 

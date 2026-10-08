@@ -13,7 +13,6 @@ readonly repo_root
 readonly release_origin='https://github.com/gitleaks/gitleaks/releases/download'
 readonly max_archive_bytes=$((32 << 20))
 readonly download_timeout_seconds=120
-readonly download_retries=3
 
 if (($# != 1)) || [[ -z "$1" ]]; then
 	printf 'usage: %s <install-dir>\n' "${0##*/}" >&2
@@ -24,6 +23,8 @@ readonly install_dir
 
 # shellcheck source=/dev/null
 . "$repo_root/tools/tool-versions.env"
+# shellcheck source=scripts/ci/lib/verified-download.sh
+. "$repo_root/scripts/ci/lib/verified-download.sh"
 
 if [[ ! "$GITLEAKS_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	printf 'invalid GITLEAKS_VERSION: %s\n' "$GITLEAKS_VERSION" >&2
@@ -51,20 +52,8 @@ readonly work_dir
 trap 'rm -rf "$work_dir"' EXIT
 
 archive="$work_dir/$asset"
-curl --fail --silent --show-error --location \
-	--proto '=https' --proto-redir '=https' \
-	--retry "$download_retries" --connect-timeout 20 \
-	--max-time "$download_timeout_seconds" \
-	--max-filesize "$max_archive_bytes" \
-	--output "$archive" \
-	"$release_origin/v${GITLEAKS_VERSION}/$asset"
-
-actual_digest="$(sha256sum "$archive" | awk '{ print $1 }')"
-if [[ "$actual_digest" != "$expected_digest" ]]; then
-	printf 'gitleaks %s archive digest mismatch: expected %s, got %s\n' \
-		"$GITLEAKS_VERSION" "$expected_digest" "$actual_digest" >&2
-	exit 1
-fi
+fetch_verified "$release_origin/v${GITLEAKS_VERSION}/$asset" "$expected_digest" \
+	"$max_archive_bytes" "$download_timeout_seconds" "$archive"
 
 tar -xzf "$archive" -C "$work_dir" --no-same-owner gitleaks
 if [[ -L "$work_dir/gitleaks" || ! -f "$work_dir/gitleaks" ]]; then

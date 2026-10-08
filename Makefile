@@ -105,6 +105,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test ## verify requi
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/tool-versions_test.sh
 	@bash scripts/ci/install-gitleaks_test.sh
+	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
 	@bash scripts/ci/release-workflows-policy_test.sh
 	@bash scripts/ci/generation-policy_test.sh
