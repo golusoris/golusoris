@@ -13,8 +13,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
@@ -41,23 +40,45 @@ type S3Options struct {
 	// host). Required for MinIO and most non-AWS S3 implementations.
 	PathStyle bool `koanf:"path_style"`
 	// PresignTTL is how long presigned GET URLs from [S3Bucket.URL] stay
-	// valid (default 15m).
+	// valid (default 15m, at most [MaxPresignTTL]).
 	PresignTTL time.Duration `koanf:"presign_ttl"`
+	// RoleARN assumes this IAM role on top of the base credentials (static
+	// keys or the default chain): STS AssumeRole, or AssumeRoleWithWebIdentity
+	// when WebIdentityTokenFile is set.
+	RoleARN string `koanf:"role_arn"`
+	// WebIdentityTokenFile is an OIDC token file (e.g. a projected Kubernetes
+	// service-account token) exchanged for RoleARN credentials. Requires
+	// RoleARN; excludes static keys.
+	WebIdentityTokenFile string `koanf:"web_identity_token_file"`
+	// RoleSessionName names assumed-role sessions (default: SDK-generated).
+	RoleSessionName string `koanf:"role_session_name"`
+	// STSEndpoint overrides the STS endpoint used for role assumption.
+	STSEndpoint string `koanf:"sts_endpoint"`
+	// PartSize is the multipart part size in bytes (default 8 MiB, range
+	// [S3MinPartSize]..[S3MaxPartSize]). Unknown-length bodies are capped at
+	// 10000 parts.
+	PartSize int64 `koanf:"part_size"`
+	// MultipartThreshold is the body size from which Put switches to
+	// multipart upload (default 16 MiB, range S3MinPartSize..S3MaxPartSize).
+	MultipartThreshold int64 `koanf:"multipart_threshold"`
+	// Concurrency bounds parallel part transfers per call (default 5, at most
+	// [S3MaxConcurrency]). Peak Put buffer memory is (Concurrency+1)*PartSize.
+	Concurrency int `koanf:"concurrency"`
 }
 
 // s3API is the subset of the s3 client [S3Bucket] depends on. Narrowed to an
 // interface so tests can inject a stub without a live endpoint.
 type s3API interface {
-	PutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
-	GetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
-	HeadObject(ctx context.Context, in *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error)
+	transfermanager.S3APIClient
 	DeleteObject(ctx context.Context, in *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
-	ListObjectsV2(ctx context.Context, in *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	CopyObject(ctx context.Context, in *s3.CopyObjectInput, optFns ...func(*s3.Options)) (*s3.CopyObjectOutput, error)
+	UploadPartCopy(ctx context.Context, in *s3.UploadPartCopyInput, optFns ...func(*s3.Options)) (*s3.UploadPartCopyOutput, error)
 }
 
-// s3Presigner is the subset of the presign client [S3Bucket.URL] depends on.
+// s3Presigner is the subset of the presign client [S3Bucket] depends on.
 type s3Presigner interface {
 	PresignGetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4PresignedRequest, error)
+	PresignPutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4PresignedRequest, error)
 }
 
 // v4PresignedRequest mirrors the field of s3.PresignedHTTPRequest that we
@@ -77,11 +98,13 @@ type S3Bucket struct {
 	client     s3API
 	presigner  s3Presigner
 	presignTTL time.Duration
+	transfer   s3Transfer
+	uploader   *transfermanager.Client
 }
 
 // NewS3Bucket builds an [S3Bucket] from opts, loading AWS config (and, when
-// AccessKey is set, static credentials). For MinIO, set Endpoint and
-// PathStyle.
+// AccessKey is set, static credentials; when RoleARN is set, an assumed role).
+// For MinIO, set Endpoint and PathStyle.
 func NewS3Bucket(ctx context.Context, opts S3Options) (*S3Bucket, error) {
 	if opts.Bucket == "" {
 		return nil, errors.New("storage/s3: bucket is required")
@@ -89,34 +112,40 @@ func NewS3Bucket(ctx context.Context, opts S3Options) (*S3Bucket, error) {
 	if opts.Region == "" {
 		return nil, errors.New("storage/s3: region is required")
 	}
-	if (opts.AccessKey == "") != (opts.SecretKey == "") {
-		return nil, errors.New("storage/s3: access_key and secret_key must be set together")
+	if err := validateS3Credentials(opts); err != nil {
+		return nil, err
 	}
-
-	loadOpts := []func(*awsconfig.LoadOptions) error{awsconfig.WithRegion(opts.Region)}
-	if opts.AccessKey != "" {
-		loadOpts = append(loadOpts, awsconfig.WithCredentialsProvider(
-			credentials.NewStaticCredentialsProvider(opts.AccessKey, opts.SecretKey, ""),
-		))
+	if opts.PresignTTL > MaxPresignTTL {
+		return nil, fmt.Errorf("storage/s3: presign_ttl: %w", ValidatePresignTTL(opts.PresignTTL))
 	}
-	cfg, err := awsconfig.LoadDefaultConfig(ctx, loadOpts...)
+	transfer, err := resolveS3Transfer(opts)
 	if err != nil {
-		return nil, fmt.Errorf("storage/s3: load aws config: %w", err)
+		return nil, err
 	}
-
+	cfg, err := loadS3Config(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	transfer.checksums = cfg.RequestChecksumCalculation
 	client := s3.NewFromConfig(cfg, s3ClientOptions(opts)...)
 	return &S3Bucket{
 		bucket:     opts.Bucket,
 		client:     client,
 		presigner:  presignAdapter{s3.NewPresignClient(client)},
 		presignTTL: presignTTL(opts.PresignTTL),
+		transfer:   transfer,
+		uploader:   newS3Uploader(client, transfer),
 	}, nil
 }
 
 // newS3BucketForTest wires an [S3Bucket] around an injected client/presigner,
 // bypassing AWS config loading. Used by hermetic tests.
 func newS3BucketForTest(bucket string, client s3API, presigner s3Presigner, ttl time.Duration) *S3Bucket {
-	return &S3Bucket{bucket: bucket, client: client, presigner: presigner, presignTTL: presignTTL(ttl)}
+	transfer := defaultS3Transfer()
+	return &S3Bucket{
+		bucket: bucket, client: client, presigner: presigner, presignTTL: presignTTL(ttl),
+		transfer: transfer, uploader: newS3Uploader(client, transfer),
+	}
 }
 
 func presignTTL(ttl time.Duration) time.Duration {
@@ -149,7 +178,17 @@ func (a presignAdapter) PresignGetObject(ctx context.Context, in *s3.GetObjectIn
 	return &v4PresignedRequest{URL: req.URL, Method: req.Method, SignedHeader: req.SignedHeader}, nil
 }
 
-// Put implements [Bucket].
+func (a presignAdapter) PresignPutObject(ctx context.Context, in *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4PresignedRequest, error) {
+	req, err := a.pc.PresignPutObject(ctx, in, optFns...)
+	if err != nil {
+		return nil, fmt.Errorf("storage/s3: presign put: %w", err)
+	}
+	return &v4PresignedRequest{URL: req.URL, Method: req.Method, SignedHeader: req.SignedHeader}, nil
+}
+
+// Put implements [Bucket]. Bodies below MultipartThreshold go up in one
+// PutObject; larger or unknown-length bodies stream as a bounded multipart
+// upload, aborted on failure.
 func (b *S3Bucket) Put(ctx context.Context, key string, r io.Reader, opts PutOptions) (Object, error) {
 	clean, err := cleanS3Key(key)
 	if err != nil {
@@ -164,7 +203,7 @@ func (b *S3Bucket) Put(ctx context.Context, key string, r io.Reader, opts PutOpt
 		return Object{}, err
 	}
 	metadata := maps.Clone(opts.Metadata)
-	in := &s3.PutObjectInput{
+	in := &transfermanager.UploadObjectInput{
 		Bucket:      aws.String(b.bucket),
 		Key:         aws.String(clean),
 		Body:        body,
@@ -173,7 +212,7 @@ func (b *S3Bucket) Put(ctx context.Context, key string, r io.Reader, opts PutOpt
 	if len(metadata) > 0 {
 		in.Metadata = metadata
 	}
-	out, err := b.client.PutObject(ctx, in)
+	out, err := b.uploader.UploadObject(ctx, in)
 	if err != nil {
 		return Object{}, fmt.Errorf("storage/s3: put %q: %w", clean, err)
 	}
@@ -282,7 +321,7 @@ func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
 
 // List implements [Bucket].
 func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error) {
-	limit, err := normalizeListLimit(opts.Limit)
+	limit, err := NormalizeListLimit(opts.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +332,7 @@ func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error)
 	if err = ctx.Err(); err != nil {
 		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
 	}
-	maxKeys := int32(limit) // #nosec G115 -- normalizeListLimit proves the value is within 1..1000.
+	maxKeys := int32(limit) // #nosec G115 -- NormalizeListLimit proves the value is within 1..1000.
 	in := &s3.ListObjectsV2Input{
 		Bucket:  aws.String(b.bucket),
 		MaxKeys: aws.Int32(maxKeys),
@@ -356,7 +395,7 @@ func cleanS3Key(key string) (string, error) {
 }
 
 func cleanS3Prefix(prefix string) (string, error) {
-	clean, err := cleanListPrefix(prefix)
+	clean, err := CleanListPrefix(prefix)
 	if err != nil {
 		return "", fmt.Errorf("storage/s3: validate list prefix: %w", err)
 	}
@@ -381,4 +420,8 @@ func isNotFound(err error) bool {
 	return false
 }
 
-var _ Bucket = (*S3Bucket)(nil)
+var (
+	_ Bucket       = (*S3Bucket)(nil)
+	_ Copier       = (*S3Bucket)(nil)
+	_ PutPresigner = (*S3Bucket)(nil)
+)

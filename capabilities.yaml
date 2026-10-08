@@ -29,6 +29,8 @@ modules:
   - github.com/golusoris/golusoris/science/bio
   - github.com/golusoris/golusoris/science/numerical
   - github.com/golusoris/golusoris/science/plot
+  - github.com/golusoris/golusoris/storage/azblob
+  - github.com/golusoris/golusoris/storage/gcs
   - github.com/golusoris/golusoris/testutil/pact
   - github.com/golusoris/golusoris/testutil/promcheck
   - github.com/golusoris/golusoris/web3/evm
@@ -1003,9 +1005,21 @@ packages:
     replaces: [github.com/minio/selfupdate]
   - import: github.com/golusoris/golusoris/storage
     domain: storage
-    capabilities: [storage.bucket, storage.s3]
+    capabilities: [storage.bucket, storage.s3, storage.presign, storage.multipart]
     description: "Package storage provides a Bucket abstraction for object storage with a local-filesystem backend included."
-    replaces: [github.com/aws/aws-sdk-go-v2, github.com/aws/aws-sdk-go-v2/config, github.com/aws/aws-sdk-go-v2/credentials, github.com/aws/aws-sdk-go-v2/service/s3, github.com/aws/smithy-go]
+    replaces: [github.com/aws/aws-sdk-go-v2, github.com/aws/aws-sdk-go-v2/config, github.com/aws/aws-sdk-go-v2/credentials, github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager, github.com/aws/aws-sdk-go-v2/service/s3, github.com/aws/aws-sdk-go-v2/service/sts, github.com/aws/smithy-go]
+  - import: github.com/golusoris/golusoris/storage/azblob
+    module: github.com/golusoris/golusoris/storage/azblob
+    domain: storage
+    capabilities: [storage.azblob]
+    description: "Package azblob implements storage.Bucket, storage.Copier, and storage.PutPresigner on Azure Blob Storage block blobs via the Azure SDK for Go."
+    replaces: [github.com/Azure/azure-sdk-for-go/sdk/azidentity, github.com/Azure/azure-sdk-for-go/sdk/storage/azblob]
+  - import: github.com/golusoris/golusoris/storage/gcs
+    module: github.com/golusoris/golusoris/storage/gcs
+    domain: storage
+    capabilities: [storage.gcs]
+    description: "Package gcs implements storage.Bucket, storage.Copier, and storage.PutPresigner on Google Cloud Storage via cloud.google.com/go/storage."
+    replaces: [cloud.google.com/go/storage]
   - import: github.com/golusoris/golusoris/storage/safety
     domain: storage
     capabilities: [storage.safety]
@@ -1074,6 +1088,11 @@ packages:
     domain: test
     capabilities: [test.nats]
     description: "Package nats boots a real NATS container via testcontainers-go and returns its URL."
+    replaces: [github.com/testcontainers/testcontainers-go]
+  - import: github.com/golusoris/golusoris/testutil/objstore
+    domain: test
+    capabilities: [test.objstore, test.storage_conformance]
+    description: "Package objstore boots object-storage emulators via testcontainers-go and holds the conformance suite every storage.Bucket backend runs."
     replaces: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/pact
     module: github.com/golusoris/golusoris/testutil/pact

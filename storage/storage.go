@@ -100,6 +100,15 @@ type Bucket interface {
 	URL(ctx context.Context, key string) (string, error)
 }
 
+// ExistsFromStat maps a Stat result to Exists semantics: [ErrNotFound]
+// becomes (false, nil), so backends without a cheaper probe share one rule.
+func ExistsFromStat(_ Object, err error) (bool, error) {
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // --- LocalBucket ---
 
 // LocalBucket stores objects as files under a base directory. Suitable for
@@ -731,7 +740,7 @@ func (b *LocalBucket) Stat(ctx context.Context, key string) (obj Object, err err
 
 // List implements [Bucket].
 func (b *LocalBucket) List(ctx context.Context, opts ListOptions) (out []Object, err error) {
-	limit, err := normalizeListLimit(opts.Limit)
+	limit, err := NormalizeListLimit(opts.Limit)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +775,9 @@ const (
 	localListWorkPerObject = 16
 )
 
-func normalizeListLimit(limit int) (int, error) {
+// NormalizeListLimit maps a zero [ListOptions.Limit] to [DefaultListLimit]
+// and rejects limits outside 1..[MaxListLimit].
+func NormalizeListLimit(limit int) (int, error) {
 	if limit == 0 {
 		return DefaultListLimit, nil
 	}
@@ -777,7 +788,7 @@ func normalizeListLimit(limit int) (int, error) {
 }
 
 func walkLocalObjects(ctx context.Context, rootFS fs.FS, prefix string, limit int) ([]Object, error) {
-	cleanPrefix, err := cleanListPrefix(prefix)
+	cleanPrefix, err := CleanListPrefix(prefix)
 	if err != nil {
 		return nil, fmt.Errorf("storage: validate local list prefix: %w", err)
 	}

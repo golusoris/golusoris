@@ -27,7 +27,7 @@ make verify-all
 | **HISS-03** | Memory | Rule 3 | No steady-state heap churn in hot paths; preallocate and pool instead. | `scripts/ci/allocation-budget.sh` fails on byte or allocation regressions in named `core/id`, `core/crypto`, and `cache/memory` benchmarks; other hot paths remain review-enforced |
 | **HISS-04** | Complexity | Rule 4 | Cyclomatic $\le 10$, cognitive $\le 15$, function $\le 60$ LOC, $\le 50$ statements. | `praetorctl audit`; all-module `.golangci.yml` gates |
 | **HISS-05** | Scoping | Rule 6 | Declare every binding at its smallest lexical scope; no shadowing, no ad-hoc import aliases. | All-module `.golangci.yml`: `govet`, `predeclared`, `reassign`, `importas` |
-| **HISS-06** | Concurrency | — | Every goroutine fan-out carries an explicit upper bound. | Required full-tree Semgrep fan-out rule; race tests across 24 modules |
+| **HISS-06** | Concurrency | — | Every goroutine fan-out carries an explicit upper bound. | Required full-tree Semgrep fan-out rule; race tests across 26 modules |
 | **HISS-07** | Error Handling | Rule 7 | Every error handled or wrapped with context; no discarded returns. | All-module lint: `errcheck`, `wrapcheck`, `errorlint`, `nilerr`; HISS scan |
 | **HISS-08** | Determinism | Rule 8 | No dynamic execution or dynamic code loading; no unsafe libc equivalents. | Required full-tree Semgrep dynamic-code rules; all-module `gosec` |
 | **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proof for every `unsafe` block and pointer cast. | All-module `gosec`; required full-tree Semgrep proof rule; HISS scan |
@@ -36,7 +36,7 @@ make verify-all
 | **HISS-12** | Secrets | — | Zero credentials in working tree or git history. | Lefthook staged `gitleaks`; CI full-history `gitleaks` |
 | **HISS-13** | Debt Ratchet | — | Total infractions may never increase; baseline only ratchets down. | `.standards-baseline.json` enforced by `praetorctl audit` |
 | **HISS-14** | Public ABI | — | Public contracts append-only; any break carries a `Migration:` footer. | Required all-module `apidiff` execution; incompatibilities informational before v1.0; PR checklist |
-| **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for public interfaces. | Race tests across 24 Go modules; 48 Python policy regressions; 70% primary aggregate; shape review-enforced |
+| **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for public interfaces. | Race tests across 26 Go modules; 48 Python policy regressions; 70% primary aggregate; shape review-enforced |
 | **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled, never hand-edited. | `praetorctl compile-context --verify` in lefthook and `make verify-all` |
 | **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` remains private, ignored, current. | `praetorctl state sync .` post-commit |
 | **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only gates touched by diff. | Not wired for main CI; full matrix runs |

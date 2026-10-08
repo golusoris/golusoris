@@ -63,7 +63,9 @@ func MustBeLocal(key string) error {
 	return nil
 }
 
-func cleanListPrefix(prefix string) (string, error) {
+// CleanListPrefix validates a [ListOptions.Prefix]: empty is valid, and a
+// trailing slash survives canonicalisation.
+func CleanListPrefix(prefix string) (string, error) {
 	if prefix == "" {
 		return "", nil
 	}

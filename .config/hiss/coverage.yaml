@@ -154,7 +154,7 @@ rules:
           praetorctl audit (internal/hiss go_ast.go checkFuncLOC) against
           .standards.yaml overrides.complexity.max_func_loc = 60, plus gocyclo
           (min-complexity 10), gocognit (15), funlen (60 lines / 50 statements) and cyclop (18)
-          in .golangci.yml, run for all 24 modules by CI jobs "Lint" and "Module sweep" and by
+          in .golangci.yml, run for all 26 modules by CI jobs "Lint" and "Module sweep" and by
           make ci-all; lefthook pre-commit job golangci-lint covers staged packages.
         rationale: >-
           The scanner decides function length only: positive/overlong-function.go (90
@@ -187,7 +187,7 @@ rules:
         mechanism: >-
           .golangci.yml with govet `enable-all: true` (so the shadow analyzer is on), revive's
           redefines-builtin-id rule, the predeclared and reassign linters and importas, run by
-          CI jobs "Lint" and "Module sweep" across all 24 modules and by make ci-all; lefthook
+          CI jobs "Lint" and "Module sweep" across all 26 modules and by make ci-all; lefthook
           pre-commit job golangci-lint covers staged packages. internal/hiss implements no
           HISS-05 rule.
         rationale: >-
@@ -224,7 +224,7 @@ rules:
         mechanism: >-
           praetorctl audit (internal/hiss go_ast.go checkBlankAssign, checkPanic and
           checkEmptyErrBranch), plus errcheck, errorlint, nilerr, nilnil, nilnesserr and
-          wrapcheck in .golangci.yml, executed across all 24 modules by "Lint" and "Module
+          wrapcheck in .golangci.yml, executed across all 26 modules by "Lint" and "Module
           sweep" plus make ci-all.
         rationale: >-
           positive/discarded-error.go (`_ = os.Remove(path)`), positive/empty-error-branch.go
@@ -311,7 +311,7 @@ rules:
         runner: golangci-lint
         mechanism: >-
           golangci-lint v2 with this repository's .golangci.yml (69 linters enabled, default
-          none), reached across all 24 modules by CI jobs "Lint" and "Module sweep" and by make
+          none), reached across all 26 modules by CI jobs "Lint" and "Module sweep" and by make
           ci-all inside make verify-all; lefthook pre-commit jobs golangci-lint and govet cover
           staged packages. gofumpt, gci and goimports are part of the same config and are also
           enforced by lefthook pre-commit jobs gofumpt and gci. internal/hiss implements no
@@ -323,7 +323,7 @@ rules:
           (govet)'. negative/clean-and-formatted.go produced "0 issues.".
           gap/unexplained-nolint.go carries a bare `//nolint:errcheck` with no reason and also
           produced "0 issues.", because nolintlint is enabled with require-explanation and
-          require-specific unset. `scripts/ci/go-modules.sh list` discovers 24 modules; local
+          require-specific unset. `scripts/ci/go-modules.sh list` discovers 26 modules; local
           make ci-all and hosted primary plus four split shards run this same lint config for
           every discovered module.
       - language: markdown
@@ -500,7 +500,7 @@ rules:
           measures the vulnerability path: a patched exact exception passes, while an unknown
           reachable finding, version drift, mixed finding set, invalid scanner JSON, scanner
           failure, source-hash drift and exception-authority drift each fail closed. The real
-          24-module sweep reports only the verified GO-2026-6452 database false positive and
+          26-module sweep reports only the verified GO-2026-6452 database false positive and
           otherwise zero reachable vulnerabilities.
   - id: HISS-12
     title: Secret Leak Prevention
@@ -580,7 +580,7 @@ rules:
         mechanism: >-
           CI job "Test (race + coverage)" applies the 70% aggregate to root/core; four "Module
           sweep" shards race-test every split module and retain coverage without a percentage
-          floor. make ci-all race-tests all 24 modules. lefthook pre-push job build-test and the
+          floor. make ci-all race-tests all 26 modules. lefthook pre-push job build-test and the
           3D-testing PR checkbox provide narrower checks and self-attestation.
         rationale: >-
           Measured with go test -covermode=atomic against each fixture package.

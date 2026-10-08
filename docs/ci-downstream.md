@@ -67,7 +67,7 @@ make test PKG=./internal/payments/...
 
 ### Multi-module repositories
 
-The framework discovers and gates all 24 Go modules through
+The framework discovers and gates all 26 Go modules through
 `scripts/ci/go-modules.sh`. `make ci-all`, `make build-all`, and
 `make verify-all` all use that single discovery path, so a newly tracked
 `go.mod` cannot silently miss the local or hosted module sweep. Downstream

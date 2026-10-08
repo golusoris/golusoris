@@ -440,6 +440,21 @@ func TestNewS3Bucket_Validation(t *testing.T) {
 		{name: "missing region", opts: S3Options{Bucket: "b"}},
 		{name: "access key only", opts: S3Options{Bucket: "b", Region: "us-east-1", AccessKey: "ak"}},
 		{name: "secret key only", opts: S3Options{Bucket: "b", Region: "us-east-1", SecretKey: "sk"}},
+		{name: "token file without role", opts: S3Options{
+			Bucket: "b", Region: "us-east-1", WebIdentityTokenFile: "/var/run/token",
+		}},
+		{name: "token file with static keys", opts: S3Options{
+			Bucket: "b", Region: "us-east-1", AccessKey: "ak", SecretKey: "sk",
+			RoleARN: "arn:aws:iam::1:role/r", WebIdentityTokenFile: "/var/run/token",
+		}},
+		{name: "presign ttl above max", opts: S3Options{Bucket: "b", Region: "us-east-1", PresignTTL: MaxPresignTTL + 1}},
+		{name: "part size below min", opts: S3Options{Bucket: "b", Region: "us-east-1", PartSize: S3MinPartSize - 1}},
+		{name: "part size above max", opts: S3Options{Bucket: "b", Region: "us-east-1", PartSize: S3MaxPartSize + 1}},
+		{name: "negative part size", opts: S3Options{Bucket: "b", Region: "us-east-1", PartSize: -1}},
+		{name: "threshold below min", opts: S3Options{Bucket: "b", Region: "us-east-1", MultipartThreshold: 1}},
+		{name: "threshold above max", opts: S3Options{Bucket: "b", Region: "us-east-1", MultipartThreshold: S3MaxPartSize + 1}},
+		{name: "concurrency above max", opts: S3Options{Bucket: "b", Region: "us-east-1", Concurrency: S3MaxConcurrency + 1}},
+		{name: "negative concurrency", opts: S3Options{Bucket: "b", Region: "us-east-1", Concurrency: -1}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -455,4 +470,93 @@ func TestPresignTTL_Default(t *testing.T) {
 	require.Equal(t, defaultPresignTTL, presignTTL(0))
 	require.Equal(t, defaultPresignTTL, presignTTL(-5*time.Second))
 	require.Equal(t, 30*time.Second, presignTTL(30*time.Second))
+}
+
+func TestResolveS3Transfer_Boundaries(t *testing.T) {
+	t.Parallel()
+	got, err := resolveS3Transfer(S3Options{})
+	require.NoError(t, err)
+	require.Equal(t, defaultS3Transfer(), got)
+
+	got, err = resolveS3Transfer(S3Options{
+		PartSize: S3MinPartSize, MultipartThreshold: S3MinPartSize, Concurrency: 1,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(S3MinPartSize), got.partSize)
+	require.Equal(t, int64(S3MinPartSize), got.threshold)
+	require.Equal(t, 1, got.concurrency)
+
+	got, err = resolveS3Transfer(S3Options{
+		PartSize: S3MaxPartSize, MultipartThreshold: S3MaxPartSize, Concurrency: S3MaxConcurrency,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(S3MaxPartSize), got.partSize)
+	require.Equal(t, S3MaxConcurrency, got.concurrency)
+}
+
+func TestNewS3Bucket_MaxPresignTTLAccepted(t *testing.T) {
+	t.Parallel()
+	b, err := NewS3Bucket(context.Background(), S3Options{
+		Bucket: "b", Region: "us-east-1", AccessKey: "ak", SecretKey: "sk", PresignTTL: MaxPresignTTL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, MaxPresignTTL, b.presignTTL)
+}
+
+func TestS3CopySourceEscapesSegments(t *testing.T) {
+	t.Parallel()
+	b := newS3BucketForTest("my bucket", nil, nil, time.Minute)
+	require.Equal(t, "my%20bucket/dir/a%20b%2Bc%3F.txt", b.copySource("dir/a b+c?.txt"))
+	require.Equal(t, "my%20bucket/%C3%BC/x", b.copySource("ü/x"))
+}
+
+func TestS3Bucket_CopyRejectsBeforeBackendIO(t *testing.T) {
+	t.Parallel()
+	b := newS3BucketForTest("bucket", nil, nil, 0) // nil client: any request panics
+	require.Equal(t, defaultPresignTTL, b.presignTTL)
+	_, err := b.Copy(context.Background(), "../a", "b")
+	require.ErrorIs(t, err, ErrUnsafeKey)
+	_, err = b.Copy(context.Background(), "a", "../b")
+	require.ErrorIs(t, err, ErrUnsafeKey)
+	_, err = b.Copy(context.Background(), "a", "a")
+	require.ErrorIs(t, err, ErrCopySameKey)
+}
+
+func TestS3Bucket_CopyMapsMissingSource(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	_, err := newTestBucket(t, srv).Copy(context.Background(), "missing", "dst")
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
+func TestS3Bucket_CopySendsPinnedSource(t *testing.T) {
+	t.Parallel()
+	var copySource, ifMatch, directive string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			w.Header().Set("ETag", `"src-etag"`)
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("Content-Length", "3")
+			w.Header().Set("X-Amz-Meta-Stage", "raw")
+			return
+		}
+		copySource = r.Header.Get("X-Amz-Copy-Source")
+		ifMatch = r.Header.Get("X-Amz-Copy-Source-If-Match")
+		directive = r.Header.Get("X-Amz-Metadata-Directive")
+		_, _ = w.Write([]byte(`<CopyObjectResult><ETag>"dst-etag"</ETag>` +
+			`<LastModified>2026-01-02T03:04:05Z</LastModified></CopyObjectResult>`))
+	}))
+	t.Cleanup(srv.Close)
+	obj, err := newTestBucket(t, srv).Copy(context.Background(), "a b/src", "dst")
+	require.NoError(t, err)
+	require.Equal(t, "my-bucket/a%20b/src", copySource)
+	require.Equal(t, `"src-etag"`, ifMatch)
+	require.Equal(t, "COPY", directive)
+	require.Equal(t, Object{
+		Key: "dst", Size: 3, ContentType: "text/plain", Metadata: map[string]string{"stage": "raw"},
+		ETag: `"dst-etag"`, LastModified: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+	}, obj)
 }
