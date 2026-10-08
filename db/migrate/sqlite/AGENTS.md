@@ -23,7 +23,7 @@ Config: `db.migrate.path`, `db.migrate.auto` (as `db/migrate`) and
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `New(opts, sqliteOpts, logger)` | Migrator for `sqliteOpts` database |
 | `URL(sqliteOpts)` | `sqlite://<path>?<db/sqlite pragmas>` |
 | `Module` | provides `*dbmigrate.Migrator`; Up on start when `auto` |
