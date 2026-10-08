@@ -60,6 +60,42 @@ rules:
         - "*_test.go"
     pattern: http.DefaultClient
 
+  # ── HISS-02 · test requests stay off the shared default transport ───────────
+  # httptest.Server.Close calls http.DefaultTransport.CloseIdleConnections,
+  # which in Go 1.27.1 also cancels in-progress dials, so a test request on the
+  # shared transport fails whenever a parallel test closes its server (#701).
+  # Tests send through srv.Client() or a cloned private transport instead.
+  # The rule decides, in *_test.go only: http.Get/Head/Post/PostForm, every
+  # http.DefaultClient reference, http.DefaultTransport.RoundTrip, and an MCP
+  # StreamableClientTransport literal without HTTPClient (its nil default is
+  # http.DefaultClient). Comparing a value with http.DefaultTransport sends
+  # nothing and is not reported. Declared gaps, pinned under gap/: a client
+  # literal without Transport, and http.DefaultTransport handed as a value to a
+  # wrapper that later sends; both need dataflow this rule does not have.
+  - id: no-default-http-client-in-tests
+    languages: [go]
+    severity: ERROR
+    message: >-
+      This test request uses the process-wide default HTTP transport, which any
+      parallel httptest.Server.Close resets mid-request (#701). Send through
+      srv.Client(), or a client on http.DefaultTransport.(*http.Transport).Clone().
+    paths:
+      include:
+        - "*_test.go"
+      exclude:
+        - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
+    pattern-either:
+      - pattern: http.Get(...)
+      - pattern: http.Head(...)
+      - pattern: http.Post(...)
+      - pattern: http.PostForm(...)
+      - pattern: http.DefaultClient
+      - pattern: http.DefaultTransport.RoundTrip(...)
+      - patterns:
+          - pattern: $MCP.StreamableClientTransport{...}
+          - pattern-not: '$MCP.StreamableClientTransport{..., HTTPClient: $C, ...}'
+
   # ── No http.ListenAndServe / ListenAndServeTLS ──────────────────────────────
   # The convenience helpers build an *http.Server with zero Read/Write/Idle
   # timeouts (Slowloris-exposed). golusoris HTTP servers are constructed with

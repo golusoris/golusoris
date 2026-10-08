@@ -63,8 +63,17 @@ func pushImage(t *testing.T, ref string, img v1.Image) {
 
 // newAnonClient builds a [registry.Client] against an unauthenticated
 // registry with a short, test-appropriate timeout.
-func newAnonClient() *registry.Client {
-	return registry.New(registry.Options{}, authn.NewMultiKeychain(), http.DefaultTransport)
+func newAnonClient(t *testing.T) *registry.Client {
+	t.Helper()
+	return registry.New(registry.Options{}, authn.NewMultiKeychain(), newTestTransport(t))
+}
+
+// newTestTransport is private: httptest.Server.Close resets http.DefaultTransport (#701).
+func newTestTransport(t *testing.T) *http.Transport {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return transport
 }
 
 func TestClient_Resolve(t *testing.T) {
@@ -78,7 +87,7 @@ func TestClient_Resolve(t *testing.T) {
 	ref := host + "/test/resolve:v1"
 	pushImage(t, ref, img)
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	got, err := c.Resolve(t.Context(), ref)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -93,7 +102,7 @@ func TestClient_Resolve_missingImage(t *testing.T) {
 	host := newTestRegistry(t)
 	ref := host + "/test/does-not-exist:v1"
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	_, err := c.Resolve(t.Context(), ref)
 	if err == nil {
 		t.Fatal("Resolve: expected error for missing image, got nil")
@@ -122,7 +131,7 @@ func TestClient_Manifest(t *testing.T) {
 	ref := host + "/test/manifest:v1"
 	pushImage(t, ref, img)
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	man, err := c.Manifest(t.Context(), ref)
 	if err != nil {
 		t.Fatalf("Manifest: %v", err)
@@ -151,7 +160,7 @@ func TestClient_Manifest_missingImage(t *testing.T) {
 	host := newTestRegistry(t)
 	ref := host + "/test/does-not-exist:v1"
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	_, err := c.Manifest(t.Context(), ref)
 	if err == nil {
 		t.Fatal("Manifest: expected error for missing image, got nil")
@@ -174,7 +183,7 @@ func TestClient_ListTags(t *testing.T) {
 	pushImage(t, repo+":v2", img)
 	pushImage(t, repo+":latest", img)
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	tags, err := c.ListTags(t.Context(), repo)
 	if err != nil {
 		t.Fatalf("ListTags: %v", err)
@@ -195,7 +204,7 @@ func TestClient_ListTags_missingRepo(t *testing.T) {
 	host := newTestRegistry(t)
 	repo := host + "/test/does-not-exist"
 
-	c := newAnonClient()
+	c := newAnonClient(t)
 	_, err := c.ListTags(t.Context(), repo)
 	if err == nil {
 		t.Fatal("ListTags: expected error for missing repository, got nil")

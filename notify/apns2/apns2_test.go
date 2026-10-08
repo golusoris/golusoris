@@ -36,7 +36,7 @@ func fakeP8(t *testing.T) []byte {
 // senderForTestServer builds a Sender pointing at an httptest.Server
 // (HTTP/1.1 — we're testing our wire encoding, not real APNs h2).
 // We override Options.HTTPClient so the sender doesn't insist on h2.
-func senderForTestServer(t *testing.T, srvURL string) *apns2.Sender {
+func senderForTestServer(t *testing.T, srv *httptest.Server) *apns2.Sender {
 	t.Helper()
 	s, err := apns2.NewSender(apns2.Options{
 		KeyID:      "ABC1234567",
@@ -52,18 +52,18 @@ func senderForTestServer(t *testing.T, srvURL string) *apns2.Sender {
 	// by setting a custom HTTPClient that rewrites the URL. Simpler:
 	// the sender uses Options.Endpoint-style override? It doesn't —
 	// so we patch the URL through a RoundTripper.
-	return senderWithHost(t, s, srvURL)
+	return senderWithHost(t, s, srv)
 }
 
 // senderWithHost replaces the sender's underlying transport with one
 // that rewrites the outgoing request URL to point at the test server.
-func senderWithHost(t *testing.T, s *apns2.Sender, host string) *apns2.Sender {
+func senderWithHost(t *testing.T, s *apns2.Sender, srv *httptest.Server) *apns2.Sender {
 	t.Helper()
 	// Tests use the same-package trick via the _test.go file of
 	// apns2_test — we cannot reach into Sender internals. Instead,
 	// install a rewriting RoundTripper by rebuilding with a custom
 	// client that rewrites host.
-	client := &http.Client{Transport: &rewriteTransport{host: host}}
+	client := &http.Client{Transport: &rewriteTransport{host: srv.URL, base: srv.Client().Transport}}
 	newS, err := apns2.NewSender(apns2.Options{
 		KeyID:      "ABC1234567",
 		TeamID:     "TEAM123456",
@@ -80,7 +80,10 @@ func senderWithHost(t *testing.T, s *apns2.Sender, host string) *apns2.Sender {
 // rewriteTransport rewrites outgoing request URLs to point at a test
 // server (host includes scheme + host). Used because [apns2.Sender]'s
 // host is set at construction time.
-type rewriteTransport struct{ host string }
+type rewriteTransport struct {
+	host string
+	base http.RoundTripper
+}
 
 func (r *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Point the request at the test server while preserving the path.
@@ -96,7 +99,7 @@ func (r *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	tgtURL.Host = testURL.Host
 	req2.URL = tgtURL
 	req2.Host = testURL.Host
-	return http.DefaultTransport.RoundTrip(req2)
+	return r.base.RoundTrip(req2)
 }
 
 type hostURL struct{ Scheme, Host string }
@@ -166,7 +169,7 @@ func TestSend_HappyPath(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	s := senderForTestServer(t, srv.URL)
+	s := senderForTestServer(t, srv)
 	err := s.Send(context.Background(), notify.Message{
 		To:       []string{"devicetokenhex1"},
 		Subject:  "Incoming",
@@ -198,7 +201,7 @@ func TestSend_UnregisteredReturnsSentinel(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	s := senderForTestServer(t, srv.URL)
+	s := senderForTestServer(t, srv)
 	err := s.Send(context.Background(), notify.Message{
 		To: []string{"dead-token"}, Subject: "x", Body: "y",
 	})
