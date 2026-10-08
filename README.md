@@ -87,7 +87,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `core/config/` | koanf v2 — env + file + YAML, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
+| `core/config/` | koanf v2 — env + file + YAML, Kubernetes secret dirs, `*_FILE` env indirection, file-watch (ConfigMap hot-reload), SIGHUP hook | knadh/koanf/v2 |
 | `core/codec/yaml/` | fleet YAML codec — strict, bounded, atomic writes | go.yaml.in/yaml/v3 |
 | `core/codec/jcs/` | RFC 8785 JSON canonicalisation for hashed/signed records — UTF-16 member order, ECMAScript numbers, refuses duplicate names, lone surrogates, invalid UTF-8 | stdlib |
 | `core/log/` | slog factory: tint (dev) / JSON (prod), podinfo attrs, OTel bridge | lmittmann/tint |
@@ -96,6 +96,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/crypto/receipt/` | Ed25519 Exit-0 execution receipts (praetor-compatible) | stdlib |
 | `core/clock/` | mockable wall clock (real + fake) — `time.Now()` is banned outside this package | jonboulle/clockwork |
 | `core/id/` | UUIDv7 and KSUID generators | google/uuid · segmentio/ksuid |
+| `core/retry/` | `Do(ctx, fn, Policy, clock)`: capped exponential backoff, jitter, retryable predicate, context-bounded waits | stdlib |
 | `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
 | `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
 | `core/clikit/` | cobra + fx CLI builder; bash/zsh/fish/PowerShell completions, man pages, generated-file drift check (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
@@ -110,14 +111,14 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `db/pgx/` | pgx pool fx module + startup retry + slow-query logger | jackc/pgx/v5 |
+| `db/pgx/` | pgx pool fx module + startup retry + slow-query logger; CloudNativePG password/cert files re-read per connection, read-only `ReadPool` | jackc/pgx/v5 |
 | `db/bun/` | bun ORM fx module over the shared pgx pool | uptrace/bun |
 | `db/sqlite/` | embedded SQLite (modernc, pure Go) fx module — WAL + foreign keys on by default | modernc.org/sqlite |
 | `db/migrate/` | golang-migrate v4 runner + fx lifecycle hook | golang-migrate/migrate/v4 |
 | `db/migrate/sqlite/` | the same runner for SQLite (pure-Go driver, pragmas of `db/sqlite`) | golang-migrate/migrate/v4 |
 | `db/sqlc/` | shared sqlc.yaml fragment + query helpers | sqlc-dev/sqlc |
 | `db/geo/` | Point EWKB scanner, EWKT value, and Haversine distance | custom on pgx |
-| `db/timescale/` | TimescaleDB hypertable creation, retention, compression helpers | custom on pgx |
+| `db/timescale/` | TimescaleDB edition detection (Apache vs community), hypertables + chunk interval, compression, retention, continuous aggregates, fx probe | custom on pgx |
 | `db/clickhouse/` | ClickHouse OLAP client fx module | ClickHouse/clickhouse-go/v2 |
 | `db/cdc/` | PostgreSQL logical-replication (WAL) consumer — pgoutput decoder → `Event` | jackc/pglogrepl |
 | `outbox/` | transactional outbox — write events in same tx, drain via river; CloudEvents envelope (stable id, trace context, tenant) | custom on pgx |
@@ -283,7 +284,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `docs/epub/` | EPUB 3.0 generator | bmaupin/go-epub |
 | `markdown/` | Markdown → HTML (GFM) | yuin/goldmark |
 | `htmltmpl/` | SSR HTML templates (auto-escaping) + opt-in helper seam | stdlib html/template + FuncProvider |
-| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types | santhosh-tekuri/jsonschema + invopop/jsonschema |
+| `jsonschema/` | JSON Schema 2020-12 validation + generation from Go types; `GenerateConfig` emits Helm `values.schema.json` from koanf config structs | santhosh-tekuri/jsonschema + invopop/jsonschema |
 | `hash/` | SHA-256, BLAKE3, xxhash-64, ETag helpers | cespare/xxhash + zeebo/blake3 |
 | `fs/watch/` | recursive directory watch with debounce | fsnotify/fsnotify |
 | `torrent/` | torrent-client abstraction (add/list/control), config-selected backend | transmissionrpc · go-qbittorrent · go-rtorrent |

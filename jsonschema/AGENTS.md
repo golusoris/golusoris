@@ -27,6 +27,24 @@ if errors.As(err, &unsupported) { ... } // Generate/RoundTrip on a chan/func/com
 
 `*Schema` is immutable + safe for concurrent use. Compile at startup, reuse handle per request.
 
+## Config schema (Helm `values.schema.json`)
+
+```go
+type values struct {
+    DB dbpgx.Options `koanf:"db"`
+}
+doc, err := jsonschema.GenerateConfig(values{DB: dbpgx.DefaultOptions()},
+    jsonschema.ConfigOptions{EnvPrefix: "APP_", Title: "myapp"})
+```
+
+- Names from `koanf` tags; `koanf:"-"` / `jsonschema:"-"` skipped (code-only fields, func/interface types); untagged embedded struct hoisted.
+- Defaults from passed value: scalars, non-empty strings, scalar slices; durations as `"5s"`. Nil pointer struct -> no defaults, env names kept.
+- `time.Duration` -> `type: string` + `DurationPattern` (`TestDurationPatternMatchesParseDuration` keeps it equal to `time.ParseDuration`).
+- Leaf description: `Env: APP_DB_POOL_MAX.`; underscore key -> names `CompoundKeys` entry; slice -> comma-separated; map -> `APP_X_*`.
+- Nothing required; `additionalProperties: false` everywhere -> typos fail `helm lint`.
+- `DoNotReference` reflector -> per-path schemas (no `$defs`); recursive type -> `*ErrUnsupportedType` via iterative cycle check (HISS-01), never reflector stack overflow.
+- Golden: `__snapshots__/config_test.snap`; refresh `UPDATE_SNAPS=true go test ./jsonschema/`.
+
 ## Why santhosh-tekuri/jsonschema/v6 (validation)
 
 - Most complete draft support (2020-12 / 2019-09 / draft-7/6/4) of Go libs;

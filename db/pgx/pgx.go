@@ -27,6 +27,11 @@
 //	db.retry.initial        # initial backoff delay (default 50ms)
 //	db.retry.max            # max backoff delay (default 5s)
 //	db.tracing.slow         # slow-query log threshold, 0 disables (default 200ms)
+//	db.password_file        # role password file, re-read per new connection
+//	db.read_dsn             # optional read-only DSN → *ReadPool (else primary)
+//	db.ssl.mode             # libpq sslmode, overrides the DSN
+//	db.ssl.rootcert         # CA file (sslrootcert), re-read per new connection
+//	db.ssl.cert / db.ssl.key  # client certificate + key files (sslcert/sslkey)
 package pgx
 
 import (
@@ -34,6 +39,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -49,7 +55,15 @@ import (
 // Options configures the pgx pool. Zero value is mostly usable after
 // [Options.withDefaults] fills in sane defaults, except DSN must be set.
 type Options struct {
-	DSN            string         `koanf:"dsn"`
+	DSN string `koanf:"dsn"`
+	// PasswordFile holds the role password (CloudNativePG secret key
+	// "password"). It overrides a DSN password and is re-read before every
+	// new connection, so a rotated secret applies without a restart.
+	PasswordFile string `koanf:"password_file"`
+	// ReadDSN, when set, backs [ReadPool] with its own read-only pool
+	// (CloudNativePG "-ro" service); every other option is shared.
+	ReadDSN        string         `koanf:"read_dsn"`
+	SSL            SSLOptions     `koanf:"ssl"`
 	Pool           PoolOptions    `koanf:"pool"`
 	ConnectTimeout time.Duration  `koanf:"connect_timeout"`
 	Retry          RetryOptions   `koanf:"retry"`
@@ -217,6 +231,10 @@ func composeTracer(slow pgx.QueryTracer, custom []pgx.QueryTracer) pgx.QueryTrac
 // returned pool is ready for use. Callers must Close it. Prefer the fx
 // [Module] in application code.
 func New(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock) (*pgxpool.Pool, error) {
+	return newPool(ctx, opts, logger, clk, false)
+}
+
+func newPool(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock, readOnly bool) (*pgxpool.Pool, error) {
 	opts = opts.withDefaults()
 	if opts.DSN == "" {
 		return nil, errMissingDSN
@@ -230,8 +248,22 @@ func New(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock
 	if validate.IsNil(clk) {
 		return nil, errors.New("db/pgx: nil clock")
 	}
+	cfg, err := poolConfig(ctx, opts, logger, clk)
+	if err != nil {
+		return nil, err
+	}
+	if readOnly {
+		// Guards a "-r" (any instance) service too; standbys reject writes anyway.
+		cfg.ConnConfig.RuntimeParams["default_transaction_read_only"] = "on"
+	}
+	return connectWithRetry(ctx, cfg, opts, logger, clk)
+}
 
-	cfg, err := pgxpool.ParseConfig(opts.DSN)
+// poolConfig parses the DSN with SSL file options appended and applies pool
+// sizing, tracers, and secret refresh.
+func poolConfig(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock) (*pgxpool.Config, error) {
+	dsn := withConnParams(opts.DSN, opts.SSL.params())
+	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("db/pgx: parse DSN: %w", err)
 	}
@@ -248,12 +280,10 @@ func New(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock
 	if tracer := composeTracer(slow, opts.Tracers); tracer != nil {
 		cfg.ConnConfig.Tracer = tracer
 	}
-
-	pool, err := connectWithRetry(ctx, cfg, opts, logger, clk)
-	if err != nil {
+	if err = applySecrets(ctx, cfg, dsn, opts); err != nil {
 		return nil, err
 	}
-	return pool, nil
+	return cfg, nil
 }
 
 // connectWithRetry establishes the initial pool + validates via Ping, retrying
@@ -302,6 +332,17 @@ func connectWithRetry(
 	return nil, fmt.Errorf("db/pgx: connect failed after %d attempts: %w", opts.Retry.Attempts, lastErr)
 }
 
+// connectBudget bounds the whole start-up connect: every attempt's timeout
+// plus the longest backoff after it, saturating instead of overflowing.
+func (o Options) connectBudget() time.Duration {
+	o = o.withDefaults()
+	perAttempt := o.ConnectTimeout + o.Retry.Max
+	if perAttempt <= 0 || int64(o.Retry.Attempts) > math.MaxInt64/int64(perAttempt) {
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(o.Retry.Attempts) * perAttempt
+}
+
 func nextRetryDelay(delay, maximum time.Duration) time.Duration {
 	if delay >= maximum || delay > maximum/2 {
 		return maximum
@@ -310,7 +351,8 @@ func nextRetryDelay(delay, maximum time.Duration) time.Duration {
 }
 
 // Module provides a [*pgxpool.Pool] built from config.Config["db"], with
-// retry-on-start and lifecycle-managed shutdown. Requires [config.Module],
+// retry-on-start and lifecycle-managed shutdown, plus a [*ReadPool] that is
+// built only when something depends on it. Requires [config.Module],
 // [log.Module], and [clock.Module] in the same fx graph (all included in
 // [golusoris.Core]).
 var Module = fx.Module(
@@ -318,9 +360,11 @@ var Module = fx.Module(
 	fx.Provide(loadOptions),
 	fx.Provide(
 		func(lc fx.Lifecycle, opts Options, logger *slog.Logger, clk clock.Clock) (*pgxpool.Pool, error) {
-			// Background context: fx.Hook OnStart ctx can expire; we want
-			// the pool to outlive it. Start-attempt ctxs are scoped per attempt.
-			pool, err := New(context.Background(), opts, logger, clk)
+			// Not the fx start ctx: the pool outlives it. The budget covers
+			// every attempt plus backoff; attempt ctxs are scoped per try.
+			startCtx, cancel := context.WithTimeout(context.Background(), opts.connectBudget())
+			defer cancel()
+			pool, err := New(startCtx, opts, logger, clk)
 			if err != nil {
 				return nil, err
 			}
@@ -333,4 +377,5 @@ var Module = fx.Module(
 			return pool, nil
 		},
 	),
+	fx.Provide(provideReadPool),
 )

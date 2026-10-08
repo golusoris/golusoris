@@ -27,7 +27,22 @@ func New(Options) (*Config, error)
 `Options` (zero value usable: env-only, prefix `APP_`, delimiter `.`):
 `EnvPrefix`, `Delimiter`, `Files []string`, `Watch bool` (default true),
 `CompoundKeys []string`, `Logger *slog.Logger` (reload-failure sink; nil =
-`slog.Default()`).
+`slog.Default()`), `SecretDirs []string`, `FileEnvSuffix string`,
+`MaxSecretBytes int64` (0 = `DefaultMaxSecretBytes`, 64 KiB).
+
+## Precedence (low -> high)
+
+| Layer | Source | Notes |
+| --- | --- | --- |
+| 1 | `Files` in order | missing skipped; bad extension = error |
+| 2 | `SecretDirs` in order | file name = koanf path; content `TrimSpace`d; dot entries + subdirs skipped; missing dir skipped |
+| 3 | env `APP_*` | `APP_DB_HOST` -> `db.host` |
+| 4 | `APP_*<FileEnvSuffix>` | file content -> target key; both `APP_X` + `APP_X_FILE` = error |
+
+- Reload (watch / SIGHUP) re-applies layers 2-4 after file reload -> file never beats secret/env; rotated secret dir values land on SIGHUP.
+- Secret dir = Kubernetes secret volume: `os.Root` follows `key -> ..data/key` symlinks, refuses escape; >1024 entries, empty key segment, oversize (`ErrSecretTooLarge`), non-regular file = error.
+- Rename Secret keys to config paths via volume `items[].path` (e.g. CNPG `uri` -> `db.dsn`).
+- `FileEnvSuffix` off by default (path-valued `*_FILE` keys exist); needs `EnvPrefix`. Compound key ending in suffix (`tls.cert_file`) stays plain path.
 
 ## Wiring
 

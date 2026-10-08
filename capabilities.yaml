@@ -126,6 +126,12 @@ packages:
     capabilities: [mcp.server]
     description: "Package mcp wires a reusable Model Context Protocol (MCP) server into the fx lifecycle."
     replaces: [github.com/mark3labs/mcp-go, github.com/modelcontextprotocol/go-sdk]
+  - import: github.com/golusoris/golusoris/core/retry
+    module: github.com/golusoris/golusoris/core
+    domain: resilience
+    capabilities: [resilience.retry, resilience.backoff]
+    description: "Package retry runs an operation with capped exponential backoff and jitter."
+    replaces: [github.com/avast/retry-go/v4, github.com/cenkalti/backoff/v4, github.com/cenkalti/backoff/v5]
   - import: github.com/golusoris/golusoris/core/tlsx
     module: github.com/golusoris/golusoris/core
     domain: crypto

@@ -9,12 +9,18 @@
 //
 // SIGHUP also triggers a re-read.
 //
+// Precedence, lowest to highest: Files (in order), SecretDirs (in order),
+// environment variables, and *_FILE environment indirection. Setting both
+// APP_X and APP_X_FILE fails. A reload re-applies the higher layers so a
+// changed file never overrides a secret or the environment.
+//
 // Apps add structured config by calling [Config.Unmarshal] into their own
 // struct.
 package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -57,6 +63,37 @@ type Options struct {
 	// Logger receives file-watch and SIGHUP reload failures. Nil means
 	// slog.Default(), which the log module rewires to the app handler.
 	Logger *slog.Logger
+	// SecretDirs lists mounted secret directories (Kubernetes secret
+	// volumes). Each regular file is one key: the file name is the koanf
+	// path (project a Secret key to "db.dsn" via the volume's items[].path),
+	// the whitespace-trimmed content its value. Dot-prefixed entries and
+	// subdirectories are skipped, missing dirs ignored, later dirs win.
+	SecretDirs []string
+	// FileEnvSuffix enables *_FILE indirection (e.g. "_FILE"):
+	// APP_DB_DSN_FILE=/run/secrets/dsn sets db.dsn to the file content.
+	// Empty disables it. Requires EnvPrefix. A CompoundKeys entry whose env
+	// name ends in the suffix stays a plain path value.
+	FileEnvSuffix string
+	// MaxSecretBytes caps each secret file read from SecretDirs or *_FILE;
+	// zero means DefaultMaxSecretBytes.
+	MaxSecretBytes int64
+}
+
+func (o Options) maxSecretBytes() int64 {
+	if o.MaxSecretBytes == 0 {
+		return DefaultMaxSecretBytes
+	}
+	return o.MaxSecretBytes
+}
+
+func (o Options) validate() error {
+	if o.MaxSecretBytes < 0 {
+		return errors.New("config: MaxSecretBytes must not be negative")
+	}
+	if o.FileEnvSuffix != "" && o.EnvPrefix == "" {
+		return errors.New("config: FileEnvSuffix requires EnvPrefix")
+	}
+	return nil
 }
 
 // Config is the dependency apps inject.
@@ -145,12 +182,21 @@ func envTransform(opts Options) func(string, string) (string, any) {
 	lookup := compoundLookup(opts)
 	return func(k, v string) (string, any) {
 		stripped := strings.TrimPrefix(k, opts.EnvPrefix)
-		if key, ok := lookup[stripped]; ok {
-			return key, v
+		if _, compound := lookup[stripped]; !compound && opts.FileEnvSuffix != "" &&
+			strings.HasSuffix(stripped, opts.FileEnvSuffix) {
+			return "", nil // *_FILE indirection is applied by loadFileEnv
 		}
-		key := strings.ReplaceAll(strings.ToLower(stripped), "_", opts.Delimiter)
-		return key, v
+		return envKey(stripped, opts, lookup), v
 	}
+}
+
+// envKey maps a prefix-stripped env name to its koanf path: a declared
+// compound key, else lowercased with every underscore split.
+func envKey(stripped string, opts Options, lookup map[string]string) string {
+	if key, ok := lookup[stripped]; ok {
+		return key
+	}
+	return strings.ReplaceAll(strings.ToLower(stripped), "_", opts.Delimiter)
 }
 
 // compoundLookup maps the prefix-stripped, uppercased env-name form of each
@@ -174,6 +220,9 @@ func New(opts Options) (*Config, error) {
 	if opts.Delimiter == "" {
 		opts.Delimiter = "."
 	}
+	if err := opts.validate(); err != nil {
+		return nil, err
+	}
 
 	k := koanf.New(opts.Delimiter)
 
@@ -196,17 +245,27 @@ func New(opts Options) (*Config, error) {
 		}
 	}
 
-	// Env on top: APP_DB_HOST -> db.host
-	envProvider := env.Provider(opts.Delimiter, env.Opt{
-		Prefix:        opts.EnvPrefix,
-		TransformFunc: envTransform(opts),
-	})
-	if err := k.Load(envProvider, nil); err != nil {
-		return nil, fmt.Errorf("config: load env: %w", err)
-	}
-
 	c := &Config{k: k, opts: opts}
+	if err := c.overlay(); err != nil {
+		return nil, err
+	}
 	return c, nil
+}
+
+// overlay applies the layers above Files: secret dirs, env (APP_DB_HOST ->
+// db.host), then *_FILE indirection.
+func (c *Config) overlay() error {
+	if err := loadSecretDirs(c.k, c.opts); err != nil {
+		return err
+	}
+	envProvider := env.Provider(c.opts.Delimiter, env.Opt{
+		Prefix:        c.opts.EnvPrefix,
+		TransformFunc: envTransform(c.opts),
+	})
+	if err := c.k.Load(envProvider, nil); err != nil {
+		return fmt.Errorf("config: load env: %w", err)
+	}
+	return loadFileEnv(c.k, c.opts)
 }
 
 // logger returns the reload-failure logger, defaulting to slog.Default().
@@ -221,6 +280,11 @@ func (c *Config) logger() *slog.Logger {
 func (c *Config) reload(path string, p koanf.Provider) {
 	if err := c.k.Load(p, parserFor(path)); err != nil {
 		c.logger().Warn("config: reload failed", slog.String("path", path), slog.Any("err", err))
+		return
+	}
+	// Re-apply higher layers so the reloaded file never wins over them.
+	if err := c.overlay(); err != nil {
+		c.logger().Warn("config: reapply secrets and env failed", slog.String("path", path), slog.Any("err", err))
 	}
 }
 

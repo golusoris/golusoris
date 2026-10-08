@@ -129,3 +129,17 @@ func TestNextRetryDelaySaturatesWithoutOverflow(t *testing.T) {
 		t.Fatalf("nextRetryDelay = %v, want saturation %v", got, maximum)
 	}
 }
+
+func TestConnectBudget(t *testing.T) {
+	t.Parallel()
+	if got := DefaultOptions().connectBudget(); got != 10*(5*time.Second+5*time.Second) {
+		t.Fatalf("default budget = %v, want 100s", got)
+	}
+	if got := (Options{}).connectBudget(); got != DefaultOptions().connectBudget() {
+		t.Fatalf("zero options budget = %v, want defaults", got)
+	}
+	huge := Options{Retry: RetryOptions{Attempts: math.MaxInt, Initial: time.Hour, Max: time.Hour}, ConnectTimeout: time.Hour}
+	if got := huge.connectBudget(); got != time.Duration(math.MaxInt64) {
+		t.Fatalf("overflowing budget = %v, want saturation", got)
+	}
+}

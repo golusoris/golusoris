@@ -26,6 +26,7 @@ stay in root module and import core.
 | `crypto/` | `crypto.password`, `crypto.aead`, `crypto.token` | argon2id, AES-GCM, secure tokens |
 | `crypto/receipt/` | `crypto.receipt` | Ed25519 Exit-0 receipts |
 | `id/` | `id.uuid`, `id.ksuid` | UUIDv7 / KSUID |
+| `retry/` | `resilience.retry`, `resilience.backoff` | capped exponential backoff + jitter on injected clock |
 | `validate/` | `validate.struct` | go-playground/validator wrapper |
 | `version/` | `build.version` | build metadata from ldflags / VCS |
 | `clikit/` | `clikit.cli`, `clikit.cobra`, `clikit.ioc`, `clikit.completion`, `clikit.manpage` | cobra + fx CLI builder; shell completions, man pages, drift check (`tui/` stays in the root module) |

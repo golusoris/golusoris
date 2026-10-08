@@ -207,3 +207,55 @@ func TestReload_LogsFailureThroughOptionsLogger(t *testing.T) {
 		t.Errorf("after invalid reload x = %d, want last good value 2", got)
 	}
 }
+
+// TestReloadKeepsSecretPrecedence proves a reloaded file never overrides a
+// secret-dir value: reload re-applies the higher layers.
+func TestReloadKeepsSecretPrecedence(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "cfg.yaml")
+	if err := os.WriteFile(path, []byte("token: file\nlevel: 1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(secretDir, "token"), []byte("secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := New(Options{EnvPrefix: "CFGRELOAD_UNSET_", Files: []string{path}, SecretDirs: []string{secretDir}})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err = os.WriteFile(path, []byte("token: file-again\nlevel: 2\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c.reload(path, file.Provider(path))
+	if got := c.k.String("token"); got != "secret" {
+		t.Fatalf("token after reload = %q, want secret", got)
+	}
+	if got := c.k.Int("level"); got != 2 {
+		t.Fatalf("level after reload = %d, want 2", got)
+	}
+}
+
+func TestFileEnvKey(t *testing.T) {
+	t.Parallel()
+	opts := Options{EnvPrefix: "APP_", Delimiter: ".", FileEnvSuffix: "_FILE", CompoundKeys: []string{"db.read_dsn", "tls.cert_file"}}
+	lookup := compoundLookup(opts)
+	tests := []struct {
+		name, key string
+		ok        bool
+	}{
+		{"APP_DB_DSN_FILE", "db.dsn", true},
+		{"APP_DB_READ_DSN_FILE", "db.read_dsn", true},
+		{"APP_TLS_CERT_FILE", "", false},
+		{"APP__FILE", "", false},
+		{"APP_FILE", "", false},
+		{"OTHER_DB_DSN_FILE", "", false},
+		{"APP_DB_DSN", "", false},
+	}
+	for _, tt := range tests {
+		key, _, ok := fileEnvKey(tt.name, opts, lookup)
+		if ok != tt.ok || key != tt.key {
+			t.Errorf("fileEnvKey(%q) = %q, %v; want %q, %v", tt.name, key, ok, tt.key, tt.ok)
+		}
+	}
+}

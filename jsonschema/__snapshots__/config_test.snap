@@ -1,0 +1,82 @@
+
+[TestGenerateConfig_Golden - 1]
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.test/values.schema.json",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Service name. Env: APP_NAME.",
+      "default": "svc"
+    },
+    "dsn": {
+      "type": "string",
+      "description": "Env: APP_DSN."
+    },
+    "connect_timeout": {
+      "type": "string",
+      "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
+      "description": "Env: APP_CONNECT_TIMEOUT (declare config.Options.CompoundKeys entry \"connect_timeout\").",
+      "default": "5s"
+    },
+    "enabled": {
+      "type": "boolean",
+      "description": "Env: APP_ENABLED.",
+      "default": true
+    },
+    "ratio": {
+      "type": "number",
+      "description": "Env: APP_RATIO.",
+      "default": 0.5
+    },
+    "hosts": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array",
+      "description": "Env: APP_HOSTS. Comma-separated.",
+      "default": [
+        "a",
+        "b"
+      ]
+    },
+    "labels": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "type": "object",
+      "description": "Env: APP_LABELS_* (one variable per map key)."
+    },
+    "retry": {
+      "properties": {
+        "attempts": {
+          "type": "integer",
+          "description": "Env: APP_RETRY_ATTEMPTS.",
+          "default": 3
+        },
+        "initial": {
+          "type": "string",
+          "pattern": "^[-+]?(0|(([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|μs|ms|s|m|h))+)$",
+          "description": "Env: APP_RETRY_INITIAL.",
+          "default": "50ms"
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "tls": {
+      "properties": {
+        "cert_file": {
+          "type": "string",
+          "description": "Env: APP_TLS_CERT_FILE (declare config.Options.CompoundKeys entry \"tls.cert_file\")."
+        }
+      },
+      "additionalProperties": false,
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "type": "object",
+  "title": "fixture"
+}
+---

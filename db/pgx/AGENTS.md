@@ -21,6 +21,20 @@ Provides `*pgxpool.Pool` as fx dependency. Reads config from `config.Config["db"
 
 - Opt-in `pgx.ReadinessModule` -> registers `ReadinessCheck(pool, timeout, logger)` (name `postgres`, Ping within 1s) on app `*statuspage.Registry`. Exhausted pool -> Ping waits on acquire -> readiness fails.
 
+## CloudNativePG
+
+| Key | Meaning |
+| --- | --- |
+| `db.password_file` | role password file (CNPG secret key `password`); overrides DSN password; re-read in `BeforeConnect` -> rotation hits new conns |
+| `db.read_dsn` | own `*ReadPool` (CNPG `-ro` service), sessions `default_transaction_read_only=on`; unset -> `*ReadPool` wraps primary |
+| `db.ssl.mode` | libpq `sslmode`; overrides DSN |
+| `db.ssl.rootcert` / `db.ssl.cert` / `db.ssl.key` | CA + client cert/key files; appended to DSN; re-parsed per new conn (rotation) |
+
+- Env for `password_file` / `read_dsn` needs `config.Options.CompoundKeys` entry (`db.password_file`, `db.read_dsn`), like `connect_timeout`.
+- Password read reuses `secrets.File`: 64 KiB cap, regular file only, whitespace trimmed.
+- TLS reload replaces `TLSConfig` + `Fallbacks` together — no stale `prefer` fallback.
+- `*ReadPool` provider lazy: built only when injected. Non-fx: `NewReadPool(ctx, opts, logger, clk)` (needs `ReadDSN`).
+
 ## Pinned upstream
 
 - `jackc/pgx/v5` v5.11.0 — see `docs/upstream/pgx/`
