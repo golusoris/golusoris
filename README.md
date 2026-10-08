@@ -112,6 +112,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `db/bun/` | bun ORM fx module over the shared pgx pool | uptrace/bun |
 | `db/sqlite/` | embedded SQLite (modernc, pure Go) fx module — WAL + foreign keys on by default | modernc.org/sqlite |
 | `db/migrate/` | golang-migrate v4 runner + fx lifecycle hook | golang-migrate/migrate/v4 |
+| `db/migrate/sqlite/` | the same runner for SQLite (pure-Go driver, pragmas of `db/sqlite`) | golang-migrate/migrate/v4 |
 | `db/sqlc/` | shared sqlc.yaml fragment + query helpers | sqlc-dev/sqlc |
 | `db/geo/` | Point EWKB scanner, EWKT value, and Haversine distance | custom on pgx |
 | `db/timescale/` | TimescaleDB hypertable creation, retention, compression helpers | custom on pgx |

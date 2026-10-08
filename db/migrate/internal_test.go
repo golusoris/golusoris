@@ -16,11 +16,11 @@ func TestLoadOptions_empty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opts, err := loadOptions(cfg)
+	opts, err := LoadOptions(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// loadOptions does not set defaults — zero value is valid.
+	// LoadOptions does not set defaults — zero value is valid.
 	if opts.Path != "" {
 		t.Errorf("Path = %q, want empty", opts.Path)
 	}
