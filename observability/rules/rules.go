@@ -14,6 +14,7 @@ package rules
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"net/url"
 	"regexp"
@@ -208,14 +209,10 @@ func (g Group) RuleGroup() (monitoringv1.RuleGroup, error) {
 
 func alertRule(a Alert) monitoringv1.Rule {
 	labels := make(map[string]string, len(a.Labels)+1)
-	for k, v := range a.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, a.Labels)
 	labels[SeverityLabel] = string(a.Severity)
 	annotations := make(map[string]string, len(a.Annotations)+3)
-	for k, v := range a.Annotations {
-		annotations[k] = v
-	}
+	maps.Copy(annotations, a.Annotations)
 	annotations[SummaryAnnotation] = a.Summary
 	annotations[RunbookURLAnnotation] = a.RunbookURL
 	if a.Description != "" {
@@ -255,7 +252,7 @@ func NewPrometheusRule(meta metav1.ObjectMeta, groups ...Group) (*monitoringv1.P
 		return nil, err
 	}
 	return &monitoringv1.PrometheusRule{
-		TypeMeta:   metav1.TypeMeta{APIVersion: monitoringv1.SchemeGroupVersion.String(), Kind: monitoringv1.PrometheusRuleKind},
+		APIVersion: monitoringv1.SchemeGroupVersion.String(), Kind: monitoringv1.PrometheusRuleKind,
 		ObjectMeta: meta,
 		Spec:       monitoringv1.PrometheusRuleSpec{Groups: rgs},
 	}, nil

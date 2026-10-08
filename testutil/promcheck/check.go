@@ -7,6 +7,7 @@ package promcheck
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/prometheus/common/model"
@@ -166,10 +167,8 @@ func (w *walk) resolveNamed(name string, set *labelSet) {
 }
 
 func (w *walk) anySeriesMatches(m *labels.Matcher) bool {
-	for _, s := range w.c.cat.Series() {
-		if m.Matches(s) {
-			return true
-		}
+	if slices.ContainsFunc(w.c.cat.Series(), m.Matches) {
+		return true
 	}
 	for s := range w.c.cfg.open {
 		if m.Matches(s) {

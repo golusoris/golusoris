@@ -59,7 +59,7 @@ func TestObserveWithExemplarLinksSampledTrace(t *testing.T) {
 
 	body := scrape(t, reg, openMetricsAccept)
 	// Exemplar label order follows map iteration, so match each label separately.
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		if !strings.HasPrefix(line, `job_duration_seconds_bucket{le="1.0"} 1 # {`) {
 			continue
 		}

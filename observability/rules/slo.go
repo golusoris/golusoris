@@ -7,6 +7,7 @@ package rules
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"regexp"
 	"strconv"
@@ -174,9 +175,7 @@ func (s SLO) burnAlert(suffix string, sev Severity, windows []burnWindow, verb s
 		conds = append(conds, "("+s.ratio(w.long)+" > "+threshold+" and "+s.ratio(w.short)+" > "+threshold+")")
 	}
 	labels := make(map[string]string, len(s.Labels)+1)
-	for k, v := range s.Labels {
-		labels[k] = v
-	}
+	maps.Copy(labels, s.Labels)
 	labels[SLOLabel] = s.Name
 	return Alert{
 		Name:        s.AlertName + suffix,

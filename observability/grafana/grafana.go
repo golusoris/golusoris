@@ -29,7 +29,7 @@ const DatasourceVar = "datasource"
 // PrometheusDatasource references the Prometheus datasource chosen in the
 // ${datasource} variable.
 func PrometheusDatasource() common.DataSourceRef {
-	return common.DataSourceRef{Type: cog.ToPtr("prometheus"), Uid: cog.ToPtr("${" + DatasourceVar + "}")}
+	return common.DataSourceRef{Type: new("prometheus"), Uid: new("${" + DatasourceVar + "}")}
 }
 
 // NewDashboard returns a dashboard builder with the ${datasource} variable,

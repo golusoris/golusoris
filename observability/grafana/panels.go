@@ -51,7 +51,7 @@ func Thresholds(steps ...Threshold) *dashboard.ThresholdsConfigBuilder {
 	all := make([]dashboard.Threshold, 0, len(steps)+1)
 	all = append(all, dashboard.Threshold{Color: "green"})
 	for _, s := range steps {
-		all = append(all, dashboard.Threshold{Value: cog.ToPtr(s.Value), Color: s.Color})
+		all = append(all, dashboard.Threshold{Value: new(s.Value), Color: s.Color})
 	}
 	return dashboard.NewThresholdsConfigBuilder().Mode(dashboard.ThresholdsModeAbsolute).Steps(all)
 }
@@ -228,7 +228,7 @@ func LabelVariable(def metricdef.Def, label string) (*dashboard.QueryVariableBui
 	return dashboard.NewQueryVariableBuilder(label).
 		Label(label).
 		Datasource(PrometheusDatasource()).
-		Query(dashboard.StringOrMap{String: cog.ToPtr(query)}).
+		Query(dashboard.StringOrMap{String: new(query)}).
 		Definition(query).
 		Refresh(dashboard.VariableRefreshOnTimeRangeChanged).
 		Sort(dashboard.VariableSortAlphabeticalAsc).
