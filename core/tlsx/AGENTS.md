@@ -12,7 +12,7 @@ fsnotify. Capability keys: `crypto.tls_files`, `crypto.tls_reload`.
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `NewReloader(Files{Cert,Key,CA}, Options)` | load once; fail closed on missing file, bad PEM, key mismatch, empty CA |
 | `(*Reloader).ServerConfig(clientAuth)` | TLS 1.3 server config; `GetConfigForClient` serves current cert + client CA pool |
 | `(*Reloader).ClientConfig(serverName)` | TLS 1.3 client config; client cert follows files per handshake; `RootCAs` = pool at call time |

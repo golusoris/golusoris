@@ -12,7 +12,7 @@ Test-only certificate factory for `core/tlsx` consumers. Capability key:
 ## Key API
 
 | Symbol | Purpose |
-|---|---|
+| --- | --- |
 | `NewCA(tb)` | self-signed ECDSA P-256 CA; `CA.PEM` = certificate |
 | `(*CA).Server(tb, hosts...)` | server-auth leaf; IP literal -> IP SAN, else DNS SAN |
 | `(*CA).Client(tb, name)` | client-auth leaf |
