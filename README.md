@@ -338,7 +338,11 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 | --- | --- | --- |
-| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy | google/go-containerregistry |
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers | google/go-containerregistry |
+| `container/registry/credentials/` | registry credential chain behind `authn.Keychain` — secret files, cloud workload identity, docker config | google/go-containerregistry |
+| `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
+| `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
+| `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
 | `science/plot/` | chart rendering — line, scatter → PNG/file | gonum/plot |
 | `science/bio/` | bounded FASTA parser, rev-complement, GC content | stdlib |
