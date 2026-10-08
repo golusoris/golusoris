@@ -34,8 +34,8 @@ fx.New(
 ```
 
 `Module` resolves rest.Config via `ctrl.GetConfig` (in-cluster ServiceAccount or
-kubeconfig), so it needs cluster access at start. default probes (`healthz`
-+ `readyz` ping) are wired automatically; point your Deployment's probes at
+kubeconfig), so it needs cluster access at start. default probes (`healthz` and
+`readyz` ping) are wired automatically; point your Deployment's probes at
 `health_probe_addr`.
 
 ## Testing

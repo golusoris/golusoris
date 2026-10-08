@@ -25,7 +25,7 @@ func NewRateLimiter(r rueidis.Client) *RateLimiter {
 
 ## Config
 
-```
+```ini
 cache.redis.addr = "localhost:6379"   # comma-separated for cluster
 cache.redis.user = ""
 cache.redis.pass = ""

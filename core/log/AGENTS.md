@@ -28,7 +28,7 @@ configured handler.
 
 ## Config (env, read by `Module`)
 
-```
+```text
 LOG_LEVEL  = debug | info | warn | error   # default info
 LOG_FORMAT = auto | tint | json            # default auto
 ```

@@ -77,7 +77,7 @@ no-ops, so call sites never branch on whether caching is configured.
 
 ## Config
 
-```
+```ini
 cache.twotier.l1_ttl = 1m   # positive value overrides L1 entry TTL; 0 inherits memory TTL
 cache.twotier.l2_ttl = 5m   # L2 TTL, 0 = no expiry
 ```

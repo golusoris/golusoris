@@ -17,7 +17,7 @@ fx.New(gcp.Module) // reads "pubsub.gcp.*" from koanf config
 Config keys (prefix `pubsub.gcp`):
 
 | Key | Default | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `project_id` | (required) | GCP project ID |
 
 Authentication uses Application Default Credentials — no credential fields

@@ -30,7 +30,7 @@ non-Linux platforms module is no-op stub.
 
 ## Workflow
 
-```
+```text
 1. Write eBPF C source (bpf/xdp_drop.c)
 2. clang -O2 -target bpf -c bpf/xdp_drop.c -o bpf/xdp_drop.o
 3. go generate ./ebpf/...        # bpf2go → Go bindings + embedded bytes

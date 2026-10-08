@@ -14,7 +14,7 @@ framework root.
 
 ## Layout
 
-```
+```text
 main.go        — pulumi.Run entrypoint; loadConfig → network → postgres → redis → app; exports dsn/redisURL/appURL
 network.go     — VPC + 2 public + 2 private subnets + single NAT
 postgres.go    — rds.Instance (encrypted, gp3, PerfInsights, IAM auth, 7-day backups); exports DSN

@@ -72,7 +72,7 @@ graph output also lists `invopop/jsonschema`'s test-only dependencies:
 only non-test package. Reproduce full view with
 `go mod graph | grep invopop`.
 
-  ```
+  ```console
   $ go mod graph | grep invopop
   github.com/golusoris/golusoris github.com/invopop/jsonschema@v0.14.0
   github.com/invopop/jsonschema@v0.14.0 github.com/pb33f/ordered-map/v2@v2.3.1
@@ -127,7 +127,7 @@ last commit in March 2020.
 **Vulnerabilities** (`govulncheck ./jsonschema/...`, govulncheck v1.8.0,
 vuln.go.dev DB dated 2026-09-10):
 
-  ```
+  ```console
   $ govulncheck ./jsonschema/...
   Go: go1.27.1-X:nodwarf5
   Scanner: govulncheck@v1.8.0
