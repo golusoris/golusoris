@@ -8,6 +8,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,14 @@ func TestServerRoundTrip(t *testing.T) {
 	}
 }
 
+// newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
+func newTestClient(t *testing.T) *http.Client {
+	t.Helper()
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	t.Cleanup(transport.CloseIdleConnections)
+	return &http.Client{Transport: transport, Timeout: 10 * time.Second}
+}
+
 // TestRunHTTPStopsWithOpenSession asserts that a client still holding its
 // event stream does not hold up the HTTP server's graceful shutdown.
 func TestRunHTTPStopsWithOpenSession(t *testing.T) {
@@ -138,7 +147,7 @@ func TestRunHTTPStopsWithOpenSession(t *testing.T) {
 	go func() { served <- runHTTP(serveCtx, slog.New(slog.DiscardHandler), addr) }()
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	transport := &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp"}
+	transport := &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}
 	var session *sdkmcp.ClientSession
 	for range 100 { // the server starts listening asynchronously
 		if session, err = client.Connect(ctx, transport, nil); err == nil {

@@ -61,7 +61,10 @@ func TestServer_AuthorizeCodeStoreFailure(t *testing.T) {
 	q.Set("code_challenge", base64.RawURLEncoding.EncodeToString(sum[:]))
 	q.Set("code_challenge_method", "S256")
 
-	noFollow := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
+	noFollow := &http.Client{
+		Transport:     ts.Client().Transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	resp, err := noFollow.Get(ts.URL + "/authorize?" + q.Encode())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)

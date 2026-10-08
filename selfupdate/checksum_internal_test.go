@@ -146,7 +146,7 @@ func TestFetchChecksum_requiresManifest(t *testing.T) {
 	t.Parallel()
 	if _, err := fetchChecksum(
 		context.Background(),
-		http.DefaultClient,
+		&http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()},
 		ghRelease{},
 		ghAsset{Name: "app.tar.gz"},
 		NewPublisherVerifier(acceptPublisher),

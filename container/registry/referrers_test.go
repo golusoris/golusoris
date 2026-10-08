@@ -25,7 +25,7 @@ const bundleType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 func TestReferrers_TagSchemaFallback(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil) // no referrers API
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	subject, err := c.PushArtifact(ctx, host+"/r:model", registry.Artifact{ArtifactType: modelType})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestReferrers_TagSchemaFallback(t *testing.T) {
 	if err != nil || len(all) != 2 {
 		t.Fatalf("all referrers = %+v, %v", all, err)
 	}
-	if _, err = artifactClient(registry.Options{MaxReferrers: 1}, nil).Referrers(ctx, host+"/r:model", ""); !errors.Is(err, registry.ErrTooLarge) {
+	if _, err = artifactClient(t, registry.Options{MaxReferrers: 1}, nil).Referrers(ctx, host+"/r:model", ""); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("over cap err = %v, want ErrTooLarge", err)
 	}
 }
@@ -56,7 +56,7 @@ func TestReferrers_TagSchemaFallback(t *testing.T) {
 func TestReferrers_API(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil, regsrv.WithReferrersSupport(true))
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	subject, err := c.PushArtifact(ctx, host+"/r:model", registry.Artifact{ArtifactType: modelType})
 	if err != nil {
@@ -130,7 +130,7 @@ func writeCosignBundle(t *testing.T, repo name.Repository, subject v1.Descriptor
 func TestReferrers_CosignBundle(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
-	c := artifactClient(registry.Options{}, nil)
+	c := artifactClient(t, registry.Options{}, nil)
 	ctx := testCtx(t)
 	subject, err := c.PushArtifact(ctx, host+"/vmafx/model:v3", registry.Artifact{
 		ArtifactType: modelType,

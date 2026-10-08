@@ -139,13 +139,13 @@ func fakeAWS(t *testing.T) *httptest.Server {
 
 // loopbackOnly fails every request that would leave the host, so the IRSA
 // test can never reach real AWS endpoints.
-type loopbackOnly struct{}
+type loopbackOnly struct{ base http.RoundTripper }
 
-func (loopbackOnly) RoundTrip(r *http.Request) (*http.Response, error) {
+func (l loopbackOnly) RoundTrip(r *http.Request) (*http.Response, error) {
 	if r.URL.Hostname() != "127.0.0.1" {
 		return nil, errors.New("test egress blocked: " + r.URL.Host)
 	}
-	return http.DefaultTransport.RoundTrip(r)
+	return l.base.RoundTrip(r)
 }
 
 func setEnv(t *testing.T, kv map[string]string) {
@@ -176,8 +176,9 @@ func irsaEnv(t *testing.T, endpoint string) {
 
 //nolint:paralleltest // t.Setenv drives the AWS default chain into IRSA mode.
 func TestNewDefault_IRSA(t *testing.T) {
-	irsaEnv(t, fakeAWS(t).URL)
-	p, err := NewDefault(t.Context(), config.WithHTTPClient(&http.Client{Transport: loopbackOnly{}}))
+	stub := fakeAWS(t)
+	irsaEnv(t, stub.URL)
+	p, err := NewDefault(t.Context(), config.WithHTTPClient(&http.Client{Transport: loopbackOnly{base: stub.Client().Transport}}))
 	if err != nil {
 		t.Fatalf("NewDefault: %v", err)
 	}

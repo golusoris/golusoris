@@ -60,6 +60,7 @@ func TestModule_StartsAndProvidesClient(t *testing.T) {
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() authn.Keychain { return authn.NewMultiKeychain() }),
+		fx.Provide(func() http.RoundTripper { return newTestTransport(t) }),
 		registry.Module,
 		fx.Populate(&c),
 	)
@@ -121,6 +122,7 @@ func TestModule_KeychainOverride(t *testing.T) {
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() authn.Keychain { return kc }),
+		fx.Provide(func() http.RoundTripper { return newTestTransport(t) }),
 		registry.Module,
 		fx.Populate(&c),
 	)

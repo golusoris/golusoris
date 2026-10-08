@@ -103,12 +103,12 @@ func mountServer(t *testing.T, h *tus.Handler) *httptest.Server {
 const tusVersion = "1.0.0"
 
 // createUpload POSTs a new upload of the given length and returns its URL.
-func createUpload(t *testing.T, base string, length int) string {
+func createUpload(t *testing.T, client *http.Client, base string, length int) string {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, base, nil)
 	req.Header.Set("Tus-Resumable", tusVersion)
 	req.Header.Set("Upload-Length", strconv.Itoa(length))
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("POST create: %v", err)
 	}
@@ -124,13 +124,13 @@ func createUpload(t *testing.T, base string, length int) string {
 }
 
 // patch sends a PATCH at offset and returns the new server offset.
-func patch(t *testing.T, url string, offset int, data string) int {
+func patch(t *testing.T, client *http.Client, url string, offset int, data string) int {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPatch, url, strings.NewReader(data))
 	req.Header.Set("Tus-Resumable", tusVersion)
 	req.Header.Set("Upload-Offset", strconv.Itoa(offset))
 	req.Header.Set("Content-Type", "application/offset+octet-stream")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
 	}
@@ -143,11 +143,11 @@ func patch(t *testing.T, url string, offset int, data string) int {
 }
 
 // headOffset issues a HEAD and returns the reported Upload-Offset.
-func headOffset(t *testing.T, url string) int {
+func headOffset(t *testing.T, client *http.Client, url string) int {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodHead, url, nil)
 	req.Header.Set("Tus-Resumable", tusVersion)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("HEAD: %v", err)
 	}
@@ -179,15 +179,16 @@ func TestE2E_FullUpload(t *testing.T) {
 
 	srv := mountServer(t, h)
 	base := srv.URL + h.BasePath()
+	client := srv.Client()
 
-	url := createUpload(t, base, 11)
-	if off := patch(t, url, 0, "hello "); off != 6 {
+	url := createUpload(t, client, base, 11)
+	if off := patch(t, client, url, 0, "hello "); off != 6 {
 		t.Fatalf("offset after first patch = %d, want 6", off)
 	}
-	if off := headOffset(t, url); off != 6 {
+	if off := headOffset(t, client, url); off != 6 {
 		t.Fatalf("HEAD offset = %d, want 6", off)
 	}
-	if off := patch(t, url, 6, "world"); off != 11 {
+	if off := patch(t, client, url, 6, "world"); off != 11 {
 		t.Fatalf("offset after finish = %d, want 11", off)
 	}
 
@@ -216,16 +217,17 @@ func TestE2E_ResumeAfterInterrupt(t *testing.T) {
 	h, bucket := bootHandler(t, enabledConfig(dir))
 	srv := mountServer(t, h)
 	base := srv.URL + h.BasePath()
+	client := srv.Client()
 
-	url := createUpload(t, base, 9)
-	patch(t, url, 0, "abc")
+	url := createUpload(t, client, base, 9)
+	patch(t, client, url, 0, "abc")
 
 	// Client "reconnects" and asks where it left off, then resumes.
-	if off := headOffset(t, url); off != 3 {
+	if off := headOffset(t, client, url); off != 3 {
 		t.Fatalf("resume offset = %d, want 3", off)
 	}
-	patch(t, url, 3, "def")
-	patch(t, url, 6, "ghi")
+	patch(t, client, url, 3, "def")
+	patch(t, client, url, 6, "ghi")
 
 	objs, err := bucket.List(context.Background(), storage.ListOptions{Prefix: "uploads/"})
 	if err != nil || len(objs) != 1 {
@@ -269,8 +271,9 @@ func TestServeHTTP_DirectMount(t *testing.T) {
 	srv := httptest.NewServer(r)
 	t.Cleanup(srv.Close)
 
-	url := createUpload(t, srv.URL+h.BasePath(), 3)
-	if off := patch(t, url, 0, "xyz"); off != 3 {
+	client := srv.Client()
+	url := createUpload(t, client, srv.URL+h.BasePath(), 3)
+	if off := patch(t, client, url, 0, "xyz"); off != 3 {
 		t.Fatalf("offset = %d, want 3", off)
 	}
 }
