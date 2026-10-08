@@ -12,7 +12,7 @@ that still has the child's output pipes open.
 from __future__ import annotations
 
 import ctypes
-from ctypes import wintypes
+import ctypes.wintypes
 
 CREATE_SUSPENDED = 0x00000004
 
@@ -62,20 +62,20 @@ class _ExtendedLimitInformation(ctypes.Structure):
 def _kernel32() -> ctypes.WinDLL:
     """Load kernel32 with the prototypes this module calls."""
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
-    kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, wintypes.LPCWSTR)
-    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.wintypes.LPCWSTR)
+    kernel32.CreateJobObjectW.restype = ctypes.wintypes.HANDLE
     kernel32.SetInformationJobObject.argtypes = (
-        wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD,
+        ctypes.wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, ctypes.wintypes.DWORD,
     )
-    kernel32.SetInformationJobObject.restype = wintypes.BOOL
-    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
-    kernel32.OpenProcess.restype = wintypes.HANDLE
-    kernel32.AssignProcessToJobObject.argtypes = (wintypes.HANDLE, wintypes.HANDLE)
-    kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
-    kernel32.TerminateJobObject.argtypes = (wintypes.HANDLE, wintypes.UINT)
-    kernel32.TerminateJobObject.restype = wintypes.BOOL
-    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
-    kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.SetInformationJobObject.restype = ctypes.wintypes.BOOL
+    kernel32.OpenProcess.argtypes = (ctypes.wintypes.DWORD, ctypes.wintypes.BOOL, ctypes.wintypes.DWORD)
+    kernel32.OpenProcess.restype = ctypes.wintypes.HANDLE
+    kernel32.AssignProcessToJobObject.argtypes = (ctypes.wintypes.HANDLE, ctypes.wintypes.HANDLE)
+    kernel32.AssignProcessToJobObject.restype = ctypes.wintypes.BOOL
+    kernel32.TerminateJobObject.argtypes = (ctypes.wintypes.HANDLE, ctypes.wintypes.UINT)
+    kernel32.TerminateJobObject.restype = ctypes.wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (ctypes.wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = ctypes.wintypes.BOOL
     return kernel32
 
 
@@ -120,7 +120,7 @@ class ProcessJob:
             if not self._kernel32.AssignProcessToJobObject(self._job, process):
                 raise _last_error("AssignProcessToJobObject")
             ntdll = ctypes.WinDLL("ntdll")
-            ntdll.NtResumeProcess.argtypes = (wintypes.HANDLE,)
+            ntdll.NtResumeProcess.argtypes = (ctypes.wintypes.HANDLE,)
             ntdll.NtResumeProcess.restype = ctypes.c_long
             status = ntdll.NtResumeProcess(process)
             if status != 0:

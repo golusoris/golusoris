@@ -9,9 +9,8 @@ import io
 import json
 import tarfile
 import tempfile
-import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import TestCase, main, mock
 
 from trainers.common import contract
 from trainers.litert import trainer
@@ -33,7 +32,7 @@ def image_config(dataset: Path) -> dict[str, object]:
     }
 
 
-class LiteRTTrainerTest(unittest.TestCase):
+class LiteRTTrainerTest(TestCase):
     def test_main_places_expansion_workspace_on_output_mount(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -194,4 +193,4 @@ class LiteRTTrainerTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    main()
