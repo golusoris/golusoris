@@ -29,7 +29,9 @@ const DatasourceVar = "datasource"
 // PrometheusDatasource references the Prometheus datasource chosen in the
 // ${datasource} variable.
 func PrometheusDatasource() common.DataSourceRef {
-	return common.DataSourceRef{Type: new("prometheus"), Uid: new("${" + DatasourceVar + "}")}
+	// Locals, not new(expr): Semgrep's Go parser rejects new with a value (semgrep/semgrep#11972).
+	kind, uid := "prometheus", "${"+DatasourceVar+"}"
+	return common.DataSourceRef{Type: &kind, Uid: &uid}
 }
 
 // NewDashboard returns a dashboard builder with the ${datasource} variable,
