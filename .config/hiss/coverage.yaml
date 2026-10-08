@@ -500,7 +500,7 @@ rules:
           measures the vulnerability path: a patched exact exception passes, while an unknown
           reachable finding, version drift, mixed finding set, invalid scanner JSON, scanner
           failure, source-hash drift and exception-authority drift each fail closed. The real
-          24-module sweep reports only the verified GO-2026-6452 database false positive and
+          26-module sweep reports only the verified GO-2026-6452 database false positive and
           otherwise zero reachable vulnerabilities.
   - id: HISS-12
     title: Secret Leak Prevention
