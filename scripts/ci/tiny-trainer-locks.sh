@@ -14,6 +14,9 @@ PIP_AUDIT_VERSION=2.10.1
 MAX_TRAINERS=2
 MAX_LOCK_CONTEXTS=3
 AUDIT_PYTHON_VERSION=3.11.16
+# Resolve as of this upload cutoff so --check compares the lock with its inputs,
+# not with whatever PyPI published since; move it forward deliberately with --write.
+LOCK_EXCLUDE_NEWER=2026-10-08T00:00:00Z
 tiny_trainer_lock_tmp=
 
 cleanup_lock_tmp() {
@@ -38,6 +41,7 @@ compile_lock() {
 		--mount "type=bind,src=$work,dst=/src" \
 		--workdir /src \
 		"$UV_IMAGE" uv pip compile --quiet --generate-hashes --no-emit-index-url \
+		--exclude-newer "$LOCK_EXCLUDE_NEWER" \
 		--python-version "$python_version" --output-file requirements.lock requirements.in
 }
 
