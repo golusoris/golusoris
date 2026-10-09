@@ -44,6 +44,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
 
       - name: Verify the Docker daemon
         shell: bash

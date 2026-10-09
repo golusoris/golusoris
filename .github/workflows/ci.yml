@@ -243,6 +243,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
@@ -416,6 +419,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
@@ -477,6 +483,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
@@ -535,6 +544,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: Build documentation strictly from immutable tooling
@@ -645,6 +657,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: Format, initialize from locks, and validate modules
@@ -881,6 +896,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: Run full-tree custom Semgrep gate
@@ -942,6 +960,9 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: REUSE lint from immutable tooling

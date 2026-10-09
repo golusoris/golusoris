@@ -7,6 +7,9 @@
 #   - dGhlIHNhbXBsZSBub25jZQ==  RFC 6455 "the sample nonce" WebSocket key
 #   - DGv6ra1nlYgDCS1FRnbzlw    Web Push test `auth` value
 #   - test-secret-0123456789abcdef  image-signing test fixture
+#   - 1234abcd-12ab-34cd-56ef-1234567890ab / mrk-1234abcd12ab34cd56ef1234567890ab
+#                                AWS documentation example KMS key IDs (kms/aws tests)
+#   - eyJhbGciOiJSUzI1NiJ9.{aks,k8s}-sa.sig  unsigned placeholder service-account JWTs (kms/azure, kms/gcp tests)
 # Allowlisting by exact value (not by path) keeps every other high-entropy
 # string — including any real secret in a test file — still detected. Native
 # secret-scanning + push-protection remain the first line of defense.
@@ -19,4 +22,8 @@ regexes = [
   '''dGhlIHNhbXBsZSBub25jZQ==''',
   '''DGv6ra1nlYgDCS1FRnbzlw''',
   '''test-secret-0123456789abcdef''',
+  '''1234abcd-12ab-34cd-56ef-1234567890ab''',
+  '''mrk-1234abcd12ab34cd56ef1234567890ab''',
+  '''eyJhbGciOiJSUzI1NiJ9\.aks-sa\.sig''',
+  '''eyJhbGciOiJSUzI1NiJ9\.k8s-sa\.sig''',
 ]

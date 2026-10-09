@@ -121,6 +121,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test ## verify requi
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
+	@bash scripts/ci/docker-hub-mirror_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
