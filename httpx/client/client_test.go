@@ -134,6 +134,85 @@ func TestNewOwnsIdlePool(t *testing.T) {
 	}
 }
 
+// idleCountingTransport is a countingTransport that counts CloseIdleConnections.
+type idleCountingTransport struct {
+	countingTransport
+	closes atomic.Int32
+}
+
+func (c *idleCountingTransport) CloseIdleConnections() { c.closes.Add(1) }
+
+// TestCloseIdleConnectionsReachesTransport pins that every layer forwards
+// CloseIdleConnections to the innermost transport and tolerates one without
+// the method (#709).
+func TestCloseIdleConnectionsReachesTransport(t *testing.T) {
+	t.Parallel()
+	layers := map[string]client.Options{
+		"plain":         {},
+		"retry":         {Retry: client.RetryOptions{Max: 1}},
+		"breaker":       {Breaker: client.BreakerOptions{Max: 1}},
+		"retry+breaker": {Retry: client.RetryOptions{Max: 1}, Breaker: client.BreakerOptions{Max: 1}},
+	}
+	for name, opts := range layers {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			tr := &idleCountingTransport{}
+			opts.Transport = tr
+			client.New(opts).CloseIdleConnections()
+			if got := tr.closes.Load(); got != 1 {
+				t.Fatalf("inner CloseIdleConnections calls = %d, want 1", got)
+			}
+			opts.Transport = &countingTransport{}
+			client.New(opts).CloseIdleConnections() // must not panic
+		})
+	}
+}
+
+// TestCloseIdleConnectionsEmptiesOwnPool pins that the private pool drops its
+// idle connection when the client closes idle connections (#709).
+func TestCloseIdleConnectionsEmptiesOwnPool(t *testing.T) {
+	t.Parallel()
+	var dials atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			dials.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	c := client.New(client.Options{Retry: client.RetryOptions{Max: 1}, Breaker: client.BreakerOptions{Max: 1}})
+	for i := range 2 {
+		if _, err := getBody(t, c, srv.URL); err != nil {
+			t.Fatalf("request %d: %v", i, err)
+		}
+		c.CloseIdleConnections()
+	}
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("dials = %d, want 2: CloseIdleConnections left the idle connection open", got)
+	}
+}
+
+// TestRetryExhaustionKeepsIdlePool pins that a failed retry sequence leaves the
+// pool shared by concurrent requests open (#709).
+func TestRetryExhaustionKeepsIdlePool(t *testing.T) {
+	t.Parallel()
+	tr := &idleCountingTransport{failures: 2}
+	c := client.New(client.Options{
+		Transport: tr,
+		Retry:     client.RetryOptions{Max: 1, Wait: time.Millisecond, MaxWait: time.Millisecond},
+	})
+	if _, err := getBody(t, c, "http://upstream.invalid/"); err != nil {
+		t.Fatalf("Get() error = %v, want final 503 response", err)
+	}
+	if calls, closes := tr.calls.Load(), tr.closes.Load(); calls != 2 || closes != 0 {
+		t.Fatalf("calls/closes = %d/%d, want 2/0", calls, closes)
+	}
+}
+
 func TestReadAllBounded(t *testing.T) {
 	t.Parallel()
 	data, err := client.ReadAllBounded(strings.NewReader("1234"), 4)

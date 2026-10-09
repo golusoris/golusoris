@@ -59,6 +59,14 @@ func (t *cacheTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	return t.store(key, resp)
 }
 
+// CloseIdleConnections forwards to next so the module's OnStop reaches cached
+// services' pools (#709).
+func (t *cacheTransport) CloseIdleConnections() {
+	if closer, ok := t.next.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 func (t *cacheTransport) forward(req *http.Request) (*http.Response, error) {
 	resp, err := t.next.RoundTrip(req)
 	if err != nil {
