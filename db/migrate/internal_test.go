@@ -5,6 +5,7 @@
 package migrate
 
 import (
+	"net/url"
 	"testing"
 
 	"github.com/golusoris/golusoris/core/config"
@@ -72,8 +73,36 @@ func TestFileSourceURLEscapesReservedPathCharacters(t *testing.T) {
 		"dir/a b":         "file://dir/a%20b",
 		"/tmp/a#b?tenant": "file:///tmp/a%23b%3Ftenant",
 	} {
-		if got := fileSourceURL(path); got != want {
-			t.Errorf("fileSourceURL(%q) = %q, want %q", path, got, want)
+		if got := fileSourceURLFor(path, false); got != want {
+			t.Errorf("fileSourceURLFor(%q, false) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+// TestFileSourceURLWindowsPaths pins the form golang-migrate's file source
+// reads back: url.Parse, then Host+Path must be the slashed path (#643).
+func TestFileSourceURLWindowsPaths(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ path, want, parsed string }{
+		{`C:\app\migrations`, "file://C:/app/migrations", "C:/app/migrations"},
+		{`c:\a#b\c?d`, "file://c:/a%23b/c%3Fd", "c:/a#b/c?d"},
+		{`\\server\share\migrations`, "file:////server/share/migrations", "//server/share/migrations"},
+		{`migrations\v1`, "file://migrations/v1", "migrations/v1"},
+		{`1:\not-a-drive`, "file://1:/not-a-drive", ""},
+		{`C:`, "file://C:", ""},
+	} {
+		got := fileSourceURLFor(tc.path, true)
+		if got != tc.want {
+			t.Errorf("fileSourceURLFor(%q, true) = %q, want %q", tc.path, got, tc.want)
+			continue
+		}
+		if tc.parsed == "" {
+			continue
+		}
+		u, err := url.Parse(got)
+		if err != nil || u.Host+u.Path != tc.parsed {
+			t.Errorf("url.Parse(%q) host+path = %q, %v; want %q", got, u.Host+u.Path, err, tc.parsed)
 		}
 	}
 }

@@ -15,6 +15,11 @@ other golang-migrate database URL whose driver program registers.
 - Migrations are off-by-default at fx start. Set `db.migrate.auto=true` to run on Start, or call `Migrator.Up()` from CLI command (preferred for production: run as init container or CI step).
 - Source is `file://` by default at `migrations/`. For embedded migrations, override `Options` via `fx.Replace(migrate.Options{Auto: true}.WithFS(myEmbedFS))`.
 - Filesystem source URL escapes reserved path bytes; `?` and `#` remain filename bytes.
+- `migrate.go` blank-imports golang-migrate `source/file`: missing import -> `Options.Path`
+  fails "unknown driver 'file'" (before #643 fix: never registered).
+- golang-migrate file parser joins URL host + path. Windows drive path ->
+  `file://C:/dir`, not RFC 8089 `file:///C:/dir`; UNC -> `file:////server/share`.
+  `fileSourceURLFor(path, windows)` pure; tests run Windows rows on every OS.
 - `pgxToMigrateURL` rewrites `postgres://` → `pgx5://` so users keep their normal pgx DSN.
 - Driver-specific modules reuse `LoadOptions` (config `db.migrate`) and `Bind`
   (Up on start when `auto`, best-effort Close on stop); never copy them.
