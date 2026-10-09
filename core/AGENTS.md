@@ -35,7 +35,7 @@ stay in root module and import core.
 | `astx/` | `ast.analyzer`, `ast.rewrite` | source walker, import rewriter, func metrics, go.mod reader |
 | `capabilities/` | `needs.capabilities` | schema + loader for `capabilities.yaml` |
 | `drain/` | `lifecycle.drain` | stop-hook seam between servers and a readiness drain |
-| `tlsx/`, `tlsx/tlsxtest/` | `crypto.tls_files`, `crypto.tls_reload`, `test.tls_certs` | file-backed TLS, lazy rotation on handshake; test CA |
+| `tlsx/`, `tlsx/tlsxtest/` | `crypto.tls_files`, `crypto.tls_reload`, `test.tls_certs` | file-backed TLS, lazy rotation on handshake or one-shot client config; test CA |
 
 ## Rules specific to core
 

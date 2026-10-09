@@ -16,9 +16,16 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl"
 
-	"github.com/golusoris/golusoris/internal/tlsfiles"
-	"github.com/golusoris/golusoris/internal/tlsfiles/tlsfilestest"
+	"github.com/golusoris/golusoris/core/tlsx"
+	"github.com/golusoris/golusoris/core/tlsx/tlsxtest"
 )
+
+// writeTLSFiles writes a throwaway CA plus a client certificate and key.
+func writeTLSFiles(t *testing.T) tlsx.Files {
+	t.Helper()
+	ca := tlsxtest.NewCA(t)
+	return ca.WriteFiles(t, t.TempDir(), ca.Client(t, "client"))
+}
 
 // built constructs an unconnected kgo client so tests can read option values.
 func built(t *testing.T, cfg Config) *kgo.Client {
@@ -44,13 +51,14 @@ func mechanismName(t *testing.T, kc *kgo.Client) string {
 
 func TestClientOptionsTLS(t *testing.T) {
 	t.Parallel()
-	paths := tlsfilestest.Write(t)
+	paths := writeTLSFiles(t)
 
 	require.Nil(t, built(t, Config{}).OptValue(kgo.DialTLSConfig))
 
 	systemRoots, ok := built(t, Config{TLS: true}).OptValue(kgo.DialTLSConfig).(*tls.Config)
 	require.True(t, ok, "tls: true enables TLS")
 	require.Nil(t, systemRoots.RootCAs)
+	require.Equal(t, uint16(tls.VersionTLS12), systemRoots.MinVersion)
 
 	privateCA, ok := built(t, Config{CA: paths.CA}).OptValue(kgo.DialTLSConfig).(*tls.Config)
 	require.True(t, ok, "ca implies TLS")
@@ -60,7 +68,7 @@ func TestClientOptionsTLS(t *testing.T) {
 	_, err := clientOptions(Config{CA: filepath.Join(t.TempDir(), "missing.pem")}, slog.New(slog.DiscardHandler))
 	require.ErrorIs(t, err, os.ErrNotExist)
 	_, err = clientOptions(Config{CA: paths.Key}, slog.New(slog.DiscardHandler))
-	require.ErrorIs(t, err, tlsfiles.ErrEmptyCA)
+	require.ErrorIs(t, err, tlsx.ErrEmptyCA)
 }
 
 func TestClientOptionsSASLMechanisms(t *testing.T) {
@@ -85,7 +93,7 @@ func TestClientOptionsSASLPasswordFile(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "s3cret", password, "trailing line breaks are trimmed")
 
-	kc := built(t, Config{CA: tlsfilestest.Write(t).CA, SASL: SASLConfig{
+	kc := built(t, Config{CA: writeTLSFiles(t).CA, SASL: SASLConfig{
 		Mechanism: SASLScramSHA512, User: "u", PasswordFile: path,
 	}})
 	require.Equal(t, SASLScramSHA512, mechanismName(t, kc))

@@ -17,8 +17,8 @@ import (
 	"github.com/nats-io/nkeys"
 	"github.com/stretchr/testify/require"
 
-	"github.com/golusoris/golusoris/internal/tlsfiles"
-	"github.com/golusoris/golusoris/internal/tlsfiles/tlsfilestest"
+	"github.com/golusoris/golusoris/core/tlsx"
+	"github.com/golusoris/golusoris/core/tlsx/tlsxtest"
 	"github.com/golusoris/golusoris/pubsub/cloudevents"
 )
 
@@ -97,7 +97,8 @@ func TestConnectOptionsAuth(t *testing.T) {
 func TestConnectOptionsTLS(t *testing.T) {
 	t.Parallel()
 	logger := slog.New(slog.DiscardHandler)
-	paths := tlsfilestest.Write(t)
+	ca := tlsxtest.NewCA(t)
+	paths := ca.WriteFiles(t, t.TempDir(), ca.Client(t, "client"))
 
 	opts, err := connectOptions(Config{TLS: TLSConfig{CA: paths.CA, Cert: paths.Cert, Key: paths.Key}}, nil, logger)
 	require.NoError(t, err)
@@ -105,6 +106,7 @@ func TestConnectOptionsTLS(t *testing.T) {
 	require.True(t, o.Secure)
 	require.NotNil(t, o.TLSConfig.RootCAs)
 	require.Len(t, o.TLSConfig.Certificates, 1)
+	require.Equal(t, uint16(tls.VersionTLS12), o.TLSConfig.MinVersion)
 
 	injected := &tls.Config{MinVersion: tls.VersionTLS13, ServerName: "nats.internal"}
 	opts, err = connectOptions(Config{}, injected, logger)
@@ -118,7 +120,7 @@ func TestConnectOptionsTLS(t *testing.T) {
 	require.ErrorIs(t, err, ErrConflictingTLS)
 
 	_, err = connectOptions(Config{TLS: TLSConfig{Cert: paths.Cert}}, nil, logger)
-	require.ErrorIs(t, err, tlsfiles.ErrPartialPair)
+	require.ErrorIs(t, err, tlsx.ErrPartialPair)
 }
 
 func TestPublishCloudEventValidatesBeforeJetStream(t *testing.T) {

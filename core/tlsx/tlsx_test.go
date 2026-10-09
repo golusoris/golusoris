@@ -279,8 +279,16 @@ func TestReloader_ServerConfigNeedsMaterial(t *testing.T) {
 	}
 }
 
-func TestNewReloader_FailsClosed(t *testing.T) {
-	t.Parallel()
+// rejectCase is a file set a loader must refuse; a nil want accepts any error.
+type rejectCase struct {
+	name  string
+	files tlsx.Files
+	want  error
+}
+
+// rejectCases returns valid files plus the file sets every loader refuses.
+func rejectCases(t *testing.T) (tlsx.Files, []rejectCase) {
+	t.Helper()
 	ca := tlsxtest.NewCA(t)
 	dir := t.TempDir()
 	good := ca.WriteFiles(t, dir, ca.Server(t, "localhost"))
@@ -290,35 +298,107 @@ func TestNewReloader_FailsClosed(t *testing.T) {
 	}
 	missing := filepath.Join(dir, "missing.pem")
 	otherKey := writeFile(t, ca.Server(t, "localhost").KeyPEM)
-
-	tests := []struct {
-		name  string
-		files tlsx.Files
-		want  error
-	}{
-		{"no files", tlsx.Files{}, tlsx.ErrNoFiles},
+	return good, []rejectCase{
 		{"cert without key", tlsx.Files{Cert: good.Cert}, tlsx.ErrPartialPair},
 		{"key without cert", tlsx.Files{Key: good.Key, CA: good.CA}, tlsx.ErrPartialPair},
+		{"key alone", tlsx.Files{Key: good.Key}, tlsx.ErrPartialPair},
 		{"missing cert", tlsx.Files{Cert: missing, Key: good.Key}, os.ErrNotExist},
 		{"missing CA", tlsx.Files{CA: missing}, os.ErrNotExist},
 		{"empty CA", tlsx.Files{CA: garbage}, tlsx.ErrEmptyCA},
+		{"key file as CA", tlsx.Files{CA: good.Key}, tlsx.ErrEmptyCA},
 		{"garbage cert", tlsx.Files{Cert: garbage, Key: good.Key}, nil},
 		{"key mismatch", tlsx.Files{Cert: good.Cert, Key: otherKey}, nil},
 	}
-	for _, tt := range tests {
-		r, err := tlsx.NewReloader(tt.files, tlsx.Options{})
-		if err == nil || r != nil {
-			t.Fatalf("%s: NewReloader = (%v, %v), want error", tt.name, r, err)
+}
+
+func wantRejected(t *testing.T, tc rejectCase, err error) {
+	t.Helper()
+	if err == nil || (tc.want != nil && !errors.Is(err, tc.want)) {
+		t.Fatalf("%s: err = %v, want %v", tc.name, err, tc.want)
+	}
+}
+
+func TestNewReloader_FailsClosed(t *testing.T) {
+	t.Parallel()
+	good, cases := rejectCases(t)
+	for _, tc := range append(cases, rejectCase{"no files", tlsx.Files{}, tlsx.ErrNoFiles}) {
+		r, err := tlsx.NewReloader(tc.files, tlsx.Options{})
+		if r != nil {
+			t.Fatalf("%s: NewReloader returned a reloader next to %v", tc.name, err)
 		}
-		if tt.want != nil && !errors.Is(err, tt.want) {
-			t.Fatalf("%s: err = %v, want %v", tt.name, err, tt.want)
-		}
+		wantRejected(t, tc, err)
 	}
 
 	r, err := tlsx.NewReloader(good, tlsx.Options{})
 	if err != nil || r.LastError() != nil {
 		t.Fatalf("good files: err=%v", err)
 	}
+}
+
+func TestLoadClientConfig(t *testing.T) {
+	t.Parallel()
+	ca := tlsxtest.NewCA(t)
+	files := ca.WriteFiles(t, t.TempDir(), ca.Client(t, "client"))
+
+	tests := []struct {
+		name      string
+		files     tlsx.Files
+		wantRoots bool
+		wantCerts int
+	}{
+		{"cert, key and CA", files, true, 1},
+		{"CA only", tlsx.Files{CA: files.CA}, true, 0},
+		{"pair only keeps system roots", tlsx.Files{Cert: files.Cert, Key: files.Key}, false, 1},
+		{"zero files keeps system roots", tlsx.Files{}, false, 0},
+	}
+	for _, tt := range tests {
+		cfg, err := tlsx.LoadClientConfig(tt.files)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if (cfg.RootCAs != nil) != tt.wantRoots || len(cfg.Certificates) != tt.wantCerts || cfg.MinVersion != tls.VersionTLS13 {
+			t.Fatalf("%s: RootCAs set=%v certificates=%d MinVersion=%#x", tt.name, cfg.RootCAs != nil, len(cfg.Certificates), cfg.MinVersion)
+		}
+	}
+}
+
+func TestLoadClientConfig_FailsClosed(t *testing.T) {
+	t.Parallel()
+	_, cases := rejectCases(t)
+	for _, tc := range cases {
+		cfg, err := tlsx.LoadClientConfig(tc.files)
+		if cfg != nil {
+			t.Fatalf("%s: LoadClientConfig returned a config next to %v", tc.name, err)
+		}
+		wantRejected(t, tc, err)
+	}
+}
+
+func TestLoadClientConfig_MutualTLSReadsOnce(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	ca := tlsxtest.NewCA(t)
+	srv := newReloader(t, ca.WriteFiles(t, t.TempDir(), ca.Server(t, host)), clk)
+	srvCfg := srv.ServerConfig(tls.RequireAndVerifyClientCert)
+	first := ca.Client(t, "client")
+	files := ca.WriteFiles(t, t.TempDir(), first)
+	cfg, err := tlsx.LoadClientConfig(files)
+	if err != nil {
+		t.Fatalf("LoadClientConfig: %v", err)
+	}
+
+	// Boundary: a rotation after the load does not reach the one-shot config.
+	tlsxtest.WritePair(t, files, ca.Client(t, "client"))
+	got := handshake(t, srvCfg, cfg)
+	if got.err != nil || got.clientSerial.Cmp(first.Serial) != 0 {
+		t.Fatalf("err=%v client serial=%v, want %v", got.err, got.clientSerial, first.Serial)
+	}
+
+	untrusted, err := tlsx.LoadClientConfig(tlsx.Files{CA: writeFile(t, tlsxtest.NewCA(t).PEM)})
+	if err != nil {
+		t.Fatalf("LoadClientConfig: %v", err)
+	}
+	wantFailure(t, handshake(t, srvCfg, untrusted), "server from an untrusted CA")
 }
 
 func TestParseClientAuth(t *testing.T) {
