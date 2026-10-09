@@ -229,6 +229,7 @@
       "description": "Update immutable integration-test image references in Go and the CI cache manifest.",
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
+        "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^\\.github/testcontainers-images\\.txt$/"
       ],
       "matchStrings": [
