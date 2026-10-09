@@ -15,6 +15,14 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.15.0](https://github.com/golusoris/golusoris/compare/v0.14.0...v0.15.0) (2026-10-09)
+
+
+### Features
+
+* **registry:** sign OCI image layouts offline and add OIDC token sources ([#732](https://github.com/golusoris/golusoris/issues/732)) ([689ff72](https://github.com/golusoris/golusoris/commit/689ff72d45b173e80a205fffe2203d1cf1b36030))
+* **registry:** sign with Vault and OpenBao transit keys ([#733](https://github.com/golusoris/golusoris/issues/733)) ([7e5be81](https://github.com/golusoris/golusoris/commit/7e5be814a61e2bd420db7df527ec684c7777a70f))
+
 ## [0.14.0](https://github.com/golusoris/golusoris/compare/v0.13.1...v0.14.0) (2026-10-09)
 
 
