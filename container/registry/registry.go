@@ -14,6 +14,10 @@
 // referrers (signatures, attestations) between a registry and a layout,
 // verifying every manifest and blob against its digest.
 //
+// [Client.Delete] and [Layout.Delete] remove an artifact by digest together
+// with its referrers at every level; [Layout.GC] then deletes the layout
+// blobs nothing references. All three are idempotent and have a dry run.
+//
 // [Client] is deliberately thin — it configures auth and transport once and
 // forwards to [remote.Puller] / [remote.Pusher] for the actual registry
 // calls. Every network method takes a [context.Context] and is additionally

@@ -345,7 +345,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 | --- | --- | --- |
-| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers; OCI image-layout dirs: digest-verified copy of image + referrers to and from registries, layout referrers | google/go-containerregistry |
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers; OCI image-layout dirs: digest-verified copy of image + referrers to and from registries, layout referrers; idempotent delete of an artifact with its referrer tree (registry and layout, dry run) and layout garbage collection | google/go-containerregistry |
 | `container/registry/credentials/` | registry credential chain behind `authn.Keychain` — secret files, cloud workload identity, docker config | google/go-containerregistry |
 | `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
