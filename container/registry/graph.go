@@ -16,6 +16,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 )
 
 // manifestRole says how a store addresses a manifest besides its digest.
@@ -114,6 +115,8 @@ func (c *Client) CopyToLayout(ctx context.Context, src string, l *Layout) (v1.De
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.limits.transfer)
 	defer cancel()
+	l.gc.RLock()
+	defer l.gc.RUnlock()
 	puller, err := remote.NewPuller(c.remoteOptions()...)
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("registry: build puller: %w", err)
@@ -204,22 +207,29 @@ func (lim limits) copyGraph(ctx context.Context, src source, dst sink, root v1.D
 // maxManifests bounds one copy: the root, its index entries, its referrers.
 func (p *plan) maxManifests() int { return 1 + p.lim.blobs + p.lim.referrers }
 
-// walk plans root and every manifest below it, children first, without
-// recursion: an explicit stack bounded by the manifest and entry caps.
+// walk plans root and every manifest below it, children first, on the
+// explicit stack walkFrames bounds by the manifest and entry caps.
 func (p *plan) walk(ctx context.Context, root v1.Descriptor) error {
 	maxSteps := 2 * p.maxManifests() * (p.lim.blobs + 1)
-	stack := []frame{{d: root}}
+	return walkFrames([]frame{{d: root}}, maxSteps, func(f frame) ([]frame, error) { return p.visit(ctx, f) })
+}
+
+// walkFrames runs visit over an explicit stack, no recursion (HISS-01):
+// each step pops one frame and pushes the frames visit returns. More than
+// maxSteps steps is [ErrTooLarge].
+func walkFrames(start []frame, maxSteps int, visit func(frame) ([]frame, error)) error {
+	stack := slices.Clone(start)
 	for step := 0; step < maxSteps && len(stack) > 0; step++ {
 		top := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		next, err := p.visit(ctx, top)
+		next, err := visit(top)
 		if err != nil {
 			return err
 		}
 		stack = append(stack, next...)
 	}
 	if len(stack) > 0 {
-		return fmt.Errorf("%w: manifest graph of %s", ErrTooLarge, root.Digest)
+		return fmt.Errorf("%w: graph walk exceeds %d steps", ErrTooLarge, maxSteps)
 	}
 	return nil
 }
@@ -270,49 +280,60 @@ func (p *plan) load(ctx context.Context, d v1.Descriptor) (*node, error) {
 		return nil, err
 	}
 	n := &node{desc: d, raw: raw}
-	if d.MediaType.IsIndex() {
-		return n, p.indexContent(n)
-	}
-	return n, p.imageContent(n)
+	return n, p.addContent(n)
 }
 
-func (p *plan) indexContent(n *node) error {
-	im, err := v1.ParseIndexManifest(bytes.NewReader(n.raw))
+// addContent records the child manifests and blobs of n.
+func (p *plan) addContent(n *node) error {
+	kids, blobs, err := contentOf(n.desc.Digest, n.desc.MediaType, n.raw, p.lim.blobs)
 	if err != nil {
-		return fmt.Errorf("%w: decode index %s: %w", ErrInvalidArtifact, n.desc.Digest, err)
+		return err
 	}
-	if len(im.Manifests) > p.lim.blobs {
-		return fmt.Errorf("%w: index %s has %d entries > %d", ErrTooLarge, n.desc.Digest, len(im.Manifests), p.lim.blobs)
+	n.kids = kids
+	for _, b := range blobs {
+		if err = p.addBlob(n, b); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func indexContent(h v1.Hash, raw []byte, maxEntries int) (kids, blobs []v1.Descriptor, err error) {
+	im, err := v1.ParseIndexManifest(bytes.NewReader(raw))
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: decode index %s: %w", ErrInvalidArtifact, h, err)
+	}
+	if len(im.Manifests) > maxEntries {
+		return nil, nil, fmt.Errorf("%w: index %s has %d entries > %d", ErrTooLarge, h, len(im.Manifests), maxEntries)
 	}
 	for _, d := range im.Manifests {
 		if isManifest(d.MediaType) {
-			n.kids = append(n.kids, d)
-			continue
-		}
-		if err = p.addBlob(n, d); err != nil {
-			return err
+			kids = append(kids, d)
+		} else {
+			blobs = append(blobs, d)
 		}
 	}
-	return nil
+	return kids, blobs, nil
 }
 
-func (p *plan) imageContent(n *node) error {
-	m, err := v1.ParseManifest(bytes.NewReader(n.raw))
+// contentOf parses manifest raw of media type mt into its child manifests
+// and its blobs (config, layers, other index entries), refusing more than
+// maxEntries index entries or layers.
+func contentOf(h v1.Hash, mt types.MediaType, raw []byte, maxEntries int) (kids, blobs []v1.Descriptor, err error) {
+	if mt.IsIndex() {
+		return indexContent(h, raw, maxEntries)
+	}
+	if !mt.IsImage() {
+		return nil, nil, fmt.Errorf("%w: %s is %q, want a manifest", ErrInvalidArtifact, h, mt)
+	}
+	m, err := v1.ParseManifest(bytes.NewReader(raw))
 	if err != nil {
-		return fmt.Errorf("%w: decode manifest %s: %w", ErrInvalidArtifact, n.desc.Digest, err)
+		return nil, nil, fmt.Errorf("%w: decode manifest %s: %w", ErrInvalidArtifact, h, err)
 	}
-	if len(m.Layers) > p.lim.blobs {
-		return fmt.Errorf("%w: manifest %s has %d layers > %d", ErrTooLarge, n.desc.Digest, len(m.Layers), p.lim.blobs)
+	if len(m.Layers) > maxEntries {
+		return nil, nil, fmt.Errorf("%w: manifest %s has %d layers > %d", ErrTooLarge, h, len(m.Layers), maxEntries)
 	}
-	if err = p.addBlob(n, m.Config); err != nil {
-		return err
-	}
-	for _, l := range m.Layers {
-		if err = p.addBlob(n, l); err != nil {
-			return err
-		}
-	}
-	return nil
+	return nil, append([]v1.Descriptor{m.Config}, m.Layers...), nil
 }
 
 // addBlob records blob d of n; foreign layers stay where their URLs point.

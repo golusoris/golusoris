@@ -11,6 +11,7 @@ OCI/Docker registry client over
 `pkg/v1/remote`: parse reference, resolve tag to its content digest, fetch
 manifest, list tags, copy image (or index), push/pull OCI 1.1 artifacts,
 list referrers, copy image + referrers to and from OCI image-layout dirs.
+Delete artifact + referrer tree; collect layout garbage.
 One OCI client for fleet; oras-go deliberately not used.
 
 ## API
@@ -50,7 +51,7 @@ bundle, err := c.FetchBlob(ctx, "ghcr.io/org/models", man.Layers[0], 1<<20)
 - Referrers: ggcr `remote.Referrers` = OCI 1.1 API, fallback tag schema `sha256-<hex>`; push with `Subject` updates fallback index on registries without API (ggcr `commitSubjectReferrers`, same path cosign uses). Over `max_referrers` -> `ErrTooLarge`. Filter is client-side on descriptor `artifactType`.
 - Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. In-process signing + verification = `container/registry/sign` submodule (`sign.Image`, `sign.Verify`; own go.mod, sigstore-go); this module stays sigstore-free.
 - Timeouts: `PushArtifact`/`PullArtifact`/`FetchBlob` bounded by `transfer_timeout` (default 10m); `Referrers`/`ArtifactManifest` by `timeout`.
-- Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`.
+- Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`; delete + GC: `ErrDeleteUnsupported`, `ErrPartialDelete`.
 
 ### OCI image layouts
 
@@ -75,6 +76,24 @@ m, err := l.Manifest(ctx, desc.Digest) // image or index
 - Timeouts: copies bounded by `transfer_timeout`; `Layout.Manifest`/`ArtifactManifest`/`Referrers` by `timeout`; `Layout.PushArtifact`/`FetchBlob` by `transfer_timeout`. Local reads check ctx per chunk.
 - Sign + verify inside layout: `container/registry/sign` (`sign.ImageLayout`, `sign.VerifyLayout`).
 - Tests: `layout_test.go` (create/open, push + referrers, caps at + over limit, tampered flip/truncate/extend/symlink/missing, bad digests, round trip registry -> layout -> registry for tag-schema + referrers API + nested index, ggcr `validate.Index` on both ends, corrupt pull leaves no entry, foreign layer). `internal_test.go` `TestVerifier`.
+
+### Delete + garbage collection (retention)
+
+```go
+rep, err := c.Delete(ctx, "ghcr.io/org/models@"+desc.Digest.String(), registry.DeleteOptions{}) // digest only
+rep, err  = l.Delete(ctx, desc.Digest, registry.DeleteOptions{DryRun: true})                  // index.json entries
+gc, err  := l.GC(ctx, registry.GCOptions{})                                                    // unreachable blobs
+```
+
+- `Client.Delete`: digest ref only; tag or bare repo -> `ErrInvalidArtifact` before I/O. Referrer tree = referrers API + tag schema index `sha256-<hex>` (union: registry with late API keeps old tag schema referrers), all levels (signature of attestation too). Explicit bounded stack (`referrerTree` on `walkFrames`, HISS-01); tree over `max_referrers` -> `ErrTooLarge`, nothing deleted. Each listed referrer fetched, `subject` checked; forged or stale tag index naming other subject -> `ErrInvalidArtifact`, nothing deleted.
+- Order: deepest referrer first; per manifest: tag schema tag (DELETE by tag; 400/405 -> DELETE index by digest, spec allows digest-only registries), then manifest; subject last. Retry after failure finds rest via surviving tag index or API.
+- Index subject: children + child referrers stay remote (children shared by other indexes possible; registry GC owns untagged manifests).
+- Idempotent (VMAFx retention = retrying River jobs): 404 -> `DeleteReport.Absent`, no error; second run -> all `Absent`. 400/405/`UNSUPPORTED` -> `ErrDeleteUnsupported`; error after first removal -> `ErrPartialDelete` + report of removed manifests + tags. DryRun: listing + HEAD per manifest, no DELETE; registry DELETE support unknown until real run.
+- `Layout.Delete`: subject + referrer tree out of `index.json` (one atomic rewrite, `commitFile`); blobs untouched. Index subject: referrers of children no remaining entry reaches go too (GC drops those children). Every listed manifest read + verified first; any error -> `index.json` unchanged. Unlisted subject -> `Absent`.
+- `Layout.GC`: mark = `index.json` entries -> index children, config, layers (bounded stack, budget = blob file count + 1, every manifest verified); sweep = `blobs/sha256/<64 hex>` files outside mark. Walk error (malformed index or manifest, digest mismatch, missing manifest, symlinked blob or `blobs` dir) -> nothing deleted. Removal through `os.Root` on `blobs/sha256`: no path outside. Other names (`.registry-*` temp files) kept. Report: digests + bytes; second GC -> empty.
+- Concurrency: `*Layout` writers (`PushArtifact`, `CopyToLayout`) hold `gc` read lock; GC holds write lock -> no blob swept between write + listing. Other process or other `*Layout` writing same dir during GC: unsupported.
+- ggcr `remote.Pusher.Delete` used (delete-scope auth). ggcr `layout.GarbageCollect` (experimental, recursive, unverified, lists only) + `RemoveDescriptors` (non-atomic `os.WriteFile`) not used.
+- Tests: `delete_test.go` (tag schema + API, cosign bundle tree, dry run, twice, partial prior deletion, 405/400/`UNSUPPORTED`, partial failure + retry, tag delete fallback, forged tag index, index children, cap, union API + tag schema); `gc_test.go` (delete then GC exact garbage, shared blobs + junk kept, dry run snapshot, twice, index subject, fail-closed table, cap, concurrent push + delete + GC); `internal_test.go` (walk budget, canceled sweep, writers hold GC lock).
 
 Every network method takes `context.Context` **and** is additionally bounded
 by `Options.Timeout` (default `registry.DefaultTimeout`, 30s) — HISS-02: caller that forgets deadline still gets one.

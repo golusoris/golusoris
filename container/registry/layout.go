@@ -46,6 +46,8 @@ type Layout struct {
 	timeout time.Duration
 	limits  limits
 	mu      sync.Mutex
+	// gc excludes [Layout.GC] while a write lists blobs it already stored.
+	gc sync.RWMutex
 }
 
 func newLayout(dir string, opts Options) *Layout {
@@ -235,15 +237,20 @@ func (l *Layout) manifest(ctx context.Context, h v1.Hash) (*Manifest, error) {
 	return &Manifest{Digest: h, MediaType: mt, Size: int64(len(raw)), Raw: raw}, nil
 }
 
-func (l *Layout) mediaType(raw []byte, h v1.Hash) (types.MediaType, error) {
+// declaredMediaType is the manifest's own mediaType field, "" without one.
+func declaredMediaType(raw []byte, h v1.Hash) (types.MediaType, error) {
 	var probe struct {
 		MediaType types.MediaType `json:"mediaType"` //nolint:tagliatelle // OCI image-spec wire name
 	}
 	if err := json.Unmarshal(raw, &probe); err != nil {
 		return "", fmt.Errorf("%w: decode manifest %s: %w", ErrInvalidArtifact, h, err)
 	}
-	if probe.MediaType != "" {
-		return probe.MediaType, nil
+	return probe.MediaType, nil
+}
+
+func (l *Layout) mediaType(raw []byte, h v1.Hash) (types.MediaType, error) {
+	if mt, err := declaredMediaType(raw, h); err != nil || mt != "" {
+		return mt, err
 	}
 	im, err := l.readIndex()
 	if err != nil {
@@ -321,6 +328,11 @@ func (l *Layout) referrerIndex(ctx context.Context) (map[v1.Hash][]v1.Descriptor
 	if err != nil {
 		return nil, err
 	}
+	return l.referrersIn(ctx, im)
+}
+
+// referrersIn maps each subject digest to the entries of im that name it.
+func (l *Layout) referrersIn(ctx context.Context, im *v1.IndexManifest) (map[v1.Hash][]v1.Descriptor, error) {
 	out := make(map[v1.Hash][]v1.Descriptor)
 	seen := make(map[v1.Hash]struct{}, len(im.Manifests))
 	for _, d := range im.Manifests {
@@ -387,6 +399,8 @@ func (l *Layout) PushArtifact(ctx context.Context, a Artifact) (v1.Descriptor, e
 	}
 	ctx, cancel := context.WithTimeout(ctx, l.limits.transfer)
 	defer cancel()
+	l.gc.RLock()
+	defer l.gc.RUnlock()
 	return l.limits.pushArtifact(ctx, layoutSink{l: l}, a)
 }
 
