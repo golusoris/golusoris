@@ -230,6 +230,7 @@
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
+        "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
         "/^\\.github/testcontainers-images\\.txt$/"
       ],
       "matchStrings": [
@@ -439,6 +440,16 @@
         "harbor.infra.cauda.dev/library/gitea-actions-job"
       ],
       "enabled": false
+    },
+    {
+      "description": "LocalStack 2026.03 and later start only with an auth token; the KMS signer tests stay on the last tokenless 4.x release.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "localstack/localstack"
+      ],
+      "allowedVersions": "<2026"
     },
     {
       "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",

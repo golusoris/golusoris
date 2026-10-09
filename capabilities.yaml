@@ -12,6 +12,9 @@ framework: github.com/golusoris/golusoris
 modules:
   - github.com/golusoris/golusoris/container/registry
   - github.com/golusoris/golusoris/container/registry/sign
+  - github.com/golusoris/golusoris/container/registry/sign/kms/aws
+  - github.com/golusoris/golusoris/container/registry/sign/kms/azure
+  - github.com/golusoris/golusoris/container/registry/sign/kms/gcp
   - github.com/golusoris/golusoris/container/registry/sign/kms/vault
   - github.com/golusoris/golusoris/core
   - github.com/golusoris/golusoris/deploy
@@ -347,6 +350,24 @@ packages:
     capabilities: [registry.sign, registry.verify, registry.sign.layout, registry.sign.idtoken]
     description: "Package sign signs OCI images, indexes and artifacts by digest with Sigstore, in process, through sigstore-go: no cosign binary and no exec; in a registry or offline in an OCI image layout."
     replaces: [github.com/sigstore/sigstore-go, github.com/sigstore/cosign/v3]
+  - import: github.com/golusoris/golusoris/container/registry/sign/kms/aws
+    module: github.com/golusoris/golusoris/container/registry/sign/kms/aws
+    domain: registry
+    capabilities: [registry.kms.aws]
+    description: "Package aws signs with an AWS KMS asymmetric key through crypto.Signer, so a key that never leaves KMS can sign OCI images with sign.Image."
+    replaces: [github.com/sigstore/sigstore/pkg/signature/kms/aws]
+  - import: github.com/golusoris/golusoris/container/registry/sign/kms/azure
+    module: github.com/golusoris/golusoris/container/registry/sign/kms/azure
+    domain: registry
+    capabilities: [registry.kms.azure]
+    description: "Package azure signs with an Azure Key Vault or Managed HSM key through crypto.Signer, so a key that never leaves the vault can sign OCI images with sign.Image."
+    replaces: [github.com/sigstore/sigstore/pkg/signature/kms/azure]
+  - import: github.com/golusoris/golusoris/container/registry/sign/kms/gcp
+    module: github.com/golusoris/golusoris/container/registry/sign/kms/gcp
+    domain: registry
+    capabilities: [registry.kms.gcp]
+    description: "Package gcp signs with a Google Cloud KMS asymmetric key version through crypto.Signer, so a key that never leaves Cloud KMS can sign OCI images with sign.Image."
+    replaces: [github.com/sigstore/sigstore/pkg/signature/kms/gcp, cloud.google.com/go/kms]
   - import: github.com/golusoris/golusoris/container/registry/sign/kms/vault
     module: github.com/golusoris/golusoris/container/registry/sign/kms/vault
     domain: registry

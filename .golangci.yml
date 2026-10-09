@@ -303,6 +303,10 @@ linters:
       - path: search/meilisearch/
         linters:
           - tagliatelle
+      # Cloud KMS REST wire format is camelCase (pemCrc32c, verifiedDigestCrc32c).
+      - path: container/registry/sign/kms/gcp/
+        linters:
+          - tagliatelle
       # APNs wire format uses kebab-case (thread-id, content-available) per spec.
       - path: notify/apns2/
         linters:

@@ -18,7 +18,7 @@ grep -Fqx 'core' <<<"$head_modules"
 grep -Fqx 'web3/solana' <<<"$head_modules"
 
 worktree_modules="$(discover_modules)"
-[[ "$(wc -l <<<"$worktree_modules")" -eq 28 ]]
+[[ "$(wc -l <<<"$worktree_modules")" -eq 31 ]]
 grep -Fqx 'deploy' <<<"$worktree_modules"
 if grep -Eq '^deploy/(multiregion|pulumi)$' <<<"$worktree_modules"; then
 	printf 'deployment reference programs must share deploy/go.mod\n' >&2

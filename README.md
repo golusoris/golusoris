@@ -352,6 +352,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `container/registry/sign/` | in-process Sigstore signing and verification by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts; `Verify` checks those and cosign v3 bundles against a key or certificate identity, tlog / TSA / SCT policy and annotations; `ImageLayout` / `VerifyLayout` do the same inside an OCI image layout offline; GitHub Actions and projected service-account ID token sources | sigstore/sigstore-go |
 | `container/registry/sign/kms/vault/` | `crypto.Signer` over a HashiCorp Vault or OpenBao transit key (ECDSA, RSA, Ed25519) for `sign.Image`; token or Kubernetes / JWT service-account login with re-login on expiry; per-call timeout; key version pinned | stdlib `net/http` (no Vault SDK) |
+| `container/registry/sign/kms/aws/` | `crypto.Signer` over an AWS KMS asymmetric key (ECDSA, RSA, Ed25519) for `sign.Image`; default credential chain incl. IRSA and EKS Pod Identity; key ARN pinned behind aliases; per-call timeout | aws-sdk-go-v2 service/kms + config |
+| `container/registry/sign/kms/gcp/` | `crypto.Signer` over a Cloud KMS key version (ECDSA, RSA, Ed25519) for `sign.Image`; Application Default Credentials incl. GKE Workload Identity and workload identity federation; CRC32C-checked requests and answers; per-request timeout | stdlib `net/http` + golang.org/x/oauth2 (no Cloud KMS SDK) |
+| `container/registry/sign/kms/azure/` | `crypto.Signer` over an Azure Key Vault or Managed HSM key (ECDSA, RSA) for `sign.Image`; DefaultAzureCredential incl. AKS workload identity; key version pinned; per-call timeout | Azure/azure-sdk-for-go azkeys + azidentity |
 | `storage/gcs/` | Google Cloud Storage `storage.Bucket` — resumable upload, signed GET/PUT (key or IAM signBlob), server-side copy | cloud.google.com/go/storage |
 | `storage/azblob/` | Azure Blob Storage `storage.Bucket` — staged block upload, SAS (shared key or user delegation), server-side copy; workload / managed identity | Azure/azure-sdk-for-go azblob + azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
@@ -425,9 +428,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 28 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 31 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 28 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 31 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
@@ -473,7 +476,7 @@ Breaking changes between minor versions are called out in the commit
 [docs/migrations/v0.13.0.md](docs/migrations/v0.13.0.md) for current API and
 secure-default changes. The [v0.9.0 guide](docs/migrations/v0.9.0.md) retains
 the earlier `core/…` import-path mapping. Every module in the catalog above is
-committed; CI gates all 28 discovered Go modules through the primary lane and
+committed; CI gates all 31 discovered Go modules through the primary lane and
 four deterministic module-sweep shards.
 
 ---
