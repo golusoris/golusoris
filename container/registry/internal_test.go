@@ -5,12 +5,17 @@
 package registry
 
 import (
+	"bytes"
+	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
 type typedNilKeychain struct{}
@@ -129,5 +134,40 @@ func TestValidateName(t *testing.T) {
 		if err := validateName(n); (err == nil) != ok {
 			t.Errorf("validateName(%q) = %v, want ok=%v", n, err, ok)
 		}
+	}
+}
+
+// TestVerifier covers the stream check every blob passes: exact content,
+// short, long and corrupt streams, and cancellation between reads.
+func TestVerifier(t *testing.T) {
+	t.Parallel()
+	body := []byte(strings.Repeat("layer", 1000))
+	h, size, err := v1.SHA256(bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := v1.Descriptor{Digest: h, Size: size}
+	read := func(ctx context.Context, b []byte) error {
+		_, cerr := io.Copy(io.Discard, newVerifier(ctx, io.NopCloser(bytes.NewReader(b)), d))
+		return cerr
+	}
+	if err = read(t.Context(), body); err != nil {
+		t.Fatalf("intact stream: %v", err)
+	}
+	corrupt := bytes.Clone(body)
+	corrupt[7] ^= 1
+	for name, b := range map[string][]byte{"short": body[:len(body)-1], "long": append(bytes.Clone(body), 'x'), "corrupt": corrupt} {
+		if err = read(t.Context(), b); !errors.Is(err, ErrDigestMismatch) {
+			t.Errorf("%s stream err = %v", name, err)
+		}
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	v := newVerifier(ctx, io.NopCloser(bytes.NewReader(body)), d)
+	if _, err = v.Read(make([]byte, 10)); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if _, err = io.Copy(io.Discard, v); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled mid-stream err = %v", err)
 	}
 }

@@ -9,6 +9,11 @@
 // referrers of arbitrary OCI 1.1 artifacts (see [Client.PushArtifact],
 // [Client.PullArtifact], [Client.Referrers]).
 //
+// [Layout] holds the same content offline in an OCI image-layout directory:
+// [Client.CopyToLayout] and [Client.CopyFromLayout] carry an image with its
+// referrers (signatures, attestations) between a registry and a layout,
+// verifying every manifest and blob against its digest.
+//
 // [Client] is deliberately thin — it configures auth and transport once and
 // forwards to [remote.Puller] / [remote.Pusher] for the actual registry
 // calls. Every network method takes a [context.Context] and is additionally
@@ -170,17 +175,7 @@ func (c *Client) Resolve(ctx context.Context, ref string) (name.Digest, error) {
 	if err != nil {
 		return name.Digest{}, err
 	}
-	ctx, cancel := c.bound(ctx)
-	defer cancel()
-	puller, err := remote.NewPuller(c.remoteOptions()...)
-	if err != nil {
-		return name.Digest{}, fmt.Errorf("registry: build puller: %w", err)
-	}
-	desc, err := puller.Head(ctx, r)
-	if err != nil {
-		return name.Digest{}, fmt.Errorf("registry: resolve %q: %w", ref, err)
-	}
-	return r.Context().Digest(desc.Digest.String()), nil
+	return c.resolve(ctx, r)
 }
 
 // Manifest is a fetched image (or index) manifest.

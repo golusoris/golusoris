@@ -345,12 +345,12 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Sub-module | Purpose | Key dep |
 | --- | --- | --- |
-| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers | google/go-containerregistry |
+| `container/registry/` | OCI/Docker registry client — resolve, manifest, tags, copy; OCI 1.1 artifact push/pull by digest, referrers; OCI image-layout dirs: digest-verified copy of image + referrers to and from registries, layout referrers | google/go-containerregistry |
 | `container/registry/credentials/` | registry credential chain behind `authn.Keychain` — secret files, cloud workload identity, docker config | google/go-containerregistry |
 | `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
-| `container/registry/sign/` | in-process Sigstore signing and verification by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts; `Verify` checks those and cosign v3 bundles against a key or certificate identity, tlog / TSA / SCT policy and annotations | sigstore/sigstore-go |
+| `container/registry/sign/` | in-process Sigstore signing and verification by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts; `Verify` checks those and cosign v3 bundles against a key or certificate identity, tlog / TSA / SCT policy and annotations; `ImageLayout` / `VerifyLayout` do the same inside an OCI image layout offline; GitHub Actions and projected service-account ID token sources | sigstore/sigstore-go |
 | `storage/gcs/` | Google Cloud Storage `storage.Bucket` — resumable upload, signed GET/PUT (key or IAM signBlob), server-side copy | cloud.google.com/go/storage |
 | `storage/azblob/` | Azure Blob Storage `storage.Bucket` — staged block upload, SAS (shared key or user delegation), server-side copy; workload / managed identity | Azure/azure-sdk-for-go azblob + azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |

@@ -315,8 +315,8 @@ packages:
   - import: github.com/golusoris/golusoris/container/registry
     module: github.com/golusoris/golusoris/container/registry
     domain: registry
-    capabilities: [registry.image, registry.artifact, registry.referrers]
-    description: "Package registry wraps go-containerregistry's remote client: resolve, fetch manifests, list tags, copy images, and push, pull (digest-verified, size-capped) and list referrers of OCI 1.1 artifacts."
+    capabilities: [registry.image, registry.artifact, registry.referrers, registry.layout]
+    description: "Package registry wraps go-containerregistry's remote client: resolve, fetch manifests, list tags, copy images, push, pull (digest-verified, size-capped) and list referrers of OCI 1.1 artifacts, and copy images with their referrers to and from OCI image layouts."
     replaces: [github.com/google/go-containerregistry]
   - import: github.com/golusoris/golusoris/container/registry/credentials
     module: github.com/golusoris/golusoris/container/registry
@@ -343,8 +343,8 @@ packages:
   - import: github.com/golusoris/golusoris/container/registry/sign
     module: github.com/golusoris/golusoris/container/registry/sign
     domain: registry
-    capabilities: [registry.sign, registry.verify]
-    description: "Package sign signs OCI images, indexes and artifacts by digest with Sigstore, in process, through sigstore-go: no cosign binary and no exec."
+    capabilities: [registry.sign, registry.verify, registry.sign.layout, registry.sign.idtoken]
+    description: "Package sign signs OCI images, indexes and artifacts by digest with Sigstore, in process, through sigstore-go: no cosign binary and no exec; in a registry or offline in an OCI image layout."
     replaces: [github.com/sigstore/sigstore-go, github.com/sigstore/cosign/v3]
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
