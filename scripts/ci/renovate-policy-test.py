@@ -40,6 +40,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "mvdan.cc/gofumpt", "go"),
     ("tools/tool-versions.env", "github.com/golangci/golangci-lint/v2", "go"),
     ("tools/tool-versions.env", "github.com/securego/gosec/v2", "go"),
+    ("tools/tool-versions.env", "golang.org/x/tools", "go"),
     ("tools/tool-versions.env", "golang.org/x/vuln", "go"),
     ("tools/tool-versions.env", "github.com/joelanford/go-apidiff", "go"),
     ("tools/tool-versions.env", "github.com/evilmartians/lefthook/v2", "go"),
