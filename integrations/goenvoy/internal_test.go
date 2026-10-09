@@ -6,6 +6,7 @@ package goenvoy
 
 import (
 	"net/http"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -54,6 +55,36 @@ func TestHTTPClient_ownsMissingTransport(t *testing.T) {
 		t.Fatal("two services share one transport")
 	}
 }
+
+// idleCountingTransport counts CloseIdleConnections calls.
+type idleCountingTransport struct {
+	http.RoundTripper
+	closes atomic.Int32
+}
+
+func (c *idleCountingTransport) CloseIdleConnections() { c.closes.Add(1) }
+
+// TestCloseIdle_reachesCachedTransport pins that OnStop's closeIdle reaches the
+// pool under every built client, cached or not, and tolerates a transport
+// without CloseIdleConnections (#709).
+func TestCloseIdle_reachesCachedTransport(t *testing.T) {
+	t.Parallel()
+	tr := &idleCountingTransport{}
+	f := newTestFactory(tr)
+	f.httpClient("plain", ServiceOptions{})
+	f.httpClient("cached", ServiceOptions{CacheTTL: time.Minute})
+	f.closeIdle()
+	if got := tr.closes.Load(); got != 2 {
+		t.Fatalf("CloseIdleConnections calls = %d, want 2 (plain + cached)", got)
+	}
+	bare := newTestFactory(roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, http.ErrNotSupported }))
+	bare.httpClient("cached", ServiceOptions{CacheTTL: time.Minute})
+	bare.closeIdle() // must not panic
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 // TestHTTPClient_keepsBuilderTransport pins the boundary: a transport the
 // builder set is wrapped as-is, not replaced.

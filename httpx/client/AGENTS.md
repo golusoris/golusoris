@@ -25,6 +25,8 @@ circuit-breaker → retry → otelhttp → stdlib transport
 - `Options.TLSConfig` -> clone of `http.DefaultTransport` with that TLS config. `tlsx.Reloader.ClientConfig` keeps client cert current; CA pool = snapshot at call.
 - `Options.Transport` replaces innermost transport; otelhttp, retry, breaker still wrap it. Transport set -> TLSConfig ignored.
 - No Transport, no TLSConfig -> private clone of `http.DefaultTransport`. Shared pool never used: any `CloseIdleConnections` on it breaks in-flight requests (#703).
+- `Client.CloseIdleConnections` reaches inner transport through breaker, retry, otelhttp. otelhttp hides method; `idleForwarder` restores (#709). Wrapper around client transport -> forward `CloseIdleConnections` too.
+- retryablehttp inner client gets bare otelhttp transport: retryablehttp close after failed or cancelled request never empties shared pool.
 
 ## Rules
 

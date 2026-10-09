@@ -135,17 +135,17 @@ func New(opts Options) *http.Client {
 	resolved := resolveOptions(opts)
 
 	// Innermost: stdlib (or caller) transport wrapped by otelhttp.
-	base := otelhttp.NewTransport(
-		innerTransport(opts),
-		otelhttp.WithTracerProvider(resolved.tracerProvider),
-	)
+	inner := innerTransport(opts)
+	traced := otelhttp.NewTransport(inner, otelhttp.WithTracerProvider(resolved.tracerProvider))
+	base := idleForwarder{RoundTripper: traced, inner: inner}
 
 	// Middle: retry layer.
 	var transport http.RoundTripper = base
 	if opts.Retry.Max > 0 {
 		rc := retryablehttp.NewClient()
 		rc.HTTPClient = &http.Client{
-			Transport: base,
+			// Not base: retryablehttp closes idle conns after each failed or cancelled request.
+			Transport: traced,
 			Timeout:   resolved.timeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
@@ -231,6 +231,22 @@ func ownTransport() http.RoundTripper {
 	return http.DefaultTransport
 }
 
+// idleForwarder restores CloseIdleConnections, which otelhttp.Transport hides,
+// so http.Client.CloseIdleConnections reaches the client's own pool (#709).
+type idleForwarder struct {
+	http.RoundTripper
+	inner http.RoundTripper
+}
+
+func (t idleForwarder) CloseIdleConnections() { closeIdle(t.inner) }
+
+// closeIdle forwards to rt when rt can close idle connections.
+func closeIdle(rt http.RoundTripper) {
+	if closer, ok := rt.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
 // ReadAllBounded reads at most maxBytes plus one sentinel byte. Exact-boundary
 // bodies succeed; larger bodies return [ErrBodyTooLarge].
 func ReadAllBounded(reader io.Reader, maxBytes int64) ([]byte, error) {
@@ -287,6 +303,8 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	return resp, nil
 }
+
+func (t *retryTransport) CloseIdleConnections() { closeIdle(t.next) }
 
 func retryRequest(req *http.Request) (*retryablehttp.Request, error) {
 	rreq := &retryablehttp.Request{Request: req}
@@ -363,6 +381,8 @@ func (t *breakerTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	// 5xx with response: drop our sentinel, return the response.
 	return resp, nil
 }
+
+func (t *breakerTransport) CloseIdleConnections() { closeIdle(t.next) }
 
 // errServerErrorSentinel is returned as the cause of a wrapped 5xx error so
 // breakerTransport can distinguish "real failure that counts" from
