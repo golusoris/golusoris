@@ -200,7 +200,7 @@ func TestCloseIdleConnectionsEmptiesOwnPool(t *testing.T) {
 // pool shared by concurrent requests open (#709).
 func TestRetryExhaustionKeepsIdlePool(t *testing.T) {
 	t.Parallel()
-	tr := &idleCountingTransport{countingTransport: countingTransport{failures: 2}}
+	tr := &idleCountingTransport{failures: 2}
 	c := client.New(client.Options{
 		Transport: tr,
 		Retry:     client.RetryOptions{Max: 1, Wait: time.Millisecond, MaxWait: time.Millisecond},
