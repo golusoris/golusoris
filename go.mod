@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.27.1
+go 1.27.2
 
 replace github.com/golusoris/golusoris/core => ./core
 
@@ -138,7 +138,7 @@ require (
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/exp v0.0.0-20261005173118-76772065c9b0
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
