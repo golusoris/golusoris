@@ -153,10 +153,7 @@ func writeAtomic(dir, name string, body []byte) error {
 	}
 	tmpPath := tmp.Name()
 	if err = fillTemp(tmp, body); err == nil {
-		err = os.Rename(tmpPath, filepath.Join(dir, name))
-		if err != nil {
-			err = fmt.Errorf("nfd: rename into place: %w", err)
-		}
+		err = osRenamer().replace(tmpPath, filepath.Join(dir, name))
 	}
 	if err != nil {
 		if rmErr := os.Remove(tmpPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {

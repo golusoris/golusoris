@@ -54,6 +54,9 @@ below `ttl`), `timeout` (10s per Source call + write).
 - Rendered file > 64 KiB -> `ErrTooLarge`; NFD ignores larger files.
 - Write = temp in same dir + fsync + chmod 0644 + rename. Failure leaves
  previous file untouched, temp removed.
+- Windows rename: open reader handle (no `FILE_SHARE_DELETE`) -> `ERROR_ACCESS_DENIED`
+ / `ERROR_SHARING_VIOLATION`. `rename.go` retries those only, 64 attempts,
+ 1ms..32ms backoff (~1.9s, `cmd/internal/robustio` 2s). Other OS: one attempt.
 
 ## Don't
 

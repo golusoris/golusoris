@@ -225,8 +225,13 @@ func TestWriteFeatureFile_readersNeverSeePartialFile(t *testing.T) {
 		default:
 		}
 		b, err := os.ReadFile(filepath.Join(dir, "f"))
-		if runtime.GOOS == "windows" && err != nil {
-			continue // a rename can briefly deny sharing on Windows
+		if runtime.GOOS == "windows" {
+			// Windows cannot replace a file while a reader holds it open, so a
+			// reader that never pauses would starve every rename; poll instead.
+			time.Sleep(time.Millisecond)
+			if err != nil {
+				continue // a rename can briefly deny sharing on Windows
+			}
 		}
 		require.NoError(t, err)
 		require.True(t, want[string(b)], "observed a partial file of %d bytes", len(b))
