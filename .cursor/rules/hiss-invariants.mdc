@@ -169,6 +169,7 @@ Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 - All-module `apidiff` versus previous root tag; execution required, incompatibilities informational before v1.0
 - Conventional-commit PR title
 - Runners: GitHub-hosted `ubuntu-24.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
+- Docker Hub pulls -> `scripts/ci/docker-hub-mirror.sh` (mirror.gcr.io, same digests) right after checkout in every pulling job; anonymous Hub pulls hit rate limit (#739).
 
 ## Working Agreements
 
