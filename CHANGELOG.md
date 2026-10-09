@@ -15,6 +15,24 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.13.1](https://github.com/golusoris/golusoris/compare/v0.13.0...v0.13.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** grant the release gate checks: read so tag runs start ([#711](https://github.com/golusoris/golusoris/issues/711)) ([f3d018e](https://github.com/golusoris/golusoris/commit/f3d018e4518affd044ac1d19fc0c8d03b22933db))
+* **deps:** update module github.com/go-playground/validator/v10 to v10.30.5 ([#576](https://github.com/golusoris/golusoris/issues/576)) ([c21aacc](https://github.com/golusoris/golusoris/commit/c21aacc81d53b4080f1df862c9a1634e28a74bc8))
+* **deps:** update module github.com/knadh/koanf/providers/env/v2 to v2.0.2 ([#587](https://github.com/golusoris/golusoris/issues/587)) ([9f8415b](https://github.com/golusoris/golusoris/commit/9f8415bf618aab305d7dd7d67d5e3163126755fc))
+* **deps:** update module github.com/knadh/koanf/v2 to v2.3.8 ([#581](https://github.com/golusoris/golusoris/issues/581)) ([d2fb83f](https://github.com/golusoris/golusoris/commit/d2fb83f234b323cc5eba7be75f6b42c0d5456d03))
+* **httpx:** stop the remaining clients from sharing http.DefaultTransport ([#708](https://github.com/golusoris/golusoris/issues/708)) ([5bf6d13](https://github.com/golusoris/golusoris/commit/5bf6d13e6cd212224ec4050f50b4fbc33b5d3b6e))
+* **nfd:** retry Windows renames blocked by open readers ([#710](https://github.com/golusoris/golusoris/issues/710)) ([b03bb7a](https://github.com/golusoris/golusoris/commit/b03bb7a34409d6ad0ef4fab3cdbaf4a12aa4ed2e))
+* **tus:** restart maintenance scans parked at directory end ([#715](https://github.com/golusoris/golusoris/issues/715)) ([f1c80d8](https://github.com/golusoris/golusoris/commit/f1c80d8bce9a6dd4f46b21e41551ba9588391246))
+
+
+### Code Refactoring
+
+* **tlsx:** merge internal/tlsfiles into core/tlsx ([#707](https://github.com/golusoris/golusoris/issues/707)) ([aa20169](https://github.com/golusoris/golusoris/commit/aa201696bda9244c664c57be2b0fad3249ac6eb2))
+
 ## [0.13.0](https://github.com/golusoris/golusoris/compare/v0.12.0...v0.13.0) (2026-10-09)
 
 
