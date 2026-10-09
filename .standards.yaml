@@ -57,6 +57,10 @@ exceptions:
       path: .github/workflows/release.yml
       reason: Release provenance is attested in the caller's build job (SLSA Build L2), not an isolated reusable workflow (L3); tracked in golusoris#619.
       expires: "2027-01-05"
+    - rule: HISS-18
+      path: .github/workflows/ci.yml
+      reason: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always().
+      expires: "2027-01-06"
 
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
