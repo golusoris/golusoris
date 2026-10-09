@@ -805,7 +805,7 @@ func (c *dirCursor) read(ctx context.Context, root string, limit int) ([]os.DirE
 }
 
 // nextLocked reads one batch, opening the handle on demand and closing it at
-// directory end (io.EOF) or on error.
+// directory end (io.EOF or a short batch) or on error.
 func (c *dirCursor) nextLocked(root string, limit int) ([]os.DirEntry, error) {
 	if c.dir == nil {
 		dir, err := os.Open(root) // #nosec G304 -- configured scratch root
@@ -823,6 +823,13 @@ func (c *dirCursor) nextLocked(root string, limit int) ([]os.DirEntry, error) {
 	}
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("read directory cursor: %w", err), c.closeLocked())
+	}
+	// ReadDir(n) stops short only at directory end; a parked handle would keep
+	// Windows from removing the scratch root between passes.
+	if len(entries) < limit {
+		if closeErr := c.closeLocked(); closeErr != nil {
+			return nil, closeErr
+		}
 	}
 	return entries, nil
 }
