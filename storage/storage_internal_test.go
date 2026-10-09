@@ -1132,7 +1132,9 @@ func TestWalkLocalObjects_PrunesAbsentPrefix(t *testing.T) {
 		}
 	}
 	counted := &countingFS{FS: os.DirFS(root)}
-	objects, err := walkLocalObjects(context.Background(), counted, "absent/prefix/", 1)
+	objects, err := walkLocalObjects(context.Background(), counted, localListQuery{
+		prefix: "absent/prefix/", limit: 1, budget: localListWorkBudget,
+	})
 	if err != nil {
 		t.Fatalf("walkLocalObjects: %v", err)
 	}
@@ -1157,7 +1159,9 @@ func TestWalkLocalObjects_CapsVisitedEntries(t *testing.T) {
 		}
 	}
 	counted := &countingFS{FS: os.DirFS(root)}
-	_, err := walkLocalObjects(context.Background(), counted, "target/no-match", 1)
+	_, err := walkLocalObjects(context.Background(), counted, localListQuery{
+		prefix: "target/no-match", limit: 1, budget: 80,
+	})
 	if !errors.Is(err, ErrListWorkLimit) {
 		t.Fatalf("walkLocalObjects error = %v; want ErrListWorkLimit", err)
 	}

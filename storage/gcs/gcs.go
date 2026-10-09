@@ -258,39 +258,68 @@ func (b *Bucket) Stat(ctx context.Context, key string) (storage.Object, error) {
 	return objectFromAttrs(attrs), nil
 }
 
-// List implements [storage.Bucket] as one bounded page of at most Limit objects.
+// List implements [storage.Bucket] as one bounded page of at most Limit
+// objects. Query.StartOffset is inclusive, so StartAfter is sent as the start
+// offset and an object named exactly StartAfter is skipped; an earlier name
+// fails with [storage.ErrListOrder].
 func (b *Bucket) List(ctx context.Context, opts storage.ListOptions) ([]storage.Object, error) {
-	limit, err := storage.NormalizeListLimit(opts.Limit)
+	query, empty, err := storage.NormalizeListOptions(opts)
 	if err != nil {
 		return nil, fmt.Errorf("storage/gcs: list: %w", err)
 	}
-	prefix, err := storage.CleanListPrefix(opts.Prefix)
-	if err != nil {
-		return nil, fmt.Errorf("storage/gcs: validate list prefix: %w", err)
+	if empty {
+		return nil, nil
 	}
-	query := &gstorage.Query{Prefix: prefix}
-	if err = query.SetAttrSelection([]string{"Name", "Size", "Etag", "Updated"}); err != nil {
-		return nil, fmt.Errorf("storage/gcs: list %q: %w", prefix, err)
+	gq := &gstorage.Query{Prefix: query.Prefix, StartOffset: query.StartAfter}
+	if err = gq.SetAttrSelection([]string{"Name", "Size", "Etag", "Updated"}); err != nil {
+		return nil, fmt.Errorf("storage/gcs: list %q: %w", query.Prefix, err)
 	}
-	it := b.handle.Objects(ctx, query)
-	it.PageInfo().MaxSize = limit
-	out := make([]storage.Object, 0, limit)
-	for range limit {
+	it := b.handle.Objects(ctx, gq)
+	it.PageInfo().MaxSize = query.Limit
+	if query.StartAfter != "" {
+		it.PageInfo().MaxSize = min(query.Limit+1, storage.MaxListLimit)
+	}
+	return collectObjects(it, query)
+}
+
+func collectObjects(it *gstorage.ObjectIterator, query storage.ListOptions) ([]storage.Object, error) {
+	out := make([]storage.Object, 0, query.Limit)
+	// One step more than Limit covers the skipped StartAfter object.
+	for range query.Limit + 1 {
+		if len(out) == query.Limit {
+			break
+		}
 		attrs, nextErr := it.Next()
 		if errors.Is(nextErr, iterator.Done) {
 			break
 		}
 		if nextErr != nil {
-			return nil, fmt.Errorf("storage/gcs: list %q: %w", prefix, nextErr)
+			return nil, fmt.Errorf("storage/gcs: list %q: %w", query.Prefix, nextErr)
 		}
-		if _, keyErr := cleanKey(attrs.Name); keyErr != nil {
-			return nil, fmt.Errorf("storage/gcs: unsafe listed key: %w", keyErr)
+		if query.StartAfter != "" && attrs.Name == query.StartAfter {
+			continue
 		}
-		out = append(out, storage.Object{
-			Key: attrs.Name, Size: attrs.Size, ETag: attrs.Etag, LastModified: attrs.Updated,
-		})
+		obj, err := listedObject(attrs, query)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, obj)
 	}
 	return out, nil
+}
+
+func listedObject(attrs *gstorage.ObjectAttrs, query storage.ListOptions) (storage.Object, error) {
+	if _, err := cleanKey(attrs.Name); err != nil {
+		return storage.Object{}, fmt.Errorf("storage/gcs: unsafe listed key: %w", err)
+	}
+	if attrs.Name < query.StartAfter {
+		return storage.Object{}, fmt.Errorf(
+			"storage/gcs: list %q: key %q after %q: %w", query.Prefix, attrs.Name, query.StartAfter, storage.ErrListOrder,
+		)
+	}
+	return storage.Object{
+		Key: attrs.Name, Size: attrs.Size, ETag: attrs.Etag, LastModified: attrs.Updated,
+	}, nil
 }
 
 // Copy implements [storage.Copier] with a server-side rewrite pinned to the

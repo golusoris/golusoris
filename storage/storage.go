@@ -25,7 +25,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	pathpkg "path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -73,6 +72,10 @@ const (
 type ListOptions struct {
 	Prefix string
 	Limit  int // 0 uses DefaultListLimit; values above MaxListLimit are rejected
+	// StartAfter keeps only keys sorting strictly after it, byte-wise; it need
+	// not name an object. Pass a page's last key to list the next page, or use
+	// [Walk]. Validated like Prefix.
+	StartAfter string
 }
 
 // Bucket is the storage abstraction. Implementations must be safe for
@@ -90,10 +93,13 @@ type Bucket interface {
 	// Stat returns metadata for key without fetching its body. Returns
 	// [ErrNotFound] when key does not exist.
 	Stat(ctx context.Context, key string) (Object, error)
-	// List returns at most opts.Limit objects whose keys begin with opts.Prefix.
-	// A zero limit uses [DefaultListLimit]. ContentType and Metadata may be
-	// omitted; use Stat when those fields are required. Local listings may
-	// return [ErrListWorkLimit] for sparse scans; use a narrower prefix.
+	// List returns at most opts.Limit objects whose keys begin with opts.Prefix
+	// and sort after opts.StartAfter, in ascending byte-wise key order. A zero
+	// limit uses [DefaultListLimit]. A page may hold fewer objects than the
+	// limit; only an empty page means no further keys match. ContentType and
+	// Metadata may be omitted; use Stat when those fields are required. Local
+	// listings may return [ErrListWorkLimit] for sparse scans; use a narrower
+	// prefix.
 	List(ctx context.Context, opts ListOptions) ([]Object, error)
 	// URL returns a publicly accessible URL for key. May return an error
 	// when the backend does not support public URLs.
@@ -736,213 +742,6 @@ func (b *LocalBucket) Stat(ctx context.Context, key string) (obj Object, err err
 		return Object{}, err
 	}
 	return obj, nil
-}
-
-// List implements [Bucket].
-func (b *LocalBucket) List(ctx context.Context, opts ListOptions) (out []Object, err error) {
-	limit, err := NormalizeListLimit(opts.Limit)
-	if err != nil {
-		return nil, err
-	}
-	if err = ctx.Err(); err != nil {
-		return nil, fmt.Errorf("storage: list local objects: %w", err)
-	}
-	root, err := b.openRoot()
-	if err != nil {
-		return nil, err
-	}
-	defer gerr.CloseInto(root, &err, "storage: close base root")
-	operationLock, err := b.lockAndRecover(ctx, root, "list before walk")
-	if err != nil {
-		return nil, err
-	}
-	defer gerr.CloseInto(operationLock, &err, "storage: release local list lock")
-	out, err = walkLocalObjects(ctx, root.FS(), opts.Prefix, limit)
-	if errors.Is(err, errListLimitReached) {
-		err = nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("storage: list local objects: %w", err)
-	}
-	return out, nil
-}
-
-var errListLimitReached = errors.New("storage: list limit reached")
-
-const (
-	localListReadBatch     = 32
-	localListBaseWork      = 64
-	localListWorkPerObject = 16
-)
-
-// NormalizeListLimit maps a zero [ListOptions.Limit] to [DefaultListLimit]
-// and rejects limits outside 1..[MaxListLimit].
-func NormalizeListLimit(limit int) (int, error) {
-	if limit == 0 {
-		return DefaultListLimit, nil
-	}
-	if limit < 0 || limit > MaxListLimit {
-		return 0, fmt.Errorf("storage: list limit %d outside range 1..%d", limit, MaxListLimit)
-	}
-	return limit, nil
-}
-
-func walkLocalObjects(ctx context.Context, rootFS fs.FS, prefix string, limit int) ([]Object, error) {
-	cleanPrefix, err := CleanListPrefix(prefix)
-	if err != nil {
-		return nil, fmt.Errorf("storage: validate local list prefix: %w", err)
-	}
-	walker := localListWalker{
-		check:     ctx.Err,
-		rootFS:    rootFS,
-		prefix:    cleanPrefix,
-		limit:     limit,
-		remaining: localListWorkLimit(limit),
-		out:       make([]Object, 0, min(limit, 16)),
-	}
-	err = walker.walk(localListStart(cleanPrefix))
-	return walker.out, err
-}
-
-type localListWalker struct {
-	check     func() error
-	rootFS    fs.FS
-	prefix    string
-	limit     int
-	remaining int
-	out       []Object
-}
-
-func (w *localListWalker) walk(start string) error {
-	if err := w.check(); err != nil {
-		return err
-	}
-	info, err := fs.Lstat(w.rootFS, start)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("storage: inspect list root %q: %w", start, err)
-	}
-	if info.Mode()&fs.ModeSymlink != 0 {
-		return nil
-	}
-	if !info.IsDir() {
-		return w.appendInfo(start, info)
-	}
-	directories := []string{start}
-	for len(directories) > 0 {
-		if err = w.check(); err != nil {
-			return err
-		}
-		children, scanErr := w.scanDirectory(directories[0])
-		if scanErr != nil {
-			return scanErr
-		}
-		directories = append(directories[1:], children...)
-	}
-	return nil
-}
-
-func (w *localListWalker) scanDirectory(name string) (children []string, err error) {
-	file, err := w.rootFS.Open(name)
-	if err != nil {
-		return nil, fmt.Errorf("storage: open listed directory %q: %w", name, err)
-	}
-	defer func() {
-		if closeErr := file.Close(); closeErr != nil {
-			err = errors.Join(err, fmt.Errorf("storage: close listed directory %q: %w", name, closeErr))
-		}
-	}()
-	directory, ok := file.(fs.ReadDirFile)
-	if !ok {
-		return nil, fmt.Errorf("storage: listed directory %q does not support bounded reads", name)
-	}
-	return w.readDirectory(name, directory)
-}
-
-func (w *localListWalker) readDirectory(name string, directory fs.ReadDirFile) ([]string, error) {
-	var children []string
-	for w.remaining > 0 {
-		if err := w.check(); err != nil {
-			return nil, err
-		}
-		entries, readErr := directory.ReadDir(min(localListReadBatch, w.remaining))
-		w.remaining -= len(entries)
-		for _, entry := range entries {
-			if err := w.visitEntry(name, entry, &children); err != nil {
-				return nil, err
-			}
-		}
-		if errors.Is(readErr, io.EOF) {
-			return children, nil
-		}
-		if readErr != nil {
-			return nil, fmt.Errorf("storage: read listed directory %q: %w", name, readErr)
-		}
-		if len(entries) == 0 {
-			return nil, fmt.Errorf("storage: read listed directory %q: %w", name, io.ErrNoProgress)
-		}
-	}
-	return nil, ErrListWorkLimit
-}
-
-func (w *localListWalker) visitEntry(directory string, entry fs.DirEntry, children *[]string) error {
-	if entry.Type()&fs.ModeSymlink != 0 || isLocalInternalName(entry.Name()) {
-		return nil
-	}
-	name := pathpkg.Join(directory, entry.Name())
-	if entry.IsDir() {
-		if localDirectoryCanMatch(name, w.prefix) {
-			*children = append(*children, name)
-		}
-		return nil
-	}
-	if !strings.HasPrefix(name, w.prefix) {
-		return nil
-	}
-	info, err := entry.Info()
-	if err != nil {
-		return fmt.Errorf("storage: stat listed object %q: %w", name, err)
-	}
-	return w.appendInfo(name, info)
-}
-
-func (w *localListWalker) appendInfo(name string, info fs.FileInfo) error {
-	if isLocalInternalName(pathpkg.Base(name)) || !strings.HasPrefix(name, w.prefix) {
-		return nil
-	}
-	w.out = append(w.out, Object{Key: name, Size: info.Size(), LastModified: info.ModTime()})
-	if len(w.out) >= w.limit {
-		return errListLimitReached
-	}
-	return nil
-}
-
-func isLocalInternalName(name string) bool {
-	return isLocalTempName(name) || isLocalMetadataName(name) || isLocalControlName(name)
-}
-
-func localListStart(prefix string) string {
-	if before, ok := strings.CutSuffix(prefix, "/"); ok {
-		return before
-	}
-	if separator := strings.LastIndexByte(prefix, '/'); separator >= 0 {
-		return prefix[:separator]
-	}
-	return "."
-}
-
-func localDirectoryCanMatch(directory, prefix string) bool {
-	if directory == "." || prefix == "" {
-		return true
-	}
-	directoryPrefix := directory + "/"
-	return strings.HasPrefix(prefix, directoryPrefix) || strings.HasPrefix(directoryPrefix, prefix)
-}
-
-func localListWorkLimit(limit int) int {
-	return localListBaseWork + localListWorkPerObject*limit
 }
 
 // URL returns a file:// URL for the object. For a public HTTP URL, configure

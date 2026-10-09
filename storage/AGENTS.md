@@ -103,15 +103,21 @@ Fx construction gives AWS config loading a fixed 15-second deadline.
 not validated). `Delete` is idempotent (deleting missing key is not error). `Get`/`Stat` map S3 404 / `NoSuchKey` to `ErrNotFound`; `Exists` maps it to
 `false`. `Stat`/`Exists` use HeadObject (no body fetched).
 
-`List`: bounded snapshot, not exhaustive enumeration. `Limit: 0` uses
+`List`: one bounded page, ascending byte-wise key order. `Limit: 0` uses
 `storage.DefaultListLimit` (1000); valid explicit limits are 1 through
-`storage.MaxListLimit` (1000). Local listing validates a canonical prefix,
-starts at its nearest fixed directory, checks cancellation, and caps visited
-directory entries. Sparse scans that exhaust the work budget return
-`storage.ErrListWorkLimit`; narrow the prefix and retry.
-S3 sends one `ListObjectsV2` request with `MaxKeys`; no automatic
-continuation token inside one call. Narrow `Prefix` or partition application
-keys when more than one bounded snapshot is needed.
+`storage.MaxListLimit` (1000). `StartAfter`: keys strictly after value,
+byte-wise; value need not name object; validated like `Prefix`. Next page ->
+last key of page as `StartAfter`. Short page != end; only empty page = end.
+`storage.Walk` loops pages, max `storage.MaxWalkPages` (2^20); key not after
+previous -> `storage.ErrListOrder`.
+Local listing validates canonical prefix, starts at nearest fixed directory,
+reads each visited directory whole and sorts, checks cancellation, caps one
+call at 65536 directory entries. Budget hit -> objects found so far, or
+`storage.ErrListWorkLimit` when none. One directory above budget (~32k objects
+plus metadata sidecars) -> `storage.ErrListWorkLimit`; split key space.
+S3: one `ListObjectsV2` page per request with `StartAfter` + `MaxKeys`; max 256
+empty pages per call. S3 directory buckets list out of byte order ->
+`StartAfter` page fails `storage.ErrListOrder`, never skips objects.
 Both backends snapshot caller metadata. `Get` and `Stat` return persisted
 content type and metadata. `List` returns identity, size, ETag, and timestamp
 only because S3's listing API omits object metadata; call `Stat` when needed.
