@@ -42,12 +42,12 @@ bundle, err := c.FetchBlob(ctx, "ghcr.io/org/models", man.Layers[0], 1<<20)
 ```
 
 - Manifest: image-spec v1.1, empty config (`application/vnd.oci.empty.v1+json`), caller `artifactType` + layer media types, manifest/layer annotations, optional `subject`. No blobs -> single empty layer.
-- Stable digests: nothing time-dependent added (no `created`); identical input -> identical digest. vmafx signs with `cosign sign <repo>@<digest>`.
+- Stable digests: nothing time-dependent added (no `created`); identical input -> identical digest. Sign by digest: `container/registry/sign` (`sign.Image`) or `cosign sign <repo>@<digest>`.
 - `Blob.Name` -> `org.opencontainers.image.title` (default `filepath.Base(Path)`); pull file name = title, else `sha256-<hex>`. Name must be single local path element.
 - Push target: repo (untagged) or repo:tag; digest target -> `ErrInvalidArtifact`. `Reader` blobs spooled to temp file first (digest before upload).
 - Pull: manifest HEAD size check, then GET + sha256 recheck; caps (`max_blobs`, `max_blob_bytes`, `max_total_bytes`, names) checked before any write; each blob hashed while streamed into temp file in `dir`, fsync, rename only after digest match. Short/long/corrupt body -> `ErrDigestMismatch`, temp file removed.
 - Referrers: ggcr `remote.Referrers` = OCI 1.1 API, fallback tag schema `sha256-<hex>`; push with `Subject` updates fallback index on registries without API (ggcr `commitSubjectReferrers`, same path cosign uses). Over `max_referrers` -> `ErrTooLarge`. Filter is client-side on descriptor `artifactType`.
-- Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. Signing itself stays in cosign (vmafx side); no sigstore-go here.
+- Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. In-process signing + verification = `container/registry/sign` submodule (`sign.Image`, `sign.Verify`; own go.mod, sigstore-go); this module stays sigstore-free.
 - Timeouts: `PushArtifact`/`PullArtifact`/`FetchBlob` bounded by `transfer_timeout` (default 10m); `Referrers`/`ArtifactManifest` by `timeout`.
 - Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`.
 
