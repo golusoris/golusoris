@@ -52,6 +52,7 @@ storage.gcs.chunk_size   = 16777216  # 256 KiB..1 GiB resumable chunk
 - `Copy`: rewrite pinned `GenerationMatch` on source; keeps content type +
   metadata; large objects loop rewrite tokens inside library.
 - `List`: one bounded page, `MaxSize` = limit; attr selection Name/Size/Etag/Updated.
+  `StartAfter` -> `Query.StartOffset` (inclusive): equal key skipped, page asks limit+1.
 - `PresignPut`: V4 signed PUT. Content type, `x-goog-meta-*` (lowercased),
   exact length via `x-goog-content-length-range: N,N`, MD5 (`Content-MD5`)
   or CRC32C (`x-goog-hash`) = signed headers. SHA-256 ->

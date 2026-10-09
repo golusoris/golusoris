@@ -266,7 +266,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `storage/` | `Bucket` interface + local FS and S3 backends; presigned GET/PUT, multipart upload, server-side copy, STS role/web-identity credentials (GCS + Azure Blob: own modules below) | aws/aws-sdk-go-v2 |
+| `storage/` | `Bucket` interface + local FS and S3 backends; paged listing (`ListOptions.StartAfter`, `Walk`), presigned GET/PUT, multipart upload, server-side copy, STS role/web-identity credentials (GCS + Azure Blob: own modules below) | aws/aws-sdk-go-v2 |
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | Animation-safe raster metadata strip + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |

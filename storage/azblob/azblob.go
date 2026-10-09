@@ -263,42 +263,97 @@ func (b *Bucket) Stat(ctx context.Context, key string) (storage.Object, error) {
 	return objectFromProperties(clean, &props), nil
 }
 
-// List implements [storage.Bucket] as one List Blobs page of at most Limit blobs.
+// maxEmptyListPages bounds the List Blobs requests one List sends while the
+// service returns empty pages with a continuation marker, as it may at
+// partition boundaries, so an empty page always means the listing is complete.
+const maxEmptyListPages = 256
+
+// List implements [storage.Bucket] as one List Blobs page of at most Limit
+// blobs, continued only past empty pages. StartAfter maps to the inclusive
+// startFrom parameter (service version 2023-05-03 and later), so a blob named
+// exactly StartAfter is skipped; an earlier name, as from a service that
+// ignores startFrom, fails with [storage.ErrListOrder].
 func (b *Bucket) List(ctx context.Context, opts storage.ListOptions) ([]storage.Object, error) {
-	limit, err := storage.NormalizeListLimit(opts.Limit)
+	query, empty, err := storage.NormalizeListOptions(opts)
 	if err != nil {
 		return nil, fmt.Errorf("storage/azblob: list: %w", err)
 	}
-	prefix, err := storage.CleanListPrefix(opts.Prefix)
+	if empty {
+		return nil, nil
+	}
+	items, err := b.listNonEmptyPage(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("storage/azblob: validate list prefix: %w", err)
+		return nil, err
+	}
+	return listedObjects(items, query)
+}
+
+func listBlobsOptions(query storage.ListOptions) *container.ListBlobsFlatOptions {
+	pageSize := query.Limit
+	if query.StartAfter != "" {
+		pageSize++ // room for the skipped StartAfter blob
 	}
 	listOpts := &container.ListBlobsFlatOptions{
-		MaxResults: new(int32(limit)), // #nosec G115 -- NormalizeListLimit proves 1..1000.
+		MaxResults: new(int32(pageSize)), // #nosec G115 -- NormalizeListOptions proves 1..1000, plus one.
 	}
-	if prefix != "" {
-		listOpts.Prefix = new(prefix)
+	if query.Prefix != "" {
+		listOpts.Prefix = new(query.Prefix)
 	}
-	page, err := b.container.NewListBlobsFlatPager(listOpts).NextPage(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("storage/azblob: list %q: %w", prefix, err)
+	if query.StartAfter != "" {
+		listOpts.StartFrom = new(query.StartAfter)
 	}
-	items := page.Segment.BlobItems
-	out := make([]storage.Object, 0, min(limit, len(items)))
-	for _, item := range items[:min(limit, len(items))] {
+	return listOpts
+}
+
+func (b *Bucket) listNonEmptyPage(ctx context.Context, query storage.ListOptions) ([]*container.BlobItem, error) {
+	pager := b.container.NewListBlobsFlatPager(listBlobsOptions(query))
+	for range maxEmptyListPages {
+		page, err := pager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("storage/azblob: list %q: %w", query.Prefix, err)
+		}
+		var items []*container.BlobItem
+		if page.Segment != nil {
+			items = page.Segment.BlobItems
+		}
+		if len(items) > 0 || !pager.More() {
+			return items, nil
+		}
+	}
+	return nil, fmt.Errorf("storage/azblob: list %q: %d consecutive empty pages", query.Prefix, maxEmptyListPages)
+}
+
+func listedObjects(items []*container.BlobItem, query storage.ListOptions) ([]storage.Object, error) {
+	out := make([]storage.Object, 0, min(query.Limit, len(items)))
+	for _, item := range items {
+		if len(out) == query.Limit {
+			break
+		}
 		name := deref(item.Name)
 		if _, keyErr := cleanKey(name); keyErr != nil {
 			return nil, fmt.Errorf("storage/azblob: unsafe listed key: %w", keyErr)
 		}
-		obj := storage.Object{Key: name}
-		if p := item.Properties; p != nil {
-			obj.Size = deref(p.ContentLength)
-			obj.ETag = etagString(p.ETag)
-			obj.LastModified = deref(p.LastModified)
+		if name == query.StartAfter {
+			continue
 		}
-		out = append(out, obj)
+		if name < query.StartAfter {
+			return nil, fmt.Errorf(
+				"storage/azblob: list %q: key %q after %q: %w", query.Prefix, name, query.StartAfter, storage.ErrListOrder,
+			)
+		}
+		out = append(out, listedObject(name, item.Properties))
 	}
 	return out, nil
+}
+
+func listedObject(name string, p *container.BlobProperties) storage.Object {
+	obj := storage.Object{Key: name}
+	if p != nil {
+		obj.Size = deref(p.ContentLength)
+		obj.ETag = etagString(p.ETag)
+		obj.LastModified = deref(p.LastModified)
+	}
+	return obj
 }
 
 func cleanKey(key string) (string, error) {

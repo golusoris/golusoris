@@ -319,45 +319,81 @@ func (b *S3Bucket) Stat(ctx context.Context, key string) (Object, error) {
 	}, nil
 }
 
-// List implements [Bucket].
+// s3MaxEmptyListPages bounds the continuation requests one List sends while
+// S3 reports more results but returns no keys, as it may while skipping
+// delete markers, so an empty page always means the listing is complete.
+const s3MaxEmptyListPages = 256
+
+// List implements [Bucket] with one ListObjectsV2 request of MaxKeys = limit,
+// continued only past empty truncated pages. StartAfter maps to S3's
+// start-after; a returned key not after it fails with [ErrListOrder].
 func (b *S3Bucket) List(ctx context.Context, opts ListOptions) ([]Object, error) {
-	limit, err := NormalizeListLimit(opts.Limit)
+	query, empty, err := NormalizeListOptions(opts)
 	if err != nil {
-		return nil, err
-	}
-	prefix, err := cleanS3Prefix(opts.Prefix)
-	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("storage/s3: list: %w", err)
 	}
 	if err = ctx.Err(); err != nil {
-		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
+		return nil, fmt.Errorf("storage/s3: list %q: %w", query.Prefix, err)
 	}
-	maxKeys := int32(limit) // #nosec G115 -- NormalizeListLimit proves the value is within 1..1000.
+	if empty {
+		return nil, nil
+	}
+	page, err := b.listNonEmptyPage(ctx, s3ListInput(b.bucket, query), query.Prefix)
+	if err != nil {
+		return nil, err
+	}
+	return s3ListedObjects(ctx, page.Contents, query)
+}
+
+func s3ListInput(bucket string, query ListOptions) *s3.ListObjectsV2Input {
+	maxKeys := int32(query.Limit) // #nosec G115 -- NormalizeListOptions proves the value is within 1..1000.
 	in := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(b.bucket),
+		Bucket:  aws.String(bucket),
 		MaxKeys: aws.Int32(maxKeys),
 	}
-	if prefix != "" {
-		in.Prefix = aws.String(prefix)
+	if query.Prefix != "" {
+		in.Prefix = aws.String(query.Prefix)
 	}
+	if query.StartAfter != "" {
+		in.StartAfter = aws.String(query.StartAfter)
+	}
+	return in
+}
 
-	page, err := b.client.ListObjectsV2(ctx, in)
-	if err != nil {
-		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
-	}
-	if err = ctx.Err(); err != nil {
-		return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
-	}
-	count := min(limit, len(page.Contents))
-	out := make([]Object, 0, count)
-	for i := range count {
+func (b *S3Bucket) listNonEmptyPage(
+	ctx context.Context, in *s3.ListObjectsV2Input, prefix string,
+) (*s3.ListObjectsV2Output, error) {
+	for range s3MaxEmptyListPages {
+		page, err := b.client.ListObjectsV2(ctx, in)
+		if err != nil {
+			return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
+		}
 		if err = ctx.Err(); err != nil {
 			return nil, fmt.Errorf("storage/s3: list %q: %w", prefix, err)
 		}
-		item := page.Contents[i]
+		if len(page.Contents) > 0 || !aws.ToBool(page.IsTruncated) || aws.ToString(page.NextContinuationToken) == "" {
+			return page, nil
+		}
+		in.ContinuationToken = page.NextContinuationToken
+	}
+	return nil, fmt.Errorf("storage/s3: list %q: %d consecutive empty truncated pages", prefix, s3MaxEmptyListPages)
+}
+
+func s3ListedObjects(ctx context.Context, contents []types.Object, query ListOptions) ([]Object, error) {
+	count := min(query.Limit, len(contents))
+	out := make([]Object, 0, count)
+	for _, item := range contents[:count] {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("storage/s3: list %q: %w", query.Prefix, err)
+		}
 		key, keyErr := cleanS3Key(aws.ToString(item.Key))
 		if keyErr != nil {
 			return nil, fmt.Errorf("storage/s3: unsafe listed key: %w", keyErr)
+		}
+		if key <= query.StartAfter {
+			return nil, fmt.Errorf(
+				"storage/s3: list %q: key %q after %q: %w", query.Prefix, key, query.StartAfter, ErrListOrder,
+			)
 		}
 		out = append(out, Object{
 			Key:          key,
@@ -390,14 +426,6 @@ func cleanS3Key(key string) (string, error) {
 	clean, err := CleanKey(key, MaxKeyBytes)
 	if err != nil {
 		return "", fmt.Errorf("storage/s3: validate key: %w", err)
-	}
-	return clean, nil
-}
-
-func cleanS3Prefix(prefix string) (string, error) {
-	clean, err := CleanListPrefix(prefix)
-	if err != nil {
-		return "", fmt.Errorf("storage/s3: validate list prefix: %w", err)
 	}
 	return clean, nil
 }

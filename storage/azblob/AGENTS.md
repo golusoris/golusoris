@@ -66,7 +66,10 @@ storage.azblob.concurrency  = 5        # 1..32 (SDK default is CPU-scaled: alway
 - `Delete`: includes snapshots; missing = nil.
 - `Copy`: Get Properties -> Copy Blob pinned `SourceIfMatch` ETag -> poll
   pending status every 500ms via `clock.After`, max 7200 polls (1h) or ctx.
-- `List`: one List Blobs page, `MaxResults` = limit.
+- `List`: List Blobs pages, `MaxResults` = limit; max 256 empty pages per call.
+  `StartAfter` -> `ListBlobsFlatOptions.StartFrom` (inclusive): equal key skipped.
+  ADLS Gen2 hierarchical-namespace account lists out of byte order ->
+  `storage.ErrListOrder`, never skips objects.
 
 ## Tests
 
