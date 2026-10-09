@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/alexedwards/argon2id v1.0.0
 	github.com/go-faster/errors v0.8.0
-	github.com/go-playground/validator/v10 v10.30.4
+	github.com/go-playground/validator/v10 v10.30.5
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/google/uuid v1.6.0
 	github.com/jonboulle/clockwork v0.5.0
