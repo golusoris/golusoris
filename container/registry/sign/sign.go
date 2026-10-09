@@ -16,6 +16,11 @@
 // KMS-backed), an ephemeral key certified by Fulcio for an OIDC identity
 // token (keyless), or a caller key certified by Fulcio. Rekor and an RFC 3161
 // timestamp authority are optional.
+//
+// [Verify] reads that layout back, from [Image] or `cosign sign`, and checks
+// each bundle against a [Policy]: a public key or keyless certificate
+// identities, the transparency log, timestamp and SCT requirements `cosign
+// verify` applies, and the subject annotations.
 package sign
 
 import (
@@ -137,7 +142,7 @@ func Image(ctx context.Context, c *registry.Client, ref string, s Signer, opts O
 	if c == nil {
 		return Signature{}, fmt.Errorf("%w: nil registry client", ErrInvalidOptions)
 	}
-	if err := validate(s, opts); err != nil {
+	if err := validateSigner(s, opts); err != nil {
 		return Signature{}, err
 	}
 	d, err := parseDigest(ref)
@@ -175,7 +180,7 @@ func parseDigest(ref string) (name.Digest, error) {
 	return d, nil
 }
 
-func validate(s Signer, o Options) error {
+func validateSigner(s Signer, o Options) error {
 	if s.Key == nil && s.IDToken == nil {
 		return fmt.Errorf("%w: signer needs a key, an ID token source, or both", ErrInvalidOptions)
 	}

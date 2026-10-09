@@ -47,7 +47,7 @@ bundle, err := c.FetchBlob(ctx, "ghcr.io/org/models", man.Layers[0], 1<<20)
 - Push target: repo (untagged) or repo:tag; digest target -> `ErrInvalidArtifact`. `Reader` blobs spooled to temp file first (digest before upload).
 - Pull: manifest HEAD size check, then GET + sha256 recheck; caps (`max_blobs`, `max_blob_bytes`, `max_total_bytes`, names) checked before any write; each blob hashed while streamed into temp file in `dir`, fsync, rename only after digest match. Short/long/corrupt body -> `ErrDigestMismatch`, temp file removed.
 - Referrers: ggcr `remote.Referrers` = OCI 1.1 API, fallback tag schema `sha256-<hex>`; push with `Subject` updates fallback index on registries without API (ggcr `commitSubjectReferrers`, same path cosign uses). Over `max_referrers` -> `ErrTooLarge`. Filter is client-side on descriptor `artifactType`.
-- Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. In-process signing = `container/registry/sign` submodule (own go.mod, sigstore-go); this module stays sigstore-free.
+- Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. In-process signing + verification = `container/registry/sign` submodule (`sign.Image`, `sign.Verify`; own go.mod, sigstore-go); this module stays sigstore-free.
 - Timeouts: `PushArtifact`/`PullArtifact`/`FetchBlob` bounded by `transfer_timeout` (default 10m); `Referrers`/`ArtifactManifest` by `timeout`.
 - Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`.
 

@@ -343,7 +343,7 @@ packages:
   - import: github.com/golusoris/golusoris/container/registry/sign
     module: github.com/golusoris/golusoris/container/registry/sign
     domain: registry
-    capabilities: [registry.sign]
+    capabilities: [registry.sign, registry.verify]
     description: "Package sign signs OCI images, indexes and artifacts by digest with Sigstore, in process, through sigstore-go: no cosign binary and no exec."
     replaces: [github.com/sigstore/sigstore-go, github.com/sigstore/cosign/v3]
   - import: github.com/golusoris/golusoris/container/runtime

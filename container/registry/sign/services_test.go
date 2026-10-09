@@ -26,9 +26,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/digitorus/timestamp"
+	"github.com/go-openapi/runtime"
+	"github.com/sigstore/rekor/pkg/generated/models"
+	"github.com/sigstore/rekor/pkg/types"
+	"github.com/sigstore/rekor/pkg/util"
 	"github.com/sigstore/sigstore-go/pkg/root"
+	"github.com/sigstore/sigstore-go/pkg/tlog"
 	"github.com/sigstore/sigstore-go/pkg/verify"
+	"github.com/sigstore/sigstore/pkg/signature"
 
 	"github.com/golusoris/golusoris/container/registry/sign"
 )
@@ -212,14 +219,28 @@ func (tsa testTSA) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
-func keylessTrust(t *testing.T, fulcio testCA, tsa *testTSA) root.TrustedMaterial {
+// trustRoot is a trusted root holding whichever of the test Fulcio CA, TSA
+// and Rekor log are non-nil.
+func trustRoot(t *testing.T, fulcio *testCA, tsa *testTSA, log *testLog) root.TrustedMaterial {
 	t.Helper()
-	cas := []root.CertificateAuthority{&root.FulcioCertificateAuthority{Root: fulcio.cert}}
-	var tsas []root.TimestampingAuthority
+	var (
+		cas  []root.CertificateAuthority
+		tsas []root.TimestampingAuthority
+		logs map[string]*root.TransparencyLog
+	)
+	if fulcio != nil {
+		cas = []root.CertificateAuthority{&root.FulcioCertificateAuthority{Root: fulcio.cert}}
+	}
 	if tsa != nil {
 		tsas = []root.TimestampingAuthority{&root.SigstoreTimestampingAuthority{Root: tsa.root.cert, Leaf: tsa.leaf}}
 	}
-	tr, err := root.NewTrustedRoot(root.TrustedRootMediaType01, cas, nil, tsas, nil)
+	if log != nil {
+		logs = map[string]*root.TransparencyLog{hex.EncodeToString(log.id): {
+			BaseURL: "https://rekor.test", ID: log.id, ValidityPeriodStart: time.Now().Add(-time.Hour),
+			HashFunc: crypto.SHA256, PublicKey: log.key.Public(), SignatureHashFunc: crypto.SHA256,
+		}}
+	}
+	tr, err := root.NewTrustedRoot(root.TrustedRootMediaType01, cas, nil, tsas, logs)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +274,7 @@ func TestImage_Keyless(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Image: %v", err)
 			}
-			v, err := verify.NewVerifier(keylessTrust(t, ca, tsa), vopts...)
+			v, err := verify.NewVerifier(trustRoot(t, &ca, tsa, nil), vopts...)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -292,7 +313,7 @@ func TestImage_KeyWithFulcio(t *testing.T) {
 	if err != nil || !key.PublicKey.Equal(cert.PublicKey) {
 		t.Fatalf("certificate does not hold the caller key: %v", err)
 	}
-	v, err := verify.NewVerifier(keylessTrust(t, ca, nil), verify.WithCurrentTime())
+	v, err := verify.NewVerifier(trustRoot(t, &ca, nil, nil), verify.WithCurrentTime())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,35 +322,101 @@ func TestImage_KeyWithFulcio(t *testing.T) {
 	}
 }
 
-// rekorServer is a Rekor v1 stand-in: it accepts the proposed entry and
-// returns it as a logged entry with a placeholder promise and proof.
-func rekorServer(t *testing.T) *httptest.Server {
+// testLog is a one-entry Rekor v1 log: it canonicalizes the proposed entry
+// as Rekor does and answers with a signed entry timestamp and an inclusion
+// proof under a signed checkpoint, all verifiable with its key.
+type testLog struct {
+	key *ecdsa.PrivateKey
+	id  []byte
+}
+
+func newLog(t *testing.T) *testLog {
 	t.Helper()
-	hash32 := hex.EncodeToString(make([]byte, 32))
+	key := ecKey(t)
+	der, err := x509.MarshalPKIXPublicKey(key.Public())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(der)
+	return &testLog{key: key, id: sum[:]}
+}
+
+func (l *testLog) server(t *testing.T) *httptest.Server {
+	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != "/api/v1/log/entries" {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		body, _ := io.ReadAll(r.Body)
+		entry, err := l.logEntry(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		uuid := strings.Repeat("ab", 32)
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("ETag", uuid)
 		w.Header().Set("Location", "/api/v1/log/entries/"+uuid)
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(map[string]any{uuid: map[string]any{
-			"body": base64.StdEncoding.EncodeToString(body), "integratedTime": 1760000000,
-			"logID": hash32, "logIndex": 42,
-			"verification": map[string]any{
-				"signedEntryTimestamp": base64.StdEncoding.EncodeToString([]byte("set")),
-				"inclusionProof": map[string]any{
-					"logIndex": 42, "rootHash": hash32, "treeSize": 43, "hashes": []string{}, "checkpoint": "checkpoint",
-				},
-			},
-		}})
+		_ = json.NewEncoder(w).Encode(map[string]any{uuid: entry})
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+// logEntry logs the canonical entry at global index 42 as the only leaf of
+// tree 1.
+func (l *testLog) logEntry(r *http.Request) (map[string]any, error) {
+	pe, err := models.UnmarshalProposedEntry(r.Body, runtime.JSONConsumer())
+	if err != nil {
+		return nil, err
+	}
+	impl, err := types.UnmarshalEntry(pe)
+	if err != nil {
+		return nil, err
+	}
+	body, err := types.CanonicalizeEntry(r.Context(), impl)
+	if err != nil {
+		return nil, err
+	}
+	const logIndex = 42
+	logID, now, b64 := hex.EncodeToString(l.id), time.Now().Unix(), base64.StdEncoding.EncodeToString(body)
+	set, err := l.signSET(tlog.RekorPayload{Body: b64, IntegratedTime: now, LogIndex: logIndex, LogID: logID})
+	if err != nil {
+		return nil, err
+	}
+	leaf := sha256.Sum256(append([]byte{0}, body...))
+	sv, err := signature.LoadECDSASignerVerifier(l.key, crypto.SHA256)
+	if err != nil {
+		return nil, err
+	}
+	checkpoint, err := util.CreateAndSignCheckpoint(r.Context(), "rekor.test", 1, 1, leaf[:], sv)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"body": b64, "integratedTime": now, "logID": logID, "logIndex": logIndex,
+		"verification": map[string]any{
+			"signedEntryTimestamp": base64.StdEncoding.EncodeToString(set),
+			"inclusionProof": map[string]any{
+				"logIndex": 0, "rootHash": hex.EncodeToString(leaf[:]), "treeSize": 1, "hashes": []string{}, "checkpoint": string(checkpoint),
+			},
+		},
+	}, nil
+}
+
+// signSET signs the canonical JSON payload Rekor's signed entry timestamp covers.
+func (l *testLog) signSET(p tlog.RekorPayload) ([]byte, error) {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return nil, err
+	}
+	canon, err := jsoncanonicalizer.Transform(raw)
+	if err != nil {
+		return nil, err
+	}
+	sum := sha256.Sum256(canon)
+	return ecdsa.SignASN1(rand.Reader, l.key, sum[:])
 }
 
 // TestImage_RekorEntryRecorded proves the signature goes to the configured
@@ -338,7 +425,7 @@ func TestImage_RekorEntryRecorded(t *testing.T) {
 	t.Parallel()
 	host := newRegistry(t, nil)
 	ref, _ := seed(t, host, false)
-	sig, err := sign.Image(testCtx(t), newClient(t), ref, sign.Signer{Key: ecKey(t)}, sign.Options{RekorURL: rekorServer(t).URL})
+	sig, err := sign.Image(testCtx(t), newClient(t), ref, sign.Signer{Key: ecKey(t)}, sign.Options{RekorURL: newLog(t).server(t).URL})
 	if err != nil {
 		t.Fatalf("Image: %v", err)
 	}
