@@ -141,6 +141,42 @@ func TestLocalScratch_MaintenanceScansAreBoundedAndAdvance(t *testing.T) {
 	}
 }
 
+// TestDirCursor_ReleasesHandleAtDirectoryEnd verifies a pass that reaches the
+// end of the directory holds no handle; Windows refuses to remove a directory
+// with an open handle.
+func TestDirCursor_ReleasesHandleAtDirectoryEnd(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	for _, name := range []string{"a", "b"} {
+		if err := os.WriteFile(filepath.Join(root, name), nil, 0o600); err != nil {
+			t.Fatalf("WriteFile %s: %v", name, err)
+		}
+	}
+	ctx := context.Background()
+	cases := []struct {
+		name     string
+		limit    int
+		wantOpen bool
+	}{
+		{name: "short batch reaches end", limit: 3, wantOpen: false},
+		{name: "full batch may continue", limit: 2, wantOpen: true},
+		{name: "partial batch continues", limit: 1, wantOpen: true},
+	}
+	for _, tc := range cases {
+		var c dirCursor
+		entries, err := c.read(ctx, root, tc.limit)
+		if err != nil || len(entries) != min(tc.limit, 2) {
+			t.Fatalf("%s: read = %d entries, %v", tc.name, len(entries), err)
+		}
+		if open := c.dir != nil; open != tc.wantOpen {
+			t.Errorf("%s: handle open = %t, want %t", tc.name, open, tc.wantOpen)
+		}
+		if err = c.close(); err != nil {
+			t.Fatalf("%s: close: %v", tc.name, err)
+		}
+	}
+}
+
 // TestLocalScratch_CompletionScanRestartsAtDirectoryEnd verifies a pass after
 // one that reached directory end sees entries created in between (#689).
 func TestLocalScratch_CompletionScanRestartsAtDirectoryEnd(t *testing.T) {
