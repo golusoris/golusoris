@@ -148,7 +148,7 @@ Consult `docs/upstream/` before API suggestions. Public docs may differ from rep
 | `jackc/pgx/v5` | v5.11.0 |
 | `ogen-go/ogen` | v1.24.0 |
 | `riverqueue/river` | v0.49.0 |
-| `knadh/koanf/v2` | v2.3.6 (`core/`) |
+| `knadh/koanf/v2` | v2.3.8 (`core/`) |
 
 Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 

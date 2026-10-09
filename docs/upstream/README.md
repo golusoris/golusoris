@@ -25,7 +25,7 @@ mapping authority; its authority column says where each pin is resolved.
 | `github.com/jackc/pgx/v5` | `v5.11.0` | root | [pgx/](pgx/README.md) |
 | `github.com/ogen-go/ogen` | `v1.24.0` | root | [ogen/](ogen/README.md) |
 | `github.com/riverqueue/river` | `v0.49.0` | root | [river/](river/README.md) |
-| `github.com/knadh/koanf/v2` | `v2.3.6` | root + core | [koanf/](koanf/README.md) |
+| `github.com/knadh/koanf/v2` | `v2.3.8` | root + core | [koanf/](koanf/README.md) |
 | `github.com/maypok86/otter/v2` | `v2.3.0` | root | [otter/](otter/README.md) |
 | `github.com/redis/rueidis` | `v1.0.78` | root | [rueidis/](rueidis/README.md) |
 | `github.com/casbin/casbin/v3` | `v3.11.0` | root | [casbin/](casbin/README.md) |
@@ -36,12 +36,12 @@ mapping authority; its authority column says where each pin is resolved.
 | `@scalar/api-reference` | `v1.25.52` | embedded asset | [scalar/](scalar/README.md) |
 | `k8s.io/client-go` | `v0.37.1` | root | [k8s/](k8s/README.md) |
 | `github.com/go-chi/chi/v5` | `v5.3.2` | root | [chi/](chi/README.md) |
-| `github.com/go-playground/validator/v10` | `v10.30.4` | root + core | [validator/](validator/README.md) |
+| `github.com/go-playground/validator/v10` | `v10.30.5` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
 | `github.com/yuin/goldmark/v2` | `v2.1.5` | root | [goldmark/](goldmark/README.md) |
 | `github.com/prometheus/client_golang` | `v1.24.1` | root | [prometheus/](prometheus/README.md) |
 | `github.com/testcontainers/testcontainers-go` | `v0.44.0` | root | [testcontainers/](testcontainers/README.md) |
-| `log/slog` | `go1.27.1` | root + core + toolchain | [slog/](slog/README.md) |
+| `log/slog` | `go1.27.2` | root + core + toolchain | [slog/](slog/README.md) |
 
 Removed snapshots: `a-h/templ` never became a dependency; `htmltmpl/` uses
 standard-library `html/template` under ADR-0014.

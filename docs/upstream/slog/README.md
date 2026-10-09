@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# log/slog — go1.27.1 stdlib snapshot
+# log/slog — go1.27.2 stdlib snapshot
 
-Pinned: **go1.27.1**
-Source: [Go 1.27.1 source](https://cs.opensource.google/go/go/+/refs/tags/go1.27.1:src/log/slog/)
+Pinned: **go1.27.2**
+Source: [Go 1.27.2 source](https://cs.opensource.google/go/go/+/refs/tags/go1.27.2:src/log/slog/)
 
 ## Core usage
 
