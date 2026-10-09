@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generated_at": "2026-10-08T20:01:36Z",
+  "generated_at": "2026-10-09T08:48:36Z",
   "repository": "golusoris/golusoris",
-  "commit_sha": "ea4d1a1b2d6708b01217a92e18e6981c59d001f6",
-  "total_infractions": 6,
+  "commit_sha": "7796cccc1f78734ba29215460de8a27c20d64278",
+  "total_infractions": 5,
   "infractions": [
     {
       "rule_id": "HISS-02",
@@ -20,14 +20,6 @@
       "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
       "anchor": "fn:NewRenderer",
       "fingerprint": "pdf/pdf.go:HISS-02:fn:NewRenderer#1"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "realtime/pubsub/redis/redis.go",
-      "line_number": 87,
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "fn:Bus.Subscribe",
-      "fingerprint": "realtime/pubsub/redis/redis.go:HISS-02:fn:Bus.Subscribe#1"
     },
     {
       "rule_id": "HISS-02",

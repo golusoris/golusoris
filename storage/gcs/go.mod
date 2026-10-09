@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.9.0
 	cloud.google.com/go/storage v1.69.0
 	github.com/golusoris/golusoris v0.12.0
-	github.com/golusoris/golusoris/core v0.9.2
+	github.com/golusoris/golusoris/core v0.10.1
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
 	google.golang.org/api v0.298.0

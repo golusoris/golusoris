@@ -26,15 +26,26 @@ payload — decode as needed.
 
 ## Semantics vs LocalBus
 
-- `Subscribe` runs background `Receive` goroutine; returned func cancels it.
+- `Subscribe` = `SubscribeWithGap(topic, h, nil)`. Background goroutine holds
+  dedicated connection with `PubSubHooks`; returned func cancels, releases
+  connection (rueidis unsubscribes on release).
+- Connection drop -> resubscribe. `core/retry` backoff 100ms..30s, 20% jitter,
+  4096 attempts per outage; `maxSubscribeSessions` (2^20) bounds reconnects.
+  Works with `DisableRetry` clients too: `Receive` path retried only inside rueidis.
+- Lifetime = stop channel, never deadline-less ctx (HISS-02). Outage ctx deadline:
+  4096 x (30s cap + 10s SUBSCRIBE timeout); SUBSCRIBE round trip: 10s.
+- `onGap` after every resubscribe, never after first subscribe. Runs on
+  subscription goroutine; keep fast.
 - `Publish` is fire-and-forget (Bus contract); transport errors are logged, not returned.
 - Redis pub/sub is at-most-once + fan-out to currently-connected subscribers
  (no persistence/replay). For durable delivery use `pubsub/nats` JetStream or `jobs/`.
 
 ## Tests
 
-`redis_test.go` has hermetic `encode` test + testcontainers round-trip
-(`testutil/redis`, requires Docker).
+`redis_test.go`: hermetic `encode` + policy bound tests; testcontainers
+round-trip, connection drop via `CLIENT KILL TYPE pubsub` (with and without
+rueidis retry, one `onGap`), cancel -> `PUBSUB NUMSUB` 0 (`testutil/redis`,
+requires Docker).
 
 ## Don't
 
