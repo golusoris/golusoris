@@ -89,6 +89,8 @@ being reachable. rtorrent and transmission are stateless at construction.
  transmission does. Re-`List` to find torrent.
 - Don't construct a backend's `*http.Client` without `Timeout` — `Options.Timeout`
  is plumbed into every backend (CI rule `http-client-must-set-timeout`).
+- Don't send on `http.DefaultTransport` — `newHTTPClient` gives every backend
+ private transport clone (`httpx/client.CloneBounded`); shared pool can be closed mid-request (#703).
 - Don't enable `insecure_skip_verify` in production — it disables TLS validation.
 - Don't add per-torrent N+1 status calls in hot paths — rtorrent's `Get` already
  issues several XML-RPC round-trips; prefer `List` for bulk reads.

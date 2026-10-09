@@ -63,6 +63,8 @@ Leaf keys contain underscores (`base_url`, `api_key`, `access_token`.). env load
  `arr.WithTimeout` / `metadata.WithTimeout` mutate `httpClient.Timeout` *in
  place*; shared transport would corrupt timeouts. Timeout is therefore set
  via `client.Options.Timeout`, and goenvoy's `WithTimeout` is never passed.
+- **Private transport per service.** `httpClient` passes builder output through
+ `client.CloneBounded`: nil Transport -> private clone of `http.DefaultTransport`, never shared pool (#703).
 - **HTTP cache** (`cache.go`): `RoundTripper` over `cache/memory`, GET-only,
  2xx-only, TTL driven by injected `clock.Clock` (deterministic in tests). Keys
  include credential header (`Authorization` / `X-Api-Key` /

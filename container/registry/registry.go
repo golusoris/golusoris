@@ -17,7 +17,7 @@
 //
 // # Usage
 //
-//	c := registry.New(registry.Options{}, nil, nil) // authn.DefaultKeychain + http.DefaultTransport
+//	c := registry.New(registry.Options{}, nil, nil) // authn.DefaultKeychain + private http.DefaultTransport clone
 //
 //	digest, err := c.Resolve(ctx, "gcr.io/distroless/static:nonroot")
 //	man, err    := c.Manifest(ctx, "gcr.io/distroless/static@"+digest.DigestStr())
@@ -37,7 +37,8 @@
 //
 // # Transport
 //
-// A nil Transport falls back to [http.DefaultTransport]. Inject a custom
+// A nil Transport falls back to a private clone of [http.DefaultTransport],
+// so no other code can close this client's idle connections. Inject a custom
 // [http.RoundTripper] for mTLS, a proxy, or (as this package's own tests do)
 // to simulate registry faults such as a corrupted response body.
 package registry
@@ -104,14 +105,14 @@ type Client struct {
 }
 
 // New builds a [Client]. keychain defaults to [authn.DefaultKeychain] when
-// nil (the same resolution `docker`/`crane` use); transport defaults to
-// [http.DefaultTransport] when nil.
+// nil (the same resolution `docker`/`crane` use); transport defaults to a
+// private clone of [http.DefaultTransport] when nil.
 func New(opts Options, keychain authn.Keychain, transport http.RoundTripper) *Client {
 	if validate.IsNil(keychain) {
 		keychain = authn.DefaultKeychain
 	}
 	if validate.IsNil(transport) {
-		transport = http.DefaultTransport
+		transport = ownTransport()
 	}
 	ua := opts.UserAgent
 	if ua == "" {
@@ -122,6 +123,16 @@ func New(opts Options, keychain authn.Keychain, transport http.RoundTripper) *Cl
 		timeout = DefaultTimeout
 	}
 	return &Client{keychain: keychain, transport: transport, userAgent: ua, timeout: timeout, limits: newLimits(opts)}
+}
+
+// ownTransport clones http.DefaultTransport so the client's idle connections
+// are its own: any code may close the shared pool mid-request (#703). This
+// module cannot import httpx/client, which holds the same helper.
+func ownTransport() http.RoundTripper {
+	if base, ok := http.DefaultTransport.(*http.Transport); ok {
+		return base.Clone()
+	}
+	return http.DefaultTransport
 }
 
 // ParseReference parses a docker/OCI image reference string ("nginx",

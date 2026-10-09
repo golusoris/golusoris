@@ -15,7 +15,7 @@ list referrers. One OCI client for fleet; oras-go deliberately not used.
 ## API
 
 ```go
-c := registry.New(registry.Options{}, nil, nil) // nil+nil = authn.DefaultKeychain + http.DefaultTransport
+c := registry.New(registry.Options{}, nil, nil) // nil+nil = authn.DefaultKeychain + private http.DefaultTransport clone
 
 digest, err := c.Resolve(ctx, "gcr.io/distroless/static:nonroot")   // name.Digest, via HEAD
 man,    err := c.Manifest(ctx, "gcr.io/distroless/static@"+digest.DigestStr())
@@ -128,9 +128,11 @@ completely.
 
 ## Don't
 
-- Don't add persistent `*http.Client`/connection pool here — `Options.Transport`
- is `http.RoundTripper` caller owns; this package never calls
- `CloseIdleConnections` because it never opens client of its own.
+- Don't add persistent `*http.Client` here. Injected `http.RoundTripper` = caller
+ owns. nil transport -> `New` clones `http.DefaultTransport` per `Client`
+ (`ownTransport`, same shape as `httpx/client`; this module cannot import root),
+ so no other code can close its idle pool (#703). Clone keeps 90s
+ `IdleConnTimeout`; package never calls `CloseIdleConnections`.
 - Don't reach for `crane` — it's CLI-oriented convenience layer over same
  `remote` package; wrapping `remote` directly keeps auth/transport/context
  injection explicit, which is point of this package.
