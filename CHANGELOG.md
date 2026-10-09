@@ -15,6 +15,23 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.14.0](https://github.com/golusoris/golusoris/compare/v0.13.1...v0.14.0) (2026-10-09)
+
+
+### Features
+
+* **registry:** sign and verify images by digest with sigstore-go ([#726](https://github.com/golusoris/golusoris/issues/726)) ([0cd0629](https://github.com/golusoris/golusoris/commit/0cd062947c58b6741a63a2ac7c2cbf760917e650))
+* **storage:** continue listings past one page with StartAfter ([#722](https://github.com/golusoris/golusoris/issues/722)) ([1da52f6](https://github.com/golusoris/golusoris/commit/1da52f67beb0c0d4716bb335b000be8af574bce3))
+
+
+### Bug Fixes
+
+* **ci:** expect the gosec x/tools pin in the Renovate policy test ([#729](https://github.com/golusoris/golusoris/issues/729)) ([fea6aa7](https://github.com/golusoris/golusoris/commit/fea6aa7ccf163c40ff97ccb8f22cdff307dcb754))
+* **httpx:** forward CloseIdleConnections through the client's wrappers ([#721](https://github.com/golusoris/golusoris/issues/721)) ([7e1e769](https://github.com/golusoris/golusoris/commit/7e1e769d79a546d5dc91673b7a3251e43d7aa2f8))
+* **migrate:** register the file source and build Windows drive URLs ([#725](https://github.com/golusoris/golusoris/issues/725)) ([a1a89e2](https://github.com/golusoris/golusoris/commit/a1a89e290b5537709163670486a14ce8188b905d))
+* **pubsub:** resubscribe redis subscriptions and report the gap ([#723](https://github.com/golusoris/golusoris/issues/723)) ([4b7c487](https://github.com/golusoris/golusoris/commit/4b7c487cf0c593b87b77f83ca101b70e667e089d))
+* **tus:** close the scratch cursor when a pass reaches directory end ([#718](https://github.com/golusoris/golusoris/issues/718)) ([7796ccc](https://github.com/golusoris/golusoris/commit/7796cccc1f78734ba29215460de8a27c20d64278))
+
 ## [0.13.1](https://github.com/golusoris/golusoris/compare/v0.13.0...v0.13.1) (2026-10-09)
 
 
