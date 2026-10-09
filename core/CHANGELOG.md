@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.1](https://github.com/golusoris/golusoris/compare/core/v0.10.0...core/v0.10.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/go-playground/validator/v10 to v10.30.5 ([#576](https://github.com/golusoris/golusoris/issues/576)) ([c21aacc](https://github.com/golusoris/golusoris/commit/c21aacc81d53b4080f1df862c9a1634e28a74bc8))
+* **deps:** update module github.com/knadh/koanf/providers/env/v2 to v2.0.2 ([#587](https://github.com/golusoris/golusoris/issues/587)) ([9f8415b](https://github.com/golusoris/golusoris/commit/9f8415bf618aab305d7dd7d67d5e3163126755fc))
+* **deps:** update module github.com/knadh/koanf/v2 to v2.3.8 ([#581](https://github.com/golusoris/golusoris/issues/581)) ([d2fb83f](https://github.com/golusoris/golusoris/commit/d2fb83f234b323cc5eba7be75f6b42c0d5456d03))
+
+
+### Code Refactoring
+
+* **tlsx:** merge internal/tlsfiles into core/tlsx ([#707](https://github.com/golusoris/golusoris/issues/707)) ([aa20169](https://github.com/golusoris/golusoris/commit/aa201696bda9244c664c57be2b0fad3249ac6eb2))
+
 ## [0.10.0](https://github.com/golusoris/golusoris/compare/core/v0.9.2...core/v0.10.0) (2026-10-09)
 
 
