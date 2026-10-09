@@ -50,6 +50,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 const defaultTimeout = 30 * time.Second
@@ -101,17 +102,19 @@ func newClient(cfg Config) (graphql.Client, error) {
 		return nil, errors.New("graphql/client: endpoint is required")
 	}
 
-	transport := authTransport{
-		base:        http.DefaultTransport,
+	return graphql.NewClient(cfg.Endpoint, newHTTPClient(cfg)), nil
+}
+
+// newHTTPClient wraps a private transport clone: code elsewhere may close the
+// idle pool of http.DefaultTransport mid-request (#703).
+func newHTTPClient(cfg Config) *http.Client {
+	hc := httpclient.CloneBounded(nil, cfg.Timeout)
+	hc.Transport = authTransport{
+		base:        hc.Transport,
 		bearerToken: cfg.BearerToken,
 		apiKey:      cfg.APIKey,
 	}
-	hc := &http.Client{
-		Timeout:   cfg.Timeout,
-		Transport: transport,
-	}
-
-	return graphql.NewClient(cfg.Endpoint, hc), nil
+	return hc
 }
 
 // authTransport injects auth headers into each request.

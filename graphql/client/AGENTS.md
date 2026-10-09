@@ -49,3 +49,4 @@ graphql:
 - `endpoint` is mandatory — missing it returns error at construction, not
  first call.
 - `*http.Client` always sets `Timeout` (CI rule `http-client-must-set-timeout`).
+- Base transport = private clone of `http.DefaultTransport` per client (`httpx/client.CloneBounded`); shared pool never used (#703).

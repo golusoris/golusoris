@@ -68,6 +68,38 @@ func TestNewClient_withEndpoint(t *testing.T) {
 	}
 }
 
+// TestNewHTTPClient_ownsTransport pins that every client wraps its own clone
+// of http.DefaultTransport, never the shared pool (#703).
+func TestNewHTTPClient_ownsTransport(t *testing.T) {
+	t.Parallel()
+	base := func(hc *http.Client) http.RoundTripper {
+		t.Helper()
+		auth, ok := hc.Transport.(authTransport)
+		if !ok {
+			t.Fatalf("transport = %T, want authTransport", hc.Transport)
+		}
+		return auth.base
+	}
+	first := base(newHTTPClient(Config{Timeout: time.Second}))
+	if _, ok := first.(*http.Transport); !ok || first == http.DefaultTransport {
+		t.Fatalf("base = %T shared=%v, want a private *http.Transport", first, first == http.DefaultTransport)
+	}
+	if second := base(newHTTPClient(Config{Timeout: time.Second})); second == first {
+		t.Fatal("two clients share one transport")
+	}
+}
+
+// TestNewHTTPClient_timeout covers the explicit and zero-timeout boundaries.
+func TestNewHTTPClient_timeout(t *testing.T) {
+	t.Parallel()
+	if got := newHTTPClient(Config{Timeout: time.Second}).Timeout; got != time.Second {
+		t.Errorf("explicit Timeout = %v, want 1s", got)
+	}
+	if got := newHTTPClient(Config{}).Timeout; got != defaultTimeout {
+		t.Errorf("zero Timeout = %v, want %v", got, defaultTimeout)
+	}
+}
+
 func TestRoundTrip_injectsAuth(t *testing.T) {
 	t.Parallel()
 	var gotAuth, gotKey string

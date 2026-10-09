@@ -17,6 +17,8 @@ import (
 	"time"
 
 	transmissionrpc "github.com/hekmon/transmissionrpc/v3"
+
+	httpclient "github.com/golusoris/golusoris/httpx/client"
 )
 
 // transmissionBackend adapts hekmon/transmissionrpc/v3 to [Client]. The
@@ -52,14 +54,15 @@ func newTransmissionClient(opts Options, logger *slog.Logger) (*transmissionBack
 }
 
 // newHTTPClient builds an *http.Client with a mandatory request timeout. The
-// timeout satisfies the http-client-must-set-timeout CI rule.
+// timeout satisfies the http-client-must-set-timeout CI rule. The transport is
+// private: code elsewhere may close http.DefaultTransport's pool (#703).
 func newHTTPClient(timeout time.Duration, insecure bool) *http.Client {
-	transport := http.DefaultTransport
+	hc := httpclient.CloneBounded(nil, timeout)
 	if insecure {
 		// #nosec G402 -- opt-in InsecureSkipVerify is test-only config, off by default.
-		transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}} // nosemgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
+		hc.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12}} // nosemgrep: go.lang.security.audit.crypto.missing-ssl-minversion.missing-ssl-minversion
 	}
-	return &http.Client{Timeout: timeout, Transport: transport}
+	return hc
 }
 
 func (b *transmissionBackend) Add(ctx context.Context, magnetOrURL string, opts AddOptions) (string, error) {

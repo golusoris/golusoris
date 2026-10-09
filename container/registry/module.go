@@ -25,8 +25,8 @@ func loadOptions(cfg *config.Config) (Options, error) {
 
 // clientParams are the fx inputs for [newClient]. Keychain and Transport are
 // optional so the module works without an app-provided override — [New]
-// supplies the same defaults ([authn.DefaultKeychain], [http.DefaultTransport])
-// either way.
+// supplies the same defaults ([authn.DefaultKeychain], a private clone of
+// [http.DefaultTransport]) either way.
 type clientParams struct {
 	fx.In
 

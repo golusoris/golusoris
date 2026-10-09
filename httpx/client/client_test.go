@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -96,6 +97,40 @@ func TestCloneBoundedOwnsMissingTransport(t *testing.T) {
 	first := client.CloneBounded(nil, time.Second).Transport
 	if second := client.CloneBounded(nil, time.Second).Transport; first == second {
 		t.Fatal("two clients share one transport")
+	}
+}
+
+// TestNewOwnsIdlePool pins that a client built without a transport keeps its
+// idle connection when other code closes http.DefaultTransport's pool (#703).
+func TestNewOwnsIdlePool(t *testing.T) {
+	t.Parallel()
+	var dials atomic.Int32
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	srv.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			dials.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	c := client.New(client.Options{})
+	for i := range 2 {
+		if i == 1 {
+			shared, ok := http.DefaultTransport.(*http.Transport)
+			if !ok {
+				t.Fatalf("http.DefaultTransport = %T, want *http.Transport", http.DefaultTransport)
+			}
+			shared.CloseIdleConnections()
+		}
+		if _, err := getBody(t, c, srv.URL); err != nil {
+			t.Fatalf("request %d: %v", i, err)
+		}
+	}
+	if got := dials.Load(); got != 1 {
+		t.Fatalf("dials = %d, want 1: the client shares http.DefaultTransport's idle pool", got)
 	}
 }
 

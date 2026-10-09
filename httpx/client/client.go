@@ -78,7 +78,7 @@ type Options struct {
 	TLSConfig *tls.Config
 
 	// Transport replaces the innermost transport; otelhttp, retry, and the
-	// breaker still wrap it. nil uses http.DefaultTransport.
+	// breaker still wrap it. nil uses a private clone of http.DefaultTransport.
 	Transport http.RoundTripper
 }
 
@@ -184,13 +184,13 @@ func New(opts Options) *http.Client {
 }
 
 // innerTransport picks the caller's transport, a TLS-configured clone of the
-// default transport, or the default transport itself.
+// default transport, or a private clone of the default transport.
 func innerTransport(opts Options) http.RoundTripper {
 	if !validate.IsNil(opts.Transport) {
 		return opts.Transport
 	}
 	if opts.TLSConfig == nil {
-		return http.DefaultTransport
+		return ownTransport()
 	}
 	tr, ok := http.DefaultTransport.(*http.Transport)
 	if !ok {

@@ -74,6 +74,22 @@ func TestErrServerError(t *testing.T) {
 	}
 }
 
+// TestInnerTransportOwnsDefault pins that New never sends on
+// http.DefaultTransport unless the caller hands it in (#703).
+func TestInnerTransportOwnsDefault(t *testing.T) {
+	t.Parallel()
+	first, ok := innerTransport(Options{}).(*http.Transport)
+	if !ok || first == http.DefaultTransport {
+		t.Fatalf("default transport = %T shared=%v, want a private *http.Transport", first, first == http.DefaultTransport)
+	}
+	if second := innerTransport(Options{}); second == first {
+		t.Fatal("two clients share one transport")
+	}
+	if got := innerTransport(Options{Transport: http.DefaultTransport}); got != http.DefaultTransport {
+		t.Fatalf("explicit transport = %T, want the caller's http.DefaultTransport", got)
+	}
+}
+
 func TestNew_defaults(t *testing.T) {
 	t.Parallel()
 	c := New(Options{})

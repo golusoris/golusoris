@@ -285,6 +285,10 @@ func TestNewRegistryForTest_TypedNilCacheDisablesCaching(t *testing.T) {
 	}
 }
 
+// TestNewRegistryForTest_CacheSupportsDefaultHTTPTransport drives the fallback
+// for a builder that leaves Transport nil, which once meant
+// http.DefaultTransport and now means a private clone (#703), end to end
+// through the cache. TestHTTPClient_ownsMissingTransport pins the clone.
 func TestNewRegistryForTest_CacheSupportsDefaultHTTPTransport(t *testing.T) {
 	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {

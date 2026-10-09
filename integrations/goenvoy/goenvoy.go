@@ -135,23 +135,21 @@ func (f *factory) names() []string {
 
 // httpClient builds one resilient *http.Client for a service. It is never
 // shared between goenvoy clients because goenvoy's WithTimeout mutates the
-// client in place. When CacheTTL > 0 and a cache is present, the transport is
-// wrapped with a clock-driven caching RoundTripper.
+// client in place. A builder that leaves Transport nil gets a private clone of
+// http.DefaultTransport, whose shared pool other code may close (#703). When
+// CacheTTL > 0 and a cache is present, the transport is wrapped with a
+// clock-driven caching RoundTripper.
 func (f *factory) httpClient(name string, o ServiceOptions) *http.Client {
-	hc := f.newHTTP(client.Options{
+	hc := client.CloneBounded(f.newHTTP(client.Options{
 		Name:    "goenvoy:" + name,
 		Timeout: o.Timeout,
 		Retry:   o.Retry,
 		Breaker: o.Breaker,
 		Logger:  f.logger,
-	})
+	}), o.Timeout)
 	if o.CacheTTL > 0 && f.cache != nil {
-		next := hc.Transport
-		if next == nil {
-			next = http.DefaultTransport
-		}
 		hc.Transport = &cacheTransport{
-			next:  next,
+			next:  hc.Transport,
 			cache: f.cache,
 			clk:   f.clk,
 			ttl:   o.CacheTTL,

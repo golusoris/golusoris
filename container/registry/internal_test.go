@@ -25,17 +25,27 @@ func (*typedNilTransport) RoundTrip(*http.Request) (*http.Response, error) {
 	return nil, errors.New("typed-nil transport must not be called")
 }
 
+// requirePrivateTransport fails unless rt is a *http.Transport other than the
+// shared http.DefaultTransport, whose idle pool any code may close (#703).
+func requirePrivateTransport(t *testing.T, rt http.RoundTripper) {
+	t.Helper()
+	if _, ok := rt.(*http.Transport); !ok || rt == http.DefaultTransport {
+		t.Fatalf("transport = %T shared=%v, want a private *http.Transport", rt, rt == http.DefaultTransport)
+	}
+}
+
 // TestNew_defaults asserts the zero-value Options plus nil keychain/transport
-// still produce a fully usable Client (authn.DefaultKeychain,
-// http.DefaultTransport, DefaultTimeout, defaultUserAgent).
+// still produce a fully usable Client (authn.DefaultKeychain, a private clone
+// of http.DefaultTransport, DefaultTimeout, defaultUserAgent).
 func TestNew_defaults(t *testing.T) {
 	t.Parallel()
 	c := New(Options{}, nil, nil)
 	if c.keychain != authn.DefaultKeychain {
 		t.Errorf("keychain = %v, want authn.DefaultKeychain", c.keychain)
 	}
-	if c.transport != http.DefaultTransport {
-		t.Errorf("transport = %v, want http.DefaultTransport", c.transport)
+	requirePrivateTransport(t, c.transport)
+	if other := New(Options{}, nil, nil); other.transport == c.transport {
+		t.Error("two clients share one transport")
 	}
 	if c.userAgent != defaultUserAgent {
 		t.Errorf("userAgent = %q, want %q", c.userAgent, defaultUserAgent)
@@ -46,7 +56,8 @@ func TestNew_defaults(t *testing.T) {
 }
 
 // TestNew_explicitValues asserts every explicit Options/keychain/transport
-// value is used as-is (the boundary opposite of TestNew_defaults).
+// value is used as-is (the boundary opposite of TestNew_defaults): even an
+// explicit http.DefaultTransport stays the caller's choice.
 func TestNew_explicitValues(t *testing.T) {
 	t.Parallel()
 	kc := authn.NewMultiKeychain()
@@ -74,9 +85,7 @@ func TestNew_typedNilDependenciesUseDefaults(t *testing.T) {
 	if c.keychain != authn.DefaultKeychain {
 		t.Errorf("keychain = %T, want authn.DefaultKeychain", c.keychain)
 	}
-	if c.transport != http.DefaultTransport {
-		t.Errorf("transport = %T, want http.DefaultTransport", c.transport)
-	}
+	requirePrivateTransport(t, c.transport)
 }
 
 // TestClient_bound asserts bound() derives a context with a deadline
