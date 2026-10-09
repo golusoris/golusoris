@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go-playground/validator/v10 — v10.30.4 snapshot
+# go-playground/validator/v10 — v10.30.5 snapshot
 
-Pinned: **v10.30.4**
-Source: [tagged source](https://github.com/go-playground/validator/tree/v10.30.4)
+Pinned: **v10.30.5**
+Source: [tagged source](https://github.com/go-playground/validator/tree/v10.30.5)
 
 ## Initialization
 
@@ -85,5 +85,5 @@ if err != nil {
 
 ## Links
 
-- [Package documentation](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.4)
-- [Baked-in validations](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.4#hdr-Baked_In_Validators_and_Tags)
+- [Package documentation](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.5)
+- [Baked-in validations](https://pkg.go.dev/github.com/go-playground/validator/v10@v10.30.5#hdr-Baked_In_Validators_and_Tags)

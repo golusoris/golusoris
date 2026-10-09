@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# knadh/koanf/v2 — v2.3.6 snapshot
+# knadh/koanf/v2 — v2.3.8 snapshot
 
-Pinned: **v2.3.6**
-Source: [tagged source](https://github.com/knadh/koanf/tree/v2.3.6)
+Pinned: **v2.3.8**
+Source: [tagged source](https://github.com/knadh/koanf/tree/v2.3.8)
 
 ## Loading config
 
@@ -104,4 +104,4 @@ k.Strings("allowed_origins")   // []string from comma-sep or YAML list
 
 ## Links
 
-- [Package documentation](https://pkg.go.dev/github.com/knadh/koanf/v2@v2.3.6)
+- [Package documentation](https://pkg.go.dev/github.com/knadh/koanf/v2@v2.3.8)

@@ -139,7 +139,7 @@ land without waiting on a direct-dependency bump. Dependabot is not used
 for version updates; its vulnerability alerts remain enabled on the
 repository, but Dependabot's automated security-fix pull requests are
 turned off so Renovate stays the single updater. The Go toolchain floor is
-`go 1.27.1` in every module.
+`go 1.27.2` in every module.
 
 ## Framework vs. app responsibility
 
