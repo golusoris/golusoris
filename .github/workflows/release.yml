@@ -37,6 +37,11 @@ jobs:
   # trigger fires seconds later while main's CI is still running.
   require-green-ci:
     uses: ./.github/workflows/require-green-ci.yml
+    # A called workflow gets no more than its caller grants; the gate reads
+    # check runs, so without checks: read the tag run fails at startup.
+    permissions:
+      contents: read
+      checks: read
     with:
       ref: ${{ github.sha }}
 
