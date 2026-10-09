@@ -50,6 +50,16 @@ type CheckedBus interface {
 	TryPublish(ctx context.Context, msg Message) error
 }
 
+// GapBus is a [Bus] whose subscriptions can miss messages while the backend
+// reconnects. Callers that keep derived state, such as an L1 cache, resync in
+// onGap.
+type GapBus interface {
+	Bus
+	// SubscribeWithGap is Subscribe that calls onGap after each reconnect,
+	// once messages published during the outage may have been lost.
+	SubscribeWithGap(topic string, h Handler, onGap func()) (cancel func())
+}
+
 var _ CheckedBus = (*LocalBus)(nil)
 
 // LocalBus is an in-process, goroutine-safe pub/sub bus. Suitable for

@@ -45,6 +45,10 @@ subscribers.
 publish failures (cache/twotier invalidation). `LocalBus` and redis `Bus`
 implement it; type-assert, fall back to fire-and-forget `Publish`.
 
+`GapBus` adds `SubscribeWithGap(topic, h, onGap)`: `onGap` after each backend
+reconnect: messages published during outage lost. Redis `Bus`
+implements; `LocalBus` never loses messages, so no.
+
 ## Don't
 
 - Don't block in Handler — it blocks Publish caller.

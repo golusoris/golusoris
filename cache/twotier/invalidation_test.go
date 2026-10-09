@@ -247,6 +247,37 @@ func TestBusBroadcaster_PlainBusIsFireAndForget(t *testing.T) {
 	require.NotNil(t, broadcaster.Subscribe(nil))
 }
 
+// gapBus is a LocalBus whose test can fire the reconnect callback.
+type gapBus struct {
+	*pubsub.LocalBus
+	onGap atomic.Pointer[func()]
+}
+
+func (g *gapBus) SubscribeWithGap(topic string, h pubsub.Handler, onGap func()) func() {
+	g.onGap.Store(&onGap)
+	return g.Subscribe(topic, h)
+}
+
+// TestBusBroadcaster_GapEvictsPeerL1 pins that a bus reconnect clears the
+// listener's whole L1, since notices sent during the outage are lost (#642).
+func TestBusBroadcaster_GapEvictsPeerL1(t *testing.T) {
+	t.Parallel()
+	bus := &gapBus{LocalBus: pubsub.New()}
+	broadcaster, err := NewBusBroadcaster(bus, "", nil)
+	require.NoError(t, err)
+	peer := newPeer(t, newStubL2(), broadcaster)
+	t.Cleanup(peer.Listen())
+	cacheOn(t, peer)
+	_, cached := peer.l1.GetIfPresent("n:k")
+	require.True(t, cached, "L1 holds the value before the gap")
+
+	onGap := bus.onGap.Load()
+	require.NotNil(t, onGap, "Listen subscribes through SubscribeWithGap")
+	(*onGap)()
+	_, cached = peer.l1.GetIfPresent("n:k")
+	require.False(t, cached, "a reconnect evicts L1")
+}
+
 func TestNewBusBroadcaster_RejectsNilBus(t *testing.T) {
 	t.Parallel()
 	broadcaster, err := NewBusBroadcaster(nil, "", nil)

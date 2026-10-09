@@ -75,8 +75,10 @@ func (s *UserService) Load(ctx context.Context, id string) (*User, error) {
   L2 already holds sender's write. Notices run synchronously in bus subscriber goroutine.
 - Broadcast bounded by `invalidation.timeout`. Failure -> `Set` / `Delete` / `InvalidatePrefix`
   return error wrapping `ErrBroadcast` (+ cause); local change stays.
-- Delivery at most once: lost, malformed or pre-subscription notice, or dropped Redis
-  subscription, leaves peer L1 stale until `l1_ttl`. Hence invalidation requires `l1_ttl > 0`.
+- Delivery at most once: lost, malformed or pre-subscription notice leaves peer L1 stale
+  until `l1_ttl`. Hence invalidation requires `l1_ttl > 0`.
+- Bus = `pubsub.GapBus` (redis): reconnect -> empty-prefix invalidation -> whole L1 evicted
+  (#642). Notices sent during outage lost; flush = only safe catch-up.
 - `pubsub.CheckedBus` (`TryPublish`) surfaces publish errors; plain `Bus` is fire-and-forget.
 
 ## Values cross tiers as JSON

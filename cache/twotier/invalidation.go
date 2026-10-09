@@ -39,7 +39,8 @@ type Invalidation struct {
 }
 
 // Broadcaster carries invalidations between replicas. Delivery is at most
-// once: a lost notice leaves a peer's L1 entry stale until its L1 TTL.
+// once: a lost notice leaves a peer's L1 entry stale until its L1 TTL, unless
+// the transport reports the gap (see [BusBroadcaster.Subscribe]).
 type Broadcaster interface {
 	// Broadcast sends inv to every subscribed replica.
 	Broadcast(ctx context.Context, inv Invalidation) error
@@ -96,19 +97,28 @@ func (b *BusBroadcaster) Broadcast(ctx context.Context, inv Invalidation) error 
 }
 
 // Subscribe decodes every notice on the topic; malformed ones are logged and
-// dropped like a lost message.
+// dropped like a lost message. On a [pubsub.GapBus], every reconnect hands
+// handle an empty-prefix invalidation that evicts all of L1, because notices
+// sent during the outage are lost.
 func (b *BusBroadcaster) Subscribe(handle func(Invalidation)) func() {
 	if handle == nil {
 		return func() {}
 	}
-	return b.bus.Subscribe(b.topic, func(msg pubsub.Message) {
+	deliver := func(msg pubsub.Message) {
 		inv, err := decodeInvalidation(msg.Data)
 		if err != nil {
 			b.logger.Warn("cache/twotier: drop malformed invalidation", slog.Any("error", err))
 			return
 		}
 		handle(inv)
-	})
+	}
+	if gapBus, ok := b.bus.(pubsub.GapBus); ok {
+		return gapBus.SubscribeWithGap(b.topic, deliver, func() {
+			b.logger.Warn("cache/twotier: invalidation bus reconnected; evicting all of L1")
+			handle(Invalidation{Kind: InvalidationPrefix})
+		})
+	}
+	return b.bus.Subscribe(b.topic, deliver)
 }
 
 func decodeInvalidation(data any) (Invalidation, error) {

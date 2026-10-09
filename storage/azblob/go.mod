@@ -7,7 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.8.2
 	github.com/golusoris/golusoris v0.12.0
-	github.com/golusoris/golusoris/core v0.9.2
+	github.com/golusoris/golusoris/core v0.10.1
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
 )
