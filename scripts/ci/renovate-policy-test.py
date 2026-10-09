@@ -21,6 +21,7 @@ INPUTS = (
     ".gitea/workflows/security-scan.yml",
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
+    "container/registry/sign/kms/aws/internal/localstackdev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
     "scripts/ci/tiny-trainer-locks.sh",
@@ -76,6 +77,8 @@ EXPECTED = {
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "hashicorp/vault", "docker"),
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "openbao/openbao", "docker"),
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
+    ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "localstack/localstack", "docker"),
+    ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "testcontainers/ryuk", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -158,6 +161,7 @@ EXPECTED_DIGESTS = {
     "mcr.microsoft.com/azure-storage/azurite",
     "hashicorp/vault",
     "openbao/openbao",
+    "localstack/localstack",
     "mcr.microsoft.com/devcontainers/go",
 }
 
@@ -338,6 +342,39 @@ def test_private_job_image_authority(
     return False
 
 
+def localstack_hold_valid(config: dict[str, object]) -> bool:
+    """Require the rule that keeps LocalStack below the token-gated 2026 line."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    holds = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["docker"]
+        and rule.get("matchPackageNames") == ["localstack/localstack"]
+        and rule.get("allowedVersions") == "<2026"
+    ]
+    return len(holds) == 1
+
+
+def test_localstack_hold(config: dict[str, object]) -> bool:
+    """Report a missing LocalStack hold and prove the check refuses its removal."""
+    if not localstack_hold_valid(config):
+        print("renovate.json must hold localstack/localstack below 2026 (auth token)", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule
+        for rule in mutated["packageRules"]
+        if rule.get("matchPackageNames") != ["localstack/localstack"]
+    ]
+    if localstack_hold_valid(mutated):
+        print("LocalStack hold negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
 def test_pin_inventory(found: list[dict[str, str]]) -> bool:
     """Require the exact declared nonstandard dependency inventory."""
     actual = identities(found)
@@ -472,6 +509,7 @@ def main() -> int:
         test_private_job_image_authority(config, contents),
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
+        test_localstack_hold(config),
     )
     if not all(checks):
         return 1
