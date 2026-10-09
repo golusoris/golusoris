@@ -69,7 +69,7 @@ added no build weight. Every other heavy test-only dependency in `testutil/`
 (`testcontainers-go`, `tsenart/vegeta`, `leanovate/gopter`, `go-mutesting`,
 `gofakeit`) already lives directly in root `go.mod` for same reason.
 Root placement avoids separate module solely for pure-Go test helper.
-`make verify-all` discovers and gates all 26 modules, including
+`make verify-all` discovers and gates all 27 modules, including
 `testutil/pact` and native submodules.
 
 ## Don't
