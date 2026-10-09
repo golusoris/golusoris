@@ -110,6 +110,8 @@ context error and leaves scratch open; active callback retains shared state.
  accepts only unsupported read-only-directory errors after file sync.
 - Maintenance walks at most 256 directory entries per call and carries an
   advancing cursor across ticks; shutdown closes retained directory handles.
+  Resumed cursor hitting directory end restarts once in same call: entries
+  created after previous pass seen next tick, no empty pass.
 - Expiry activity = newest data/info mtime. Sweeper uses same per-upload lock as
   tusd, skips active request, rechecks expiry while locked. `upload_expiry` and
   `expiry_sweep_interval` must be positive.

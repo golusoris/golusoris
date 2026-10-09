@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -114,41 +115,49 @@ func finishTestUpload(t *testing.T, client *http.Client, url, body string) int {
 	return resp.StatusCode
 }
 
-// TestCompletionRetryIsDurable verifies that a transient callback failure does
-// not fail or lose the completed upload, repeat the Bucket Put, or redeliver
-// after the durable completion has been acknowledged.
-func TestCompletionRetryIsDurable(t *testing.T) {
-	t.Parallel()
+type retryRig struct {
+	h        *Handler
+	clk      *clockwork.FakeClock
+	bucket   *putCountingBucket
+	srv      *httptest.Server
+	attempts chan int32
+}
+
+// newRetryRig starts a handler whose callback fails its first failures attempts
+// and reports every attempt number on attempts.
+func newRetryRig(t *testing.T, failures int32) *retryRig {
+	t.Helper()
 	local, err := storage.NewLocalBucket(t.TempDir())
 	if err != nil {
 		t.Fatalf("NewLocalBucket: %v", err)
 	}
-	bucket := &putCountingBucket{Bucket: local}
-	fakeClock := clockwork.NewFakeClock()
+	rig := &retryRig{
+		clk:      clockwork.NewFakeClock(),
+		bucket:   &putCountingBucket{Bucket: local},
+		attempts: make(chan int32, failures+2),
+	}
 	opts := defaultOptions()
 	opts.Enabled = true
 	opts.ScratchDir = t.TempDir()
 	opts.GracefulRequestCompletionTimeout = time.Millisecond
 	lc := fxtest.NewLifecycle(t)
-	h, err := newHandler(params{
-		LC: lc, Opts: opts, Bucket: bucket,
-		Logger: slog.New(slog.DiscardHandler), Clock: fakeClock,
+	rig.h, err = newHandler(params{
+		LC: lc, Opts: opts, Bucket: rig.bucket,
+		Logger: slog.New(slog.DiscardHandler), Clock: rig.clk,
 	})
 	if err != nil {
 		t.Fatalf("newHandler: %v", err)
 	}
-	attempts := make(chan int32, 3)
 	var attempt atomic.Int32
-	mustOnComplete(t, h, "retry", func(context.Context, CompletedUpload) error {
+	mustOnComplete(t, rig.h, "retry", func(context.Context, CompletedUpload) error {
 		n := attempt.Add(1)
-		attempts <- n
-		if n == 1 {
+		rig.attempts <- n
+		if n <= failures {
 			return errBoom
 		}
 		return nil
 	})
-	ctx := context.Background()
-	if err = lc.Start(ctx); err != nil {
+	if err = lc.Start(context.Background()); err != nil {
 		t.Fatalf("lifecycle start: %v", err)
 	}
 	t.Cleanup(func() {
@@ -158,50 +167,95 @@ func TestCompletionRetryIsDurable(t *testing.T) {
 			t.Errorf("lifecycle stop: %v", stopErr)
 		}
 	})
-	waitCtx, cancel := context.WithTimeout(ctx, time.Second)
+	waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	if err = fakeClock.BlockUntilContext(waitCtx, 1); err != nil {
+	if err = rig.clk.BlockUntilContext(waitCtx, 1); err != nil {
 		t.Fatalf("completion retry ticker did not start: %v", err)
 	}
-
 	router := chi.NewRouter()
-	h.Mount(router)
-	server := httptest.NewServer(router)
-	t.Cleanup(server.Close)
-	url := createTestUpload(t, server.Client(), server.URL+h.BasePath(), 4)
-	if status := finishTestUpload(t, server.Client(), url, "data"); status != http.StatusInternalServerError {
+	rig.h.Mount(router)
+	rig.srv = httptest.NewServer(router)
+	t.Cleanup(rig.srv.Close)
+	return rig
+}
+
+// finishFailedUpload completes one upload whose inline callback fails, then
+// waits until no request holds its lock so the next tick cannot skip it.
+func (r *retryRig) finishFailedUpload(t *testing.T) {
+	t.Helper()
+	url := createTestUpload(t, r.srv.Client(), r.srv.URL+r.h.BasePath(), 4)
+	if status := finishTestUpload(t, r.srv.Client(), url, "data"); status != http.StatusInternalServerError {
 		t.Fatalf("PATCH status = %d, want 500 from transient callback failure", status)
 	}
+	r.expectAttempt(t, 1)
+	id := path.Base(url)
+	for range 1000 {
+		if unlock, ok := r.h.locker.tryMaintenanceLock(id); ok {
+			unlock()
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("upload %s still locked after its PATCH returned", id)
+}
+
+func (r *retryRig) expectAttempt(t *testing.T, want int32) {
+	t.Helper()
 	select {
-	case got := <-attempts:
-		if got != 1 {
-			t.Fatalf("first callback attempt = %d, want 1", got)
+	case got := <-r.attempts:
+		if got != want {
+			t.Fatalf("callback attempt = %d, want %d", got, want)
 		}
 	case <-time.After(time.Second):
-		t.Fatal("first completion callback did not run")
+		t.Fatalf("completion callback attempt %d did not run", want)
 	}
-	if bucket.puts.Load() != 1 {
-		t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
-	}
+}
 
-	fakeClock.Advance(15 * time.Minute)
+func (r *retryRig) expectNoAttempt(t *testing.T) {
+	t.Helper()
 	select {
-	case got := <-attempts:
-		if got != 2 {
-			t.Fatalf("retry callback attempt = %d, want 2", got)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("completion callback was not retried")
-	}
-	if bucket.puts.Load() != 1 {
-		t.Fatalf("Bucket Put count after retry = %d, want 1", bucket.puts.Load())
-	}
-
-	fakeClock.Advance(15 * time.Minute)
-	select {
-	case got := <-attempts:
+	case got := <-r.attempts:
 		t.Fatalf("acknowledged completion redelivered as attempt %d", got)
 	case <-time.After(25 * time.Millisecond):
+	}
+}
+
+// TestCompletionRetryIsDurable verifies that a transient callback failure does
+// not fail or lose the completed upload, repeat the Bucket Put, or redeliver
+// after the durable completion has been acknowledged.
+func TestCompletionRetryIsDurable(t *testing.T) {
+	t.Parallel()
+	rig := newRetryRig(t, 1)
+	rig.finishFailedUpload(t)
+	if rig.bucket.puts.Load() != 1 {
+		t.Fatalf("Bucket Put count = %d, want 1", rig.bucket.puts.Load())
+	}
+
+	rig.clk.Advance(15 * time.Minute)
+	rig.expectAttempt(t, 2)
+	if rig.bucket.puts.Load() != 1 {
+		t.Fatalf("Bucket Put count after retry = %d, want 1", rig.bucket.puts.Load())
+	}
+
+	rig.clk.Advance(15 * time.Minute)
+	rig.expectNoAttempt(t)
+}
+
+// TestCompletionRetryRunsEveryTick verifies consecutive ticks each retry a
+// failing completion; a scan parked at directory end once skipped every other
+// tick (#689).
+func TestCompletionRetryRunsEveryTick(t *testing.T) {
+	t.Parallel()
+	rig := newRetryRig(t, 2)
+	rig.finishFailedUpload(t)
+	for want := int32(2); want <= 3; want++ {
+		rig.clk.Advance(15 * time.Minute)
+		rig.expectAttempt(t, want)
+	}
+	rig.clk.Advance(15 * time.Minute)
+	rig.expectNoAttempt(t)
+	if rig.bucket.puts.Load() != 1 {
+		t.Fatalf("Bucket Put count = %d, want 1", rig.bucket.puts.Load())
 	}
 }
 

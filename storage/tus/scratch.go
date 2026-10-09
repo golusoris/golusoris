@@ -788,6 +788,25 @@ func (c *dirCursor) read(ctx context.Context, root string, limit int) ([]os.DirE
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	resumed := c.dir != nil
+	entries, err := c.nextLocked(root, limit)
+	// A resumed handle parked at directory end never sees entries created after
+	// the previous pass; restart once instead of returning an empty pass.
+	if resumed && errors.Is(err, io.EOF) {
+		entries, err = c.nextLocked(root, limit)
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, err
+	}
+	if err = ctx.Err(); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+// nextLocked reads one batch, opening the handle on demand and closing it at
+// directory end (io.EOF) or on error.
+func (c *dirCursor) nextLocked(root string, limit int) ([]os.DirEntry, error) {
 	if c.dir == nil {
 		dir, err := os.Open(root) // #nosec G304 -- configured scratch root
 		if err != nil {
@@ -797,15 +816,13 @@ func (c *dirCursor) read(ctx context.Context, root string, limit int) ([]os.DirE
 	}
 	entries, err := c.dir.ReadDir(limit)
 	if errors.Is(err, io.EOF) {
-		err = c.closeLocked()
-	} else if err != nil {
-		err = errors.Join(err, c.closeLocked())
+		if closeErr := c.closeLocked(); closeErr != nil {
+			return nil, closeErr
+		}
+		return nil, io.EOF
 	}
 	if err != nil {
-		return nil, err
-	}
-	if err = ctx.Err(); err != nil {
-		return nil, err
+		return nil, errors.Join(fmt.Errorf("read directory cursor: %w", err), c.closeLocked())
 	}
 	return entries, nil
 }

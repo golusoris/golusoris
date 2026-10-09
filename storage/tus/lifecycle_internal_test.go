@@ -141,6 +141,74 @@ func TestLocalScratch_MaintenanceScansAreBoundedAndAdvance(t *testing.T) {
 	}
 }
 
+// TestLocalScratch_CompletionScanRestartsAtDirectoryEnd verifies a pass after
+// one that reached directory end sees entries created in between (#689).
+func TestLocalScratch_CompletionScanRestartsAtDirectoryEnd(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalScratch: %v", err)
+	}
+	t.Cleanup(func() { _ = scratch.Close() })
+	ctx := context.Background()
+	if _, err = scratch.Create(ctx, tusd.FileInfo{ID: "pending"}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	assertCompletionIDs(t, scratch, maxMaintenanceBatch) // short batch parks the handle at end
+	if err = scratch.SaveCompletion(ctx, newCompletionRecord(CompletedUpload{ID: "pending"})); err != nil {
+		t.Fatalf("SaveCompletion: %v", err)
+	}
+	assertCompletionIDs(t, scratch, maxMaintenanceBatch, "pending")
+	if err = scratch.RemoveUpload(ctx, "pending"); err != nil {
+		t.Fatalf("RemoveUpload: %v", err)
+	}
+	// Boundary: a batch filled exactly at directory end must not yield an empty pass.
+	assertCompletionIDs(t, scratch, 1, "pending")
+	assertCompletionIDs(t, scratch, 1, "pending")
+	if err = scratch.DeleteCompletion(ctx, "pending"); err != nil {
+		t.Fatalf("DeleteCompletion: %v", err)
+	}
+	assertCompletionIDs(t, scratch, 1)
+}
+
+func assertCompletionIDs(t *testing.T, scratch *localScratch, limit int, want ...string) {
+	t.Helper()
+	got, err := scratch.CompletionIDs(context.Background(), limit)
+	if err != nil {
+		t.Fatalf("CompletionIDs: %v", err)
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("CompletionIDs(limit=%d) = %v, want %v", limit, got, want)
+	}
+}
+
+// TestLocalScratch_ExpiryScanRestartsAtDirectoryEnd verifies the expiry sweep
+// sees an upload that expired after the previous pass reached directory end.
+func TestLocalScratch_ExpiryScanRestartsAtDirectoryEnd(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalScratch: %v", err)
+	}
+	t.Cleanup(func() { _ = scratch.Close() })
+	ctx := context.Background()
+	if _, err = scratch.Create(ctx, tusd.FileInfo{ID: "fresh"}); err != nil {
+		t.Fatalf("Create fresh: %v", err)
+	}
+	ids, err := scratch.Expired(ctx, time.Now(), time.Hour)
+	if err != nil || len(ids) != 0 {
+		t.Fatalf("first Expired = %v, %v; want none", ids, err)
+	}
+	if _, err = scratch.Create(ctx, tusd.FileInfo{ID: "stale"}); err != nil {
+		t.Fatalf("Create stale: %v", err)
+	}
+	agePastMtime(t, scratch.root, "stale", 48*time.Hour)
+	ids, err = scratch.Expired(ctx, time.Now(), time.Hour)
+	if err != nil || !slices.Equal(ids, []string{"stale"}) {
+		t.Fatalf("second Expired = %v, %v; want [stale]", ids, err)
+	}
+}
+
 func TestSweepExpired_SkipsActivePatchAndRechecksActivity(t *testing.T) {
 	t.Parallel()
 	opts := defaultOptions()
