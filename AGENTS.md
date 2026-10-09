@@ -7,6 +7,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 <!-- markdownlint-disable MD013 MD025 -->
 # golusoris Agent Operating Harness
 
+<!-- praetor:head -->
+
 Before concluding any turn:
 
 ```bash
@@ -61,6 +63,8 @@ make verify-all
 
 6. **Anti-loop interception.** Same AST diff + error category repeats $\ge 3$ times -> halt immediately. Re-evaluate design; no micro-textual retries.
 
+<!-- praetor:config -->
+
 ## Text Register
 
 <!-- praetor:register:start -->
@@ -80,6 +84,8 @@ Register follows the audience, then the task label of your brief (`register:` in
 Golusoris social override: no receipt fence; no changelog fragments.
 `.github/PULL_REQUEST_TEMPLATE.md` uses `## Summary`; `release-please` reads Conventional
 Commits. Generic managed row remains upstream gap `cordanaLLM/praetor#328`.
+
+<!-- praetor:tail -->
 
 ## Primary Verification Commands
 
