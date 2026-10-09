@@ -11,6 +11,7 @@ version: 1
 framework: github.com/golusoris/golusoris
 modules:
   - github.com/golusoris/golusoris/container/registry
+  - github.com/golusoris/golusoris/container/registry/sign
   - github.com/golusoris/golusoris/core
   - github.com/golusoris/golusoris/deploy
   - github.com/golusoris/golusoris/hw/fssnap
@@ -339,6 +340,12 @@ packages:
     domain: registry
     capabilities: [registry.credentials.gar]
     description: "Package gar resolves Google Artifact Registry credentials from Application Default Credentials (GKE Workload Identity, federation, gcloud)."
+  - import: github.com/golusoris/golusoris/container/registry/sign
+    module: github.com/golusoris/golusoris/container/registry/sign
+    domain: registry
+    capabilities: [registry.sign]
+    description: "Package sign signs OCI images, indexes and artifacts by digest with Sigstore, in process, through sigstore-go: no cosign binary and no exec."
+    replaces: [github.com/sigstore/sigstore-go, github.com/sigstore/cosign/v3]
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
     capabilities: [runtime.detect]

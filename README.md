@@ -350,6 +350,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/ecr/` | ECR credentials via AWS default chain (IRSA, Pod Identity) | aws/aws-sdk-go-v2/service/ecr |
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
+| `container/registry/sign/` | in-process Sigstore signing by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts | sigstore/sigstore-go |
 | `storage/gcs/` | Google Cloud Storage `storage.Bucket` — resumable upload, signed GET/PUT (key or IAM signBlob), server-side copy | cloud.google.com/go/storage |
 | `storage/azblob/` | Azure Blob Storage `storage.Bucket` — staged block upload, SAS (shared key or user delegation), server-side copy; workload / managed identity | Azure/azure-sdk-for-go azblob + azidentity |
 | `science/numerical/` | gonum linear algebra, statistics, optimization | gonum/gonum |
@@ -423,9 +424,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ## Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 26 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 27 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 26 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 27 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
@@ -471,7 +472,7 @@ Breaking changes between minor versions are called out in the commit
 [docs/migrations/v0.13.0.md](docs/migrations/v0.13.0.md) for current API and
 secure-default changes. The [v0.9.0 guide](docs/migrations/v0.9.0.md) retains
 the earlier `core/…` import-path mapping. Every module in the catalog above is
-committed; CI gates all 26 discovered Go modules through the primary lane and
+committed; CI gates all 27 discovered Go modules through the primary lane and
 four deterministic module-sweep shards.
 
 ---
