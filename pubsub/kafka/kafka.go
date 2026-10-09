@@ -26,6 +26,7 @@ package kafka
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -40,7 +41,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
-	"github.com/golusoris/golusoris/internal/tlsfiles"
+	"github.com/golusoris/golusoris/core/tlsx"
 )
 
 // SASL mechanism names accepted by SASLConfig.Mechanism, case-insensitively.
@@ -148,10 +149,12 @@ func clientOptions(cfg Config, logger *slog.Logger) ([]kgo.Opt, error) {
 	}
 	secure := cfg.TLS || cfg.CA != ""
 	if secure {
-		tlsCfg, err := tlsfiles.ClientConfig(tlsfiles.Files{CA: cfg.CA})
+		tlsCfg, err := tlsx.LoadClientConfig(tlsx.Files{CA: cfg.CA})
 		if err != nil {
 			return nil, fmt.Errorf("kafka: tls: %w", err)
 		}
+		// Keep the TLS 1.2 floor brokers accept; tlsx alone floors at 1.3.
+		tlsCfg.MinVersion = tls.VersionTLS12
 		opts = append(opts, kgo.DialTLSConfig(tlsCfg))
 	}
 	saslOpts, err := saslOptions(cfg.SASL)

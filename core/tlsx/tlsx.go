@@ -13,6 +13,10 @@
 // A handshake re-reads the files at most once per [Options.MinInterval]. A
 // failed reload keeps the last good material, logs a warning, and is reported
 // by [Reloader.LastError] until a later reload succeeds.
+//
+// Clients that never rotate their files take a one-shot config instead:
+//
+//	cfg, err := tlsx.LoadClientConfig(tlsx.Files{CA: "ca.crt"})
 package tlsx
 
 import (
@@ -36,7 +40,7 @@ import (
 // DefaultMinInterval is the least time between two reads of the files.
 const DefaultMinInterval = 30 * time.Second
 
-// Sentinel errors returned by [NewReloader], [ParseClientAuth], and handshakes.
+// Sentinel errors returned by [NewReloader], [LoadClientConfig], [ParseClientAuth], and handshakes.
 var (
 	ErrNoFiles       = errors.New("tlsx: no certificate or CA file configured")
 	ErrPartialPair   = errors.New("tlsx: cert and key files must be set together")
@@ -46,8 +50,8 @@ var (
 	ErrClientAuth    = errors.New("tlsx: unknown client auth mode")
 )
 
-// Files names the PEM files a [Reloader] serves. Cert and Key are set together;
-// CA alone suits a client that only verifies its server.
+// Files names the PEM files a [Reloader] or [LoadClientConfig] reads. Cert and
+// Key are set together; CA alone suits a client that only verifies its server.
 type Files struct {
 	Cert string // certificate chain, leaf first
 	Key  string // private key matching Cert
@@ -89,10 +93,7 @@ type Reloader struct {
 // NewReloader loads files once and fails closed when they are missing,
 // unparsable, or the key does not match the certificate.
 func NewReloader(files Files, opts Options) (*Reloader, error) {
-	if (files.Cert == "") != (files.Key == "") {
-		return nil, ErrPartialPair
-	}
-	if files.Cert == "" && files.CA == "" {
+	if files == (Files{}) {
 		return nil, ErrNoFiles
 	}
 	r := &Reloader{files: files, minInterval: opts.MinInterval, clk: opts.Clock, logger: opts.Logger}
@@ -105,17 +106,29 @@ func NewReloader(files Files, opts Options) (*Reloader, error) {
 	if r.logger == nil {
 		r.logger = slog.Default()
 	}
-	raw, err := files.read()
-	if err != nil {
-		return nil, err
-	}
-	m, err := files.parse(raw)
+	m, err := files.load()
 	if err != nil {
 		return nil, err
 	}
 	r.cur = m
 	r.checkedAt = r.clk.Now()
 	return r, nil
+}
+
+// LoadClientConfig reads files once into a TLS 1.3 client config. CA sets
+// RootCAs (unset means system roots); Cert and Key add a client certificate.
+// The zero Files is valid and yields a system-roots config. Nothing is re-read
+// after this call: use [Reloader.ClientConfig] to follow rotated files.
+func LoadClientConfig(files Files) (*tls.Config, error) {
+	m, err := files.load()
+	if err != nil {
+		return nil, err
+	}
+	cfg := &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: m.pool}
+	if m.cert != nil {
+		cfg.Certificates = []tls.Certificate{*m.cert}
+	}
+	return cfg, nil
 }
 
 // LastError reports the most recent reload failure, or nil once a later
@@ -207,6 +220,18 @@ func (r *Reloader) reload() (bool, error) {
 	}
 	r.cur = m
 	return true, nil
+}
+
+// load validates f, then reads and parses one generation of the files.
+func (f Files) load() (*material, error) {
+	if (f.Cert == "") != (f.Key == "") {
+		return nil, ErrPartialPair
+	}
+	raw, err := f.read()
+	if err != nil {
+		return nil, err
+	}
+	return f.parse(raw)
 }
 
 func (f Files) read() ([3][]byte, error) {

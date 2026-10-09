@@ -34,7 +34,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
-	"github.com/golusoris/golusoris/internal/tlsfiles"
+	"github.com/golusoris/golusoris/core/tlsx"
 )
 
 const (
@@ -211,19 +211,21 @@ func authOptions(cfg Config) ([]nats.Option, error) {
 }
 
 func tlsOptions(files TLSConfig, injected *tls.Config) ([]nats.Option, error) {
-	paths := tlsfiles.Files(files)
+	noFiles := files == TLSConfig{}
 	switch {
-	case injected != nil && !paths.IsZero():
+	case injected != nil && !noFiles:
 		return nil, ErrConflictingTLS
 	case injected != nil:
 		return []nats.Option{nats.Secure(injected.Clone())}, nil
-	case paths.IsZero():
+	case noFiles:
 		return nil, nil
 	}
-	tlsCfg, err := tlsfiles.ClientConfig(paths)
+	tlsCfg, err := tlsx.LoadClientConfig(tlsx.Files{CA: files.CA, Cert: files.Cert, Key: files.Key})
 	if err != nil {
 		return nil, fmt.Errorf("nats: tls: %w", err)
 	}
+	// Keep the TLS 1.2 floor NATS servers accept; tlsx alone floors at 1.3.
+	tlsCfg.MinVersion = tls.VersionTLS12
 	return []nats.Option{nats.Secure(tlsCfg)}, nil
 }
 
