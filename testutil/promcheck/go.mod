@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/testutil/promcheck
 
-go 1.27.1
+go 1.27.2
 
 require (
 	github.com/golusoris/golusoris v0.12.0
@@ -80,7 +80,7 @@ require (
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260911204522-f61a6ca850bd // indirect
