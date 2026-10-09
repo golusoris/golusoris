@@ -31,9 +31,12 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/url"
+	"runtime"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // registers pgx5 scheme
+	_ "github.com/golang-migrate/migrate/v4/source/file"     // registers the file:// source for Options.Path
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"go.uber.org/fx"
 
@@ -178,8 +181,31 @@ func Open(opts Options, databaseURL string, logger *slog.Logger) (*Migrator, err
 	return &Migrator{m: m, logger: logger}, nil
 }
 
+// fileSourceURL builds the URL golang-migrate's file source parses. It joins
+// host and path, so a Windows drive path needs file://C:/dir, not RFC 8089's
+// file:///C:/dir (#643).
 func fileSourceURL(path string) string {
-	return (&url.URL{Scheme: "file", Path: path}).String()
+	return fileSourceURLFor(path, runtime.GOOS == "windows")
+}
+
+func fileSourceURLFor(path string, windows bool) string {
+	if !windows {
+		return (&url.URL{Scheme: "file", Path: path}).String()
+	}
+	slashed := strings.ReplaceAll(path, `\`, "/")
+	if isDriveAbsolute(slashed) {
+		return (&url.URL{Scheme: "file", Host: slashed[:2], Path: slashed[2:]}).String()
+	}
+	return (&url.URL{Scheme: "file", Path: slashed}).String()
+}
+
+// isDriveAbsolute reports a slashed Windows path such as C:/dir.
+func isDriveAbsolute(path string) bool {
+	if len(path) < 3 || path[1] != ':' || path[2] != '/' {
+		return false
+	}
+	letter := path[0] | 0x20 // ASCII lower case
+	return letter >= 'a' && letter <= 'z'
 }
 
 // pgxToMigrateURL rewrites a pgx-style DSN ("postgres://...") into the

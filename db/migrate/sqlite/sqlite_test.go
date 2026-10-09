@@ -8,6 +8,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
@@ -105,6 +107,30 @@ func TestUpVersionDownForce(t *testing.T) {
 	}
 	if got := tableCount(t, opts, "widgets"); got != 0 {
 		t.Fatalf("widgets still present after Down")
+	}
+}
+
+// TestUpFromAbsoluteDirectory reads migrations from disk through an absolute
+// OS path; on Windows that is a drive path such as C:\Users\... (#643).
+func TestUpFromAbsoluteDirectory(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	for name, file := range twoMigrations() {
+		if err := os.WriteFile(filepath.Join(dir, path.Base(name)), file.Data, 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	opts := tempDB(t)
+	m, err := migratesqlite.New(dbmigrate.Options{Path: dir}, opts, log.New(log.Options{}))
+	if err != nil {
+		t.Fatalf("New(Path: %q): %v", dir, err)
+	}
+	t.Cleanup(func() { _ = m.Close() })
+	if err := m.Up(); err != nil {
+		t.Fatalf("Up: %v", err)
+	}
+	if got := tableCount(t, opts, "widgets", "gadgets"); got != 2 {
+		t.Fatalf("tables after Up = %d, want 2", got)
 	}
 }
 
