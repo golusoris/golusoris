@@ -21,6 +21,7 @@ INPUTS = (
     ".gitea/workflows/security-scan.yml",
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
+    "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
     "scripts/ci/tiny-trainer-locks.sh",
     "template/.devcontainer/devcontainer.json",
@@ -72,6 +73,9 @@ EXPECTED = {
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
     ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
     ("internal/testimages/images.go", "mcr.microsoft.com/azure-storage/azurite", "docker"),
+    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "hashicorp/vault", "docker"),
+    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "openbao/openbao", "docker"),
+    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -152,6 +156,8 @@ EXPECTED_DIGESTS = {
     "clamav/clamav",
     "fsouza/fake-gcs-server",
     "mcr.microsoft.com/azure-storage/azurite",
+    "hashicorp/vault",
+    "openbao/openbao",
     "mcr.microsoft.com/devcontainers/go",
 }
 
