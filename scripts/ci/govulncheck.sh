@@ -7,18 +7,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
-readonly exception_file="$repo_root/.config/govulncheck-exceptions.json"
 readonly max_patterns=512
-readonly allowed_id="GO-2026-6452"
-readonly allowed_module="github.com/xuri/excelize/v2"
-readonly allowed_version="v2.11.0"
-readonly allowed_module_sum="h1:HxaEFl6sRN2+8J5a8HaKq+0M4FsjBGMnWWtjOCPSG88="
-readonly allowed_source_path="cell.go"
-readonly allowed_source_sha256="52dca8b3104978c5a711351e28b5ea9351e5b403896e46cf82e219efb32aa1ac"
-readonly allowed_source_contains="if xlsxSI < 0 || xlsxSI >= len(d.SI) {"
-readonly allowed_advisory="https://github.com/qax-os/excelize/security/advisories/GHSA-fx5j-qcqg-grpf"
-readonly allowed_database_issue_1="https://github.com/golang/vulndb/issues/6510"
-readonly allowed_database_issue_2="https://github.com/golang/vulndb/issues/6532"
 scan_temp_dir=
 
 # shellcheck source=/dev/null
@@ -27,86 +16,6 @@ scan_temp_dir=
 fail() {
 	printf 'govulncheck policy: %s\n' "$1" >&2
 	return 1
-}
-
-validate_exception_config() {
-	[[ -f "$exception_file" ]] || fail "missing exception authority: $exception_file"
-	jq -e \
-		--arg id "$allowed_id" \
-		--arg module "$allowed_module" \
-		--arg version "$allowed_version" \
-		--arg module_sum "$allowed_module_sum" \
-		--arg source_path "$allowed_source_path" \
-		--arg source_sha256 "$allowed_source_sha256" \
-		--arg source_contains "$allowed_source_contains" \
-		--arg advisory "$allowed_advisory" \
-		--arg database_issue_1 "$allowed_database_issue_1" \
-		--arg database_issue_2 "$allowed_database_issue_2" '
-		.schema_version == 1 and
-		.exceptions == [{
-			id: $id,
-			module: $module,
-			version: $version,
-			module_sum: $module_sum,
-			source_path: $source_path,
-			source_sha256: $source_sha256,
-			source_contains: $source_contains,
-			advisory: $advisory,
-			database_issues: [$database_issue_1, $database_issue_2]
-		}]
-	' "$exception_file" >/dev/null || fail "invalid exception authority"
-}
-
-verify_patched_module() {
-	local go_bin="$1"
-	local module_json resolved_dir resolved_path resolved_sum resolved_version source_contains
-	local source_hash source_path source_sha256
-	local exception_module exception_sum exception_version
-
-	exception_module="$(jq -er '.exceptions[0].module' "$exception_file")"
-	exception_version="$(jq -er '.exceptions[0].version' "$exception_file")"
-	exception_sum="$(jq -er '.exceptions[0].module_sum' "$exception_file")"
-	source_path="$(jq -er '.exceptions[0].source_path' "$exception_file")"
-	source_sha256="$(jq -er '.exceptions[0].source_sha256' "$exception_file")"
-	source_contains="$(jq -er '.exceptions[0].source_contains' "$exception_file")"
-
-	if ! module_json="$("$go_bin" list -m -json "$exception_module" 2>/dev/null)"; then
-		fail "exempted module is absent from the active module graph: $exception_module"
-		return
-	fi
-	resolved_path="$(jq -er '.Path' <<<"$module_json")"
-	resolved_version="$(jq -er '.Version' <<<"$module_json")"
-	resolved_sum="$(jq -er '.Sum' <<<"$module_json")"
-	resolved_dir="$(jq -er '.Dir' <<<"$module_json")"
-	if ! jq -e '(.Replace? // null) == null' <<<"$module_json" >/dev/null; then
-		fail "exempted module uses a replacement: $exception_module"
-		return
-	fi
-	if [[ "$resolved_path" != "$exception_module" || "$resolved_version" != "$exception_version" ||
-		"$resolved_sum" != "$exception_sum" ]]; then
-		fail "exempted module identity drifted: ${exception_module}@${resolved_version} ${resolved_sum}"
-		return
-	fi
-	if [[ ! -f "$resolved_dir/$source_path" || -L "$resolved_dir/$source_path" ]]; then
-		fail "exempted module source is absent or a symlink: $source_path"
-		return
-	fi
-	if ! grep -Fq -- "$source_contains" "$resolved_dir/$source_path"; then
-		fail "exempted module lacks the verified patched-source fingerprint"
-		return
-	fi
-	if command -v sha256sum >/dev/null 2>&1; then
-		source_hash="$(sha256sum -- "$resolved_dir/$source_path" | awk '{print $1}')"
-	elif command -v shasum >/dev/null 2>&1; then
-		source_hash="$(shasum -a 256 -- "$resolved_dir/$source_path" | awk '{print $1}')"
-	else
-		fail "sha256sum or shasum is required"
-		return
-	fi
-	if [[ "$source_hash" != "$source_sha256" ]]; then
-		fail "exempted module patched-source fingerprint drifted: $source_path"
-		return
-	fi
 }
 
 print_findings() {
@@ -133,13 +42,8 @@ validate_patterns() {
 }
 
 require_scanner() {
-	local go_bin="$1"
-	local govulncheck_bin="$2"
+	local govulncheck_bin="$1"
 	local version_output
-	if ! command -v "$go_bin" >/dev/null 2>&1; then
-		fail "go executable not found: $go_bin"
-		return
-	fi
 	if ! command -v "$govulncheck_bin" >/dev/null 2>&1; then
 		fail "govulncheck executable not found: $govulncheck_bin"
 		return
@@ -182,6 +86,16 @@ scan_symbol_findings() {
 		fail "scanner emitted invalid JSON or unexpected govulncheck configuration"
 		return
 	fi
+	# The govulncheck protocol requires an OSV id and at least one trace frame on every finding.
+	if ! jq -se '
+		all(.[] | .finding? | select(. != null);
+			((.osv? | type) == "string" and (.osv | length) > 0) and
+			((.trace? | type) == "array" and (.trace | length) > 0) and
+			((.trace[0] | type) == "object"))
+	' "$report_file" >/dev/null; then
+		fail "scanner finding stream is invalid: finding without OSV id or trace"
+		return
+	fi
 	if ! jq -sc '[.[] | .finding? | select(. != null) |
 		select((.trace[0].function? // "") | length > 0)]' \
 		"$report_file" >"$findings_file"; then
@@ -190,44 +104,13 @@ scan_symbol_findings() {
 	fi
 }
 
-# check_exception_findings accepts the findings only when every one is the pinned exception and the
-# resolved module still carries the verified patched source.
-check_exception_findings() {
-	local go_bin="$1"
-	local findings_file="$2"
-	local finding_count="$3"
-	local exception_id exception_module exception_version allowed_count
-	exception_id="$(jq -er '.exceptions[0].id' "$exception_file")"
-	exception_module="$(jq -er '.exceptions[0].module' "$exception_file")"
-	exception_version="$(jq -er '.exceptions[0].version' "$exception_file")"
-	allowed_count="$(jq -er --arg id "$exception_id" --arg module "$exception_module" \
-		--arg version "$exception_version" '
-		[.[] | select(
-			.osv == $id and
-			.trace[0].module == $module and
-			.trace[0].version == $version
-		)] | length
-	' "$findings_file")"
-	if ((allowed_count != finding_count)); then
-		printf 'govulncheck reported %d unexpected reachable finding(s):\n' \
-			"$((finding_count - allowed_count))" >&2
-		print_findings "$findings_file"
-		return 1
-	fi
-	verify_patched_module "$go_bin"
-	printf 'govulncheck: verified patched exception %s for %s@%s (%d trace(s))\n' \
-		"$exception_id" "$exception_module" "$exception_version" "$allowed_count"
-}
-
 main() {
 	validate_patterns "$@"
 	command -v jq >/dev/null || fail "jq is required"
-	validate_exception_config
 
-	local go_bin govulncheck_bin
-	go_bin="${GO_BIN:-go}"
+	local govulncheck_bin
 	govulncheck_bin="${GOVULNCHECK_BIN:-govulncheck}"
-	require_scanner "$go_bin" "$govulncheck_bin"
+	require_scanner "$govulncheck_bin"
 
 	local findings_file finding_count
 	scan_temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-govulncheck.XXXXXX")"
@@ -240,7 +123,9 @@ main() {
 		printf 'govulncheck: no reachable vulnerabilities\n'
 		return
 	fi
-	check_exception_findings "$go_bin" "$findings_file" "$finding_count"
+	printf 'govulncheck reported %d reachable finding(s):\n' "$finding_count" >&2
+	print_findings "$findings_file"
+	return 1
 }
 
 main "$@"

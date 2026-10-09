@@ -38,12 +38,11 @@ sub-modules with their own `go.mod` (`media/*`, `ocr/`, `pdf/`, `hw/*`,
 builds, vets, lints, scans, and race-tests every module; deployment alerts stay
 scoped to apps that import them.
 
-The govulncheck gate parses the scanner's JSON and rejects every unexpected
-reachable finding. Its sole temporary exception is `GO-2026-6452` for
-Excelize `v2.11.0`: the release contains the upstream fix, and the gate binds
-the module checksum plus the patched `cell.go` hash until the Go vulnerability
-database records the fixed version. Policy tests reject scanner, version,
-checksum, source, and exception-authority drift.
+The govulncheck gate (`scripts/ci/govulncheck.sh`) parses the scanner's JSON
+and fails on every reachable finding; it carries no exceptions. Invalid or
+empty scanner output, an unexpected scanner version or configuration, and
+findings without an OSV id or call trace also fail.
+`scripts/ci/govulncheck-policy_test.sh` covers each case.
 
 ## Supply chain
 

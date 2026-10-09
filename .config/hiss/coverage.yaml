@@ -489,9 +489,9 @@ rules:
           .standards.yaml declares
           supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
           checks as configuration. scripts/ci/govulncheck.sh parses pinned govulncheck v1.8.0
-          symbol JSON for every module and rejects every unexpected reachable finding; its one
-          temporary database exception binds an exact module version, checksum, absence of a
-          replacement, patched-source content and full source hash.
+          symbol JSON for every module and rejects every reachable finding with no exception
+          list; it also rejects invalid or unexpected scanner configuration and any finding
+          that lacks an OSV id or trace.
         rationale: >-
           No positive fixture exists because every mechanism above decides a repository-global
           property -- the lockfile, the pinned digest, the signed attestation -- that no single
@@ -502,11 +502,13 @@ rules:
           gap/unpinned-action.yml is a workflow step on a mutable tag; Renovate rewrites that
           shape in .github/workflows/, but nothing FAILS on it, so one introduced by hand
           between Renovate runs merges unreported. scripts/ci/govulncheck-policy_test.sh
-          measures the vulnerability path: a patched exact exception passes, while an unknown
-          reachable finding, version drift, mixed finding set, invalid scanner JSON, scanner
-          failure, source-hash drift and exception-authority drift each fail closed. The real
-          26-module sweep reports only the verified GO-2026-6452 database false positive and
-          otherwise zero reachable vulnerabilities.
+          measures the vulnerability path: a clean stream and imported-but-uncalled module or
+          package findings pass, while every reachable finding (a GO-2026-6452-shaped Excelize
+          trace included), invalid, empty, missing, duplicated or drifted scanner
+          configuration, findings without an OSV id or trace, scanner failure and scanner
+          version drift each fail closed. Mutants of govulncheck.sh that ignore findings,
+          skip the trace or configuration check, or count uncalled findings each fail that
+          test. The real 26-module sweep reports zero reachable vulnerabilities.
   - id: HISS-12
     title: Secret Leak Prevention
     coverage:
