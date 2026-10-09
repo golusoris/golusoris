@@ -101,9 +101,9 @@ Jobs that feed the **CI success** aggregate:
 - `dependency-review` — fails on high/critical advisories or a GPL/AGPL
   licence entering the tree (PR-only; explicitly skipped on other events)
 - `gitleaks` — full-history secret scan
-- `dco` — every human-authored commit in the PR must carry `Signed-off-by:`;
-  Renovate, the release-please bot (`github-actions[bot]`) and non-PR events
-  are explicitly not applicable
+- `dco` — every human-authored commit in the PR must carry `Signed-off-by:`
+  (`scripts/ci/check-dco.sh`); commits authored by a GitHub App bot such as
+  Renovate or release-please are skipped, and non-PR events are not applicable
 - `apidiff` — checks every discovered Go module against the previous root
   release tag; discovery and checker errors fail the aggregate, while detected
   incompatibilities remain informational before v1.0
