@@ -66,7 +66,7 @@ func TestFileToken(t *testing.T) {
 	if _, err := os.Stat(sign.DefaultTokenPath); err == nil {
 		t.Skip("host has a token at the default path")
 	}
-	if _, err := (sign.FileToken{}).Token(ctx); err == nil || !strings.Contains(err.Error(), sign.DefaultTokenPath) {
+	if _, err := (sign.FileToken{}).Token(ctx); err == nil || !strings.Contains(err.Error(), filepath.FromSlash(sign.DefaultTokenPath)) {
 		t.Fatalf("default path err = %v", err)
 	}
 }

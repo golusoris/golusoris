@@ -22,7 +22,7 @@ const (
 	// DefaultTokenPath is where cosign's filesystem provider reads an OIDC
 	// token. Mount a projected service-account token there whose audience is
 	// "sigstore", the audience Fulcio accepts.
-	DefaultTokenPath = "/var/run/sigstore/cosign/oidc-token" //nolint:gosec // G101: a file path, not a credential.
+	DefaultTokenPath = "/var/run/sigstore/cosign/oidc-token" // #nosec G101 -- a file path, not a credential.
 	// DefaultAudience is the token audience Fulcio's public instance accepts.
 	DefaultAudience = "sigstore"
 	// DefaultTokenTimeout bounds one GitHub Actions token request when
@@ -31,7 +31,7 @@ const (
 
 	// GitHub Actions sets both for a job with `permissions: id-token: write`.
 	envGitHubRequestURL   = "ACTIONS_ID_TOKEN_REQUEST_URL"
-	envGitHubRequestToken = "ACTIONS_ID_TOKEN_REQUEST_TOKEN" //nolint:gosec // WHY: environment variable name, not a credential.
+	envGitHubRequestToken = "ACTIONS_ID_TOKEN_REQUEST_TOKEN" // #nosec G101 -- environment variable name, not a credential.
 
 	// maxTokenBytes caps a token file or response; OIDC JWTs are a few KiB.
 	maxTokenBytes = 64 << 10
@@ -105,7 +105,7 @@ func (g GitHubToken) Token(ctx context.Context) (string, error) {
 	defer cancel()
 	transport, release := ownTransport(g.Transport)
 	defer release()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody) //nolint:gosec // G704: URL is the GitHub Actions runtime endpoint from the job environment.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, http.NoBody) // #nosec G704 -- URL is the GitHub Actions runtime endpoint from the job environment.
 	if err != nil {
 		return "", fmt.Errorf("sign: github token request: %w", err)
 	}
@@ -134,7 +134,7 @@ func githubTokenURL(raw, audience string) (string, error) {
 }
 
 func readGitHubToken(c *http.Client, req *http.Request) (_ string, err error) {
-	resp, err := c.Do(req) //nolint:gosec // G704: URL is the GitHub Actions runtime endpoint from the job environment.
+	resp, err := c.Do(req) // #nosec G704 -- URL is the GitHub Actions runtime endpoint from the job environment.
 	if err != nil {
 		return "", fmt.Errorf("sign: github token: %w", err)
 	}
