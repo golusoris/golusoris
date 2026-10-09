@@ -47,6 +47,10 @@ on:
         description: Exact gosec version
         type: string
         default: v2.29.0
+      gosec-xtools-version:
+        description: golang.org/x/tools version gosec is built against (Go 1.27.2 export data needs >= v0.51.0)
+        type: string
+        default: v0.51.0
       govulncheck-version:
         description: Exact govulncheck version
         type: string
@@ -272,9 +276,17 @@ jobs:
       - name: gosec
         env:
           GOSEC_VERSION: ${{ inputs.gosec-version }}
+          GOSEC_XTOOLS_VERSION: ${{ inputs.gosec-xtools-version }}
         run: |
           set -euo pipefail
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          # gosec's own x/tools pin cannot read Go 1.27.2 export data; build it against a newer one.
+          work="$(mktemp -d)"
+          (
+            cd "$work"
+            go mod init golusoris.invalid/gosec-build >/dev/null 2>&1
+            GOFLAGS=-mod=mod go get "github.com/securego/gosec/v2@${GOSEC_VERSION}" "golang.org/x/tools@${GOSEC_XTOOLS_VERSION}"
+            GOFLAGS=-mod=mod go build -o "$(go env GOPATH)/bin/gosec" github.com/securego/gosec/v2/cmd/gosec
+          )
           # One gating scan writes SARIF and logs findings. testdata is excluded
           # because gosec's own walk includes fixtures that `go list ./...` does
           # not; real exceptions belong at the finding with a reason.

@@ -85,7 +85,7 @@ fix-check-all: ## assert go fix would not modernize any Go module
 tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-	$(GO) install github.com/securego/gosec/v2/cmd/gosec@$(GOSEC_VERSION)
+	bash scripts/ci/install-gosec.sh
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	$(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
 	$(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
