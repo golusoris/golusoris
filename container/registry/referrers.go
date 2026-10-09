@@ -24,20 +24,34 @@ func (c *Client) Referrers(ctx context.Context, ref, artifactType string) ([]v1.
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := c.bound(ctx)
-	defer cancel()
 	subject, ok := r.(name.Digest)
 	if !ok {
-		puller, perr := remote.NewPuller(c.remoteOptions()...)
-		if perr != nil {
-			return nil, fmt.Errorf("registry: build puller: %w", perr)
+		if subject, err = c.resolve(ctx, r); err != nil {
+			return nil, err
 		}
-		desc, herr := puller.Head(ctx, r)
-		if herr != nil {
-			return nil, fmt.Errorf("registry: resolve %q: %w", ref, herr)
-		}
-		subject = r.Context().Digest(desc.Digest.String())
 	}
+	return c.referrersOf(ctx, subject, artifactType)
+}
+
+// resolve maps r to its digest with one bounded manifest HEAD.
+func (c *Client) resolve(ctx context.Context, r name.Reference) (name.Digest, error) {
+	ctx, cancel := c.bound(ctx)
+	defer cancel()
+	puller, err := remote.NewPuller(c.remoteOptions()...)
+	if err != nil {
+		return name.Digest{}, fmt.Errorf("registry: build puller: %w", err)
+	}
+	desc, err := puller.Head(ctx, r)
+	if err != nil {
+		return name.Digest{}, fmt.Errorf("registry: resolve %q: %w", r.String(), err)
+	}
+	return r.Context().Digest(desc.Digest.String()), nil
+}
+
+// referrersOf lists the referrers of subject in one bounded call.
+func (c *Client) referrersOf(ctx context.Context, subject name.Digest, artifactType string) ([]v1.Descriptor, error) {
+	ctx, cancel := c.bound(ctx)
+	defer cancel()
 	opts := append(c.remoteOptions(), remote.WithContext(ctx))
 	if artifactType != "" {
 		opts = append(opts, remote.WithFilter("artifactType", artifactType))
@@ -50,8 +64,5 @@ func (c *Client) Referrers(ctx context.Context, ref, artifactType string) ([]v1.
 	if err != nil {
 		return nil, fmt.Errorf("registry: referrers of %q: %w", subject.String(), err)
 	}
-	if len(im.Manifests) > c.limits.referrers {
-		return nil, fmt.Errorf("%w: %d referrers of %s > %d", ErrTooLarge, len(im.Manifests), subject.String(), c.limits.referrers)
-	}
-	return im.Manifests, nil
+	return c.limits.capReferrers(im.Manifests, subject.String())
 }

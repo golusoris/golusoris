@@ -10,7 +10,8 @@ OCI/Docker registry client over
 [google/go-containerregistry](https://github.com/google/go-containerregistry)'s
 `pkg/v1/remote`: parse reference, resolve tag to its content digest, fetch
 manifest, list tags, copy image (or index), push/pull OCI 1.1 artifacts,
-list referrers. One OCI client for fleet; oras-go deliberately not used.
+list referrers, copy image + referrers to and from OCI image-layout dirs.
+One OCI client for fleet; oras-go deliberately not used.
 
 ## API
 
@@ -50,6 +51,30 @@ bundle, err := c.FetchBlob(ctx, "ghcr.io/org/models", man.Layers[0], 1<<20)
 - Cosign bundles: referrer `artifactType`/layer `application/vnd.dev.sigstore.bundle.v0.3+json`; `referrers_test.go` writes cosign's exact layout with raw ggcr and reads it back. In-process signing + verification = `container/registry/sign` submodule (`sign.Image`, `sign.Verify`; own go.mod, sigstore-go); this module stays sigstore-free.
 - Timeouts: `PushArtifact`/`PullArtifact`/`FetchBlob` bounded by `transfer_timeout` (default 10m); `Referrers`/`ArtifactManifest` by `timeout`.
 - Sentinels: `ErrTooLarge`, `ErrDigestMismatch`, `ErrArtifactType`, `ErrInvalidArtifact`.
+
+### OCI image layouts
+
+```go
+l, err := registry.CreateLayout("/data/models/oci", registry.Options{}) // missing/empty dir -> new layout; OpenLayout = existing only
+desc, err := c.CopyToLayout(ctx, "ghcr.io/org/models:v3", l)          // manifest graph + referrers -> layout
+desc, err  = c.CopyFromLayout(ctx, l, desc.Digest, "registry.local/models:v3") // layout -> registry, referrers too
+refs, err := l.Referrers(ctx, desc.Digest, "application/vnd.dev.sigstore.bundle.v0.3+json")
+sig, err  := l.PushArtifact(ctx, registry.Artifact{ArtifactType: t, Subject: &desc}) // manifest = Client.PushArtifact one
+_, man, err := l.ArtifactManifest(ctx, refs[0].Digest)
+bundle, err := l.FetchBlob(ctx, man.Layers[0], 1<<20)
+m, err := l.Manifest(ctx, desc.Digest) // image or index
+```
+
+- Format: OCI image-layout v1.0.0 (`oci-layout`, `index.json`, `blobs/sha256/<hex>`); ggcr `pkg/v1/layout`, oras, skopeo read + write same tree. VMAFx standalone profile + rclone mover carry such dirs.
+- Referrer in layout = manifest blob + `index.json` entry (mediaType, digest, size, artifactType; no `org.opencontainers.image.ref.name`). Same convention as oras-go v2.6.2 `content/oci.Store` (lists untagged manifests). `Layout.Referrers` scans `index.json` manifests for `subject` = digest; result shaped like OCI 1.1 referrers API (artifactType, else config mediaType; manifest annotations).
+- Layout = untrusted input: every manifest + blob read hashed against digest (`ErrDigestMismatch`); digest outside `sha256:<64 hex>` -> `ErrInvalidArtifact` before any path use (no `blobs/` escape); symlinked blob refused (ggcr `Path.Blob`). Manifest media type: own `mediaType` field, else `index.json` entry.
+- Writes: temp file in target dir, fsync, rename only after digest match; `index.json` rewritten same way, one entry per digest; blob already present with matching hash kept. One writer process per layout; `*Layout` serializes own `index.json` updates.
+- Copy (`graph.go`): post-order walk on explicit stack, no recursion (children before index: registries refuse index with missing children); referrers of every manifest in graph (index children too, `cosign sign --recursive`); referrers of referrers stay behind. Only root gets dst tag; children + referrers pushed by digest. Foreign (non-distributable) layers skipped, URL stays. Referrer artifactType read from manifest, not listing (ggcr test registry reports config mediaType).
+- One verified stream (`content.go` `verifier`) for every blob: registry pull, layout read, local file push. Push/pull/copy share `sink` (`remoteSink`, `layoutSink`) + `source` (`remoteSource`, `layoutSource`); `PushArtifact` on Client + Layout = one `limits.pushArtifact`.
+- Caps (copying client `Options`): manifest <= `max_manifest_bytes`; index entries + image layers <= `max_blobs` each; blob <= `max_blob_bytes`; manifests + blobs <= `max_total_bytes` per copy; referrers per manifest <= `max_referrers`; manifests per copy <= 1 + `max_blobs` + `max_referrers`. `CopyFromLayout` also applies layout read caps.
+- Timeouts: copies bounded by `transfer_timeout`; `Layout.Manifest`/`ArtifactManifest`/`Referrers` by `timeout`; `Layout.PushArtifact`/`FetchBlob` by `transfer_timeout`. Local reads check ctx per chunk.
+- Sign + verify inside layout: `container/registry/sign` (`sign.ImageLayout`, `sign.VerifyLayout`).
+- Tests: `layout_test.go` (create/open, push + referrers, caps at + over limit, tampered flip/truncate/extend/symlink/missing, bad digests, round trip registry -> layout -> registry for tag-schema + referrers API + nested index, ggcr `validate.Index` on both ends, corrupt pull leaves no entry, foreign layer). `internal_test.go` `TestVerifier`.
 
 Every network method takes `context.Context` **and** is additionally bounded
 by `Options.Timeout` (default `registry.DefaultTimeout`, 30s) — HISS-02: caller that forgets deadline still gets one.

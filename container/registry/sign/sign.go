@@ -21,6 +21,13 @@
 // each bundle against a [Policy]: a public key or keyless certificate
 // identities, the transparency log, timestamp and SCT requirements `cosign
 // verify` applies, and the subject annotations.
+//
+// [ImageLayout] and [VerifyLayout] do the same inside an OCI image-layout
+// directory ([registry.Layout]), offline unless the signer or policy names a
+// Sigstore service; [registry.Client.CopyFromLayout] and
+// [registry.Client.CopyToLayout] carry the signatures between layout and
+// registry. [GitHubToken] and [FileToken] supply the OIDC identity token for
+// keyless signing in GitHub Actions and Kubernetes.
 package sign
 
 import (
@@ -145,11 +152,36 @@ func Image(ctx context.Context, c *registry.Client, ref string, s Signer, opts O
 	if err := validateSigner(s, opts); err != nil {
 		return Signature{}, err
 	}
-	d, err := parseDigest(ref)
+	d, h, err := parseDigest(ref)
 	if err != nil {
 		return Signature{}, err
 	}
-	subject, err := subjectOf(ctx, c, d)
+	return signIn(ctx, remoteStore{c: c, repo: d.Context()}, h, s, opts)
+}
+
+// ImageLayout signs the manifest digest names in the OCI image layout l and
+// stores the signature in l: the referrer manifest [Image] pushes, listed in
+// l's index.json, so [VerifyLayout] reads it offline and
+// [registry.Client.CopyFromLayout] carries it to a registry where `cosign
+// verify` and [Verify] accept it. No network I/O unless s or opts name
+// Fulcio, Rekor or a timestamp authority. A zero digest is
+// [ErrDigestRequired]; options are checked before any I/O.
+func ImageLayout(ctx context.Context, l *registry.Layout, digest v1.Hash, s Signer, opts Options) (Signature, error) {
+	if l == nil {
+		return Signature{}, fmt.Errorf("%w: nil layout", ErrInvalidOptions)
+	}
+	if err := validateSigner(s, opts); err != nil {
+		return Signature{}, err
+	}
+	if digest == (v1.Hash{}) {
+		return Signature{}, ErrDigestRequired
+	}
+	return signIn(ctx, layoutStore{l: l}, digest, s, opts)
+}
+
+// signIn signs manifest h of st and stores the bundle there as its referrer.
+func signIn(ctx context.Context, st store, h v1.Hash, s Signer, opts Options) (Signature, error) {
+	subject, err := subjectOf(ctx, st, h)
 	if err != nil {
 		return Signature{}, err
 	}
@@ -161,23 +193,27 @@ func Image(ctx context.Context, c *registry.Client, ref string, s Signer, opts O
 	if err != nil {
 		return Signature{}, err
 	}
-	desc, err := push(ctx, c, d.Context(), subject, raw, opts.Clock)
+	desc, err := push(ctx, st, subject, raw, opts.Clock)
 	if err != nil {
 		return Signature{}, err
 	}
 	return Signature{Descriptor: desc, Subject: subject, Bundle: raw}, nil
 }
 
-func parseDigest(ref string) (name.Digest, error) {
+func parseDigest(ref string) (name.Digest, v1.Hash, error) {
 	r, err := registry.ParseReference(ref)
 	if err != nil {
-		return name.Digest{}, fmt.Errorf("sign: %w", err)
+		return name.Digest{}, v1.Hash{}, fmt.Errorf("sign: %w", err)
 	}
 	d, ok := r.(name.Digest)
 	if !ok {
-		return name.Digest{}, fmt.Errorf("%w: %q", ErrDigestRequired, ref)
+		return name.Digest{}, v1.Hash{}, fmt.Errorf("%w: %q", ErrDigestRequired, ref)
 	}
-	return d, nil
+	h, err := v1.NewHash(d.DigestStr())
+	if err != nil {
+		return name.Digest{}, v1.Hash{}, fmt.Errorf("sign: %w", err)
+	}
+	return d, h, nil
 }
 
 func validateSigner(s Signer, o Options) error {
@@ -225,15 +261,15 @@ func checkURL(raw string) error {
 	return nil
 }
 
-// subjectOf fetches the manifest d names; go-containerregistry rejects a body
-// that does not hash to d.
-func subjectOf(ctx context.Context, c *registry.Client, d name.Digest) (v1.Descriptor, error) {
-	m, err := c.Manifest(ctx, d.String())
+// subjectOf reads manifest h; registry and layout reads reject a body that
+// does not hash to h.
+func subjectOf(ctx context.Context, st store, h v1.Hash) (v1.Descriptor, error) {
+	m, err := st.manifest(ctx, h)
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("sign: subject: %w", err)
 	}
-	if m.Digest.String() != d.DigestStr() {
-		return v1.Descriptor{}, fmt.Errorf("%w: subject %s served as %s", registry.ErrDigestMismatch, d.DigestStr(), m.Digest)
+	if m.Digest != h {
+		return v1.Descriptor{}, fmt.Errorf("%w: subject %s served as %s", registry.ErrDigestMismatch, h, m.Digest)
 	}
 	return v1.Descriptor{MediaType: m.MediaType, Digest: m.Digest, Size: m.Size}, nil
 }
@@ -343,11 +379,11 @@ func ownTransport(rt http.RoundTripper) (http.RoundTripper, func()) {
 
 // push stores the bundle the way `cosign sign` does: artifactType and single
 // layer [BundleMediaType], empty config, subject = the signed manifest.
-func push(ctx context.Context, c *registry.Client, repo name.Repository, subject v1.Descriptor, bundle []byte, clk clock.Clock) (v1.Descriptor, error) {
+func push(ctx context.Context, st store, subject v1.Descriptor, bundle []byte, clk clock.Clock) (v1.Descriptor, error) {
 	if clk == nil {
 		clk = clockwork.NewRealClock()
 	}
-	desc, err := c.PushArtifact(ctx, repo.Name(), registry.Artifact{
+	desc, err := st.push(ctx, registry.Artifact{
 		ArtifactType: BundleMediaType,
 		Blobs:        []registry.Blob{{MediaType: BundleMediaType, Reader: bytes.NewReader(bundle)}},
 		Annotations: map[string]string{

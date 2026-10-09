@@ -7,8 +7,6 @@ package registry
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -94,8 +92,8 @@ func (c *Client) FetchBlob(ctx context.Context, repo string, d v1.Descriptor, ma
 	if err != nil {
 		return nil, fmt.Errorf("%w: repository %q: %w", ErrInvalidArtifact, repo, err)
 	}
-	if limit := min(maxBytes, c.limits.blobBytes); d.Size < 0 || d.Size > limit {
-		return nil, fmt.Errorf("%w: blob %s is %d bytes, limit %d", ErrTooLarge, d.Digest, d.Size, limit)
+	if err = c.limits.checkFetch(d, maxBytes); err != nil {
+		return nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.limits.transfer)
 	defer cancel()
@@ -125,19 +123,7 @@ func (c *Client) artifactManifest(ctx context.Context, p *remote.Puller, r name.
 	if err != nil {
 		return v1.Descriptor{}, nil, fmt.Errorf("registry: fetch manifest %q: %w", r.String(), err)
 	}
-	if int64(len(got.Manifest)) > c.limits.manifestBytes {
-		return v1.Descriptor{}, nil, fmt.Errorf("%w: manifest %d bytes > %d", ErrTooLarge, len(got.Manifest), c.limits.manifestBytes)
-	}
-	if sum := sha256.Sum256(got.Manifest); hex.EncodeToString(sum[:]) != got.Digest.Hex {
-		return v1.Descriptor{}, nil, fmt.Errorf("%w: manifest %s", ErrDigestMismatch, r.String())
-	}
-	man, err := v1.ParseManifest(bytes.NewReader(got.Manifest))
-	if err != nil {
-		return v1.Descriptor{}, nil, fmt.Errorf("%w: decode manifest %s: %w", ErrInvalidArtifact, got.Digest, err)
-	}
-	desc := got.Descriptor
-	desc.ArtifactType = artifactTypeOf(man)
-	return desc, man, nil
+	return c.limits.decodeArtifact(got.Descriptor, got.Manifest)
 }
 
 // planPull checks layer count, sizes and file names before any I/O.
@@ -170,67 +156,42 @@ func (c *Client) planPull(man *v1.Manifest) ([]string, error) {
 
 // pullBlob streams one verified layer into dir/fileName via temp + rename.
 func pullBlob(ctx context.Context, p *remote.Puller, repo name.Repository, dir, fileName string, d v1.Descriptor) (err error) {
-	tmp, err := os.CreateTemp(dir, ".registry-pull-*")
+	rc, err := openRemoteBlob(ctx, p, repo, d)
 	if err != nil {
-		return fmt.Errorf("registry: create temp file: %w", err)
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			err = errors.Join(err, discard(tmp))
-		}
-	}()
-	if err = copyBlob(ctx, p, repo, tmp, d); err != nil {
 		return err
 	}
-	if err = tmp.Sync(); err != nil {
-		return fmt.Errorf("registry: sync %s: %w", fileName, err)
+	defer func() { err = errors.Join(err, rc.Close()) }()
+	return commitFile(dir, fileName, rc)
+}
+
+// copyBlob streams blob d of repo into w and fails unless size and sha256
+// digest match exactly.
+func copyBlob(ctx context.Context, p *remote.Puller, repo name.Repository, w io.Writer, d v1.Descriptor) (err error) {
+	rc, err := openRemoteBlob(ctx, p, repo, d)
+	if err != nil {
+		return err
 	}
-	if err = tmp.Close(); err != nil {
-		return fmt.Errorf("registry: close %s: %w", fileName, err)
+	defer func() { err = errors.Join(err, rc.Close()) }()
+	if _, err = io.Copy(w, rc); err != nil {
+		return fmt.Errorf("registry: read blob %s: %w", d.Digest, err)
 	}
-	if err = os.Rename(tmp.Name(), filepath.Join(dir, fileName)); err != nil {
-		return fmt.Errorf("registry: commit %s: %w", fileName, err)
-	}
-	committed = true
 	return nil
 }
 
-// copyBlob streams blob d of repo into w, hashing it and reading at most
-// d.Size+1 bytes, and fails unless size and sha256 digest match exactly.
-func copyBlob(ctx context.Context, p *remote.Puller, repo name.Repository, w io.Writer, d v1.Descriptor) (err error) {
-	if d.Digest.Algorithm != "sha256" {
-		return fmt.Errorf("%w: digest algorithm %q unsupported", ErrInvalidArtifact, d.Digest.Algorithm)
+// openRemoteBlob opens blob d of repo as a verified stream.
+func openRemoteBlob(ctx context.Context, p *remote.Puller, repo name.Repository, d v1.Descriptor) (io.ReadCloser, error) {
+	if err := checkDigest(d.Digest); err != nil {
+		return nil, err
 	}
 	layer, err := p.Layer(ctx, repo.Digest(d.Digest.String()))
 	if err != nil {
-		return fmt.Errorf("registry: blob %s: %w", d.Digest, err)
+		return nil, fmt.Errorf("registry: blob %s: %w", d.Digest, err)
 	}
 	rc, err := layer.Compressed()
 	if err != nil {
-		return fmt.Errorf("registry: fetch blob %s: %w", d.Digest, err)
+		return nil, fmt.Errorf("registry: fetch blob %s: %w", d.Digest, err)
 	}
-	defer func() { err = errors.Join(err, rc.Close()) }()
-	h := sha256.New()
-	n, cerr := io.Copy(io.MultiWriter(w, h), io.LimitReader(rc, d.Size+1))
-	if n != d.Size || hex.EncodeToString(h.Sum(nil)) != d.Digest.Hex {
-		// The registry's own verifier may fail the read at EOF; the local
-		// hash decides, so a short, long or corrupted body is a mismatch.
-		return errors.Join(fmt.Errorf("%w: blob %s (%d of %d bytes)", ErrDigestMismatch, d.Digest, n, d.Size), cerr)
-	}
-	if cerr != nil {
-		return fmt.Errorf("registry: read blob %s: %w", d.Digest, cerr)
-	}
-	return nil
-}
-
-// discard closes (if still open) and removes a temp file.
-func discard(f *os.File) error {
-	cerr := f.Close()
-	if errors.Is(cerr, os.ErrClosed) {
-		cerr = nil
-	}
-	return errors.Join(cerr, os.Remove(f.Name()))
+	return newVerifier(ctx, rc, d), nil
 }
 
 func artifactTypeOf(m *v1.Manifest) string {

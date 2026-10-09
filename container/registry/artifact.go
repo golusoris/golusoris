@@ -20,7 +20,6 @@ import (
 
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"github.com/google/go-containerregistry/pkg/v1/partial"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 )
@@ -145,7 +144,7 @@ func (c *Client) PushArtifact(ctx context.Context, ref string, a Artifact) (v1.D
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
-	if err = c.checkArtifact(a); err != nil {
+	if err = c.limits.checkArtifact(a); err != nil {
 		return v1.Descriptor{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.limits.transfer)
@@ -154,20 +153,22 @@ func (c *Client) PushArtifact(ctx context.Context, ref string, a Artifact) (v1.D
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("registry: build pusher: %w", err)
 	}
-	layers, err := c.uploadBlobs(ctx, pusher, repo, a.Blobs)
+	return c.limits.pushArtifact(ctx, remoteSink{p: pusher, repo: repo, tag: tag}, a)
+}
+
+// pushArtifact stores a's blobs, then its manifest, in dst: a registry
+// repository or an image layout.
+func (lim limits) pushArtifact(ctx context.Context, dst sink, a Artifact) (v1.Descriptor, error) {
+	layers, err := lim.uploadBlobs(ctx, dst, a.Blobs)
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
-	raw, desc, err := c.buildManifest(a, layers)
+	raw, desc, err := lim.buildManifest(a, layers)
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
-	var target name.Reference = repo.Digest(desc.Digest.String())
-	if tag != "" {
-		target = repo.Tag(tag)
-	}
-	if err = pusher.Put(ctx, target, rawManifest{raw: raw, mediaType: desc.MediaType}); err != nil {
-		return v1.Descriptor{}, fmt.Errorf("registry: push manifest %q: %w", target.String(), err)
+	if err = dst.putManifest(ctx, desc, raw, roleRoot); err != nil {
+		return v1.Descriptor{}, err
 	}
 	return desc, nil
 }
@@ -188,27 +189,28 @@ func parsePushTarget(ref string) (name.Repository, string, error) {
 	return repo, "", nil
 }
 
-func (c *Client) checkArtifact(a Artifact) error {
+func (lim limits) checkArtifact(a Artifact) error {
 	if a.ArtifactType == "" || !strings.Contains(a.ArtifactType, "/") {
 		return fmt.Errorf("%w: artifactType %q is not a media type", ErrInvalidArtifact, a.ArtifactType)
 	}
-	if len(a.Blobs) > c.limits.blobs {
-		return fmt.Errorf("%w: %d blobs > %d", ErrTooLarge, len(a.Blobs), c.limits.blobs)
+	if len(a.Blobs) > lim.blobs {
+		return fmt.Errorf("%w: %d blobs > %d", ErrTooLarge, len(a.Blobs), lim.blobs)
 	}
 	return nil
 }
 
-// uploadBlobs uploads every blob (or the empty layer) plus the empty config.
-func (c *Client) uploadBlobs(ctx context.Context, p *remote.Pusher, repo name.Repository, blobs []Blob) ([]v1.Descriptor, error) {
-	if err := uploadEmpty(ctx, p, repo); err != nil {
-		return nil, err
+// uploadBlobs stores every blob (or the empty layer) plus the empty config.
+func (lim limits) uploadBlobs(ctx context.Context, dst sink, blobs []Blob) ([]v1.Descriptor, error) {
+	empty := emptyDescriptor()
+	if err := dst.putBlob(ctx, empty, openBytes(ctx, empty, emptyJSON)); err != nil {
+		return nil, fmt.Errorf("registry: empty blob: %w", err)
 	}
 	if len(blobs) == 0 {
-		return []v1.Descriptor{emptyDescriptor()}, nil
+		return []v1.Descriptor{empty}, nil
 	}
 	layers := make([]v1.Descriptor, 0, len(blobs))
 	for i := range blobs {
-		d, err := c.uploadBlob(ctx, p, repo, blobs[i])
+		d, err := lim.uploadBlob(ctx, dst, blobs[i])
 		if err != nil {
 			return nil, fmt.Errorf("registry: blob %d: %w", i, err)
 		}
@@ -226,54 +228,38 @@ func emptyDescriptor() v1.Descriptor {
 	}
 }
 
-func uploadEmpty(ctx context.Context, p *remote.Pusher, repo name.Repository) error {
-	d := emptyDescriptor()
-	l, err := partial.CompressedToLayer(&bytesLayer{d: d, b: emptyJSON})
-	if err != nil {
-		return fmt.Errorf("registry: empty blob: %w", err)
-	}
-	if err = p.Upload(ctx, repo, l); err != nil {
-		return fmt.Errorf("registry: upload empty blob: %w", err)
-	}
-	return nil
-}
-
-func (c *Client) uploadBlob(ctx context.Context, p *remote.Pusher, repo name.Repository, b Blob) (_ v1.Descriptor, err error) {
-	path, cleanup, err := c.blobFile(b)
+func (lim limits) uploadBlob(ctx context.Context, dst sink, b Blob) (_ v1.Descriptor, err error) {
+	path, cleanup, err := lim.blobFile(b)
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
 	defer func() { err = errors.Join(err, cleanup()) }()
-	d, err := c.describe(path, b)
+	d, err := lim.describe(path, b)
 	if err != nil {
 		return v1.Descriptor{}, err
 	}
-	l, err := partial.CompressedToLayer(&fileLayer{d: d, path: path})
-	if err != nil {
-		return v1.Descriptor{}, fmt.Errorf("registry: layer: %w", err)
-	}
-	if err = p.Upload(ctx, repo, l); err != nil {
-		return v1.Descriptor{}, fmt.Errorf("registry: upload %s: %w", d.Digest, err)
+	if err = dst.putBlob(ctx, d, openFile(ctx, path, d)); err != nil {
+		return v1.Descriptor{}, err
 	}
 	return d, nil
 }
 
 // blobFile returns a local file holding b and the function releasing it.
-func (c *Client) blobFile(b Blob) (string, func() error, error) {
+func (lim limits) blobFile(b Blob) (string, func() error, error) {
 	switch {
 	case b.Path != "" && b.Reader != nil:
 		return "", nil, fmt.Errorf("%w: blob sets both path and reader", ErrInvalidArtifact)
 	case b.Path != "":
 		return filepath.Clean(b.Path), func() error { return nil }, nil
 	case b.Reader != nil:
-		return c.spool(b.Reader)
+		return lim.spool(b.Reader)
 	default:
 		return "", nil, fmt.Errorf("%w: blob needs path or reader", ErrInvalidArtifact)
 	}
 }
 
 // spool copies r into a temp file, refusing more than MaxBlobBytes.
-func (c *Client) spool(r io.Reader) (_ string, _ func() error, err error) {
+func (lim limits) spool(r io.Reader) (_ string, _ func() error, err error) {
 	f, err := os.CreateTemp("", "registry-blob-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("registry: spool blob: %w", err)
@@ -285,30 +271,30 @@ func (c *Client) spool(r io.Reader) (_ string, _ func() error, err error) {
 			err = errors.Join(err, remove())
 		}
 	}()
-	n, err := io.Copy(f, io.LimitReader(r, c.limits.blobBytes+1))
+	n, err := io.Copy(f, io.LimitReader(r, lim.blobBytes+1))
 	if err != nil {
 		return "", nil, fmt.Errorf("registry: spool blob: %w", err)
 	}
-	if n > c.limits.blobBytes {
-		return "", nil, fmt.Errorf("%w: blob > %d bytes", ErrTooLarge, c.limits.blobBytes)
+	if n > lim.blobBytes {
+		return "", nil, fmt.Errorf("%w: blob > %d bytes", ErrTooLarge, lim.blobBytes)
 	}
 	return f.Name(), remove, nil
 }
 
 // describe hashes the blob file and builds its layer descriptor.
-func (c *Client) describe(path string, b Blob) (_ v1.Descriptor, err error) {
+func (lim limits) describe(path string, b Blob) (_ v1.Descriptor, err error) {
 	f, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("registry: open blob: %w", err)
 	}
 	defer func() { err = errors.Join(err, f.Close()) }()
 	h := sha256.New()
-	n, err := io.Copy(h, io.LimitReader(f, c.limits.blobBytes+1))
+	n, err := io.Copy(h, io.LimitReader(f, lim.blobBytes+1))
 	if err != nil {
 		return v1.Descriptor{}, fmt.Errorf("registry: hash blob: %w", err)
 	}
-	if n > c.limits.blobBytes {
-		return v1.Descriptor{}, fmt.Errorf("%w: blob > %d bytes", ErrTooLarge, c.limits.blobBytes)
+	if n > lim.blobBytes {
+		return v1.Descriptor{}, fmt.Errorf("%w: blob > %d bytes", ErrTooLarge, lim.blobBytes)
 	}
 	annotations, err := blobAnnotations(b)
 	if err != nil {
@@ -344,7 +330,7 @@ func blobAnnotations(b Blob) (map[string]string, error) {
 }
 
 // buildManifest serializes the artifact manifest deterministically.
-func (c *Client) buildManifest(a Artifact, layers []v1.Descriptor) ([]byte, v1.Descriptor, error) {
+func (lim limits) buildManifest(a Artifact, layers []v1.Descriptor) ([]byte, v1.Descriptor, error) {
 	m := v1.Manifest{
 		SchemaVersion: 2,
 		MediaType:     types.OCIManifestSchema1,
@@ -358,8 +344,8 @@ func (c *Client) buildManifest(a Artifact, layers []v1.Descriptor) ([]byte, v1.D
 	if err != nil {
 		return nil, v1.Descriptor{}, fmt.Errorf("registry: encode manifest: %w", err)
 	}
-	if int64(len(raw)) > c.limits.manifestBytes {
-		return nil, v1.Descriptor{}, fmt.Errorf("%w: manifest %d bytes > %d", ErrTooLarge, len(raw), c.limits.manifestBytes)
+	if int64(len(raw)) > lim.manifestBytes {
+		return nil, v1.Descriptor{}, fmt.Errorf("%w: manifest %d bytes > %d", ErrTooLarge, len(raw), lim.manifestBytes)
 	}
 	sum := sha256.Sum256(raw)
 	return raw, v1.Descriptor{
@@ -369,35 +355,4 @@ func (c *Client) buildManifest(a Artifact, layers []v1.Descriptor) ([]byte, v1.D
 		ArtifactType: a.ArtifactType,
 		Annotations:  a.Annotations,
 	}, nil
-}
-
-// fileLayer serves a blob from a local file for upload.
-type fileLayer struct {
-	d    v1.Descriptor
-	path string
-}
-
-func (l *fileLayer) Digest() (v1.Hash, error)            { return l.d.Digest, nil }
-func (l *fileLayer) Size() (int64, error)                { return l.d.Size, nil }
-func (l *fileLayer) MediaType() (types.MediaType, error) { return l.d.MediaType, nil }
-
-func (l *fileLayer) Compressed() (io.ReadCloser, error) {
-	f, err := os.Open(filepath.Clean(l.path))
-	if err != nil {
-		return nil, fmt.Errorf("registry: open blob: %w", err)
-	}
-	return f, nil
-}
-
-// bytesLayer serves a small in-memory blob for upload.
-type bytesLayer struct {
-	d v1.Descriptor
-	b []byte
-}
-
-func (l *bytesLayer) Digest() (v1.Hash, error)            { return l.d.Digest, nil }
-func (l *bytesLayer) Size() (int64, error)                { return l.d.Size, nil }
-func (l *bytesLayer) MediaType() (types.MediaType, error) { return l.d.MediaType, nil }
-func (l *bytesLayer) Compressed() (io.ReadCloser, error) {
-	return io.NopCloser(strings.NewReader(string(l.b))), nil
 }

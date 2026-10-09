@@ -28,6 +28,13 @@ tr, _ := root.FetchTrustedRoot() // sigstore-go TUF; or root.NewTrustedRootFromJ
 sigs, err = sign.Verify(ctx, client, ref, sign.Policy{TrustedMaterial: tr,
     Identities: []sign.Identity{{Issuer: "https://token.actions.githubusercontent.com", SubjectRegexp: `https://github\.com/org/app/\.github/workflows/.+`}}})
 // sigs[i] = Signature (referrer, subject, bundle) + Result (*verify.VerificationResult)
+// OCI image layout, offline: digest = v1.Hash of image/index in layout
+l, err := registry.OpenLayout("/data/models/oci", registry.Options{})
+sig, err = sign.ImageLayout(ctx, l, digest, sign.Signer{Key: kmsSigner}, sign.Options{})
+sigs, err = sign.VerifyLayout(ctx, l, digest, sign.Policy{Key: pub, InsecureIgnoreTlog: true})
+// keyless ID token sources = Signer.IDToken
+sign.Signer{IDToken: sign.GitHubToken{}.Token}  // GitHub Actions job, permissions id-token: write
+sign.Signer{IDToken: sign.FileToken{}.Token}    // projected SA token at DefaultTokenPath
 ```
 
 - `Signer{Key}` -> public-key bundle. `Signer{IDToken}` -> keyless. Both -> Fulcio cert over caller key.
@@ -44,6 +51,20 @@ sigs, err = sign.Verify(ctx, client, ref, sign.Policy{TrustedMaterial: tr,
 - Key in `Policy.Key` = only trusted key; keys inside `TrustedMaterial` never substitute.
 - `Verify` reads no clock; sigstore-go `WithCurrentTime` (keyless, tlog off, no TSA) uses wall time.
 
+## Layouts
+
+- `ImageLayout` / `VerifyLayout` = `Image` / `Verify` over `*registry.Layout`. One code path: unexported `store` (`store.go`: `remoteStore`, `layoutStore`) -> same statement, bundle, referrer manifest, policy checks, sentinels. Referrer lands as manifest blob + `index.json` entry (`container/registry/AGENTS.md` layouts).
+- Offline: `ImageLayout` with `Signer{Key}` and no Rekor/TSA = zero network. `VerifyLayout` with key policy + `InsecureIgnoreTlog`, or `TrustedMaterial` held in memory (`root.NewTrustedRootFromJSON`) = zero network.
+- Carry: `registry.Client.CopyFromLayout` pushes image + signature -> `Verify` and `cosign verify` accept; `registry.Client.CopyToLayout` pulls registry signatures (own or cosign v3) -> `VerifyLayout` offline.
+- Zero digest -> `ErrDigestRequired`; malformed digest -> `registry.ErrInvalidArtifact`; tampered subject -> `registry.ErrDigestMismatch`; tampered or foreign bundle -> `ErrNoValidSignature`.
+
+## ID tokens
+
+- `FileToken{Path}`: file re-read per call (kubelet rotates projected tokens), trimmed, <= 64 KiB. Empty `Path` -> `DefaultTokenPath` `/var/run/sigstore/cosign/oidc-token` = cosign v3.1.3 filesystem provider path -> pod specs written for cosign work unchanged. Pod spec sets audience: projected volume source `serviceAccountToken{audience: sigstore, expirationSeconds: 600, path: oidc-token}` mounted at `/var/run/sigstore/cosign`.
+- `GitHubToken{Audience, Timeout, Transport}`: GET `$ACTIONS_ID_TOKEN_REQUEST_URL` + `audience` query (default `DefaultAudience` = `sigstore`), header `Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN`, reply `{"value": jwt}`; cosign v3.1.3 github provider shape. Env read per call. Bounded: `Timeout` (default `DefaultTokenTimeout` 30s; ctx + `http.Client.Timeout`), reply <= 64 KiB, no retry (cosign retries 3x; caller decides). Nil `Transport` -> private `http.DefaultTransport` clone, idle conns closed after.
+- Static token: `func(context.Context) (string, error) { return tok, nil }`; no helper.
+- Tokens + runtime bearer never logged, never inside errors (tests assert). Sentinels: `ErrNoToken` (unset env, blank token), `ErrInvalidOptions` (oversized token, non-http URL).
+
 ## Wire format (cosign v3.1.3 parity)
 
 - Payload: in-toto Statement v1, sole subject `{digest: {sha256: <manifest hex>}, annotations}`, `predicateType` = `PredicateType` (`https://sigstore.dev/cosign/sign/v1`), empty predicate. Same as cosign `signDigestBundle`.
@@ -56,6 +77,8 @@ sigs, err = sign.Verify(ctx, client, ref, sign.Policy{TrustedMaterial: tr,
 
 - `sign_test.go`: ggcr in-process registry (tag-schema fallback + referrers API), ECDSA P-256/P-384, RSA, Ed25519, image + index; bundle verified via sigstore-go with cosign `--key` options; referrer read back via `Client.Referrers`; rejects before I/O; signer, push, subject failures.
 - `services_test.go`: httptest Fulcio (checks bearer token + proof of possession, issues code-signing cert), RFC 3161 TSA (digitorus/timestamp), one-entry Rekor v1 log (rekor canonicalization, real SET + inclusion proof + signed checkpoint). Keyless verified against identity with current time or signed timestamp.
+- `layout_test.go`: `ImageLayout` on ggcr-written layouts (image + index, every key type) -> cosign `--key` checks + `VerifyLayout`; referrer manifest pinned field by field; layout -> registry (tag schema + referrers API) -> `Verify`; registry -> layout -> `VerifyLayout`; tampered bundle, tampered subject, foreign bundle, other key, unsigned; rejects before I/O.
+- `token_test.go`: file rotation, size cap at + over, blank, missing, canceled ctx, default path; fake Actions runtime (bearer, `api-version` kept, audience), 403, 502 with token body, non-JSON, empty, oversized, hung runtime -> deadline; keyless `ImageLayout` via `GitHubToken` + test Fulcio -> offline `VerifyLayout` by identity.
 - `verify_test.go`: `Image` -> `Verify` for key types, image + index, tag-schema + referrers API; keyless identities (exact, regexp, anchoring, any-of); default SCT/tlog requirements; TSA; Rekor log trusted vs foreign; annotations; crafted referrers (other digest, payload edited, other predicate, message signature, bundle v0.2, garbage, non-bundle layer); several referrers one valid; policy/ref rejected before I/O; canceled ctx. Mutation run: 30 mutants of `verify.go`, 29 killed, 1 equivalent (key: `WithCurrentTime` vs `WithNoObserverTimestamps`, key without validity window).
 
 ## Notes

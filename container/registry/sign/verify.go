@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	intoto "github.com/in-toto/attestation/go/v1"
 	"github.com/sigstore/sigstore-go/pkg/bundle"
@@ -115,19 +114,45 @@ func Verify(ctx context.Context, c *registry.Client, ref string, p Policy) ([]Ve
 	if err != nil {
 		return nil, err
 	}
-	d, err := parseDigest(ref)
+	d, h, err := parseDigest(ref)
 	if err != nil {
 		return nil, err
 	}
-	subject, err := subjectOf(ctx, c, d)
+	return chk.verifyIn(ctx, remoteStore{c: c, repo: d.Context()}, h)
+}
+
+// VerifyLayout checks the Sigstore bundles stored in the OCI image layout l
+// as referrers of the manifest digest names, by the rules of [Verify]:
+// signatures [ImageLayout] writes, and registry signatures (own or cosign v3)
+// copied in by [registry.Client.CopyToLayout]. Every manifest and bundle is
+// verified against its digest. No network I/O unless p needs it; a key
+// policy with InsecureIgnoreTlog, or trusted material held in memory, runs
+// offline. A zero digest is [ErrDigestRequired].
+func VerifyLayout(ctx context.Context, l *registry.Layout, digest v1.Hash, p Policy) ([]VerifiedSignature, error) {
+	if l == nil {
+		return nil, fmt.Errorf("%w: nil layout", ErrInvalidOptions)
+	}
+	chk, err := newChecker(p)
 	if err != nil {
 		return nil, err
 	}
-	refs, err := c.Referrers(ctx, d.String(), "")
+	if digest == (v1.Hash{}) {
+		return nil, ErrDigestRequired
+	}
+	return chk.verifyIn(ctx, layoutStore{l: l}, digest)
+}
+
+// verifyIn checks every bundle referrer of manifest h in st.
+func (k *checker) verifyIn(ctx context.Context, st store, h v1.Hash) ([]VerifiedSignature, error) {
+	subject, err := subjectOf(ctx, st, h)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := st.referrers(ctx, h)
 	if err != nil {
 		return nil, fmt.Errorf("sign: list referrers: %w", err)
 	}
-	return chk.referrers(ctx, c, d, subject, refs)
+	return k.referrers(ctx, st, subject, refs)
 }
 
 type checker struct {
@@ -234,7 +259,7 @@ func verifierOptions(p Policy) []verify.VerifierOption {
 
 // referrers verifies each referrer that may hold a bundle; one failing
 // bundle does not hide another that passes.
-func (k *checker) referrers(ctx context.Context, c *registry.Client, d name.Digest, subject v1.Descriptor, refs []v1.Descriptor) ([]VerifiedSignature, error) {
+func (k *checker) referrers(ctx context.Context, st store, subject v1.Descriptor, refs []v1.Descriptor) ([]VerifiedSignature, error) {
 	var (
 		ok      []VerifiedSignature
 		reasons []error
@@ -246,7 +271,7 @@ func (k *checker) referrers(ctx context.Context, c *registry.Client, d name.Dige
 		if !maybeBundle(desc) {
 			continue
 		}
-		sig, err := k.referrer(ctx, c, d.Context(), subject, desc.Digest)
+		sig, err := k.referrer(ctx, st, subject, desc.Digest)
 		if err != nil {
 			reasons = append(reasons, fmt.Errorf("referrer %s: %w", desc.Digest, err))
 			continue
@@ -257,9 +282,9 @@ func (k *checker) referrers(ctx context.Context, c *registry.Client, d name.Dige
 		return ok, nil
 	}
 	if len(reasons) == 0 {
-		return nil, fmt.Errorf("%w: %s has no Sigstore bundle referrers", ErrNoValidSignature, d.DigestStr())
+		return nil, fmt.Errorf("%w: %s has no Sigstore bundle referrers", ErrNoValidSignature, subject.Digest)
 	}
-	return nil, fmt.Errorf("%w: %s: %w", ErrNoValidSignature, d.DigestStr(), errors.Join(reasons...))
+	return nil, fmt.Errorf("%w: %s: %w", ErrNoValidSignature, subject.Digest, errors.Join(reasons...))
 }
 
 // maybeBundle skips referrers whose artifactType rules a bundle out. A
@@ -270,15 +295,15 @@ func maybeBundle(d v1.Descriptor) bool {
 		strings.HasPrefix(d.ArtifactType, bundleMediaTypePrefix)
 }
 
-func (k *checker) referrer(ctx context.Context, c *registry.Client, repo name.Repository, subject v1.Descriptor, h v1.Hash) (VerifiedSignature, error) {
-	desc, man, err := c.ArtifactManifest(ctx, repo.Digest(h.String()).String())
+func (k *checker) referrer(ctx context.Context, st store, subject v1.Descriptor, h v1.Hash) (VerifiedSignature, error) {
+	desc, man, err := st.artifactManifest(ctx, h)
 	if err != nil {
 		return VerifiedSignature{}, fmt.Errorf("sign: fetch referrer: %w", err)
 	}
 	if len(man.Layers) != 1 || !strings.HasPrefix(string(man.Layers[0].MediaType), bundleMediaTypePrefix) {
 		return VerifiedSignature{}, errNotBundle
 	}
-	raw, err := c.FetchBlob(ctx, repo.Name(), man.Layers[0], maxBundleBytes)
+	raw, err := st.fetchBlob(ctx, man.Layers[0], maxBundleBytes)
 	if err != nil {
 		return VerifiedSignature{}, fmt.Errorf("sign: fetch bundle: %w", err)
 	}
