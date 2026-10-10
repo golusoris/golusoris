@@ -105,8 +105,13 @@ func TestConnString_AddsAbsentParameters(t *testing.T) {
 	if cfg.TLSConfig == nil || cfg.TLSConfig.ServerName != "db.example" || cfg.TLSConfig.RootCAs == nil {
 		t.Fatalf("verify-full with the CA file not applied: %+v", cfg.TLSConfig)
 	}
-	if cfg.Password != "" {
-		t.Fatalf("password = %q without a password file", cfg.Password)
+	// Checked on the URL: pgconn fills an absent password from PGPASSWORD, which hosted Windows runners set.
+	u, err := url.Parse(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, set := u.User.Password(); set {
+		t.Fatalf("ConnString added a password without a password file: %q", got)
 	}
 }
 
