@@ -7,7 +7,7 @@ require (
 	github.com/golusoris/golusoris/core v0.10.1
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.3
-	github.com/prometheus/common v0.71.0
+	github.com/prometheus/common v0.72.0
 	github.com/prometheus/prometheus v0.315.0
 	sigs.k8s.io/yaml v1.6.0
 )
