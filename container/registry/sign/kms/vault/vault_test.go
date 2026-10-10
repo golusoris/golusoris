@@ -564,9 +564,10 @@ func padded(t *testing.T, pub crypto.PublicKey, size int) string {
 
 func TestNew_TimeoutBoundary(t *testing.T) {
 	t.Parallel()
-	_, addr := newFake(t)
+	f, addr := newFake(t)
 	cfg := tokenConfig(addr)
 	cfg.Timeout = time.Nanosecond
+	f.stall(t) // a fast fake could answer before a coarse clock (Windows) sees the 1ns deadline pass
 	if _, err := vault.New(t.Context(), cfg); errors.Is(err, vault.ErrInvalidConfig) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("1ns timeout: New error = %v, want a valid config that times out", err)
 	}
@@ -596,16 +597,7 @@ func TestTimeout_BoundsEachCall(t *testing.T) {
 	cfg := tokenConfig(addr)
 	cfg.Timeout = 200 * time.Millisecond
 	s := newSigner(t, cfg)
-	f.set(func(f *fakeTransit) {
-		f.hook = func(_ http.ResponseWriter, r *http.Request) bool {
-			// The server notices the client hanging up only after the body is read.
-			if _, err := io.Copy(io.Discard, r.Body); err != nil {
-				t.Errorf("drain body: %v", err)
-			}
-			<-r.Context().Done()
-			return true
-		}
-	})
+	f.stall(t)
 	done := make(chan error, 1)
 	go func() {
 		_, err := s.Sign(rand.Reader, digestOf(crypto.SHA256, "m"), crypto.SHA256)

@@ -12,7 +12,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"errors"
-	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -557,6 +556,7 @@ func TestNew_TimeoutBoundary(t *testing.T) {
 	f.addKey("k", "P-256", 1)
 	cfg := fakeConfig(rt, "k")
 	cfg.Timeout = time.Nanosecond
+	f.stall(t) // a fast fake could answer before a coarse clock (Windows) sees the 1ns deadline pass
 	if _, err := azure.New(t.Context(), cfg); errors.Is(err, azure.ErrInvalidConfig) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("1ns timeout: New error = %v, want a valid config that times out", err)
 	}
@@ -569,18 +569,7 @@ func TestTimeout_BoundsEachCall(t *testing.T) {
 	cfg := fakeConfig(rt, "k")
 	cfg.Timeout = 300 * time.Millisecond
 	s := newSigner(t, cfg)
-	f.set(func(f *fakeVault) {
-		f.hook = func(_ http.ResponseWriter, r *http.Request) bool {
-			// The server notices the client hanging up only after the body is read.
-			if _, err := io.Copy(io.Discard, r.Body); err != nil {
-				t.Errorf("drain body: %v", err)
-			}
-			f.mu.Unlock()
-			<-r.Context().Done()
-			f.mu.Lock()
-			return true
-		}
-	})
+	f.stall(t)
 	done := make(chan error, 1)
 	go func() {
 		_, err := s.Sign(rand.Reader, digestOf(crypto.SHA256, "m"), crypto.SHA256)
