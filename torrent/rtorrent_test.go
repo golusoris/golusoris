@@ -23,6 +23,9 @@ import (
 // rtMethodRe extracts the methodName from an XML-RPC request body.
 var rtMethodRe = regexp.MustCompile(`<methodName>([^<]+)</methodName>`)
 
+// rtBatchedMethodRe extracts the calls a system.multicall request batches.
+var rtBatchedMethodRe = regexp.MustCompile(`<name>methodName</name><value><string>([^<]+)</string>`)
+
 // rtResp wraps a single value in a methodResponse envelope.
 func rtResp(valueXML string) string {
 	return "<?xml version=\"1.0\"?><methodResponse><params><param><value>" +
@@ -50,15 +53,26 @@ func rtMulticallRow(name string, size int, hash, label, dir string, active, comp
 	return b.String()
 }
 
-// rtMulticallResponse wraps rows in the outer array d.multicall2 returns.
-func rtMulticallResponse(rows ...string) string {
+// rtArray wraps values in an XML-RPC array, the shape of d.multicall2 rows and
+// of every system.multicall result.
+func rtArray(values ...string) string {
 	var b strings.Builder
 	b.WriteString("<array><data>")
-	for _, row := range rows {
-		b.WriteString("<value>" + row + "</value>")
+	for _, value := range values {
+		b.WriteString("<value>" + value + "</value>")
 	}
 	b.WriteString("</data></array>")
-	return rtResp(b.String())
+	return b.String()
+}
+
+// rtBatchValue answers a system.multicall body: one single-value array per batched call, in request order.
+func rtBatchValue(st *rtServerState, body string) string {
+	calls := rtBatchedMethodRe.FindAllStringSubmatch(body, -1)
+	results := make([]string, 0, len(calls))
+	for _, call := range calls {
+		results = append(results, rtArray(rtorrentValueFor(st, call[1])))
+	}
+	return rtArray(results...)
 }
 
 // rtServerState records the last method called and serves canned per-field
@@ -99,40 +113,44 @@ func newRTorrentServer(t *testing.T, st *rtServerState) *httptest.Server {
 			method = m[1]
 		}
 		st.record(method)
+		value := rtorrentValueFor(st, method)
+		if method == "system.multicall" {
+			value = rtBatchValue(st, string(body))
+		}
 		w.Header().Set("Content-Type", "text/xml")
-		_, _ = io.WriteString(w, rtorrentRespFor(st, method))
+		_, _ = io.WriteString(w, rtResp(value))
 	}))
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-// rtorrentRespFor returns the canned XML response for a given method.
-func rtorrentRespFor(st *rtServerState, method string) string {
+// rtorrentValueFor returns the canned XML value for a given method.
+func rtorrentValueFor(st *rtServerState, method string) string {
 	switch method {
 	case "d.multicall2":
-		return rtMulticallResponse(rtMulticallRow(
+		return rtArray(rtMulticallRow(
 			st.name, st.size, st.hash, st.label, "/downloads",
 			1, st.complete, st.ratioMilli, 1700000000, 0, 1700000100,
 		))
 	case "d.name":
 		if st.emptyLookup {
-			return rtResp(rtString(""))
+			return rtString("")
 		}
-		return rtResp(rtString(st.name))
+		return rtString(st.name)
 	case "d.size_bytes", "d.completed_bytes":
-		return rtResp(rtInt(st.size))
+		return rtInt(st.size)
 	case "d.custom1":
-		return rtResp(rtString(st.label))
+		return rtString(st.label)
 	case "d.directory":
-		return rtResp(rtString("/downloads"))
+		return rtString("/downloads")
 	case "d.complete":
-		return rtResp(rtInt(st.complete))
+		return rtInt(st.complete)
 	case "d.ratio":
-		return rtResp(rtInt(st.ratioMilli))
+		return rtInt(st.ratioMilli)
 	case "d.down.rate", "d.up.rate", "throttle.global_down.rate", "throttle.global_up.rate":
-		return rtResp(rtInt(2048))
+		return rtInt(2048)
 	default: // load.start, load.raw_start, d.pause, d.resume, d.erase, d.hash
-		return rtResp(rtInt(0))
+		return rtInt(0)
 	}
 }
 
