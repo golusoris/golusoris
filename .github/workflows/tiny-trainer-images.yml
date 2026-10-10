@@ -32,7 +32,7 @@ concurrency:
 jobs:
   contracts:
     name: Python contracts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -70,7 +70,7 @@ jobs:
 
   build-only:
     name: Build and smoke (${{ matrix.trainer }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -121,7 +121,7 @@ jobs:
     name: Verify publication controls
     if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: contracts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Require explicit remote-control enablement
@@ -139,7 +139,7 @@ jobs:
     name: Publish (${{ matrix.trainer }})
     if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [contracts, publish-policy]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     environment: tiny-trainer-publish
     concurrency:
