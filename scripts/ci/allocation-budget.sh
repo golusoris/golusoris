@@ -6,6 +6,7 @@
 set -euo pipefail
 
 allocation_suite_root=""
+readonly ALLOCATION_RUNS=5
 
 usage() {
 	printf 'usage: %s [--root PATH] | --check-output FILE --budgets FILE\n' \
@@ -38,7 +39,7 @@ budget_manifest_rules() {
 AWK
 }
 
-# benchmark_result_rules prints the awk rules that check each benchmark result against its budget.
+# benchmark_result_rules prints the awk rules that record every run of each budgeted benchmark.
 benchmark_result_rules() {
 	cat <<'AWK'
 		$1 ~ /^Benchmark/ {
@@ -49,12 +50,6 @@ benchmark_result_rules() {
 				failed = 1
 				next
 			}
-			if (++seen[name] > 1) {
-				printf "duplicate benchmark result: %s\n", name > "/dev/stderr"
-				failed = 1
-				next
-			}
-
 			bytes = ""
 			allocs = ""
 			for (i = 2; i <= NF; i++) {
@@ -70,21 +65,26 @@ benchmark_result_rules() {
 				failed = 1
 				next
 			}
-			if (bytes > max_bytes[name]) {
-				printf "%s exceeds byte budget: %d B/op > %d B/op\n",
-					name, bytes, max_bytes[name] > "/dev/stderr"
-				failed = 1
+			seen[name]++
+			run_bytes[name] = run_bytes[name] " " bytes
+			run_allocs[name] = run_allocs[name] " " allocs
+			if (seen[name] == 1 || bytes + 0 < min_bytes[name]) {
+				min_bytes[name] = bytes + 0
 			}
-			if (allocs > max_allocs[name]) {
-				printf "%s exceeds allocation budget: %d allocs/op > %d allocs/op\n",
-					name, allocs, max_allocs[name] > "/dev/stderr"
-				failed = 1
+			if (seen[name] == 1 || allocs + 0 < min_allocs[name]) {
+				min_allocs[name] = allocs + 0
 			}
 		}
 AWK
 }
 
-# budget_coverage_rules prints the awk rules that fail on an empty manifest or a missing result.
+# budget_coverage_rules prints the awk rules that require exactly `runs` results per budget
+# and compare each minimum with it: runtime thread and goroutine bookkeeping only ever adds
+# allocations under host load (#717), while a regression in the measured code raises every run.
+# Resolution: a deterministic regression fails once it exceeds the printed headroom. A fixed
+# count measured at its cap has headroom 0, so one more allocation fails. BenchmarkHashPassword
+# does not resolve single allocations: its goroutines make allocs/op fractional and Go truncates
+# it (floor 58 to 60 against a cap of 70), so it catches 13 or more.
 budget_coverage_rules() {
 	cat <<'AWK'
 		END {
@@ -95,6 +95,29 @@ budget_coverage_rules() {
 			for (name in max_bytes) {
 				if (!(name in seen)) {
 					printf "missing benchmark result: %s\n", name > "/dev/stderr"
+					failed = 1
+					continue
+				}
+				if (seen[name] != runs) {
+					printf "repeat-count mismatch: %s has %d results, want %d\n",
+						name, seen[name], runs > "/dev/stderr"
+					failed = 1
+					continue
+				}
+				printf "%s B/op runs:%s min %d budget %d headroom %d\n",
+					name, run_bytes[name], min_bytes[name], max_bytes[name],
+					max_bytes[name] - min_bytes[name]
+				printf "%s allocs/op runs:%s min %d budget %d headroom %d\n",
+					name, run_allocs[name], min_allocs[name], max_allocs[name],
+					max_allocs[name] - min_allocs[name]
+				if (min_bytes[name] > max_bytes[name]) {
+					printf "%s exceeds byte budget: %d B/op > %d B/op (minimum of %d runs)\n",
+						name, min_bytes[name], max_bytes[name], runs > "/dev/stderr"
+					failed = 1
+				}
+				if (min_allocs[name] > max_allocs[name]) {
+					printf "%s exceeds allocation budget: %d allocs/op > %d allocs/op (minimum of %d runs)\n",
+						name, min_allocs[name], max_allocs[name], runs > "/dev/stderr"
 					failed = 1
 				}
 			}
@@ -117,7 +140,7 @@ check_output() {
 
 	local program
 	program="$(budget_manifest_rules)"$'\n'"$(benchmark_result_rules)"$'\n'"$(budget_coverage_rules)"
-	LC_ALL=C awk "$program" "$budgets" "$output"
+	LC_ALL=C awk -v runs="$ALLOCATION_RUNS" "$program" "$budgets" "$output"
 }
 
 run_benchmarks() {
@@ -127,12 +150,12 @@ run_benchmarks() {
 	(
 		cd "$root/core"
 		"$go_bin" test -run '^$' -bench '^BenchmarkNew(UUID|KSUID)$' \
-			-benchmem -count=1 ./id
+			-benchmem -count="$ALLOCATION_RUNS" ./id
 		"$go_bin" test -run '^$' -bench '^Benchmark(HashPassword|SealOpen)$' \
-			-benchmem -count=1 ./crypto
+			-benchmem -count="$ALLOCATION_RUNS" ./crypto
 		cd "$root"
 		"$go_bin" test -run '^$' -bench '^BenchmarkTypedSetGet$' \
-			-benchmem -count=1 ./cache/memory
+			-benchmem -count="$ALLOCATION_RUNS" ./cache/memory
 	) | tee "$output"
 }
 
