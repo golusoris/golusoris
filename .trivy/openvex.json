@@ -3,7 +3,8 @@
   "@id": "https://github.com/golusoris/golusoris/security/vex/2026-09-19",
   "author": "https://github.com/golusoris",
   "timestamp": "2026-09-19T20:56:00Z",
-  "version": 1,
+  "last_updated": "2026-10-10T17:57:00Z",
+  "version": 2,
   "statements": [
     {
       "vulnerability": {
@@ -17,6 +18,24 @@
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
       "impact_statement": "Golusoris imports no google.golang.org/grpc/xds package and never constructs xds.NewGRPCServer. Govulncheck reports no reachable call path."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-93687",
+        "aliases": [
+          "GHSA-vfj7-8cjw-p6xm"
+        ]
+      },
+      "timestamp": "2026-10-10T17:57:00Z",
+      "products": [
+        {
+          "@id": "pkg:npm/braces@3.0.3"
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "braces enters only through tools/spectral/package-lock.json (@stoplight/spectral-cli > fast-glob > micromatch > braces) and runs only in the OpenAPI lint job, on a path named by the workflow file. The v0.16.1 release archives and their SBOMs contain no npm package. No patched braces release exists.",
+      "status_notes": "expires: 2027-01-10"
     }
   ]
 }
