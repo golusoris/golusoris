@@ -15,6 +15,14 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.3](https://github.com/golusoris/golusoris/compare/v0.16.2...v0.16.3) (2026-10-10)
+
+
+### Bug Fixes
+
+* **deps:** update github.com/xuri/excelize/v2 digest to 066c84b ([#747](https://github.com/golusoris/golusoris/issues/747)) ([2c6cc52](https://github.com/golusoris/golusoris/commit/2c6cc52703602b3788f65aa51e2887057cd0ea13))
+* **deps:** update media, document and protocol libraries as one train ([#802](https://github.com/golusoris/golusoris/issues/802)) ([cd27c5f](https://github.com/golusoris/golusoris/commit/cd27c5f395ee7292fe73987d132d0064567af028))
+
 ## [0.16.2](https://github.com/golusoris/golusoris/compare/v0.16.1...v0.16.2) (2026-10-10)
 
 
