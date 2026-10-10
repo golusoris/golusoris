@@ -6,7 +6,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
 	github.com/digitorus/timestamp v0.0.0-20231217203849-220c5c2851b7
 	github.com/go-openapi/runtime v0.33.0
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261009075203-cfa5a55c0d81
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
 	github.com/golusoris/golusoris/core v0.9.2
 	github.com/google/go-containerregistry v0.22.1
 	github.com/in-toto/attestation v1.2.0
