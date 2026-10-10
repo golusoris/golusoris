@@ -5,7 +5,7 @@ module github.com/golusoris/golusoris/deploy
 go 1.27.2
 
 require (
-	github.com/pulumi/pulumi-aws/sdk/v7 v7.48.0
+	github.com/pulumi/pulumi-aws/sdk/v7 v7.50.0
 	github.com/pulumi/pulumi/sdk/v3 v3.266.0
 )
 
