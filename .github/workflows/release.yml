@@ -45,9 +45,70 @@ jobs:
     with:
       ref: ${{ github.sha }}
 
+  # Unprivileged on purpose: it runs the tagged code and hands only text to the release job.
+  apidiff:
+    name: API compatibility summary
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      section: ${{ steps.section.outputs.section }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      # apidiff type-checks every module, including the cgo ones.
+      - name: Install cgo system libraries
+        timeout-minutes: 10
+        run: bash scripts/ci/install-cgo-libs.sh
+
+      - name: Install apidiff
+        shell: bash
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+
+      - name: Compose the API compatibility section
+        id: section
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          previous="$(scripts/ci/previous-published-release.sh "$RELEASE_TAG")"
+          if [[ -z "$previous" ]]; then
+            scripts/ci/release-notes-breaking.sh api none \
+              --unavailable 'there is no earlier published release to compare with' \
+              >"$RUNNER_TEMP/api-section.md"
+          else
+            # A checker error leaves no coverage line; the section then says the run did not finish.
+            if ! GO_APIDIFF_BIN="$(go env GOPATH)/bin/go-apidiff" \
+              scripts/ci/go-apidiff.sh "$previous" HEAD >"$RUNNER_TEMP/apidiff.txt" 2>&1; then
+              echo '::warning::go-apidiff.sh did not finish; the release notes state that.'
+            fi
+            cat "$RUNNER_TEMP/apidiff.txt"
+            scripts/ci/release-notes-breaking.sh api "$previous" \
+              --apidiff "$RUNNER_TEMP/apidiff.txt" >"$RUNNER_TEMP/api-section.md"
+          fi
+          cat "$RUNNER_TEMP/api-section.md"
+          echo "section=$(base64 -w0 <"$RUNNER_TEMP/api-section.md")" >>"$GITHUB_OUTPUT"
+
   goreleaser:
     name: GoReleaser
-    needs: require-green-ci
+    needs: [require-green-ci, apidiff]
+    # The API summary is informational: when its job fails, the notes say so and the release goes on.
+    if: ${{ !cancelled() && needs.require-green-ci.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -116,14 +177,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.ref_name }}
+          APIDIFF_RESULT: ${{ needs.apidiff.result }}
+          API_SECTION: ${{ needs.apidiff.outputs.section }}
         run: |
           set -euo pipefail
           # Breaking entries count from the last published release: a tag can ship without one (#740).
-          previous="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
-            --exclude-pre-releases --limit 20 --json tagName \
-            --jq "[.[].tagName | select(startswith(\"v\") and . != \"${RELEASE_TAG}\")][0] // \"\"")"
+          previous="$(scripts/ci/previous-published-release.sh "$RELEASE_TAG")"
           scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous" \
-            >"$RUNNER_TEMP/release-header.md"
+            >"$RUNNER_TEMP/breaking.md"
+          if [[ "$APIDIFF_RESULT" == success && -n "$API_SECTION" ]]; then
+            base64 -d <<<"$API_SECTION" >"$RUNNER_TEMP/api.md"
+          else
+            scripts/ci/release-notes-breaking.sh api "${previous:-none}" \
+              --unavailable "the apidiff job ended with ${APIDIFF_RESULT}" >"$RUNNER_TEMP/api.md"
+          fi
+          if [[ -s "$RUNNER_TEMP/breaking.md" ]]; then
+            {
+              cat "$RUNNER_TEMP/breaking.md"
+              printf '\n'
+              cat "$RUNNER_TEMP/api.md"
+            } >"$RUNNER_TEMP/release-header.md"
+          else
+            cp "$RUNNER_TEMP/api.md" "$RUNNER_TEMP/release-header.md"
+          fi
           cat "$RUNNER_TEMP/release-header.md"
 
       - name: Run GoReleaser
@@ -133,7 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           args=(release --config=tools/.goreleaser.yml --clean)
-          # A fix-only release has an empty header and runs exactly as before.
+          # The header always carries the API compatibility section; the guard keeps a failed compose visible.
           if [[ -s "$RUNNER_TEMP/release-header.md" ]]; then
             args+=(--release-header="$RUNNER_TEMP/release-header.md")
           fi

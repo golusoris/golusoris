@@ -48,7 +48,10 @@ A release whose changelog entry has a `BREAKING CHANGES` section needs a
 migration guide at `docs/migrations/v<version>.md`. `make release-notes-check`
 fails the release pull request without it, and the release workflow puts the
 breaking lines, the guide's section headings and a link to the guide at the top
-of the GitHub release notes (`scripts/ci/release-notes-breaking.sh`).
+of the GitHub release notes (`scripts/ci/release-notes-breaking.sh`). Every
+release's notes also carry an "API compatibility" section: the number of modules
+with incompatible changes since the last published release and their `apidiff`
+reports, or the reason when that comparison did not run.
 
 ## Licensing and the Developer Certificate of Origin
 

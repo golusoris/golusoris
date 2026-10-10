@@ -152,6 +152,10 @@ check_root_release() {
 		'      - name: Compose the breaking-change notes header' \
 		'scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous"' \
 		'args+=(--release-header="$RUNNER_TEMP/release-header.md")' \
+		'    needs: [require-green-ci, apidiff]' \
+		"if: \${{ !cancelled() && needs.require-green-ci.result == 'success' }}" \
+		'scripts/ci/release-notes-breaking.sh api "$previous"' \
+		'--unavailable "the apidiff job ended with ${APIDIFF_RESULT}"' \
 		'release-tag-binding:start' \
 		'release-tag-binding:end' \
 		'"$remote_sha" != "$SOURCE_SHA"' \
@@ -161,6 +165,20 @@ check_root_release() {
 			return 1
 		}
 	done
+}
+
+# check_unprivileged_apidiff fails when the job that runs the tagged code can write anything.
+check_unprivileged_apidiff() {
+	local path="$1" block
+	block="$(awk '/^  apidiff:$/ { inside = 1; next } inside && /^  [a-z]/ { exit } inside { print }' "$path")"
+	if [[ -z "$block" ]]; then
+		printf 'root release lacks the apidiff job: %s\n' "$path" >&2
+		return 1
+	fi
+	if ! grep -Fq '      contents: read' <<<"$block" || grep -Eq ':[[:space:]]+write' <<<"$block"; then
+		printf 'apidiff job must hold contents: read and no write permission: %s\n' "$path" >&2
+		return 1
+	fi
 }
 
 check_release_draft_contract() {
@@ -261,6 +279,7 @@ goreleaser_config="$repo_root/tools/.goreleaser.yml"
 
 check_release_go "$release_go"
 check_root_release "$release"
+check_unprivileged_apidiff "$release"
 check_tag_release "$sbom"
 check_rebuild "$rebuild"
 check_verifier "$verifier"

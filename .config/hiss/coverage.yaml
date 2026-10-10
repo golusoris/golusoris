@@ -582,6 +582,8 @@ rules:
           release-notes-check` (CI job "CI policy tests", make verify-all) fails when the newest
           CHANGELOG entry has a BREAKING CHANGES section and docs/migrations/v<version>.md is
           missing, and the release workflow refuses to compose the notes header without it.
+          The release workflow also states the apidiff result in every release's notes (job
+          "API compatibility summary"), or the reason there is none; that is reporting, not a gate.
         rationale: >-
           API coverage itself is complete and fail-closed, but nothing fails a build on a
           detected pre-v1 breaking change or checks that a `Migration:` footer is present --
