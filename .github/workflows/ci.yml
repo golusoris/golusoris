@@ -14,6 +14,10 @@ on:
   merge_group:
   workflow_dispatch:
 
+# Praetor engine that local hooks and Make targets run; .config/lefthook/engine.sh reads this pin.
+env:
+  PRAETOR_REF: 9615f1b907cc7e677a3ae71f6e864deb4450b9de
+
 permissions:
   contents: read
 
