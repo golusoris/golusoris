@@ -15,6 +15,20 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.0](https://github.com/golusoris/golusoris/compare/v0.15.0...v0.16.0) (2026-10-10)
+
+
+### Features
+
+* **registry:** delete artifacts with their referrers and collect layout garbage ([#735](https://github.com/golusoris/golusoris/issues/735)) ([2e147eb](https://github.com/golusoris/golusoris/commit/2e147eb5d4073c0e2ee73e68d086941b9d21fcf6))
+* **registry:** sign with AWS, GCP and Azure KMS keys ([#738](https://github.com/golusoris/golusoris/issues/738)) ([791ec0b](https://github.com/golusoris/golusoris/commit/791ec0b3ec888c96ca878b6fd3bca066f23aadeb))
+
+
+### Bug Fixes
+
+* **ci:** pull Docker Hub images through mirror.gcr.io ([#741](https://github.com/golusoris/golusoris/issues/741)) ([42b8cb6](https://github.com/golusoris/golusoris/commit/42b8cb637f43524d729a88277f07256c06e31ad7))
+* **registry:** withhold a tampered blob's tail before it leaves the verifier ([#742](https://github.com/golusoris/golusoris/issues/742)) ([e44e83d](https://github.com/golusoris/golusoris/commit/e44e83d2a9d86993d575dd3c89bf99e39a22ef79))
+
 ## [0.15.0](https://github.com/golusoris/golusoris/compare/v0.14.0...v0.15.0) (2026-10-09)
 
 
