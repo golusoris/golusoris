@@ -111,11 +111,33 @@ jobs:
           syft version | grep -Eq 'Version:[[:space:]]+1\.52\.0([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
 
+      - name: Compose the breaking-change notes header
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Breaking entries count from the last published release: a tag can ship without one (#740).
+          previous="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts \
+            --exclude-pre-releases --limit 20 --json tagName \
+            --jq "[.[].tagName | select(startswith(\"v\") and . != \"${RELEASE_TAG}\")][0] // \"\"")"
+          scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous" \
+            >"$RUNNER_TEMP/release-header.md"
+          cat "$RUNNER_TEMP/release-header.md"
+
       - name: Run GoReleaser
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: goreleaser release --config=tools/.goreleaser.yml --clean
+        run: |
+          set -euo pipefail
+          args=(release --config=tools/.goreleaser.yml --clean)
+          # A fix-only release has an empty header and runs exactly as before.
+          if [[ -s "$RUNNER_TEMP/release-header.md" ]]; then
+            args+=(--release-header="$RUNNER_TEMP/release-header.md")
+          fi
+          goreleaser "${args[@]}"
 
       - name: Verify the keyless checksum bundle
         shell: bash

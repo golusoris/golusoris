@@ -678,6 +678,8 @@ jobs:
           echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
       - name: Run the CI script policy tests
         run: make ci-policy-test
+      - name: Require a migration guide for a breaking CHANGELOG entry
+        run: make release-notes-check
 
   terraform:
     name: Terraform modules

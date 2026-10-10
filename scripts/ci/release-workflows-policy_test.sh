@@ -149,6 +149,9 @@ check_root_release() {
 	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 	for contract in \
 		'      - name: Publish verified immutable release' \
+		'      - name: Compose the breaking-change notes header' \
+		'scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous"' \
+		'args+=(--release-header="$RUNNER_TEMP/release-header.md")' \
 		'release-tag-binding:start' \
 		'release-tag-binding:end' \
 		'"$remote_sha" != "$SOURCE_SHA"' \
