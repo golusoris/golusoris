@@ -23,6 +23,54 @@ if grep -Fxq 'google.golang.org/grpc/xds' <<<"$root_dependencies"; then
 	exit 1
 fi
 
+# An npm exception is stale once the lock moves off the named version, and fails once its date passed.
+check_npm_exception() {
+	local vex="$1" lock="$2" package="$3" today="$4"
+	local locked product expires
+	locked="$(jq -r --arg key "node_modules/$package" '.packages[$key].version // ""' "$lock")"
+	product="pkg:npm/${package}@${locked}"
+	if ! jq -e --arg id "$product" \
+		'any(.statements[]; any(.products[]; .["@id"] == $id))' "$vex" >/dev/null; then
+		printf 'OpenVEX %s product does not match locked version %s\n' "$package" "${locked:-none}" >&2
+		return 1
+	fi
+	expires="$(jq -r --arg id "$product" \
+		'first(.statements[] | select(any(.products[]; .["@id"] == $id))) | .status_notes // "" | sub("^expires: "; "")' \
+		"$vex")"
+	if [[ ! "$expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+		printf 'OpenVEX %s exception names no expiry date\n' "$package" >&2
+		return 1
+	fi
+	if [[ "$today" > "$expires" ]]; then
+		printf 'OpenVEX %s exception expired on %s\n' "$package" "$expires" >&2
+		return 1
+	fi
+}
+
+expect_refusal() {
+	local want="$1" output
+	shift
+	if output="$(check_npm_exception "$@" 2>&1)"; then
+		printf 'OpenVEX policy accepted a case it must refuse: %s\n' "$want" >&2
+		exit 1
+	fi
+	if [[ "$output" != *"$want"* ]]; then
+		printf 'OpenVEX policy refused for another reason: got "%s", want "%s"\n' "$output" "$want" >&2
+		exit 1
+	fi
+}
+
+readonly vex_file="$repo_root/.trivy/openvex.json"
+readonly spectral_lock_file="$repo_root/tools/spectral/package-lock.json"
+policy_date="$(date -u +%F)"
+readonly policy_date
+check_npm_exception "$vex_file" "$spectral_lock_file" braces "$policy_date"
+expect_refusal 'expired on' "$vex_file" "$spectral_lock_file" braces 9999-12-31
+jq '.packages["node_modules/braces"].version = "3.0.4"' "$spectral_lock_file" >"$fixture_dir/moved-lock.json"
+expect_refusal 'does not match locked version 3.0.4' "$vex_file" "$fixture_dir/moved-lock.json" braces "$policy_date"
+jq 'del(.statements[].status_notes)' "$vex_file" >"$fixture_dir/undated-vex.json"
+expect_refusal 'names no expiry date' "$fixture_dir/undated-vex.json" "$spectral_lock_file" braces "$policy_date"
+
 write_fake() {
 	local body="$1"
 	local dollar='$'
