@@ -48,7 +48,7 @@ jobs:
   # Unprivileged on purpose: it runs the tagged code and hands only text to the release job.
   apidiff:
     name: API compatibility summary
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -109,7 +109,7 @@ jobs:
     needs: [require-green-ci, apidiff]
     # The API summary is informational: when its job fails, the notes say so and the release goes on.
     if: ${{ !cancelled() && needs.require-green-ci.result == 'success' }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     env:
       GOFLAGS: -mod=readonly
