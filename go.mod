@@ -112,8 +112,8 @@ require (
 	github.com/tus/tusd/v2 v2.10.1
 	github.com/twmb/franz-go v1.22.1
 	github.com/ulule/limiter/v3 v3.11.2
-	github.com/uptrace/bun v1.2.18
-	github.com/uptrace/bun/dialect/pgdialect v1.2.18
+	github.com/uptrace/bun v1.3.0
+	github.com/uptrace/bun/dialect/pgdialect v1.3.0
 	github.com/uptrace/bun/extra/bundebug v1.2.18
 	github.com/wneessen/go-mail v0.8.1
 	github.com/xuri/excelize/v2 v2.11.1-0.20261008044812-1cf5392f4fb7
