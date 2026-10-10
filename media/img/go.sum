@@ -56,8 +56,8 @@ github.com/containerd/platforms v0.2.1 h1:zvwtM3rz2YHPQsF2CHYM8+KtB5dvhISiXh5ZpS
 github.com/containerd/platforms v0.2.1/go.mod h1:XHCb+2/hzowdiut9rkudds9bE5yJ7npe7dG/wG+uFPw=
 github.com/cpuguy83/dockercfg v0.3.2 h1:DlJTyZGBDlXqUZ2Dk2Q3xHs/FtnooJJVaad2S9GKorA=
 github.com/cpuguy83/dockercfg v0.3.2/go.mod h1:sugsbF4//dDlL/i+S+rtpIWp+5h0BHJHfjj5/jFyUJc=
-github.com/davidbyttow/govips/v2 v2.18.0 h1:pZRshWVYvewP/TZx3yZ7YeC42WyLXg53tHy5Qt8nT9E=
-github.com/davidbyttow/govips/v2 v2.18.0/go.mod h1:8+nst5zfMoats12PgmmAPh6p5OfjDaXK0BXMFl/vOcM=
+github.com/davidbyttow/govips/v2 v2.19.0 h1:vIFpRodf/jrQlnKetj0BaQ1OwGNR+bR+QIBQ2sgxtxc=
+github.com/davidbyttow/govips/v2 v2.19.0/go.mod h1:QK5liLrx7YaHC7xPcYnm4KaQIYvu9xSGrBt9goXrfgo=
 github.com/distribution/reference v0.6.0 h1:0IXCQ5g4/QMHHkarYzh5l+u8T3t73zM5QvfrDyIgxBk=
 github.com/distribution/reference v0.6.0/go.mod h1:BbU0aIcezP1/5jX/8MP0YiH4SdvB5Y4f/wlDRiLyi3E=
 github.com/docker/go-connections v0.8.1 h1:JibmG5hULs5qXSr/cp/w3Pw5fZuStt4MOHMUExb29/M=

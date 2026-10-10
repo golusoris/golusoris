@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/media/img
 go 1.27.2
 
 require (
-	github.com/davidbyttow/govips/v2 v2.18.0
+	github.com/davidbyttow/govips/v2 v2.19.0
 	github.com/golusoris/golusoris v0.16.1
 	github.com/golusoris/golusoris/core v0.10.1
 	github.com/jonboulle/clockwork v0.5.0
