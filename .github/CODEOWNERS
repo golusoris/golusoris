@@ -1,4 +1,4 @@
-* @lusoris
+# No catch-all row: a path without a row requests no review, so update-bot pull requests notify nobody.
 
 # Security-critical packages — extra attention required
 
@@ -16,14 +16,8 @@
 /idempotency/   @lusoris
 /audit/         @lusoris
 
-# CI / release / dependency pipeline
+# Capability catalogue
 
-/.github/       @lusoris
-/tools/         @lusoris
-/go.mod         @lusoris
-/go.sum         @lusoris
-/core/go.mod    @lusoris
-/core/go.sum    @lusoris
 /capabilities.yaml @lusoris
 
 # Licensing
