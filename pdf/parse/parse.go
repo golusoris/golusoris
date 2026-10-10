@@ -100,7 +100,7 @@ func Info(ctx context.Context, r io.ReadSeeker, fileName string) (Metadata, erro
 		return Metadata{}, err
 	}
 	info, err := api.PDFInfo(
-		guardedReadSeeker{check: ctx.Err, source: r}, fileName, nil, false,
+		ctx, guardedReadSeeker{check: ctx.Err, source: r}, fileName, nil, false,
 		model.NewDefaultConfiguration(),
 	)
 	if err != nil {
@@ -175,7 +175,7 @@ func Validate(ctx context.Context, r io.ReadSeeker) error {
 		return err
 	}
 	if err := api.Validate(
-		guardedReadSeeker{check: ctx.Err, source: r}, model.NewDefaultConfiguration(),
+		ctx, guardedReadSeeker{check: ctx.Err, source: r}, model.NewDefaultConfiguration(), nil,
 	); err != nil {
 		return fmt.Errorf("pdf/parse: validate: %w", err)
 	}
@@ -216,7 +216,7 @@ func Merge(ctx context.Context, inFiles []string, outFile string) error {
 			return openErr
 		}
 		defer func() { err = errors.Join(err, closeFiles(files)) }()
-		return api.MergeRaw(readers, w, false, model.NewDefaultConfiguration())
+		return api.MergeRaw(ctx, readers, w, false, model.NewDefaultConfiguration())
 	}); err != nil {
 		return fmt.Errorf("pdf/parse: merge: %w", err)
 	}
@@ -237,8 +237,8 @@ func Optimize(ctx context.Context, src, dst string) error {
 		}
 		defer func() { err = errors.Join(err, f.Close()) }()
 		return api.Optimize(
-			guardedReadSeeker{check: ctx.Err, source: f}, w,
-			model.NewDefaultConfiguration(),
+			ctx, guardedReadSeeker{check: ctx.Err, source: f}, w,
+			model.NewDefaultConfiguration(), nil,
 		)
 	}); err != nil {
 		return fmt.Errorf("pdf/parse: optimize: %w", err)
