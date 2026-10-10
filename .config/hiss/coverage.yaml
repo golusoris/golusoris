@@ -138,16 +138,22 @@ rules:
         state: partial
         runner: allocation-budget
         mechanism: >-
-          scripts/ci/allocation-budget.sh parses benchmem output against
-          scripts/ci/allocation-budgets.tsv and fails closed on missing, duplicate, malformed,
-          byte-over-budget or allocations-over-budget results. make allocation-budget runs in
-          make verify-all; required hosted allocation jobs run the same wrapper.
+          scripts/ci/allocation-budget.sh runs each budgeted benchmark five times, compares the
+          minimum B/op and allocs/op with scripts/ci/allocation-budgets.tsv and prints every run.
+          It fails closed on missing, malformed, wrong-repeat-count, byte-over-budget or
+          allocations-over-budget results. make allocation-budget runs in make verify-all;
+          required hosted allocation jobs run the same wrapper.
         rationale: >-
           scripts/ci/allocation-budget-policy_test.sh measures positive/over-budget_test.go at
           16 B/op against an 8 B/op cap and requires failure, measures
           negative/within-budget_test.go at 0 B/op and negative/at-budget_test.go at exactly
           8 B/op and requires success, then proves allocation-over, missing-result and
-          duplicate-result failures. The production gate covers five named benchmarks;
+          repeat-count failures (ten and four results against five). One run at 3 allocs/op among
+          four at 1 passes a 1 allocs/op cap, and a probe measured at 2 allocs/op in every run
+          fails it. With 16 allocations planted in HashPassword through a build overlay the
+          production gate measures 76 allocs/op against its 70 cap and fails; that benchmark
+          resolves 13 or more, not single allocations. The production gate covers five named
+          benchmarks;
           gap/hot-path-allocation.go remains undetected because no static rule finds an
           unbenchmarked hot path.
   - id: HISS-04

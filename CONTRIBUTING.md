@@ -88,7 +88,7 @@ Jobs that feed the **CI success** aggregate:
   discovered module
 - `mkdocs` — strict documentation-site build from immutable tooling
 - `allocation-budget` — measured byte/op and allocation/op ceilings for named
-  hot paths
+  hot paths; the minimum of five runs is compared, and every run is printed
 - `shellcheck` and `actionlint` — pinned full-tree shell and workflow lint
 - `terraform` and `kubeconform` — locked Terraform validation plus static and
   rendered Kubernetes schema checks
