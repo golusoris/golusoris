@@ -63,7 +63,7 @@ func New(pool *pgxpool.Pool, opts Options, logger *slog.Logger) (*bun.DB, error)
 	}
 	db := bun.NewDB(stdlib.OpenDBFromPool(pool), pgdialect.New())
 	if opts.Verbose {
-		db.AddQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
+		db = db.WithQueryHook(bundebug.NewQueryHook(bundebug.WithVerbose(true)))
 	}
 	logger.Debug("db/bun: ORM ready", slog.Bool("verbose", opts.Verbose))
 	return db, nil

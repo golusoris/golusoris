@@ -73,6 +73,8 @@ func (k *keyPair) GetKeyAlgorithm() string {
 		return "RSA"
 	case signature.ED25519:
 		return "ED25519"
+	case signature.MLDSA:
+		return "" // sigstore-go v1.3.0 names no ML-DSA family for Fulcio requests
 	default:
 		return ""
 	}
