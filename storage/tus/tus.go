@@ -41,6 +41,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 
@@ -89,6 +90,30 @@ type Handler struct {
 
 	drainCancel context.CancelFunc
 	drainDone   chan struct{}
+	drainStep   atomic.Pointer[drainStep]
+}
+
+// drainStep is what the completion drain is doing, so a stop that times out
+// can name the call it is blocked in.
+type drainStep struct {
+	op string
+	id string
+}
+
+func (h *Handler) setDrainStep(op, id string) { h.drainStep.Store(&drainStep{op: op, id: id}) }
+
+func (h *Handler) currentDrainStep() drainStep {
+	if step := h.drainStep.Load(); step != nil {
+		return *step
+	}
+	return drainStep{op: "not started"}
+}
+
+func (s drainStep) String() string {
+	if s.id == "" {
+		return s.op
+	}
+	return s.op + " " + s.id
 }
 
 // BasePath returns the URL prefix the handler routes under (e.g. "/files/").
@@ -247,17 +272,17 @@ func (h *Handler) buildTusd() error {
 // wireLifecycle starts the bounded completion-drain goroutine on OnStart and
 // cancels + waits for it on OnStop, also sweeping expired scratch best-effort.
 func (h *Handler) wireLifecycle(lc fx.Lifecycle) {
+	// The drain goroutine outlives OnStart; OnStop cancels and joins it.
+	ctx, cancel := context.WithCancel(context.Background())
+	h.drainCancel = cancel
 	lc.Append(fx.Hook{
-		OnStart: func(startCtx context.Context) error {
-			// Derive from startCtx so values propagate but detach its cancel —
-			// the drain goroutine outlives OnStart and is stopped via OnStop.
-			ctx, cancel := context.WithCancel(context.WithoutCancel(startCtx))
-			h.drainCancel = cancel
+		OnStart: func(context.Context) error {
 			go h.drainCompletions(ctx)
 			return nil
 		},
-		OnStop: func(ctx context.Context) error {
-			return h.stop(ctx)
+		OnStop: func(stopCtx context.Context) error {
+			cancel()
+			return h.stop(stopCtx)
 		},
 	})
 }
@@ -291,6 +316,7 @@ func (h *Handler) drainCompletions(ctx context.Context) {
 	h.retryCompletions(ctx)
 	ch := h.unrouted.CompleteUploads
 	for ctx.Err() == nil {
+		h.setDrainStep("wait for work", "")
 		select {
 		case <-ctx.Done():
 			return
@@ -303,12 +329,14 @@ func (h *Handler) drainCompletions(ctx context.Context) {
 			h.attemptCompletion(ctx, ev.Upload.ID)
 		case <-ticker.Chan():
 			h.retryCompletions(ctx)
+			h.setDrainStep("sweep expired uploads", "")
 			h.sweepExpired(ctx)
 		}
 	}
 }
 
 func (h *Handler) retryCompletions(ctx context.Context) {
+	h.setDrainStep("list completions", "")
 	ids, err := h.scratch.CompletionIDs(ctx, maxMaintenanceBatch)
 	if err != nil {
 		h.log.WarnContext(ctx, "tus: list durable completions failed", "err", err)
@@ -320,6 +348,7 @@ func (h *Handler) retryCompletions(ctx context.Context) {
 }
 
 func (h *Handler) attemptCompletion(ctx context.Context, id string) {
+	h.setDrainStep("complete upload", id)
 	unlock, ok := h.tryMaintenanceLock(id)
 	if !ok {
 		return
@@ -401,8 +430,10 @@ func (h *Handler) waitDrain(ctx context.Context) error {
 	case <-h.drainDone:
 		return nil
 	case <-ctx.Done():
-		h.log.WarnContext(ctx, "tus: drain did not stop before shutdown deadline")
-		return fmt.Errorf("tus: wait for completion drain: %w", ctx.Err())
+		step := h.currentDrainStep()
+		h.log.WarnContext(ctx, "tus: drain did not stop before shutdown deadline",
+			"step", step.op, "upload_id", step.id)
+		return fmt.Errorf("tus: wait for completion drain during %s: %w", step, ctx.Err())
 	}
 }
 

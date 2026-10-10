@@ -59,6 +59,8 @@ between applications.
 completion receipts. Sweeps expired scratch each `expiry_sweep_interval`.
 `OnStop`: cancel, join, final best-effort expiry sweep. Join timeout returns
 context error and leaves scratch open; active callback retains shared state.
+Join timeout error + warn log name worker step (`list completions`, `complete upload <id>`,
+`sweep expired uploads`, `wait for work`): stuck call visible in CI output (#736).
 
 ## Notes
 
