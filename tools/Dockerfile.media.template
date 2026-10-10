@@ -2,15 +2,15 @@
 # Uses Chainguard wolfi-base which lets us apk add system packages.
 
 # ---- Build stage ----
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1d95114038f76513a9ace6fca107d5582b08c65981f81f61cb56bf7fd2ef216d AS builder
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1c451d46a0d5c4e9f2b38e0e8d3e299564a1aa95c21973efcc1980a9d1d2e73e AS builder
 
 RUN apk add --no-cache \
-    go-1.27=1.27.1-r0 \
-    build-base=1-r9 \
-    pkgconf=3.0.7-r0 \
-    ffmpeg-9.0-dev=9.0.2-r0 \
-    libvips-dev=8.18.6-r1 \
-    glycin-2=2.2.1-r0 \
+    go-1.27=1.27.2-r0 \
+    build-base=1-r10 \
+    pkgconf=3.0.8-r0 \
+    ffmpeg-9.0-dev=9.0.2-r3 \
+    libvips-dev=8.18.7-r1 \
+    glycin-2=2.2.2-r0 \
     opencv-dev=4.13.0-r4 \
     tesseract-dev=5.5.2-r8
 
@@ -32,12 +32,12 @@ RUN CGO_ENABLED=1 go build \
     -o /out/app ./cmd/app
 
 # ---- Runtime stage ----
-FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1d95114038f76513a9ace6fca107d5582b08c65981f81f61cb56bf7fd2ef216d
+FROM cgr.dev/chainguard/wolfi-base:latest@sha256:1c451d46a0d5c4e9f2b38e0e8d3e299564a1aa95c21973efcc1980a9d1d2e73e
 
 RUN apk add --no-cache \
-    ffmpeg-9.0=9.0.2-r0 \
-    libvips=8.18.6-r1 \
-    glycin-2=2.2.1-r0 \
+    ffmpeg-9.0=9.0.2-r3 \
+    libvips=8.18.7-r1 \
+    glycin-2=2.2.2-r0 \
     opencv=4.13.0-r4 \
     tesseract=5.5.2-r8 \
     tesseract-eng=5.5.2-r8
