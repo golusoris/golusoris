@@ -33,7 +33,7 @@ fx.New(golusoris.Core, sqlite.Module, fx.Invoke(func(db *sql.DB) { … }))
 
 | Symbol | Purpose |
 | --- | --- |
-| `Open(ctx, Options, logger)` | open + ping; caller owns `*sql.DB` |
+| `Open(ctx, Options, logger)` | open + ping; caller owns `*sql.DB`; failure names step (`connect` = file open + DSN pragmas, `ping`) + disk state (database file size or absent, wal present or absent), #778 |
 | `Options.DSN()` | `file:…?_pragma=…` connection string |
 | `Module` | provides `*sql.DB`, closes on fx stop |
 | `ErrMissingPath` | no path configured |
