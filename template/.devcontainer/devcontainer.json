@@ -23,7 +23,7 @@
       "nvmInstallPath": "/usr/local/share/nvm",
       "npmVersion": "12.0.2",
       "pnpmVersion": "12.4.2",
-      "nvmVersion": "0.40.7",
+      "nvmVersion": "0.40.8",
       "installYarnUsingApt": false
     }
   },
