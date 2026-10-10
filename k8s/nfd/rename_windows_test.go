@@ -9,6 +9,7 @@ package nfd
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,18 +45,18 @@ func TestWriteFeatureFile_waitsForOpenReader(t *testing.T) {
 	require.NoError(t, WriteFeatureFile(dir, "f", map[string]string{"example.com/a": "old"}))
 	reader, err := os.Open(path)
 	require.NoError(t, err)
-	release := time.AfterFunc(50*time.Millisecond, func() { _ = reader.Close() })
-	t.Cleanup(func() {
-		if release.Stop() {
-			_ = reader.Close()
-		}
-	})
+	var closeOnce sync.Once
+	closeReader := func() { closeOnce.Do(func() { _ = reader.Close() }) }
+	t.Cleanup(closeReader)
 
 	other := filepath.Join(dir, "g")
 	require.NoError(t, os.WriteFile(other, nil, 0o600))
 	err = os.Rename(other, path)
 	require.True(t, transientRenameError(err), "a plain rename over the open file should be denied, got %v", err)
 
+	// Release only now: a timer started before the rename can fire first on a slow runner.
+	release := time.AfterFunc(50*time.Millisecond, closeReader)
+	t.Cleanup(func() { release.Stop() })
 	require.NoError(t, WriteFeatureFile(dir, "f", map[string]string{"example.com/a": "new"}))
 	got, err := os.ReadFile(path)
 	require.NoError(t, err)
