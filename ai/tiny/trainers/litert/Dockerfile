@@ -1,9 +1,9 @@
-# syntax=docker/dockerfile:1.20@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
+# syntax=docker/dockerfile:1.28@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-ARG PYTHON_IMAGE="python:3.11.16-slim-bookworm@sha256:4b4c524dc3dce996864e030c7bd9c6b0e517597189fee48f48e05b499442444b"
+ARG PYTHON_IMAGE="python:3.14.8-slim-bookworm@sha256:a66d3a463d0be3cc537c269b0d3418746dda512417a975559a0eaa8a6406baaf"
 FROM ${PYTHON_IMAGE}
 
 ARG VCS_REF="unknown"
