@@ -14,7 +14,7 @@ import (
 
 const (
 	// Postgres is the default PostgreSQL integration-test image.
-	Postgres = "postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995"
+	Postgres = "postgres:17-alpine@sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
 	Timescale = "timescale/timescaledb:2.30.0-pg17@sha256:3113d12b78392c064aa7475caf7a52b447b29ddd4f9bfd23526733fcb03e3459"
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
