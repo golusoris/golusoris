@@ -21,7 +21,7 @@
       "version": "24.21.0",
       "nodeGypDependencies": true,
       "nvmInstallPath": "/usr/local/share/nvm",
-      "npmVersion": "12.0.2",
+      "npmVersion": "12.2.0",
       "pnpmVersion": "12.10.1",
       "nvmVersion": "0.40.8",
       "installYarnUsingApt": false
