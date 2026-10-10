@@ -577,13 +577,21 @@ rules:
           (Conventional Commits)" and consumed by release-please for the version bump. The CI
           job "API compatibility (apidiff)" executes against every discovered Go module and
           feeds the required aggregate gate; discovery or checker errors fail closed. Detected
-          incompatibilities remain `::warning::` findings until v1.0.
+          incompatibilities remain `::warning::` findings until v1.0. For a break that is
+          declared, scripts/ci/release-notes-breaking.sh decides one thing: `make
+          release-notes-check` (CI job "CI policy tests", make verify-all) fails when the newest
+          CHANGELOG entry has a BREAKING CHANGES section and docs/migrations/v<version>.md is
+          missing, and the release workflow refuses to compose the notes header without it.
         rationale: >-
           API coverage itself is complete and fail-closed, but nothing fails a build on a
           detected pre-v1 breaking change or checks that a `Migration:` footer is present --
           scripts/hooks/commit-msg.sh checks only the Conventional-Commits subject and DCO
           trailer. gap/removed-exported-func.go and gap/narrowed-exported-signature.go therefore
-          remain honest gaps: both can land with an ordinary `fix(api):` subject.
+          remain honest gaps: both can land with an ordinary `fix(api):` subject, and an
+          undeclared break produces no BREAKING CHANGES section for the guide check to see.
+          scripts/ci/release-notes-breaking_test.sh measures the declared case: a breaking
+          newest entry without its guide, or with a guide named for a neighbouring version,
+          fails, and the same entry with its guide passes.
   - id: HISS-15
     title: 3D Test Discipline
     coverage:

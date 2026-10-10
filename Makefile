@@ -110,6 +110,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test ## verify requi
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
 	@bash scripts/ci/release-workflows-policy_test.sh
+	@bash scripts/ci/release-notes-breaking_test.sh
 	@bash scripts/ci/generation-policy_test.sh
 	@bash scripts/ci/helm-chart_test.sh
 	@bash scripts/ci/trivy-policy_test.sh
@@ -128,6 +129,10 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test ## verify requi
 	@bash scripts/ci/c-quality-policy_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
+
+.PHONY: release-notes-check
+release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
+	@bash scripts/ci/release-notes-breaking.sh check
 
 .PHONY: python-lint
 python-lint: ## lint every repository-owned Python source with immutable Ruff
@@ -250,7 +255,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

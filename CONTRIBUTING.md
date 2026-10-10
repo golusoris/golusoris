@@ -42,8 +42,13 @@ Migration:
 The `Migration:` footer is **required by project policy** for breaking
 changes and is checked during review. Before v1.0, the `apidiff` job reports
 compatibility changes without blocking the merge. Release Please builds the
-changelog from Conventional Commit messages; maintainers add a migration guide
-when an upgrade needs more than the commit's before/after example.
+changelog from Conventional Commit messages.
+
+A release whose changelog entry has a `BREAKING CHANGES` section needs a
+migration guide at `docs/migrations/v<version>.md`. `make release-notes-check`
+fails the release pull request without it, and the release workflow puts the
+breaking lines, the guide's section headings and a link to the guide at the top
+of the GitHub release notes (`scripts/ci/release-notes-breaking.sh`).
 
 ## Licensing and the Developer Certificate of Origin
 
