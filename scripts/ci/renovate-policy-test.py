@@ -496,6 +496,54 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     return True
 
 
+MINIMUM_RELEASE_AGE = "3 days"
+
+
+def minimum_age_valid(config: dict[str, object]) -> bool:
+    """Require the three-day release age and refuse any setting that weakens it."""
+    if config.get("minimumReleaseAge") != MINIMUM_RELEASE_AGE:
+        return False
+    if config.get("internalChecksFilter", "strict") != "strict":
+        return False
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    return not any(isinstance(rule, dict) and "minimumReleaseAge" in rule for rule in rules)
+
+
+def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Build the configurations the age check must refuse."""
+    removed = json.loads(json.dumps(config))
+    removed.pop("minimumReleaseAge", None)
+    shortened = json.loads(json.dumps(config))
+    shortened["minimumReleaseAge"] = "1 day"
+    unfiltered = json.loads(json.dumps(config))
+    unfiltered["internalChecksFilter"] = "none"
+    overridden = json.loads(json.dumps(config))
+    overridden["packageRules"].append({"matchManagers": ["gomod"], "minimumReleaseAge": "0 days"})
+    return {
+        "age removed": removed,
+        "age shortened": shortened,
+        "pending versions not filtered": unfiltered,
+        "package rule overrides the age": overridden,
+    }
+
+
+def test_minimum_age(config: dict[str, object]) -> bool:
+    """Report a missing age rule and prove the check refuses each way to weaken it."""
+    if not minimum_age_valid(config):
+        print(
+            "renovate.json must set minimumReleaseAge to 3 days, keep the strict filter and override it nowhere",
+            file=sys.stderr,
+        )
+        return False
+    for label, mutated in minimum_age_mutants(config).items():
+        if minimum_age_valid(mutated):
+            print(f"minimum release age negative control was accepted: {label}", file=sys.stderr)
+            return False
+    return True
+
+
 def main() -> int:
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
@@ -510,6 +558,7 @@ def main() -> int:
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
+        test_minimum_age(config),
     )
     if not all(checks):
         return 1
