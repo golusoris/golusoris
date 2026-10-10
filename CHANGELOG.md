@@ -15,6 +15,20 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.2](https://github.com/golusoris/golusoris/compare/v0.16.1...v0.16.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **db/migrate:** apply db.ssl.* and db.password_file to the migrator ([#788](https://github.com/golusoris/golusoris/issues/788)) ([d7f87f2](https://github.com/golusoris/golusoris/commit/d7f87f256dc239a5ef251440e53371733dfa7b87))
+* **db/sqlite:** name the failed step and the disk state when the open fails ([#796](https://github.com/golusoris/golusoris/issues/796)) ([18452a6](https://github.com/golusoris/golusoris/commit/18452a6bcd01dcd600b1005c6aebf15c6bc6aa69))
+* **deps:** update cloud, observability, data and registry libraries as one train ([#792](https://github.com/golusoris/golusoris/issues/792)) ([1284fa3](https://github.com/golusoris/golusoris/commit/1284fa32ec373194605e0736447ce2349c569562))
+* **deps:** update module github.com/davidbyttow/govips/v2 to v2.19.0 ([#599](https://github.com/golusoris/golusoris/issues/599)) ([bbfdec7](https://github.com/golusoris/golusoris/commit/bbfdec7caa8ed8ec44c09d5ba0dda26f362999ff))
+* **deps:** update module github.com/ethereum/go-ethereum to v1.17.8 ([#749](https://github.com/golusoris/golusoris/issues/749)) ([47bd9c2](https://github.com/golusoris/golusoris/commit/47bd9c26b159967413ba60ec2f2f2eb4561cb310))
+* **deps:** update module github.com/golusoris/golusoris to v0.16.1 ([#758](https://github.com/golusoris/golusoris/issues/758)) ([9020016](https://github.com/golusoris/golusoris/commit/902001658b3fe0d9e92def28e23fa50d3477bec8))
+* **deps:** update module sigs.k8s.io/controller-runtime to v0.25.2 ([#594](https://github.com/golusoris/golusoris/issues/594)) ([765a7f9](https://github.com/golusoris/golusoris/commit/765a7f95e3f880c52484a63201a82cb72d39ddd5))
+* **deps:** update the golang.org/x modules as one train ([#789](https://github.com/golusoris/golusoris/issues/789)) ([610e4ab](https://github.com/golusoris/golusoris/commit/610e4ab476d3aaea166681d995c3fb70007b20bb))
+
 ## [0.16.1](https://github.com/golusoris/golusoris/compare/v0.16.0...v0.16.1) (2026-10-10)
 
 
