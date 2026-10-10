@@ -177,6 +177,47 @@ func TestVerifier(t *testing.T) {
 	}
 }
 
+// TestVerifier_WithholdsTamperedTail reads exactly the descriptor size, as an
+// upload with a known Content-Length does, and never reads EOF: a corrupt or
+// overlong stream must still fail before its last bytes are handed out.
+func TestVerifier_WithholdsTamperedTail(t *testing.T) {
+	t.Parallel()
+	body := []byte(strings.Repeat("layer", 1000))
+	h, size, err := v1.SHA256(bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := v1.Descriptor{Digest: h, Size: size}
+	readSize := func(b []byte, chunk int) (int, error) {
+		v := newVerifier(t.Context(), io.NopCloser(bytes.NewReader(b)), d)
+		buf := make([]byte, size)
+		total := 0
+		for total < len(buf) {
+			n, rerr := v.Read(buf[total:min(total+chunk, len(buf))])
+			total += n
+			if rerr != nil {
+				return total, rerr
+			}
+		}
+		return total, nil
+	}
+	for _, chunk := range []int{int(size), 512, 1} {
+		if n, rerr := readSize(body, chunk); rerr != nil || int64(n) != size {
+			t.Fatalf("chunk %d: intact = %d bytes, %v", chunk, n, rerr)
+		}
+		corrupt := bytes.Clone(body)
+		corrupt[len(corrupt)-1] ^= 1
+		n, rerr := readSize(corrupt, chunk)
+		if !errors.Is(rerr, ErrDigestMismatch) || int64(n) >= size {
+			t.Fatalf("chunk %d: corrupt = %d of %d bytes, %v; want the tail withheld and ErrDigestMismatch", chunk, n, size, rerr)
+		}
+	}
+	v := newVerifier(t.Context(), io.NopCloser(bytes.NewReader(append(bytes.Clone(body), 'x'))), d)
+	if n, rerr := io.Copy(io.Discard, v); !errors.Is(rerr, ErrDigestMismatch) || n > size {
+		t.Fatalf("long stream = %d bytes, %v; want at most %d bytes and ErrDigestMismatch", n, rerr, size)
+	}
+}
+
 // TestLayoutWalkBounds covers the manifest budget of a reachability walk and
 // a sweep canceled before it removes anything.
 func TestLayoutWalkBounds(t *testing.T) {

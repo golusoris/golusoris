@@ -42,12 +42,20 @@ func (v *verifier) Read(p []byte) (int, error) {
 		return 0, fmt.Errorf("registry: read blob %s: %w", v.d.Digest, err)
 	}
 	n, err := v.r.Read(p)
+	// A reader of exactly d.Size bytes (an upload with Content-Length) never
+	// reads EOF, so bytes past the size and a full-size mismatch are withheld.
+	if v.n+int64(n) > v.d.Size {
+		return 0, v.mismatch(nil)
+	}
 	v.h.Write(p[:n])
 	v.n += int64(n)
+	complete := v.n == v.d.Size && hex.EncodeToString(v.h.Sum(nil)) == v.d.Digest.Hex
 	switch {
+	case v.n == v.d.Size && !complete:
+		return 0, v.mismatch(err)
 	case err == nil:
 		return n, nil
-	case v.n == v.d.Size && hex.EncodeToString(v.h.Sum(nil)) == v.d.Digest.Hex:
+	case complete:
 		return n, err //nolint:wrapcheck // WHY: io.EOF must reach io.Copy unwrapped; other errors are wrapped by the copy site.
 	default:
 		// The source's own verifier may fail the read at EOF; the local hash
