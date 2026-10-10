@@ -8,11 +8,16 @@
 #   notes <tag> [<previous>] prints the release-notes block for <tag>: every breaking entry after the
 #                            previous published release (every entry when none is named), each with its
 #                            guide; prints nothing when no entry in that range is breaking
+#   api <previous> --apidiff FILE | --unavailable REASON
+#                            prints the "API compatibility" section from the output of go-apidiff.sh,
+#                            or the reason there is none; the section is never empty
 
 set -euo pipefail
 
 usage() {
 	printf 'usage: %s [--root DIR] check | [--root DIR] notes <tag> [<previous-published-tag>]\n' \
+		"${0##*/}" >&2
+	printf '       %s api <previous-published-tag> --apidiff FILE | --unavailable REASON\n' \
 		"${0##*/}" >&2
 }
 
@@ -141,7 +146,104 @@ print_notes() {
 	done
 }
 
+# api_unavailable prints the section for a release without an apidiff result.
+api_unavailable() {
+	printf '## API compatibility\n\napidiff not available: %s\n' "$1"
+}
+
+# api_details prints, per module that go-apidiff.sh flagged, its report in a text block, and the
+# removed modules; it stops quoting reports after max_lines so the notes stay readable.
+api_details() {
+	LC_ALL=C awk -v max_lines=120 '
+		/^==> / {
+			block = ""
+			next
+		}
+		/^::warning::.* contains pre-1\.0 incompatible API changes$/ {
+			name = $0
+			sub(/^::warning::/, "", name)
+			sub(/ contains pre-1\.0 incompatible API changes$/, "", name)
+			if (name == ".") {
+				name = "root module"
+			}
+			printf "**%s**\n\n", name
+			if (printed >= max_lines) {
+				if (!noted) {
+					printf "Report not quoted here; the release workflow run has the full output.\n\n"
+					noted = 1
+				}
+				next
+			}
+			printf "```text\n"
+			count = split(block, lines, "\n")
+			for (i = 1; i <= count && printed < max_lines; i++) {
+				if (lines[i] != "") {
+					print lines[i]
+					printed++
+				}
+			}
+			printf "```\n\n"
+			next
+		}
+		/^::warning::Go module removed since / {
+			name = $0
+			sub(/^.*: /, "", name)
+			removed = removed (removed == "" ? "" : ", ") name
+			next
+		}
+		/^::/ { next }
+		{ block = block $0 "\n" }
+		END {
+			if (removed != "") {
+				printf "Removed modules: %s\n\n", removed
+			}
+		}
+	' "$1"
+}
+
+# api_section prints the "API compatibility" section from the combined output of go-apidiff.sh.
+api_section() {
+	local previous="$1" file="$2" coverage
+	if [[ ! -s "$file" ]]; then
+		api_unavailable 'the apidiff run produced no output'
+		return 0
+	fi
+	coverage="$(LC_ALL=C awk '/^API module coverage: checked=[0-9]+ added=[0-9]+ removed=[0-9]+ incompatible=[0-9]+ current=[0-9]+$/ { line = $0 } END { print line }' "$file")"
+	if [[ ! "$coverage" =~ checked=([0-9]+)\ added=([0-9]+)\ removed=([0-9]+)\ incompatible=([0-9]+)\ current=([0-9]+)$ ]]; then
+		api_unavailable 'the apidiff run did not finish (no module coverage line)'
+		return 0
+	fi
+	local checked="${BASH_REMATCH[1]}" added="${BASH_REMATCH[2]}" removed="${BASH_REMATCH[3]}"
+	local incompatible="${BASH_REMATCH[4]}" current="${BASH_REMATCH[5]}"
+	printf '## API compatibility\n\n'
+	if ((incompatible == 0)); then
+		printf 'Compared with %s: no incompatible API changes (%d modules compared, %d new, %d in total).\n' \
+			"$previous" "$checked" "$added" "$current"
+		return 0
+	fi
+	printf 'Compared with %s: %d modules have incompatible API changes (%d compared, %d new, %d removed).\n\n' \
+		"$previous" "$incompatible" "$checked" "$added" "$removed"
+	printf '<details>\n<summary>Incompatible changes by module</summary>\n\n'
+	api_details "$file"
+	printf '</details>\n'
+}
+
 main() {
+	if [[ "${1:-}" == api ]]; then
+		if (($# != 4)) || [[ -z "$2" ]]; then
+			usage
+			return 2
+		fi
+		case "$3" in
+			--apidiff) api_section "$2" "$4" ;;
+			--unavailable) api_unavailable "$4" ;;
+			*)
+				usage
+				return 2
+				;;
+		esac
+		return
+	fi
 	local root
 	root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 	if [[ "${1:-}" == --root ]]; then
