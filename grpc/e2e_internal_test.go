@@ -215,3 +215,26 @@ func TestServerTLS_ConfigErrors(t *testing.T) {
 	_, err := frameworkServerOptions(cfg.withDefaults(), logger, nil)
 	require.NoError(t, err)
 }
+
+// TestServerHook_StopClosesLateServeListener pins #724: a Serve that starts
+// after the stop closes its listener on its own goroutine, and OnStop must not
+// return before it has.
+func TestServerHook_StopClosesLateServeListener(t *testing.T) {
+	t.Parallel()
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	srv := grpc.NewServer()
+	srv.Stop() // forces grpc-go's "Serve called after Stop" path
+	hook := serverHook(srv, nil, Config{Listen: addr}, slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, hook.OnStart(ctx))
+	require.NoError(t, hook.OnStop(ctx))
+
+	again, err := (&net.ListenConfig{}).Listen(ctx, "tcp", addr)
+	require.NoError(t, err, "listener must be closed once OnStop returns")
+	require.NoError(t, again.Close())
+}
