@@ -33,11 +33,11 @@ pre-commit:
       glob: "*.go"
       run: bash scripts/hooks/govet.sh {staged_files}
     context-check:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl compile-context --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl compile-context --verify; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh compile-context --verify
     hiss-audit:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh audit
     hiss-coverage:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl hiss coverage --verify; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl hiss coverage --verify; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh hiss coverage --verify
     reuse:
       run: bash scripts/hooks/reuse.sh
     gitleaks:
@@ -51,9 +51,9 @@ commit-msg:
 post-commit:
   commands:
     state-sync:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl state sync .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl state sync .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh state sync .
     dedupe-cadence:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl dedupe cadence --threshold=20 --record .; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl dedupe cadence --threshold=20 --record .; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh dedupe cadence --threshold=20 --record .
 
 pre-push:
   parallel: false
@@ -63,4 +63,4 @@ pre-push:
     security:
       run: if command -v govulncheck >/dev/null 2>&1; then GO_MODULE_GROUP=primary scripts/ci/go-modules.sh vuln; else echo govulncheck is not installed, skipping >&2; fi
     audit:
-      run: if command -v praetorctl >/dev/null 2>&1; then praetorctl audit; elif [ -d ./cmd/standardsctl ]; then go run ./cmd/standardsctl audit; else echo HISS governance hook cannot run because praetorctl is not installed >&2; exit 1; fi
+      run: sh .config/lefthook/engine.sh audit

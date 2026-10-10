@@ -5,6 +5,7 @@
 # come from tools/Makefile.shared — the same fragment downstream apps include.
 # This file adds all-module orchestration and the praetor governance gates so
 # `make verify-all` is the one command every agent runs.
+-include .config/praetor/engine.mk
 
 include tools/Makefile.shared
 include tools/tool-versions.env
