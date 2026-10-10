@@ -21,6 +21,7 @@ run_policy() {
 		ALLOCATION_BUDGET="${ALLOCATION_BUDGET:-success}" \
 		SHELLCHECK="${SHELLCHECK:-success}" \
 		ACTIONLINT="${ACTIONLINT:-success}" \
+		CI_POLICY="${CI_POLICY:-success}" \
 		TERRAFORM="${TERRAFORM:-success}" \
 		KUBECONFORM="${KUBECONFORM:-success}" \
 		SEMGREP="${SEMGREP:-success}" \
@@ -57,6 +58,8 @@ expect_failure env MKDOCS=skipped bash "$0" --single
 expect_failure env ALLOCATION_BUDGET=failure bash "$0" --single
 expect_failure env SHELLCHECK=failure bash "$0" --single
 expect_failure env ACTIONLINT=skipped bash "$0" --single
+expect_failure env CI_POLICY=failure bash "$0" --single
+expect_failure env CI_POLICY=skipped bash "$0" --single
 expect_failure env TERRAFORM=failure bash "$0" --single
 expect_failure env KUBECONFORM=skipped bash "$0" --single
 expect_failure env SEMGREP=failure bash "$0" --single

@@ -38,6 +38,7 @@ main() {
 	require_success allocation-budget "${ALLOCATION_BUDGET:?}"
 	require_success shellcheck "${SHELLCHECK:?}"
 	require_success actionlint "${ACTIONLINT:?}"
+	require_success policy "${CI_POLICY:?}"
 	require_success terraform "${TERRAFORM:?}"
 	require_success kubeconform "${KUBECONFORM:?}"
 	require_success semgrep "${SEMGREP:?}"
