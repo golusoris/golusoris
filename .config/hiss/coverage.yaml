@@ -428,7 +428,7 @@ rules:
         mechanism: >-
           kubeconform v0.8.0 from an immutable image digest validates repository-owned static
           manifests plus default and feature-complete Helm renders in strict mode against
-          Kubernetes v1.37.0 schemas and external CRD schemas at immutable source commits.
+          Kubernetes v1.37.1 schemas and external CRD schemas at immutable source commits.
           scripts/ci/kubeconform.sh selects tracked plus non-ignored untracked manifests,
           rejects symlinks, and fails on missing schemas except the explicit local AppStack
           claim. Make target kubeconform runs inside make verify-all; required CI job

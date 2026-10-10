@@ -114,7 +114,7 @@ on:
       spectral-version:
         description: "Deprecated/unused; Spectral resolves from this workflow revision's package lock"
         type: string
-        default: 6.16.3
+        default: 6.17.0
       spectral-fail-severity:
         description: Minimum severity that fails the spectral lint (error|warn|info|hint)
         type: string
