@@ -36,7 +36,7 @@ const (
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the opt-in malware-scanner integration-test image.
-	ClamAV = "clamav/clamav:1.5_base-debian@sha256:974ff8d90d274ce85a0b9bb417497a6fd5201ef30f2fc83cb073b916f97727d5"
+	ClamAV = "clamav/clamav:1.5.4_base-debian@sha256:974ff8d90d274ce85a0b9bb417497a6fd5201ef30f2fc83cb073b916f97727d5"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")
