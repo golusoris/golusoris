@@ -15,6 +15,19 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.1](https://github.com/golusoris/golusoris/compare/v0.16.0...v0.16.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **ci:** compare the minimum of five runs in the allocation gate ([#783](https://github.com/golusoris/golusoris/issues/783)) ([01ac715](https://github.com/golusoris/golusoris/commit/01ac715d19ee1f84c4812de24bed919cab7991db))
+* **ci:** fail the verify phase when go mod download rewrites go.mod ([#774](https://github.com/golusoris/golusoris/issues/774)) ([10c5243](https://github.com/golusoris/golusoris/commit/10c52436718c826fbb2706ca5ecf2dadce7be372))
+* **deps:** update github.com/golusoris/golusoris/container/registry digest to 5e0e1ab ([#745](https://github.com/golusoris/golusoris/issues/745)) ([78ede0c](https://github.com/golusoris/golusoris/commit/78ede0c192b4a6663c869532b5126c766379ffe9))
+* **deps:** update github.com/golusoris/golusoris/container/registry/sign digest to 78871be ([#746](https://github.com/golusoris/golusoris/issues/746)) ([53a0b39](https://github.com/golusoris/golusoris/commit/53a0b390aaaf4cf0969ea8548cc770e7a445758d))
+* **deps:** update module github.com/golusoris/golusoris/core to v0.10.1 ([#759](https://github.com/golusoris/golusoris/issues/759)) ([633449b](https://github.com/golusoris/golusoris/commit/633449b30b9cff71a06f5608b8b37fe13e361834))
+* **grpc:** wait for Serve before the stop hook returns ([#773](https://github.com/golusoris/golusoris/issues/773)) ([cd37d15](https://github.com/golusoris/golusoris/commit/cd37d15ebe03e3c47b833d7da98b7ef7cc4ed76c))
+* **tus:** name the drain step when the stop deadline cuts the join short ([#776](https://github.com/golusoris/golusoris/issues/776)) ([af072ae](https://github.com/golusoris/golusoris/commit/af072ae2ecfd8d4874e19ead7a9e497f2f693440))
+
 ## [0.16.0](https://github.com/golusoris/golusoris/compare/v0.15.0...v0.16.0) (2026-10-10)
 
 
