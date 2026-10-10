@@ -77,6 +77,18 @@ digest_of() {
 	sha256sum "$1" | awk '{ print $1 }'
 }
 
+# corrupt_digest flips the first hex digit, so the pin always differs from the
+# archive digest (prefixing "0" kept digests that already start with 0).
+corrupt_digest() {
+	local d
+	d="$(digest_of "$1")"
+	if [[ "${d:0:1}" == 0 ]]; then
+		printf '1%s' "${d:1}"
+	else
+		printf '0%s' "${d:1}"
+	fi
+}
+
 run_installer() {
 	local archive="$1" target="$2"
 	env PATH="$fake_bin:$PATH" FIXTURE_ARCHIVE="$archive" \
@@ -116,7 +128,7 @@ reported="$("$suite_root/install-ok/shellcheck" --version | awk '$1 == "version:
 }
 
 # Negative: one changed digest byte rejects the same archive.
-write_pins "$version" "0$(digest_of "$good" | cut -c2-)"
+write_pins "$version" "$(corrupt_digest "$good")"
 expect_failure 'archive digest mismatch' "$suite_root/install-digest" \
 	run_installer "$good" "$suite_root/install-digest"
 
