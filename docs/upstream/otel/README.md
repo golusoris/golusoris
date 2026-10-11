@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go.opentelemetry.io/otel — v1.46.0 snapshot
+# go.opentelemetry.io/otel — v1.47.0 snapshot
 
-Pinned: **v1.46.0** (semconv API: **v1.26.0**)
-Source: [tagged source](https://github.com/open-telemetry/opentelemetry-go/tree/v1.46.0)
+Pinned: **v1.47.0** (semconv API: **v1.26.0**)
+Source: [tagged source](https://github.com/open-telemetry/opentelemetry-go/tree/v1.47.0)
 
 ## Tracer
 
@@ -108,11 +108,14 @@ ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(req.Hea
 - `core/log/` — slog factory; `otel.ModuleWithSlogBridge` installs the OTel
   bridge via `go.opentelemetry.io/contrib/bridges/otelslog`.
 - `otel.export.prometheus` adds `go.opentelemetry.io/otel/exporters/prometheus`
-  v0.68.0 (the release built against v1.46.0) as a pull reader on the app's
+  v0.69.0 (the release built against v1.47.0) as a pull reader on the app's
   Prometheus registry.
+- Logs: `go.opentelemetry.io/otel/log` and `go.opentelemetry.io/otel/sdk/log` are
+  stable from v1.47.0. The global logger provider is read and set with
+  `otel.GetLoggerProvider` and `otel.SetLoggerProvider`; `otel/` uses them.
 
 ## Links
 
 - [OpenTelemetry specification](https://opentelemetry.io/docs/specs/otel/)
 - [Semantic conventions](https://opentelemetry.io/docs/specs/semconv/)
-- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/v1.46.0/CHANGELOG.md)
+- [Changelog](https://github.com/open-telemetry/opentelemetry-go/blob/v1.47.0/CHANGELOG.md)
