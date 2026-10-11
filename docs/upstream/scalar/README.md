@@ -41,16 +41,17 @@ the bounded framework default is not suitable.
   <script
     id="api-reference"
     data-url="/openapi.json"
-    data-configuration='{"telemetry":false}'></script>
+    data-configuration='{"telemetry":false,"withDefaultFonts":false}'></script>
   <script src="/docs/scalar.js"></script>
 </body>
 </html>
 ```
 
-The shipped handler always serves the embedded bundle, so the script itself has
-no runtime CDN dependency. The bundle's `telemetry` setting defaults to on from
-v1.73; the handler turns it off. With its default fonts the page still requests
-font files from `fonts.scalar.com`, as it did with v1.25.52.
+The shipped handler serves the embedded bundle and turns off the two settings
+that reach outside: `telemetry` (on by default from v1.73) and the default
+fonts, which load from `fonts.scalar.com`. The page uses system fonts and
+contacts no outside host; `TestServedPageContactsNoOutsideHost` renders it in
+Chrome and reads the network log to prove it.
 
 ## Links
 
