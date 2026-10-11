@@ -443,6 +443,19 @@
       "enabled": false
     },
     {
+      "description": "Hold the hosted runner image at ubuntu 24.04: the branch rule set requires the check named \"Test (race + coverage) (ubuntu-24.04, module)\", so a new label stops every merge until the check name no longer carries it (#815). Expires 2027-01-09.",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchDepTypes": [
+        "github-runner"
+      ],
+      "matchPackageNames": [
+        "ubuntu"
+      ],
+      "allowedVersions": "/^24\\.04$/"
+    },
+    {
       "description": "LocalStack 2026.03 and later start only with an auth token; the KMS signer tests stay on the last tokenless 4.x release.",
       "matchDatasources": [
         "docker"
