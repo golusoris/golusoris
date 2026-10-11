@@ -113,7 +113,7 @@ rules:
           of the loop half: `for !done` has no scalar upper bound, which is what the axiom
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
           is reported by Semgrep and golangci-lint rather than by the HISS scanner. Semgrep
-          1.177.0 runs from the declared digest with strict parsing and proves all 721 selected
+          1.180.0 runs from the declared digest with strict parsing and proves all 1093 selected
           repository Go files were scanned; scanner errors, omissions and findings fail. The
           test-request rule fires on its eight positive fixtures, stays silent on four negative
           and two gap fixtures (a client literal without Transport, and http.DefaultTransport
