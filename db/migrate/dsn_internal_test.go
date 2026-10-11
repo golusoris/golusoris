@@ -77,6 +77,63 @@ func TestMigratorURL_AppliesPoolSSLAndPasswordFile(t *testing.T) {
 	}
 }
 
+// TestDatabaseURL_ExplicitDSNIsUsedAsGiven pins #810: an explicit migrator
+// address keeps its own password and TLS parameters; the pool's do not replace them.
+func TestDatabaseURL_ExplicitDSNIsUsedAsGiven(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	tlsxtest.NewCA(t).WriteCA(t, caPath)
+	passwordFile := writeFile(t, filepath.Join(dir, "password"), "pool-secret\n")
+	const explicit = "postgres://migrator:migrator-secret@db.example:5432/app?sslmode=require"
+	for name, ssl := range map[string]dbpgx.SSLOptions{
+		"pool with a CA file": {Mode: "verify-full", RootCert: caPath},
+		// Refused for the inherited DSN; the explicit one never reads it.
+		"pool CA path with a space": {Mode: "verify-full", RootCert: filepath.Join(dir, "pool ca.crt")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			pool := dbpgx.Options{DSN: "postgres://app@db.example:5432/app", PasswordFile: passwordFile, SSL: ssl}
+			got, err := databaseURL(explicit, pool)
+			if err != nil {
+				t.Fatalf("databaseURL: %v", err)
+			}
+			if want := "pgx5" + strings.TrimPrefix(explicit, "postgres"); got != want {
+				t.Fatalf("databaseURL = %q, want the explicit DSN as given (%q)", got, want)
+			}
+			cfg := driverConfig(t, got)
+			if cfg.User != "migrator" || cfg.Password != "migrator-secret" {
+				t.Fatalf("credentials = %q:%q, want the explicit DSN's", cfg.User, cfg.Password)
+			}
+		})
+	}
+}
+
+// TestDatabaseURL_InheritedDSNTakesPoolOptions keeps #771: without an explicit
+// address the migrator connects as the pool does.
+func TestDatabaseURL_InheritedDSNTakesPoolOptions(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	caPath := filepath.Join(dir, "ca.crt")
+	tlsxtest.NewCA(t).WriteCA(t, caPath)
+	pool := dbpgx.Options{
+		DSN:          "postgres://app@db.example:5432/app",
+		PasswordFile: writeFile(t, filepath.Join(dir, "password"), "pool-secret\n"),
+		SSL:          dbpgx.SSLOptions{Mode: "verify-full", RootCert: caPath},
+	}
+	got, err := databaseURL("", pool)
+	if err != nil {
+		t.Fatalf("databaseURL: %v", err)
+	}
+	cfg := driverConfig(t, got)
+	if cfg.User != "app" || cfg.Password != "pool-secret" {
+		t.Fatalf("credentials = %q:%q, want the pool's role with the password file", cfg.User, cfg.Password)
+	}
+	if cfg.TLSConfig == nil || cfg.TLSConfig.ServerName != "db.example" {
+		t.Fatalf("db.ssl.mode=verify-full not applied to the inherited DSN: %+v", cfg.TLSConfig)
+	}
+}
+
 func TestMigratorURL_KeepsDSNWithoutOptions(t *testing.T) {
 	t.Parallel()
 	const dsn = "postgres://app:pw@db.example:5432/app?sslmode=disable&x-migrations-table=m"

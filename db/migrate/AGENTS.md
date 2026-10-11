@@ -21,7 +21,8 @@ other golang-migrate database URL whose driver program registers.
   `file://C:/dir`, not RFC 8089 `file:///C:/dir`; UNC -> `file:////server/share`.
   `fileSourceURLFor(path, windows)` pure; tests run Windows rows on every OS.
 - `pgxToMigrateURL` rewrites `postgres://` → `pgx5://` so users keep their normal pgx DSN.
-- `New` applies `db.ssl.*` + `db.password_file` to migrator URL via `dbpgx.Options.ConnString`
+- `New` applies `db.ssl.*` + `db.password_file` via `dbpgx.Options.ConnString` only to inherited `db.dsn`.
+  Explicit `db.migrate.dsn` = own role: used as given, scheme rewritten only. #810.
   (pool precedence; files read once at construction, no rotation). No other `db.*` option applies.
   Keyword/value DSN refused; `db.ssl.*` file path with space refused (driver re-encodes space as `+`). #771.
 - Driver-specific modules reuse `LoadOptions` (config `db.migrate`) and `Bind`
