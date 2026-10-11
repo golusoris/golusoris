@@ -56,6 +56,11 @@ main() {
 	[[ "${ACTOR:?}" == 'renovate[bot]' || "${ACTOR:?}" == 'github-actions[bot]' ]] && dco_applicable=false
 	require_conditional dco "${DCO:?}" "$dco_applicable"
 
+	# The merge queue is where the commits that land on main exist, squash body included.
+	local is_queue=false
+	[[ "$EVENT_NAME" == merge_group ]] && is_queue=true
+	require_conditional attribution "${ATTRIBUTION:?}" "$is_queue"
+
 	printf 'all gating jobs passed\n'
 }
 
