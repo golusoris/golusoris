@@ -219,6 +219,9 @@ func TestScalarDocsServesHTMLAndJS(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), `data-url="/openapi.yaml"`) {
 		t.Errorf("HTML missing data-url: %q", rr.Body.String())
 	}
+	if !strings.Contains(rr.Body.String(), `data-configuration='{"telemetry":false}'`) {
+		t.Errorf("HTML does not turn the bundle's telemetry off: %q", rr.Body.String())
+	}
 
 	rr = httptest.NewRecorder()
 	r.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/docs/scalar.js", nil))
