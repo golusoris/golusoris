@@ -36,9 +36,9 @@ jobs:
           - name: Linux
             runner: ubuntu-26.04
           - name: macOS
-            runner: macos-latest
+            runner: macos-26
           - name: Windows
-            runner: windows-latest
+            runner: windows-2025
     steps:
       - name: Stop on a draft pull request
         if: github.event.pull_request.draft == true

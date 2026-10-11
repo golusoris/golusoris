@@ -248,8 +248,8 @@ class PortabilityDriverTest(TestCase):
         required = (
             "fail-fast: false",
             "runner: ubuntu-26.04",
-            "runner: macos-latest",
-            "runner: windows-latest",
+            "runner: macos-26",
+            "runner: windows-2025",
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
             "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
@@ -268,6 +268,8 @@ class PortabilityDriverTest(TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
         self.assertNotIn("continue-on-error:", workflow)
+        # A floating label moves to the next system image without a reviewed change.
+        self.assertNotRegex(workflow, r"runner:\s*\S*-latest")
         self.assertNotIn("pact-go/v2 install", workflow)
         self.assertNotIn("--lib-dir /tmp", workflow)
         self.assertLess(
