@@ -27,6 +27,16 @@ facets:
     - api:public-contract
     - docs:seo-portal
     - agent:sandboxed
+# Clients and editors installed on the maintainer workstation; the engine neither
+# generates nor verifies the others.
+agent_clients:
+    - claude
+    - codex
+    - gemini
+editors:
+    - universal
+    - vscode
+    - antigravity
 
 # praetor#36 (BUG-371): the flavor detector classifies this framework library as a
 # go-service and scaffolds a service Dockerfile and security workflow it does not ship.

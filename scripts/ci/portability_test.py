@@ -247,7 +247,7 @@ class PortabilityDriverTest(TestCase):
         )
         required = (
             "fail-fast: false",
-            "runner: ubuntu-latest",
+            "runner: ubuntu-26.04",
             "runner: macos-latest",
             "runner: windows-latest",
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",

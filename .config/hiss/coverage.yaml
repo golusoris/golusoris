@@ -641,8 +641,8 @@ rules:
           compile-context-verify and lefthook pre-commit job context-check, verifies root
           projections and persona projections. Makefile target caveman-context, also inside
           make verify-all, lints every tracked AGENTS.md plus canonical personas, skills and
-          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .cursor/,
-          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/.
+          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .gemini/ and
+          .codex/, the clients `agent_clients` in .standards.yaml selects.
         rationale: >-
           No positive fixture exists because projection comparison and bounded source
           discovery are repository-global properties no single fixture can exhibit. Measured
