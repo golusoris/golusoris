@@ -954,6 +954,8 @@ jobs:
 
   # ── Developer Certificate of Origin ─────────────────────────────────────────
   # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
+  # The squash commit copies PR commit trailers and the PR body, so both are read here for
+  # model or coding-tool attribution before they can reach main.
   dco:
     name: DCO sign-off
     if: github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]' && github.event_name == 'pull_request'
@@ -982,6 +984,36 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/ci/check-dco.sh "$BASE" "$HEAD"
+      - name: Test the attribution check
+        run: bash scripts/ci/check-attribution_test.sh
+      - name: Refuse model or coding-tool attribution in PR commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci/check-attribution.sh "$BASE" "$HEAD"
+      - name: Refuse model or coding-tool attribution in the PR body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n' "$BODY" | bash scripts/ci/check-attribution.sh --text
+
+  # The merge queue builds the commits that land on main, so the squash body is final there:
+  # a PR body edited after its last CI run and a bot PR, which the job above skips, are read here.
+  attribution:
+    name: Attribution (merge queue)
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Test the attribution check
+        run: bash scripts/ci/check-attribution_test.sh
+      - name: Refuse model or coding-tool attribution in the commits that land
+        env:
+          BASE: ${{ github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.merge_group.head_sha }}
+        run: bash scripts/ci/check-attribution.sh "$BASE" "$HEAD"
 
   # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
   reuse:
@@ -1039,6 +1071,7 @@ jobs:
       - dependency-review
       - gitleaks
       - dco
+      - attribution
       - reuse
       - apidiff
     runs-on: ubuntu-24.04
@@ -1079,6 +1112,7 @@ jobs:
           DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
           GITLEAKS: ${{ needs.gitleaks.result }}
           DCO: ${{ needs.dco.result }}
+          ATTRIBUTION: ${{ needs.attribution.result }}
           REUSE: ${{ needs.reuse.result }}
           APIDIFF: ${{ needs.apidiff.result }}
           EVENT_NAME: ${{ github.event_name }}

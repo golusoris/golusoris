@@ -29,6 +29,7 @@ run_policy() {
 		DEPENDENCY_REVIEW="${DEPENDENCY_REVIEW:-success}" \
 		GITLEAKS="${GITLEAKS:-success}" \
 		DCO="${DCO:-success}" \
+		ATTRIBUTION="${ATTRIBUTION:-skipped}" \
 		REUSE="${REUSE:-success}" \
 		APIDIFF="${APIDIFF:-success}" \
 		EVENT_NAME="${EVENT_NAME:-pull_request}" \
@@ -52,7 +53,7 @@ run_policy >/dev/null
 ACTOR='renovate[bot]' DCO=skipped run_policy >/dev/null
 ACTOR='github-actions[bot]' DCO=skipped run_policy >/dev/null
 EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=skipped run_policy >/dev/null
-EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped run_policy >/dev/null
+EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success run_policy >/dev/null
 expect_failure env LINT=skipped bash "$0" --single
 expect_failure env MKDOCS=skipped bash "$0" --single
 expect_failure env ALLOCATION_BUDGET=failure bash "$0" --single
@@ -71,7 +72,11 @@ expect_failure env EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=success bash "$
 expect_failure env ACTOR='renovate[bot]' DCO=success bash "$0" --single
 expect_failure env ACTOR='github-actions[bot]' DCO=success bash "$0" --single
 expect_failure env DCO=skipped bash "$0" --single
-expect_failure env EVENT_NAME=merge_group TEST=skipped DEPENDENCY_REVIEW=skipped DCO=skipped bash "$0" --single
-expect_failure env EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=success bash "$0" --single
+expect_failure env EVENT_NAME=merge_group TEST=skipped DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success bash "$0" --single
+expect_failure env EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=success ATTRIBUTION=success bash "$0" --single
+expect_failure env EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=skipped bash "$0" --single
+expect_failure env EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=failure bash "$0" --single
+expect_failure env ATTRIBUTION=success bash "$0" --single
+expect_failure env EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success bash "$0" --single
 
 printf 'required-job result policy tests passed\n'
