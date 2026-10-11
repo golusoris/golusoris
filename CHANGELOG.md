@@ -15,6 +15,14 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.4](https://github.com/golusoris/golusoris/compare/v0.16.3...v0.16.4) (2026-10-11)
+
+
+### Bug Fixes
+
+* **apidocs:** update the embedded Scalar bundle to 1.73.1 ([#808](https://github.com/golusoris/golusoris/issues/808)) ([64852b2](https://github.com/golusoris/golusoris/commit/64852b2a9487a5a412054cd7d539f9eed6bf8d95))
+* **db/migrate:** use an explicit migrator DSN as given ([#811](https://github.com/golusoris/golusoris/issues/811)) ([6058e81](https://github.com/golusoris/golusoris/commit/6058e81a21224f28421c57e8cce781cb18d8d4ea))
+
 ## [0.16.3](https://github.com/golusoris/golusoris/compare/v0.16.2...v0.16.3) (2026-10-11)
 
 
