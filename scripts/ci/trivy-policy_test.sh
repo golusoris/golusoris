@@ -53,7 +53,8 @@ check_npm_exception() {
 	check_expiry "$vex" "$product" "$package" "$today"
 }
 
-# A package exception holds while the package is in no checked import graph and its date has not passed.
+# A package exception holds while neither the package nor a subpackage of it is in a checked
+# import graph and its date has not passed.
 check_go_package_exception() {
 	local vex="$1" product="$2" package="$3" dependencies="$4" today="$5"
 	if ! jq -e --arg id "$product" \
@@ -61,8 +62,10 @@ check_go_package_exception() {
 		printf 'OpenVEX has no statement for %s\n' "$product" >&2
 		return 1
 	fi
-	if grep -Fxq "$package" <<<"$dependencies"; then
-		printf 'OpenVEX exception is stale: %s is in the import graph\n' "$package" >&2
+	local imported
+	imported="$(awk -v p="$package" '$0 == p || index($0, p "/") == 1' <<<"$dependencies" | head -n 1)"
+	if [[ -n "$imported" ]]; then
+		printf 'OpenVEX exception is stale: %s is in the import graph\n' "$imported" >&2
 		return 1
 	fi
 	check_expiry "$vex" "$product" "$package" "$today"
@@ -99,6 +102,12 @@ readonly graph_dependencies
 check_go_package_exception "$vex_file" "$openpgp_product" "$openpgp_package" "$graph_dependencies" "$policy_date"
 expect_refusal 'is in the import graph' check_go_package_exception \
 	"$vex_file" "$openpgp_product" "$openpgp_package" "$graph_dependencies"$'\n'"$openpgp_package" "$policy_date"
+# The advisory lists the subpackages too; armor does not import the parent package.
+expect_refusal 'openpgp/armor is in the import graph' check_go_package_exception \
+	"$vex_file" "$openpgp_product" "$openpgp_package" "$graph_dependencies"$'\n'"$openpgp_package/armor" "$policy_date"
+# A sibling package that only shares the name prefix is not the advisory's package.
+check_go_package_exception \
+	"$vex_file" "$openpgp_product" "$openpgp_package" "$graph_dependencies"$'\n'"${openpgp_package}x" "$policy_date"
 expect_refusal 'expired on' check_go_package_exception \
 	"$vex_file" "$openpgp_product" "$openpgp_package" "$graph_dependencies" 9999-12-31
 expect_refusal 'names no expiry date' check_go_package_exception \
