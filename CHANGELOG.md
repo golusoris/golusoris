@@ -15,6 +15,13 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.5](https://github.com/golusoris/golusoris/compare/v0.16.4...v0.16.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **testutil:** let the redis and kafka helpers boot a caller's image ([#817](https://github.com/golusoris/golusoris/issues/817)) ([6fe9ee1](https://github.com/golusoris/golusoris/commit/6fe9ee11e8d386a0f196e8d987339c0097ea05c3))
+
 ## [0.16.4](https://github.com/golusoris/golusoris/compare/v0.16.3...v0.16.4) (2026-10-11)
 
 
