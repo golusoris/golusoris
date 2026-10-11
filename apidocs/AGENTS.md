@@ -59,8 +59,12 @@ docs-only mounting validates OpenAPI without MCP tool conversion.
 
 ## Scalar bundle
 
-`apidocs/embed/scalar.js` pins `@scalar/api-reference`. Update via
-`make scalar-update VERSION=1.x.y`.
+`apidocs/embed/scalar.js` pins `@scalar/api-reference`. Weekly workflow
+`scalar-bundle.yml` runs `scripts/ci/scalar-bundle-update.sh`: newest release
+>= 3 days old, tarball sha512 checked, bundle + `SCALAR_VERSION` +
+`SCALAR_RELEASED` + `docs/upstream` pin rewritten, pull request opened. Pin
+check fails when `SCALAR_RELEASED` is older than 45 days (job silent). Never
+bump the version line alone.
 
 ## Don't
 
