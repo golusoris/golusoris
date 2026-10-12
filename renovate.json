@@ -639,7 +639,8 @@
         "tools/apicompat/gate/main.go",
         "tools/apicompat/gate/placeholder.go",
         ".devcontainer/devcontainer.json",
-        ".devcontainer/Dockerfile.praetor"
+        ".devcontainer/Dockerfile.praetor",
+        ".github/workflows/reuse.yml"
       ],
       "enabled": false
     }
