@@ -5,8 +5,10 @@
 package pgx
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,10 +38,21 @@ func TestTraceQueryStart_stashesContext(t *testing.T) {
 func TestTraceQueryEnd_belowThreshold(t *testing.T) {
 	t.Parallel()
 	clk := clockwork.NewFakeClock()
-	tr := &slowQueryTracer{logger: slog.Default(), threshold: time.Hour, clk: clk}
+	var logs bytes.Buffer
+	tr := &slowQueryTracer{logger: slog.New(slog.NewTextHandler(&logs, nil)), threshold: time.Hour, clk: clk}
 	ctx := tr.TraceQueryStart(context.Background(), nil, pgx.TraceQueryStartData{SQL: "SELECT 1"})
-	// elapsed is ~0, well below 1h threshold — must not panic
+	clk.Advance(time.Hour - time.Nanosecond)
 	tr.TraceQueryEnd(ctx, nil, pgx.TraceQueryEndData{})
+	if logs.Len() != 0 {
+		t.Errorf("query below threshold was logged: %s", logs.String())
+	}
+
+	ctx = tr.TraceQueryStart(context.Background(), nil, pgx.TraceQueryStartData{SQL: "SELECT 2"})
+	clk.Advance(time.Hour)
+	tr.TraceQueryEnd(ctx, nil, pgx.TraceQueryEndData{})
+	if !strings.Contains(logs.String(), "slow query") || !strings.Contains(logs.String(), "SELECT 2") {
+		t.Errorf("query at threshold was not logged: %q", logs.String())
+	}
 }
 
 func TestTraceQueryEnd_noStart(t *testing.T) {
