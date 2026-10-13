@@ -13,7 +13,6 @@ Immutable OCI authority for testcontainers helpers + opt-in integration tests.
 - Constants: `tag@sha256:<64 lowercase hex>`.
 - `Validate`: reject mutable caller overrides before Docker access.
 - `WithPinnedReaper`: override testcontainers Ryuk default.
-- `.github/testcontainers-images.txt`: same default set except opt-in ClamAV
-  and split-module emulators (`FakeGCSServer`, `Azurite`); Module sweep job
-  pulls those.
+- `.github/testcontainers-images.txt`: same default set except split-module
+  emulators (`FakeGCSServer`, `Azurite`); Module sweep job pulls those.
 - Renovate: update tag + digest copies together; policy test prevents drift.

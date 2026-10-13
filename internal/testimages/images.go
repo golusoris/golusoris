@@ -37,8 +37,8 @@ const (
 	Azurite = "mcr.microsoft.com/azure-storage/azurite:3.37.0@sha256:830430c1da1a2d537e08f3e6764dd1f5ae00cf0346bcaf625b968ec3f0971fd5"
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
-	// ClamAV is the opt-in malware-scanner integration-test image.
-	ClamAV = "clamav/clamav:1.5.4_base-debian@sha256:974ff8d90d274ce85a0b9bb417497a6fd5201ef30f2fc83cb073b916f97727d5"
+	// ClamAV is the malware-scanner image; it ships its signatures, so clamd starts offline.
+	ClamAV = "clamav/clamav:1.5.4@sha256:638d90201ee7ee6a82d249a2fc23b132e578673b5f1f2766852b127676ca1ef6"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")

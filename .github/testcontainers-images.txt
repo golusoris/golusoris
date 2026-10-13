@@ -1,10 +1,9 @@
 # Testcontainers images the CI test job needs, one per line.
 #
 # Cache manifest. Keep byte-identical references with internal/testimages.
-# storage/scan's ClamAV image is behind the `integration` build tag, which the
-# CI test job does not set, so it is deliberately absent. Split-module emulator
-# images (storage/gcs, storage/azblob) run in the Module sweep job and are
-# absent too.
+# storage/scan's ClamAV image serves the CI test job's integration-tagged step.
+# Split-module emulator images (storage/gcs, storage/azblob) run in the Module
+# sweep job and are deliberately absent.
 #
 # This lives in its own file, not inline in ci.yml, because the CI image cache
 # is keyed on its hash: edit the list and the next run repopulates the cache.
@@ -19,3 +18,4 @@ clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b91724
 redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89
 versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499
 testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0
+clamav/clamav:1.5.4@sha256:638d90201ee7ee6a82d249a2fc23b132e578673b5f1f2766852b127676ca1ef6

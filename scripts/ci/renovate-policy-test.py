@@ -94,6 +94,7 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "redpandadata/redpanda", "docker"),
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
+    (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
     (
@@ -226,7 +227,7 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
 # them: ClamAV sits behind the `integration` build tag, and split-module
 # emulators run in the Module sweep job, which pulls on demand.
 CACHE_EXEMPT_IMAGES = frozenset(
-    {"clamav/clamav", "fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
+    {"fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
 )
 
 

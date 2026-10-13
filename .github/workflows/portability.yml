@@ -13,6 +13,7 @@ on:
     branches:
       - main
       - 'lts-*'
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -22,8 +23,8 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-# Add these exact matrix contexts to the active ruleset only after each leg's first hosted green:
-# Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (Windows).
+# main requires these matrix contexts, so the merge queue runs them too; each leg had its first hosted green
+# before it became required: Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (Windows).
 jobs:
   portability:
     name: Platform Neutrality (${{ matrix.name }})
