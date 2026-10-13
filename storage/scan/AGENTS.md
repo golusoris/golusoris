@@ -92,7 +92,8 @@ empty / explicit `0` = no client-side guard; clamd still enforces `StreamMaxLeng
   results map to `ErrUnavailable`.
 - Tests: unit path drives real client against **fake clamd TCP server**
 (`fakeclamd_test.go`, speaks INSTREAM + PING framing) — no Docker. Real
-daemon: `integration_test.go`; `integration` tag; immutable ClamAV + Ryuk
-references from `internal/testimages`; EICAR vector. Never check real malware in.
+daemon: `integration_test.go`; `integration` tag (CI test job runs suite, fails on
+skip); immutable signature-preloaded ClamAV + Ryuk references from
+`internal/testimages`, freshclam off, no network; EICAR vector. Never check real malware in.
 - Timing convention: `clk clock.Clock` is injected for any future retry/backoff
  logic; never `time.Now()` directly.

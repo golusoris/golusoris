@@ -37,6 +37,8 @@ func startClamd(t *testing.T) string {
 			Image:        testimages.ClamAV,
 			ReaperImage:  testimages.Ryuk,
 			ExposedPorts: []string{"3310/tcp"},
+			// The image ships its signatures; no updater means no network dependency.
+			Env: map[string]string{"CLAMAV_NO_FRESHCLAMD": "true"},
 			WaitingFor: wait.ForAll(
 				wait.ForListeningPort("3310/tcp"),
 				wait.ForLog("clamd.*started").AsRegexp(),
