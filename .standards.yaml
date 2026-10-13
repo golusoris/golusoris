@@ -57,9 +57,6 @@ api:
 adoption:
     decline:
         - working-dir-and-flavor
-        # Hand-managed until Documentation Governance (#622) and Go API Compatibility
-        # (cordanaLLM/praetor#849) are green; re-enable per #646.
-        - branch-ruleset
 
 # Declared gaps, one rule and one file each; an expired entry fails its gate again.
 exceptions:
@@ -102,6 +99,8 @@ overrides:
         # can approve; the required count stays so the switch restores it.
         review_mode: single_maintainer
         dismiss_stale_reviews: true
+        # main merges through a merge queue; only merge_group workflows can be required.
+        merge_queue: true
     supply_chain:
         slsa_level: 3
         enforce_cosign: true

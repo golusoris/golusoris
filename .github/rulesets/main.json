@@ -86,6 +86,9 @@
             "context": "Module sweep (shard 3)"
           },
           {
+            "context": "CI policy tests"
+          },
+          {
             "context": "Licensing (reuse lint)"
           },
           {
@@ -107,22 +110,13 @@
             "context": "Vulnerabilities (govulncheck)"
           },
           {
-            "context": "Platform Neutrality (Linux)"
-          },
-          {
-            "context": "Platform Neutrality (macOS)"
-          },
-          {
-            "context": "Platform Neutrality (Windows)"
-          },
-          {
             "context": "Go API Compatibility"
           },
           {
             "context": "Documentation Governance"
           },
           {
-            "context": "Scorecard Analysis"
+            "context": "REUSE lint"
           },
           {
             "context": "Build and smoke (gemma)"
