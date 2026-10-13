@@ -19,6 +19,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -36,42 +37,36 @@ const (
 	startTimeout = 3 * time.Minute
 )
 
+// Options tweak the container. Zero value uses defaults.
+type Options struct {
+	// Image is an immutable Redis image reference (tag@sha256:<digest>), for
+	// example to stay on another major. Empty uses the repository pin.
+	Image string
+}
+
+// image returns the reference to boot: the repository pin, or the explicit immutable one.
+func (o Options) image() (string, error) {
+	if o.Image == "" {
+		return testimages.Redis, nil
+	}
+	if err := testimages.Validate(o.Image); err != nil {
+		return "", fmt.Errorf("testutil/redis: validate image: %w", err)
+	}
+	return o.Image, nil
+}
+
 // Start boots a Redis container and returns a connected rueidis.Client.
 // The container and client are stopped/closed via t.Cleanup.
 func Start(t *testing.T) rueidis.Client {
 	t.Helper()
-	if testing.Short() {
-		t.Skip("testutil/redis: container-backed; skipped under -short")
-	}
+	return StartWith(t, Options{})
+}
 
-	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
-
-	// Queue for a boot slot first, so startTimeout only counts the boot itself.
-	defer startgate.Acquire(t)()
-	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
-	defer cancel()
-
-	ctr, err := tcredis.Run(ctx, testimages.Redis, testimages.WithPinnedReaper())
-	if err != nil {
-		t.Fatalf("testutil/redis: start container: %v", err)
-	}
-	t.Cleanup(func() {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer stopCancel()
-		if terr := ctr.Terminate(stopCtx); terr != nil {
-			t.Logf("testutil/redis: terminate container: %v", terr)
-		}
-	})
-
-	addr, err := ctr.ConnectionString(ctx)
-	if err != nil {
-		t.Fatalf("testutil/redis: connection string: %v", err)
-	}
-	// Strip the "redis://" scheme — rueidis expects "host:port".
-	addr = stripScheme(addr)
-
+// StartWith is Start with opts.
+func StartWith(t *testing.T, opts Options) rueidis.Client {
+	t.Helper()
 	client, err := rueidis.NewClient(rueidis.ClientOption{
-		InitAddress: []string{addr},
+		InitAddress: []string{boot(t, opts)},
 	})
 	if err != nil {
 		t.Fatalf("testutil/redis: new client: %v", err)
@@ -87,8 +82,24 @@ func Start(t *testing.T) rueidis.Client {
 // The container is terminated via t.Cleanup.
 func Addr(t *testing.T) string {
 	t.Helper()
+	return boot(t, Options{})
+}
+
+// AddrWith is Addr with opts.
+func AddrWith(t *testing.T, opts Options) string {
+	t.Helper()
+	return boot(t, opts)
+}
+
+// boot starts the container and returns its "host:port" address.
+func boot(t *testing.T, opts Options) string {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("testutil/redis: container-backed; skipped under -short")
+	}
+	image, err := opts.image()
+	if err != nil {
+		t.Fatal(err)
 	}
 	testcontainers.SkipIfProviderIsNotHealthy(t) // skip cleanly when Docker is unavailable (e.g. macOS CI) instead of failing
 
@@ -97,7 +108,7 @@ func Addr(t *testing.T) string {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	ctr, err := tcredis.Run(ctx, testimages.Redis, testimages.WithPinnedReaper())
+	ctr, err := tcredis.Run(ctx, image, testimages.WithPinnedReaper())
 	if err != nil {
 		t.Fatalf("testutil/redis: start container: %v", err)
 	}
@@ -113,6 +124,7 @@ func Addr(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("testutil/redis: connection string: %v", err)
 	}
+	// Strip the "redis://" scheme: rueidis expects "host:port".
 	return stripScheme(addr)
 }
 

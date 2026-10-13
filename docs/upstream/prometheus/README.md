@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# prometheus/client_golang — v1.24.1 snapshot
+# prometheus/client_golang — v1.25.0 snapshot
 
-Pinned: **v1.24.1**
-Source: [tagged source](https://github.com/prometheus/client_golang/tree/v1.24.1)
+Pinned: **v1.25.0**
+Source: [tagged source](https://github.com/prometheus/client_golang/tree/v1.25.0)
 
 ## Metrics registration
 
@@ -70,5 +70,5 @@ reg.MustRegister(
 
 ## Links
 
-- [Changelog](https://github.com/prometheus/client_golang/blob/v1.24.1/CHANGELOG.md)
+- [Changelog](https://github.com/prometheus/client_golang/blob/v1.25.0/CHANGELOG.md)
 - [Metric naming practices](https://prometheus.io/docs/practices/naming/)

@@ -19,6 +19,7 @@ package kafka
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -35,11 +36,35 @@ const (
 	startTimeout = 3 * time.Minute
 )
 
+// Options tweak the container. Zero value uses defaults.
+type Options struct {
+	// Image is an immutable Redpanda image reference (tag@sha256:<digest>), for
+	// example to stay on another major. Empty uses the repository pin.
+	Image string
+}
+
+// image returns the reference to boot: the repository pin, or the explicit immutable one.
+func (o Options) image() (string, error) {
+	if o.Image == "" {
+		return testimages.Redpanda, nil
+	}
+	if err := testimages.Validate(o.Image); err != nil {
+		return "", fmt.Errorf("testutil/kafka: validate image: %w", err)
+	}
+	return o.Image, nil
+}
+
 // Addr boots a Redpanda container and returns its Kafka-compatible broker
 // address as "host:port". The container is terminated via t.Cleanup.
 func Addr(t *testing.T) string {
 	t.Helper()
-	return start(t)
+	return start(t, Options{})
+}
+
+// AddrWith is Addr with opts.
+func AddrWith(t *testing.T, opts Options) string {
+	t.Helper()
+	return start(t, opts)
 }
 
 // AddrSASL boots a Redpanda container whose Kafka listener requires SASL
@@ -47,17 +72,27 @@ func Addr(t *testing.T) string {
 // broker address as "host:port"; the container is terminated via t.Cleanup.
 func AddrSASL(t *testing.T, user, password string) string {
 	t.Helper()
-	return start(t,
+	return AddrSASLWith(t, user, password, Options{})
+}
+
+// AddrSASLWith is AddrSASL with opts.
+func AddrSASLWith(t *testing.T, user, password string, opts Options) string {
+	t.Helper()
+	return start(t, opts,
 		redpandacontainer.WithEnableSASL(),
 		redpandacontainer.WithNewServiceAccount(user, password),
 		redpandacontainer.WithSuperusers(user),
 	)
 }
 
-func start(t *testing.T, extra ...testcontainers.ContainerCustomizer) string {
+func start(t *testing.T, opts Options, extra ...testcontainers.ContainerCustomizer) string {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("testutil/kafka: container-backed; skipped under -short")
+	}
+	image, err := opts.image()
+	if err != nil {
+		t.Fatal(err)
 	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
@@ -69,11 +104,11 @@ func start(t *testing.T, extra ...testcontainers.ContainerCustomizer) string {
 	// The module renders Redpanda's advertised listener with Docker's mapped
 	// host port. A hand-written localhost:9092 advertisement breaks as soon as
 	// Docker assigns an ephemeral port (and races when tests run in parallel).
-	opts := append([]testcontainers.ContainerCustomizer{
+	customizers := append([]testcontainers.ContainerCustomizer{
 		redpandacontainer.WithAutoCreateTopics(),
 		testimages.WithPinnedReaper(),
 	}, extra...)
-	ctr, err := redpandacontainer.Run(ctx, testimages.Redpanda, opts...)
+	ctr, err := redpandacontainer.Run(ctx, image, customizers...)
 	if err != nil {
 		t.Fatalf("testutil/kafka: start container: %v", err)
 	}

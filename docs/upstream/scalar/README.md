@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Scalar API reference UI — v1.25.52 snapshot
+# Scalar API reference UI — v1.73.1 snapshot
 
-Pinned: **v1.25.52**
-Source: [published package v1.25.52](https://www.npmjs.com/package/@scalar/api-reference/v/1.25.52)
+Pinned: **v1.73.1**
+Source: [published package v1.73.1](https://www.npmjs.com/package/@scalar/api-reference/v/1.73.1)
 Used via: `apidocs/embed/scalar.js`; version authority is
 `apidocs/embed/SCALAR_VERSION` and the bundle header.
 
@@ -40,16 +40,20 @@ the bounded framework default is not suitable.
 <body>
   <script
     id="api-reference"
-    data-url="/openapi.json"></script>
+    data-url="/openapi.json"
+    data-configuration='{"telemetry":false,"withDefaultFonts":false}'></script>
   <script src="/docs/scalar.js"></script>
 </body>
 </html>
 ```
 
-The shipped handler always serves the embedded bundle; it has no runtime CDN
-dependency.
+The shipped handler serves the embedded bundle and turns off the two settings
+that reach outside: `telemetry` (on by default from v1.73) and the default
+fonts, which load from `fonts.scalar.com`. The page uses system fonts and
+contacts no outside host; `TestServedPageContactsNoOutsideHost` renders it in
+Chrome and reads the network log to prove it.
 
 ## Links
 
-- [Published package](https://www.npmjs.com/package/@scalar/api-reference/v/1.25.52)
+- [Published package](https://www.npmjs.com/package/@scalar/api-reference/v/1.73.1)
 - [Scalar documentation](https://guides.scalar.com/scalar/scalar-api-references)

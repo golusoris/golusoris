@@ -596,6 +596,7 @@ func TestNew_TimeoutBoundary(t *testing.T) {
 	f.addKey("k", "EC_SIGN_P256_SHA256")
 	cfg := fakeConfig(addr, "k")
 	cfg.Timeout = time.Nanosecond
+	f.stall(t) // a fast fake could answer before a coarse clock (Windows) sees the 1ns deadline pass
 	if _, err := gcp.New(t.Context(), cfg); errors.Is(err, gcp.ErrInvalidConfig) || !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("1ns timeout: New error = %v, want a valid config that times out", err)
 	}
@@ -608,18 +609,7 @@ func TestTimeout_BoundsEachCall(t *testing.T) {
 	cfg := fakeConfig(addr, "k")
 	cfg.Timeout = 200 * time.Millisecond
 	s := newSigner(t, cfg)
-	f.set(func(f *fakeKMS) {
-		f.hook = func(_ http.ResponseWriter, r *http.Request) bool {
-			// The server notices the client hanging up only after the body is read.
-			if _, err := io.Copy(io.Discard, r.Body); err != nil {
-				t.Errorf("drain body: %v", err)
-			}
-			f.mu.Unlock()
-			<-r.Context().Done()
-			f.mu.Lock()
-			return true
-		}
-	})
+	f.stall(t)
 	done := make(chan error, 1)
 	go func() {
 		_, err := s.Sign(rand.Reader, digestOf(crypto.SHA256, "m"), crypto.SHA256)

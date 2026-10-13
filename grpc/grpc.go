@@ -301,6 +301,7 @@ func newLogAdapter(logger *slog.Logger) grpclogging.Logger {
 // serverHook binds listen/serve and the bounded graceful stop to fx lifecycle.
 // A registered health service reports NOT_SERVING before the drain starts.
 func serverHook(srv *grpc.Server, hs *grpchealth.Server, cfg Config, logger *slog.Logger) fx.Hook {
+	served := make(chan struct{})
 	return fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			lc := &net.ListenConfig{}
@@ -309,6 +310,7 @@ func serverHook(srv *grpc.Server, hs *grpchealth.Server, cfg Config, logger *slo
 				return fmt.Errorf("grpc: listen %s: %w", cfg.Listen, err)
 			}
 			go func() {
+				defer close(served)
 				if err := srv.Serve(ln); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
 					logger.ErrorContext(ctx, "grpc: serve error", "err", err)
 				}
@@ -330,6 +332,9 @@ func serverHook(srv *grpc.Server, hs *grpchealth.Server, cfg Config, logger *slo
 				srv.Stop()
 				<-done
 			}
+			// A Serve that starts after the stop closes its listener itself; wait
+			// for it so the port is closed once OnStop returns.
+			<-served
 			return nil
 		},
 	}

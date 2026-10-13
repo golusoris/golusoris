@@ -41,7 +41,7 @@ gate that enforces it in this repository:
 
 - **HISS-16 (Context Integrity)**: [`AGENTS.md`](AGENTS.md) is the **single
   canonical agent harness**. Every vendor context file (`CLAUDE.md`,
-  `.cursor/`, `.gemini/`, `.codex/`, `.windsurfrules`, IDE configs) is
+  `.gemini/`, `.codex/`, IDE configs) is
   compiled from it by `praetorctl compile-context` and verified by the
   lefthook pre-commit hook and `make verify-all` — never edited by hand.
   `make caveman-context` also checks every tracked package guide, canonical

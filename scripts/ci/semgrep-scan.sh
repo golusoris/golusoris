@@ -6,6 +6,8 @@
 set -euo pipefail
 
 readonly max_go_files=16384
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+readonly script_dir
 
 # Exception (one file, all rules): Semgrep's Go parser rejects generic type
 # aliases while the ruleset holds a for-range pattern (semgrep/semgrep#11972),
@@ -73,52 +75,7 @@ collect_files() {
 }
 
 validate_report() {
-	local report="$1"
-	local expected="$2"
-	python3 - "$report" "$expected" <<'PY'
-import json
-import pathlib
-import sys
-
-report_path, expected_path = map(pathlib.Path, sys.argv[1:])
-if not report_path.is_file():
-    print("Semgrep did not produce its JSON report", file=sys.stderr)
-    raise SystemExit(1)
-
-try:
-    payload = json.loads(report_path.read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError) as error:
-    print(f"Semgrep report is unreadable: {error}", file=sys.stderr)
-    raise SystemExit(1) from error
-errors = payload.get("errors", [])
-results = payload.get("results", [])
-expected = {
-    pathlib.Path(raw.decode("utf-8")).as_posix()
-    for raw in expected_path.read_bytes().split(b"\0")
-    if raw
-}
-scanned = {
-    pathlib.Path(path).as_posix()
-    for path in payload.get("paths", {}).get("scanned", [])
-}
-
-for error in errors[:5]:
-    print(f"Semgrep error: {error}", file=sys.stderr)
-for result in results[:10]:
-    path = result.get("path", "unknown")
-    check = result.get("check_id", "unknown")
-    line = result.get("start", {}).get("line", 0)
-    message = result.get("extra", {}).get("message", "finding")
-    print(f"{path}:{line}: {check}: {message}", file=sys.stderr)
-
-missing = sorted(expected - scanned)
-if missing:
-    for path in missing[:10]:
-        print(f"Semgrep did not scan selected file: {path}", file=sys.stderr)
-if errors or results or missing:
-    raise SystemExit(1)
-print(f"Semgrep custom rules: {len(scanned)} repository Go files passed")
-PY
+	python3 -B "$script_dir/semgrep-report.py" "$1" "$2"
 }
 
 # snapshot_sources copies the configuration and main's selected files into stage and lists them.
