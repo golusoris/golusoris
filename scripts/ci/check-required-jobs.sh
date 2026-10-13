@@ -51,6 +51,11 @@ main() {
 	[[ "${EVENT_NAME:?}" == pull_request ]] && is_pr=true
 	require_conditional dependency-review "${DEPENDENCY_REVIEW:?}" "$is_pr"
 
+	# Renovate titles follow its own commit convention; the job skips it.
+	local title_applicable="$is_pr"
+	[[ "${ACTOR:?}" == 'renovate[bot]' ]] && title_applicable=false
+	require_conditional pr-title "${PR_TITLE:?}" "$title_applicable"
+
 	local dco_applicable="$is_pr"
 	# Bots author no human contribution to certify: Renovate and the release-please bot.
 	[[ "${ACTOR:?}" == 'renovate[bot]' || "${ACTOR:?}" == 'github-actions[bot]' ]] && dco_applicable=false
