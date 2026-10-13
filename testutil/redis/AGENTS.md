@@ -24,6 +24,9 @@ Container + client are torn down via `t.Cleanup` — no manual cleanup needed.
 
 Redis + Ryuk references: immutable `internal/testimages` authority. Renovate owns
 tag + digest updates. No local mutable image strings.
+`StartWith` / `AddrWith` + `Options.Image`: consumer pins own image (e.g. older
+major); exact `tag@sha256:<64 hex>` required, mutable reference fails before
+Docker access. Empty = repository pin.
 
 For tests that drive their own client constructor (e.g. `cache/redis`), use
 `redistest.Addr(t)` to get container's `host:port` address instead of ready-made client.

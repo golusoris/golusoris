@@ -1,0 +1,62 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Rebuilds the embedded API-docs bundle from the package registry once a week and
+# opens a pull request when a release at least three days old is newer than the
+# embedded one. A version line alone cannot regenerate the bundle, so no update
+# bot owns it; scripts/verify-upstream-pins.sh fails when this job stays silent.
+name: scalar-bundle
+
+on:
+  schedule:
+    - cron: '23 5 * * 1' # Mondays 05:23 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scalar-bundle
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    name: Rebuild the embedded API-docs bundle
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Rebuild from the registry
+        run: bash scripts/ci/scalar-bundle-update.sh
+      - name: Open or refresh the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: automation/scalar-bundle
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "The embedded bundle is current; nothing to propose." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          version="$(tr -d '\r\n' < apidocs/embed/SCALAR_VERSION)"
+          released="$(tr -d '\r\n' < apidocs/embed/SCALAR_RELEASED)"
+          title="fix(apidocs): update the embedded Scalar bundle to $version"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          gh auth setup-git
+          git switch -C "$BRANCH"
+          git commit --all --signoff --message "$title" \
+            --message "Rebuilt by the scalar-bundle workflow from the package registry: release of $released, tarball checked against the registry's sha512."
+          git push --force origin "$BRANCH"
+          body="Rebuilt by the weekly \`scalar-bundle\` workflow. Release of $released, at least three days old; the tarball matched the registry's sha512. The checks of this pull request need an approval to run; \`TestServedPageContactsNoOutsideHost\` then shows whether the new bundle still contacts no outside host."
+          if [ "$(gh pr list --head "$BRANCH" --state open --json number --jq 'length')" = 0 ]; then
+            gh pr create --base main --head "$BRANCH" --title "$title" --body "$body"
+          else
+            gh pr edit "$BRANCH" --title "$title" --body "$body"
+          fi

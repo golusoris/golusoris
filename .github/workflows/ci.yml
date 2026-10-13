@@ -16,7 +16,7 @@ on:
 
 # Praetor engine that local hooks and Make targets run; .config/lefthook/engine.sh reads this pin.
 env:
-  PRAETOR_REF: 9615f1b907cc7e677a3ae71f6e864deb4450b9de
+  PRAETOR_REF: 3bbde07342bdece12c46f74b0ee2c1f51129478f
 
 permissions:
   contents: read
@@ -107,6 +107,7 @@ jobs:
           . tools/tool-versions.env
           go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
       - name: Check gofumpt formatting
         run: scripts/hooks/gofumpt.sh --all
       - name: Lint primary modules
@@ -117,6 +118,8 @@ jobs:
         run: |
           docker info
           bash scripts/ci/python-lint.sh
+      - name: Lint protobuf and check the vendored KEDA contract (buf)
+        run: bash scripts/ci/buf-lint.sh
 
   # ── Security scan (gosec) ───────────────────────────────────────────────────
   gosec:
@@ -162,12 +165,12 @@ jobs:
           bash scripts/ci/install-gosec.sh
           scripts/ci/go-modules.sh verify
           scripts/ci/go-modules.sh gosec
+      # A fork pull request gets no security-events write token; every other run must upload.
       - name: Upload SARIF
-        if: always() && github.event.pull_request.draft != true
+        if: always() && github.event.pull_request.draft != true && github.event.pull_request.head.repo.fork != true
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: gosec.sarif
-        continue-on-error: true   # SARIF upload requires Advanced Security (private repos)
 
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
@@ -665,11 +668,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Install pinned actionlint and Helm
+      - name: Install pinned actionlint, Helm and buf
         run: |
           . tools/tool-versions.env
           go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Install pinned ShellCheck
         run: |
@@ -954,6 +958,8 @@ jobs:
 
   # ── Developer Certificate of Origin ─────────────────────────────────────────
   # Every PR commit must carry a Signed-off-by trailer (LICENSING.md, CONTRIBUTING.md).
+  # The squash commit copies PR commit trailers and the PR body, so both are read here for
+  # model or coding-tool attribution before they can reach main.
   dco:
     name: DCO sign-off
     if: github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]' && github.event_name == 'pull_request'
@@ -982,6 +988,36 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/ci/check-dco.sh "$BASE" "$HEAD"
+      - name: Test the attribution check
+        run: bash scripts/ci/check-attribution_test.sh
+      - name: Refuse model or coding-tool attribution in PR commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci/check-attribution.sh "$BASE" "$HEAD"
+      - name: Refuse model or coding-tool attribution in the PR body
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s\n' "$BODY" | bash scripts/ci/check-attribution.sh --text
+
+  # The merge queue builds the commits that land on main, so the squash body is final there:
+  # a PR body edited after its last CI run and a bot PR, which the job above skips, are read here.
+  attribution:
+    name: Attribution (merge queue)
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Test the attribution check
+        run: bash scripts/ci/check-attribution_test.sh
+      - name: Refuse model or coding-tool attribution in the commits that land
+        env:
+          BASE: ${{ github.event.merge_group.base_sha }}
+          HEAD: ${{ github.event.merge_group.head_sha }}
+        run: bash scripts/ci/check-attribution.sh "$BASE" "$HEAD"
 
   # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
   reuse:
@@ -1021,6 +1057,7 @@ jobs:
     # event contract makes them inapplicable may be skipped.
     if: always()
     needs:
+      - pr-title
       - lint
       - gosec
       - vuln
@@ -1039,6 +1076,7 @@ jobs:
       - dependency-review
       - gitleaks
       - dco
+      - attribution
       - reuse
       - apidiff
     runs-on: ubuntu-24.04
@@ -1061,6 +1099,7 @@ jobs:
         run: bash scripts/ci/check-required-jobs_test.sh
       - name: Verify all gating jobs passed
         env:
+          PR_TITLE: ${{ needs.pr-title.result }}
           LINT: ${{ needs.lint.result }}
           GOSEC: ${{ needs.gosec.result }}
           VULN: ${{ needs.vuln.result }}
@@ -1079,6 +1118,7 @@ jobs:
           DEPENDENCY_REVIEW: ${{ needs.dependency-review.result }}
           GITLEAKS: ${{ needs.gitleaks.result }}
           DCO: ${{ needs.dco.result }}
+          ATTRIBUTION: ${{ needs.attribution.result }}
           REUSE: ${{ needs.reuse.result }}
           APIDIFF: ${{ needs.apidiff.result }}
           EVENT_NAME: ${{ github.event_name }}

@@ -113,7 +113,7 @@ rules:
           of the loop half: `for !done` has no scalar upper bound, which is what the axiom
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
           is reported by Semgrep and golangci-lint rather than by the HISS scanner. Semgrep
-          1.177.0 runs from the declared digest with strict parsing and proves all 721 selected
+          1.180.0 runs from the declared digest with strict parsing and proves all 1093 selected
           repository Go files were scanned; scanner errors, omissions and findings fail. The
           test-request rule fires on its eight positive fixtures, stays silent on four negative
           and two gap fixtures (a client literal without Transport, and http.DefaultTransport
@@ -428,7 +428,7 @@ rules:
         mechanism: >-
           kubeconform v0.8.0 from an immutable image digest validates repository-owned static
           manifests plus default and feature-complete Helm renders in strict mode against
-          Kubernetes v1.37.0 schemas and external CRD schemas at immutable source commits.
+          Kubernetes v1.37.1 schemas and external CRD schemas at immutable source commits.
           scripts/ci/kubeconform.sh selects tracked plus non-ignored untracked manifests,
           rejects symlinks, and fails on missing schemas except the explicit local AppStack
           claim. Make target kubeconform runs inside make verify-all; required CI job
@@ -641,8 +641,8 @@ rules:
           compile-context-verify and lefthook pre-commit job context-check, verifies root
           projections and persona projections. Makefile target caveman-context, also inside
           make verify-all, lints every tracked AGENTS.md plus canonical personas, skills and
-          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .cursor/,
-          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/.
+          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .gemini/ and
+          .codex/, the clients `agent_clients` in .standards.yaml selects.
         rationale: >-
           No positive fixture exists because projection comparison and bounded source
           discovery are repository-global properties no single fixture can exhibit. Measured

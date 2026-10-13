@@ -23,9 +23,11 @@
 //	db.migrate.auto     # run Up() on fx Start (default false)
 //	db.migrate.dsn      # DSN; defaults to db.dsn if empty
 //
-// The PostgreSQL migrator also honours db.ssl.* and db.password_file, with the
-// pool's precedence over the DSN. It reads those files once, when it is
-// constructed. No other db.* option applies to it.
+// A migrator that inherits db.dsn also honours db.ssl.* and db.password_file,
+// with the pool's precedence over the DSN; it reads those files once, when it
+// is constructed. An explicit db.migrate.dsn names its own role and is used as
+// given: it carries its password and TLS parameters itself. No other db.*
+// option applies to the migrator.
 package migrate
 
 import (
@@ -142,28 +144,35 @@ func (m *Migrator) Close() error {
 }
 
 // New constructs a Migrator for PostgreSQL. If opts.FS is set it takes
-// precedence over Path. dsn defaults to opts.DSN, falling back to pgxOpts.DSN.
+// precedence over Path. opts.DSN is used as given; when it is empty the
+// migrator inherits pgxOpts.DSN with db.ssl.* and db.password_file applied.
 func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
-	dsn := opts.DSN
-	if dsn == "" {
-		dsn = pgxOpts.DSN
-	}
-	if dsn == "" {
+	if opts.DSN == "" && pgxOpts.DSN == "" {
 		return nil, errors.New("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
 	}
 	if logger == nil {
 		return nil, errors.New("db/migrate: nil logger")
 	}
-	dbURL, err := migratorURL(dsn, pgxOpts)
+	dbURL, err := databaseURL(opts.DSN, pgxOpts)
 	if err != nil {
 		return nil, err
 	}
 	return Open(opts, dbURL, logger)
 }
 
-// migratorURL is the golang-migrate URL for dsn with db.ssl.* and
-// db.password_file applied: the migrator connects outside the pool, and
-// without them it fails where the pool connects (#771).
+// databaseURL keeps an explicit migrator DSN as given: it names its own role,
+// so the pool's password file and TLS options do not belong to it (#810).
+// Only the inherited pool DSN takes them.
+func databaseURL(explicit string, pgxOpts dbpgx.Options) (string, error) {
+	if explicit != "" {
+		return pgxToMigrateURL(explicit)
+	}
+	return migratorURL(pgxOpts.DSN, pgxOpts)
+}
+
+// migratorURL is the golang-migrate URL for the inherited pool dsn with
+// db.ssl.* and db.password_file applied: the migrator connects outside the
+// pool, and without them it fails where the pool connects (#771).
 func migratorURL(dsn string, pgxOpts dbpgx.Options) (string, error) {
 	// golang-migrate re-encodes the query with "+" for a space, which pgx reads as a literal plus.
 	for _, file := range []string{pgxOpts.SSL.RootCert, pgxOpts.SSL.Cert, pgxOpts.SSL.Key} {

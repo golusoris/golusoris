@@ -21,6 +21,8 @@ var scalarJS []byte
 // scalarHTMLTemplate is the one-page HTML wrapper Scalar expects. The
 // <script id="api-reference"> tag carries a data-url attribute pointing to
 // the OpenAPI spec, and the <script src> tag loads the bundle.
+// data-configuration turns off the bundle's telemetry setting and its default fonts,
+// which load from the vendor's host; both default to on.
 const scalarHTMLTemplate = `<!doctype html>
 <html lang="en">
 <head>
@@ -29,7 +31,7 @@ const scalarHTMLTemplate = `<!doctype html>
 <title>%s</title>
 </head>
 <body>
-<script id="api-reference" data-url="%s"></script>
+<script id="api-reference" data-url="%s" data-configuration='{"telemetry":false,"withDefaultFonts":false}'></script>
 <script src="/docs/scalar.js"></script>
 </body>
 </html>

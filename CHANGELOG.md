@@ -15,6 +15,34 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.5](https://github.com/golusoris/golusoris/compare/v0.16.4...v0.16.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **testutil:** let the redis and kafka helpers boot a caller's image ([#817](https://github.com/golusoris/golusoris/issues/817)) ([6fe9ee1](https://github.com/golusoris/golusoris/commit/6fe9ee11e8d386a0f196e8d987339c0097ea05c3))
+
+## [0.16.4](https://github.com/golusoris/golusoris/compare/v0.16.3...v0.16.4) (2026-10-11)
+
+
+### Bug Fixes
+
+* **apidocs:** update the embedded Scalar bundle to 1.73.1 ([#808](https://github.com/golusoris/golusoris/issues/808)) ([64852b2](https://github.com/golusoris/golusoris/commit/64852b2a9487a5a412054cd7d539f9eed6bf8d95))
+* **db/migrate:** use an explicit migrator DSN as given ([#811](https://github.com/golusoris/golusoris/issues/811)) ([6058e81](https://github.com/golusoris/golusoris/commit/6058e81a21224f28421c57e8cce781cb18d8d4ea))
+
+## [0.16.3](https://github.com/golusoris/golusoris/compare/v0.16.2...v0.16.3) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** update github.com/xuri/excelize/v2 digest to 066c84b ([#747](https://github.com/golusoris/golusoris/issues/747)) ([2c6cc52](https://github.com/golusoris/golusoris/commit/2c6cc52703602b3788f65aa51e2887057cd0ea13))
+* **deps:** update media, document and protocol libraries as one train ([#802](https://github.com/golusoris/golusoris/issues/802)) ([cd27c5f](https://github.com/golusoris/golusoris/commit/cd27c5f395ee7292fe73987d132d0064567af028))
+
+
+### Reverts
+
+* update github.com/xuri/excelize/v2 digest to 066c84b ([#747](https://github.com/golusoris/golusoris/issues/747)) ([#806](https://github.com/golusoris/golusoris/issues/806)) ([61738d7](https://github.com/golusoris/golusoris/commit/61738d707e8cc9703dfda9b184d3f11b5c0c0aac))
+
 ## [0.16.2](https://github.com/golusoris/golusoris/compare/v0.16.1...v0.16.2) (2026-10-10)
 
 
