@@ -127,6 +127,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
+	@bash scripts/ci/check-gofumpt_test.sh
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
