@@ -119,6 +119,9 @@
             "context": "REUSE lint"
           },
           {
+            "context": "Scorecard Analysis"
+          },
+          {
             "context": "Build and smoke (gemma)"
           },
           {
