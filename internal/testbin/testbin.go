@@ -41,7 +41,7 @@ func Build(tb testing.TB, pkg, ldflags string) string {
 	}
 	ctx, cancel := context.WithTimeout(tb.Context(), Timeout)
 	defer cancel()
-	//nolint:gosec // G204: the toolchain path comes from LookPath and the arguments from the calling test.
+	// #nosec G204 -- the toolchain path comes from LookPath and the arguments from the calling test.
 	cmd := exec.CommandContext(ctx, goBin, "build", "-trimpath", "-ldflags", ldflags, "-o", bin, pkg)
 	if out, buildErr := cmd.CombinedOutput(); buildErr != nil {
 		tb.Fatalf("testbin: go build %s: %v\n%s", pkg, buildErr, out)
@@ -56,7 +56,7 @@ func Run(tb testing.TB, bin string, args ...string) Result {
 	ctx, cancel := context.WithTimeout(tb.Context(), Timeout)
 	defer cancel()
 	var stdout, stderr bytes.Buffer
-	//nolint:gosec // G204: the binary is one Build produced for the calling test.
+	// #nosec G204 -- the binary is one Build produced for the calling test.
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
