@@ -54,7 +54,6 @@ import (
 	otlplog "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	otlpmetric "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	otlptrace "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/log/global"
 	nooplog "go.opentelemetry.io/otel/log/noop"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
@@ -169,8 +168,8 @@ func (p *Providers) detachGlobals() {
 	if p.Meter != nil && otelapi.GetMeterProvider() == p.Meter {
 		otelapi.SetMeterProvider(noopmetric.NewMeterProvider())
 	}
-	if p.Logger != nil && global.GetLoggerProvider() == p.Logger {
-		global.SetLoggerProvider(nooplog.NewLoggerProvider())
+	if p.Logger != nil && otelapi.GetLoggerProvider() == p.Logger {
+		otelapi.SetLoggerProvider(nooplog.NewLoggerProvider())
 	}
 }
 
@@ -234,7 +233,7 @@ func installGlobals(providers *Providers) {
 		otelapi.SetMeterProvider(providers.Meter)
 	}
 	if providers.Logger != nil {
-		global.SetLoggerProvider(providers.Logger)
+		otelapi.SetLoggerProvider(providers.Logger)
 	}
 }
 

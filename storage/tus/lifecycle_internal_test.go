@@ -16,6 +16,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -457,6 +458,64 @@ func TestStopLeavesScratchUntouchedWhenDrainJoinTimesOut(t *testing.T) {
 	}
 	if _, err = scratch.Create(context.Background(), tusd.FileInfo{ID: "still-open", Size: 1}); err != nil {
 		t.Fatalf("scratch unusable after failed join: %v", err)
+	}
+}
+
+// blockingCompletionScratch lists one durable completion and blocks loading it
+// until released, like a file call that ignores ctx and outlives the stop deadline.
+type blockingCompletionScratch struct {
+	scratchStore
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (s *blockingCompletionScratch) CompletionIDs(context.Context, int) ([]string, error) {
+	return []string{"stuck-upload"}, nil
+}
+
+func (s *blockingCompletionScratch) Completion(context.Context, string) (completionRecord, error) {
+	close(s.entered)
+	<-s.release
+	return completionRecord{}, tusd.ErrNotFound
+}
+
+// TestStopTimeoutNamesDrainPhase pins #736: when the drain outlives the stop
+// deadline, the error names the operation and upload it is blocked in.
+func TestStopTimeoutNamesDrainPhase(t *testing.T) {
+	t.Parallel()
+	local, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalScratch: %v", err)
+	}
+	scratch := &blockingCompletionScratch{scratchStore: local, entered: make(chan struct{}), release: make(chan struct{})}
+	h := &Handler{
+		unrouted:  &tusd.UnroutedHandler{CompleteUploads: make(chan tusd.HookEvent)},
+		scratch:   scratch,
+		log:       slog.New(slog.DiscardHandler),
+		clk:       clockwork.NewRealClock(),
+		opts:      Options{ExpirySweepInterval: time.Hour},
+		drainDone: make(chan struct{}),
+	}
+	drainCtx, cancel := context.WithCancel(context.Background())
+	h.drainCancel = cancel
+	go h.drainCompletions(drainCtx)
+	select {
+	case <-scratch.entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("drain never loaded the listed completion")
+	}
+
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer stopCancel()
+	err = h.stop(stopCtx)
+	close(scratch.release)
+	select {
+	case <-h.drainDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("drain did not exit after release")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "complete upload stuck-upload") {
+		t.Fatalf("stop error = %v; want deadline exceeded naming the blocked upload", err)
 	}
 }
 

@@ -50,6 +50,8 @@ func TestModule_StartsAndStops(t *testing.T) {
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		ourgrpc.Module,
+		// Ephemeral port: the default :9090 may be held by a parallel test or another process.
+		fx.Decorate(func(c ourgrpc.Config) ourgrpc.Config { c.Listen = "127.0.0.1:0"; return c }),
 		fx.Invoke(func(*grpc.Server) {}),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

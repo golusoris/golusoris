@@ -45,10 +45,3 @@ func TestNewMissingEnvIsEmpty(t *testing.T) { //nolint:paralleltest // mutates g
 		t.Errorf("expected empty PodInfo, got %+v", p)
 	}
 }
-
-func TestIsInCluster(t *testing.T) {
-	t.Parallel()
-	// We can't reliably set the SA token file in tests; just check the
-	// helper doesn't panic and returns a bool.
-	_ = podinfo.IsInCluster()
-}

@@ -42,8 +42,16 @@ Migration:
 The `Migration:` footer is **required by project policy** for breaking
 changes and is checked during review. Before v1.0, the `apidiff` job reports
 compatibility changes without blocking the merge. Release Please builds the
-changelog from Conventional Commit messages; maintainers add a migration guide
-when an upgrade needs more than the commit's before/after example.
+changelog from Conventional Commit messages.
+
+A release whose changelog entry has a `BREAKING CHANGES` section needs a
+migration guide at `docs/migrations/v<version>.md`. `make release-notes-check`
+fails the release pull request without it, and the release workflow puts the
+breaking lines, the guide's section headings and a link to the guide at the top
+of the GitHub release notes (`scripts/ci/release-notes-breaking.sh`). Every
+release's notes also carry an "API compatibility" section: the number of modules
+with incompatible changes since the last published release and their `apidiff`
+reports, or the reason when that comparison did not run.
 
 ## Licensing and the Developer Certificate of Origin
 
@@ -88,7 +96,7 @@ Jobs that feed the **CI success** aggregate:
   discovered module
 - `mkdocs` — strict documentation-site build from immutable tooling
 - `allocation-budget` — measured byte/op and allocation/op ceilings for named
-  hot paths
+  hot paths; the minimum of five runs is compared, and every run is printed
 - `shellcheck` and `actionlint` — pinned full-tree shell and workflow lint
 - `terraform` and `kubeconform` — locked Terraform validation plus static and
   rendered Kubernetes schema checks
@@ -103,7 +111,14 @@ Jobs that feed the **CI success** aggregate:
 - `gitleaks` — full-history secret scan
 - `dco` — every human-authored commit in the PR must carry `Signed-off-by:`
   (`scripts/ci/check-dco.sh`); commits authored by a GitHub App bot such as
-  Renovate or release-please are skipped, and non-PR events are not applicable
+  Renovate or release-please are skipped, and non-PR events are not applicable.
+  The same job refuses a PR commit or PR body that credits a model or coding
+  tool in a `Co-authored-by:` trailer or a "Generated with" footer
+  (`scripts/ci/check-attribution.sh`)
+- `attribution` — merge queue only: runs the same check over the commits the
+  queue built, which are the commits that land on `main`. This covers the final
+  squash body and the pull requests of Renovate and release-please, which the
+  `dco` job skips
 - `apidiff` — checks every discovered Go module against the previous root
   release tag; discovery and checker errors fail the aggregate, while detected
   incompatibilities remain informational before v1.0
@@ -154,7 +169,7 @@ lefthook install          # writes .git/hooks/{pre-commit,commit-msg,post-commit
 | Hook | Runs |
 | --- | --- |
 | `pre-commit` (parallel, staged `*.go` only) | `gofumpt -l`, `gci list`, `golangci-lint run --config .golangci.yml` and `go vet` on the packages of the staged files; `praetorctl compile-context --verify`, `praetorctl audit`, `reuse lint`, `gitleaks git --staged` |
-| `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`) and the DCO `Signed-off-by:` trailer |
+| `commit-msg` | Conventional Commits subject (`<type>(<scope>): <description>`), the DCO `Signed-off-by:` trailer, and no model or coding-tool attribution (`scripts/ci/check-attribution.sh`) |
 | `post-commit` | `praetorctl state sync .`, `praetorctl dedupe cadence --threshold=20 --record .` |
 | `pre-push` | all primary-module build/vet + `go test -short` (no `-race`); `GO_MODULE_GROUP=primary scripts/ci/go-modules.sh vuln`; `praetorctl audit` |
 | `agent-checkpoint-tool` / `agent-checkpoint-stop` | Bounded checkpoint evaluator (`.config/lefthook/scripts/checkpoint.py`); disabled until a reviewed `.config/agent/checkpoint.json` is added locally — not part of this adoption |

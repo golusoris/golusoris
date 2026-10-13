@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# yuin/goldmark — v2.1.5 snapshot
+# yuin/goldmark — v2.1.6 snapshot
 
-Pinned: **v2.1.5**
-Source: [tagged source](https://github.com/yuin/goldmark/tree/v2.1.5)
+Pinned: **v2.1.6**
+Source: [tagged source](https://github.com/yuin/goldmark/tree/v2.1.6)
 
 ## Basic usage
 
@@ -74,4 +74,4 @@ sanitize output at the application boundary when rendering untrusted input.
 
 ## Links
 
-- [Package documentation](https://pkg.go.dev/github.com/yuin/goldmark/v2@v2.1.5)
+- [Package documentation](https://pkg.go.dev/github.com/yuin/goldmark/v2@v2.1.6)

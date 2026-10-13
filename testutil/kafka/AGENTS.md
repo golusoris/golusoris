@@ -30,6 +30,9 @@ addr := kafkatest.AddrSASL(t, "svc", "s3cret") // SCRAM-SHA-256 required; user i
 - Container is terminated via `t.Cleanup` — no manual teardown needed.
 - Uses immutable Redpanda + Ryuk references from `internal/testimages`.
 - Renovate owns tag + digest updates; no local mutable image strings.
+- `AddrWith` / `AddrSASLWith` + `Options.Image`: consumer pins own image (e.g.
+  older major); exact `tag@sha256:<64 hex>` required, mutable reference fails
+  before Docker access. Empty = repository pin.
 - Redpanda runs `dev-container` mode: single node; no ZooKeeper.
 
 ## Don't

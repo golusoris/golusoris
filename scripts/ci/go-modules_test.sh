@@ -99,4 +99,34 @@ if ! go_fix_check "$fix_root/probe" >/dev/null 2>&1; then
 	exit 1
 fi
 
+# app lists leaf below the version dep requires; go mod download repairs that in place.
+# The probe resolves through local replacements only, so it must never reach a proxy.
+export GOPROXY=off
+drift_root="$fix_root/drift"
+mkdir -p "$drift_root/leaf" "$drift_root/dep" "$drift_root/app"
+printf 'module example.com/leaf\n\ngo 1.27\n' >"$drift_root/leaf/go.mod"
+printf 'package leaf\n\nconst N = 1\n' >"$drift_root/leaf/leaf.go"
+printf 'module example.com/dep\n\ngo 1.27\n\nrequire example.com/leaf v0.2.0\n\nreplace example.com/leaf => ../leaf\n' \
+	>"$drift_root/dep/go.mod"
+printf 'package dep\n\nimport "example.com/leaf"\n\nconst N = leaf.N\n' >"$drift_root/dep/dep.go"
+printf 'package app\n\nimport "example.com/dep"\n\nconst N = dep.N\n' >"$drift_root/app/app.go"
+write_app_mod() {
+	printf 'module example.com/app\n\ngo 1.27\n\nrequire example.com/dep v0.1.0\n\nrequire example.com/leaf %s // indirect\n\nreplace example.com/dep => ../dep\n\nreplace example.com/leaf => ../leaf\n' \
+		"$1" >"$drift_root/app/go.mod"
+}
+write_app_mod v0.1.0
+if verify_output="$(verify_module "$drift_root/app" 2>&1)"; then
+	printf 'verify phase accepted a go.mod that go mod download rewrote\n' >&2
+	exit 1
+fi
+if [[ "$verify_output" != *"go mod download rewrote go.mod or go.sum"* ]]; then
+	printf 'verify phase failed without the rewrite finding: %s\n' "$verify_output" >&2
+	exit 1
+fi
+write_app_mod v0.2.0
+if ! verify_module "$drift_root/app" >/dev/null 2>&1; then
+	printf 'verify phase rejected a tidy module\n' >&2
+	exit 1
+fi
+
 printf 'go-module coverage selection tests passed\n'

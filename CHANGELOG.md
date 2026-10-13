@@ -15,6 +15,61 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.16.5](https://github.com/golusoris/golusoris/compare/v0.16.4...v0.16.5) (2026-10-11)
+
+
+### Bug Fixes
+
+* **testutil:** let the redis and kafka helpers boot a caller's image ([#817](https://github.com/golusoris/golusoris/issues/817)) ([6fe9ee1](https://github.com/golusoris/golusoris/commit/6fe9ee11e8d386a0f196e8d987339c0097ea05c3))
+
+## [0.16.4](https://github.com/golusoris/golusoris/compare/v0.16.3...v0.16.4) (2026-10-11)
+
+
+### Bug Fixes
+
+* **apidocs:** update the embedded Scalar bundle to 1.73.1 ([#808](https://github.com/golusoris/golusoris/issues/808)) ([64852b2](https://github.com/golusoris/golusoris/commit/64852b2a9487a5a412054cd7d539f9eed6bf8d95))
+* **db/migrate:** use an explicit migrator DSN as given ([#811](https://github.com/golusoris/golusoris/issues/811)) ([6058e81](https://github.com/golusoris/golusoris/commit/6058e81a21224f28421c57e8cce781cb18d8d4ea))
+
+## [0.16.3](https://github.com/golusoris/golusoris/compare/v0.16.2...v0.16.3) (2026-10-11)
+
+
+### Bug Fixes
+
+* **deps:** update github.com/xuri/excelize/v2 digest to 066c84b ([#747](https://github.com/golusoris/golusoris/issues/747)) ([2c6cc52](https://github.com/golusoris/golusoris/commit/2c6cc52703602b3788f65aa51e2887057cd0ea13))
+* **deps:** update media, document and protocol libraries as one train ([#802](https://github.com/golusoris/golusoris/issues/802)) ([cd27c5f](https://github.com/golusoris/golusoris/commit/cd27c5f395ee7292fe73987d132d0064567af028))
+
+
+### Reverts
+
+* update github.com/xuri/excelize/v2 digest to 066c84b ([#747](https://github.com/golusoris/golusoris/issues/747)) ([#806](https://github.com/golusoris/golusoris/issues/806)) ([61738d7](https://github.com/golusoris/golusoris/commit/61738d707e8cc9703dfda9b184d3f11b5c0c0aac))
+
+## [0.16.2](https://github.com/golusoris/golusoris/compare/v0.16.1...v0.16.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **db/migrate:** apply db.ssl.* and db.password_file to the migrator ([#788](https://github.com/golusoris/golusoris/issues/788)) ([d7f87f2](https://github.com/golusoris/golusoris/commit/d7f87f256dc239a5ef251440e53371733dfa7b87))
+* **db/sqlite:** name the failed step and the disk state when the open fails ([#796](https://github.com/golusoris/golusoris/issues/796)) ([18452a6](https://github.com/golusoris/golusoris/commit/18452a6bcd01dcd600b1005c6aebf15c6bc6aa69))
+* **deps:** update cloud, observability, data and registry libraries as one train ([#792](https://github.com/golusoris/golusoris/issues/792)) ([1284fa3](https://github.com/golusoris/golusoris/commit/1284fa32ec373194605e0736447ce2349c569562))
+* **deps:** update module github.com/davidbyttow/govips/v2 to v2.19.0 ([#599](https://github.com/golusoris/golusoris/issues/599)) ([bbfdec7](https://github.com/golusoris/golusoris/commit/bbfdec7caa8ed8ec44c09d5ba0dda26f362999ff))
+* **deps:** update module github.com/ethereum/go-ethereum to v1.17.8 ([#749](https://github.com/golusoris/golusoris/issues/749)) ([47bd9c2](https://github.com/golusoris/golusoris/commit/47bd9c26b159967413ba60ec2f2f2eb4561cb310))
+* **deps:** update module github.com/golusoris/golusoris to v0.16.1 ([#758](https://github.com/golusoris/golusoris/issues/758)) ([9020016](https://github.com/golusoris/golusoris/commit/902001658b3fe0d9e92def28e23fa50d3477bec8))
+* **deps:** update module sigs.k8s.io/controller-runtime to v0.25.2 ([#594](https://github.com/golusoris/golusoris/issues/594)) ([765a7f9](https://github.com/golusoris/golusoris/commit/765a7f95e3f880c52484a63201a82cb72d39ddd5))
+* **deps:** update the golang.org/x modules as one train ([#789](https://github.com/golusoris/golusoris/issues/789)) ([610e4ab](https://github.com/golusoris/golusoris/commit/610e4ab476d3aaea166681d995c3fb70007b20bb))
+
+## [0.16.1](https://github.com/golusoris/golusoris/compare/v0.16.0...v0.16.1) (2026-10-10)
+
+
+### Bug Fixes
+
+* **ci:** compare the minimum of five runs in the allocation gate ([#783](https://github.com/golusoris/golusoris/issues/783)) ([01ac715](https://github.com/golusoris/golusoris/commit/01ac715d19ee1f84c4812de24bed919cab7991db))
+* **ci:** fail the verify phase when go mod download rewrites go.mod ([#774](https://github.com/golusoris/golusoris/issues/774)) ([10c5243](https://github.com/golusoris/golusoris/commit/10c52436718c826fbb2706ca5ecf2dadce7be372))
+* **deps:** update github.com/golusoris/golusoris/container/registry digest to 5e0e1ab ([#745](https://github.com/golusoris/golusoris/issues/745)) ([78ede0c](https://github.com/golusoris/golusoris/commit/78ede0c192b4a6663c869532b5126c766379ffe9))
+* **deps:** update github.com/golusoris/golusoris/container/registry/sign digest to 78871be ([#746](https://github.com/golusoris/golusoris/issues/746)) ([53a0b39](https://github.com/golusoris/golusoris/commit/53a0b390aaaf4cf0969ea8548cc770e7a445758d))
+* **deps:** update module github.com/golusoris/golusoris/core to v0.10.1 ([#759](https://github.com/golusoris/golusoris/issues/759)) ([633449b](https://github.com/golusoris/golusoris/commit/633449b30b9cff71a06f5608b8b37fe13e361834))
+* **grpc:** wait for Serve before the stop hook returns ([#773](https://github.com/golusoris/golusoris/issues/773)) ([cd37d15](https://github.com/golusoris/golusoris/commit/cd37d15ebe03e3c47b833d7da98b7ef7cc4ed76c))
+* **tus:** name the drain step when the stop deadline cuts the join short ([#776](https://github.com/golusoris/golusoris/issues/776)) ([af072ae](https://github.com/golusoris/golusoris/commit/af072ae2ecfd8d4874e19ead7a9e497f2f693440))
+
 ## [0.16.0](https://github.com/golusoris/golusoris/compare/v0.15.0...v0.16.0) (2026-10-10)
 
 

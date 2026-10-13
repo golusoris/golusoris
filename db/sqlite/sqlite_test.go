@@ -5,6 +5,7 @@
 package sqlite_test
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"log/slog"
@@ -163,9 +164,27 @@ func TestOpenErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when the parent directory does not exist")
 	}
-	// sql.Open is lazy, so the failure must surface through the ping wrap.
-	if !strings.Contains(err.Error(), "db/sqlite: ping "+missingDir) {
-		t.Fatalf("expected ping-wrapped error, got %v", err)
+	// sql.Open is lazy, so the failure surfaces when the first connection opens the file.
+	if !strings.Contains(err.Error(), "db/sqlite: connect "+missingDir) ||
+		!strings.Contains(err.Error(), "(database file absent, wal file absent)") {
+		t.Fatalf("expected a connect error naming the disk state, got %v", err)
+	}
+}
+
+// TestOpenTimeoutNamesStepAndDiskState pins #778: an open that runs out of
+// time says which step it was in and how far the files on disk got.
+func TestOpenTimeoutNamesStepAndDiskState(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "late.db")
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := sqlite.Open(ctx, sqlite.Options{Path: path}, discard())
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Open with a cancelled context = %v, want context.Canceled", err)
+	}
+	if !strings.Contains(err.Error(), "db/sqlite: connect "+path) ||
+		!strings.Contains(err.Error(), "(database file absent, wal file absent)") {
+		t.Fatalf("error does not name the step and disk state: %v", err)
 	}
 }
 

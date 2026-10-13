@@ -71,28 +71,46 @@ type Info struct {
 
 // Detect inspects the process environment + /proc + well-known files and
 // returns a populated [Info]. Never errors: unknown details are left empty.
-func Detect() Info {
+func Detect() Info { return detect(hostProbe()) }
+
+// probe is the host view detection reads; tests plant a host shape.
+type probe struct {
+	getenv   func(key string) string
+	exists   func(path string) bool
+	readFile func(path string) ([]byte, error)
+}
+
+func hostProbe() probe {
+	return probe{getenv: os.Getenv, exists: fileExists, readFile: os.ReadFile}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+func detect(p probe) Info {
 	info := Info{Hostname: hostname()}
 	switch {
-	case isK8s():
+	case isK8s(p):
 		info.Runtime = RuntimeK8s
-		info.PodName = os.Getenv("POD_NAME")
-		info.Namespace = os.Getenv("POD_NAMESPACE")
-		info.PodIP = os.Getenv("POD_IP")
-		info.NodeName = os.Getenv("NODE_NAME")
-		info.ServiceAccount = os.Getenv("SERVICE_ACCOUNT")
-		info.ContainerName = os.Getenv("CONTAINER_NAME")
-		info.ContainerImage = os.Getenv("CONTAINER_IMAGE")
-		info.ContainerID = containerIDFromCgroup()
-	case isPodman():
+		info.PodName = p.getenv("POD_NAME")
+		info.Namespace = p.getenv("POD_NAMESPACE")
+		info.PodIP = p.getenv("POD_IP")
+		info.NodeName = p.getenv("NODE_NAME")
+		info.ServiceAccount = p.getenv("SERVICE_ACCOUNT")
+		info.ContainerName = p.getenv("CONTAINER_NAME")
+		info.ContainerImage = p.getenv("CONTAINER_IMAGE")
+		info.ContainerID = containerIDFromCgroup(p)
+	case isPodman(p):
 		info.Runtime = RuntimePodman
-		info.ContainerID = containerIDFromCgroup()
-	case isDocker():
+		info.ContainerID = containerIDFromCgroup(p)
+	case isDocker(p):
 		info.Runtime = RuntimeDocker
-		info.ContainerID = containerIDFromCgroup()
-	case isSystemd():
+		info.ContainerID = containerIDFromCgroup(p)
+	case isSystemd(p):
 		info.Runtime = RuntimeSystemd
-		info.SystemdUnit = systemdUnit()
+		info.SystemdUnit = systemdUnit(p)
 	default:
 		info.Runtime = RuntimeBare
 	}
@@ -107,47 +125,40 @@ func hostname() string {
 	return h
 }
 
-func isK8s() bool {
-	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	return err == nil
+func isK8s(p probe) bool {
+	return p.exists("/var/run/secrets/kubernetes.io/serviceaccount/token")
 }
 
 // isDocker detects Docker via the /.dockerenv marker file + cgroup inspection.
 // The marker file is always present in Docker containers; cgroup fallback
 // handles edge cases (e.g. privileged containers that mask the root).
-func isDocker() bool {
-	if _, err := os.Stat("/.dockerenv"); err == nil {
-		return true
-	}
-	return cgroupContains("docker")
+func isDocker(p probe) bool {
+	return p.exists("/.dockerenv") || cgroupContains(p, "docker")
 }
 
 // isPodman detects Podman via its well-known container-marker file.
-func isPodman() bool {
-	if _, err := os.Stat("/run/.containerenv"); err == nil {
-		return true
-	}
-	return cgroupContains("libpod")
+func isPodman(p probe) bool {
+	return p.exists("/run/.containerenv") || cgroupContains(p, "libpod")
 }
 
 // isSystemd detects a systemd-managed process via the NOTIFY_SOCKET or
 // INVOCATION_ID env vars (both set by systemd when spawning a unit).
-func isSystemd() bool {
-	return os.Getenv("NOTIFY_SOCKET") != "" || os.Getenv("INVOCATION_ID") != ""
+func isSystemd(p probe) bool {
+	return p.getenv("NOTIFY_SOCKET") != "" || p.getenv("INVOCATION_ID") != ""
 }
 
-func systemdUnit() string {
-	if v := os.Getenv("SYSTEMD_UNIT"); v != "" {
+func systemdUnit(p probe) string {
+	if v := p.getenv("SYSTEMD_UNIT"); v != "" {
 		return v
 	}
 	// No dedicated unit-name env — fall back to invocation ID.
-	return os.Getenv("INVOCATION_ID")
+	return p.getenv("INVOCATION_ID")
 }
 
 // cgroupLines returns the lines of /proc/self/cgroup. Graceful on
 // non-Linux / missing file (returns nil).
-func cgroupLines() []string {
-	data, err := os.ReadFile("/proc/self/cgroup")
+func cgroupLines(p probe) []string {
+	data, err := p.readFile("/proc/self/cgroup")
 	if err != nil {
 		return nil
 	}
@@ -156,8 +167,8 @@ func cgroupLines() []string {
 
 // cgroupContains reports whether /proc/self/cgroup contains the given
 // substring. Graceful on non-Linux / missing file (returns false).
-func cgroupContains(s string) bool {
-	for _, line := range cgroupLines() {
+func cgroupContains(p probe, s string) bool {
+	for _, line := range cgroupLines(p) {
 		if strings.Contains(line, s) {
 			return true
 		}
@@ -172,8 +183,8 @@ var containerIDRegex = regexp.MustCompile(`([0-9a-f]{64})`)
 
 // containerIDFromCgroup scans /proc/self/cgroup for a 64-char hex container
 // ID. Returns the first match or "".
-func containerIDFromCgroup() string {
-	for _, line := range cgroupLines() {
+func containerIDFromCgroup(p probe) string {
+	for _, line := range cgroupLines(p) {
 		if m := containerIDRegex.FindString(line); m != "" {
 			return m
 		}

@@ -1,6 +1,3 @@
-<!-- markdownlint-disable MD013 -->
-<!-- Compiled automatically by praetorctl compile-context from AGENTS.md. DO NOT EDIT DIRECTLY. -->
-
 <!--
 SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 
@@ -10,13 +7,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 <!-- markdownlint-disable MD013 MD025 -->
 # golusoris Agent Operating Harness
 
-Before concluding any turn:
+Run read-only: file edits, state mutations, commits prohibited. Mutating steps dropped; prohibitions kept.
 
-```bash
-make verify-all
-```
-
-`make verify-all` runs `praetorctl audit`, context verification, and repository tests. Exit 0 means verified. On failure, agents keep full logs in ephemeral storage and report at most 1,500 diagnostic tokens.
+<!-- praetor:head -->
 
 ## Core Directives & Invariants — Golusoris HISS-21 Lattice
 
@@ -31,14 +24,14 @@ make verify-all
 | **HISS-07** | Error Handling | Rule 7 | Every error handled or wrapped with context; no discarded returns. | All-module lint: `errcheck`, `wrapcheck`, `errorlint`, `nilerr`; HISS scan |
 | **HISS-08** | Determinism | Rule 8 | No dynamic execution or dynamic code loading; no unsafe libc equivalents. | Required full-tree Semgrep dynamic-code rules; all-module `gosec` |
 | **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proof for every `unsafe` block and pointer cast. | All-module `gosec`; required full-tree Semgrep proof rule; HISS scan |
-| **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Required Go, Ruff/Python, Clang/C, docs, Shell, workflow, Terraform, and Kubernetes-schema gates; `make verify-all` mirrors them |
+| **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Required Go, Ruff/Python, Clang/C, docs, Shell, workflow, Terraform, and Kubernetes-schema gates; verification gate mirrors them |
 | **HISS-11** | Supply Chain | — | Digest-pinned dependencies, SLSA 3 provenance, cosign signatures, SBOM per release. | Direct attestations currently measure at Build L2; no L3 conformance gate. `cordanaLLM/praetor#330` tracks enforcement; digest, SBOM, cosign, Scorecard, lock gates remain |
 | **HISS-12** | Secrets | — | Zero credentials in working tree or git history. | Lefthook staged `gitleaks`; CI full-history `gitleaks` |
 | **HISS-13** | Debt Ratchet | — | Total infractions may never increase; baseline only ratchets down. | `.standards-baseline.json` enforced by `praetorctl audit` |
 | **HISS-14** | Public ABI | — | Public contracts append-only; any break carries a `Migration:` footer. | Required all-module `apidiff` execution; incompatibilities informational before v1.0; PR checklist |
 | **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for public interfaces. | Race tests across 31 Go modules; 48 Python policy regressions; 70% primary aggregate; shape review-enforced |
-| **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled, never hand-edited. | `praetorctl compile-context --verify` in lefthook and `make verify-all` |
-| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` remains private, ignored, current. | `praetorctl state sync .` post-commit |
+| **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled, never hand-edited. | `praetorctl compile-context --verify` in lefthook and verification gate |
+| **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` remains private, ignored, current. | read-only run: step dropped |
 | **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only gates touched by diff. | Not wired for main CI; full matrix runs |
 | **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation. | `praetorctl dedupe scan .`; cadence recording post-commit |
 | **HISS-20** | Enforcement Coverage | Fleet | Every enforcement claim has positive, negative, and gap fixtures. | `praetorctl hiss coverage --verify` replays `.config/hiss/testdata/` |
@@ -64,6 +57,8 @@ make verify-all
 
 6. **Anti-loop interception.** Same AST diff + error category repeats $\ge 3$ times -> halt immediately. Re-evaluate design; no micro-textual retries.
 
+<!-- praetor:config -->
+
 ## Text Register
 
 <!-- praetor:register:start -->
@@ -84,11 +79,11 @@ Golusoris social override: no receipt fence; no changelog fragments.
 `.github/PULL_REQUEST_TEMPLATE.md` uses `## Summary`; `release-please` reads Conventional
 Commits. Generic managed row remains upstream gap `cordanaLLM/praetor#328`.
 
+<!-- praetor:tail -->
+
 ## Primary Verification Commands
 
 ```bash
-# Declared application gate
-make verify-all
 
 # Cross-agent context verification
 praetorctl compile-context --verify
@@ -175,7 +170,7 @@ Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 - Research/hardening PR: per-module `AGENTS.md`, decision or benchmark digest, STATE delta. (#28)
 - Session state: private `.workingdir/{OPEN,STATE,BACKLOG,BUGS,QUESTIONS}.md`; never link or stage.
 - Fresh checkout: `praetorctl state init --if-absent`.
-- Work completion: `praetorctl state sync .`.
+- Read-only run: mutating steps dropped here; rule duties bind write runs only.
 - New or changed module: update README landed list; update AGENTS layout for new top-level package; add per-subpackage `AGENTS.md`.
 
 ## HISS-20 Coverage Updates

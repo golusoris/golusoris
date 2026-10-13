@@ -170,6 +170,29 @@ select_modules() {
 	done
 }
 
+# module_files_sum prints one checksum over go.mod and, when present, go.sum in dir.
+module_files_sum() {
+	local -a files=("$1/go.mod")
+	if [[ -f "$1/go.sum" ]]; then
+		files+=("$1/go.sum")
+	fi
+	cat "${files[@]}" | cksum
+}
+
+# verify_module downloads and verifies the module graph in dir. It fails when the
+# download rewrote go.mod or go.sum: go mod download repairs a stale requirement
+# even under -mod=readonly, which would hide the drift from the tidy phase.
+verify_module() {
+	local before after
+	before="$(module_files_sum "$1")" || return
+	(cd "$1" && go mod download && go mod verify) || return
+	after="$(module_files_sum "$1")" || return
+	if [[ "$after" != "$before" ]]; then
+		printf '%s: go mod download rewrote go.mod or go.sum; run go mod tidy and commit the result\n' "$1" >&2
+		return 1
+	fi
+}
+
 # go_fix_check fails when go fix would modernize any package of the module in dir:
 # go fix -diff prints the rewrite and exits nonzero.
 go_fix_check() {
@@ -186,7 +209,7 @@ run_module() {
 	printf '==> %s: %s\n' "$module" "$phase"
 	case "$phase" in
 	verify)
-			(cd "$REPO_ROOT/$module" && go mod download && go mod verify)
+			verify_module "$REPO_ROOT/$module"
 			;;
 		tidy)
 			(cd "$REPO_ROOT/$module" && go mod tidy -diff)

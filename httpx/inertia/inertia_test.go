@@ -247,6 +247,7 @@ func TestNewInertia_AllOptions(t *testing.T) {
 func TestSSRRequestHasFiniteTimeout(t *testing.T) {
 	t.Parallel()
 
+	const ssrTimeout = 500 * time.Millisecond
 	started := make(chan struct{})
 	release := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) {
@@ -268,7 +269,8 @@ func TestSSRRequestHasFiniteTimeout(t *testing.T) {
 		SSR: inertia.SSROptions{
 			Enabled: true,
 			URL:     server.URL,
-			Timeout: 20 * time.Millisecond,
+			// Far above the Windows timer tick (about 15.6ms) and local connection setup.
+			Timeout: ssrTimeout,
 		},
 	})
 	recorder := httptest.NewRecorder()
@@ -277,12 +279,13 @@ func TestSSRRequestHasFiniteTimeout(t *testing.T) {
 	if err := i.Render(recorder, request, "Home"); err != nil {
 		t.Fatalf("Render() error = %v", err)
 	}
-	if elapsed := time.Since(start); elapsed > time.Second {
+	if elapsed := time.Since(start); elapsed > 10*ssrTimeout {
 		t.Fatalf("Render() elapsed = %v, want bounded SSR fallback", elapsed)
 	}
+	// The handler may be entered after the client gave up; wait for it instead of racing it.
 	select {
 	case <-started:
-	default:
+	case <-time.After(10 * ssrTimeout):
 		t.Fatal("SSR sidecar was not called")
 	}
 }
