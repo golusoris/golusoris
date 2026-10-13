@@ -80,6 +80,8 @@ jobs:
           install -d -m 0700 "$pact_dir"
           python -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
+          # pact-go's cgo flags search only /tmp, /opt/pact/lib and /usr/local/lib.
+          echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install verified Pact FFI on Windows
         if: runner.os == 'Windows'
         shell: pwsh

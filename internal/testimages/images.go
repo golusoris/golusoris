@@ -15,6 +15,8 @@ import (
 const (
 	// Postgres is the default PostgreSQL integration-test image.
 	Postgres = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
+	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
 	Timescale = "timescale/timescaledb:2.30.2-pg17@sha256:b346edcdb51a1fd6020e3965e0bd1c9f3406fa6d5fbce1e28f4852587ef934e2"
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
