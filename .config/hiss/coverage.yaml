@@ -491,7 +491,7 @@ rules:
           authorities in tools/tool-versions.env; Renovate updates each pair atomically and
           policy tests reject ambient or version-only bypasses. Its regex manager also tracks
           immutable integration-test references in internal/testimages/images.go and the CI
-          cache manifest; policy tests require their parity except declared ClamAV absence.
+          cache manifest; policy tests require their parity except the declared split-module emulators.
           .standards.yaml declares
           supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
           checks as configuration. scripts/ci/govulncheck.sh parses pinned govulncheck v1.8.0
