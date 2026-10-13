@@ -57,6 +57,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "sigs.k8s.io/controller-tools", "go"),
     ("tools/tool-versions.env", "github.com/avito-tech/go-mutesting", "go"),
     ("tools/tool-versions.env", "helm.sh/helm/v4", "go"),
+    ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),
     ("tools/tool-versions.env", "koalaman/shellcheck", "github-releases"),
     ("tools/tool-versions.env", "github.com/rhysd/actionlint", "go"),
     ("tools/tool-versions.env", "goreleaser/goreleaser", "github-releases"),
