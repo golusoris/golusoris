@@ -165,12 +165,12 @@ jobs:
           bash scripts/ci/install-gosec.sh
           scripts/ci/go-modules.sh verify
           scripts/ci/go-modules.sh gosec
+      # A fork pull request gets no security-events write token; every other run must upload.
       - name: Upload SARIF
-        if: always() && github.event.pull_request.draft != true
+        if: always() && github.event.pull_request.draft != true && github.event.pull_request.head.repo.fork != true
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: gosec.sarif
-        continue-on-error: true   # SARIF upload requires Advanced Security (private repos)
 
   # ── Vulnerability check ─────────────────────────────────────────────────────
   vuln:
@@ -1057,6 +1057,7 @@ jobs:
     # event contract makes them inapplicable may be skipped.
     if: always()
     needs:
+      - pr-title
       - lint
       - gosec
       - vuln
@@ -1098,6 +1099,7 @@ jobs:
         run: bash scripts/ci/check-required-jobs_test.sh
       - name: Verify all gating jobs passed
         env:
+          PR_TITLE: ${{ needs.pr-title.result }}
           LINT: ${{ needs.lint.result }}
           GOSEC: ${{ needs.gosec.result }}
           VULN: ${{ needs.vuln.result }}
