@@ -268,6 +268,8 @@ class PortabilityDriverTest(TestCase):
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
         self.assertNotIn("continue-on-error:", workflow)
+        # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
+        self.assertRegex(workflow, r"(?m)^  merge_group:$")
         # A floating label moves to the next system image without a reviewed change.
         self.assertNotRegex(workflow, r"runner:\s*\S*-latest")
         self.assertNotIn("pact-go/v2 install", workflow)
