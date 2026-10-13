@@ -105,10 +105,10 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 .PHONY: ci-policy-test
 ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
 	@bash scripts/ci/check-required-jobs_test.sh
-	@bash scripts/ci/release-pr-ci_test.sh
 	@bash scripts/ci/check-dco_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
+	@bash scripts/ci/release-pr-ci_test.sh
 	@bash scripts/ci/install-gitleaks_test.sh
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
