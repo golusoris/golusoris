@@ -110,6 +110,15 @@
             "context": "Vulnerabilities (govulncheck)"
           },
           {
+            "context": "Platform Neutrality (Linux)"
+          },
+          {
+            "context": "Platform Neutrality (macOS)"
+          },
+          {
+            "context": "Platform Neutrality (Windows)"
+          },
+          {
             "context": "Go API Compatibility"
           },
           {
