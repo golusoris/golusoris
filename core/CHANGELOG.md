@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/golusoris/golusoris/compare/core/v0.10.1...core/v0.10.2) (2026-10-10)
+
+
+### Bug Fixes
+
+* **deps:** update the golang.org/x modules as one train ([#789](https://github.com/golusoris/golusoris/issues/789)) ([610e4ab](https://github.com/golusoris/golusoris/commit/610e4ab476d3aaea166681d995c3fb70007b20bb))
+
 ## [0.10.1](https://github.com/golusoris/golusoris/compare/core/v0.10.0...core/v0.10.1) (2026-10-09)
 
 

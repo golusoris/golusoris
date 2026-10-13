@@ -104,6 +104,7 @@ check_scalar() {
   local expected="$1"
   local plain="${expected#v}"
   local actual
+  local age
 
   if [[ ! -f "$root/apidocs/embed/SCALAR_VERSION" || ! -f "$root/apidocs/embed/scalar.js" ]]; then
     record_failure "@scalar/api-reference: embedded version authority is missing"
@@ -115,6 +116,10 @@ check_scalar() {
   fi
   if ! grep -Fq "@scalar/api-reference $plain" "$root/apidocs/embed/scalar.js"; then
     record_failure "@scalar/api-reference: scalar.js header does not identify $plain"
+  fi
+  # The weekly job rebuilds the bundle; an old release date means it has been silent.
+  if ! age="$(bash "$root/scripts/ci/scalar-bundle-update.sh" age-check 2>&1)"; then
+    record_failure "@scalar/api-reference: ${age#scalar bundle: }"
   fi
 }
 

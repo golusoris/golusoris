@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# commit-msg: Conventional Commits subject + Signed-off-by trailer (DCO). See CONTRIBUTING.md.
+# commit-msg: Conventional Commits subject + Signed-off-by trailer (DCO) + attribution check. See CONTRIBUTING.md.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -12,6 +12,9 @@ msgfile=${1:?usage: commit-msg.sh <commit-message-file>}
 body=$(tr -d '\r' < "$msgfile" | awk '!/^#/')
 subject=$(printf '%s\n' "$body" | awk '!found && length { print; found = 1 }')
 [ -n "$subject" ] || fail "empty commit message"
+
+bash "$(dirname "$0")/../ci/check-attribution.sh" --message "$msgfile" ||
+  fail "model or coding-tool attribution is not allowed"
 
 # git-generated subjects and to-be-squashed fixups are exempt (CI's DCO check ignores merges).
 case "$subject" in

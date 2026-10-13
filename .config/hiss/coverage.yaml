@@ -113,7 +113,7 @@ rules:
           of the loop half: `for !done` has no scalar upper bound, which is what the axiom
           demands, but the scanner reports only a loop whose condition is absent. The I/O half
           is reported by Semgrep and golangci-lint rather than by the HISS scanner. Semgrep
-          1.177.0 runs from the declared digest with strict parsing and proves all 721 selected
+          1.180.0 runs from the declared digest with strict parsing and proves all 1093 selected
           repository Go files were scanned; scanner errors, omissions and findings fail. The
           test-request rule fires on its eight positive fixtures, stays silent on four negative
           and two gap fixtures (a client literal without Transport, and http.DefaultTransport
@@ -138,16 +138,22 @@ rules:
         state: partial
         runner: allocation-budget
         mechanism: >-
-          scripts/ci/allocation-budget.sh parses benchmem output against
-          scripts/ci/allocation-budgets.tsv and fails closed on missing, duplicate, malformed,
-          byte-over-budget or allocations-over-budget results. make allocation-budget runs in
-          make verify-all; required hosted allocation jobs run the same wrapper.
+          scripts/ci/allocation-budget.sh runs each budgeted benchmark five times, compares the
+          minimum B/op and allocs/op with scripts/ci/allocation-budgets.tsv and prints every run.
+          It fails closed on missing, malformed, wrong-repeat-count, byte-over-budget or
+          allocations-over-budget results. make allocation-budget runs in make verify-all;
+          required hosted allocation jobs run the same wrapper.
         rationale: >-
           scripts/ci/allocation-budget-policy_test.sh measures positive/over-budget_test.go at
           16 B/op against an 8 B/op cap and requires failure, measures
           negative/within-budget_test.go at 0 B/op and negative/at-budget_test.go at exactly
           8 B/op and requires success, then proves allocation-over, missing-result and
-          duplicate-result failures. The production gate covers five named benchmarks;
+          repeat-count failures (ten and four results against five). One run at 3 allocs/op among
+          four at 1 passes a 1 allocs/op cap, and a probe measured at 2 allocs/op in every run
+          fails it. With 16 allocations planted in HashPassword through a build overlay the
+          production gate measures 76 allocs/op against its 70 cap and fails; that benchmark
+          resolves 13 or more, not single allocations. The production gate covers five named
+          benchmarks;
           gap/hot-path-allocation.go remains undetected because no static rule finds an
           unbenchmarked hot path.
   - id: HISS-04
@@ -422,7 +428,7 @@ rules:
         mechanism: >-
           kubeconform v0.8.0 from an immutable image digest validates repository-owned static
           manifests plus default and feature-complete Helm renders in strict mode against
-          Kubernetes v1.37.0 schemas and external CRD schemas at immutable source commits.
+          Kubernetes v1.37.1 schemas and external CRD schemas at immutable source commits.
           scripts/ci/kubeconform.sh selects tracked plus non-ignored untracked manifests,
           rejects symlinks, and fails on missing schemas except the explicit local AppStack
           claim. Make target kubeconform runs inside make verify-all; required CI job
@@ -571,13 +577,23 @@ rules:
           (Conventional Commits)" and consumed by release-please for the version bump. The CI
           job "API compatibility (apidiff)" executes against every discovered Go module and
           feeds the required aggregate gate; discovery or checker errors fail closed. Detected
-          incompatibilities remain `::warning::` findings until v1.0.
+          incompatibilities remain `::warning::` findings until v1.0. For a break that is
+          declared, scripts/ci/release-notes-breaking.sh decides one thing: `make
+          release-notes-check` (CI job "CI policy tests", make verify-all) fails when the newest
+          CHANGELOG entry has a BREAKING CHANGES section and docs/migrations/v<version>.md is
+          missing, and the release workflow refuses to compose the notes header without it.
+          The release workflow also states the apidiff result in every release's notes (job
+          "API compatibility summary"), or the reason there is none; that is reporting, not a gate.
         rationale: >-
           API coverage itself is complete and fail-closed, but nothing fails a build on a
           detected pre-v1 breaking change or checks that a `Migration:` footer is present --
           scripts/hooks/commit-msg.sh checks only the Conventional-Commits subject and DCO
           trailer. gap/removed-exported-func.go and gap/narrowed-exported-signature.go therefore
-          remain honest gaps: both can land with an ordinary `fix(api):` subject.
+          remain honest gaps: both can land with an ordinary `fix(api):` subject, and an
+          undeclared break produces no BREAKING CHANGES section for the guide check to see.
+          scripts/ci/release-notes-breaking_test.sh measures the declared case: a breaking
+          newest entry without its guide, or with a guide named for a neighbouring version,
+          fails, and the same entry with its guide passes.
   - id: HISS-15
     title: 3D Test Discipline
     coverage:
@@ -625,8 +641,8 @@ rules:
           compile-context-verify and lefthook pre-commit job context-check, verifies root
           projections and persona projections. Makefile target caveman-context, also inside
           make verify-all, lints every tracked AGENTS.md plus canonical personas, skills and
-          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .cursor/,
-          .github/copilot-instructions.md, .windsurfrules, .gemini/ and .codex/.
+          Paperclip surfaces. Root AGENTS.md remains source for CLAUDE.md, .gemini/ and
+          .codex/, the clients `agent_clients` in .standards.yaml selects.
         rationale: >-
           No positive fixture exists because projection comparison and bounded source
           discovery are repository-global properties no single fixture can exhibit. Measured

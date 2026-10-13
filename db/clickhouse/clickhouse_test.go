@@ -9,6 +9,9 @@ import (
 	"log/slog"
 	"testing"
 
+	"go.uber.org/fx"
+
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/db/clickhouse"
 	chtestutil "github.com/golusoris/golusoris/testutil/clickhouse"
 )
@@ -91,7 +94,17 @@ func TestDB_Conn(t *testing.T) {
 	}
 }
 
-func TestModule_exported(t *testing.T) {
+// TestModule_providesDB checks the module's graph without a server: ValidateApp
+// resolves providers without running them.
+func TestModule_providesDB(t *testing.T) {
 	t.Parallel()
-	_ = clickhouse.Module
+	err := fx.ValidateApp(
+		clickhouse.Module,
+		fx.Provide(func() *config.Config { return nil }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Invoke(func(*clickhouse.DB) {}),
+	)
+	if err != nil {
+		t.Fatalf("ValidateApp: %v", err)
+	}
 }
