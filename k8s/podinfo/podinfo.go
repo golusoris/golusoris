@@ -48,7 +48,11 @@ type PodInfo struct {
 // IsInCluster reports whether the process is running inside k8s. Detection:
 // the standard service-account token file is mounted by kubelet on every pod.
 func IsInCluster() bool {
-	_, err := os.Stat("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	return tokenMounted("/var/run/secrets/kubernetes.io/serviceaccount/token")
+}
+
+func tokenMounted(path string) bool {
+	_, err := os.Stat(path)
 	return err == nil
 }
 

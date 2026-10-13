@@ -17,6 +17,8 @@ new_repo() {
 	mkdir -p "$root/scripts/ci" "$root/tools"
 	install -m 0755 "$repo_root/scripts/ci/semgrep-scan.sh" \
 		"$root/scripts/ci/semgrep-scan.sh"
+	install -m 0644 "$repo_root/scripts/ci/semgrep-report.py" \
+		"$root/scripts/ci/semgrep-report.py"
 	install -m 0644 "$repo_root/tools/tool-versions.env" \
 		"$root/tools/tool-versions.env"
 	install -m 0644 "$repo_root/.semgrep.yml" "$root/.semgrep.yml"
@@ -147,5 +149,43 @@ EOF
 chmod +x "$suite_root/docker-failure"
 expect_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-failure" \
 	bash "$failure_root/scripts/ci/semgrep-scan.sh" --root "$failure_root"
+
+# xargs splits a long file list over several scanner runs; the report then holds one JSON document per run.
+split_root="$(new_repo split-report)"
+write_clean_go "$split_root"
+printf '%s\n' 'package clean' '' 'func Sub(a, b int) int { return a - b }' >"$split_root/second.go"
+git -C "$split_root" add .
+
+# write_fake_docker NAME REPORT...: a docker stand-in that prints the given report documents.
+write_fake_docker() {
+	local path="$suite_root/$1"
+	shift
+	{
+		printf '%s\n' '#!/usr/bin/env bash' 'cat >/dev/null'
+		printf "printf '%%s\\\\n' %q\n" "$@"
+	} >"$path"
+	chmod +x "$path"
+}
+
+readonly split_first='{"errors":[],"results":[],"paths":{"scanned":["clean.go"]}}'
+readonly split_second='{"errors":[],"results":[],"paths":{"scanned":["second.go"]}}'
+readonly split_finding='{"errors":[],"results":[{"path":"second.go","check_id":"planted.rule","start":{"line":3},"extra":{"message":"planted"}}],"paths":{"scanned":["second.go"]}}'
+readonly split_unscanned='{"errors":[],"results":[],"paths":{"scanned":[]}}'
+
+write_fake_docker docker-split-clean "$split_first" "$split_second"
+split_output="$(DOCKER_BIN="$suite_root/docker-split-clean" bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root")"
+if [[ "$split_output" != *'2 repository Go files passed'* ]]; then
+	printf 'split report was not merged: %s\n' "$split_output" >&2
+	exit 1
+fi
+write_fake_docker docker-split-finding "$split_first" "$split_finding"
+expect_failure 'second.go:3: planted.rule: planted' env DOCKER_BIN="$suite_root/docker-split-finding" \
+	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
+write_fake_docker docker-split-unscanned "$split_first" "$split_unscanned"
+expect_failure 'Semgrep did not scan selected file: second.go' env DOCKER_BIN="$suite_root/docker-split-unscanned" \
+	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
+write_fake_docker docker-split-garbage "$split_first" 'not json'
+expect_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-split-garbage" \
+	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
 
 printf 'Semgrep full-tree policy tests passed\n'

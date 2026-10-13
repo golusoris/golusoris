@@ -24,10 +24,19 @@ import (
 	natstestutil "github.com/golusoris/golusoris/testutil/nats"
 )
 
-// TestPackage_compiles verifies the package exports are reachable without Docker.
-func TestPackage_compiles(t *testing.T) {
+// TestModule_providesClient checks the module's graph without a server: ValidateApp
+// resolves providers without running them.
+func TestModule_providesClient(t *testing.T) {
 	t.Parallel()
-	_ = nats.Module
+	err := fx.ValidateApp(
+		nats.Module,
+		fx.Provide(func() *config.Config { return nil }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Invoke(func(*nats.Client) {}),
+	)
+	if err != nil {
+		t.Fatalf("ValidateApp: %v", err)
+	}
 }
 
 // bootClient starts a *nats.Client via the fx lifecycle wired to url.

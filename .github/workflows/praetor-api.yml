@@ -6,6 +6,7 @@ name: Praetor API Compatibility
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: ['main']
+  merge_group:
 
 permissions:
   contents: read
@@ -80,4 +81,5 @@ jobs:
         if: github.event.pull_request.draft != true
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
+          GOTOOLCHAIN: auto
         run: go run tools/apicompat/gate/main.go -base="$BASE"

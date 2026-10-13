@@ -67,8 +67,8 @@ FAKE_LOG="$fake_log" KUBECONFORM_BIN="$fake" \
 	bash "$repo_root/scripts/ci/kubeconform.sh" --root "$clean_root" >/dev/null
 for required in \
 	'-strict' \
-	'-kubernetes-version 1.37.0' \
-	'491f6d0bac338516572de67fbd5ec4c510f7e657' \
+	'-kubernetes-version 1.37.1' \
+	'a6f9a32d2ccb64b6e4f5b41419b9c2e8ee0cce18' \
 	'ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2' \
 	'-skip AppStack'; do
 	if ! grep -Fq -- "$required" "$fake_log"; then

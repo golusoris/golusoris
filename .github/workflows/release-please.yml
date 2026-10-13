@@ -34,3 +34,24 @@ jobs:
           manifest-file: .release-please-manifest.json
           # Release-PR-only mode: tags and releases originate on Gitea.
           skip-github-release: true
+
+  # The CI runs of a pull request opened with the repository token wait for an
+  # approval, and main requires the CI success check. A dispatched run does not
+  # count for the pull request, so the waiting runs are approved here.
+  release-pr-ci:
+    name: Run CI on the release pull request
+    needs: release-please
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Approve the waiting runs on the release branch head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/release-pr-ci.sh "$GITHUB_REPOSITORY"

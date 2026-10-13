@@ -27,7 +27,6 @@ scan_args=(
 	--skip-dirs .git
 	--skip-dirs .terraform
 	--skip-dirs .workingdir
-	--skip-dirs .workingdir2
 	--skip-dirs node_modules
 	--skip-version-check
 	--exit-code 1
@@ -80,7 +79,6 @@ tar -C "$repo_root" \
 	--exclude=.git \
 	--exclude=.terraform \
 	--exclude=.workingdir \
-	--exclude=.workingdir2 \
 	--exclude=node_modules \
 	-cf - . \
 	| docker run --rm -i \
@@ -100,7 +98,6 @@ tar -C "$repo_root" \
 			--skip-dirs .git \
 			--skip-dirs .terraform \
 			--skip-dirs .workingdir \
-			--skip-dirs .workingdir2 \
 			--skip-dirs node_modules \
 			--skip-version-check \
 			--exit-code 1 \

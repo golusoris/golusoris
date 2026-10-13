@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -15,10 +16,12 @@ import (
 	pubsub "cloud.google.com/go/pubsub/v2"
 	"cloud.google.com/go/pubsub/v2/apiv1/pubsubpb"
 	"cloud.google.com/go/pubsub/v2/pstest"
+	"go.uber.org/fx"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/pubsub/gcp"
 )
 
@@ -26,11 +29,19 @@ import (
 // bound on loops) instead of looping until a deadline with no cap.
 const maxPollIterations = 1000
 
-// TestPackage_compiles verifies the package exports are reachable without
-// any network, mirroring pubsub/nats's equivalent smoke test.
-func TestPackage_compiles(t *testing.T) {
+// TestModule_providesClient checks the module's graph without a server: ValidateApp
+// resolves providers without running them.
+func TestModule_providesClient(t *testing.T) {
 	t.Parallel()
-	_ = gcp.Module
+	err := fx.ValidateApp(
+		gcp.Module,
+		fx.Provide(func() *config.Config { return nil }),
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Invoke(func(*gcp.Client) {}),
+	)
+	if err != nil {
+		t.Fatalf("ValidateApp: %v", err)
+	}
 }
 
 // newTestClient starts an in-process pstest fake server, dials it, and

@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -126,15 +127,53 @@ func Open(ctx context.Context, opts Options, logger *slog.Logger) (*sql.DB, erro
 	}
 	pingCtx, cancel := context.WithTimeout(ctx, opts.BusyTimeout)
 	defer cancel()
-	if err := db.PingContext(pingCtx); err != nil {
-		pingErr := fmt.Errorf("db/sqlite: ping %s: %w", opts.Path, err)
+	if err := connectAndPing(pingCtx, db, opts.Path); err != nil {
 		if cerr := db.Close(); cerr != nil {
-			return nil, errors.Join(pingErr, fmt.Errorf("db/sqlite: close %s: %w", opts.Path, cerr))
+			return nil, errors.Join(err, fmt.Errorf("db/sqlite: close %s: %w", opts.Path, cerr))
 		}
-		return nil, pingErr
+		return nil, err
 	}
 	logger.InfoContext(ctx, "db/sqlite: opened", slog.String("path", opts.Path), slog.Bool("wal", !opts.DisableWAL), slog.Bool("read_only", opts.ReadOnly))
 	return db, nil
+}
+
+// connectAndPing opens one connection and pings it. Its error names the step
+// that failed and what is on disk, so a timeout shows how far the open got
+// (#778): "connect" is the driver opening the file and applying the DSN
+// pragmas, "ping" the round trip after it.
+func connectAndPing(ctx context.Context, db *sql.DB, path string) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("db/sqlite: connect %s: %w (%s)", path, err, diskState(path))
+	}
+	if err = conn.PingContext(ctx); err != nil {
+		pingErr := fmt.Errorf("db/sqlite: ping %s: %w (%s)", path, err, diskState(path))
+		return errors.Join(pingErr, releaseConn(conn, path))
+	}
+	return releaseConn(conn, path)
+}
+
+func releaseConn(conn *sql.Conn, path string) error {
+	if err := conn.Close(); err != nil {
+		return fmt.Errorf("db/sqlite: release connection %s: %w", path, err)
+	}
+	return nil
+}
+
+// diskState reports whether the database file and its write-ahead log exist.
+func diskState(path string) string {
+	if path == MemoryPath {
+		return "in-memory database"
+	}
+	database := "database file absent"
+	if info, err := os.Stat(path); err == nil {
+		database = "database file " + strconv.FormatInt(info.Size(), 10) + " bytes"
+	}
+	wal := "wal file absent"
+	if _, err := os.Stat(path + "-wal"); err == nil {
+		wal = "wal file present"
+	}
+	return database + ", " + wal
 }
 
 // loadOptions unmarshals the "db.sqlite" key on top of DefaultOptions.

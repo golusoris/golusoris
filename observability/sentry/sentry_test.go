@@ -28,8 +28,10 @@ func TestBadDSNErrors(t *testing.T) {
 
 func TestFlush(t *testing.T) {
 	t.Parallel()
-	// Sentry not initialized — Flush should return without panic.
-	_ = sentry.Flush(10 * time.Millisecond)
+	// No client is bound in this package's tests, so nothing can be delivered.
+	if sentry.Flush(10 * time.Millisecond) {
+		t.Error("Flush without a client reported delivery")
+	}
 }
 
 func TestDefaults(t *testing.T) {
