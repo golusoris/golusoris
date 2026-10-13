@@ -114,7 +114,7 @@ on:
       spectral-version:
         description: "Deprecated/unused; Spectral resolves from this workflow revision's package lock"
         type: string
-        default: 6.16.3
+        default: 6.17.0
       spectral-fail-severity:
         description: Minimum severity that fails the spectral lint (error|warn|info|hint)
         type: string
@@ -292,8 +292,9 @@ jobs:
           # not; real exceptions belong at the finding with a reason.
           gosec -exclude-generated -exclude-dir=testdata -fmt sarif \
             -out gosec.sarif -stdout -verbose text ./...
+      # A fork pull request gets no security-events write token; skip rather than fail open.
       - name: Upload SARIF
-        if: always()
+        if: always() && github.event.pull_request.head.repo.fork != true
         uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           sarif_file: ${{ inputs.working-directory }}/gosec.sarif
@@ -301,7 +302,8 @@ jobs:
           # commit replace each other, which breaks callers that fan this
           # workflow out over a module matrix.
           category: gosec${{ inputs.working-directory != '.' && format('/{0}', inputs.working-directory) || '' }}
-        continue-on-error: true
+        # Code scanning on a private repository needs Advanced Security; public callers must upload.
+        continue-on-error: ${{ github.event.repository.private }}
 
   # ── Vulnerability check ───────────────────────────────────────────────────
   vuln:

@@ -28,6 +28,7 @@ for value in \
 	"$CONTROLLER_GEN_VERSION" \
 	"$GO_MUTESTING_VERSION" \
 	"$HELM_VERSION" \
+	"$BUF_VERSION" \
 	"v$SHELLCHECK_VERSION" \
 	"$ACTIONLINT_VERSION" \
 	"v$GORELEASER_VERSION" \
@@ -406,8 +407,7 @@ for relative_workflow in "${attestation_workflow_paths[@]}"; do
 done
 mapfile -t discovered_attestation_workflows < <(
 	cd "$repo_root"
-	rg -l 'uses:[[:space:]]+actions/attest(-build-provenance)?@' \
-		.github/workflows -g '*.yml' | sort
+	grep -lE 'uses:[[:space:]]+actions/attest(-build-provenance)?@' .github/workflows/*.yml | sort
 )
 if [[ "${discovered_attestation_workflows[*]}" != "${attestation_workflow_paths[*]}" ]]; then
 	printf 'attestation workflow inventory changed: found %s, expected %s\n' \

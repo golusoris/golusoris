@@ -32,6 +32,7 @@ Provides `*pgxpool.Pool` as fx dependency. Reads config from `config.Config["db"
 
 - Env for `password_file` / `read_dsn` needs `config.Options.CompoundKeys` entry (`db.password_file`, `db.read_dsn`), like `connect_timeout`.
 - Password read reuses `secrets.File`: 64 KiB cap, regular file only, whitespace trimmed.
+- `Options.ConnString(ctx, dsn)` -> DSN with `ssl.*` + `password_file` applied, for connections outside pool (`db/migrate`). URL form: params replaced, password in userinfo. Read once; no rotation.
 - TLS reload replaces `TLSConfig` + `Fallbacks` together — no stale `prefer` fallback.
 - `*ReadPool` provider lazy: built only when injected. Non-fx: `NewReadPool(ctx, opts, logger, clk)` (needs `ReadDSN`).
 

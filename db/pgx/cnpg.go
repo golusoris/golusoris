@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/jackc/pgx/v5"
@@ -120,6 +121,64 @@ func withConnParams(dsn string, params [][2]string) string {
 // only: a QueryEscape "+" would arrive as a literal plus.
 func uriEscape(s string) string {
 	return strings.ReplaceAll(url.QueryEscape(s), "+", "%20")
+}
+
+// ConnString returns dsn with db.ssl.* and db.password_file applied, for a
+// connection opened outside the pool, such as the migrator's. Set SSL options
+// replace the same DSN parameters and the file's password replaces the DSN's,
+// as in the pool. The files are read once here: such a connection is not
+// re-keyed when they rotate.
+func (o Options) ConnString(ctx context.Context, dsn string) (string, error) {
+	params := o.SSL.params()
+	if len(params) == 0 && o.PasswordFile == "" {
+		return dsn, nil
+	}
+	password := ""
+	if o.PasswordFile != "" {
+		var err error
+		if password, err = readPasswordFile(ctx, o.PasswordFile); err != nil {
+			return "", err
+		}
+	}
+	u, err := url.Parse(dsn)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		if password != "" {
+			params = append(params, [2]string{"password", password})
+		}
+		return withConnParams(dsn, params), nil
+	}
+	return urlConnString(u, params, password), nil
+}
+
+// urlConnString replaces the parameters instead of appending them: URL
+// consumers that re-encode the query keep every duplicate, and not all of them
+// let the last one win.
+func urlConnString(u *url.URL, params [][2]string, password string) string {
+	query := u.Query()
+	for _, kv := range params {
+		query.Set(kv[0], kv[1])
+	}
+	u.RawQuery = encodeURIQuery(query)
+	if password != "" {
+		u.User = url.UserPassword(u.User.Username(), password)
+	}
+	return u.String()
+}
+
+// encodeURIQuery encodes query in key order with uriEscape.
+func encodeURIQuery(query url.Values) string {
+	keys := make([]string, 0, len(query))
+	for key := range query {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, key := range keys {
+		for _, value := range query[key] {
+			pairs = append(pairs, uriEscape(key)+"="+uriEscape(value))
+		}
+	}
+	return strings.Join(pairs, "&")
 }
 
 // readPasswordFile reads a mounted secret through [secrets.File], which

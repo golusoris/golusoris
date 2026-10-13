@@ -167,6 +167,26 @@ func (f *fakeVault) set(fn func(*fakeVault)) {
 	fn(f)
 }
 
+// stall holds every request until the client hangs up, at most 10s, so only the client deadline ends it.
+func (f *fakeVault) stall(t *testing.T) {
+	t.Helper()
+	f.set(func(f *fakeVault) {
+		f.hook = func(_ http.ResponseWriter, r *http.Request) bool {
+			// The server notices the client hanging up only after the body is read.
+			if _, err := io.Copy(io.Discard, r.Body); err != nil {
+				t.Errorf("drain body: %v", err)
+			}
+			f.mu.Unlock()
+			select {
+			case <-r.Context().Done():
+			case <-time.After(10 * time.Second):
+			}
+			f.mu.Lock()
+			return true
+		}
+	})
+}
+
 // snapshot is what a test reads back from the fake.
 type snapshot struct {
 	requests, signs int

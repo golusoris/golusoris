@@ -11,7 +11,6 @@ import (
 	"time"
 
 	otelapi "go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/log/global"
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -168,11 +167,11 @@ func TestNewWithLogs(t *testing.T) { //nolint:paralleltest // Mutates the global
 func TestShutdownDetachesGlobalProviders(t *testing.T) { //nolint:paralleltest // Mutates all OTel globals.
 	previousTracer := otelapi.GetTracerProvider()
 	previousMeter := otelapi.GetMeterProvider()
-	previousLogger := global.GetLoggerProvider()
+	previousLogger := otelapi.GetLoggerProvider()
 	t.Cleanup(func() {
 		otelapi.SetTracerProvider(previousTracer)
 		otelapi.SetMeterProvider(previousMeter)
-		global.SetLoggerProvider(previousLogger)
+		otelapi.SetLoggerProvider(previousLogger)
 	})
 
 	providers := &golusoris_otel.Providers{}
@@ -181,10 +180,10 @@ func TestShutdownDetachesGlobalProviders(t *testing.T) { //nolint:paralleltest /
 	providers.Logger = sdklog.NewLoggerProvider()
 	otelapi.SetTracerProvider(providers.Tracer)
 	otelapi.SetMeterProvider(providers.Meter)
-	global.SetLoggerProvider(providers.Logger)
+	otelapi.SetLoggerProvider(providers.Logger)
 	if otelapi.GetTracerProvider() != providers.Tracer ||
 		otelapi.GetMeterProvider() != providers.Meter ||
-		global.GetLoggerProvider() != providers.Logger {
+		otelapi.GetLoggerProvider() != providers.Logger {
 		t.Fatal("constructed providers were not installed as globals")
 	}
 
@@ -195,7 +194,7 @@ func TestShutdownDetachesGlobalProviders(t *testing.T) { //nolint:paralleltest /
 	}
 	if otelapi.GetTracerProvider() == providers.Tracer ||
 		otelapi.GetMeterProvider() == providers.Meter ||
-		global.GetLoggerProvider() == providers.Logger {
+		otelapi.GetLoggerProvider() == providers.Logger {
 		t.Fatal("shutdown left a stopped SDK provider installed globally")
 	}
 	if _, span := otelapi.Tracer("after-shutdown").Start(ctx, "noop"); span == nil {
@@ -206,7 +205,7 @@ func TestShutdownDetachesGlobalProviders(t *testing.T) { //nolint:paralleltest /
 	if _, err := otelapi.Meter("after-shutdown").Int64Counter("noop.counter"); err != nil {
 		t.Fatalf("replacement global meter: %v", err)
 	}
-	if logger := global.GetLoggerProvider().Logger("after-shutdown"); logger == nil {
+	if logger := otelapi.GetLoggerProvider().Logger("after-shutdown"); logger == nil {
 		t.Fatal("replacement global logger returned nil")
 	}
 }
@@ -453,11 +452,11 @@ func TestNoopGlobalAPIDoesNotPanic(t *testing.T) { //nolint:paralleltest // snap
 	// can't leak a real provider into this assertion.
 	prevTracer := otelapi.GetTracerProvider()
 	prevMeter := otelapi.GetMeterProvider()
-	prevLogger := global.GetLoggerProvider()
+	prevLogger := otelapi.GetLoggerProvider()
 	t.Cleanup(func() {
 		otelapi.SetTracerProvider(prevTracer)
 		otelapi.SetMeterProvider(prevMeter)
-		global.SetLoggerProvider(prevLogger)
+		otelapi.SetLoggerProvider(prevLogger)
 	})
 	otelapi.SetTracerProvider(nooptrace.NewTracerProvider())
 	otelapi.SetMeterProvider(noopmetric.NewMeterProvider())

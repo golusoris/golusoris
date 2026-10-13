@@ -14,19 +14,19 @@ import (
 
 const (
 	// Postgres is the default PostgreSQL integration-test image.
-	Postgres = "postgres:17-alpine@sha256:f02121de6f74d30d8a94cd1d9584125e2178d7e6c377d8130112d4e52d867995"
+	Postgres = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
-	Timescale = "timescale/timescaledb:2.30.0-pg17@sha256:3113d12b78392c064aa7475caf7a52b447b29ddd4f9bfd23526733fcb03e3459"
+	Timescale = "timescale/timescaledb:2.30.2-pg17@sha256:b346edcdb51a1fd6020e3965e0bd1c9f3406fa6d5fbce1e28f4852587ef934e2"
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
-	TimescaleApache = "timescale/timescaledb:2.30.0-pg17-oss@sha256:9e655f215736939b7bb9c37efb6b157f278166e6239a46d2d0d5c79a8d0eb1d3"
+	TimescaleApache = "timescale/timescaledb:2.30.2-pg17-oss@sha256:097e225077ef92e5c0e17e167d7ac71cb4e98762d31faa4ff0008c7955935889"
 	// Redis is the default Redis integration-test image.
-	Redis = "redis:7-alpine@sha256:520775a41a63e77e06c73e35d2fd9cc15921a609516818796b4ecbb813078bc7"
+	Redis = "redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0"
 	// NATS is the default NATS integration-test image.
 	NATS = "nats:2-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4"
 	// ClickHouse is the default ClickHouse integration-test image.
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
-	Redpanda = "redpandadata/redpanda:v24.3.1@sha256:f2f8bb89f1a0747cc6f86440cb3a0916e981e136e1d72392bab179f73492fb0f"
+	Redpanda = "redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89"
 	// VersityGW is the S3-compatible gateway that enforces SigV4 for storage tests.
 	VersityGW = "versity/versitygw:v1.8.0@sha256:30292fc2eeacc67a36993b01f7a7a5e3361a19cced0e80c1d71cfa2a4b0a2499"
 	// FakeGCSServer is the GCS emulator for the storage/gcs module tests.
@@ -36,7 +36,7 @@ const (
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the opt-in malware-scanner integration-test image.
-	ClamAV = "clamav/clamav:1.5_base-debian@sha256:0481636f876a3d338ab2a9871888f8a75968f428a423e872ec98a73c6687e1ce"
+	ClamAV = "clamav/clamav:1.5.4_base-debian@sha256:974ff8d90d274ce85a0b9bb417497a6fd5201ef30f2fc83cb073b916f97727d5"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")

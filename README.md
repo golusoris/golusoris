@@ -453,16 +453,17 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 
 ## Status
 
-Pre-1.0, actively developed. Latest tagged release: **v0.12.0** (root
-module); the `core/` sub-module is at **core/v0.9.2**. Code has been
+Pre-1.0, actively developed. The root module and the `core/` sub-module are
+versioned separately; `.release-please-manifest.json` holds both current
+versions, and the [releases page](https://github.com/golusoris/golusoris/releases)
+lists every root release. Code has been
 licensed under the [European Union Public Licence 1.2](LICENSE)
 (`EUPL-1.2`) since the v0.9.0 relicense (ADR-0018) — v0.8.0 and earlier were
 MIT; documentation is `CC-BY-SA-4.0`. GitHub immutable releases are enabled,
 starting with [v0.10.1](https://github.com/golusoris/golusoris/releases/tag/v0.10.1):
 `release.yml` runs goreleaser to publish archives, checksums, per-archive
-SPDX SBOMs, cosign keyless signatures and build-provenance attestations. The
-[v0.12.0 release run](https://github.com/golusoris/golusoris/actions/runs/35001126039)
-published those release assets successfully. `sbom.yml` separately attempts
+SPDX SBOMs, cosign keyless signatures and build-provenance attestations.
+`sbom.yml` separately attempts
 source-tree SPDX and CycloneDX attestations for each root tag; its
 [v0.12.0 run](https://github.com/golusoris/golusoris/actions/runs/35001126102)
 failed while writing to Rekor, so source-tree attestations are not claimed for

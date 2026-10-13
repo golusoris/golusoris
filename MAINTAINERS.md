@@ -26,14 +26,17 @@ Currently the BDFL is also the sole maintainer — every subtree maps to
 added here with the subtree(s) they own, and [`CODEOWNERS`](.github/CODEOWNERS)
 will be updated in the same PR.
 
+A subtree marked `none` has no `CODEOWNERS` row: a pull request that touches only
+such subtrees requests no review automatically.
+
 | Subtree | Maintainer(s) | CODEOWNERS row |
 | --- | --- | --- |
 | Security-critical (`auth/`, `authz/`, `crypto/`, `secrets/`, `hash/`, `webhooks/`, `payments/`) | @lusoris | `/auth/`, `/authz/`, `/crypto/`, `/secrets/`, … |
-| Core (`config/`, `log/`, `clock/`, `id/`, `validate/`, `errors/`) | @lusoris | `*` (root) |
-| Data + jobs (`db/`, `jobs/`, `outbox/`, `cache/`) | @lusoris | `*` (root) |
-| HTTP + API (`httpx/`, `api/`, `grpc/`, `graphql/`) | @lusoris | `*` (root) |
-| Observability (`otel/`, `log/`) | @lusoris | `*` (root) |
-| CI / release / deps | @lusoris | `/.github/`, `/tools/`, `/go.mod`, `/go.sum` |
+| Core (`config/`, `log/`, `clock/`, `id/`, `validate/`, `errors/`) | @lusoris | none |
+| Data + jobs (`db/`, `jobs/`, `outbox/`, `cache/`) | @lusoris | none |
+| HTTP + API (`httpx/`, `api/`, `grpc/`, `graphql/`) | @lusoris | none |
+| Observability (`otel/`, `log/`) | @lusoris | none |
+| CI / release / deps | @lusoris | none |
 | ADRs / compliance docs | @lusoris | `/docs/adr/`, `/docs/architecture/`, `/SECURITY.md` |
 
 ## Becoming a maintainer
