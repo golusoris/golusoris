@@ -99,6 +99,7 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
 	$(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
 	$(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
+	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
 	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
@@ -124,6 +125,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
+	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
@@ -221,6 +223,10 @@ allocation-budget: ## enforce measured hot-path allocation budgets
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
 
+.PHONY: buf-lint
+buf-lint: ## lint tracked protobuf files and check the vendored KEDA contract against upstream
+	@bash scripts/ci/buf-lint.sh
+
 .PHONY: capabilities-check
 capabilities-check: ## capabilities.yaml ↔ tree drift guard
 	$(GO) test -count=1 -run 'TestCapabilities' .
@@ -257,7 +263,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

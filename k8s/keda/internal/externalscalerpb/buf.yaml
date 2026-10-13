@@ -2,7 +2,22 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# KEDA's externalscaler.proto is vendored verbatim: its package and service
-# names are the wire contract KEDA dials, so tools/buf.yaml lint rules
-# (versioned package, Service suffix) cannot apply.
+# KEDA's externalscaler.proto is vendored verbatim: its package, service,
+# message and field names are the wire contract KEDA dials, so the STANDARD
+# rules that judge those names are excepted and every other rule applies.
+# scripts/ci/buf-lint.sh lints this module and checks it against upstream.
 version: v2
+lint:
+  use:
+    - STANDARD
+  except:
+    - FIELD_LOWER_SNAKE_CASE
+    - PACKAGE_DIRECTORY_MATCH
+    - PACKAGE_VERSION_SUFFIX
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - SERVICE_SUFFIX
+breaking:
+  use:
+    - FILE
