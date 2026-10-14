@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
+	"net/http"
 	"path"
 	"strings"
 
@@ -81,6 +82,7 @@ type bucketStore struct {
 	keyFn   KeyFunc
 	log     *slog.Logger
 	deliver deliveryFn
+	replica string
 }
 
 func newBucketStore(
@@ -89,20 +91,25 @@ func newBucketStore(
 	keyFn KeyFunc,
 	log *slog.Logger,
 	deliver deliveryFn,
+	replica string,
 ) *bucketStore {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
 	return &bucketStore{
 		scratch: scratch,
 		bucket:  bucket,
 		keyFn:   keyFn,
 		log:     log,
 		deliver: deliver,
+		replica: replica,
 	}
 }
 
 // NewUpload implements tusd.DataStore.
 func (s *bucketStore) NewUpload(ctx context.Context, info tusd.FileInfo) (tusd.Upload, error) {
 	if info.ID == "" {
-		id, err := newUploadID()
+		id, err := newUploadID(s.replica)
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +126,20 @@ func (s *bucketStore) NewUpload(ctx context.Context, info tusd.FileInfo) (tusd.U
 func (s *bucketStore) GetUpload(ctx context.Context, id string) (tusd.Upload, error) {
 	entry, err := s.scratch.Get(ctx, id)
 	if err != nil {
+		if errors.Is(err, tusd.ErrNotFound) {
+			if tag, tagged := uploadReplica(id); tagged && tag != s.replica {
+				s.log.WarnContext(ctx, "tus: upload belongs to another replica",
+					"id", id,
+					"upload_replica", tag,
+					"this_replica", s.replica,
+				)
+				return nil, tusd.NewError(
+					"ERR_UPLOAD_NOT_FOUND",
+					fmt.Sprintf("upload not found: created on replica %q, this is replica %q; scratch is node-local, route resumes to the creating replica (sticky sessions) or run one replica", tag, s.replica),
+					http.StatusNotFound,
+				)
+			}
+		}
 		return nil, fmt.Errorf("tus: get scratch upload %s: %w", id, err)
 	}
 	return &bucketUpload{store: s, entry: entry, id: id}, nil

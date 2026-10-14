@@ -518,6 +518,14 @@ jobs:
       - name: Install cgo system libraries
         timeout-minutes: 10
         run: bash scripts/ci/install-cgo-libs.sh
+      # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
+      - name: Install verified Pact FFI
+        run: |
+          pact_dir="${RUNNER_TEMP}/pact-ffi"
+          install -d -m 0700 "$pact_dir"
+          python3 -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install pinned analysis tools
         run: |
           set -euo pipefail

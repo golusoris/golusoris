@@ -38,6 +38,7 @@ func newTestStore(t *testing.T) (*bucketStore, storage.Bucket, *localScratch) {
 	store := newBucketStore(
 		scratch, bucket, defaultKeyFunc("uploads/"), log,
 		func(context.Context, string) error { return nil },
+		"test-replica",
 	)
 	return store, bucket, scratch
 }
@@ -267,7 +268,7 @@ func TestFinishUploadRejectsBadKey(t *testing.T) {
 	}
 	// KeyFunc deliberately returns a traversal key; FinishUpload must reject it.
 	evil := func(tusd.FileInfo) (string, error) { return "../escape", nil }
-	store := newBucketStore(scratch, bucket, evil, slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(scratch, bucket, evil, slog.New(slog.DiscardHandler), nil, "test-replica")
 
 	ctx := context.Background()
 	up, err := store.NewUpload(ctx, tusd.FileInfo{Size: 1})
@@ -303,7 +304,7 @@ func TestFinishUpload_BucketPutError(t *testing.T) {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
 	store := newBucketStore(
-		scratch, failBucket{}, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil,
+		scratch, failBucket{}, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica",
 	)
 	ctx := context.Background()
 	up, err := store.NewUpload(ctx, tusd.FileInfo{Size: 1})
