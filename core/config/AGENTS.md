@@ -59,6 +59,7 @@ watch on). Override by supplying your own `Options` ahead of it via `fx.Replace`
 
 - Env mapping: `APP_DB_HOST` → `db.host`. Every underscore splits on  delimiter unless leaf key is listed in `CompoundKeys` (e.g.
  `search.api_key` keeps `APP_SEARCH_API_KEY` → `search.api_key`).
+- `CompoundKeys(keys...)` fx option feeds group `config.compound_keys`; `Module` merges group into `Options.CompoundKeys` (own keys first, then sorted, deduped), also after `fx.Replace(Options{...})`.
 - Files load first (later override earlier); env loads on top. Missing files are
  skipped silently; unsupported extension is hard error.
 - `OnChange` callbacks run synchronously in watcher goroutine — keep them

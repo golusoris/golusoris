@@ -86,3 +86,26 @@ func TestModule_AcceptsProvidedServerOption(t *testing.T) {
 	require.NoError(t, app.Start(ctx))
 	require.NoError(t, app.Stop(ctx))
 }
+
+func TestModule_KeepaliveFromEnv(t *testing.T) {
+	t.Setenv("APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE", "10m")
+	t.Setenv("APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE", "45s")
+
+	var loaded ourgrpc.Config
+	app := fxtest.New(
+		t,
+		config.Module,
+		ourgrpc.Module,
+		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Invoke(func(c ourgrpc.Config) {
+			loaded = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, app.Start(ctx))
+	require.NoError(t, app.Stop(ctx))
+
+	require.Equal(t, 10*time.Minute, loaded.Keepalive.MaxConnectionAge)
+	require.Equal(t, 45*time.Second, loaded.Keepalive.MaxConnectionAgeGrace)
+}

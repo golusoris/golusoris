@@ -18,7 +18,7 @@ func TestKeepalive_defaultsKeepTodaysValues(t *testing.T) {
 	t.Parallel()
 	got := KeepaliveConfig{}.withDefaults()
 	require.Equal(t, 2*time.Minute, got.MaxConnectionAge)
-	require.Equal(t, 5*time.Second, got.MaxConnectionAgeGrace)
+	require.Equal(t, Infinite, got.MaxConnectionAgeGrace)
 	require.Equal(t, time.Minute, got.Time)
 	require.Equal(t, 20*time.Second, got.Timeout)
 	require.Equal(t, 5*time.Minute, got.MinTime)
@@ -53,9 +53,12 @@ func TestKeepalive_serverParameters(t *testing.T) {
 	require.Equal(t, grpcInfinity, got.Time)
 	require.Equal(t, 3*time.Second, got.Timeout)
 
-	finite := defaultKeepalive().serverParameters()
-	require.Equal(t, 2*time.Minute, finite.MaxConnectionAge)
-	require.Equal(t, 5*time.Second, finite.MaxConnectionAgeGrace)
+	defaults := defaultKeepalive().serverParameters()
+	require.Equal(t, 2*time.Minute, defaults.MaxConnectionAge)
+	require.Equal(t, grpcInfinity, defaults.MaxConnectionAgeGrace)
+
+	explicit := KeepaliveConfig{MaxConnectionAgeGrace: 5 * time.Second}.serverParameters()
+	require.Equal(t, 5*time.Second, explicit.MaxConnectionAgeGrace)
 
 	policy := KeepaliveConfig{MinTime: time.Minute, PermitWithoutStream: true}.enforcementPolicy()
 	require.Equal(t, time.Minute, policy.MinTime)

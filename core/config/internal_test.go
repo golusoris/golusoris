@@ -6,13 +6,18 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/knadh/koanf/providers/file"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 func TestParserFor_yaml(t *testing.T) {
@@ -257,5 +262,89 @@ func TestFileEnvKey(t *testing.T) {
 		if ok != tt.ok || key != tt.key {
 			t.Errorf("fileEnvKey(%q) = %q, %v; want %q, %v", tt.name, key, ok, tt.key, tt.ok)
 		}
+	}
+}
+
+func TestMergeCompoundKeys(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		existing    []string
+		contributed []string
+		want        []string
+	}{
+		{
+			name:        "nil existing sorted contributed",
+			existing:    nil,
+			contributed: []string{"z.key", "a.key", "m.key"},
+			want:        []string{"a.key", "m.key", "z.key"},
+		},
+		{
+			name:        "existing preserved order contributed sorted",
+			existing:    []string{"z.key", "b.key"},
+			contributed: []string{"m.key", "a.key"},
+			want:        []string{"z.key", "b.key", "a.key", "m.key"},
+		},
+		{
+			name:        "duplicate in contributed deduplicated",
+			existing:    []string{"a.key"},
+			contributed: []string{"b.key", "b.key", "c.key"},
+			want:        []string{"a.key", "b.key", "c.key"},
+		},
+		{
+			name:        "overlap between existing and contributed deduplicated",
+			existing:    []string{"existing.key"},
+			contributed: []string{"existing.key", "contributed.key"},
+			want:        []string{"existing.key", "contributed.key"},
+		},
+		{
+			name:        "duplicate in existing deduplicated",
+			existing:    []string{"dup.key", "dup.key"},
+			contributed: []string{"new.key"},
+			want:        []string{"dup.key", "new.key"},
+		},
+		{
+			name:        "empty contributed preserves existing",
+			existing:    []string{"a.key"},
+			contributed: nil,
+			want:        []string{"a.key"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := mergeCompoundKeys(tc.existing, tc.contributed)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("mergeCompoundKeys(%v, %v) = %v, want %v", tc.existing, tc.contributed, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestModule_DuplicateContributedKeyDeduped(t *testing.T) {
+	t.Parallel()
+	var cfg *Config
+	app := fxtest.New(
+		t,
+		Module,
+		CompoundKeys("test.key_one", "test.key_two"),
+		CompoundKeys("test.key_one"),
+		fx.Invoke(func(c *Config) {
+			cfg = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("app.Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("app.Stop: %v", err)
+	}
+	if len(cfg.opts.CompoundKeys) != 2 {
+		t.Fatalf("expected 2 keys, got %d: %v", len(cfg.opts.CompoundKeys), cfg.opts.CompoundKeys)
+	}
+	if cfg.opts.CompoundKeys[0] != "test.key_one" || cfg.opts.CompoundKeys[1] != "test.key_two" {
+		t.Errorf("unexpected compound keys: %v", cfg.opts.CompoundKeys)
 	}
 }

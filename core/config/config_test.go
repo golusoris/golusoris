@@ -5,9 +5,14 @@
 package config_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
 )
@@ -197,5 +202,119 @@ func TestOnChange(t *testing.T) {
 		t.Error("OnChange fired before any change")
 	default:
 		// expected: no premature fire
+	}
+}
+
+func TestModule_CompoundKeysContributor(t *testing.T) {
+	t.Setenv("APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE", "45s")
+
+	var cfg *config.Config
+	app := fxtest.New(
+		t,
+		config.Module,
+		config.CompoundKeys("grpc.keepalive.max_connection_age_grace"),
+		fx.Invoke(func(c *config.Config) {
+			cfg = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("app.Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("app.Stop: %v", err)
+	}
+
+	if got := cfg.String("grpc.keepalive.max_connection_age_grace"); got != "45s" {
+		t.Errorf("got %q, want 45s", got)
+	}
+	if cfg.Exists("grpc.keepalive.max.connection.age.grace") {
+		t.Error("split key should not exist when compound key declared")
+	}
+}
+
+func TestModule_WithoutCompoundKeysContributor(t *testing.T) {
+	t.Setenv("APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE", "45s")
+
+	var cfg *config.Config
+	app := fxtest.New(
+		t,
+		config.Module,
+		fx.Invoke(func(c *config.Config) {
+			cfg = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("app.Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("app.Stop: %v", err)
+	}
+
+	if got := cfg.String("grpc.keepalive.max.connection.age.grace"); got != "45s" {
+		t.Errorf("got %q, want 45s", got)
+	}
+	if cfg.Exists("grpc.keepalive.max_connection_age_grace") {
+		t.Error("compound key should not exist without contributor")
+	}
+}
+
+func TestModule_DuplicateContributedKey(t *testing.T) {
+	t.Setenv("APP_TEST_DUPLICATE_KEY", "value")
+
+	var cfg *config.Config
+	app := fxtest.New(
+		t,
+		config.Module,
+		config.CompoundKeys("test.duplicate_key"),
+		config.CompoundKeys("test.duplicate_key"),
+		fx.Invoke(func(c *config.Config) {
+			cfg = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("app.Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("app.Stop: %v", err)
+	}
+
+	if got := cfg.String("test.duplicate_key"); got != "value" {
+		t.Errorf("got %q, want value", got)
+	}
+}
+
+func TestModule_ReplacedOptionsMergesGroup(t *testing.T) {
+	t.Setenv("CUSTOM_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE", "45s")
+
+	var cfg *config.Config
+	app := fxtest.New(
+		t,
+		config.Module,
+		fx.Replace(config.Options{
+			EnvPrefix: "CUSTOM_",
+			Delimiter: ".",
+		}),
+		config.CompoundKeys("grpc.keepalive.max_connection_age_grace"),
+		fx.Invoke(func(c *config.Config) {
+			cfg = c
+		}),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Start(ctx); err != nil {
+		t.Fatalf("app.Start: %v", err)
+	}
+	if err := app.Stop(ctx); err != nil {
+		t.Fatalf("app.Stop: %v", err)
+	}
+
+	if got := cfg.String("grpc.keepalive.max_connection_age_grace"); got != "45s" {
+		t.Errorf("got %q, want 45s", got)
 	}
 }

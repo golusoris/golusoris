@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"syscall"
@@ -371,6 +372,47 @@ func parserFor(path string) koanf.Parser {
 	return nil
 }
 
+// CompoundKeys registers leaf keys that retain underscores when loaded from the environment.
+func CompoundKeys(keys ...string) fx.Option {
+	return fx.Provide(fx.Annotate(
+		func() []string {
+			return slices.Clone(keys)
+		},
+		fx.ResultTags(`group:"config.compound_keys,flatten"`),
+	))
+}
+
+func mergeCompoundKeys(existing, contributed []string) []string {
+	if len(contributed) == 0 {
+		return existing
+	}
+	seen := make(map[string]struct{}, len(existing)+len(contributed))
+	out := make([]string, 0, len(existing)+len(contributed))
+	for _, k := range existing {
+		if _, ok := seen[k]; !ok {
+			seen[k] = struct{}{}
+			out = append(out, k)
+		}
+	}
+	extra := make([]string, 0, len(contributed))
+	for _, k := range contributed {
+		if _, ok := seen[k]; !ok {
+			seen[k] = struct{}{}
+			extra = append(extra, k)
+		}
+	}
+	slices.Sort(extra)
+	return append(out, extra...)
+}
+
+type configParams struct {
+	fx.In
+
+	Opts         Options
+	Lifecycle    fx.Lifecycle
+	CompoundKeys []string `group:"config.compound_keys"`
+}
+
 // Module provides a [*Config] built from default Options (env-prefix "APP_",
 // no files). Apps can override by supplying their own [Options] before this
 // module via fx.Replace or fx.Decorate.
@@ -383,13 +425,15 @@ var Module = fx.Module(
 			Watch:     true,
 		}
 	}),
-	fx.Provide(func(opts Options, lc fx.Lifecycle) (*Config, error) {
+	fx.Provide(func(p configParams) (*Config, error) {
+		opts := p.Opts
+		opts.CompoundKeys = mergeCompoundKeys(opts.CompoundKeys, p.CompoundKeys)
 		c, err := New(opts)
 		if err != nil {
 			return nil, err
 		}
 		var stop func()
-		lc.Append(fx.Hook{
+		p.Lifecycle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) (err error) {
 				stop, err = c.startWatch(ctx)
 				return err
