@@ -149,6 +149,7 @@ expected_budgets=(
 	BenchmarkHashPassword
 	BenchmarkSealOpen
 	BenchmarkTypedSetGet
+	BenchmarkTypedGetMiss
 )
 if [[ "$(grep -Evc '^[[:space:]]*(#|$)' \
 	"$repo_root/scripts/ci/allocation-budgets.tsv")" -ne "${#expected_budgets[@]}" ]]; then

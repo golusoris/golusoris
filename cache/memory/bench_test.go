@@ -25,3 +25,17 @@ func BenchmarkTypedSetGet(b *testing.B) {
 		_, _ = tc.Get("k")
 	}
 }
+
+// BenchmarkTypedGetMiss measures a Get of a missing key on the otter-backed L1
+// cache; scripts/ci/allocation-budgets.tsv caps its allocations.
+func BenchmarkTypedGetMiss(b *testing.B) {
+	c, err := memory.NewForTest(10_000, time.Minute)
+	if err != nil {
+		b.Fatal(err)
+	}
+	tc := memory.Typed[string, int](c, "bench")
+	b.ReportAllocs()
+	for b.Loop() {
+		_, _ = tc.Get("missing")
+	}
+}
