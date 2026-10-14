@@ -65,16 +65,34 @@ func TestNewServeMux(t *testing.T) {
 
 func TestRegister_TCPBindFailureReturnsAndCleansUDP(t *testing.T) {
 	t.Parallel()
-	occupied, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("occupy TCP address: %v", err)
+	var (
+		occupied net.Listener
+		addr     string
+	)
+	for range 20 {
+		probe, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			continue
+		}
+		targetAddr := probe.LocalAddr().String()
+		tcpLn, err := net.Listen("tcp", targetAddr)
+		_ = probe.Close()
+		if err != nil {
+			continue
+		}
+		occupied = tcpLn
+		addr = targetAddr
+		break
+	}
+	if occupied == nil {
+		t.Fatalf("could not bind UDP probe and occupy TCP on same port within 20 attempts")
 	}
 	t.Cleanup(func() { _ = occupied.Close() })
 
 	lifecycle := &lifecycleRecorder{}
 	register(params{
 		LC:     lifecycle,
-		Cfg:    Config{Addr: occupied.Addr().String(), UDPSize: defaultUDPSize},
+		Cfg:    Config{Addr: addr, UDPSize: defaultUDPSize},
 		Mux:    dns.NewServeMux(),
 		Logger: slog.New(slog.DiscardHandler),
 	})
@@ -82,7 +100,7 @@ func TestRegister_TCPBindFailureReturnsAndCleansUDP(t *testing.T) {
 	defer cancel()
 	startErr := lifecycle.hook.OnStart(ctx)
 
-	probe, probeErr := net.ListenPacket("udp", occupied.Addr().String())
+	probe, probeErr := net.ListenPacket("udp", addr)
 	if probeErr == nil {
 		_ = probe.Close()
 	}
