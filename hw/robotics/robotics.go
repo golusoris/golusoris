@@ -36,7 +36,7 @@ func NewMaster() *Master {
 // AddRobot registers a robot with the master.
 func (m *Master) AddRobot(r *gobot.Robot) { m.m.AddRobot(r) }
 
-// Start starts the master and all registered robots (blocks until stopped).
+// Start starts all registered robots, then blocks until the process receives os.Interrupt; Stop does not unblock it.
 func (m *Master) Start() error {
 	if err := m.m.Start(); err != nil {
 		return fmt.Errorf("robotics: start: %w", err)
