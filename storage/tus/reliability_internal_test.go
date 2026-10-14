@@ -326,7 +326,7 @@ func TestFinishUploadRetrySkipsPersistedObject(t *testing.T) {
 		return nil
 	})
 	store := newBucketStore(
-		scratch, bucket, defaultKeyFunc("uploads/"), h.log, h.deliverCompletion,
+		scratch, bucket, defaultKeyFunc("uploads/"), h.log, h.deliverCompletion, "test-replica",
 	)
 	ctx := context.Background()
 	upload, err := store.NewUpload(ctx, tusd.FileInfo{Size: 4})
@@ -369,7 +369,7 @@ func assertPrePutCheckpointFailure(t *testing.T, failAt int32) {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
 	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: failAt}
-	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
 		t.Fatalf("NewUpload: %v", err)
@@ -397,7 +397,7 @@ func TestCompletionCheckpointFailureReconcilesWithoutDuplicatePut(t *testing.T) 
 		t.Fatalf("newLocalScratch: %v", err)
 	}
 	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: 3}
-	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
 		t.Fatalf("NewUpload: %v", err)
@@ -416,7 +416,7 @@ func TestCompletionCheckpointFailureReconcilesWithoutDuplicatePut(t *testing.T) 
 	if err != nil || record.normalizedStage() != completionStagePutting {
 		t.Fatalf("putting receipt = %+v, err=%v", record, err)
 	}
-	restarted := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	restarted := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	if err = restarted.ResumeCompletion(context.Background(), info.ID); err != nil {
 		t.Fatalf("ResumeCompletion: %v", err)
 	}
@@ -437,7 +437,7 @@ func TestCompletionRetryRejectsChangedScratch(t *testing.T) {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
 	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: 3}
-	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
 		t.Fatalf("NewUpload: %v", err)
@@ -459,7 +459,7 @@ func TestCompletionRetryRejectsChangedScratch(t *testing.T) {
 	if err = os.WriteFile(binPath, []byte("evil"), scratchFilePerm); err != nil {
 		t.Fatalf("replace scratch bytes: %v", err)
 	}
-	restarted := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	restarted := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	if err = restarted.ResumeCompletion(context.Background(), info.ID); err == nil {
 		t.Fatal("ResumeCompletion accepted scratch bytes changed after checkpoint")
 	}
@@ -491,7 +491,7 @@ func TestAmbiguousPutResultReconcilesWithoutDuplicatePut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
-	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
 		t.Fatalf("NewUpload: %v", err)
@@ -556,7 +556,7 @@ func TestDestinationMismatchIsOverwritten(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newLocalScratch: %v", err)
 			}
-			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 			upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 			if err != nil {
 				t.Fatalf("NewUpload: %v", err)
@@ -601,7 +601,7 @@ func TestDestinationAttributeMismatchIsOverwritten(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 			info := tusd.FileInfo{Size: 4, MetaData: tusd.MetaData{"filetype": "text/plain", "owner": "alice"}}
 			upload, err := store.NewUpload(context.Background(), info)
 			if err != nil {
@@ -647,7 +647,7 @@ func TestDestinationProbeFailureDoesNotRiskPut(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
-	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil)
+	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
 		t.Fatalf("NewUpload: %v", err)
@@ -699,7 +699,7 @@ func TestS3CompletionReceiptRecordsUploadedSize(t *testing.T) {
 	}
 	store := newBucketStore(
 		scratch, bucket, defaultKeyFunc("objects/"), slog.New(slog.DiscardHandler),
-		func(context.Context, string) error { return nil },
+		func(context.Context, string) error { return nil }, "test-replica",
 	)
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
 	if err != nil {
@@ -740,7 +740,7 @@ func TestResumePersistedCompletionWithoutScratch(t *testing.T) {
 		calls.Add(1)
 		return nil
 	})
-	store := newBucketStore(scratch, nil, defaultKeyFunc("uploads/"), h.log, h.deliverCompletion)
+	store := newBucketStore(scratch, nil, defaultKeyFunc("uploads/"), h.log, h.deliverCompletion, "test-replica")
 	if err = store.ResumeCompletion(context.Background(), "persisted"); err != nil {
 		t.Fatalf("ResumeCompletion: %v", err)
 	}
