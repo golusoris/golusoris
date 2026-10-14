@@ -197,6 +197,72 @@ func TestPresignPut_SignsThroughIAMSignBlob(t *testing.T) {
 	}
 }
 
+func TestPresignPut_ExpiryAndPathBakedIntoSignature(t *testing.T) {
+	t.Parallel()
+	rec := &signBlobRecorder{}
+	sig := []byte("remote-signature")
+	svc := newIAMServer(t, rec, sig)
+	b := offlineBucket(t, &urlSigner{blob: iamSigner{svc: svc}, email: "uploader@proj.iam.gserviceaccount.com"})
+
+	const keyA = "presign/target-key.txt"
+	req, err := b.PresignPut(context.Background(), keyA, storage.MinPresignTTL, storage.PresignPutOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(req.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+
+	if got := q.Get("X-Goog-Expires"); got != "1" {
+		t.Fatalf("X-Goog-Expires = %q, want %q", got, "1")
+	}
+	signedAt, err := time.Parse(goog4DateLayout, q.Get("X-Goog-Date"))
+	if err != nil {
+		t.Fatalf("parse X-Goog-Date: %v", err)
+	}
+	if !req.Expires.Equal(signedAt.Add(storage.MinPresignTTL)) {
+		t.Fatalf("Expires = %s, want %s", req.Expires, signedAt.Add(storage.MinPresignTTL))
+	}
+	exp, err := signedExpiry(req.URL)
+	if err != nil || !exp.Equal(req.Expires) {
+		t.Fatalf("signedExpiry(%s) = %s, %v; want %s", req.URL, exp, err, req.Expires)
+	}
+
+	wantPath := "/media/" + keyA
+	if u.Path != wantPath {
+		t.Fatalf("URL Path = %q, want %q", u.Path, wantPath)
+	}
+
+	base := canonicalHash(t, rec)
+	if _, err = b.PresignPut(context.Background(), "presign/other-key.txt", storage.MinPresignTTL, storage.PresignPutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := canonicalHash(t, rec); got == base {
+		t.Fatalf("canonical request hash unchanged for a different key: %q", got)
+	}
+	if _, err = b.PresignPut(context.Background(), keyA, 2*time.Second, storage.PresignPutOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := canonicalHash(t, rec); got == base {
+		t.Fatalf("canonical request hash unchanged for a different TTL: %q", got)
+	}
+}
+
+// canonicalHash returns the canonical-request hash line of the last GOOG4 string-to-sign.
+func canonicalHash(t *testing.T, rec *signBlobRecorder) string {
+	t.Helper()
+	rec.mu.Lock()
+	payload := string(rec.payload)
+	rec.mu.Unlock()
+	lines := strings.Split(payload, "\n")
+	if len(lines) < 4 || lines[0] != "GOOG4-RSA-SHA256" {
+		t.Fatalf("string-to-sign shape: %q", payload)
+	}
+	return lines[3]
+}
+
 func TestPresignPut_TTLBoundariesMapToWholeSeconds(t *testing.T) {
 	t.Parallel()
 	signer, err := newEphemeralSigner()
