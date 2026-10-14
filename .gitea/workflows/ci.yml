@@ -78,7 +78,7 @@ jobs:
 
       - name: Format and lint every module
         run: |
-          scripts/hooks/gofumpt.sh --all
+          bash scripts/ci/check-gofumpt.sh
           scripts/ci/go-modules.sh lint
           docker info
           bash scripts/ci/python-lint.sh

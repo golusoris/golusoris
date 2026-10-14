@@ -86,6 +86,9 @@
             "context": "Module sweep (shard 3)"
           },
           {
+            "context": "CI policy tests"
+          },
+          {
             "context": "Licensing (reuse lint)"
           },
           {
@@ -120,6 +123,9 @@
           },
           {
             "context": "Documentation Governance"
+          },
+          {
+            "context": "REUSE lint"
           },
           {
             "context": "Scorecard Analysis"

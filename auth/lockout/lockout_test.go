@@ -6,6 +6,7 @@ package lockout_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/auth/lockout"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 func TestService_LocksAfterMaxFails(t *testing.T) {
@@ -183,4 +185,88 @@ func (s *failureBarrierStore) waitAndRelease() {
 		<-s.ready
 	}
 	close(s.release)
+}
+
+func TestMemoryStore_GetAndRecordFailure(t *testing.T) {
+	t.Parallel()
+	clk := clockwork.NewFakeClock()
+	store := lockout.NewMemoryStoreWithClock(clk)
+	ctx := t.Context()
+
+	// Missing key returns not found
+	_, err := store.Get(ctx, "unknown")
+	require.Error(t, err)
+	var ge *gerr.Error
+	require.True(t, errors.As(err, &ge))
+	require.Equal(t, gerr.CodeNotFound, ge.Code)
+
+	// Record failure and verify Get returns the stored state
+	now := clk.Now()
+	opts := lockout.Options{MaxFails: 3, Window: 2 * time.Minute, Cooldown: 10 * time.Minute}
+	err = store.RecordFailure(ctx, "user-1", now, opts)
+	require.NoError(t, err)
+
+	state, err := store.Get(ctx, "user-1")
+	require.NoError(t, err)
+	require.Equal(t, 1, state.Fails)
+	require.Equal(t, now, state.FirstFailAt)
+	require.True(t, state.LockedUntil.IsZero())
+}
+
+func TestMemoryStore_Get_ExpiredBoundary(t *testing.T) {
+	t.Parallel()
+	clk := clockwork.NewFakeClock()
+	store := lockout.NewMemoryStoreWithClock(clk)
+	ctx := t.Context()
+
+	now := clk.Now()
+	opts := lockout.Options{MaxFails: 3, Window: time.Minute, Cooldown: 5 * time.Minute}
+	err := store.RecordFailure(ctx, "user-exp", now, opts)
+	require.NoError(t, err)
+
+	// At exact expiry boundary (Now == expires), entry is still active
+	clk.Advance(time.Minute)
+	state, err := store.Get(ctx, "user-exp")
+	require.NoError(t, err)
+	require.Equal(t, 1, state.Fails)
+
+	// Just past expiry (Now > expires), entry expires and is pruned
+	clk.Advance(time.Nanosecond)
+	_, err = store.Get(ctx, "user-exp")
+	require.Error(t, err)
+	var ge *gerr.Error
+	require.True(t, errors.As(err, &ge))
+	require.Equal(t, gerr.CodeNotFound, ge.Code)
+	require.Contains(t, err.Error(), "expired")
+
+	// Subsequent Get confirms key is pruned
+	_, err = store.Get(ctx, "user-exp")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not found")
+}
+
+func TestMemoryStore_Delete(t *testing.T) {
+	t.Parallel()
+	clk := clockwork.NewFakeClock()
+	store := lockout.NewMemoryStoreWithClock(clk)
+	ctx := t.Context()
+
+	// Delete non-existent key is idempotent and returns nil
+	require.NoError(t, store.Delete(ctx, "nonexistent"))
+
+	// Record failure, verify present, then delete
+	err := store.RecordFailure(ctx, "user-del", clk.Now(), lockout.Options{MaxFails: 2, Window: time.Minute, Cooldown: time.Minute})
+	require.NoError(t, err)
+
+	_, err = store.Get(ctx, "user-del")
+	require.NoError(t, err)
+
+	require.NoError(t, store.Delete(ctx, "user-del"))
+
+	// Verify key no longer exists
+	_, err = store.Get(ctx, "user-del")
+	require.Error(t, err)
+	var ge *gerr.Error
+	require.True(t, errors.As(err, &ge))
+	require.Equal(t, gerr.CodeNotFound, ge.Code)
 }

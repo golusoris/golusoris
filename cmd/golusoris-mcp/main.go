@@ -11,6 +11,7 @@
 //	golusoris-mcp                       # stdio transport (for local IDE clients)
 //	golusoris-mcp --transport http      # streamable-HTTP on :8899
 //	golusoris-mcp --transport http --addr :9000
+//	golusoris-mcp --version             # print the release version
 //
 // The server is built on the official MCP Go SDK
 // (github.com/modelcontextprotocol/go-sdk). The stdio transport lets Claude
@@ -38,10 +39,11 @@ import (
 	"github.com/golusoris/golusoris/core/mcp"
 )
 
-const (
-	serverName    = "golusoris-mcp"
-	serverVersion = "0.1.0"
-)
+const serverName = "golusoris-mcp"
+
+// version is set by release builds through -ldflags -X (tools/.goreleaser.yml)
+// and is what the server reports to clients.
+var version = "dev"
 
 func main() {
 	var (
@@ -50,6 +52,7 @@ func main() {
 	)
 
 	root := clikit.New(serverName, "MCP server for the golusoris framework")
+	root.Cobra().Version = version
 	flags := root.Cobra().PersistentFlags()
 	flags.StringVar(&transport, "transport", "stdio", "Transport: 'stdio' (local IDE clients) or 'http' (streamable-HTTP)")
 	flags.StringVar(&addr, "addr", ":8899", "Listen address (http transport only)")
@@ -76,7 +79,7 @@ func run(ctx context.Context, transport, addr string) error {
 
 // newServer builds the MCP server with all golusoris tools registered.
 func newServer(logger *slog.Logger) *sdkmcp.Server {
-	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: serverName, Version: serverVersion}, &sdkmcp.ServerOptions{Logger: logger})
+	srv := sdkmcp.NewServer(&sdkmcp.Implementation{Name: serverName, Version: version}, &sdkmcp.ServerOptions{Logger: logger})
 	for i := range mcpTools {
 		t := mcpTools[i]
 		sdkmcp.AddTool[map[string]any, any](
