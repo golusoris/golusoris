@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "generated_at": "2026-10-09T08:48:36Z",
+  "generated_at": "2026-10-13T22:39:15Z",
   "repository": "golusoris/golusoris",
-  "commit_sha": "7796cccc1f78734ba29215460de8a27c20d64278",
-  "total_infractions": 5,
+  "commit_sha": "695a891eec506da92a4ec826686203cfa220ba08",
+  "total_infractions": 4,
   "infractions": [
     {
       "rule_id": "HISS-02",
@@ -28,14 +28,6 @@
       "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
       "anchor": "fn:ParseFASTA",
       "fingerprint": "science/bio/fasta.go:HISS-02:fn:ParseFASTA#1"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "storage/tus/tus.go",
-      "line_number": 256,
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "fn:Handler.wireLifecycle",
-      "fingerprint": "storage/tus/tus.go:HISS-02:fn:Handler.wireLifecycle#1"
     },
     {
       "rule_id": "HISS-02",
