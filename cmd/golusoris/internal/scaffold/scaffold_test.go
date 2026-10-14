@@ -5,8 +5,11 @@
 package scaffold_test
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/golusoris/golusoris/cmd/golusoris/internal/scaffold"
@@ -41,28 +44,98 @@ func TestInitCmd_createsFiles(t *testing.T) { //nolint:paralleltest // mutates g
 
 func TestAddCmd_listModules(t *testing.T) {
 	t.Parallel()
+	var buf bytes.Buffer
 	cmd := scaffold.AddCmd()
+	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error listing modules: %v", err)
+	}
+	got := buf.String()
+	if !strings.HasPrefix(got, "Available modules:") {
+		t.Fatalf("output does not start with %q: %q", "Available modules:", got)
+	}
+
+	expected := map[string]string{
+		"auth-oidc": "golusoris.AuthOIDC",
+		"authz":     "golusoris.Authz",
+		"cache":     "golusoris.CacheMemory",
+		"db":        "golusoris.DB",
+		"http":      "golusoris.HTTP",
+		"jobs":      "golusoris.Jobs",
+		"k8s":       "golusoris.K8s",
+		"otel":      "golusoris.OTel",
+	}
+
+	for mod, fxVar := range expected {
+		if !strings.Contains(got, mod) {
+			t.Errorf("output missing module %q", mod)
+		}
+		if !strings.Contains(got, fxVar) {
+			t.Errorf("output missing fx variable %q for module %q", fxVar, mod)
+		}
+	}
+
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	if len(lines) != len(expected)+1 {
+		t.Fatalf("got %d lines, want %d", len(lines), len(expected)+1)
+	}
+	moduleLines := lines[1:]
+	if !slices.IsSorted(moduleLines) {
+		t.Errorf("module lines are not in sorted order: %v", moduleLines)
 	}
 }
 
 func TestAddCmd_knownModule(t *testing.T) {
 	t.Parallel()
+	var buf bytes.Buffer
 	cmd := scaffold.AddCmd()
+	cmd.SetOut(&buf)
 	cmd.SetArgs([]string{"db"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("unexpected error for known module: %v", err)
+	}
+	got := buf.String()
+	wantImport := `import "github.com/golusoris/golusoris"`
+	if !strings.Contains(got, wantImport) {
+		t.Errorf("output does not contain %s; got:\n%s", wantImport, got)
+	}
+	if !strings.Contains(got, "golusoris.DB,") {
+		t.Errorf("output does not contain golusoris.DB,; got:\n%s", got)
 	}
 }
 
 func TestAddCmd_unknownModule(t *testing.T) {
 	t.Parallel()
+	var buf bytes.Buffer
 	cmd := scaffold.AddCmd()
-	cmd.SetArgs([]string{"nonexistent-module-xyz"})
-	if err := cmd.Execute(); err == nil {
+	cmd.SetOut(&buf)
+	unknown := "nonexistent-module-xyz"
+	cmd.SetArgs([]string{unknown})
+	err := cmd.Execute()
+	if err == nil {
 		t.Fatal("expected error for unknown module")
+	}
+	if !strings.Contains(err.Error(), unknown) {
+		t.Errorf("error %q does not contain module name %q", err.Error(), unknown)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected buffer to be empty, got %q", buf.String())
+	}
+}
+
+func TestAddCmd_emptyModuleName(t *testing.T) {
+	t.Parallel()
+	var buf bytes.Buffer
+	cmd := scaffold.AddCmd()
+	cmd.SetOut(&buf)
+	cmd.SetArgs([]string{""})
+	err := cmd.Execute()
+	if err == nil || !strings.Contains(err.Error(), `unknown module ""`) {
+		t.Fatalf("Execute() error = %v, want unknown module \"\"", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected buffer to be empty, got %q", buf.String())
 	}
 }
 
