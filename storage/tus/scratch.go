@@ -167,13 +167,66 @@ func (u completionUpload) completed() CompletedUpload {
 	}
 }
 
-// newUploadID returns a 128-bit URL-safe hex id (no slashes, no NUL).
-func newUploadID() (string, error) {
+// newUploadID returns a replica-tagged URL-safe id formatted as <tag>_<32hex>.
+// If tag is empty, it returns a 32 lowercase hex id.
+func newUploadID(tag string) (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("tus: generate upload id: %w", err)
 	}
-	return hex.EncodeToString(b), nil
+	hexPart := hex.EncodeToString(b)
+	if tag == "" {
+		return hexPart, nil
+	}
+	return tag + "_" + hexPart, nil
+}
+
+func isTagChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9') || b == '-'
+}
+
+func isLowerHex(b byte) bool {
+	return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f')
+}
+
+func hasOnlyTagChars(s string) bool {
+	limit := min(len(s), maxReplicaTagBytes)
+	for i := range limit {
+		if !isTagChar(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasOnlyLowerHex(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for i := range 32 {
+		if !isLowerHex(s[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// uploadReplica parses the replica tag from an upload ID.
+// It reports tagged=true iff id has the form <tag>_<32 lowercase hex>
+// with tag matching [a-z0-9-]{1,63}. A bare 32-hex id = legacy untagged -> tagged=false.
+func uploadReplica(id string) (string, bool) {
+	idx := strings.IndexByte(id, '_')
+	if idx <= 0 || idx > maxReplicaTagBytes || strings.IndexByte(id[idx+1:], '_') != -1 {
+		return "", false
+	}
+	tag := id[:idx]
+	if !hasOnlyTagChars(tag) {
+		return "", false
+	}
+	if !hasOnlyLowerHex(id[idx+1:]) {
+		return "", false
+	}
+	return tag, true
 }
 
 // --- localScratch: append-capable temp-dir store (node-local). ---

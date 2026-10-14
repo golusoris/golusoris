@@ -257,6 +257,7 @@ class PortabilityDriverTest(TestCase):
             'install -d -m 0700 "$pact_dir"',
             'python -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"',
             'PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir',
+            'CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir',
             "python -B scripts/ci/pact_ffi.py --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
             "python -B scripts/ci/portability_test.py",
