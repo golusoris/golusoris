@@ -20,6 +20,7 @@ run_policy() {
 		MODULE_SWEEP="${MODULE_SWEEP:-success}" \
 		MKDOCS="${MKDOCS:-success}" \
 		ALLOCATION_BUDGET="${ALLOCATION_BUDGET:-success}" \
+		CORE_SKEW="${CORE_SKEW:-success}" \
 		SHELLCHECK="${SHELLCHECK:-success}" \
 		ACTIONLINT="${ACTIONLINT:-success}" \
 		CI_POLICY="${CI_POLICY:-success}" \
@@ -58,6 +59,8 @@ EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success
 expect_failure env LINT=skipped bash "$0" --single
 expect_failure env MKDOCS=skipped bash "$0" --single
 expect_failure env ALLOCATION_BUDGET=failure bash "$0" --single
+expect_failure env CORE_SKEW=failure bash "$0" --single
+expect_failure env CORE_SKEW=skipped bash "$0" --single
 expect_failure env SHELLCHECK=failure bash "$0" --single
 expect_failure env ACTIONLINT=skipped bash "$0" --single
 expect_failure env CI_POLICY=failure bash "$0" --single
