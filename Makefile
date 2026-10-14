@@ -125,6 +125,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/gosec-scan_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
+	@bash scripts/ci/template-workflows-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
@@ -219,6 +220,10 @@ shellcheck: ## lint every repository-owned shell script with the pinned ShellChe
 actionlint: ## lint GitHub and Gitea workflow YAML with the pinned actionlint
 	@bash scripts/ci/actionlint.sh
 
+.PHONY: template-workflows
+template-workflows: ## check template workflows against their pinned reusable workflows
+	@bash scripts/ci/template-workflows.sh
+
 .PHONY: terraform-validate
 terraform-validate: ## format and validate every Terraform module with locked providers
 	@bash scripts/ci/terraform-validate.sh
@@ -283,7 +288,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate
