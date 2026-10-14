@@ -34,6 +34,7 @@
 package pact
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pact-foundation/pact-go/v2/consumer"
@@ -86,15 +87,30 @@ type ProviderOptions struct {
 // VerifyProvider runs provider-side pact verification.
 func VerifyProvider(t *testing.T, opts ProviderOptions) {
 	t.Helper()
+	urls, files := splitPactSources(opts.PactURLs)
 	verifier := provider.NewVerifier()
 	err := verifier.VerifyProvider(t, provider.VerifyRequest{
 		Provider:                 opts.Provider,
 		ProviderBaseURL:          opts.ProviderBaseURL,
-		PactURLs:                 opts.PactURLs,
+		PactURLs:                 urls,
+		PactFiles:                files,
 		BrokerURL:                opts.BrokerURL,
 		ConsumerVersionSelectors: opts.ConsumerVersionSelectors,
 	})
 	if err != nil {
 		t.Fatalf("pact: provider verification: %v", err)
 	}
+}
+
+// splitPactSources routes http(s) entries to the URL source and every other
+// entry to the file source; pact-go fetches URL sources over HTTP only.
+func splitPactSources(sources []string) (urls, files []string) {
+	for _, src := range sources {
+		if strings.HasPrefix(src, "http://") || strings.HasPrefix(src, "https://") {
+			urls = append(urls, src)
+			continue
+		}
+		files = append(files, src)
+	}
+	return urls, files
 }
