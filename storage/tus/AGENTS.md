@@ -45,7 +45,7 @@ fx.New(
 
 Requires `storage.Bucket`, `*slog.Logger`, `clock.Clock`, `*config.Config`.
 Config keys live under `storage.tus` prefix (`enabled`, `base_path`,
-`max_size`, `key_prefix`, `scratch`, `scratch_dir`, `upload_expiry`,
+`max_size`, `key_prefix`, `replica_tag`, `scratch`, `scratch_dir`, `upload_expiry`,
 `expiry_sweep_interval`, `disable_*` flags, tusd timeouts).
 `max_size` defaults to a finite 5 GiB and must be positive.
 `scratch` accepts only `local`; empty or unknown values fail construction.
@@ -68,6 +68,8 @@ Join timeout error + warn log name worker step (`list completions`, `complete up
   replica. Run single-replica or sticky sessions until distributed scratch.
   upload locker also node-local. Empty `scratch_dir` isolates co-located apps
   but cannot resume after process restart. Explicit app-unique path persists.
+- Upload ID format: `<replica_tag>_<32hex>`. Foreign-tag miss emits warn log;
+  404 response names sticky-session cause.
 - Scratch creation uses exclusive data/info files; duplicate IDs fail without
  truncation. Info-create failure removes newly reserved data. Chunk writes
  require exact offset and poll request cancellation during source reads.
