@@ -69,7 +69,7 @@ type SearchQuery struct {
 	// Metric controls the distance function. Default: Cosine.
 	Metric Metric
 	// Filter is an optional SQL WHERE clause appended to the query.
-	// Example: "tenant_id = $2" (use positional parameters starting at $2).
+	// Example: "tenant_id = $3" ($1 is the embedding, $2 the limit).
 	Filter string
 	// FilterArgs are the arguments for Filter placeholders.
 	FilterArgs []any

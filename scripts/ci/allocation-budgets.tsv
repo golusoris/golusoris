@@ -6,3 +6,4 @@ BenchmarkNewKSUID 0 0
 BenchmarkHashPassword 67200000 70
 BenchmarkSealOpen 2704 7
 BenchmarkTypedSetGet 165 7
+BenchmarkTypedGetMiss 32 1

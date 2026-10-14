@@ -15,7 +15,7 @@ directly: `github.com/golusoris/golusoris/hw/robotics`.
 ```go
 master := robotics.NewMaster()                 // wraps gobot.Manager
 master.AddRobot(robotics.NewRobot("name", workFn))
-master.Start()                                 // blocks until Stop
+master.Start()                                 // blocks until os.Interrupt, not Stop
 master.Stop()
 
 // re-exports so callers need no direct gobot import:
@@ -31,5 +31,5 @@ Single API across many hardware adapters (Firmata, GPIO, drone SDKs); `Manager` 
 ## Notes
 
 - Separate go.mod because gobot pulls CGO adapters for each hardware platform.
-- `Master.Start` blocks — run it on its own goroutine if app does other work.
+- `Master.Start` blocks until os.Interrupt -> app with other work -> own goroutine.
 - `NewRobot` wires empty connection/device set; add hardware via  re-exported `gobot.Connection` / `gobot.Device` types directly.
