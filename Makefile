@@ -243,6 +243,10 @@ fault-recovery: ## fail when a short test recovers a nil-dereference fault (gola
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
 
+.PHONY: helm-backup-restore
+helm-backup-restore: ## restore a Helm chart backup into a fresh database
+	@bash scripts/ci/helm-backup-restore_test.sh
+
 .PHONY: buf-lint
 buf-lint: ## lint tracked protobuf files and check the vendored KEDA contract against upstream
 	@bash scripts/ci/buf-lint.sh
