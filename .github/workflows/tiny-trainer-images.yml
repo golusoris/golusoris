@@ -7,6 +7,8 @@ name: tiny trainer images
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  # main requires the contract and smoke contexts, so the merge queue runs them too.
+  merge_group:
   push:
     tags:
       - 'tiny-trainers-v*.*.*'
@@ -51,7 +53,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: '3.14'
+          python-version: '3.15'
 
       - name: Run positive, negative, and boundary contracts
         shell: bash

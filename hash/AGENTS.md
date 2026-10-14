@@ -11,7 +11,7 @@ Content-hashing helpers. Pick right hash for task:
 | Function | Algorithm | Use when |
 | --- | --- | --- |
 | `SHA256(data)` | SHA-256 | Content dedup, integrity checks, security-sensitive |
-| `BLAKE3(data)` | BLAKE3 | Fast cryptographic hash (3× faster than SHA-256) |
+| `BLAKE3(data)` | BLAKE3 | Fast cryptographic hash: about 2x SHA-256 at 1 MiB, no faster at 4 KiB and below on CPUs with SHA extensions (`hash/bench_test.go`) |
 | `XX64(data)` | xxhash-64 | Non-cryptographic: caching keys, fast dedup, Bloom filters |
 | `ETag(data)` | SHA-1 (quoted) | HTTP ETag headers (RFC 7232) |
 | `HMACSHA256(secret, data)` | HMAC-SHA256 | Keyed token/credential hashing (magic links, recovery codes, API keys) |

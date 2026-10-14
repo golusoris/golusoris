@@ -109,7 +109,7 @@ jobs:
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
           go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
       - name: Check gofumpt formatting
-        run: scripts/hooks/gofumpt.sh --all
+        run: bash scripts/ci/check-gofumpt.sh
       - name: Lint primary modules
         env:
           GO_MODULE_GROUP: primary
@@ -385,6 +385,22 @@ jobs:
           # ready to accept connections". Take the bound before the spawn --
           # the same rule HISS-06 applies to application code.
           scripts/ci/go-modules.sh test
+      # ADR-0011 keeps the real-clamd suite behind the integration tag so the
+      # local gate stays cheap; this step is where it runs.
+      - name: Run the ClamAV integration suite
+        if: matrix.primary
+        timeout-minutes: 15
+        env:
+          RYUK_RECONNECTION_TIMEOUT: 30m
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/clamav-integration.log"
+          go test -race -count=1 -v -tags integration -run '^TestIntegration_' -timeout 10m ./storage/scan/ | tee "$LOG"
+          # The suite skips without Docker; here a skip is a failure, not a pass.
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the ClamAV integration suite skipped instead of running"
+            exit 1
+          fi
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |
@@ -502,6 +518,14 @@ jobs:
       - name: Install cgo system libraries
         timeout-minutes: 10
         run: bash scripts/ci/install-cgo-libs.sh
+      # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
+      - name: Install verified Pact FFI
+        run: |
+          pact_dir="${RUNNER_TEMP}/pact-ffi"
+          install -d -m 0700 "$pact_dir"
+          python3 -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install pinned analysis tools
         run: |
           set -euo pipefail

@@ -67,6 +67,8 @@ EXPECTED = {
     ("tools/tool-versions.env", "ghcr.io/astral-sh/ruff", "docker"),
     ("tools/tool-versions.env", "silkeh/clang", "docker"),
     ("internal/testimages/images.go", "postgres", "docker"),
+    ("internal/testimages/images.go", "postgis/postgis", "docker"),
+    ("internal/testimages/images.go", "pgvector/pgvector", "docker"),
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"),
     ("internal/testimages/images.go", "redis", "docker"),
     ("internal/testimages/images.go", "nats", "docker"),
@@ -85,6 +87,8 @@ EXPECTED = {
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
+    (".github/testcontainers-images.txt", "postgis/postgis", "docker"),
+    (".github/testcontainers-images.txt", "pgvector/pgvector", "docker"),
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"),
     (".github/testcontainers-images.txt", "redis", "docker"),
     (".github/testcontainers-images.txt", "nats", "docker"),
@@ -92,6 +96,7 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "redpandadata/redpanda", "docker"),
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
+    (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
     (
@@ -152,6 +157,8 @@ EXPECTED_DIGESTS = {
     "ghcr.io/astral-sh/uv",
     "silkeh/clang",
     "postgres",
+    "postgis/postgis",
+    "pgvector/pgvector",
     "timescale/timescaledb",
     "redis",
     "nats",
@@ -223,7 +230,7 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
 # them: ClamAV sits behind the `integration` build tag, and split-module
 # emulators run in the Module sweep job, which pulls on demand.
 CACHE_EXEMPT_IMAGES = frozenset(
-    {"clamav/clamav", "fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
+    {"fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
 )
 
 

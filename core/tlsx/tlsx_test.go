@@ -5,13 +5,17 @@
 package tlsx_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -19,6 +23,23 @@ import (
 	"github.com/golusoris/golusoris/core/tlsx"
 	"github.com/golusoris/golusoris/core/tlsx/tlsxtest"
 )
+
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *safeBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *safeBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
 
 const (
 	interval = 10 * time.Second
@@ -86,13 +107,18 @@ func serveOne(ctx context.Context, ln net.Listener, cfg *tls.Config, seen chan<-
 	_, _ = srv.Write([]byte{1})
 }
 
-func newReloader(t *testing.T, files tlsx.Files, clk clock.Clock) *tlsx.Reloader {
+func newReloaderWithLog(t *testing.T, files tlsx.Files, clk clock.Clock, logger *slog.Logger) *tlsx.Reloader {
 	t.Helper()
-	r, err := tlsx.NewReloader(files, tlsx.Options{MinInterval: interval, Clock: clk})
+	r, err := tlsx.NewReloader(files, tlsx.Options{MinInterval: interval, Clock: clk, Logger: logger})
 	if err != nil {
 		t.Fatalf("NewReloader: %v", err)
 	}
 	return r
+}
+
+func newReloader(t *testing.T, files tlsx.Files, clk clock.Clock) *tlsx.Reloader {
+	t.Helper()
+	return newReloaderWithLog(t, files, clk, nil)
 }
 
 // clientFor builds a client reloader trusting ca and presenting a fresh client leaf.
@@ -150,7 +176,9 @@ func TestReloader_BadRotationKeepsLastGood(t *testing.T) {
 	ca := tlsxtest.NewCA(t)
 	first := ca.Server(t, host)
 	files := ca.WriteFiles(t, t.TempDir(), first)
-	srv := newReloader(t, files, clk)
+	var logBuf safeBuffer
+	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
+	srv := newReloaderWithLog(t, files, clk, logger)
 	cli := clientFor(t, ca, clk)
 	cfg := srv.ServerConfig(tls.NoClientCert)
 
@@ -163,6 +191,13 @@ func TestReloader_BadRotationKeepsLastGood(t *testing.T) {
 	if srv.LastError() == nil {
 		t.Fatal("LastError = nil after a bad rotation")
 	}
+	logOutput := logBuf.String()
+	if !strings.Contains(logOutput, "tlsx: reload failed; keeping last good certificate") {
+		t.Errorf("expected bad rotation log message, got %q", logOutput)
+	}
+	if !strings.Contains(logOutput, "level=WARN") {
+		t.Errorf("expected level=WARN in log, got %q", logOutput)
+	}
 
 	// The next good write clears the error.
 	third := ca.Server(t, host)
@@ -171,6 +206,10 @@ func TestReloader_BadRotationKeepsLastGood(t *testing.T) {
 	wantServer(t, handshake(t, cfg, cli.ClientConfig(host)), third.Serial)
 	if err := srv.LastError(); err != nil {
 		t.Fatalf("LastError = %v after a good rotation", err)
+	}
+	logOutput = logBuf.String()
+	if !strings.Contains(logOutput, "tlsx: reloaded certificate files") {
+		t.Errorf("expected good rotation log message, got %q", logOutput)
 	}
 }
 

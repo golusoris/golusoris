@@ -215,6 +215,13 @@ jobs:
           fi
           goreleaser "${args[@]}"
 
+      # The draft stays unpublished unless each host-runnable CLI reports this tag.
+      - name: Smoke-run the release binaries
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: scripts/ci/release-smoke.sh "$RELEASE_TAG"
+
       - name: Verify the keyless checksum bundle
         shell: bash
         run: |

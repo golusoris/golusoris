@@ -491,7 +491,7 @@ rules:
           authorities in tools/tool-versions.env; Renovate updates each pair atomically and
           policy tests reject ambient or version-only bypasses. Its regex manager also tracks
           immutable integration-test references in internal/testimages/images.go and the CI
-          cache manifest; policy tests require their parity except declared ClamAV absence.
+          cache manifest; policy tests require their parity except the declared split-module emulators.
           .standards.yaml declares
           supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
           checks as configuration. scripts/ci/govulncheck.sh parses pinned govulncheck v1.8.0
@@ -716,12 +716,14 @@ rules:
           This file, replayed against .config/hiss/testdata by `praetorctl hiss coverage
           --verify` via the Makefile target hiss-coverage inside make verify-all and the
           lefthook pre-commit job hiss-coverage, next to hiss-audit.
+          scripts/ci/hiss_coverage_counts.py, run by make ci-policy-test, fails when the claim
+          counts this rationale states drift from the catalogue.
         rationale: >-
           No positive fixture exists because the corpus IS this rule's evidence: the meta-rule
-          is satisfied exactly when the other nineteen claims survive their own fixtures, and a
+          is satisfied exactly when the claims of the other twenty invariants survive their own fixtures, and a
           file demonstrating "an undeclared mechanism" would be a copy of this catalogue rather
-          than a source file. partial, not enforced, for two measured reasons. First, of the 33
-          claims declared here only 22 are replayed by the verifier; the other 11 name a tool
+          than a source file. partial, not enforced, for two measured reasons. First, of the 40
+          claims declared here only 16 are replayed by the verifier; the other 24 name a tool
           it does not run, so for those it checks the attribution and the rationale carries the
           measurement instead. Second, four claims (HISS-11, HISS-12, HISS-16 and HISS-20
           itself) are backed by a named mechanism and a measured gap but by no positive
