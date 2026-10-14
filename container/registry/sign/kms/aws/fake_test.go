@@ -15,12 +15,15 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -151,15 +154,45 @@ func (f *fakeKMS) set(fn func(*fakeKMS)) {
 	fn(f)
 }
 
+type drainReporter interface {
+	Helper()
+	Errorf(format string, args ...any)
+}
+
+// isClientHangup reports whether err is an expected client hang-up during stall.
+func isClientHangup(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "forcibly closed") ||
+		strings.Contains(msg, "broken pipe")
+}
+
+// drainStallBody reads and discards r, ignoring expected client hang-up errors.
+func drainStallBody(tb drainReporter, r io.Reader) {
+	tb.Helper()
+	if _, err := io.Copy(io.Discard, r); err != nil && !isClientHangup(err) {
+		tb.Errorf("drain body: %v", err)
+	}
+}
+
 // stall holds every request until the client hangs up, at most 10s, so only the client deadline ends it.
 func (f *fakeKMS) stall(t *testing.T) {
 	t.Helper()
 	f.set(func(f *fakeKMS) {
 		f.hook = func(_ http.ResponseWriter, r *http.Request, _ string) bool {
-			// The server notices the client hanging up only after the body is read.
-			if _, err := io.Copy(io.Discard, r.Body); err != nil {
-				t.Errorf("drain body: %v", err)
-			}
+			// Client hang-ups during stall are expected; other read errors fail the test.
+			drainStallBody(t, r.Body)
 			f.mu.Unlock()
 			select {
 			case <-r.Context().Done():
@@ -355,4 +388,52 @@ func scope(auth string) string {
 		return ""
 	}
 	return parts[2] + "/" + parts[3]
+}
+
+type stubReporter struct {
+	errs []string
+}
+
+func (s *stubReporter) Helper() {}
+
+func (s *stubReporter) Errorf(format string, _ ...any) {
+	s.errs = append(s.errs, format)
+}
+
+type errReader struct {
+	err error
+}
+
+func (r errReader) Read([]byte) (int, error) {
+	return 0, r.err
+}
+
+func TestDrainStallBody(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		err       error
+		wantError bool
+	}{
+		{name: "clean EOF", err: io.EOF, wantError: false},
+		{name: "unexpected EOF", err: io.ErrUnexpectedEOF, wantError: false},
+		{name: "net closed", err: net.ErrClosed, wantError: false},
+		{name: "context canceled", err: context.Canceled, wantError: false},
+		{name: "deadline exceeded", err: context.DeadlineExceeded, wantError: false},
+		{name: "connection reset", err: syscall.ECONNRESET, wantError: false},
+		{name: "unrelated read error", err: errors.New("read failed: disk I/O"), wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			stub := &stubReporter{}
+			drainStallBody(stub, errReader{err: tt.err})
+			if tt.wantError && len(stub.errs) == 0 {
+				t.Fatal("drainStallBody did not report non-hang-up error")
+			}
+			if !tt.wantError && len(stub.errs) > 0 {
+				t.Fatalf("drainStallBody reported expected hang-up: %v", stub.errs)
+			}
+		})
+	}
 }

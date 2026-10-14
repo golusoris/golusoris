@@ -59,6 +59,9 @@
             "context": "CI success"
           },
           {
+            "context": "Core version skew"
+          },
+          {
             "context": "Secret scan (gitleaks)"
           },
           {
