@@ -19,6 +19,6 @@ permissions:
 
 jobs:
   release:
-    uses: golusoris/golusoris/.github/workflows/release-go.yml@54fae5cc9d71eb5e989eafce4bb1a569dbd36008 # v0.16.2
+    uses: golusoris/golusoris/.github/workflows/release-go.yml@20a0d6df7afa001e9e489dd5c150ded53ea7aa73 # v0.16.3
     with:
       image-name: ghcr.io/${{ github.repository }}
