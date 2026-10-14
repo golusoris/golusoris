@@ -98,7 +98,9 @@ func signable(b azkeys.KeyBundle) error {
 	if b.Attributes != nil && b.Attributes.Enabled != nil && !*b.Attributes.Enabled {
 		return errors.New("key disabled")
 	}
-	if !slices.ContainsFunc(b.Key.KeyOps, func(op *azkeys.KeyOperation) bool { return op != nil && *op == azkeys.KeyOperationSign }) {
+	if !slices.ContainsFunc(b.Key.KeyOps, func(op *azkeys.KeyOperation) bool {
+		return op != nil && (*op == azkeys.KeyOperationSign || *op == azkeys.KeyOperationVerify)
+	}) {
 		return fmt.Errorf("key operations %v lack sign", opNames(b.Key.KeyOps))
 	}
 	return nil
