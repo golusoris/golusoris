@@ -329,6 +329,7 @@ jobs:
         env:
           GO_MODULE_GROUP: primary
           GO_COVERAGE_DIR: .coverage/primary
+          GOLUSORIS_REQUIRE_CHROME: "1"
           # v0.44.0 can reuse a stopped shared Ryuk after a package gap
           # (testcontainers/testcontainers-go#3867). Keep it alive within this
           # bounded job until testcontainers/testcontainers-go#3868 ships.
