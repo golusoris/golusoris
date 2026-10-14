@@ -96,6 +96,7 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 		VersityGW:       false,
 		Ryuk:            false,
 		ClamAV:          false,
+		Mailpit:         false,
 	}
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
