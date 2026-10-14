@@ -28,6 +28,8 @@
 //
 // Scratch is node-local ("local"): a resumed PATCH must reach the same replica.
 // Run single-replica or with sticky sessions until a distributed scratch lands.
+// Upload IDs carry the replica tag (storage.tus.replica_tag, default hostname);
+// a resume on another replica answers 404 naming the cause.
 // CORS for tus's custom headers is delegated to httpx/cors, not configured here.
 package tus
 
@@ -39,6 +41,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -222,12 +225,18 @@ func newHandler(p params) (*Handler, error) {
 	if p.Opts.MaxSize <= 0 || p.Opts.MaxSize == math.MaxInt64 {
 		return nil, errors.New("tus: max size must be positive and less than MaxInt64")
 	}
+	replicaTag, err := resolveReplicaTag(p.Opts.ReplicaTag, os.Hostname)
+	if err != nil {
+		return nil, err
+	}
 	scratch, err := newLocalScratch(p.Opts.ScratchDir)
 	if err != nil {
 		return nil, err
 	}
 	h.scratch = scratch
-	h.store = newBucketStore(scratch, p.Bucket, defaultKeyFunc(p.Opts.KeyPrefix), p.Logger, h.deliverCompletion)
+	h.store = newBucketStore(
+		scratch, p.Bucket, defaultKeyFunc(p.Opts.KeyPrefix), p.Logger, h.deliverCompletion, replicaTag,
+	)
 	if err = h.buildTusd(); err != nil {
 		return nil, errors.Join(err, scratch.Close())
 	}
@@ -474,6 +483,7 @@ type Options struct {
 	BasePath                         string        `koanf:"base_path"`
 	MaxSize                          int64         `koanf:"max_size"`
 	KeyPrefix                        string        `koanf:"key_prefix"`
+	ReplicaTag                       string        `koanf:"replica_tag"`
 	Scratch                          string        `koanf:"scratch"`
 	ScratchDir                       string        `koanf:"scratch_dir"`
 	UploadExpiry                     time.Duration `koanf:"upload_expiry"`
@@ -495,6 +505,7 @@ func defaultOptions() Options {
 		BasePath:                         "/files/",
 		MaxSize:                          defaultMaxSize,
 		KeyPrefix:                        "uploads/",
+		ReplicaTag:                       "",
 		Scratch:                          "local",
 		ScratchDir:                       "",
 		UploadExpiry:                     24 * time.Hour,
@@ -515,6 +526,69 @@ func loadOptions(cfg *config.Config) (Options, error) {
 		return Options{}, fmt.Errorf("tus: load options: %w", err)
 	}
 	return opts, nil
+}
+
+const (
+	maxReplicaTagBytes = 63
+	// maxHostnameBytes bounds normalization; DNS names never exceed 253 bytes.
+	maxHostnameBytes = 255
+)
+
+func validateConfigTag(tag string) error {
+	if strings.Trim(tag, "- \t\r\n") == "" {
+		return fmt.Errorf("tus: replica tag: %q is empty after trim", tag)
+	}
+	if len(tag) > maxReplicaTagBytes {
+		return fmt.Errorf("tus: replica tag: %q exceeds %d bytes", tag, maxReplicaTagBytes)
+	}
+	if !hasOnlyTagChars(tag) {
+		return fmt.Errorf("tus: replica tag: %q contains invalid characters", tag)
+	}
+	return nil
+}
+
+func mapHostnameByte(b byte) byte {
+	if isTagChar(b) {
+		return b
+	}
+	return '-'
+}
+
+func normalizeHostname(raw string) (string, error) {
+	if raw == "" {
+		return "", errors.New("tus: replica tag: empty hostname")
+	}
+	lower := strings.ToLower(raw)
+	lower = lower[:min(len(lower), maxHostnameBytes)]
+	buf := make([]byte, len(lower))
+	for i := range len(lower) {
+		buf[i] = mapHostnameByte(lower[i])
+	}
+	s := strings.Trim(string(buf), "-")
+	if len(s) > maxReplicaTagBytes {
+		s = strings.Trim(s[:maxReplicaTagBytes], "-")
+	}
+	if s == "" {
+		return "", fmt.Errorf("tus: replica tag: empty result from hostname %q", raw)
+	}
+	return s, nil
+}
+
+func resolveReplicaTag(cfgTag string, hostnameFn func() (string, error)) (string, error) {
+	if cfgTag != "" {
+		if err := validateConfigTag(cfgTag); err != nil {
+			return "", err
+		}
+		return cfgTag, nil
+	}
+	if hostnameFn == nil {
+		hostnameFn = os.Hostname
+	}
+	raw, err := hostnameFn()
+	if err != nil {
+		return "", fmt.Errorf("tus: replica tag: %w", err)
+	}
+	return normalizeHostname(raw)
 }
 
 // Module provides *tus.Handler to the fx graph. Requires storage.Bucket,
