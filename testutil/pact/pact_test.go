@@ -60,7 +60,9 @@ func getUser(t *testing.T, base string) error {
 	if err != nil {
 		return fmt.Errorf("pact test: request: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defer transport.CloseIdleConnections()
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if err != nil {
 		return fmt.Errorf("pact test: get: %w", err)
 	}
@@ -106,8 +108,7 @@ func runChild(t *testing.T, scenario string) string {
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestChild$", "-test.count=1")
 	cmd.Env = append(os.Environ(), childEnv+"="+scenario)
 	out, err := cmd.CombinedOutput()
-	var exitErr *exec.ExitError
-	if !errors.As(err, &exitErr) {
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok {
 		t.Fatalf("child %s: want non-zero exit, got %v\n%s", scenario, err, out)
 	}
 	return string(out)
