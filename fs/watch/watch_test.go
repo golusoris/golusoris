@@ -5,10 +5,13 @@
 package watch_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/fs/watch"
 )
@@ -123,7 +126,8 @@ func TestWatcher_debounce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := watch.New(watch.Options{Debounce: 100 * time.Millisecond})
+	const debounce = 1 * time.Second
+	w, err := watch.New(watch.Options{Debounce: debounce})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,27 +137,38 @@ func TestWatcher_debounce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write 5 files rapidly — should produce at most 2 events (debounced).
+	clk := clockwork.NewRealClock()
+	start := clk.Now()
+
+	// Write 5 files rapidly — burst duration must be well inside debounce window.
 	for i := range 5 {
 		path := filepath.Join(dir, filepath.FromSlash("f"+string(rune('0'+i))+".txt"))
-		_ = os.WriteFile(path, []byte("x"), 0o640)
+		if err := os.WriteFile(path, []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeDuration := clk.Since(start)
+	if writeDuration >= debounce {
+		t.Fatalf("writes took %v, exceeded debounce window %v", writeDuration, debounce)
 	}
 
-	// maxEvents bounds the drain loop; the timeout normally ends it first.
+	// Drain events up to a bounded timeout scaled to debounce.
 	const maxEvents = 100
 	var eventCount int
-	timeout := time.After(500 * time.Millisecond)
+	drainTimeout := debounce + 2*time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
 loop:
 	for range maxEvents {
 		select {
 		case <-w.Events():
 			eventCount++
-		case <-timeout:
+		case <-ctx.Done():
 			break loop
 		}
 	}
-	// Debounce collapses bursts; expect far fewer events than files.
-	if eventCount > 3 {
-		t.Fatalf("debounce failed: got %d events for 5 rapid writes", eventCount)
+	// Debounce collapses rapid bursts into exactly 1 event.
+	if eventCount != 1 {
+		t.Fatalf("debounce failed: got %d events for 5 rapid writes, want 1", eventCount)
 	}
 }
