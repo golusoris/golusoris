@@ -220,7 +220,7 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: scripts/ci/release-smoke.sh "$RELEASE_TAG"
+        run: python3 -B scripts/ci/release_smoke.py --version "$RELEASE_TAG" --target linux/amd64
 
       - name: Verify the keyless checksum bundle
         shell: bash

@@ -114,7 +114,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
 	@bash scripts/ci/release-workflows-policy_test.sh
-	@bash scripts/ci/release-smoke_test.sh
+	@python3 -B scripts/ci/release_smoke_test.py
 	@bash scripts/ci/scalar-bundle-update_test.sh
 	@bash scripts/ci/release-notes-breaking_test.sh
 	@bash scripts/ci/generation-policy_test.sh
