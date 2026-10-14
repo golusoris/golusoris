@@ -718,7 +718,8 @@ jobs:
           path: ${{ runner.temp }}
       - name: Unpack the binaries
         shell: bash
-        run: tar -xf "$RUNNER_TEMP/release-binaries.tar"
+        # Stdin, because Git Bash tar reads the D:\ in a Windows path as a remote host.
+        run: tar -xf - <"$RUNNER_TEMP/release-binaries.tar"
       - name: Run each CLI on its own target
         shell: bash
         env:
