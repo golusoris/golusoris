@@ -232,6 +232,7 @@
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
+        "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
         "/^\\.github/testcontainers-images\\.txt$/"
       ],
       "matchStrings": [
