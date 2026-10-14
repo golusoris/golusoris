@@ -27,20 +27,14 @@ type probeJobArgs struct {
 
 func (probeJobArgs) Kind() string { return "probe-ui-job" }
 
-type probeWorker struct {
-	river.WorkerDefaults[probeJobArgs]
-}
-
-func (probeWorker) Work(_ context.Context, _ *river.Job[probeJobArgs]) error {
-	return nil
-}
-
 func TestHandler_RealRiver(t *testing.T) {
 	t.Parallel()
 
 	rv := rivertest.Start(t, rivertest.Options{
 		Register: func(w *jobs.Workers) {
-			if err := jobs.Register(w, &probeWorker{}); err != nil {
+			if err := jobs.Register(w, river.WorkFunc(func(context.Context, *river.Job[probeJobArgs]) error {
+				return nil
+			})); err != nil {
 				t.Fatalf("jobs.Register: %v", err)
 			}
 		},
