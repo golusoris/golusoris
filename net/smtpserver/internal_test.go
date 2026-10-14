@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http/httptest"
+	"net/smtp"
 	"os"
 	"path/filepath"
 	"strings"
@@ -210,4 +211,179 @@ func writeTLSFixture(t *testing.T) (string, string) {
 		t.Fatalf("write private key: %v", err)
 	}
 	return certFile, keyFile
+}
+
+func TestReadyListener_Accept(t *testing.T) {
+	t.Parallel()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+
+	ready := make(chan struct{})
+	rl := &readyListener{Listener: ln, ready: ready}
+
+	go func() {
+		conn, dialErr := net.Dial("tcp", ln.Addr().String())
+		if dialErr == nil {
+			_ = conn.Close()
+		}
+	}()
+
+	conn, err := rl.Accept()
+	if err != nil {
+		t.Fatalf("Accept: %v", err)
+	}
+	_ = conn.Close()
+
+	select {
+	case <-ready:
+	default:
+		t.Fatal("expected ready channel to be closed after Accept")
+	}
+}
+
+func TestHandlerSession_Methods(t *testing.T) {
+	t.Parallel()
+	sess := &handlerSession{handler: func(Envelope) error { return nil }}
+
+	if err := sess.Mail("sender@example.com", nil); err != nil {
+		t.Fatalf("Mail: %v", err)
+	}
+	if sess.env.From != "sender@example.com" {
+		t.Errorf("env.From = %q, want %q", sess.env.From, "sender@example.com")
+	}
+
+	if err := sess.Rcpt("rcpt1@example.com", nil); err != nil {
+		t.Fatalf("Rcpt 1: %v", err)
+	}
+	if err := sess.Rcpt("rcpt2@example.com", nil); err != nil {
+		t.Fatalf("Rcpt 2: %v", err)
+	}
+	if len(sess.env.To) != 2 || sess.env.To[0] != "rcpt1@example.com" || sess.env.To[1] != "rcpt2@example.com" {
+		t.Errorf("env.To = %v", sess.env.To)
+	}
+
+	if err := sess.Logout(); err != nil {
+		t.Errorf("Logout: %v", err)
+	}
+
+	sess.Reset()
+	if sess.env.From != "" || len(sess.env.To) != 0 {
+		t.Errorf("Reset did not clear envelope: %+v", sess.env)
+	}
+}
+
+func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
+	t.Parallel()
+
+	delivered := make(chan Envelope, 1)
+	backend := NewHandlerBackend(func(env Envelope) error {
+		delivered <- env
+		return nil
+	})
+
+	cfg := Config{
+		Addr:            "127.0.0.1:0",
+		Domain:          "localhost",
+		MaxMessageBytes: 50,
+		MaxRecipients:   1,
+	}
+	srv, err := newServer(backend, cfg)
+	if err != nil {
+		t.Fatalf("newServer: %v", err)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = srv.Close(); _ = ln.Close() })
+
+	go func() {
+		_ = srv.Serve(ln)
+	}()
+
+	addr := ln.Addr().String()
+
+	// 1. Positive: full SMTP ceremony (EHLO, MAIL, RCPT, DATA, QUIT)
+	client, dialErr := smtp.Dial(addr)
+	if dialErr != nil {
+		t.Fatalf("dial: %v", dialErr)
+	}
+	if mailErr := client.Mail("alice@example.com"); mailErr != nil {
+		t.Fatalf("Mail: %v", mailErr)
+	}
+	if rcptErr := client.Rcpt("bob@example.com"); rcptErr != nil {
+		t.Fatalf("Rcpt: %v", rcptErr)
+	}
+	wc, dataErr := client.Data()
+	if dataErr != nil {
+		t.Fatalf("Data: %v", dataErr)
+	}
+	msg := []byte("Subject: Hi\r\n\r\nHello")
+	if _, writeErr := wc.Write(msg); writeErr != nil {
+		t.Fatalf("Write: %v", writeErr)
+	}
+	if closeErr := wc.Close(); closeErr != nil {
+		t.Fatalf("Close data: %v", closeErr)
+	}
+	if quitErr := client.Quit(); quitErr != nil {
+		t.Fatalf("Quit: %v", quitErr)
+	}
+
+	select {
+	case env := <-delivered:
+		if env.From != "alice@example.com" {
+			t.Errorf("From = %q", env.From)
+		}
+		if len(env.To) != 1 || env.To[0] != "bob@example.com" {
+			t.Errorf("To = %v", env.To)
+		}
+		if string(env.Data) != "Subject: Hi\r\n\r\nHello\r\n" {
+			t.Errorf("Data = %q", string(env.Data))
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for message delivery")
+	}
+
+	// 2. Negative: recipient limit policy exceeded (MaxRecipients = 1)
+	client2, dial2Err := smtp.Dial(addr)
+	if dial2Err != nil {
+		t.Fatalf("dial: %v", dial2Err)
+	}
+	defer client2.Close()
+	if mailErr := client2.Mail("alice@example.com"); mailErr != nil {
+		t.Fatalf("Mail: %v", mailErr)
+	}
+	if rcpt1Err := client2.Rcpt("rcpt1@example.com"); rcpt1Err != nil {
+		t.Fatalf("Rcpt 1: %v", rcpt1Err)
+	}
+	if rcpt2Err := client2.Rcpt("rcpt2@example.com"); rcpt2Err == nil {
+		t.Fatal("expected error on exceeding MaxRecipients, got nil")
+	}
+
+	// 3. Reset clears state
+	if resetErr := client2.Reset(); resetErr != nil {
+		t.Fatalf("Reset: %v", resetErr)
+	}
+
+	// 4. Negative: size limit boundary exceeded (MaxMessageBytes = 50)
+	if mailAfterResetErr := client2.Mail("alice@example.com"); mailAfterResetErr != nil {
+		t.Fatalf("Mail after reset: %v", mailAfterResetErr)
+	}
+	if rcptAfterResetErr := client2.Rcpt("rcpt1@example.com"); rcptAfterResetErr != nil {
+		t.Fatalf("Rcpt after reset: %v", rcptAfterResetErr)
+	}
+	wc2, data2Err := client2.Data()
+	if data2Err != nil {
+		t.Fatalf("Data: %v", data2Err)
+	}
+	oversized := bytes.Repeat([]byte("A"), 100)
+	_, writeErr := wc2.Write(oversized)
+	closeErr := wc2.Close()
+	if writeErr == nil && closeErr == nil {
+		t.Fatal("expected error for oversized message, got nil")
+	}
 }

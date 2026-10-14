@@ -114,6 +114,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
 	@bash scripts/ci/release-workflows-policy_test.sh
+	@bash scripts/ci/release-smoke_test.sh
 	@bash scripts/ci/scalar-bundle-update_test.sh
 	@bash scripts/ci/release-notes-breaking_test.sh
 	@bash scripts/ci/generation-policy_test.sh
@@ -127,14 +128,18 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
+	@bash scripts/ci/check-gofumpt_test.sh
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
+	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
+	@python3 -B scripts/ci/hiss_coverage_counts_test.py
+	@python3 -B scripts/ci/hiss_coverage_counts.py
 
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking

@@ -26,7 +26,7 @@ func NewUserService(c *memory.Cache) *UserService {
 | --- | --- |
 | `memory.Module` | fx module — provides `*memory.Cache` |
 | `memory.Typed[K, V](c, prefix)` | Type-safe view with key prefix |
-| `TypedCache.Get(k)` | Returns `(V, bool)` — no allocation on miss |
+| `TypedCache.Get(k)` | Returns `(V, bool)`; miss = one 32 B allocation (key boxing), budget `BenchmarkTypedGetMiss` |
 | `TypedCache.Set(k, v)` | Returns `bool`: true on insert, false on replacement |
 | `TypedCache.Delete(k)` | Invalidates the key |
 | `TypedCache.SetExpiresAfter(k, ttl)` | Per-entry expiry override |

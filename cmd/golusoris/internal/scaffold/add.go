@@ -6,17 +6,22 @@ package scaffold
 
 import (
 	"fmt"
+	"io"
+	"maps"
+	"slices"
 
 	"github.com/spf13/cobra"
 
 	"github.com/golusoris/golusoris/core/clikit"
 )
 
-// knownModules maps short names to their golusoris import paths and fx vars.
-var knownModules = map[string]struct {
+type moduleEntry struct {
 	Import string
 	FxVar  string
-}{
+}
+
+// knownModules maps short names to their golusoris import paths and fx vars.
+var knownModules = map[string]moduleEntry{
 	"db":        {"github.com/golusoris/golusoris", "golusoris.DB"},
 	"http":      {"github.com/golusoris/golusoris", "golusoris.HTTP"},
 	"otel":      {"github.com/golusoris/golusoris", "golusoris.OTel"},
@@ -31,23 +36,43 @@ var knownModules = map[string]struct {
 func AddCmd() *cobra.Command {
 	return clikit.Command(
 		"add", "Show how to add a golusoris module to an existing app",
-		clikit.WithRunE(func(_ *cobra.Command, args []string) error {
+		clikit.WithRunE(func(cmd *cobra.Command, args []string) error {
+			out := cmd.OutOrStdout()
 			if len(args) < 1 {
-				fmt.Println("Available modules:")
-				for name, m := range knownModules {
-					fmt.Printf("  %-12s  %s\n", name, m.FxVar)
-				}
-				return nil
+				return listModules(out)
 			}
 			name := args[0]
 			m, ok := knownModules[name]
 			if !ok {
 				return fmt.Errorf("unknown module %q — run 'golusoris add' to list available modules", name)
 			}
-			fmt.Printf("Add %q to your fx.New() call:\n\n", name)
-			fmt.Printf("  import %q\n\n", m.Import)
-			fmt.Printf("  fx.New(\n    // ...\n    %s,\n  )\n", m.FxVar)
-			return nil
+			return showModule(out, name, m)
 		}),
 	)
+}
+
+func listModules(out io.Writer) error {
+	if _, err := fmt.Fprintln(out, "Available modules:"); err != nil {
+		return fmt.Errorf("scaffold: add: %w", err)
+	}
+	for _, name := range slices.Sorted(maps.Keys(knownModules)) {
+		m := knownModules[name]
+		if _, err := fmt.Fprintf(out, "  %-12s  %s\n", name, m.FxVar); err != nil {
+			return fmt.Errorf("scaffold: add: %w", err)
+		}
+	}
+	return nil
+}
+
+func showModule(out io.Writer, name string, m moduleEntry) error {
+	if _, err := fmt.Fprintf(out, "Add %q to your fx.New() call:\n\n", name); err != nil {
+		return fmt.Errorf("scaffold: add: %w", err)
+	}
+	if _, err := fmt.Fprintf(out, "  import %q\n\n", m.Import); err != nil {
+		return fmt.Errorf("scaffold: add: %w", err)
+	}
+	if _, err := fmt.Fprintf(out, "  fx.New(\n    // ...\n    %s,\n  )\n", m.FxVar); err != nil {
+		return fmt.Errorf("scaffold: add: %w", err)
+	}
+	return nil
 }
