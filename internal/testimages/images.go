@@ -41,6 +41,8 @@ const (
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the malware-scanner image; it ships its signatures, so clamd starts offline.
 	ClamAV = "clamav/clamav:1.5.4@sha256:638d90201ee7ee6a82d249a2fc23b132e578673b5f1f2766852b127676ca1ef6"
+	// Moto is the AWS API emulator for container credential and SDK integration tests.
+	Moto = "motoserver/moto:5.2.3@sha256:91fd602a21f49cf9eb82fdf474015a3c131d40104c8297ea6a2ca920708ae32c"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")
