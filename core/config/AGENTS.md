@@ -28,7 +28,8 @@ func New(Options) (*Config, error)
 `EnvPrefix`, `Delimiter`, `Files []string`, `Watch bool` (default true),
 `CompoundKeys []string`, `Logger *slog.Logger` (reload-failure sink; nil =
 `slog.Default()`), `SecretDirs []string`, `FileEnvSuffix string`,
-`MaxSecretBytes int64` (0 = `DefaultMaxSecretBytes`, 64 KiB).
+`MaxSecretBytes int64` (0 = `DefaultMaxSecretBytes`, 64 KiB),
+`DisableEnv bool` (skips layers 3-4).
 
 ## Precedence (low -> high)
 
@@ -40,6 +41,7 @@ func New(Options) (*Config, error)
 | 4 | `APP_*<FileEnvSuffix>` | file content -> target key; both `APP_X` + `APP_X_FILE` = error |
 
 - Reload (watch / SIGHUP) re-applies layers 2-4 after file reload -> file never beats secret/env; rotated secret dir values land on SIGHUP.
+- `DisableEnv` skips layers 3-4 (env + `*_FILE` indirection); files and secret dirs populate tree.
 - Secret dir = Kubernetes secret volume: `os.Root` follows `key -> ..data/key` symlinks, refuses escape; >1024 entries, empty key segment, oversize (`ErrSecretTooLarge`), non-regular file = error.
 - Rename Secret keys to config paths via volume `items[].path` (e.g. CNPG `uri` -> `db.dsn`).
 - `FileEnvSuffix` off by default (path-valued `*_FILE` keys exist); needs `EnvPrefix`. Compound key ending in suffix (`tls.cert_file`) stays plain path.
