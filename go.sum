@@ -456,8 +456,8 @@ github.com/golusoris/goenvoy/arr/v2 v2.1.0 h1:zUzG6zLH49JBII8zxAYUwoTa/a/nX7Qc8g
 github.com/golusoris/goenvoy/arr/v2 v2.1.0/go.mod h1:sLkd48dAGp87Z3hqeg6mcHBXHEU6mtzupet2Z2ar82I=
 github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=
 github.com/golusoris/goenvoy/metadata v1.3.1/go.mod h1:VDXGvMyayQDRBpacFqT9pZAHactFkqkHPFQLxgvu2Ao=
-github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315 h1:syiw6CpnTplsatjbm6CwtOwrl99USMMfV1mxW4dQrfE=
-github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1-0.20260906000323-66546eaf9315/go.mod h1:jpOcLbMCvhSx9neCm9k4vzubA1ttOY1zbdPzgBJyIQw=
+github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1 h1:nCM4/V1Nq2aiEC2s3ZYY2g17T6sAPxVUowjVtknik6Y=
+github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1/go.mod h1:PPptW5Q4wL0H4/bIMDZ01z53AhnpzeItcAowbEc+uJQ=
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1 h1:20r3nBYNbJOSaZlURRGVd9WBVC0hFErirdWJdhCJwyg=
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.1/go.mod h1:NB1afgaMIjGJRaIvMuOkJaRn2IbxuThHiFv6qnJNL1w=
 github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.1 h1:GEMMua13oKlMtOcskcYf4LRXKhI5CKt1TyZDo3H5rJM=
