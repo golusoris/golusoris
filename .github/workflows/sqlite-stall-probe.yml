@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   probe:
-    name: SQLite Stall Probe (${{ matrix.os }}, ${{ matrix.variant }})
+    name: SQLite Stall Probe (${{ matrix.os }}, ${{ matrix.variant }}, ${{ matrix.attempt }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -32,6 +32,7 @@ jobs:
           - default
           - defender-excluded
           - file-load
+        attempt: [1, 2, 3]
         exclude:
           - os: ubuntu-24.04
             variant: defender-excluded
@@ -65,11 +66,17 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$VARIANT" == "file-load" ]]; then
-            export STALLPROBE_P=4
-            go test -count=1 ./storage/... &
+            export STALLPROBE_P=4 STALLPROBE_N=600
+            # Same short mode as the Platform Neutrality job; the failing packages plus file-heavy neighbours.
+            go test -short -count=3 ./storage/... ./db/... ./idempotency/... ./cache/... ./jobs/... > "$RUNNER_TEMP/load.log" 2>&1 &
             load_pid=$!
-            go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/
-            wait "$load_pid"
+            probe_rc=0
+            go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/ || probe_rc=$?
+            load_rc=0
+            wait "$load_pid" || load_rc=$?
+            echo "probe_rc=$probe_rc load_rc=$load_rc"
+            if [[ "$load_rc" != 0 ]]; then grep -E -- '--- FAIL|^FAIL' "$RUNNER_TEMP/load.log" | head -40; fi
+            [[ "$probe_rc" == 0 && "$load_rc" == 0 ]]
           else
             export STALLPROBE_P=1
             go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/
