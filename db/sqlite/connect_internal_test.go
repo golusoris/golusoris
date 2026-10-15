@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 var errPingRefused = errors.New("ping refused")
@@ -64,5 +65,51 @@ func TestDiskStateMemory(t *testing.T) {
 	t.Parallel()
 	if got := diskState(MemoryPath); got != "in-memory database" {
 		t.Fatalf("diskState(memory) = %q", got)
+	}
+}
+
+// lateConnector opens only after ctx has expired, like an open the driver cannot cancel.
+type lateConnector struct{}
+
+func (lateConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	<-ctx.Done()
+	return pingFailConn{}, nil
+}
+func (lateConnector) Driver() driver.Driver { return pingFailDriver{} }
+
+func TestConnectAndPingNamesALateConnect(t *testing.T) {
+	t.Parallel()
+	db := sql.OpenDB(lateConnector{})
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
+	path := filepath.Join(t.TempDir(), "absent.db")
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+	defer cancel()
+	err := connectAndPing(ctx, db, path)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("connectAndPing = %v, want the deadline error", err)
+	}
+	if !strings.Contains(err.Error(), "db/sqlite: connect "+path+" finished after the open deadline") ||
+		strings.Contains(err.Error(), "ping") {
+		t.Fatalf("error does not name the late connect: %v", err)
+	}
+}
+
+func TestConnectAndPingWithinDeadline(t *testing.T) {
+	t.Parallel()
+	db := sql.OpenDB(lateConnector{})
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := connectAndPing(ctx, db, filepath.Join(t.TempDir(), "x.db"))
+	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "db/sqlite: connect ") {
+		t.Fatalf("connectAndPing with a done ctx = %v, want the connect error", err)
 	}
 }
