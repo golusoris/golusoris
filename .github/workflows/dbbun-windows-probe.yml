@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+# Temporary probe for the db/bun Windows access violation; never merged.
+name: db-bun Windows probe
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: db-bun Windows probe
+    runs-on: windows-2025
+    timeout-minutes: 60
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Run the db/bun test binary 300 times per variant
+        shell: bash
+        env:
+          GOTRACEBACK: all
+        run: |
+          go test -c -o "$RUNNER_TEMP/bun.test.exe" ./db/bun/
+          for variant in all internal external-nopg; do
+            case $variant in
+              all) args=(-test.short) ;;
+              internal) args=(-test.short -test.run '^TestRegisterLifecycle') ;;
+              external-nopg) args=(-test.short -test.run '^(TestOptionsFromConfig|TestNew(RejectsNilPool|RejectsUninitializedPool|NilLogger))$') ;;
+            esac
+            fails=0
+            for i in $(seq 1 300); do
+              if ! "$RUNNER_TEMP/bun.test.exe" "${args[@]}" > "$RUNNER_TEMP/out.txt" 2>&1; then
+                fails=$((fails + 1))
+                if [ $fails -le 3 ]; then echo "--- $variant run $i"; head -c 6000 "$RUNNER_TEMP/out.txt"; fi
+              fi
+            done
+            echo "RESULT $variant fails=$fails of 300"
+          done
