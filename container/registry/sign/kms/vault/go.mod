@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015163412-c9de8c9a6f0e
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015200537-b544145a689f
 	github.com/google/go-containerregistry v0.22.1
 	github.com/moby/moby/api v1.56.1
 	github.com/testcontainers/testcontainers-go v0.44.0
