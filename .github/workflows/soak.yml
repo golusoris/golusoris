@@ -26,7 +26,7 @@ jobs:
   soak:
     name: Run soak tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       SOAK_DURATION: ${{ inputs.duration || '2m' }}
     steps:
@@ -50,8 +50,13 @@ jobs:
             printf '| :--- | :--- | :--- | :--- | :--- |\n'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Run soak tests (go -p 4)
+        env:
+          # v0.44.0 can reuse a stopped shared Ryuk after a package gap
+          # (testcontainers/testcontainers-go#3867). Keep it alive within this
+          # bounded job until testcontainers/testcontainers-go#3868 ships.
+          RYUK_RECONNECTION_TIMEOUT: 30m
         run: |
-          go test -tags soak -v -p 4 -run 'Test.*_Soak' -timeout 35m \
+          go test -tags soak -race -count=1 -v -p 4 -run 'Test.*_Soak' -timeout 50m \
             ./jobs \
             ./realtime/pubsub \
             ./cache/twotier \

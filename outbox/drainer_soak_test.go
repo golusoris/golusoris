@@ -39,8 +39,8 @@ func (w *soakOutboxWorker) Work(_ context.Context, _ *river.Job[soakOutboxArgs])
 	return nil
 }
 
+//nolint:paralleltest // WHY: soak tests sample process-wide metrics; parallel tests skew goroutines and heap.
 func TestOutboxDrainer_Soak(t *testing.T) {
-	t.Parallel()
 	w := &soakOutboxWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
 		Register: func(workers *jobs.Workers) {
@@ -64,10 +64,15 @@ func TestOutboxDrainer_Soak(t *testing.T) {
 		},
 	)
 	drainerCtx, drainerCancel := context.WithCancel(context.Background())
-	t.Cleanup(drainerCancel)
+	drainerDone := make(chan struct{})
 	go func() {
+		defer close(drainerDone)
 		_ = drainer.Run(drainerCtx)
 	}()
+	t.Cleanup(func() {
+		drainerCancel()
+		<-drainerDone
+	})
 
 	var counter atomic.Int64
 	op := func(ctx context.Context) error {
@@ -77,12 +82,40 @@ func TestOutboxDrainer_Soak(t *testing.T) {
 		return insertOutboxRow(opCtx, rv, id)
 	}
 
-	load.RunSoak(t, load.SoakOptions{
+	res := load.RunSoak(t, load.SoakOptions{
 		Name:        "outbox/drainer",
 		Pool:        rv.Pool,
 		Pace:        15 * time.Millisecond,
 		Concurrency: 2,
 	}, op)
+
+	inserted := counter.Load()
+	if inserted == 0 || res.TotalOps == 0 {
+		t.Fatal("outbox soak: no outbox rows inserted")
+	}
+
+	// Drain: wait for drainer to drain all rows from golusoris_outbox.
+	clk := clockwork.NewRealClock()
+	drainDeadline := clk.Now().Add(10 * time.Second)
+	var remaining int
+	for clk.Now().Before(drainDeadline) {
+		checkCtx, checkCancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := rv.Pool.QueryRow(checkCtx, "SELECT count(*) FROM golusoris_outbox WHERE dispatched_at IS NULL").Scan(&remaining)
+		checkCancel()
+		if err != nil {
+			t.Fatalf("outbox soak query remaining: %v", err)
+		}
+		if remaining == 0 {
+			break
+		}
+		clk.Sleep(50 * time.Millisecond)
+	}
+	if remaining > 0 {
+		t.Fatalf("outbox soak: %d outbox rows remained undrained after workload", remaining)
+	}
+	if processed := w.processed.Load(); processed == 0 {
+		t.Fatal("outbox soak: no jobs processed by outbox worker")
+	}
 }
 
 func insertOutboxRow(ctx context.Context, rv *rivertest.Harness, id int64) error {

@@ -20,8 +20,8 @@ import (
 	redistest "github.com/golusoris/golusoris/testutil/redis"
 )
 
+//nolint:paralleltest // WHY: soak tests sample process-wide metrics; parallel tests skew goroutines and heap.
 func TestCacheTwoTier_Soak(t *testing.T) {
-	t.Parallel()
 	client := redistest.Start(t)
 	l1, err := memory.NewForTest(5000, 5*time.Minute)
 	if err != nil {
@@ -54,11 +54,15 @@ func TestCacheTwoTier_Soak(t *testing.T) {
 		return executeCacheOp(opCtx, typed, key, id, loader)
 	}
 
-	load.RunSoak(t, load.SoakOptions{
+	res := load.RunSoak(t, load.SoakOptions{
 		Name:        "cache/twotier",
 		Pace:        5 * time.Millisecond,
 		Concurrency: 2,
 	}, op)
+
+	if res.TotalOps == 0 || counter.Load() == 0 {
+		t.Fatal("cache/twotier soak: no operations executed")
+	}
 }
 
 func executeCacheOp(

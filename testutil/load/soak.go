@@ -30,14 +30,16 @@ const (
 	WarmupRatio = 0.20 // WHY: discards initial startup transients before measuring steady-state metrics.
 	// DefaultSampleInterval yields steady sampling cadence without adding runtime metric collection overhead.
 	DefaultSampleInterval = 1 * time.Second // WHY: yields steady sampling cadence without adding metric collection overhead.
+	// DefaultPace prevents unpaced busy loops from exhausting MaxLoopIterations.
+	DefaultPace = 10 * time.Millisecond // WHY: prevents unpaced busy loops from exhausting MaxLoopIterations.
 	// DefaultMaxGoroutineSlack accommodates Go runtime GC, timer, and testcontainer pollers without masking per-op leaks.
 	DefaultMaxGoroutineSlack = 15 // WHY: accommodates runtime GC, timers, and container pollers without masking leaks.
 	// DefaultMaxHeapSlopeBytesPerSec caps steady-state retained heap accumulation at 50 KiB/s.
 	DefaultMaxHeapSlopeBytesPerSec = 50 * 1024 // WHY: caps steady-state retained heap accumulation at 50 KiB/s to catch memory leaks.
 	// DefaultMinThroughputRatio fails if throughput decays by more than 30% due to lock contention or starvation.
 	DefaultMinThroughputRatio = 0.70 // WHY: fails if throughput decays by more than 30% due to contention or pool starvation.
-	// MaxPoolAcquiredSlack ensures connections are returned to the pgxpool rather than leaked across iterations.
-	MaxPoolAcquiredSlack = 5 // WHY: ensures connections are returned to the pgxpool rather than leaked across iterations.
+	// MaxPoolAcquiredSlack bounds idle connections checked out after workload stops (< default MaxConns of 4).
+	MaxPoolAcquiredSlack = 1 // WHY: bounds idle pool connections checked out after workload stops (< default MaxConns of 4).
 	// MaxLoopIterations bounds workload execution loops to satisfy HISS-02.
 	MaxLoopIterations = 1_000_000 // WHY: HISS-02 scalar bound for workload execution loop.
 	// MaxSampleCount bounds 1s sample collections over maximum duration.
@@ -64,8 +66,10 @@ type SoakOptions struct {
 	Pace                    time.Duration
 	Pool                    *pgxpool.Pool
 	MaxGoroutineSlack       int
+	MaxPoolAcquiredSlack    int
 	MaxHeapSlopeBytesPerSec float64
 	MinThroughputRatio      float64
+	MaxIterations           int
 }
 
 // SoakResult holds the aggregated outcome of a soak run.
@@ -82,10 +86,21 @@ type SoakResult struct {
 	Samples         []Sample
 }
 
+// soakTB is the testing.T subset RunSoak reports through; tests substitute a spy.
+type soakTB interface {
+	Helper()
+	Error(args ...any)
+}
+
 // RunSoak executes a steady workload for the resolved duration, sampling runtime
 // metrics and asserting goroutine, heap slope, error, and throughput bounds.
 func RunSoak(t *testing.T, opts SoakOptions, op func(context.Context) error) SoakResult {
 	t.Helper()
+	return runSoakTB(t, opts, op)
+}
+
+func runSoakTB(tb soakTB, opts SoakOptions, op func(context.Context) error) SoakResult {
+	tb.Helper()
 	duration := resolveSoakDuration(opts.Duration)
 	warmup := time.Duration(float64(duration) * WarmupRatio)
 
@@ -96,7 +111,7 @@ func RunSoak(t *testing.T, opts SoakOptions, op func(context.Context) error) Soa
 	var (
 		totalOps atomic.Int64
 		firstErr atomic.Pointer[error]
-		samples  []Sample
+		samples  = make([]Sample, 0, 16)
 		sampMu   sync.Mutex
 	)
 
@@ -108,17 +123,26 @@ func RunSoak(t *testing.T, opts SoakOptions, op func(context.Context) error) Soa
 		firstErr.CompareAndSwap(nil, &err)
 		cancel()
 	}
-	runWorkload(ctx, opts.Concurrency, opts.Pace, op, recordOp, recordErr)
+	runWorkload(ctx, opts.Concurrency, opts.Pace, opts.MaxIterations, op, recordOp, recordErr)
 	stopSampler()
+
+	if ctx.Err() == nil && firstErr.Load() == nil {
+		err := fmt.Errorf("load: soak [%s]: workers stopped before duration (%v) expired", opts.Name, duration)
+		firstErr.CompareAndSwap(nil, &err)
+	}
+
+	clk := clockwork.NewRealClock()
+	sEnd := sampleMetrics(clk.Now(), opts.Pool, totalOps.Load())
+	samples = append(samples, sEnd)
 
 	res := buildSoakResult(opts.Name, duration, warmup, totalOps.Load(), samples)
 	var errVal error
 	if ep := firstErr.Load(); ep != nil {
 		errVal = *ep
 	}
-	verifySoakResults(t, opts, res, errVal)
+	verifySoakResults(tb, opts, res, errVal)
 	if err := emitStepSummary(res); err != nil {
-		t.Error(err)
+		tb.Error(err)
 	}
 	return res
 }
@@ -131,15 +155,19 @@ func startSampler(
 	mu *sync.Mutex,
 ) func() {
 	clk := clockwork.NewRealClock()
-	ticker := clk.NewTicker(opts.SampleInterval)
-	done := make(chan struct{})
 
 	s0 := sampleMetrics(clk.Now(), opts.Pool, totalOps.Load())
 	mu.Lock()
 	*samples = append(*samples, s0)
 	mu.Unlock()
 
+	ticker := clk.NewTicker(opts.SampleInterval)
+	done := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		defer ticker.Stop()
 		for i := 0; i < MaxSampleCount && ctx.Err() == nil; i++ {
 			select {
@@ -158,12 +186,12 @@ func startSampler(
 		}
 	}()
 
+	var stopOnce sync.Once
 	return func() {
-		select {
-		case <-done:
-		default:
+		stopOnce.Do(func() {
 			close(done)
-		}
+			wg.Wait()
+		})
 	}
 }
 
@@ -171,6 +199,7 @@ func runWorkload(
 	ctx context.Context,
 	concurrency int,
 	pace time.Duration,
+	maxIterations int,
 	op func(context.Context) error,
 	recordOp func(),
 	recordErr func(error),
@@ -181,7 +210,7 @@ func runWorkload(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			runWorker(ctx, clk, pace, op, recordOp, recordErr)
+			runWorker(ctx, clk, pace, maxIterations, op, recordOp, recordErr)
 		}()
 	}
 	wg.Wait()
@@ -191,11 +220,12 @@ func runWorker(
 	ctx context.Context,
 	clk clockwork.Clock,
 	pace time.Duration,
+	maxIterations int,
 	op func(context.Context) error,
 	recordOp func(),
 	recordErr func(error),
 ) {
-	for iter := 0; iter < MaxLoopIterations && ctx.Err() == nil; iter++ {
+	for iter := 0; iter < maxIterations && ctx.Err() == nil; iter++ {
 		if err := op(ctx); err != nil {
 			if ctx.Err() != nil {
 				return
@@ -296,11 +326,14 @@ func calculateHeapSlope(samples []Sample, warmupIdx int) float64 {
 		return 0
 	}
 	pts := samples[warmupIdx:]
+	if len(pts) > MaxSampleCount {
+		pts = pts[:MaxSampleCount]
+	}
 	n := float64(len(pts))
 	t0 := pts[0].Timestamp
 
 	var sumT, sumY, sumTT, sumTY float64
-	for i := 0; i < len(pts) && i < MaxSampleCount; i++ {
+	for i := range pts {
 		t := pts[i].Timestamp.Sub(t0).Seconds()
 		y := float64(pts[i].HeapBytes)
 		sumT += t
@@ -344,10 +377,10 @@ func calculateThroughputWindows(samples []Sample, warmupIdx int) (float64, float
 	return firstRate, lastRate
 }
 
-func verifySoakResults(t *testing.T, opts SoakOptions, res SoakResult, firstErr error) {
-	t.Helper()
+func verifySoakResults(tb soakTB, opts SoakOptions, res SoakResult, firstErr error) {
+	tb.Helper()
 	for _, v := range violations(opts, res, firstErr) {
-		t.Error(v)
+		tb.Error(v)
 	}
 }
 
@@ -356,6 +389,15 @@ func violations(opts SoakOptions, res SoakResult, firstErr error) []string {
 	var out []string
 	if firstErr != nil {
 		out = append(out, fmt.Sprintf("soak [%s]: operation error: %v", opts.Name, firstErr))
+	}
+	warmup := time.Duration(float64(res.Duration) * WarmupRatio)
+	warmupIdx := findWarmupIndex(res.Samples, warmup)
+	postSamples := len(res.Samples) - warmupIdx
+	if len(res.Samples) == 0 {
+		postSamples = 0
+	}
+	if postSamples < 3 {
+		out = append(out, fmt.Sprintf("soak [%s]: insufficient post-warmup samples: got %d, want at least 3", opts.Name, postSamples))
 	}
 	if res.GoroutineDelta > opts.MaxGoroutineSlack {
 		out = append(out, fmt.Sprintf("soak [%s]: goroutine count grew by %d after warmup (%d -> %d), exceeds slack %d",
@@ -369,13 +411,24 @@ func violations(opts SoakOptions, res SoakResult, firstErr error) []string {
 		out = append(out, fmt.Sprintf("soak [%s]: throughput decayed from %.2f ops/s to %.2f ops/s (below %.0f%%)",
 			opts.Name, res.FirstWindowOps, res.LastWindowOps, opts.MinThroughputRatio*100))
 	}
-	if opts.Pool != nil && len(res.Samples) > 0 {
-		if acquired := res.Samples[len(res.Samples)-1].AcquiredConns; acquired > MaxPoolAcquiredSlack {
-			out = append(out, fmt.Sprintf("soak [%s]: pool acquired connections %d exceeds slack %d",
-				opts.Name, acquired, MaxPoolAcquiredSlack))
-		}
+	poolSlack := opts.MaxPoolAcquiredSlack
+	if poolSlack <= 0 {
+		poolSlack = MaxPoolAcquiredSlack
+	}
+	if v := checkPoolViolation(opts.Name, poolSlack, res.Samples); v != "" {
+		out = append(out, v)
 	}
 	return out
+}
+
+func checkPoolViolation(name string, slack int, samples []Sample) string {
+	if len(samples) == 0 {
+		return ""
+	}
+	if acquired := samples[len(samples)-1].AcquiredConns; acquired > int32(slack) {
+		return fmt.Sprintf("soak [%s]: pool acquired connections %d exceeds slack %d", name, acquired, slack)
+	}
+	return ""
 }
 
 func resolveSoakDuration(override time.Duration) time.Duration {
@@ -411,14 +464,23 @@ func normalizeOptions(opts SoakOptions) SoakOptions {
 	if opts.SampleInterval <= 0 {
 		opts.SampleInterval = DefaultSampleInterval
 	}
+	if opts.Pace <= 0 {
+		opts.Pace = DefaultPace
+	}
 	if opts.MaxGoroutineSlack <= 0 {
 		opts.MaxGoroutineSlack = DefaultMaxGoroutineSlack
+	}
+	if opts.MaxPoolAcquiredSlack <= 0 {
+		opts.MaxPoolAcquiredSlack = MaxPoolAcquiredSlack
 	}
 	if opts.MaxHeapSlopeBytesPerSec <= 0 {
 		opts.MaxHeapSlopeBytesPerSec = DefaultMaxHeapSlopeBytesPerSec
 	}
 	if opts.MinThroughputRatio <= 0 {
 		opts.MinThroughputRatio = DefaultMinThroughputRatio
+	}
+	if opts.MaxIterations <= 0 {
+		opts.MaxIterations = MaxLoopIterations
 	}
 	return opts
 }

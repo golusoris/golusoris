@@ -5,7 +5,9 @@
 package load
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -96,8 +98,75 @@ func TestViolationsOperationError(t *testing.T) {
 
 func TestViolationsEmptySamples(t *testing.T) {
 	t.Parallel()
-	if got := violations(soakOpts(), result(nil), nil); len(got) != 0 {
-		t.Fatalf("empty run violations = %q", got)
+	wantOne(t, violations(soakOpts(), result(nil), nil), "insufficient post-warmup samples")
+}
+
+func TestViolationsPoolConnectionLeak(t *testing.T) {
+	t.Parallel()
+	s := series(flatGoroutines, flatHeap, steadyOps)
+	s[len(s)-1].AcquiredConns = int32(MaxPoolAcquiredSlack + 1)
+	wantOne(t, violations(soakOpts(), result(s), nil), "pool acquired connections")
+}
+
+func TestViolationsPoolSlackBoundary(t *testing.T) {
+	t.Parallel()
+	s := series(flatGoroutines, flatHeap, steadyOps)
+	s[len(s)-1].AcquiredConns = int32(MaxPoolAcquiredSlack)
+	if got := violations(soakOpts(), result(s), nil); len(got) != 0 {
+		t.Fatalf("pool connections equal to slack must pass: %q", got)
+	}
+}
+
+func TestViolationsInsufficientSamples(t *testing.T) {
+	t.Parallel()
+	for n := 1; n < 3; n++ {
+		res := result(series(flatGoroutines, flatHeap, steadyOps)[:n])
+		wantOne(t, violations(soakOpts(), res, nil), "insufficient post-warmup samples")
+	}
+}
+
+func TestNormalizeOptionsDefaultPace(t *testing.T) {
+	t.Parallel()
+	opts := normalizeOptions(SoakOptions{Name: "test", Pace: 0})
+	if opts.Pace != DefaultPace {
+		t.Fatalf("normalizeOptions: pace = %v, want DefaultPace %v", opts.Pace, DefaultPace)
+	}
+}
+
+type spyTB struct {
+	errors []string
+}
+
+func (s *spyTB) Helper() {}
+func (s *spyTB) Error(args ...any) {
+	s.errors = append(s.errors, fmt.Sprint(args...))
+}
+
+func TestRunSoakFailsWhenWorkersStopEarly(t *testing.T) {
+	t.Parallel()
+	spy := &spyTB{}
+	opts := SoakOptions{
+		Name:          "early_stop",
+		Duration:      5 * time.Second,
+		MaxIterations: 2,
+		Pace:          time.Millisecond,
+	}
+	op := func(context.Context) error {
+		return nil
+	}
+	_ = runSoakTB(spy, opts, op)
+	if len(spy.errors) == 0 {
+		t.Fatal("RunSoak must fail when workers stop before duration")
+	}
+	found := false
+	for _, e := range spy.errors {
+		if strings.Contains(e, "workers stopped before duration") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("errors = %q, want one containing %q", spy.errors, "workers stopped before duration")
 	}
 }
 

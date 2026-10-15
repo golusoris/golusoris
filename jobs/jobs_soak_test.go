@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/riverqueue/river"
 
 	"github.com/golusoris/golusoris/jobs"
@@ -36,8 +37,8 @@ func (w *soakWorker) Work(_ context.Context, _ *river.Job[soakArgs]) error {
 	return nil
 }
 
+//nolint:paralleltest // WHY: soak tests sample process-wide metrics; parallel tests skew goroutines and heap.
 func TestJobs_Soak(t *testing.T) {
-	t.Parallel()
 	w := &soakWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
 		Register: func(workers *jobs.Workers) {
@@ -58,10 +59,30 @@ func TestJobs_Soak(t *testing.T) {
 		return nil
 	}
 
-	load.RunSoak(t, load.SoakOptions{
+	res := load.RunSoak(t, load.SoakOptions{
 		Name:        "jobs",
 		Pool:        rv.Pool,
-		Pace:        10 * time.Millisecond,
+		Pace:        50 * time.Millisecond,
 		Concurrency: 2,
 	}, op)
+
+	inserted := counter.Load()
+	if inserted == 0 || res.TotalOps == 0 {
+		t.Fatal("jobs soak: no jobs were inserted")
+	}
+
+	// Drain: wait for workers to process remaining jobs before asserting.
+	clk := clockwork.NewRealClock()
+	deadline := clk.Now().Add(10 * time.Second)
+	for clk.Now().Before(deadline) && w.processed.Load() < inserted {
+		clk.Sleep(50 * time.Millisecond)
+	}
+
+	processed := w.processed.Load()
+	if processed == 0 {
+		t.Fatal("jobs soak: no jobs were processed")
+	}
+	if float64(processed) < float64(inserted)*0.90 {
+		t.Fatalf("jobs soak: processed %d jobs, want close to inserted %d", processed, inserted)
+	}
 }

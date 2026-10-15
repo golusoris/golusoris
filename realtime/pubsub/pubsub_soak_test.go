@@ -16,13 +16,14 @@ import (
 	"github.com/golusoris/golusoris/testutil/load"
 )
 
+//nolint:paralleltest // WHY: soak tests sample process-wide metrics; parallel tests skew goroutines and heap.
 func TestPubSub_Soak(t *testing.T) {
-	t.Parallel()
 	bus := pubsub.New()
 	var delivered atomic.Int64
 	const topic = "soak.events"
+	const subscribers = 4
 
-	for range 4 {
+	for range subscribers {
 		cancel := bus.Subscribe(topic, func(_ pubsub.Message) {
 			delivered.Add(1)
 		})
@@ -40,9 +41,18 @@ func TestPubSub_Soak(t *testing.T) {
 		return nil
 	}
 
-	load.RunSoak(t, load.SoakOptions{
+	res := load.RunSoak(t, load.SoakOptions{
 		Name:        "realtime/pubsub",
 		Pace:        time.Millisecond,
 		Concurrency: 2,
 	}, op)
+
+	pub := counter.Load()
+	deliv := delivered.Load()
+	if pub == 0 || res.TotalOps == 0 {
+		t.Fatal("pubsub soak: no messages were published")
+	}
+	if want := pub * subscribers; deliv != want {
+		t.Fatalf("pubsub soak: delivered %d messages, want %d (published %d * %d subscribers)", deliv, want, pub, subscribers)
+	}
 }
