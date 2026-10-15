@@ -5,8 +5,15 @@
 package pg
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/golusoris/golusoris/core/clock"
+	"github.com/golusoris/golusoris/leader"
 )
 
 func TestDefaultOptions(t *testing.T) {
@@ -64,5 +71,91 @@ func TestKeyFor_different(t *testing.T) {
 	}
 	if foo == bar {
 		t.Fatal("want different keys for different names")
+	}
+}
+
+type probeFunc func(context.Context) error
+
+func (f probeFunc) Exec(ctx context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+	return pgconn.CommandTag{}, f(ctx)
+}
+
+func TestHeartbeat_probeErrorEndsTerm(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	calls := 0
+	probe := probeFunc(func(context.Context) error {
+		calls++
+		if calls == 2 {
+			return errors.New("terminating connection due to administrator command")
+		}
+		return nil
+	})
+	done := make(chan struct{})
+	go func() { defer close(done); heartbeat(context.Background(), probe, time.Second, clk) }()
+	for range 2 {
+		if err := clk.BlockUntilContext(context.Background(), 1); err != nil {
+			t.Fatal(err)
+		}
+		clk.Advance(time.Second)
+	}
+	waitClosed(t, done, "heartbeat return after probe error")
+	if calls != 2 {
+		t.Fatalf("probes = %d, want 2", calls)
+	}
+}
+
+func TestHeartbeat_ctxEndStops(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	heartbeat(ctx, probeFunc(func(context.Context) error {
+		t.Fatal("probe ran after ctx end")
+		return nil
+	}), time.Second, clock.NewFake())
+}
+
+func TestHeartbeat_probeHasDeadline(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	probe := probeFunc(func(ctx context.Context) error {
+		if _, ok := ctx.Deadline(); !ok {
+			t.Error("probe ctx has no deadline")
+		}
+		return errors.New("stop")
+	})
+	done := make(chan struct{})
+	go func() { defer close(done); heartbeat(context.Background(), probe, time.Second, clk) }()
+	if err := clk.BlockUntilContext(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(time.Second)
+	waitClosed(t, done, "heartbeat return")
+}
+
+func TestLeadWhileHeld_lostSessionStopsLeading(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	stopped := make(chan struct{})
+	cb := leader.Callbacks{OnStoppedLeading: func() { close(stopped) }}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		leadWhileHeld(context.Background(), probeFunc(func(context.Context) error { return errors.New("gone") }), time.Second, clk, "pod-1", cb)
+	}()
+	if err := clk.BlockUntilContext(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(time.Second)
+	waitClosed(t, done, "term end after lost session")
+	waitClosed(t, stopped, "OnStoppedLeading")
+}
+
+func waitClosed(t *testing.T, ch <-chan struct{}, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s: none within 5s", what)
 	}
 }
