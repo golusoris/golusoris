@@ -10,8 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -27,20 +25,11 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/storage"
 	"github.com/golusoris/golusoris/storage/tus"
+	"github.com/golusoris/golusoris/testutil/configfile"
 )
 
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m)
-}
-
-// writeConfig writes a YAML config file into a temp dir and returns its path.
-func writeConfig(t *testing.T, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return path
 }
 
 // enabledConfig builds a YAML config enabling tus over a local bucket at dir.
@@ -60,7 +49,7 @@ func enabledConfig(dir string, extra ...string) string {
 // handler, the backing bucket, and a started/stopped fx app.
 func bootHandler(t *testing.T, body string) (*tus.Handler, storage.Bucket) {
 	t.Helper()
-	cfg, err := config.New(config.Options{Files: []string{writeConfig(t, body)}})
+	cfg, err := config.New(config.Options{Files: []string{configfile.Write(t, body)}})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
 	}

@@ -374,6 +374,11 @@ packages:
     capabilities: [registry.kms.vault]
     description: "Package vault signs with a HashiCorp Vault or OpenBao transit key through crypto.Signer, so a key that never leaves the server can sign OCI images with sign.Image."
     replaces: [github.com/sigstore/sigstore/pkg/signature/kms/hashivault, github.com/hashicorp/vault/api]
+  - import: github.com/golusoris/golusoris/container/registry/sign/signtest
+    module: github.com/golusoris/golusoris/container/registry/sign
+    domain: test
+    capabilities: [test.registry.signing]
+    description: "Package signtest creates a bounded in-process OCI registry with a seeded image for signing tests."
   - import: github.com/golusoris/golusoris/container/runtime
     domain: runtime
     capabilities: [runtime.detect]
@@ -1099,6 +1104,10 @@ packages:
     capabilities: [test.clickhouse]
     description: "Package clickhouse boots a real ClickHouse container via testcontainers-go and returns a connected [chgo.Conn]."
     replaces: [github.com/ClickHouse/clickhouse-go/v2, github.com/testcontainers/testcontainers-go]
+  - import: github.com/golusoris/golusoris/testutil/configfile
+    domain: test
+    capabilities: [test.configfile]
+    description: "Package configfile writes caller-provided test configuration to a private temporary YAML file."
   - import: github.com/golusoris/golusoris/testutil/factory
     domain: test
     capabilities: [test.factory]
