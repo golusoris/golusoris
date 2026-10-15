@@ -7,12 +7,10 @@
 
 from __future__ import annotations
 
-import datetime
 import json
 import re
 import sys
 from collections import Counter
-from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +65,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "ghcr.io/astral-sh/ruff", "docker"),
     ("tools/tool-versions.env", "silkeh/clang", "docker"),
     ("internal/testimages/images.go", "postgres", "docker"),
+    ("internal/testimages/images.go", "postgis/postgis", "docker"),
     ("internal/testimages/images.go", "pgvector/pgvector", "docker"),
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"),
     ("internal/testimages/images.go", "redis", "docker"),
@@ -86,6 +85,7 @@ EXPECTED = {
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
+    (".github/testcontainers-images.txt", "postgis/postgis", "docker"),
     (".github/testcontainers-images.txt", "pgvector/pgvector", "docker"),
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"),
     (".github/testcontainers-images.txt", "redis", "docker"),
@@ -155,6 +155,7 @@ EXPECTED_DIGESTS = {
     "ghcr.io/astral-sh/uv",
     "silkeh/clang",
     "postgres",
+    "postgis/postgis",
     "pgvector/pgvector",
     "timescale/timescaledb",
     "redis",
@@ -503,12 +504,22 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     return True
 
 
+PRESET = "github>plurano/horistes"
+# The preset holds minimumReleaseAge "3 days" and switches github-runner proposals off.
 MINIMUM_RELEASE_AGE = "3 days"
 
 
+def extends_preset(config: dict[str, object]) -> bool:
+    """Require the family preset in extends."""
+    extends = config.get("extends")
+    return isinstance(extends, list) and PRESET in extends
+
+
 def minimum_age_valid(config: dict[str, object]) -> bool:
-    """Require the three-day release age and refuse any setting that weakens it."""
-    if config.get("minimumReleaseAge") != MINIMUM_RELEASE_AGE:
+    """Require the preset's three-day release age and refuse any setting that weakens it."""
+    if not extends_preset(config):
+        return False
+    if config.get("minimumReleaseAge", MINIMUM_RELEASE_AGE) != MINIMUM_RELEASE_AGE:
         return False
     if config.get("internalChecksFilter", "strict") != "strict":
         return False
@@ -518,10 +529,15 @@ def minimum_age_valid(config: dict[str, object]) -> bool:
     return not any(isinstance(rule, dict) and "minimumReleaseAge" in rule for rule in rules)
 
 
+def without_preset(config: dict[str, object]) -> dict[str, object]:
+    """Copy the configuration with the family preset dropped from extends."""
+    mutated = json.loads(json.dumps(config))
+    mutated["extends"] = [entry for entry in mutated["extends"] if entry != PRESET]
+    return mutated
+
+
 def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
     """Build the configurations the age check must refuse."""
-    removed = json.loads(json.dumps(config))
-    removed.pop("minimumReleaseAge", None)
     shortened = json.loads(json.dumps(config))
     shortened["minimumReleaseAge"] = "1 day"
     unfiltered = json.loads(json.dumps(config))
@@ -529,7 +545,7 @@ def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object
     overridden = json.loads(json.dumps(config))
     overridden["packageRules"].append({"matchManagers": ["gomod"], "minimumReleaseAge": "0 days"})
     return {
-        "age removed": removed,
+        "preset removed": without_preset(config),
         "age shortened": shortened,
         "pending versions not filtered": unfiltered,
         "package rule overrides the age": overridden,
@@ -540,7 +556,8 @@ def test_minimum_age(config: dict[str, object]) -> bool:
     """Report a missing age rule and prove the check refuses each way to weaken it."""
     if not minimum_age_valid(config):
         print(
-            "renovate.json must set minimumReleaseAge to 3 days, keep the strict filter and override it nowhere",
+            f"renovate.json must extend {PRESET} (3-day release age), keep the strict filter "
+            "and override the age nowhere",
             file=sys.stderr,
         )
         return False
@@ -551,70 +568,33 @@ def test_minimum_age(config: dict[str, object]) -> bool:
     return True
 
 
-RUNNER_HOLD_EXPIRY = re.compile(r"Expires (\d{4}-\d{2}-\d{2})\.")
-# Ninety days after the hold was set on 2026-10-11; a later date needs a new decision.
-RUNNER_HOLD_LATEST_EXPIRY = "2027-01-09"
-
-
-def runner_hold_valid(config: dict[str, object], today: str) -> bool:
-    """Require the dated hold of the hosted runner image while its date has not passed."""
+def runner_rules_off(config: dict[str, object]) -> bool:
+    """Require the preset that switches runner proposals off and refuse any local runner rule."""
+    if not extends_preset(config):
+        return False
     rules = config.get("packageRules")
     if not isinstance(rules, list):
         return False
-    holds = [
-        rule
-        for rule in rules
-        if isinstance(rule, dict)
-        and rule.get("matchManagers") == ["github-actions"]
-        and rule.get("matchDepTypes") == ["github-runner"]
-        and rule.get("matchPackageNames") == ["ubuntu"]
-        and rule.get("allowedVersions") == "/^24\\.04$/"
-    ]
-    if len(holds) != 1:
-        return False
-    expiry = RUNNER_HOLD_EXPIRY.search(str(holds[0].get("description", "")))
-    return expiry is not None and today <= expiry.group(1) <= RUNNER_HOLD_LATEST_EXPIRY
-
-
-def runner_hold_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
-    """Build the configurations the runner hold check must refuse."""
-
-    def with_hold(change: Callable[[dict[str, object]], None]) -> dict[str, object]:
-        mutated = json.loads(json.dumps(config))
-        for rule in mutated["packageRules"]:
-            if rule.get("matchDepTypes") == ["github-runner"]:
-                change(rule)
-        return mutated
-
-    removed = json.loads(json.dumps(config))
-    removed["packageRules"] = [
-        rule for rule in removed["packageRules"] if rule.get("matchDepTypes") != ["github-runner"]
-    ]
-    return {
-        "hold removed": removed,
-        "hold without a date": with_hold(lambda rule: rule.update(description="Hold the runner image.")),
-        "hold dated past the limit": with_hold(
-            lambda rule: rule.update(description=str(rule["description"]).replace("2027-01-09", "2028-01-09"))
-        ),
-        "hold widened": with_hold(lambda rule: rule.update(allowedVersions="/^2[4-6]\\./")),
-    }
+    return not any(
+        isinstance(rule, dict) and "github-runner" in rule.get("matchDepTypes", []) for rule in rules
+    )
 
 
 def test_runner_hold(config: dict[str, object]) -> bool:
-    """Report a missing or expired runner hold and prove the check refuses each weakening."""
-    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
-    if not runner_hold_valid(config, today):
+    """Keep the hosted runner label out of proposals (golusoris#815) and prove the check refuses."""
+    if not runner_rules_off(config):
         print(
-            "renovate.json must hold the runner image at ubuntu 24.04 with an expiry date that has not passed "
-            f"(latest {RUNNER_HOLD_LATEST_EXPIRY}); once golusoris#815 is done, remove the hold and this check",
+            f"renovate.json must extend {PRESET}, which switches runner proposals off, "
+            "and carry no rule of its own for github-runner",
             file=sys.stderr,
         )
         return False
-    if runner_hold_valid(config, "9999-12-31"):
-        print("runner hold negative control was accepted: expiry date passed", file=sys.stderr)
-        return False
-    for label, mutated in runner_hold_mutants(config).items():
-        if runner_hold_valid(mutated, today):
+    reenabled = json.loads(json.dumps(config))
+    reenabled["packageRules"].append(
+        {"matchManagers": ["github-actions"], "matchDepTypes": ["github-runner"], "enabled": True}
+    )
+    for label, mutated in {"preset removed": without_preset(config), "runner re-enabled": reenabled}.items():
+        if runner_rules_off(mutated):
             print(f"runner hold negative control was accepted: {label}", file=sys.stderr)
             return False
     return True

@@ -610,6 +610,76 @@ jobs:
       - name: Enforce measured hot-path allocation budgets
         run: bash scripts/ci/allocation-budget.sh
 
+  # Root code may use only the core API that go.mod requires; the in-repo
+  # replace hides a missing core release, a consumer does not get one.
+  core-skew:
+    name: Core version skew
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Build and test the root against the required core version
+        run: bash scripts/ci/core-skew.sh
+
+  # A recovered nil-dereference fault corrupts the heap on Windows hosts with
+  # large exception contexts (golang/go#81238); code checks for nil instead.
+  fault-recovery:
+    name: Recovered fault scan
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      # hw/udev and media/3d are cgo modules; hosted images lack their headers.
+      - name: Install cgo system libraries
+        timeout-minutes: 10
+        run: bash scripts/ci/install-cgo-libs.sh
+      # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
+      - name: Install verified Pact FFI
+        run: |
+          pact_dir="${RUNNER_TEMP}/pact-ffi"
+          install -d -m 0700 "$pact_dir"
+          python3 -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
+          echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
+      - name: Fail on any recovered nil-dereference fault
+        run: bash scripts/ci/fault-recovery.sh
+
   shellcheck:
     name: Shell scripts (ShellCheck)
     runs-on: ubuntu-24.04
@@ -1090,6 +1160,8 @@ jobs:
       - module-sweep
       - mkdocs
       - allocation-budget
+      - core-skew
+      - fault-recovery
       - shellcheck
       - actionlint
       - policy
@@ -1132,6 +1204,8 @@ jobs:
           MODULE_SWEEP: ${{ needs.module-sweep.result }}
           MKDOCS: ${{ needs.mkdocs.result }}
           ALLOCATION_BUDGET: ${{ needs.allocation-budget.result }}
+          CORE_SKEW: ${{ needs.core-skew.result }}
+          FAULT_RECOVERY: ${{ needs.fault-recovery.result }}
           SHELLCHECK: ${{ needs.shellcheck.result }}
           ACTIONLINT: ${{ needs.actionlint.result }}
           CI_POLICY: ${{ needs.policy.result }}

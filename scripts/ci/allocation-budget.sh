@@ -154,7 +154,7 @@ run_benchmarks() {
 		"$go_bin" test -run '^$' -bench '^Benchmark(HashPassword|SealOpen)$' \
 			-benchmem -count="$ALLOCATION_RUNS" ./crypto
 		cd "$root"
-		"$go_bin" test -run '^$' -bench '^BenchmarkTypedSetGet$' \
+		"$go_bin" test -run '^$' -bench '^BenchmarkTyped(SetGet|GetMiss)$' \
 			-benchmem -count="$ALLOCATION_RUNS" ./cache/memory
 	) | tee "$output"
 }

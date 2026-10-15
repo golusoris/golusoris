@@ -133,28 +133,18 @@ func TestRunHTTPStopsWithOpenSession(t *testing.T) {
 	t.Parallel()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("reserve port: %v", err)
-	}
-	addr := ln.Addr().String()
-	if err = ln.Close(); err != nil {
-		t.Fatalf("close reserved listener: %v", err)
+		t.Fatalf("listen: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	serveCtx, stop := context.WithCancel(ctx)
 	served := make(chan error, 1)
-	go func() { served <- runHTTP(serveCtx, slog.New(slog.DiscardHandler), addr) }()
+	go func() { served <- serveHTTP(serveCtx, slog.New(slog.DiscardHandler), ln) }()
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
-	transport := &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}
-	var session *sdkmcp.ClientSession
-	for range 100 { // the server starts listening asynchronously
-		if session, err = client.Connect(ctx, transport, nil); err == nil {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	transport := &sdkmcp.StreamableClientTransport{Endpoint: "http://" + ln.Addr().String() + "/mcp", HTTPClient: newTestClient(t)}
+	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		stop()
 		t.Fatalf("client connect: %v", err)
@@ -170,5 +160,25 @@ func TestRunHTTPStopsWithOpenSession(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("runHTTP did not return within 3s of the stop signal")
+	}
+}
+
+func TestRunHTTP_AddressAlreadyInUse(t *testing.T) {
+	t.Parallel()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err = runHTTP(ctx, slog.New(slog.DiscardHandler), ln.Addr().String())
+	if err == nil {
+		t.Fatal("runHTTP on occupied address succeeded, want error")
+	}
+	if !strings.Contains(err.Error(), "golusoris-mcp: listen:") {
+		t.Fatalf("runHTTP error = %v, want golusoris-mcp: listen: prefix", err)
 	}
 }

@@ -20,6 +20,13 @@ golusoris-mcp                    # stdio
 golusoris-mcp --transport http   # streamable-HTTP on :8899
 ```
 
+## Version
+
+- Release builds set `main.version` via `-ldflags -X`
+  (`tools/.goreleaser.yml`). Same value -> `--version` + MCP `serverInfo`.
+- `binary_test.go` builds binary through `internal/testbin`; asserts
+  `--version`, stdio `initialize` server info, tool list, one tool call.
+
 ## Tools exposed
 
 | Tool | Description |
@@ -43,9 +50,9 @@ types, and unknown fields before dispatch.
 }
 ```
 
-## Don't
+## Never
 
-- Don't add tools that shell out to arbitrary commands — keep tool output
+- Never add tools that shell out to arbitrary commands — keep tool output
  as instructions to agent, not side effects.
-- Don't re-introduce hand-rolled JSON-RPC. Register tools via generic
+- Never re-introduce hand-rolled JSON-RPC. Register tools via generic
  `mcp.AddTool`. Low-level `server.AddTool` skips input validation.
