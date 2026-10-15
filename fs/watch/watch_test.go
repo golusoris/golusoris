@@ -137,19 +137,10 @@ func TestWatcher_debounce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clk := clockwork.NewRealClock()
-	start := clk.Now()
-
-	// Write 5 files rapidly — burst duration must be well inside debounce window.
-	for i := range 5 {
-		path := filepath.Join(dir, filepath.FromSlash("f"+string(rune('0'+i))+".txt"))
-		if err := os.WriteFile(path, []byte("x"), 0o640); err != nil {
-			t.Fatal(err)
-		}
-	}
-	writeDuration := clk.Since(start)
-	if writeDuration >= debounce {
-		t.Fatalf("writes took %v, exceeded debounce window %v", writeDuration, debounce)
+	// The debounce is trailing (each event restarts the timer), so one event
+	// needs every gap between writes inside the window, not the whole burst.
+	if gap := writeBurst(t, dir, 5); gap >= debounce {
+		t.Fatalf("gap between writes %v reached debounce window %v", gap, debounce)
 	}
 
 	// Drain events up to a bounded timeout scaled to debounce.
@@ -171,4 +162,26 @@ loop:
 	if eventCount != 1 {
 		t.Fatalf("debounce failed: got %d events for 5 rapid writes, want 1", eventCount)
 	}
+}
+
+// writeBurst writes n files into dir and returns the largest gap between
+// the starts of consecutive writes.
+func writeBurst(t *testing.T, dir string, n int) time.Duration {
+	t.Helper()
+	clk := clockwork.NewRealClock()
+	var largest time.Duration
+	prev := clk.Now()
+	for i := range n {
+		path := filepath.Join(dir, filepath.FromSlash("f"+string(rune('0'+i))+".txt"))
+		start := clk.Now()
+		if gap := start.Sub(prev); gap > largest {
+			largest = gap
+		}
+		prev = start
+		if err := os.WriteFile(path, []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("write %d took %v", i, clk.Since(start))
+	}
+	return largest
 }
