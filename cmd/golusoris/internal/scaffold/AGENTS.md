@@ -18,7 +18,7 @@ scaffold.AddCmd()   // golusoris add [module]                 — print fx wirin
 scaffold.BumpCmd()  // golusoris bump [version]               — go get + go mod tidy
 ```
 
-- **init** writes `go.mod` + `main.go` from `text/template` into `./<name>`;
+- **init** writes `go.mod` + `cmd/app/main.go` from `text/template` into `./<name>`;
  validates name (rejects path/shell metacharacters), defaults module
  path to `github.com/example/<name>`.
 - **add** looks up short name (`db`, `http`, `otel`, `cache`, `jobs`,
