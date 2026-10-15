@@ -37,6 +37,7 @@ main() {
 	require_success mkdocs "${MKDOCS:?}"
 	require_success allocation-budget "${ALLOCATION_BUDGET:?}"
 	require_success core-skew "${CORE_SKEW:?}"
+	require_success fault-recovery "${FAULT_RECOVERY:?}"
 	require_success shellcheck "${SHELLCHECK:?}"
 	require_success actionlint "${ACTIONLINT:?}"
 	require_success policy "${CI_POLICY:?}"

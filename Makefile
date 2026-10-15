@@ -128,6 +128,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/core-skew-policy_test.sh
+	@bash scripts/ci/fault-recovery-policy_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
 	@bash scripts/ci/check-gofumpt_test.sh
 	@bash scripts/ci/buf-lint-policy_test.sh
@@ -231,6 +232,10 @@ allocation-budget: ## enforce measured hot-path allocation budgets
 core-skew: ## build and test the root against the required core version, in-repo replaces dropped
 	@bash scripts/ci/core-skew.sh
 
+.PHONY: fault-recovery
+fault-recovery: ## fail when a short test recovers a nil-dereference fault (golang/go#81238)
+	@bash scripts/ci/fault-recovery.sh
+
 .PHONY: kubeconform
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
@@ -275,7 +280,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate
