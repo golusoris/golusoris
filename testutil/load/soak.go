@@ -165,9 +165,7 @@ func startSampler(
 	done := make(chan struct{})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer ticker.Stop()
 		for i := 0; i < MaxSampleCount && ctx.Err() == nil; i++ {
 			select {
@@ -184,7 +182,7 @@ func startSampler(
 				mu.Unlock()
 			}
 		}
-	}()
+	})
 
 	var stopOnce sync.Once
 	return func() {
@@ -207,11 +205,9 @@ func runWorkload(
 	var wg sync.WaitGroup
 	clk := clockwork.NewRealClock()
 	for i := 0; i < concurrency && i < MaxConcurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			runWorker(ctx, clk, pace, maxIterations, op, recordOp, recordErr)
-		}()
+		})
 	}
 	wg.Wait()
 }
@@ -355,10 +351,7 @@ func calculateThroughputWindows(samples []Sample, warmupIdx int) (float64, float
 	}
 	post := samples[warmupIdx:]
 	n := len(post)
-	wSize := n / 3
-	if wSize < 1 {
-		wSize = 1
-	}
+	wSize := max(n/3, 1)
 
 	firstDeltaOps := post[wSize].OpsCompleted - post[0].OpsCompleted
 	firstDeltaT := post[wSize].Timestamp.Sub(post[0].Timestamp).Seconds()
