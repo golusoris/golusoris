@@ -16,7 +16,7 @@ on:
 
 # Praetor engine that local hooks and Make targets run; .config/lefthook/engine.sh reads this pin.
 env:
-  PRAETOR_REF: 3bbde07342bdece12c46f74b0ee2c1f51129478f
+  PRAETOR_REF: 7057d9957b3a7b98d60899aad55bbee406e0e96c
 
 permissions:
   contents: read
