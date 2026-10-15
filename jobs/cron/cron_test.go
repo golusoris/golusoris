@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 
 	"github.com/golusoris/golusoris/jobs"
 	"github.com/golusoris/golusoris/jobs/cron"
@@ -41,6 +43,26 @@ func TestRegisterRejectsProducerOnlyClient(t *testing.T) {
 	}
 	if err := cron.Register(client, "@hourly", func() registerArgs { return registerArgs{} }); err == nil || !strings.Contains(err.Error(), "periodic jobs") {
 		t.Fatalf("producer-only registration error = %v", err)
+	}
+}
+
+func TestRegisterRejectsLeaderElectionDisabledClient(t *testing.T) {
+	t.Parallel()
+
+	client, err := river.NewClient(riverpgxv5.New(&pgxpool.Pool{}), &river.Config{
+		LeaderElectionDisabled: true,
+		PollOnly:               true,
+		Queues: map[string]river.QueueConfig{
+			river.QueueDefault: {MaxWorkers: 1},
+		},
+		Workers: river.NewWorkers(),
+		Logger:  slog.New(slog.DiscardHandler),
+	})
+	if err != nil {
+		t.Fatalf("new client with leader election disabled: %v", err)
+	}
+	if err := cron.Register(client, "@hourly", func() registerArgs { return registerArgs{} }); err == nil || !strings.Contains(err.Error(), "LeaderElectionDisabled") {
+		t.Fatalf("leader election disabled registration error = %v", err)
 	}
 }
 
