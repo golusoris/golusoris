@@ -418,7 +418,7 @@ func checkPoolViolation(name string, slack int, samples []Sample) string {
 	if len(samples) == 0 {
 		return ""
 	}
-	if acquired := samples[len(samples)-1].AcquiredConns; acquired > int32(slack) {
+	if acquired := samples[len(samples)-1].AcquiredConns; int64(acquired) > int64(slack) {
 		return fmt.Sprintf("soak [%s]: pool acquired connections %d exceeds slack %d", name, acquired, slack)
 	}
 	return ""
@@ -484,7 +484,7 @@ func emitStepSummary(res SoakResult) (err error) {
 	if path == "" {
 		return nil
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) //nolint:gosec // WHY: path is the runner-provided summary file.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600) // #nosec G304 G703 -- path is the runner-provided job summary file.
 	if err != nil {
 		return fmt.Errorf("load: open step summary: %w", err)
 	}
