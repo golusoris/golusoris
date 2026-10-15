@@ -39,3 +39,13 @@ does not fail test — only `Assert` calls `t.Errorf`.
 
 - Opt-in: guard `*_Load` tests with `testing.Short()` so they skip in normal CI.
 - `Rate` is `vegeta.Pacer` — pass `ConstantRate(n)` or any other pacer.
+
+## Soak runs
+
+`load.RunSoak(t, load.SoakOptions{Name, Pace, Concurrency, Pool}, op)` runs `op`
+for `SOAK_DURATION` (default 2m, clamped 5s..30m), samples goroutines, heap and
+pool once per second, drops first 20% as warmup, then fails on: op error,
+goroutine growth > slack, heap slope > 50 KiB/s, throughput decay > 30%,
+leaked pool connections. Verdict logic = `violations`; planted cases in
+`soak_internal_test.go`. Callers: `*_soak_test.go` behind build tag `soak`;
+`.github/workflows/soak.yml` runs soak tests weekly + on dispatch.
