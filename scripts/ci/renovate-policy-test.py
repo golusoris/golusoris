@@ -21,6 +21,7 @@ INPUTS = (
     ".gitea/workflows/security-scan.yml",
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
+    ".github/testcontainers-split-images.txt",
     "container/registry/sign/kms/aws/internal/localstackdev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
@@ -95,6 +96,12 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
+    (".github/testcontainers-split-images.txt", "localstack/localstack", "docker"),
+    (".github/testcontainers-split-images.txt", "hashicorp/vault", "docker"),
+    (".github/testcontainers-split-images.txt", "openbao/openbao", "docker"),
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"),
+    (".github/testcontainers-split-images.txt", "fsouza/fake-gcs-server", "docker"),
+    (".github/testcontainers-split-images.txt", "mcr.microsoft.com/azure-storage/azurite", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
     (
@@ -139,6 +146,7 @@ EXPECTED = {
 EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 4,
 }
 
 EXPECTED_DIGESTS = {
@@ -224,9 +232,7 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
     return {(item["path"], item["dep_name"], item["datasource"]) for item in found}
 
 
-# Go-authority images the primary CI test job never runs, so its cache omits
-# them: ClamAV sits behind the `integration` build tag, and split-module
-# emulators run in the Module sweep job, which pulls on demand.
+# Split-module emulators use the shard pre-pull manifest instead of the primary cache.
 CACHE_EXEMPT_IMAGES = frozenset(
     {"fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
 )
@@ -251,6 +257,53 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
         print(f"test-image authorities differ beyond the declared cache exemptions: {drift[0]}", file=sys.stderr)
         return False
     return True
+
+
+SPLIT_IMAGES_PATH = ".github/testcontainers-split-images.txt"
+SPLIT_IMAGE_AUTHORITIES = {
+    "container/registry/sign/kms/aws": (
+        "container/registry/sign/kms/aws/internal/localstackdev/images.go", None,
+    ),
+    "container/registry/sign/kms/vault": (
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go", None,
+    ),
+    "storage/gcs": (
+        "internal/testimages/images.go", {"fsouza/fake-gcs-server", "testcontainers/ryuk"},
+    ),
+    "storage/azblob": (
+        "internal/testimages/images.go", {"mcr.microsoft.com/azure-storage/azurite", "testcontainers/ryuk"},
+    ),
+}
+
+
+def split_image_authorities_valid(found: list[dict[str, str]], content: str) -> bool:
+    """Require exact module, name, tag and digest parity with Go authorities."""
+    expected = Counter(
+        (module, item["dep_name"], item["current_value"], item["current_digest"])
+        for module, (path, names) in SPLIT_IMAGE_AUTHORITIES.items()
+        for item in found
+        if item["path"] == path and (names is None or item["dep_name"] in names)
+    )
+    actual: Counter[tuple[str, ...]] = Counter()
+    for line in content.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(
+            r"([a-z0-9_./-]+) ([a-z0-9][a-z0-9._/-]*):([^@\s]+)@(sha256:[a-f0-9]{64})",
+            line,
+        )
+        if match is None:
+            return False
+        actual[match.groups()] += 1
+    return actual == expected
+
+
+def test_split_image_authorities(found: list[dict[str, str]], content: str) -> bool:
+    """Report split-module pre-pull drift before tests reach Docker."""
+    if split_image_authorities_valid(found, content):
+        return True
+    print("split test-image manifest differs from Go authorities (module/name/tag/digest)", file=sys.stderr)
+    return False
 
 
 def test_trainer_manager_coverage(config: dict[str, object]) -> bool:
@@ -448,6 +501,13 @@ def test_negative_controls(config: dict[str, object], contents: dict[str, str]) 
     if private_job_image_authority_valid(config, drifted):
         print("negative control accepted a drifting private job-image digest", file=sys.stderr)
         return False
+    split_drift = dict(contents)
+    split_drift[SPLIT_IMAGES_PATH] = re.sub(
+        r"@sha256:[a-f0-9]{64}", "@sha256:" + "0" * 64, contents[SPLIT_IMAGES_PATH], count=1,
+    )
+    if split_image_authorities_valid(extract(config, split_drift), split_drift[SPLIT_IMAGES_PATH]):
+        print("negative control accepted a drifting split test-image digest", file=sys.stderr)
+        return False
     return True
 
 
@@ -609,6 +669,7 @@ def main() -> int:
         test_pin_inventory(found),
         test_digest_inventory(found),
         test_image_authorities_match(found),
+        test_split_image_authorities(found, contents[SPLIT_IMAGES_PATH]),
         test_trainer_manager_coverage(config),
         test_private_job_image_authority(config, contents),
         test_negative_controls(config, contents),
