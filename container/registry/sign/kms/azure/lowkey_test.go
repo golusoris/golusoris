@@ -40,19 +40,17 @@ func (lowkeyCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions
 	return azcore.AccessToken{Token: lowkeyToken, ExpiresOn: time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC)}, nil
 }
 
-func ptr[T any](v T) *T { return &v }
-
 var (
-	signOps   = []*azkeys.KeyOperation{ptr(azkeys.KeyOperationSign), ptr(azkeys.KeyOperationVerify)}
-	noSignOps = []*azkeys.KeyOperation{ptr(azkeys.KeyOperationVerify)}
+	signOps   = []*azkeys.KeyOperation{new(azkeys.KeyOperationSign), new(azkeys.KeyOperationVerify)}
+	noSignOps = []*azkeys.KeyOperation{new(azkeys.KeyOperationVerify)}
 )
 
 func ecParams(crv azkeys.CurveName, ops []*azkeys.KeyOperation) azkeys.CreateKeyParameters {
-	return azkeys.CreateKeyParameters{Kty: ptr(azkeys.KeyTypeEC), Curve: ptr(crv), KeyOps: ops}
+	return azkeys.CreateKeyParameters{Kty: new(azkeys.KeyTypeEC), Curve: new(crv), KeyOps: ops}
 }
 
 func rsaParams(size int32, ops []*azkeys.KeyOperation) azkeys.CreateKeyParameters {
-	return azkeys.CreateKeyParameters{Kty: ptr(azkeys.KeyTypeRSA), KeySize: ptr(size), KeyOps: ops}
+	return azkeys.CreateKeyParameters{Kty: new(azkeys.KeyTypeRSA), KeySize: new(size), KeyOps: ops}
 }
 
 func fetchCert(addr string) (*x509.Certificate, error) {
@@ -100,16 +98,14 @@ func startLowkey(t *testing.T) (string, *http.Transport) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	ctr, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        lowkeydev.LowkeyVaultImage,
-			ReaperImage:  lowkeydev.RyukImage,
-			ExposedPorts: []string{"8443/tcp"},
-			Env: map[string]string{
-				"LOWKEY_ARGS": "--LOWKEY_AUTH_RESOURCE=localhost --LOWKEY_VAULT_RELAXED_PORTS=true",
-			},
-			WaitingFor: wait.ForLog("Started LowkeyVaultApp").WithStartupTimeout(3 * time.Minute),
+		Image:        lowkeydev.LowkeyVaultImage,
+		ReaperImage:  lowkeydev.RyukImage,
+		ExposedPorts: []string{"8443/tcp"},
+		Env: map[string]string{
+			"LOWKEY_ARGS": "--LOWKEY_AUTH_RESOURCE=localhost --LOWKEY_VAULT_RELAXED_PORTS=true",
 		},
-		Started: true,
+		WaitingFor: wait.ForLog("Started LowkeyVaultApp").WithStartupTimeout(3 * time.Minute),
+		Started:    true,
 	})
 	if err != nil {
 		t.Fatalf("start lowkey container: %v", err)
@@ -210,9 +206,7 @@ func assertPublicEqual(t *testing.T, expected, got crypto.PublicKey) {
 func TestLowkey_Sign(t *testing.T) {
 	vault, tr := startLowkey(t)
 	azClient, err := azkeys.NewClient(vault, lowkeyCredential{}, &azkeys.ClientOptions{
-		ClientOptions: azcore.ClientOptions{
-			Transport: &http.Client{Transport: tr, Timeout: 10 * time.Second},
-		},
+		Transport: &http.Client{Transport: tr, Timeout: 10 * time.Second},
 	})
 	if err != nil {
 		t.Fatalf("azkeys client: %v", err)
