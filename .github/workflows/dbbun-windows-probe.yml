@@ -14,9 +14,13 @@ permissions:
 
 jobs:
   probe:
-    name: db-bun Windows probe
+    name: db-bun Windows probe (host ${{ matrix.host }})
     runs-on: windows-2025
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ['1', '2', '3', '4']
     steps:
       - name: Checkout source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -26,29 +30,21 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
-      - name: Run db/bun under go test and under GC pressure
+      - name: Host CPU
+        shell: pwsh
+        run: Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name
+      - name: Stress the formerly faulting packages
         shell: bash
         env:
           GOTRACEBACK: all
         run: |
-          go test -c -o "$RUNNER_TEMP/bun.test.exe" ./db/bun/
           fails=0
-          for i in $(seq 1 150); do
-            if ! go test -short -count=1 ./db/bun/ > "$RUNNER_TEMP/gt.txt" 2>&1; then
+          for pkg in ./db/bun/ ./db/timescale/ ./jobs/ ./storage/safety/; do
+            if ! go test -short -count=100 -p 4 "$pkg" > "$RUNNER_TEMP/out.txt" 2>&1; then
               fails=$((fails + 1))
-              if [ $fails -le 2 ]; then echo "--- gotest run $i"; head -c 6000 "$RUNNER_TEMP/gt.txt"; fi
+              echo "--- $pkg failed"; head -c 6000 "$RUNNER_TEMP/out.txt"
             fi
+            echo "RESULT $pkg $(tail -1 "$RUNNER_TEMP/out.txt")"
           done
-          echo "RESULT gotest-parent fails=$fails of 150"
-          loop() {
-            local f=0
-            for i in $(seq 1 150); do
-              if ! GOGC=1 "$RUNNER_TEMP/bun.test.exe" -test.short > "$RUNNER_TEMP/gc$1.txt" 2>&1; then
-                f=$((f + 1))
-                if [ $f -le 1 ]; then echo "--- gogc1 worker $1 run $i"; head -c 6000 "$RUNNER_TEMP/gc$1.txt"; fi
-              fi
-            done
-            echo "RESULT gogc1 worker $1 fails=$f of 150"
-          }
-          for w in 1 2 3 4; do loop $w & done
-          wait
+          echo "RESULT failed packages=$fails of 4"
+          exit "$fails"
