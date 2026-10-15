@@ -37,7 +37,7 @@ require (
 	github.com/emersion/go-smtp v0.25.0
 	github.com/felixge/httpsnoop v1.1.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/fxamacker/cbor/v2 v2.9.4
+	github.com/fxamacker/cbor/v2 v2.9.6
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/gkampitakis/go-snaps v0.5.23

@@ -21,7 +21,7 @@ require (
 	github.com/dennwc/varint v1.0.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/fxamacker/cbor/v2 v2.9.4 // indirect
+	github.com/fxamacker/cbor/v2 v2.9.6 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/go-chi/chi/v5 v5.3.2 // indirect
 	github.com/go-faster/errors v0.8.0 // indirect
