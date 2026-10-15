@@ -41,7 +41,7 @@ require (
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/getsentry/sentry-go v0.50.0
 	github.com/gkampitakis/go-snaps v0.5.23
-	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-chi/chi/v5 v5.4.0
 	github.com/go-logr/logr v1.4.4
 	github.com/go-playground/form/v4 v4.5.0
 	github.com/go-webauthn/webauthn v0.18.2
