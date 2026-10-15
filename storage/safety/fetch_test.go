@@ -169,8 +169,8 @@ func TestFetch_ExactlyAtCap(t *testing.T) {
 // second dial hop (Control re-runs per hop).
 func TestFetch_RedirectToPrivate(t *testing.T) {
 	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Redirect(w, nil, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
 	}))
 	defer srv.Close()
 
