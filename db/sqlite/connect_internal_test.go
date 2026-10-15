@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 var errPingRefused = errors.New("ping refused")
@@ -68,29 +67,30 @@ func TestDiskStateMemory(t *testing.T) {
 	}
 }
 
-// lateConnector opens only after ctx has expired, like an open the driver cannot cancel.
-type lateConnector struct{}
+// lateConnector ends ctx while connecting, like an open the driver cannot cancel; ending it
+// here rather than on a timer keeps database/sql from failing before Connect runs.
+type lateConnector struct{ cancel context.CancelFunc }
 
-func (lateConnector) Connect(ctx context.Context) (driver.Conn, error) {
-	<-ctx.Done()
+func (c lateConnector) Connect(context.Context) (driver.Conn, error) {
+	c.cancel()
 	return pingFailConn{}, nil
 }
 func (lateConnector) Driver() driver.Driver { return pingFailDriver{} }
 
 func TestConnectAndPingNamesALateConnect(t *testing.T) {
 	t.Parallel()
-	db := sql.OpenDB(lateConnector{})
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	db := sql.OpenDB(lateConnector{cancel: cancel})
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
 			t.Errorf("close: %v", err)
 		}
 	})
 	path := filepath.Join(t.TempDir(), "absent.db")
-	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
-	defer cancel()
 	err := connectAndPing(ctx, db, path)
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("connectAndPing = %v, want the deadline error", err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("connectAndPing = %v, want the context error", err)
 	}
 	if !strings.Contains(err.Error(), "db/sqlite: connect "+path+" finished after the open deadline") ||
 		strings.Contains(err.Error(), "ping") {
@@ -100,16 +100,17 @@ func TestConnectAndPingNamesALateConnect(t *testing.T) {
 
 func TestConnectAndPingWithinDeadline(t *testing.T) {
 	t.Parallel()
-	db := sql.OpenDB(lateConnector{})
+	ctx, cancel := context.WithCancel(t.Context())
+	db := sql.OpenDB(lateConnector{cancel: cancel})
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
 			t.Errorf("close: %v", err)
 		}
 	})
-	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	err := connectAndPing(ctx, db, filepath.Join(t.TempDir(), "x.db"))
-	if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "db/sqlite: connect ") {
-		t.Fatalf("connectAndPing with a done ctx = %v, want the connect error", err)
+	path := filepath.Join(t.TempDir(), "x.db")
+	err := connectAndPing(ctx, db, path)
+	if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "db/sqlite: connect "+path+": ") {
+		t.Fatalf("connectAndPing with a done ctx = %v, want the plain connect error", err)
 	}
 }
