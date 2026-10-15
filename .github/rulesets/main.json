@@ -62,6 +62,9 @@
             "context": "Core version skew"
           },
           {
+            "context": "Recovered fault scan"
+          },
+          {
             "context": "Secret scan (gitleaks)"
           },
           {
