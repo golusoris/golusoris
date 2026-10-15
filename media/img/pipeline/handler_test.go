@@ -17,9 +17,9 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/media/img/pipeline"
-	"github.com/golusoris/golusoris/storage"
 )
 
 // stubProcessor returns img.ErrCGORequired for every op (mirrors the no-libvips

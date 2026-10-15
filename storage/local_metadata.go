@@ -20,8 +20,6 @@ import (
 )
 
 const (
-	// DefaultContentType is applied when PutOptions.ContentType is empty.
-	DefaultContentType        = "application/octet-stream"
 	maxLocalAttributeBytes    = 16 * 1024
 	localAttributeSchema      = 2
 	localMetadataPrefix       = ".golusoris-meta-"
