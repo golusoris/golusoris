@@ -158,6 +158,11 @@ packages:
     capabilities: [validate.struct]
     description: "Package validate wraps go-playground/validator with golusoris conventions: errors map to errors.Validation with a structured message describing failed fields by"
     replaces: [github.com/go-playground/validator/v10]
+  - import: github.com/golusoris/golusoris/core/validate/nilcheck
+    module: github.com/golusoris/golusoris/core
+    domain: validate
+    capabilities: [validate.nilcheck]
+    description: "Package nilcheck detects nil values, including typed-nil values in interfaces."
   - import: github.com/golusoris/golusoris/core/version
     module: github.com/golusoris/golusoris/core
     domain: build
