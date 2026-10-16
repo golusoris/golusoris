@@ -47,6 +47,7 @@ leader:
 ## Health
 
 `Gate.Check(name)` registers readiness check:
+
 - Down before `Run` starts or after `Run` returns (`ErrNotRunning`).
 - Down when loop start fails in current term.
 - Down while election failing until retry succeeds.
