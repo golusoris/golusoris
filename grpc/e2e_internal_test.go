@@ -146,6 +146,7 @@ func TestLongRPC_ConnectionAge(t *testing.T) {
 	}{
 		{"age disabled", KeepaliveConfig{MaxConnectionAge: Infinite, MaxConnectionAgeGrace: 200 * time.Millisecond}, codes.OK},
 		{"unlimited grace", KeepaliveConfig{MaxConnectionAge: age, MaxConnectionAgeGrace: Infinite}, codes.OK},
+		{"default grace", KeepaliveConfig{MaxConnectionAge: age}.withDefaults(), codes.OK},
 		{"short age and grace", KeepaliveConfig{MaxConnectionAge: age, MaxConnectionAgeGrace: 200 * time.Millisecond}, codes.Unavailable},
 	}
 	for _, tt := range tests {

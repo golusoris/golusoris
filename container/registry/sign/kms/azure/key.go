@@ -143,10 +143,14 @@ func ecPublicKey(k *azkeys.JSONWebKey) (crypto.PublicKey, error) {
 	}
 	c := curves[*k.Crv]
 	size := (c.Params().BitSize + 7) / 8
-	if len(k.X) != size || len(k.Y) != size {
+	if len(k.X) == 0 || len(k.X) > size || len(k.Y) == 0 || len(k.Y) > size {
 		return nil, fmt.Errorf("curve %s: %d- and %d-byte coordinates, want %d", *k.Crv, len(k.X), len(k.Y), size)
 	}
-	point := append(append([]byte{4}, k.X...), k.Y...)
+	// Minimal big-endian encodings omit leading zeros required by the uncompressed point format.
+	point := make([]byte, 1+2*size)
+	point[0] = 4
+	copy(point[1+size-len(k.X):1+size], k.X)
+	copy(point[1+2*size-len(k.Y):], k.Y)
 	pub, err := ecdsa.ParseUncompressedPublicKey(c, point)
 	if err != nil {
 		return nil, fmt.Errorf("curve %s: %w", *k.Crv, err)
