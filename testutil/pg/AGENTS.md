@@ -6,31 +6,43 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — testutil/pg
 
-Boots real Postgres container via testcontainers-go for tests that need genuine database. Docker is hard requirement (no fake/mock fallback).
+PostgreSQL testcontainers harness. Real database; Docker mandatory; no mock fallback.
 
-## Conventions
+## Contract
 
-- `pg.Start(t)` returns connected `*pgxpool.Pool`. container + pool are torn down via `t.Cleanup`. Each call gets its own container — tests are isolated.
-- For tests that need only DSN (e.g. driving `db/migrate`), use `pg.DSN(t)`.
-- For logical-replication tests (e.g. `db/cdc`), use `pg.StartReplication(t)` — it boots `wal_level=logical` container and returns `(pool, replicationDSN)`; DSN already carries `replication=database`.
-- For TimescaleDB tests, use `pg.StartTimescale(t)` — immutable repository pin + `CREATE EXTENSION` before return.
-- Default PostgreSQL + TimescaleDB references: `internal/testimages` authority.
-- `Options.Image`: exact `tag@sha256:<64 lowercase hex>` required; mutable override fails before Docker access.
-- Every start is bounded by `startTimeout` (3 min, image pull included) — sized for cold-cache CI runners where all container packages pull at once. Keep it scalar constant (HISS-02).
-- Image updates: change `internal/testimages` + `.github/testcontainers-images.txt`; Renovate manager + parity test enforce both copies.
-- Ryuk: immutable repository pin; helper overrides testcontainers default.
-- Every helper takes slot from `testutil/internal/startgate` before booting, so at most 2 containers start at once per test binary; parallel tests beyond that queue instead of timing out.
+- `Start(t)` -> connected `*pgxpool.Pool`. Container + pool teardown via `t.Cleanup`. Fresh container per call; tests isolated.
+- `DSN(t)` -> raw connection string (for `db/migrate`).
+- `StartReplication(t)` -> `(*pgxpool.Pool, replicationDSN)` with `wal_level=logical`.
+- `StartTimescale(t)` -> `*pgxpool.Pool` with `timescaledb` extension enabled.
+- PostgreSQL + TimescaleDB references: immutable `internal/testimages` authority.
+- `Options.Image`: digest-pinned `tag@sha256:<64 lowercase hex>` required.
+- Startup bounded by `startTimeout` (3 min scalar constant, HISS-02).
+- Ryuk: immutable repository pin; `internal/testimages.WithPinnedReaper()`.
+- Concurrency: `testutil/internal/startgate` limits parallel boots to 2 per test binary.
 
-## Key surface
+## Template cloning
 
-| Helper | Returns | Use when |
-| --- | --- | --- |
-| `Start(t, …)` | `*pgxpool.Pool` | plain Postgres |
-| `DSN(t, …)` | `string` | you need the raw connection string |
-| `StartReplication(t, …)` | `(*pgxpool.Pool, string)` | logical replication / CDC |
-| `StartTimescale(t, …)` | `*pgxpool.Pool` | TimescaleDB hypertables |
+One shared container per test binary via `TestMain`:
 
-## Don't
+```go
+func TestMain(m *testing.M) {
+	os.Exit(pg.Main(m, func(ctx context.Context, dsn string) error {
+		// apply migrations to template once
+		return nil
+	}))
+}
 
-- Don't share containers across test files via package-level vars — use TestMain or sync.Once helper if you genuinely need to amortize startup cost.
-- Don't `t.Skip()` when Docker is missing — CI without Docker is CI bug.
+func TestExample(t *testing.T) {
+	pool := pg.Clone(t) // isolated cloned database
+	// ...
+}
+```
+
+- `Main(m, migrate, opts...)`: boots shared container, runs migration once against template database, terminates at exit.
+- `Clone(t)`: creates fresh database via `CREATE DATABASE ... TEMPLATE template`, returns connected `*pgxpool.Pool`. Drops clone via `t.Cleanup`.
+- `CloneDSN(t)`: same cloning lifecycle; returns connection string.
+
+## Restrictions
+
+- Never share containers across test files via package-level vars; use `Main` + `Clone` to amortize startup cost.
+- Never call `t.Skip()` when Docker missing; CI without Docker signals defect.
