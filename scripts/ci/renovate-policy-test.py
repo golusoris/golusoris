@@ -387,6 +387,76 @@ def test_localstack_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def trainer_python_cap_valid(config: dict[str, object]) -> bool:
+    """Require the Python cap for both TensorFlow trainer base images."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    caps = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["docker"]
+        and rule.get("matchFileNames") == [
+            "ai/tiny/trainers/gemma/**",
+            "ai/tiny/trainers/litert/**",
+        ]
+        and rule.get("matchPackageNames") == ["python"]
+        and rule.get("allowedVersions") == "<3.14"
+    ]
+    return len(caps) == 1
+
+
+def test_trainer_python_cap(config: dict[str, object]) -> bool:
+    """Report a missing trainer Python cap and prove its removal is refused."""
+    if not trainer_python_cap_valid(config):
+        print("renovate.json must hold both trainer Python bases below 3.14", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
+    ]
+    if trainer_python_cap_valid(mutated):
+        print("trainer Python cap negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def chromedp_group_valid(config: dict[str, object]) -> bool:
+    """Require chromedp and cdproto in one reviewed update group."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    groups = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["go"]
+        and rule.get("matchPackageNames") == [
+            "github.com/chromedp/chromedp",
+            "github.com/chromedp/cdproto",
+        ]
+        and rule.get("groupName") == "chromedp"
+        and rule.get("automerge") is False
+    ]
+    return len(groups) == 1
+
+
+def test_chromedp_group(config: dict[str, object]) -> bool:
+    """Report a missing chromedp group and prove its removal is refused."""
+    if not chromedp_group_valid(config):
+        print("renovate.json must group chromedp and cdproto with automerge off", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("groupName") != "chromedp"
+    ]
+    if chromedp_group_valid(mutated):
+        print("chromedp group negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
 def test_pin_inventory(found: list[dict[str, str]]) -> bool:
     """Require the exact declared nonstandard dependency inventory."""
     actual = identities(found)
@@ -618,6 +688,8 @@ def main() -> int:
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
+        test_trainer_python_cap(config),
+        test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
     )
