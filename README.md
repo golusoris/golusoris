@@ -304,6 +304,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `ai/tiny/` | bounded trainer/predictor contracts, registries, and container runner | custom + pgx |
 | `ai/tiny/gemma/` `ai/tiny/litert/` | digest-pinned Gemma LoRA and MobileNet V2 classifier trainer orchestration | containerized KerasHub / TensorFlow |
 | `ai/tiny/serve/` | Ollama + distributed fleet adapters; LiteRT sidecar client/protocol ([runtime #564](https://github.com/golusoris/golusoris/issues/564)) | HTTP + river |
+| `ai/tpe/` | Tree-structured Parzen Estimator for hyperparameter search | custom |
 
 ### Commerce
 
