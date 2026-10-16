@@ -38,7 +38,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}"
+          bash scripts/ci/install-gosec.sh
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
           scripts/ci/go-modules.sh verify
