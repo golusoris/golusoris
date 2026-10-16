@@ -37,7 +37,9 @@ System libraries the cgo modules link are installed by
 `scripts/ci/install-cgo-libs.sh`. The reusable `ci-go.yml` and
 `release-go.yml` default to `ubuntu-24.04` and install declared system
 packages instead of only verifying them (input `install-system-packages`).
-The live ruleset requires `Test (race + coverage) (ubuntu-24.04, module)`.
+The live ruleset requires `Test (race + coverage) (module)`. The check
+name carries no runner label, so an image bump does not rename a
+required check (#815).
 
 ## Alternatives considered
 

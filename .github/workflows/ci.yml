@@ -214,10 +214,12 @@ jobs:
   # Docker-backed integration tests through its native Docker daemon.
   # go.mod is the single source of truth for the exact Go toolchain. The
   # descriptive matrix axis keeps the primary-leg metadata explicit without a
-  # mutable `stable` selector. Keep both values in the explicit name: GitHub
+  # mutable `stable` selector. Keep the toolchain in the explicit name: GitHub
   # suffixes a plain matrix name, while praetor can only render named values.
+  # Leave the runner label out: it is a required check, and an image bump
+  # must not rename it (#815).
   test:
-    name: Test (race + coverage) (${{ matrix.os }}, ${{ matrix.toolchain }})
+    name: Test (race + coverage) (${{ matrix.toolchain }})
     needs: build
     runs-on: ${{ matrix.os }}
     # 30: the Docker-backed suite took 13.5 min on a cold self-hosted runner
