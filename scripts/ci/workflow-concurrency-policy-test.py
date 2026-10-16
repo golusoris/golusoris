@@ -69,26 +69,26 @@ def _events(blocks: dict[str, tuple[str, list[str]]]) -> set[str]:
     return events
 
 
-def check(name: str, text: str, today: datetime.date) -> list[str]:
-    """Return the policy findings for one workflow file."""
-    blocks = _top_blocks(text)
-    events = _events(blocks)
-    if not events.intersection(PR_EVENTS):
-        return []
-    if name in EXCEPTIONS:
-        reason, expiry = EXCEPTIONS[name]
-        if today > datetime.date.fromisoformat(expiry):
-            return [f"{name}: exception expired {expiry} ({reason})"]
-        return []
-    if "concurrency" not in blocks:
-        return [f"{name}: pull-request workflow has no top-level concurrency group"]
+def _exception_findings(name: str, today: datetime.date) -> list[str] | None:
+    if name not in EXCEPTIONS:
+        return None
+    reason, expiry = EXCEPTIONS[name]
+    if today > datetime.date.fromisoformat(expiry):
+        return [f"{name}: exception expired {expiry} ({reason})"]
+    return []
+
+
+def _concurrency_fields(lines: list[str]) -> dict[str, str]:
     fields: dict[str, str] = {}
-    for line in blocks["concurrency"][1]:
+    for line in lines:
         match = _CHILD_KEY.match(line)
         if match:
             fields[match.group("key")] = match.group("rest").strip()
+    return fields
+
+
+def _group_findings(name: str, group: str, events: set[str]) -> list[str]:
     findings: list[str] = []
-    group = fields.get("group", "")
     if group.startswith("${{") and "github.workflow" not in group:
         findings.append(
             f"{name}: concurrency group has neither github.workflow nor a literal prefix",
@@ -101,13 +101,34 @@ def check(name: str, text: str, today: datetime.date) -> list[str]:
             )
     elif "github.ref" not in group and "github.event.pull_request.number" not in group:
         findings.append(f"{name}: concurrency group is not keyed by PR number or ref")
-    cancel = fields.get("cancel-in-progress", "")
+    return findings
+
+
+def _cancel_findings(name: str, cancel: str) -> list[str]:
+    findings: list[str] = []
     if "github.event_name" not in cancel:
         findings.append(
             f"{name}: cancel-in-progress must be scoped to pull-request events, "
             f"got {cancel or 'nothing'}",
         )
     return findings
+
+
+def check(name: str, text: str, today: datetime.date) -> list[str]:
+    """Return the policy findings for one workflow file."""
+    blocks = _top_blocks(text)
+    events = _events(blocks)
+    if not events.intersection(PR_EVENTS):
+        return []
+    exceptions = _exception_findings(name, today)
+    if exceptions is not None:
+        return exceptions
+    if "concurrency" not in blocks:
+        return [f"{name}: pull-request workflow has no top-level concurrency group"]
+    fields = _concurrency_fields(blocks["concurrency"][1])
+    return _group_findings(name, fields.get("group", ""), events) + _cancel_findings(
+        name, fields.get("cancel-in-progress", "")
+    )
 
 
 def scan(root: Path, today: datetime.date) -> list[str]:
