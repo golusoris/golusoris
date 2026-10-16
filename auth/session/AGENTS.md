@@ -39,6 +39,15 @@ if err := mgr.Destroy(w, r); err != nil {
 }
 ```
 
+### Renew after sign-in
+
+```go
+if err := mgr.Renew(r.Context(), w, sess); err != nil {
+    http.Error(w, "session", http.StatusInternalServerError)
+    return
+}
+```
+
 ## Store contract
 
 Implement `session.Store` with context-aware `Load / Save / Delete`.
