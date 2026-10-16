@@ -46,10 +46,8 @@ scaffold_app() {
 	)
 	app_dir="$work/smokeapp"
 	test -s "$app_dir/go.mod"
-	test -s "$app_dir/main.go"
-	# Until #876: tools/Dockerfile.template compiles ./cmd/app while golusoris init writes main.go at module root.
-	mkdir -p "$app_dir/cmd/app"
-	mv "$app_dir/main.go" "$app_dir/cmd/app/main.go"
+	test -s "$app_dir/cmd/app/main.go"
+	test ! -e "$app_dir/main.go"
 	(
 		cd "$app_dir"
 		export GOWORK=off
