@@ -155,7 +155,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `auth/oidc/` | OIDC + PKCE + session storage | coreos/go-oidc/v3 |
+| `auth/oidc/` | OIDC + PKCE + nonce + session storage | coreos/go-oidc/v3 |
 | `auth/passkeys/` | WebAuthn + TOTP (MFA) | go-webauthn/webauthn + pquerna/otp |
 | `auth/jwt/` | HMAC JWT issuance, expiry, and validation | golang-jwt/jwt/v5 |
 | `auth/apikey/` | HMAC API key issuance, verification, and scopes | custom |
