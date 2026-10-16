@@ -472,13 +472,11 @@ func TestPredictor_Concurrency(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			got, err := p.Predict(context.Background(), []float64{1.0, 2.0})
 			require.NoError(t, err)
 			require.InDelta(t, 42.0, got.Value, 1e-6)
-		}()
+		})
 	}
 	wg.Wait()
 }

@@ -259,7 +259,9 @@ func marshalInput(input any) ([]byte, error) {
 	}
 }
 
-func marshalFloats[T ~float32 | ~float64](in []T) ([]byte, error) {
+type floatValue interface{ ~float32 | ~float64 }
+
+func marshalFloats[T floatValue](in []T) ([]byte, error) {
 	if len(in) > MaxInputLength {
 		return nil, fmt.Errorf("ai/tiny/serve/onnx: input length %d exceeds maximum %d", len(in), MaxInputLength)
 	}
@@ -277,8 +279,7 @@ func explainExitError(ctx context.Context, runErr error, stderr string) error {
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return fmt.Errorf("ai/tiny/serve/onnx: runner canceled: %w (run err: %w)", ctxErr, runErr)
 	}
-	var exitErr *exec.ExitError
-	if errors.As(runErr, &exitErr) {
+	if exitErr, ok := errors.AsType[*exec.ExitError](runErr); ok {
 		msg := strings.TrimSpace(stderr)
 		switch exitErr.ExitCode() {
 		case 1:
