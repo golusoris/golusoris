@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.66.4
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.11.0
 	github.com/google/go-containerregistry v0.22.1
 	go.uber.org/fx v1.24.0
 	golang.org/x/oauth2 v0.37.0
