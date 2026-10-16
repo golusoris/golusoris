@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/golusoris/golusoris v0.16.5
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.10.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.72.1
