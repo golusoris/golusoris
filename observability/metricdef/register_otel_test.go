@@ -134,7 +134,7 @@ func assertOTelRoundTrip(t *testing.T, reg *prometheus.Registry, defs []metricde
 		var text bytes.Buffer
 		_, err = expfmt.MetricFamilyToText(&text, family)
 		mustOK(t, err)
-		for _, line := range strings.Split(text.String(), "\n") {
+		for line := range strings.SplitSeq(text.String(), "\n") {
 			if line == "" || strings.HasPrefix(line, "#") {
 				continue
 			}
