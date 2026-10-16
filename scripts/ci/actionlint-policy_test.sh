@@ -102,6 +102,32 @@ if contexts.count("Scorecard Analysis") != 1:
 PY
 }
 
+check_required_contexts_label_free() {
+	local ruleset="$1"
+	python3 - "$ruleset" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+ruleset = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+rules = ruleset.get("rules", [])
+if len(rules) > 128:
+    raise SystemExit("required context scan exceeds 128 rules")
+runner_label = re.compile(r"(?:ubuntu|macos|windows)-(?:[0-9]+(?:\.[0-9]+)?|latest)")
+for rule in rules:
+    if rule.get("type") != "required_status_checks":
+        continue
+    checks = rule.get("parameters", {}).get("required_status_checks", [])
+    if len(checks) > 512:
+        raise SystemExit("required context scan exceeds 512 checks per rule")
+    for check in checks:
+        context = check["context"]
+        if runner_label.search(context):
+            raise SystemExit(f"required context contains runner label: {context}")
+PY
+}
+
 check_workflow_job_timeouts() {
 	local root="$1"
 	python3 - "$root" <<'PY'
@@ -436,6 +462,24 @@ expect_failure 'must only expose workflow_call inputs' \
 
 check_scorecard_policy_contract "$repo_root/.github/workflows/scorecard.yml" \
 	"$repo_root/.github/rulesets/main.json"
+
+check_required_contexts_label_free "$repo_root/.github/rulesets/main.json"
+required_label_negative="$suite_root/ruleset-runner-label.json"
+python3 - "$repo_root/.github/rulesets/main.json" "$required_label_negative" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = '"context": "Test (race + coverage) (module)"'
+if source.count(marker) != 1:
+    raise SystemExit("required context runner-label mutation requires exactly one marker")
+pathlib.Path(sys.argv[2]).write_text(
+    source.replace(marker, '"context": "Test (race + coverage) (ubuntu-24.04, module)"', 1),
+    encoding="utf-8",
+)
+PY
+expect_failure 'required context contains runner label' \
+	check_required_contexts_label_free "$required_label_negative"
 
 scorecard_pr_negative="$suite_root/scorecard-no-pr.yml"
 python3 - "$repo_root/.github/workflows/scorecard.yml" "$scorecard_pr_negative" <<'PY'
