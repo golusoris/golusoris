@@ -243,6 +243,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `notify/tracking/` | signed open-pixel and click tracking handlers | custom |
 | `notify/unsub/` | RFC 8058 one-click unsubscribe + suppression list | custom |
 | `notify/bounce/` | SES / Postmark bounce + complaint webhook handlers | custom |
+| `notify/channel/` | generic channel dispatch + secret redaction | custom |
 | `realtime/sse/` | Server-Sent Events hub | r3labs/sse |
 | `realtime/pubsub/` | synchronous local pub/sub bus plus Redis adapter | custom + rueidis |
 | `realtime/webrtc/` | bounded Pion offer/answer signaling + data-channel hooks | pion/webrtc |

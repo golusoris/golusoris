@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # Agent guide — notify/
 
 Unified notification dispatcher. `Notifier` holds list of `Sender`
-implementations and tries them in order (first success wins) or fans
+implementations; tries each in order (first success wins) or fans
 out to all via `Multi`.
 
 ## Usage
@@ -34,6 +34,7 @@ err := n.Send(ctx, notify.Message{
 | `postmark.Sender` | `postmark.NewSender(opts)`   | Postmark transactional email (HTTP)  |
 | `slack.Sender`    | `slack.NewSender(opts)`      | Slack incoming webhook               |
 | `discord.Sender`  | `discord.NewSender(opts)`    | Discord incoming webhook             |
+| `channel.Sender`  | `channel.Sender(kind, cfg)`  | Unified multi-channel factory        |
 
 More senders (Mailgun, SendGrid, Twilio, FCM, APNs, web-push, Telegram,
 Teams, Gotify, ntfy) ship as additional `notify/<provider>` subpackages.
@@ -53,6 +54,6 @@ if suppressed, _ := unsubSvc.IsSuppressed(ctx, email); suppressed {
 
 ## Don't
 
-- Don't use `Send` for transactional fan-out — use `Multi` instead.
-- Don't build HTML directly in Sender — templates live in app,
+- Transactional fan-out: `Multi`, never `Send`.
+- Never build HTML directly in Sender — templates live in app,
  senders receive rendered string.
