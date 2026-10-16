@@ -10,7 +10,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly root
 readonly catalogue="$root/docs/upstream/README.md"
 readonly max_rows=64
-readonly command_timeout=60s
+readonly command_timeout="${UPSTREAM_PINS_COMMAND_TIMEOUT:-60s}"
 
 # shellcheck source=/dev/null
 . "$root/tools/tool-versions.env"
@@ -22,6 +22,16 @@ declare -A seen_snapshots=()
 
 record_failure() {
   failures+=("$1")
+}
+
+# timeout exits 124 without naming what it stopped; say which command ran out of time.
+bounded() {
+  local rc=0
+  timeout "$command_timeout" "$@" || rc=$?
+  if ((rc == 124)); then
+    printf 'upstream pin verification: timed out after %s: %s\n' "$command_timeout" "$*" >&2
+  fi
+  return "$rc"
 }
 
 module_version() {
@@ -90,8 +100,8 @@ check_sqlc() {
     record_failure "$module: SQLC_BIN is not executable: $binary"
     return
   fi
-  binary_package="$(timeout "$command_timeout" go version -m "$binary" | awk '$1 == "path" { print $2; exit }')"
-  actual="$(timeout "$command_timeout" go version -m "$binary" | awk -v module="$module" '$1 == "mod" && $2 == module { print $3; exit }')"
+  binary_package="$(bounded go version -m "$binary" | awk '$1 == "path" { print $2; exit }')"
+  actual="$(bounded go version -m "$binary" | awk -v module="$module" '$1 == "mod" && $2 == module { print $3; exit }')"
   if [[ "$binary_package" != "$module/cmd/sqlc" ]]; then
     record_failure "$module: installed binary package is ${binary_package:-unknown}"
   fi
@@ -133,9 +143,9 @@ check_go() {
 
   root_go="go$(awk '$1 == "go" { print $2; exit }' "$root/go.mod")"
   core_go="go$(awk '$1 == "go" { print $2; exit }' "$root/core/go.mod")"
-  goroot="$(timeout "$command_timeout" go env GOROOT)"
+  goroot="$(bounded go env GOROOT)"
   IFS= read -r source_go < "$goroot/VERSION"
-  runtime_go="$(timeout "$command_timeout" go env GOVERSION)"
+  runtime_go="$(bounded go env GOVERSION)"
 
   [[ "$root_go" == "$expected" ]] || record_failure "log/slog: catalogue $expected, root go.mod $root_go"
   [[ "$core_go" == "$expected" ]] || record_failure "log/slog: catalogue $expected, core/go.mod $core_go"
@@ -176,9 +186,9 @@ if (( row_count > max_rows )); then
   exit 1
 fi
 
-root_graph="$(timeout "$command_timeout" go -C "$root" list -mod=readonly -m -f $'{{.Path}}\t{{.Version}}' all)"
+root_graph="$(bounded go -C "$root" list -mod=readonly -m -f $'{{.Path}}\t{{.Version}}' all)"
 readonly root_graph
-core_graph="$(timeout "$command_timeout" go -C "$root/core" list -mod=readonly -m -f $'{{.Path}}\t{{.Version}}' all)"
+core_graph="$(bounded go -C "$root/core" list -mod=readonly -m -f $'{{.Path}}\t{{.Version}}' all)"
 readonly core_graph
 
 for ((row_index = 0; row_index < row_count && row_index < max_rows; row_index++)); do

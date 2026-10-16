@@ -1140,6 +1140,49 @@ jobs:
       - name: REUSE lint from immutable tooling
         run: bash scripts/ci/reuse-lint.sh
 
+  # ── Scaffolded app image smoke (amd64 + arm64) ───────────────────────────────
+  app-image-smoke:
+    name: App image smoke (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Verify Docker daemon
+        run: docker info
+      - name: Build and smoke scaffolded app image
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: bash scripts/ci/app-image-smoke.sh "$PLATFORM"
+
   # ── Aggregate gate ───────────────────────────────────────────────────────────
   # Single "green only if every gating job passed" check used by classic branch
   # protection and release verification. Current praetor excludes `if: always()`
@@ -1175,6 +1218,7 @@ jobs:
       - attribution
       - reuse
       - apidiff
+      - app-image-smoke
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -1219,6 +1263,7 @@ jobs:
           ATTRIBUTION: ${{ needs.attribution.result }}
           REUSE: ${{ needs.reuse.result }}
           APIDIFF: ${{ needs.apidiff.result }}
+          APP_IMAGE_SMOKE: ${{ needs.app-image-smoke.result }}
           EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
         run: |

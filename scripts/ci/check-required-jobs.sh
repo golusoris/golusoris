@@ -48,6 +48,7 @@ main() {
 	require_success gitleaks "${GITLEAKS:?}"
 	require_success reuse "${REUSE:?}"
 	require_success apidiff "${APIDIFF:?}"
+	require_success app-image-smoke "${APP_IMAGE_SMOKE:?}"
 
 	local is_pr=false
 	[[ "${EVENT_NAME:?}" == pull_request ]] && is_pr=true
