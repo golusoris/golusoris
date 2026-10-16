@@ -423,6 +423,8 @@ jobs:
           . tools/tool-versions.env
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           bash scripts/ci/helm-chart_test.sh
+      - name: Restore a chart backup into a fresh database
+        run: bash scripts/ci/helm-backup-restore_test.sh
       - name: Verify all module dependencies before caching
         run: scripts/ci/go-modules.sh verify
       - name: Build and vet primary modules

@@ -738,6 +738,47 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
+    """Require Renovate ownership and digest pins for the backup-restore Dockerfile."""
+    manager = config.get("dockerfile")
+    if not isinstance(manager, dict):
+        print("Renovate lacks dockerfile manager", file=sys.stderr)
+        return False
+    patterns = manager.get("managerFilePatterns")
+    if not isinstance(patterns, list):
+        print("Renovate dockerfile manager lacks managerFilePatterns", file=sys.stderr)
+        return False
+    target = "scripts/ci/backup-restore.Dockerfile"
+    if not any(matches_file(str(pattern), target) for pattern in patterns):
+        print(f"Renovate dockerfile manager does not own {target}", file=sys.stderr)
+        return False
+
+    dockerfile = ROOT / target
+    if not dockerfile.is_file():
+        print(f"missing Dockerfile: {target}", file=sys.stderr)
+        return False
+
+    from_pattern = re.compile(
+        r"^FROM\s+[a-zA-Z0-9_./-]+:[a-zA-Z0-9_.-]+@sha256:[a-f0-9]{64}(?:\s+[Aa][Ss]\s+\S+)?$"
+    )
+    from_lines = [
+        line.strip()
+        for line in dockerfile.read_text(encoding="utf-8").splitlines()
+        if re.match(r"\s*FROM\b", line, re.IGNORECASE)
+    ]
+    if not from_lines:
+        print(f"{target} contains no FROM instructions", file=sys.stderr)
+        return False
+    for line in from_lines:
+        if not from_pattern.fullmatch(line):
+            print(
+                f"{target} line does not match name:tag@sha256:<64 hex>: {line}",
+                file=sys.stderr,
+            )
+            return False
+    return True
+
+
 def main() -> int:
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
@@ -757,6 +798,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_backup_restore_dockerfile(config),
     )
     if not all(checks):
         return 1
