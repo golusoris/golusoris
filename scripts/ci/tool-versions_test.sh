@@ -149,6 +149,19 @@ if grep -En 'go install [^[:space:]]+@v[0-9]' "${direct_workflows[@]}"; then
 	printf 'direct workflow bypasses tools/tool-versions.env\n' >&2
 	exit 1
 fi
+for workflow in "${direct_workflows[@]}"; do
+	if ! grep -Fq 'scripts/ci/install-gosec.sh' "$workflow"; then
+		printf 'direct workflow bypasses scripts/ci/install-gosec.sh: %s\n' "$workflow" >&2
+		exit 1
+	fi
+done
+for workflow in "$repo_root"/.github/workflows/*.yml "$repo_root"/.gitea/workflows/*.yml; do
+	if grep -En 'go install [^[:space:]]*gosec@' "$workflow"; then
+		printf 'workflow runs raw go install for gosec instead of scripts/ci/install-gosec.sh: %s\n' \
+			"$workflow" >&2
+		exit 1
+	fi
+done
 
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
 cosign_version_guard="cosign version | grep -Eq '$cosign_version_pattern'"
