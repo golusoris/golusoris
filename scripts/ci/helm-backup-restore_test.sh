@@ -29,6 +29,7 @@ readonly helm_bin
 
 work="$(mktemp -d)"
 readonly work
+chmod 0755 "$work"
 net="golusoris-backup-restore-$$"
 readonly net
 

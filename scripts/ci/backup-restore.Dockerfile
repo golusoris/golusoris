@@ -6,4 +6,9 @@ FROM amazon/aws-cli:2.37.12@sha256:ce44b800602264c12298bbf3399055a4cefdb9ed4a098
 FROM postgres:18.6-trixie@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336
 COPY --from=yq /usr/bin/yq /usr/local/bin/yq
 COPY --from=aws /usr/local/aws-cli /usr/local/aws-cli
-RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws
+RUN ln -s /usr/local/aws-cli/v2/current/bin/aws /usr/local/bin/aws \
+    && groupadd --gid 65532 nonroot \
+    && useradd --no-log-init --uid 65532 --gid 65532 -d /home/nonroot -m nonroot \
+    && chown -R 65532:65532 /var/lib/postgresql /var/run/postgresql
+
+USER 65532:65532
