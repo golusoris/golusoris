@@ -5,74 +5,17 @@
 package gcp_test
 
 import (
-	"context"
 	"crypto"
-	"errors"
 	"net/http"
-	"net/http/httptest"
-	"net/url"
 	"testing"
-	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/name"
-	regsrv "github.com/google/go-containerregistry/pkg/registry"
-	"github.com/google/go-containerregistry/pkg/v1/random"
-	"github.com/google/go-containerregistry/pkg/v1/remote"
-
-	"github.com/golusoris/golusoris/container/registry"
 	"github.com/golusoris/golusoris/container/registry/sign"
+	"github.com/golusoris/golusoris/container/registry/sign/signtest"
 )
 
-// imageRoundTrip pushes a random image to an in-process registry, signs it
-// with s through sign.Image and verifies it through sign.Verify with s's
-// public key, as `cosign verify --key --insecure-ignore-tlog` would.
-func imageRoundTrip(t *testing.T, s crypto.Signer) {
+func imageRoundTrip(t *testing.T, signer crypto.Signer) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-	defer cancel()
-	srv := httptest.NewServer(regsrv.New())
-	t.Cleanup(srv.Close)
-	u, err := url.Parse(srv.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Private transport: httptest.Server.Close resets http.DefaultTransport.
-	rt := http.DefaultTransport.(*http.Transport).Clone()
-	t.Cleanup(rt.CloseIdleConnections)
-	ref := seedImage(t, u.Host, rt)
-	c := registry.New(registry.Options{}, authn.NewMultiKeychain(), rt)
-	if _, serr := sign.Image(ctx, c, ref, sign.Signer{Key: s}, sign.Options{}); serr != nil {
-		t.Fatalf("sign.Image: %v", serr)
-	}
-	sigs, err := sign.Verify(ctx, c, ref, sign.Policy{Key: s.Public(), InsecureIgnoreTlog: true})
-	if err != nil || len(sigs) != 1 {
-		t.Fatalf("sign.Verify = %d signatures, %v; want 1", len(sigs), err)
-	}
-	other := genKey(t, "EC_SIGN_P256_SHA256").Public()
-	if _, err := sign.Verify(ctx, c, ref, sign.Policy{Key: other, InsecureIgnoreTlog: true}); !errors.Is(err, sign.ErrNoValidSignature) {
-		t.Fatalf("sign.Verify with a foreign key = %v, want ErrNoValidSignature", err)
-	}
-}
-
-func seedImage(t *testing.T, host string, rt http.RoundTripper) string {
-	t.Helper()
-	tag, err := name.NewTag(host + "/app:v1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	img, err := random.Image(64, 1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if werr := remote.Write(tag, img, remote.WithTransport(rt), remote.WithContext(t.Context())); werr != nil {
-		t.Fatalf("seed image: %v", werr)
-	}
-	h, err := img.Digest()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return host + "/app@" + h.String()
+	signtest.RoundTrip(t, signer, genKey(t, "EC_SIGN_P256_SHA256").Public())
 }
 
 func TestImage_RoundTripFake(t *testing.T) {
@@ -111,17 +54,8 @@ func TestImage_Fails(t *testing.T) {
 					}
 				})
 			}
-			srv := httptest.NewServer(regsrv.New())
-			t.Cleanup(srv.Close)
-			u, err := url.Parse(srv.URL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			rt := http.DefaultTransport.(*http.Transport).Clone()
-			t.Cleanup(rt.CloseIdleConnections)
-			ref := seedImage(t, u.Host, rt)
-			c := registry.New(registry.Options{}, authn.NewMultiKeychain(), rt)
-			if _, err := sign.Image(t.Context(), c, ref, sign.Signer{Key: s}, sign.Options{}); err == nil {
+			ctx, c, ref := signtest.NewRegistryImage(t)
+			if _, err := sign.Image(ctx, c, ref, sign.Signer{Key: s}, sign.Options{}); err == nil {
 				t.Fatal("sign.Image succeeded")
 			}
 		})

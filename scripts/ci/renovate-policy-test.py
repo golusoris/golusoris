@@ -22,6 +22,7 @@ INPUTS = (
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
     "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+    "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
     "scripts/ci/tiny-trainer-locks.sh",
@@ -82,6 +83,8 @@ EXPECTED = {
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "localstack/localstack", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "testcontainers/ryuk", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "nagyesta/lowkey-vault", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "testcontainers/ryuk", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -170,6 +173,7 @@ EXPECTED_DIGESTS = {
     "hashicorp/vault",
     "openbao/openbao",
     "localstack/localstack",
+    "nagyesta/lowkey-vault",
     "mcr.microsoft.com/devcontainers/go",
 }
 
