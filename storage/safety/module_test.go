@@ -7,8 +7,6 @@ package safety_test
 import (
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -17,16 +15,8 @@ import (
 
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/storage/safety"
+	"github.com/golusoris/golusoris/testutil/configfile"
 )
-
-func writeConfig(t *testing.T, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return path
-}
 
 // bootSafety boots the safety Module against cfg and populates the provided
 // Stripper + Fetcher.
@@ -82,7 +72,7 @@ func TestModule_LoadsConfigOverrides(t *testing.T) {
 		"      max_bytes: 100\n" +
 		"    strip:\n" +
 		"      jpeg_quality: 60\n"
-	cfg, err := config.New(config.Options{Files: []string{writeConfig(t, body)}})
+	cfg, err := config.New(config.Options{Files: []string{configfile.Write(t, body)}})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
 	}
@@ -103,7 +93,7 @@ func TestModule_BadConfigFailsStart(t *testing.T) {
 		"  safety:\n" +
 		"    fetch:\n" +
 		"      max_bytes: not-a-number\n"
-	cfg, err := config.New(config.Options{Files: []string{writeConfig(t, body)}})
+	cfg, err := config.New(config.Options{Files: []string{configfile.Write(t, body)}})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
 	}
