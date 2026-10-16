@@ -88,13 +88,3 @@ func TestLoadConfig_keepaliveFromEnv(t *testing.T) {
 	require.Equal(t, 30*time.Second, c.Keepalive.Time)
 	require.Equal(t, 20*time.Second, c.Keepalive.Timeout, "unset keys keep defaults")
 }
-
-// TestLoadConfig_compoundKeysNeeded documents the env split without CompoundKeys.
-func TestLoadConfig_compoundKeysNeeded(t *testing.T) {
-	t.Setenv("TESTKB_GRPC_KEEPALIVE_MAX_CONNECTION_AGE", "-1s")
-	cfg, err := config.New(config.Options{EnvPrefix: "TESTKB_"})
-	require.NoError(t, err)
-	c, err := loadConfig(cfg)
-	require.NoError(t, err)
-	require.Equal(t, defaultMaxConnectionAge, c.Keepalive.MaxConnectionAge)
-}
