@@ -5,10 +5,13 @@
 package watch_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/fs/watch"
 )
@@ -123,7 +126,8 @@ func TestWatcher_debounce(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := watch.New(watch.Options{Debounce: 100 * time.Millisecond})
+	const debounce = 1 * time.Second
+	w, err := watch.New(watch.Options{Debounce: debounce})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,27 +137,51 @@ func TestWatcher_debounce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Write 5 files rapidly — should produce at most 2 events (debounced).
-	for i := range 5 {
-		path := filepath.Join(dir, filepath.FromSlash("f"+string(rune('0'+i))+".txt"))
-		_ = os.WriteFile(path, []byte("x"), 0o640)
+	// The debounce is trailing (each event restarts the timer), so one event
+	// needs every gap between writes inside the window, not the whole burst.
+	if gap := writeBurst(t, dir, 5); gap >= debounce {
+		t.Fatalf("gap between writes %v reached debounce window %v", gap, debounce)
 	}
 
-	// maxEvents bounds the drain loop; the timeout normally ends it first.
+	// Drain events up to a bounded timeout scaled to debounce.
 	const maxEvents = 100
 	var eventCount int
-	timeout := time.After(500 * time.Millisecond)
+	drainTimeout := debounce + 2*time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+	defer cancel()
 loop:
 	for range maxEvents {
 		select {
 		case <-w.Events():
 			eventCount++
-		case <-timeout:
+		case <-ctx.Done():
 			break loop
 		}
 	}
-	// Debounce collapses bursts; expect far fewer events than files.
-	if eventCount > 3 {
-		t.Fatalf("debounce failed: got %d events for 5 rapid writes", eventCount)
+	// Debounce collapses rapid bursts into exactly 1 event.
+	if eventCount != 1 {
+		t.Fatalf("debounce failed: got %d events for 5 rapid writes, want 1", eventCount)
 	}
+}
+
+// writeBurst writes n files into dir and returns the largest gap between
+// the starts of consecutive writes.
+func writeBurst(t *testing.T, dir string, n int) time.Duration {
+	t.Helper()
+	clk := clockwork.NewRealClock()
+	var largest time.Duration
+	prev := clk.Now()
+	for i := range n {
+		path := filepath.Join(dir, filepath.FromSlash("f"+string(rune('0'+i))+".txt"))
+		start := clk.Now()
+		if gap := start.Sub(prev); gap > largest {
+			largest = gap
+		}
+		prev = start
+		if err := os.WriteFile(path, []byte("x"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		t.Logf("write %d took %v", i, clk.Since(start))
+	}
+	return largest
 }

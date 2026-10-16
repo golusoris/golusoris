@@ -105,6 +105,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
 | `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
 | `core/tlsx/` | file-backed TLS: cert/key/CA reloaded lazily on handshake or loaded once into a client config, client-auth policy parsing; `tlsxtest/` issues throwaway test certificates | stdlib |
+| `core/storage/` | backend-neutral object storage contracts: `Bucket`, `Object`, key cleaning, bounded listing and `Walk`, presign and checksum validation; backends implement them without the root module graph | golang.org/x/net (httpguts) |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data
@@ -351,6 +352,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `container/registry/sign/` | in-process Sigstore signing and verification by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts; `Verify` checks those and cosign v3 bundles against a key or certificate identity, tlog / TSA / SCT policy and annotations; `ImageLayout` / `VerifyLayout` do the same inside an OCI image layout offline; GitHub Actions and projected service-account ID token sources | sigstore/sigstore-go |
+| `container/registry/sign/signtest/` | shared in-process registry and seeded image setup for KMS signing tests | go-containerregistry |
 | `container/registry/sign/kms/vault/` | `crypto.Signer` over a HashiCorp Vault or OpenBao transit key (ECDSA, RSA, Ed25519) for `sign.Image`; token or Kubernetes / JWT service-account login with re-login on expiry; per-call timeout; key version pinned | stdlib `net/http` (no Vault SDK) |
 | `container/registry/sign/kms/aws/` | `crypto.Signer` over an AWS KMS asymmetric key (ECDSA, RSA, Ed25519) for `sign.Image`; default credential chain incl. IRSA and EKS Pod Identity; key ARN pinned behind aliases; per-call timeout | aws-sdk-go-v2 service/kms + config |
 | `container/registry/sign/kms/gcp/` | `crypto.Signer` over a Cloud KMS key version (ECDSA, RSA, Ed25519) for `sign.Image`; Application Default Credentials incl. GKE Workload Identity and workload identity federation; CRC32C-checked requests and answers; per-request timeout | stdlib `net/http` + golang.org/x/oauth2 (no Cloud KMS SDK) |
@@ -396,6 +398,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
 | `junit/` | JUnit XML report writer for CI gates — suites, pass/fail/error/skip, properties, XML-illegal characters escaped; validates against junit-10.xsd | stdlib |
 | `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
+| `testutil/configfile/` | private temporary config file writer for tests | stdlib |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
 | `testutil/prop/` | property-based testing (own go.mod) | leanovate/gopter |

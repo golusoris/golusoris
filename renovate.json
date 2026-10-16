@@ -1,16 +1,14 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
+    "github>plurano/horistes",
     "helpers:pinGitHubActionDigests",
-    ":dependencyDashboard",
     ":semanticCommits"
   ],
   "labels": [
     "dependencies"
   ],
   "prConcurrentLimit": 5,
-  "minimumReleaseAge": "3 days",
   "gomod": {
     "enabled": true
   },
@@ -232,6 +230,7 @@
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
+        "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
         "/^\\.github/testcontainers-images\\.txt$/"
       ],
       "matchStrings": [
@@ -443,19 +442,6 @@
       "enabled": false
     },
     {
-      "description": "Hold the hosted runner image at ubuntu 24.04: the branch rule set requires the check named \"Test (race + coverage) (ubuntu-24.04, module)\", so a new label stops every merge until the check name no longer carries it (#815). Expires 2027-01-09.",
-      "matchManagers": [
-        "github-actions"
-      ],
-      "matchDepTypes": [
-        "github-runner"
-      ],
-      "matchPackageNames": [
-        "ubuntu"
-      ],
-      "allowedVersions": "/^24\\.04$/"
-    },
-    {
       "description": "LocalStack 2026.03 and later start only with an auth token; the KMS signer tests stay on the last tokenless 4.x release.",
       "matchDatasources": [
         "docker"
@@ -464,6 +450,36 @@
         "localstack/localstack"
       ],
       "allowedVersions": "<2026"
+    },
+    {
+      "description": "stripe-go v87 changes the exported payments/stripe API; hold below v87 until the v0.17.0 breaking release (milestone 4, #614), which removes this rule.",
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "github.com/stripe/stripe-go/v86"
+      ],
+      "allowedVersions": "<87.0.0"
+    },
+    {
+      "description": "The chromedp release that #598 offers (v0.20.1) breaks pdf/pdf.go; hold until the v0.17.0 breaking release (milestone 4, #597, #598), which removes this rule.",
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "github.com/chromedp/chromedp"
+      ],
+      "allowedVersions": "<0.17.0"
+    },
+    {
+      "description": "Tagged cdproto releases need the newer chromedp API; hold on the pseudo-version until the v0.17.0 breaking release (milestone 4, #597), which removes this rule.",
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "github.com/chromedp/cdproto"
+      ],
+      "allowedVersions": "<0.1.0"
     },
     {
       "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
@@ -579,7 +595,8 @@
         "github.com/spf13/pflag",
         "go.uber.org/fx",
         "go.yaml.in/yaml/v3",
-        "golang.org/x/mod"
+        "golang.org/x/mod",
+        "golang.org/x/net"
       ],
       "enabled": true
     },

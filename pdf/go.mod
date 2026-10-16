@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/chromedp/cdproto v0.157.9
 	github.com/chromedp/chromedp v0.16.0
-	github.com/pdfcpu/pdfcpu v0.16.1
+	github.com/pdfcpu/pdfcpu v0.16.2
 )
 
 require (
@@ -16,6 +16,7 @@ require (
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/hhrutter/tiff v1.0.7 // indirect
 	github.com/mattn/go-runewidth v0.0.30 // indirect
+	github.com/xdg-go/stringprep v1.0.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.58.0 // indirect
 	golang.org/x/image v0.46.0 // indirect

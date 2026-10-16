@@ -9,9 +9,12 @@ import (
 	"context"
 	"crypto/md5" //nolint:gosec // Content-MD5 is Azure's transport integrity header, not a security primitive.
 	"crypto/sha256"
+	"errors"
 	"io"
 	"maps"
 	"net/http"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -122,6 +125,83 @@ func TestBucket_PresignPutMD5Enforced(t *testing.T) {
 	}
 	if status := put(ctx, t, req, body); status/100 != 2 {
 		t.Fatalf("matching body status = %d", status)
+	}
+}
+
+func TestBucket_PresignPutExpiryAndDifferentKey(t *testing.T) {
+	t.Parallel()
+	b := startBucket(t, azblob.Options{})
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	clk := clockwork.NewRealClock()
+
+	// Positive: PUT within TTL = 2xx.
+	const keyA = "presign/expiry-key-a"
+	reqPos, err := b.PresignPut(ctx, keyA, storage.MinPresignTTL, storage.PresignPutOptions{})
+	if err != nil {
+		t.Fatalf("PresignPut positive: %v", err)
+	}
+	if status := put(ctx, t, reqPos, []byte("positive payload")); status/100 != 2 {
+		t.Fatalf("positive PUT status = %d, want 2xx", status)
+	}
+	stat, err := b.Stat(ctx, keyA)
+	if err != nil || stat.Size != int64(len("positive payload")) {
+		t.Fatalf("Stat(%q) = %+v, %v", keyA, stat, err)
+	}
+
+	// Expiry: new presign, wait past TTL -> PUT != 2xx.
+	const keyExp = "presign/expiry-key-expired"
+	reqExp, err := b.PresignPut(ctx, keyExp, storage.MinPresignTTL, storage.PresignPutOptions{})
+	if err != nil {
+		t.Fatalf("PresignPut expired: %v", err)
+	}
+	wait := reqExp.Expires.Sub(clk.Now())
+	if wait > 0 {
+		select {
+		case <-clk.After(wait + 1500*time.Millisecond):
+		case <-ctx.Done():
+			t.Fatalf("context done waiting for expiry: %v", ctx.Err())
+		}
+	}
+	// Polls for up to 4s so emulator clock skew cannot pass a live URL as expired.
+	expStatus := put(ctx, t, reqExp, []byte("late payload"))
+	for range 8 {
+		if expStatus/100 != 2 {
+			break
+		}
+		select {
+		case <-clk.After(500 * time.Millisecond):
+		case <-ctx.Done():
+			t.Fatalf("context done polling for expiry: %v", ctx.Err())
+		}
+		expStatus = put(ctx, t, reqExp, []byte("late payload"))
+	}
+	if expStatus/100 == 2 {
+		t.Fatalf("expired PUT status = %d, want != 2xx within 4s", expStatus)
+	}
+	if _, err = b.Stat(ctx, keyExp); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("Stat(%q) = %v, want ErrNotFound", keyExp, err)
+	}
+
+	// Different key: presign for key A, rewrite URL path to key B -> PUT != 2xx and key B absent.
+	const keyB = "presign/expiry-key-b"
+	reqDiff, err := b.PresignPut(ctx, keyA, time.Minute, storage.PresignPutOptions{})
+	if err != nil {
+		t.Fatalf("PresignPut keyA: %v", err)
+	}
+	u, err := url.Parse(reqDiff.URL)
+	if err != nil {
+		t.Fatalf("parse URL: %v", err)
+	}
+	u.Path = strings.Replace(u.Path, keyA, keyB, 1)
+	u.RawPath = ""
+	reqRewritten := reqDiff
+	reqRewritten.URL = u.String()
+	if status := put(ctx, t, reqRewritten, []byte("tampered payload")); status/100 == 2 {
+		t.Fatalf("retargeted PUT status = %d, want rejection", status)
+	}
+	if _, err = b.Stat(ctx, keyB); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("Stat(%q) = %v, want ErrNotFound", keyB, err)
 	}
 }
 

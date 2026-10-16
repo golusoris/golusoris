@@ -31,6 +31,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/golusoris/golusoris/internal/pgxpoolstate"
 )
 
 // querier is the pgx surface the helpers use; tests substitute a fake.
@@ -51,7 +53,7 @@ type DB struct {
 // New returns a TimescaleDB helper backed by pool.
 // The pool must connect to a TimescaleDB-enabled PostgreSQL instance.
 func New(pool *pgxpool.Pool) *DB {
-	d := &DB{pool: pool, initialized: poolInitialized(pool)}
+	d := &DB{pool: pool, initialized: pgxpoolstate.Initialized(pool)}
 	if pool != nil {
 		d.db = pool
 	}
@@ -230,18 +232,6 @@ func (d *DB) validatePool() error {
 		return errors.New("timescale: invalid pool")
 	}
 	return nil
-}
-
-func poolInitialized(pool *pgxpool.Pool) (initialized bool) {
-	if pool == nil {
-		return false
-	}
-	defer func() {
-		if recover() != nil {
-			initialized = false
-		}
-	}()
-	return pool.Config() != nil
 }
 
 func intervalValue(duration time.Duration) (pgtype.Interval, error) {

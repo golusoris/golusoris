@@ -28,6 +28,7 @@ import (
 	rcron "github.com/robfig/cron/v3"
 
 	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/internal/riverclientstate"
 )
 
 // parser matches robfig v3's default (5-field + descriptors).
@@ -88,13 +89,13 @@ func periodicConstructor[T river.JobArgs](constructor func() T) river.PeriodicJo
 	}
 }
 
-func periodicJobBundle(c *river.Client[pgx.Tx]) (bundle *river.PeriodicJobBundle, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			bundle = nil
-			err = fmt.Errorf("cron: periodic jobs unavailable: %v", recovered)
-		}
-	}()
+func periodicJobBundle(c *river.Client[pgx.Tx]) (*river.PeriodicJobBundle, error) {
+	if !riverclientstate.WorksJobs(c) {
+		return nil, errors.New("cron: periodic jobs unavailable: client has no queues configured")
+	}
+	if riverclientstate.LeaderElectionDisabled(c) {
+		return nil, errors.New("cron: periodic jobs unavailable: client has LeaderElectionDisabled")
+	}
 	return c.PeriodicJobs(), nil
 }
 

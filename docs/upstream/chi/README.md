@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go-chi/chi/v5 — v5.3.2 snapshot
+# go-chi/chi/v5 — v5.4.0 snapshot
 
-Pinned: **v5.3.2**
-Source: [tagged source](https://github.com/go-chi/chi/tree/v5.3.2)
+Pinned: **v5.4.0**
+Source: [tagged source](https://github.com/go-chi/chi/tree/v5.4.0)
 
 ## Router
 
@@ -64,6 +64,14 @@ middleware.Timeout(30 * time.Second)
 middleware.BasicAuth("realm", map[string]string{"user": "pass"})
 ```
 
+## Changes since v5.3.2
+
+- `chi.Context` gained `Clone()` for copying route state out of a request.
+- `middleware.ClientIPFrom*` now treats `RemoteAddr` as the rightmost hop
+  (GHSA-j6qf-3m9c-vwj3); a proxy chain that relied on the old order needs
+  checking.
+- Minimum Go is 1.24.
+
 ## golusoris usage
 
 - `httpx/router/` — `chi.Router` provided via fx; ogen server mounted on it.
@@ -72,4 +80,4 @@ middleware.BasicAuth("realm", map[string]string{"user": "pass"})
 
 ## Links
 
-- [Changelog](https://github.com/go-chi/chi/blob/v5.3.2/CHANGELOG.md)
+- [Changelog](https://github.com/go-chi/chi/blob/v5.4.0/CHANGELOG.md)

@@ -25,6 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -102,12 +103,20 @@ func runStdio(ctx context.Context, logger *slog.Logger) error {
 }
 
 func runHTTP(ctx context.Context, logger *slog.Logger, addr string) error {
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", addr)
+	if err != nil {
+		return fmt.Errorf("golusoris-mcp: listen: %w", err)
+	}
+	return serveHTTP(ctx, logger, ln)
+}
+
+func serveHTTP(ctx context.Context, logger *slog.Logger, ln net.Listener) error {
 	handler := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return newServer(logger) },
 		nil,
 	)
 	srv := &http.Server{
-		Addr:         addr,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 0, // streamable HTTP may stream responses; no write deadline
 		IdleTimeout:  60 * time.Second,
@@ -120,8 +129,8 @@ func runHTTP(ctx context.Context, logger *slog.Logger, addr string) error {
 	defer cancel()
 
 	go func() {
-		logger.InfoContext(ctx, "golusoris-mcp listening", "addr", addr, "path", "/mcp")
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logger.InfoContext(ctx, "golusoris-mcp listening", "addr", ln.Addr().String(), "path", "/mcp")
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.ErrorContext(ctx, "server error", "err", err)
 		}
 	}()
