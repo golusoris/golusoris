@@ -105,6 +105,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
 | `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
 | `core/tlsx/` | file-backed TLS: cert/key/CA reloaded lazily on handshake or loaded once into a client config, client-auth policy parsing; `tlsxtest/` issues throwaway test certificates | stdlib |
+| `core/storage/` | backend-neutral object storage contracts: `Bucket`, `Object`, key cleaning, bounded listing and `Walk`, presign and checksum validation; backends implement them without the root module graph | golang.org/x/net (httpguts) |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data
