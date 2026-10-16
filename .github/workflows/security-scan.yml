@@ -72,6 +72,11 @@ jobs:
           # correct by construction. They are replayed against .semgrep.yml,
           # in both directions, by scripts/hiss/semgrep-fixtures.sh
           # (`make hiss-fixtures`), which scans them from a temporary copy.
+          #
+          # tools/figures/player holds Praetor's minified figure bundle, built
+          # from praetor tools/figures/*.ts; under its old dist/ path Semgrep's
+          # default ignore skipped it, and raw-html-format misreads its error
+          # message templates as HTML.
           semgrep_image="semgrep/semgrep:${SEMGREP_VERSION}@${SEMGREP_IMAGE_DIGEST}"
           tar -cf - --exclude=.git . \
             | docker run --rm -i "$semgrep_image" \
@@ -82,6 +87,7 @@ jobs:
                     --config p/security-audit \
                     --exclude .config/hiss/testdata \
                     --exclude .config/hiss/semgrep/testdata \
+                    --exclude tools/figures/player \
                     --error --metrics=off --quiet /src'
 
       - name: Run Trivy dependency, secret, and IaC gate
