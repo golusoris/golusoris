@@ -2,15 +2,23 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Dispatch-only proof that the release jobs' pinned tool installs work on the
-# hosted runner, without cutting a release. It installs the same versions
-# through the same SHA-pinned actions as release.yml, release-go.yml,
-# rebuild-on-base.yml and tiny-trainer-images.yml, then checks each version and
-# a local cosign sign/verify round trip.
+# Proof on workflow_dispatch and on pull requests changing release tool files
+# that the release jobs' pinned tool installs work on the hosted runner without
+# cutting a release, installing the same versions through the same SHA-pinned
+# actions as the release workflows, then checking each version and a local cosign
+# sign/verify round trip.
 name: Release runner tool contract
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - .github/workflows/release-go.yml
+      - .github/workflows/release-tool-contract.yml
+      - .github/workflows/rebuild-on-base.yml
+      - .github/workflows/tiny-trainer-images.yml
+      - tools/tool-versions.env
 
 permissions:
   contents: read
@@ -65,7 +73,7 @@ jobs:
           go version
           node --version
           docker info
-          docker buildx version | grep -Eq '^github.com/docker/buildx v0\.37\.1([[:space:]]|$)'
+          docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
