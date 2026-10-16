@@ -108,7 +108,7 @@ func NewSampler(dims []Dimension, cfg Config, seed int64) (*Sampler, error) {
 		dimIndex: dimIndex,
 		cfg:      cfg,
 		//nolint:gosec,forbidigo // G404: deterministic pseudo-random stream for reproducible hyperparameter search
-		rng: rand.New(rand.NewSource(seed)),
+		rng: rand.New(rand.NewSource(seed)), // #nosec G404 -- seeded PRNG for reproducible hyperparameter search, not security
 		obs: make([]observation, 0, 32),
 	}, nil
 }
