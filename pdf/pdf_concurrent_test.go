@@ -58,14 +58,14 @@ func TestRendererConcurrentCallsKeepPageContentIsolated(t *testing.T) {
 	}))
 	t.Cleanup(server.Close)
 
-	renderer, err := pdf.NewRenderer(pdf.Options{
+	renderer, err := pdf.NewRendererContext(t.Context(), pdf.Options{
 		Timeout:    concurrentRenderTimeout,
 		NoSandbox:  true,
 		DisableGPU: true,
 		ChromePath: chromePath,
 	})
 	if err != nil {
-		t.Fatalf("NewRenderer() error = %v", err)
+		t.Fatalf("NewRendererContext() error = %v", err)
 	}
 	t.Cleanup(renderer.Close)
 
