@@ -331,6 +331,7 @@ jobs:
         env:
           GO_MODULE_GROUP: primary
           GO_COVERAGE_DIR: .coverage/primary
+          GOLUSORIS_REQUIRE_CHROME: "1"
           # v0.44.0 can reuse a stopped shared Ryuk after a package gap
           # (testcontainers/testcontainers-go#3867). Keep it alive within this
           # bounded job until testcontainers/testcontainers-go#3868 ships.
@@ -690,6 +691,8 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0   # template pins name release commits and tags
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
@@ -705,6 +708,8 @@ jobs:
           echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
       - name: Lint GitHub and Gitea workflows
         run: ACTIONLINT_BIN="$(go env GOPATH)/bin/actionlint" bash scripts/ci/actionlint.sh
+      - name: Check template workflows against their pinned reusable workflows
+        run: ACTIONLINT_BIN="$(go env GOPATH)/bin/actionlint" bash scripts/ci/template-workflows.sh
 
   policy:
     name: CI policy tests
