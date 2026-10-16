@@ -22,7 +22,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 
 	"github.com/golusoris/golusoris/container/registry/credentials"
-	"github.com/golusoris/golusoris/internal/testimages"
+	"github.com/golusoris/golusoris/container/registry/credentials/ecr/internal/motodev"
 )
 
 const motoDefaultAccount = "123456789012"
@@ -36,8 +36,8 @@ func startMoto(t *testing.T) string {
 
 	req := testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        testimages.Moto,
-			ReaperImage:  testimages.Ryuk,
+			Image:        motodev.MotoImage,
+			ReaperImage:  motodev.RyukImage,
 			ExposedPorts: []string{"5000/tcp"},
 			WaitingFor:   wait.ForHTTP("/moto-api/").WithPort("5000/tcp").WithStartupTimeout(1 * time.Minute),
 		},
