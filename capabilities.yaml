@@ -1139,6 +1139,10 @@ packages:
     capabilities: [test.fixture]
     description: "Package fixture loads typed test fixtures from testdata CSV files into slices of structs, backed by jszwec/csvutil."
     replaces: [github.com/jszwec/csvutil]
+  - import: github.com/golusoris/golusoris/testutil/testctx
+    domain: test
+    capabilities: [testutil.testctx]
+    description: "Package testctx provides test contexts with deadlines and automatic cleanup."
   - import: github.com/golusoris/golusoris/testutil/fuzz
     domain: test
     capabilities: [test.fuzz]

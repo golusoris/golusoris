@@ -20,6 +20,7 @@ import (
 
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/idempotency/store"
+	"github.com/golusoris/golusoris/testutil/testctx"
 )
 
 const (
@@ -41,14 +42,6 @@ type Harness struct {
 type conformanceCase struct {
 	name string
 	run  func(t *testing.T, h Harness)
-}
-
-// deadlineCtx bounds each store call so a hung backend fails the test.
-func deadlineCtx(t *testing.T) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), conformanceTimeout)
-	t.Cleanup(cancel)
-	return ctx
 }
 
 // Base anchors every fake clock in the suite.
@@ -88,7 +81,7 @@ func conformanceCases() []conformanceCase {
 
 func claim(t *testing.T, value store.Store, key, fingerprint string) store.ClaimResult {
 	t.Helper()
-	result, err := value.Claim(deadlineCtx(t), key, fingerprint, conformanceTTL)
+	result, err := value.Claim(testctx.Deadline(t, conformanceTimeout), key, fingerprint, conformanceTTL)
 	if err != nil {
 		t.Fatalf("Claim(%q, %q): %v", key, fingerprint, err)
 	}
@@ -159,7 +152,7 @@ func caseCommitReplays(t *testing.T, h Harness) {
 	} {
 		key := t.Name() + "/" + name
 		token := Acquire(t, h.Store, key)
-		if err := commit(deadlineCtx(t), h.Store, key, token, fingerprintA, response); err != nil {
+		if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, key, token, fingerprintA, response); err != nil {
 			t.Fatalf("Commit %s: %v", name, err)
 		}
 		got := claim(t, h.Store, key, fingerprintA)
@@ -186,7 +179,7 @@ func requireSameResponse(t *testing.T, got, want store.CachedResponse) {
 func caseCompletedMismatch(t *testing.T, h Harness) {
 	t.Helper()
 	token := Acquire(t, h.Store, t.Name())
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), token, fingerprintA, sampleResponse()); err != nil {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), token, fingerprintA, sampleResponse()); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
 	requireState(t, claim(t, h.Store, t.Name(), fingerprintB), store.ClaimFingerprintMismatch)
@@ -195,14 +188,14 @@ func caseCompletedMismatch(t *testing.T, h Harness) {
 func caseReleaseFrees(t *testing.T, h Harness) {
 	t.Helper()
 	token := Acquire(t, h.Store, t.Name())
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), token); err != nil {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), token); err != nil {
 		t.Fatalf("Release: %v", err)
 	}
 	next := Acquire(t, h.Store, t.Name())
 	if next == token {
 		t.Fatalf("reclaimed token %q equals released token", next)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), token); !errors.Is(err, store.ErrReservationLost) {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), token); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("Release released token = %v; want ErrReservationLost", err)
 	}
 }
@@ -210,13 +203,13 @@ func caseReleaseFrees(t *testing.T, h Harness) {
 func caseForeignToken(t *testing.T, h Harness) {
 	t.Helper()
 	Acquire(t, h.Store, t.Name())
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), "foreign", fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), "foreign", fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("Commit foreign token = %v; want ErrReservationLost", err)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), "foreign"); !errors.Is(err, store.ErrReservationLost) {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), "foreign"); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("Release foreign token = %v; want ErrReservationLost", err)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name()+"/absent", "foreign"); !errors.Is(err, store.ErrReservationLost) {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name()+"/absent", "foreign"); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("Release absent key = %v; want ErrReservationLost", err)
 	}
 	requireState(t, claim(t, h.Store, t.Name(), fingerprintA), store.ClaimInFlight)
@@ -225,13 +218,13 @@ func caseForeignToken(t *testing.T, h Harness) {
 func caseCommitTwice(t *testing.T, h Harness) {
 	t.Helper()
 	token := Acquire(t, h.Store, t.Name())
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), token, fingerprintA, sampleResponse()); err != nil {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), token, fingerprintA, sampleResponse()); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), token, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), token, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("second Commit = %v; want ErrReservationLost", err)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), token); !errors.Is(err, store.ErrReservationLost) {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), token); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("Release completed = %v; want ErrReservationLost", err)
 	}
 	requireState(t, claim(t, h.Store, t.Name(), fingerprintA), store.ClaimCompleted)
@@ -240,10 +233,10 @@ func caseCommitTwice(t *testing.T, h Harness) {
 func caseCommitMismatch(t *testing.T, h Harness) {
 	t.Helper()
 	token := Acquire(t, h.Store, t.Name())
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), token, fingerprintB, sampleResponse()); !errors.Is(err, store.ErrFingerprintMismatch) {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), token, fingerprintB, sampleResponse()); !errors.Is(err, store.ErrFingerprintMismatch) {
 		t.Fatalf("Commit other fingerprint = %v; want ErrFingerprintMismatch", err)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), token); err != nil {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), token); err != nil {
 		t.Fatalf("Release after rejected commit: %v", err)
 	}
 }
@@ -262,13 +255,13 @@ func caseStaleToken(t *testing.T, h Harness) {
 	stale := Acquire(t, h.Store, t.Name())
 	h.Advance(t, 2*conformanceTTL)
 	current := Acquire(t, h.Store, t.Name())
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), stale, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), stale, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("stale Commit = %v; want ErrReservationLost", err)
 	}
-	if err := h.Store.Release(deadlineCtx(t), t.Name(), stale); !errors.Is(err, store.ErrReservationLost) {
+	if err := h.Store.Release(testctx.Deadline(t, conformanceTimeout), t.Name(), stale); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("stale Release = %v; want ErrReservationLost", err)
 	}
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), current, fingerprintA, sampleResponse()); err != nil {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), current, fingerprintA, sampleResponse()); err != nil {
 		t.Fatalf("current Commit: %v", err)
 	}
 }
@@ -277,7 +270,7 @@ func caseCommitAfterExpiry(t *testing.T, h Harness) {
 	t.Helper()
 	token := Acquire(t, h.Store, t.Name())
 	h.Advance(t, conformanceTTL)
-	if err := commit(deadlineCtx(t), h.Store, t.Name(), token, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, t.Name(), token, fingerprintA, sampleResponse()); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("expired Commit = %v; want ErrReservationLost", err)
 	}
 	requireState(t, claim(t, h.Store, t.Name(), fingerprintA), store.ClaimAcquired)
@@ -292,7 +285,7 @@ func caseConcurrentClaims(t *testing.T, h Harness) {
 	for range concurrentClaimers {
 		wg.Go(func() {
 			<-start
-			result, err := h.Store.Claim(deadlineCtx(t), t.Name(), fingerprintA, conformanceTTL)
+			result, err := h.Store.Claim(testctx.Deadline(t, conformanceTimeout), t.Name(), fingerprintA, conformanceTTL)
 			switch {
 			case err != nil:
 				errs <- err
@@ -316,7 +309,7 @@ func caseConcurrentClaims(t *testing.T, h Harness) {
 
 func caseInvalidArguments(t *testing.T, h Harness) {
 	t.Helper()
-	ctx := deadlineCtx(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	checks := map[string]error{}
 	_, checks["claim empty key"] = h.Store.Claim(ctx, "", fingerprintA, conformanceTTL)
 	_, checks["claim empty fingerprint"] = h.Store.Claim(ctx, t.Name(), "", conformanceTTL)
@@ -334,7 +327,7 @@ func caseInvalidArguments(t *testing.T, h Harness) {
 
 func caseCanceledContext(t *testing.T, h Harness) {
 	t.Helper()
-	ctx, cancel := context.WithCancel(deadlineCtx(t))
+	ctx, cancel := context.WithCancel(testctx.Deadline(t, conformanceTimeout))
 	cancel()
 	if _, err := h.Store.Claim(ctx, t.Name(), fingerprintA, conformanceTTL); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Claim canceled = %v; want context.Canceled", err)
@@ -346,10 +339,10 @@ func caseCanceledContext(t *testing.T, h Harness) {
 // must start at base so every row it writes predates other cases' rows.
 func RunSweep(t *testing.T, h Harness, sweeper store.Sweeper) {
 	t.Helper()
-	ctx := deadlineCtx(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	prefix := t.Name() + "/sweep/"
 	committed := Acquire(t, h.Store, prefix+"committed")
-	if err := commit(deadlineCtx(t), h.Store, prefix+"committed", committed, fingerprintA, sampleResponse()); err != nil {
+	if err := commit(testctx.Deadline(t, conformanceTimeout), h.Store, prefix+"committed", committed, fingerprintA, sampleResponse()); err != nil {
 		t.Fatalf("Commit: %v", err)
 	}
 	Acquire(t, h.Store, prefix+"a")
@@ -393,12 +386,14 @@ func SharedAcrossReplicas(t *testing.T, replicaA, replicaB store.Store) {
 	}
 	handlerA, handlerB := newHandler(replicaA), newHandler(replicaB)
 	firstDone := make(chan *httptest.ResponseRecorder, 1)
-	go func() { firstDone <- sendIdempotentRequest(deadlineCtx(t), handlerA, "/payments", "shared", "payload") }()
+	go func() {
+		firstDone <- sendIdempotentRequest(testctx.Deadline(t, conformanceTimeout), handlerA, "/payments", "shared", "payload")
+	}()
 	<-entered
-	concurrent := sendIdempotentRequest(deadlineCtx(t), handlerB, "/payments", "shared", "payload")
+	concurrent := sendIdempotentRequest(testctx.Deadline(t, conformanceTimeout), handlerB, "/payments", "shared", "payload")
 	close(release)
 	first := <-firstDone
-	replayed := sendIdempotentRequest(deadlineCtx(t), handlerB, "/payments", "shared", "payload")
+	replayed := sendIdempotentRequest(testctx.Deadline(t, conformanceTimeout), handlerB, "/payments", "shared", "payload")
 	if first.Code != http.StatusCreated || concurrent.Code != http.StatusConflict {
 		t.Fatalf("first/concurrent = %d/%d; want 201/409", first.Code, concurrent.Code)
 	}

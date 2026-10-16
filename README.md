@@ -402,6 +402,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
 | `junit/` | JUnit XML report writer for CI gates — suites, pass/fail/error/skip, properties, XML-illegal characters escaped; validates against junit-10.xsd | stdlib |
 | `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
+| `testutil/testctx/` | test contexts with deadlines and automatic cleanup | stdlib |
 | `testutil/configfile/` | private temporary config file writer for tests | stdlib |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
