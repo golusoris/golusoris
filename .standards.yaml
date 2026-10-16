@@ -62,28 +62,28 @@ adoption:
 exceptions:
     - rule: HISS-19
       path: storage/key.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: storage/list.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: storage/presign.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: core/storage/key.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: core/storage/list.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: core/storage/presign.go
-      reason: "Category B: core/storage copies the root storage contracts until the alias pull request for golusoris#916 lands after the core tag and removes the root copies."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
+      expires: "2026-10-22"
     - rule: HISS-11
       path: .github/workflows/release.yml
       reason: Release provenance is attested in the caller's build job (SLSA Build L2), not an isolated reusable workflow (L3); tracked in golusoris#619.
