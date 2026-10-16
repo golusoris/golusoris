@@ -59,8 +59,11 @@ watch on). Override by supplying your own `Options` ahead of it via `fx.Replace`
 
 ## Notes
 
-- Env mapping: `APP_DB_HOST` → `db.host`. Every underscore splits on  delimiter unless leaf key is listed in `CompoundKeys` (e.g.
- `search.api_key` keeps `APP_SEARCH_API_KEY` → `search.api_key`).
+- Stored env mapping: `APP_DB_HOST` -> `db.host`; underscores split on delimiter. `CompoundKeys` -> explicit stored paths + getter support; explicit paths win over inferred paths.
+- `Unmarshal` -> second decode from destination `koanf` paths containing `_`; env snapshot captured during overlay, replaced on reload under `c.mu`. No process-env reads during decode; unmatched fields retain file/default values.
+- Destination walk: pointer to struct; nested structs/pointers; map, interface, func, chan leaves skipped; embedded fields nested unless `,squash`; `-`, `remain`, inaccessible fields skipped. Explicit queue; max 32 struct levels, 4096 fields; overflow -> error.
+- `DisableEnv` or empty `EnvPrefix` -> no inferred mapping. `FileEnvSuffix` indirection for inferred underscore paths -> unsupported; use explicit `CompoundKeys`.
+- Regression gate: `cd core && go test -race -count=1 ./config/...`; `env_struct_test.go` -> precedence, snapshot/reload, hooks, struct rules, depth/field boundaries.
 - Files load first (later override earlier); env loads on top. Missing files are
  skipped silently; unsupported extension is hard error.
 - `OnChange` callbacks run synchronously in watcher goroutine — keep them

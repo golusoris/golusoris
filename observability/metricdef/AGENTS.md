@@ -18,10 +18,12 @@ One metric definition shared by services, dashboard generator (`observability/gr
 | `NewCatalog(defs...)` | validated immutable set; rejects duplicates + OpenMetrics family clash (`x_total` vs gauge `x`) |
 | `Catalog.Defs()` / `Lookup` / `LookupSeries` / `Series` / `Merge` | generator + checker reads; deep copies |
 | `Catalog.Register(reg)` / `Register(reg, defs...)` | all-or-nothing registration -> `*Handles`; `External` defs skipped / refused |
+| `Catalog.RegisterOrReuse(reg)` / `RegisterOrReuse(reg, defs...)` | register or reuse existing collectors -> `*Handles`; separate guards |
 | `Catalog.RegisterOTel(m)` / `RegisterOTel(m, defs...)` | OTel synchronous float64 instruments; same handles + label guard; catalog skips External, standalone refuses |
-| `Handles.Counter/Gauge/Histogram(name)` | typed handle or error |
+| `Handles.Counter/Gauge/OTelGauge/Histogram(name)` | typed handle or error |
 | `Counter.Add(ctx, v, labels...)`, `Inc` | sampled span in ctx -> exemplar |
-| `Gauge.Set(v, labels...)`, `Add` | no exemplars (gauges carry none) |
+| `Gauge.Set(v, labels...)`, `Add`, `Reset`, `Delete` | no exemplars; `Reset` clears series + guards; `Delete` removes series |
+| `OTelGauge.Set(v, labels...)`, `Add` | OTel-backed gauge; no `Reset`, no `Delete` |
 | `Histogram.Observe(ctx, v, labels...)` | exemplar via `prom.ObserveWithExemplar` |
 | `Def.Series()` / `Def.SeriesLabels(series)` | exposed sample names; `le` only on `_bucket`, `quantile` only on summary base series |
 

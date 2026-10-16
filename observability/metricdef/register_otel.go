@@ -36,7 +36,12 @@ func RegisterOTel(m metric.Meter, defs ...Def) (*Handles, error) {
 		}
 		mappings = append(mappings, mapping)
 	}
-	h := &Handles{counters: map[string]*Counter{}, gauges: map[string]*Gauge{}, histograms: map[string]*Histogram{}}
+	h := &Handles{
+		counters:   make(map[string]*Counter, len(owned)),
+		gauges:     make(map[string]*Gauge),
+		otelGauges: make(map[string]*OTelGauge, len(owned)),
+		histograms: make(map[string]*Histogram, len(owned)),
+	}
 	for i, d := range owned {
 		if err = h.addOTel(m, d, mappings[i]); err != nil {
 			return nil, fmt.Errorf("metricdef: register OTel %s: %w", d.Name, err)
@@ -115,7 +120,7 @@ func (h *Handles) addOTel(m metric.Meter, d Def, mapping otlptranslator.Metric) 
 		if err != nil {
 			return fmt.Errorf("create gauge: %w", err)
 		}
-		h.gauges[d.Name] = &Gauge{sink: sink, guard: guard}
+		h.otelGauges[d.Name] = &OTelGauge{sink: sink, guard: guard}
 	case KindHistogram:
 		buckets := d.Buckets
 		if len(buckets) == 0 {
@@ -129,6 +134,36 @@ func (h *Handles) addOTel(m metric.Meter, d Def, mapping otlptranslator.Metric) 
 		h.histograms[d.Name] = &Histogram{sink: otelHistogram{instrument: instrument, labels: d.Labels}, guard: guard}
 	case KindSummary:
 		return errors.New("summaries are emitted elsewhere")
+	}
+	return nil
+}
+
+// OTelGauge is a registered OpenTelemetry gauge family.
+type OTelGauge struct {
+	sink  *otelGauge
+	guard *labelGuard
+}
+
+// Set sets the series for labelValues to v.
+func (g *OTelGauge) Set(v float64, labelValues ...string) error {
+	values, err := g.guard.bound(labelValues)
+	if err != nil {
+		return err
+	}
+	if err = g.sink.set(v, values); err != nil {
+		return fmt.Errorf("metricdef: %s: %w", g.guard.name, err)
+	}
+	return nil
+}
+
+// Add adds v (may be negative) to the series for labelValues.
+func (g *OTelGauge) Add(v float64, labelValues ...string) error {
+	values, err := g.guard.bound(labelValues)
+	if err != nil {
+		return err
+	}
+	if err = g.sink.add(v, values); err != nil {
+		return fmt.Errorf("metricdef: %s: %w", g.guard.name, err)
 	}
 	return nil
 }

@@ -67,7 +67,7 @@ func TestRegisterOTelRoundTrip(t *testing.T) { //nolint:paralleltest // Provider
 		recordOTelDef(t, h, d)
 	}
 	assertOTelRoundTrip(t, reg, defs)
-	depth, err := h.Gauge(queueDepth.Name)
+	depth, err := h.OTelGauge(queueDepth.Name)
 	mustOK(t, err, depth.Set(9, "value"), depth.Add(-2, "value"))
 	if got := otelSeries(t, reg, queueDepth.Name)["queue=value"].GetGauge().GetValue(); got != 7 {
 		t.Errorf("Set + Add = %v, want 7", got)
@@ -105,7 +105,7 @@ func recordOTelDef(t *testing.T, h *metricdef.Handles, d metricdef.Def) {
 		counter, err := h.Counter(d.Name)
 		mustOK(t, err, counter.Inc(t.Context(), values...), counter.Add(t.Context(), 2, values...))
 	case metricdef.KindGauge:
-		gauge, err := h.Gauge(d.Name)
+		gauge, err := h.OTelGauge(d.Name)
 		mustOK(t, err, gauge.Add(5, values...))
 	case metricdef.KindHistogram:
 		histogram, err := h.Histogram(d.Name)
@@ -219,7 +219,7 @@ func TestOTelLabelLimitsAndGaugeConcurrency(t *testing.T) { //nolint:paralleltes
 			t.Errorf("bounded counter series = %v", got)
 		}
 	}
-	gauge, err := h.Gauge(gaugeDef.Name)
+	gauge, err := h.OTelGauge(gaugeDef.Name)
 	mustOK(t, err, gauge.Set(10, "first"))
 	var workers sync.WaitGroup
 	for range 8 {
@@ -316,7 +316,7 @@ func TestCatalogRegisterOTelSkipsExternalAndRejectsMisuse(t *testing.T) {
 	meter := noop.NewMeterProvider().Meter("test")
 	h, err := catalog.RegisterOTel(meter)
 	mustOK(t, err)
-	if _, err = h.Gauge(external.Name); err == nil {
+	if _, err = h.OTelGauge(external.Name); err == nil {
 		t.Error("external got a handle")
 	}
 	if _, err = metricdef.RegisterOTel(meter, external); err == nil {
@@ -324,7 +324,7 @@ func TestCatalogRegisterOTelSkipsExternalAndRejectsMisuse(t *testing.T) {
 	}
 	jobs, err := h.Counter(jobsTotal.Name)
 	mustOK(t, err)
-	depth, err := h.Gauge(queueDepth.Name)
+	depth, err := h.OTelGauge(queueDepth.Name)
 	mustOK(t, err)
 	latency, err := h.Histogram(jobSeconds.Name)
 	mustOK(t, err)
@@ -357,5 +357,100 @@ func TestOTelInstrumentMetadata(t *testing.T) {
 	got := data.ScopeMetrics[0].Metrics[0]
 	if got.Name != "elapsed" || got.Unit != "s" || got.Description != def.Help {
 		t.Errorf("instrument = %v", got)
+	}
+}
+
+func TestOTelGauge_SetAndAdd(t *testing.T) { //nolint:paralleltest // Provider setup uses t.Setenv and OTel globals.
+	reg, meter := prometheusMeter(t)
+	def := metricdef.Def{
+		Name:   "app_temperature_celsius",
+		Help:   "Current temperature.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"sensor"},
+	}
+	h, err := metricdef.RegisterOTel(meter, def)
+	mustOK(t, err)
+	g, err := h.OTelGauge(def.Name)
+	mustOK(t, err)
+
+	mustOK(t, g.Set(21.5, "living_room"))
+	mustOK(t, g.Add(1.5, "living_room"))
+
+	got := otelSeries(t, reg, def.Name)
+	if val := got["sensor=living_room"].GetGauge().GetValue(); val != 23.0 {
+		t.Fatalf("gauge value = %v, want 23.0", val)
+	}
+}
+
+func TestHandles_GaugeAndOTelGaugeCrossErrors(t *testing.T) { //nolint:paralleltest // Provider setup uses t.Setenv and OTel globals.
+	_, meter := prometheusMeter(t)
+	otelGaugeDef := metricdef.Def{
+		Name:   "otel_test_gauge",
+		Help:   "OTel gauge.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"zone"},
+	}
+	hOTel, err := metricdef.RegisterOTel(meter, otelGaugeDef)
+	mustOK(t, err)
+
+	// Handles.Gauge on OTel gauge -> error naming OTelGauge
+	_, err = hOTel.Gauge(otelGaugeDef.Name)
+	if err == nil {
+		t.Fatal("Handles.Gauge on OTel gauge succeeded, want error")
+	}
+	if !strings.Contains(err.Error(), "OTelGauge") {
+		t.Fatalf("error %q does not name OTelGauge", err)
+	}
+
+	// Prom-registered gauge
+	promReg := prometheus.NewRegistry()
+	promGaugeDef := metricdef.Def{
+		Name:   "prom_test_gauge",
+		Help:   "Prom gauge.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"zone"},
+	}
+	hProm, err := metricdef.Register(promReg, promGaugeDef)
+	mustOK(t, err)
+
+	// Handles.OTelGauge on prom gauge -> error naming Gauge
+	_, err = hProm.OTelGauge(promGaugeDef.Name)
+	if err == nil {
+		t.Fatal("Handles.OTelGauge on Prom gauge succeeded, want error")
+	}
+	if !strings.Contains(err.Error(), "Gauge") {
+		t.Fatalf("error %q does not name Gauge", err)
+	}
+}
+
+func TestOTelGauge_LabelGuardOverflowFolds(t *testing.T) { //nolint:paralleltest // Provider setup uses t.Setenv and OTel globals.
+	reg, meter := prometheusMeter(t)
+	def := metricdef.Def{
+		Name:   "app_bounded_gauge",
+		Help:   "Bounded gauge.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"tenant"},
+		Limits: map[string]metricdef.LabelLimit{
+			"tenant": {MaxDistinct: 1},
+		},
+	}
+	h, err := metricdef.RegisterOTel(meter, def)
+	mustOK(t, err)
+	g, err := h.OTelGauge(def.Name)
+	mustOK(t, err)
+
+	mustOK(t, g.Set(10, "admitted"))
+	mustOK(t, g.Set(20, "overflow1"))
+	mustOK(t, g.Add(5, "overflow2"))
+
+	got := otelSeries(t, reg, def.Name)
+	if len(got) != 2 {
+		t.Fatalf("got %d series, want 2: %v", len(got), got)
+	}
+	if val := got["tenant=admitted"].GetGauge().GetValue(); val != 10 {
+		t.Errorf("tenant=admitted = %v, want 10", val)
+	}
+	if val := got["tenant=other"].GetGauge().GetValue(); val != 25 {
+		t.Errorf("tenant=other = %v, want 25", val)
 	}
 }
