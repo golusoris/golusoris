@@ -61,6 +61,9 @@ type mailpitMessagesSummary struct {
 // startMailpit boots a real Mailpit container and returns SMTP host, port, and HTTP base URL.
 func startMailpit(t *testing.T) (string, int, string) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("notify: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)

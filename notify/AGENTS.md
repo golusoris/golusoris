@@ -60,4 +60,3 @@ if suppressed, _ := unsubSvc.IsSuppressed(ctx, email); suppressed {
 ## Tests
 
 - `smtp_mailpit_test.go`: sends through a real Mailpit container; skips without Docker.
-
