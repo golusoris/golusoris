@@ -26,15 +26,15 @@ One shared container per test binary via `TestMain`:
 
 ```go
 func TestMain(m *testing.M) {
-	os.Exit(pg.Main(m, func(ctx context.Context, dsn string) error {
-		// apply migrations to template once
-		return nil
-	}))
+    os.Exit(pg.Main(m, func(ctx context.Context, dsn string) error {
+        // apply migrations to template once
+        return nil
+    }))
 }
 
 func TestExample(t *testing.T) {
-	pool := pg.Clone(t) // isolated cloned database
-	// ...
+    pool := pg.Clone(t) // isolated cloned database
+    // ...
 }
 ```
 
