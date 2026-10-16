@@ -307,7 +307,7 @@ func TestUnmarshalUnderscoreWatchReload(t *testing.T) {
 	if s.Grace != 7*time.Second {
 		t.Fatalf("before reload grace = %v, want 7s", s.Grace)
 	}
-	writeFile(t, path, "x:\n  max_connection_age_grace: 2s\n  file_only: after\n")
+	replaceFile(t, path, "x:\n  max_connection_age_grace: 2s\n  file_only: after\n")
 	s = waitEnvReload(t, c, changed, "after")
 	if s.Grace != 9*time.Second || s.FileOnly != "after" {
 		t.Fatalf("after reload = %+v, want env 9s and updated file", s)
@@ -322,7 +322,7 @@ func TestUnmarshalUnderscoreReloadRemovesEnv(t *testing.T) {
 	if err := os.Unsetenv("CFGWATCH_X_MAX_CONNECTION_AGE_GRACE"); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, path, "x:\n  max_connection_age_grace: 3s\n  file_only: removed\n")
+	replaceFile(t, path, "x:\n  max_connection_age_grace: 3s\n  file_only: removed\n")
 	s := waitEnvReload(t, c, changed, "removed")
 	if s.Grace != 3*time.Second {
 		t.Fatalf("removed env remained in snapshot: grace = %v, want file 3s", s.Grace)

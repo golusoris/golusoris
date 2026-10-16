@@ -25,6 +25,32 @@ func writeFile(t *testing.T, path, content string) string {
 	return path
 }
 
+func replaceFile(t *testing.T, path, content string) {
+	t.Helper()
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	tmp, err := os.CreateTemp(dir, "cfg-*.tmp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write([]byte(content)); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		t.Fatal(err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		t.Fatal(err)
+	}
+}
+
 // kubernetesSecretDir mirrors a secret volume: real files under a dated
 // dir, ..data pointing at it, and per-key symlinks through ..data.
 func kubernetesSecretDir(t *testing.T, values map[string]string) string {
