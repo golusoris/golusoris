@@ -13,10 +13,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/idempotency/store"
@@ -280,26 +281,25 @@ func caseConcurrentClaims(t *testing.T, h Harness) {
 	t.Helper()
 	start := make(chan struct{})
 	var acquired, inFlight atomic.Int32
-	var wg sync.WaitGroup
-	errs := make(chan error, concurrentClaimers)
+	var g errgroup.Group
+	g.SetLimit(concurrentClaimers)
 	for range concurrentClaimers {
-		wg.Go(func() {
+		g.Go(func() error {
 			<-start
 			result, err := h.Store.Claim(testctx.Deadline(t, conformanceTimeout), t.Name(), fingerprintA, conformanceTTL)
 			switch {
 			case err != nil:
-				errs <- err
+				return fmt.Errorf("claim: %w", err)
 			case result.State == store.ClaimAcquired:
 				acquired.Add(1)
 			case result.State == store.ClaimInFlight:
 				inFlight.Add(1)
 			}
+			return nil
 		})
 	}
 	close(start)
-	wg.Wait()
-	close(errs)
-	for err := range errs {
+	if err := g.Wait(); err != nil {
 		t.Fatalf("concurrent Claim: %v", err)
 	}
 	if acquired.Load() != 1 || inFlight.Load() != concurrentClaimers-1 {
