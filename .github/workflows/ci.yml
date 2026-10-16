@@ -683,6 +683,13 @@ jobs:
       - name: Verify pinned GoReleaser
         shell: bash
         run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+      - name: Pin the snapshot base to the root release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Module tags such as tiny-trainers-v0.1.0 are newer than vX.Y.Z and not semver.
+          tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')"
+          echo "GORELEASER_CURRENT_TAG=$tag" >> "$GITHUB_ENV"
       - name: Build every release target
         run: goreleaser build --config=tools/.goreleaser.yml --snapshot --clean
       - name: Record the snapshot version
