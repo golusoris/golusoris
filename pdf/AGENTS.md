@@ -21,7 +21,7 @@ No fx module — construct `Renderer` directly and `Close()` it.
 
 | Symbol | Purpose |
 | --- | --- |
-| `pdf.NewRenderer(Options)` | start persistent Chrome; return `*Renderer` |
+| `pdf.NewRendererContext(ctx, Options)` | start persistent Chrome bound to `ctx`; return `*Renderer` |
 | `Renderer.RenderURL(ctx, url, RenderOptions)` | navigate + print → PDF bytes |
 | `Renderer.RenderHTML(ctx, html, RenderOptions)` | render HTML data URL |
 | `Renderer.Close()` | kill the browser process |
@@ -38,12 +38,12 @@ chromedp PATH lookup.
 
 Start-up budget = `LaunchTimeout` (default: max of `Timeout`, 60s), apart from
 per-render `Timeout`. Cold Chrome start reads ~250 MB before first tab answers;
-slow CI disks need 15-25 s. Budget also caps chromedp URL-read + websocket dial
-timers. Launch error carries last 4 KiB of Chrome output, or says Chrome
-printed nothing.
+slow CI disks need 15-25 s. Default pipe transport, no debugging port; launch
+deadline cancels browser + allocator, waits for process cleanup. Launch error
+carries last 4 KiB of Chrome output, or says Chrome printed nothing.
 
 ```go
-r, err := pdf.NewRenderer(pdf.Options{Timeout: 30 * time.Second})
+r, err := pdf.NewRendererContext(ctx, pdf.Options{Timeout: 30 * time.Second})
 if err != nil { return err }
 defer r.Close()
 opts := pdf.RenderOptions{PrintBackground: true}
