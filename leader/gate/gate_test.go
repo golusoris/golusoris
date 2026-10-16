@@ -192,8 +192,7 @@ func TestCallbacks_StopOnLoss(t *testing.T) {
 	loop := newFakeLoop(nil)
 	g := gate.New(clock.NewFake(), quiet(), loop)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	cb := g.Callbacks(ctx)
 	cb.OnStartedLeading(ctx)
