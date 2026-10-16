@@ -303,10 +303,12 @@ func TestNew_UnsupportedKeys(t *testing.T) {
 		{"no kty", "no key type", func(k, _ map[string]any) { delete(k, "kty") }},
 		{"secp256k1", "curve", func(k, _ map[string]any) { k["crv"] = "P-256K" }},
 		{"no curve", "curve <nil>", func(k, _ map[string]any) { delete(k, "crv") }},
-		{"short x", "31- and 32-byte coordinates", func(k, _ map[string]any) { k["x"] = b64(make([]byte, 31)) }},
-		{"short y", "32- and 31-byte coordinates", func(k, _ map[string]any) { k["y"] = b64(make([]byte, 31)) }},
+		{"short x", "not on curve", func(k, _ map[string]any) { k["x"] = b64(make([]byte, 31)) }},
+		{"short y", "not on curve", func(k, _ map[string]any) { k["y"] = b64(make([]byte, 31)) }},
+		{"long x", "33- and 32-byte coordinates, want 32", func(k, _ map[string]any) { k["x"] = b64(make([]byte, 33)) }},
+		{"empty x", "0- and 32-byte coordinates, want 32", func(k, _ map[string]any) { k["x"] = b64(nil) }},
 		{"off curve", "not on curve", func(k, _ map[string]any) { k["x"] = b64(make([]byte, 32)) }},
-		{"curve mismatch", "coordinates, want 48", func(k, _ map[string]any) { k["crv"] = "P-384" }},
+		{"curve mismatch", "not on curve", func(k, _ map[string]any) { k["crv"] = "P-384" }},
 		{"rsa no modulus", "0-byte modulus", func(k, _ map[string]any) { k["kty"], k["e"] = "RSA", b64([]byte{1, 0, 1}) }},
 		{"rsa exponent 1", "exponent 1", func(k, _ map[string]any) { k["kty"], k["n"], k["e"] = "RSA", b64(make([]byte, 256)), b64([]byte{1}) }},
 		{"rsa even exponent", "exponent 65536", func(k, _ map[string]any) {
@@ -335,6 +337,52 @@ func TestNew_UnsupportedKeys(t *testing.T) {
 			_, err := azure.New(t.Context(), fakeConfig(rt, "k"))
 			if !errors.Is(err, azure.ErrUnsupportedKey) || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("New error = %v, want ErrUnsupportedKey %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func keyWithShortX(t *testing.T, kind string) *ecdsa.PrivateKey {
+	t.Helper()
+	for range 4096 {
+		priv := genKey(t, kind).(*ecdsa.PrivateKey)
+		point, err := priv.PublicKey.Bytes()
+		if err != nil {
+			t.Fatalf("public key bytes: %v", err)
+		}
+		if point[1] == 0 {
+			return priv
+		}
+	}
+	t.Fatal("no key with a leading zero X byte in 4096 tries")
+	return nil
+}
+
+func TestNew_ShortCoordinates(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"P-256", "P-384"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			priv := keyWithShortX(t, kind)
+			point, err := priv.PublicKey.Bytes()
+			if err != nil {
+				t.Fatalf("public key bytes: %v", err)
+			}
+			size := (len(point) - 1) / 2
+			f, rt := newFake(t)
+			v := f.addKey("k", kind, 1)[0]
+			f.set(func(vault *fakeVault) {
+				v.priv = priv
+				vault.hook = func(w http.ResponseWriter, _ *http.Request) bool {
+					k := jwk(t, kid("k", v.id), v)
+					k["x"] = b64(point[2 : 1+size])
+					reply(t, w, http.StatusOK, map[string]any{"key": k})
+					return true
+				}
+			})
+			s := newSigner(t, fakeConfig(rt, "k"))
+			if !priv.PublicKey.Equal(s.Public()) {
+				t.Fatal("Public differs from the original key")
 			}
 		})
 	}
