@@ -53,6 +53,12 @@
             "context": "API compatibility (apidiff)"
           },
           {
+            "context": "App image smoke (linux/amd64)"
+          },
+          {
+            "context": "App image smoke (linux/arm64)"
+          },
+          {
             "context": "Build"
           },
           {

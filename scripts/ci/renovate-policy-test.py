@@ -23,6 +23,7 @@ INPUTS = (
     ".github/testcontainers-images.txt",
     ".github/testcontainers-split-images.txt",
     "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+    "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
     "scripts/ci/tiny-trainer-locks.sh",
@@ -83,6 +84,8 @@ EXPECTED = {
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "localstack/localstack", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "testcontainers/ryuk", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "nagyesta/lowkey-vault", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "testcontainers/ryuk", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -102,6 +105,7 @@ EXPECTED = {
     (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-split-images.txt", "fsouza/fake-gcs-server", "docker"),
     (".github/testcontainers-split-images.txt", "mcr.microsoft.com/azure-storage/azurite", "docker"),
+    (".github/testcontainers-split-images.txt", "nagyesta/lowkey-vault", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
     (
@@ -146,7 +150,7 @@ EXPECTED = {
 EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
-    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 4,
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 5,
 }
 
 EXPECTED_DIGESTS = {
@@ -178,6 +182,7 @@ EXPECTED_DIGESTS = {
     "hashicorp/vault",
     "openbao/openbao",
     "localstack/localstack",
+    "nagyesta/lowkey-vault",
     "mcr.microsoft.com/devcontainers/go",
 }
 
@@ -263,6 +268,9 @@ SPLIT_IMAGES_PATH = ".github/testcontainers-split-images.txt"
 SPLIT_IMAGE_AUTHORITIES = {
     "container/registry/sign/kms/aws": (
         "container/registry/sign/kms/aws/internal/localstackdev/images.go", None,
+    ),
+    "container/registry/sign/kms/azure": (
+        "container/registry/sign/kms/azure/internal/lowkeydev/images.go", None,
     ),
     "container/registry/sign/kms/vault": (
         "container/registry/sign/kms/vault/internal/vaultdev/images.go", None,
@@ -432,6 +440,76 @@ def test_localstack_hold(config: dict[str, object]) -> bool:
     ]
     if localstack_hold_valid(mutated):
         print("LocalStack hold negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def trainer_python_cap_valid(config: dict[str, object]) -> bool:
+    """Require the Python cap for both TensorFlow trainer base images."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    caps = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["docker"]
+        and rule.get("matchFileNames") == [
+            "ai/tiny/trainers/gemma/**",
+            "ai/tiny/trainers/litert/**",
+        ]
+        and rule.get("matchPackageNames") == ["python"]
+        and rule.get("allowedVersions") == "<3.14"
+    ]
+    return len(caps) == 1
+
+
+def test_trainer_python_cap(config: dict[str, object]) -> bool:
+    """Report a missing trainer Python cap and prove its removal is refused."""
+    if not trainer_python_cap_valid(config):
+        print("renovate.json must hold both trainer Python bases below 3.14", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
+    ]
+    if trainer_python_cap_valid(mutated):
+        print("trainer Python cap negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def chromedp_group_valid(config: dict[str, object]) -> bool:
+    """Require chromedp and cdproto in one reviewed update group."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    groups = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["go"]
+        and rule.get("matchPackageNames") == [
+            "github.com/chromedp/chromedp",
+            "github.com/chromedp/cdproto",
+        ]
+        and rule.get("groupName") == "chromedp"
+        and rule.get("automerge") is False
+    ]
+    return len(groups) == 1
+
+
+def test_chromedp_group(config: dict[str, object]) -> bool:
+    """Report a missing chromedp group and prove its removal is refused."""
+    if not chromedp_group_valid(config):
+        print("renovate.json must group chromedp and cdproto with automerge off", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("groupName") != "chromedp"
+    ]
+    if chromedp_group_valid(mutated):
+        print("chromedp group negative control was accepted", file=sys.stderr)
         return False
     return True
 
@@ -675,6 +753,8 @@ def main() -> int:
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
+        test_trainer_python_cap(config),
+        test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
     )

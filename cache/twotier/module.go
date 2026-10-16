@@ -178,25 +178,49 @@ func (r redisL2) DelPrefix(ctx context.Context, prefix string) error {
 	if prefix == "" {
 		return errors.New("cache/twotier: refusing to scan-delete an empty prefix")
 	}
-	match := prefix + "*"
+	seen := make(map[string]struct{})
+	for _, node := range r.client.Nodes() {
+		if err := r.scanPrefix(ctx, node, prefix+"*", seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r redisL2) scanPrefix(ctx context.Context, node rueidis.Client, match string, seen map[string]struct{}) error {
 	return runBoundedScan(maxScanRounds, func(cursor uint64) (uint64, error) {
-		entry, err := r.client.Do(
+		entry, err := node.Do(
 			ctx,
-			r.client.B().Scan().Cursor(cursor).Match(match).Count(scanCount).Build(),
+			node.B().Scan().Cursor(cursor).Match(match).Count(scanCount).Build(),
 		).AsScanEntry()
 		if err != nil {
 			return 0, fmt.Errorf("cache/twotier: redis scan %q: %w", match, err)
 		}
-		if len(entry.Elements) > 0 {
-			if derr := r.client.Do(
-				ctx,
-				r.client.B().Unlink().Key(entry.Elements...).Build(),
-			).Error(); derr != nil {
-				return 0, fmt.Errorf("cache/twotier: redis unlink: %w", derr)
-			}
+		if err := r.unlinkKeys(ctx, entry.Elements, seen); err != nil {
+			return 0, err
 		}
 		return entry.Cursor, nil
 	})
+}
+
+func (r redisL2) unlinkKeys(ctx context.Context, keys []string, seen map[string]struct{}) error {
+	commands := make([]rueidis.Completed, 0, len(keys))
+	for _, key := range keys {
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		// Nodes includes replicas, and SCAN may repeat keys across pages.
+		seen[key] = struct{}{}
+		// Single-key commands let the cluster client route each deletion by slot.
+		commands = append(commands, r.client.B().Unlink().Key(key).Build())
+	}
+	var unlinkErr error
+	for _, result := range r.client.DoMulti(ctx, commands...) {
+		if err := result.Error(); err != nil {
+			unlinkErr = errors.Join(unlinkErr, fmt.Errorf("cache/twotier: redis unlink: %w", err))
+		}
+	}
+	return unlinkErr
 }
 
 var errInvalidDependency = errors.New("cache/twotier: invalid dependency")

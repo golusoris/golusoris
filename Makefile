@@ -134,6 +134,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
+	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh

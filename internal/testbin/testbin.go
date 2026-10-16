@@ -41,8 +41,9 @@ func Build(tb testing.TB, pkg, ldflags string) string {
 	}
 	ctx, cancel := context.WithTimeout(tb.Context(), Timeout)
 	defer cancel()
+	// Match module build flags to reuse the warm compile cache; -trimpath would change cache keys.
 	// #nosec G204 -- the toolchain path comes from LookPath and the arguments from the calling test.
-	cmd := exec.CommandContext(ctx, goBin, "build", "-trimpath", "-ldflags", ldflags, "-o", bin, pkg)
+	cmd := exec.CommandContext(ctx, goBin, "build", "-ldflags", ldflags, "-o", bin, pkg)
 	if out, buildErr := cmd.CombinedOutput(); buildErr != nil {
 		tb.Fatalf("testbin: go build %s: %v\n%s", pkg, buildErr, out)
 	}

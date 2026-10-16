@@ -230,6 +230,7 @@
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
+        "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
         "/^\\.github/testcontainers-images\\.txt$/",
         "/^\\.github/testcontainers-split-images\\.txt$/"
       ],
@@ -465,6 +466,18 @@
       "platformAutomerge": true
     },
     {
+      "description": "chromedp and cdproto move together: a tagged cdproto removes APIs that older chromedp calls (pdf build broke on #597), so one pull request bumps both.",
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "github.com/chromedp/chromedp",
+        "github.com/chromedp/cdproto"
+      ],
+      "groupName": "chromedp",
+      "automerge": false
+    },
+    {
       "description": "Review media image and APK updates as one ABI-tested set.",
       "matchFileNames": [
         "tools/Dockerfile.media.template"
@@ -489,6 +502,20 @@
       "groupName": "tiny trainer runtimes",
       "rangeStrategy": "pin",
       "automerge": false
+    },
+    {
+      "description": "tensorflow 2.21 publishes wheels for CPython 3.10-3.13 only; keep the trainer Python base below 3.14. Revisit when tensorflow ships cp314 wheels.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ai/tiny/trainers/gemma/**",
+        "ai/tiny/trainers/litert/**"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "allowedVersions": "<3.14"
     },
     {
       "description": "The custom manager owns this digest-only image so its variant remains explicit.",
@@ -565,7 +592,8 @@
         "github.com/spf13/pflag",
         "go.uber.org/fx",
         "go.yaml.in/yaml/v3",
-        "golang.org/x/mod"
+        "golang.org/x/mod",
+        "golang.org/x/net"
       ],
       "enabled": true
     },

@@ -15,6 +15,44 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.17.0](https://github.com/golusoris/golusoris/compare/v0.16.5...v0.17.0) (2026-10-16)
+
+
+### Features
+
+* **core/config:** add Options.DisableEnv to skip the environment ([#873](https://github.com/golusoris/golusoris/issues/873)) ([93e46dd](https://github.com/golusoris/golusoris/commit/93e46dd0ae96cb3876de847e61365dd7d1666713)), closes [#727](https://github.com/golusoris/golusoris/issues/727)
+* **core/storage:** add the backend-neutral storage API ([#919](https://github.com/golusoris/golusoris/issues/919)) ([06a7313](https://github.com/golusoris/golusoris/commit/06a7313ad880bd0c11bd5b467f0709d982253f08))
+
+
+### Bug Fixes
+
+* **cache/twotier:** invalidate prefixes on every Redis cluster node ([#914](https://github.com/golusoris/golusoris/issues/914)) ([ab3ff8e](https://github.com/golusoris/golusoris/commit/ab3ff8e29c686ecd474c4831f7703f73d88cc24d))
+* **ci:** bump the pinned Semgrep image to 1.180.0 ([#826](https://github.com/golusoris/golusoris/issues/826)) ([638c723](https://github.com/golusoris/golusoris/commit/638c72372c6f46dd4317371509a1ed4cc47437e2))
+* **ci:** refuse an openpgp subpackage in the not-affected policy check ([#823](https://github.com/golusoris/golusoris/issues/823)) ([bd04c9d](https://github.com/golusoris/golusoris/commit/bd04c9dba61a03b6eac9619484105695a2e7c178))
+* **cli:** report the release version and smoke-run release binaries ([#842](https://github.com/golusoris/golusoris/issues/842)) ([c9c4008](https://github.com/golusoris/golusoris/commit/c9c40085c481f2072d405838eb143450dabf96a9))
+* **db/sqlite:** name an open that outlasts the deadline ([#879](https://github.com/golusoris/golusoris/issues/879)) ([e3a0f04](https://github.com/golusoris/golusoris/commit/e3a0f04e568f3a58704448f0d073e5ea65da402f))
+* **deps:** pin goenvoy anilist to tagged v1.3.1 ([#913](https://github.com/golusoris/golusoris/issues/913)) ([d83f482](https://github.com/golusoris/golusoris/commit/d83f482fec1ac194439811d1c7aacd9cdfece5dd))
+* **deps:** update github.com/golusoris/golusoris/container/registry/sign digest to c9de8c9 ([#887](https://github.com/golusoris/golusoris/issues/887)) ([b544145](https://github.com/golusoris/golusoris/commit/b544145a689f9efced5475fd2f270a03d4e77e54))
+* **deps:** update github.com/xuri/excelize/v2 digest to 402e3bd ([#888](https://github.com/golusoris/golusoris/issues/888)) ([5cdd777](https://github.com/golusoris/golusoris/commit/5cdd777a02beefb4d97931d59991561a518d6591))
+* **deps:** update module charm.land/bubbletea/v2 to v2.1.0 ([#755](https://github.com/golusoris/golusoris/issues/755)) ([def54e3](https://github.com/golusoris/golusoris/commit/def54e36b269f771fcdf2421b32db9e87b47b62e))
+* **deps:** update module github.com/brianvoe/gofakeit/v7 to v7.18.0 ([#907](https://github.com/golusoris/golusoris/issues/907)) ([c68c939](https://github.com/golusoris/golusoris/commit/c68c9392238cfd4d994d22b9bebf0a05bbd7a4a7))
+* **deps:** update module github.com/fxamacker/cbor/v2 to v2.9.6 ([#860](https://github.com/golusoris/golusoris/issues/860)) ([d4e3c60](https://github.com/golusoris/golusoris/commit/d4e3c6078b20dcd05e36471c7968350de3c957b0))
+* **deps:** update module github.com/getkin/kin-openapi to v0.151.0 ([#908](https://github.com/golusoris/golusoris/issues/908)) ([8802154](https://github.com/golusoris/golusoris/commit/88021547b0b4bdcfa4d0b510dc313a9ca289d573))
+* **deps:** update module github.com/go-chi/chi/v5 to v5.4.0 ([#909](https://github.com/golusoris/golusoris/issues/909)) ([d4cba05](https://github.com/golusoris/golusoris/commit/d4cba05c1202a5bdff0a611a7ed5d95ddb684751))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/tracking/trakt to v1.3.2 ([#893](https://github.com/golusoris/golusoris/issues/893)) ([f2e9bc1](https://github.com/golusoris/golusoris/commit/f2e9bc1fc025e444f3057ffe601bd89ab12d8061))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/video/tmdb to v1.3.2 ([#894](https://github.com/golusoris/golusoris/issues/894)) ([3fcd29a](https://github.com/golusoris/golusoris/commit/3fcd29a242fe7c7de4f4bc1cbbd40a68274e5905))
+* **deps:** update module github.com/golusoris/golusoris to v0.16.2 ([#852](https://github.com/golusoris/golusoris/issues/852)) ([97f6c1b](https://github.com/golusoris/golusoris/commit/97f6c1b2728564284ebf8c340477444de3a911fb))
+* **deps:** update module github.com/golusoris/golusoris to v0.16.5 ([#895](https://github.com/golusoris/golusoris/issues/895)) ([aad707d](https://github.com/golusoris/golusoris/commit/aad707da0b234d4e637547e124fd75822cb37a47))
+* **deps:** update module github.com/onsi/ginkgo/v2 to v2.33.1 ([#753](https://github.com/golusoris/golusoris/issues/753)) ([1af2331](https://github.com/golusoris/golusoris/commit/1af2331eccc7a15659e836adc261d9f397456226))
+* **deps:** update module github.com/oschwald/maxminddb-golang/v2 to v2.8.0 ([#601](https://github.com/golusoris/golusoris/issues/601)) ([aa4bd85](https://github.com/golusoris/golusoris/commit/aa4bd853cbfc130e9cd9d76c5a04f8ef5419519e))
+* **deps:** update module github.com/pdfcpu/pdfcpu to v0.16.2 ([#602](https://github.com/golusoris/golusoris/issues/602)) ([b8b3597](https://github.com/golusoris/golusoris/commit/b8b35977f25a5735b5ab7f5d37f3d1b36f7a8438))
+* **deps:** update module github.com/prometheus/common to v0.72.1 ([#761](https://github.com/golusoris/golusoris/issues/761)) ([982535e](https://github.com/golusoris/golusoris/commit/982535e0e98acc113474a9994c9dae93a14a1824))
+* **deps:** update module go.temporal.io/sdk to v1.50.0 ([#918](https://github.com/golusoris/golusoris/issues/918)) ([f838b50](https://github.com/golusoris/golusoris/commit/f838b506d0139f3ad0834bc17e7e823d7d9c4831))
+* **jobs:** check River client settings instead of recovering panics ([#872](https://github.com/golusoris/golusoris/issues/872)) ([c9de8c9](https://github.com/golusoris/golusoris/commit/c9de8c9a6f0e5cbc2d1b0f19808fc1250bdbb4a4))
+* **leader/pg:** end leadership when the lock session dies ([#867](https://github.com/golusoris/golusoris/issues/867)) ([66fd882](https://github.com/golusoris/golusoris/commit/66fd88235c15e7aa805a2c2ef8cc746bc667ed24))
+* stop recovering nil-dereference faults that corrupt the heap on Windows ([#870](https://github.com/golusoris/golusoris/issues/870)) ([cd0d780](https://github.com/golusoris/golusoris/commit/cd0d780bb00643976d88acf1d11343256f191cde))
+* **storage/tus:** tag upload ids with the creating replica ([#853](https://github.com/golusoris/golusoris/issues/853)) ([eb0a59a](https://github.com/golusoris/golusoris/commit/eb0a59adf23a6d13aa4546550387edfc27dbe1b7))
+
 ## [0.16.5](https://github.com/golusoris/golusoris/compare/v0.16.4...v0.16.5) (2026-10-11)
 
 
