@@ -36,6 +36,8 @@ main() {
 	require_success module-sweep "${MODULE_SWEEP:?}"
 	require_success mkdocs "${MKDOCS:?}"
 	require_success allocation-budget "${ALLOCATION_BUDGET:?}"
+	require_success core-skew "${CORE_SKEW:?}"
+	require_success fault-recovery "${FAULT_RECOVERY:?}"
 	require_success release-binaries "${RELEASE_BINARIES:?}"
 	require_success release-smoke "${RELEASE_SMOKE:?}"
 	require_success shellcheck "${SHELLCHECK:?}"
@@ -48,6 +50,7 @@ main() {
 	require_success gitleaks "${GITLEAKS:?}"
 	require_success reuse "${REUSE:?}"
 	require_success apidiff "${APIDIFF:?}"
+	require_success app-image-smoke "${APP_IMAGE_SMOKE:?}"
 
 	local is_pr=false
 	[[ "${EVENT_NAME:?}" == pull_request ]] && is_pr=true

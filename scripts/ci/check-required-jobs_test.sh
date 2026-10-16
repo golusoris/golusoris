@@ -20,6 +20,8 @@ run_policy() {
 		MODULE_SWEEP="${MODULE_SWEEP:-success}" \
 		MKDOCS="${MKDOCS:-success}" \
 		ALLOCATION_BUDGET="${ALLOCATION_BUDGET:-success}" \
+		CORE_SKEW="${CORE_SKEW:-success}" \
+		FAULT_RECOVERY="${FAULT_RECOVERY:-success}" \
 		RELEASE_BINARIES="${RELEASE_BINARIES:-success}" \
 		RELEASE_SMOKE="${RELEASE_SMOKE:-success}" \
 		SHELLCHECK="${SHELLCHECK:-success}" \
@@ -35,6 +37,7 @@ run_policy() {
 		ATTRIBUTION="${ATTRIBUTION:-skipped}" \
 		REUSE="${REUSE:-success}" \
 		APIDIFF="${APIDIFF:-success}" \
+		APP_IMAGE_SMOKE="${APP_IMAGE_SMOKE:-success}" \
 		EVENT_NAME="${EVENT_NAME:-pull_request}" \
 		ACTOR="${ACTOR:-contributor}" \
 		bash "$POLICY"
@@ -60,6 +63,10 @@ EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success
 expect_failure env LINT=skipped bash "$0" --single
 expect_failure env MKDOCS=skipped bash "$0" --single
 expect_failure env ALLOCATION_BUDGET=failure bash "$0" --single
+expect_failure env CORE_SKEW=failure bash "$0" --single
+expect_failure env CORE_SKEW=skipped bash "$0" --single
+expect_failure env FAULT_RECOVERY=failure bash "$0" --single
+expect_failure env FAULT_RECOVERY=skipped bash "$0" --single
 expect_failure env RELEASE_BINARIES=failure bash "$0" --single
 expect_failure env RELEASE_SMOKE=failure bash "$0" --single
 expect_failure env RELEASE_SMOKE=skipped bash "$0" --single
@@ -72,6 +79,8 @@ expect_failure env KUBECONFORM=skipped bash "$0" --single
 expect_failure env SEMGREP=failure bash "$0" --single
 expect_failure env GITLEAKS=failure bash "$0" --single
 expect_failure env APIDIFF=failure bash "$0" --single
+expect_failure env APP_IMAGE_SMOKE=failure bash "$0" --single
+expect_failure env APP_IMAGE_SMOKE=skipped bash "$0" --single
 expect_failure env DEPENDENCY_REVIEW=skipped bash "$0" --single
 expect_failure env PR_TITLE=skipped EVENT_NAME=push DEPENDENCY_REVIEW=success DCO=skipped bash "$0" --single
 expect_failure env PR_TITLE=skipped EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=success bash "$0" --single

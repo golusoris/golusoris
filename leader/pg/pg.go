@@ -13,7 +13,11 @@
 //  2. While holding the lock the connection stays open — advisory
 //     locks are released on session end (graceful close OR crash), so
 //     there's no TTL + renewal dance.
-//  3. On fx Stop the connection is closed, releasing the lock for the
+//  3. While leading, the elector runs SELECT 1 on that connection every
+//     leader.pg.retry. If the session is gone (backend terminated,
+//     network loss), leadership ends and the candidate re-enters the
+//     election on a fresh connection.
+//  4. On fx Stop the connection is closed, releasing the lock for the
 //     next candidate immediately.
 //
 // Compared to the k8s Lease: simpler (no TTL tuning), fail-safe on
@@ -37,6 +41,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 
@@ -77,9 +82,8 @@ func keyFor(name string) (int64, error) {
 }
 
 // Run blocks until ctx is canceled, running the pg-advisory-lock
-// election loop. Never returns a "leadership lost" error — advisory
-// locks disappear only on session close, and this function owns the
-// session.
+// election loop. Losing the lock session ends the leadership term and
+// starts a new campaign; it is not returned as an error.
 func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock, cb leader.Callbacks) error {
 	opts = opts.withDefaults()
 	if opts.Name == "" {
@@ -91,31 +95,87 @@ func Run(ctx context.Context, pool *pgxpool.Pool, opts Options, clk clock.Clock,
 	if err != nil {
 		return err
 	}
+	for ctx.Err() == nil {
+		if err := campaign(ctx, pool, key, opts.PG.Retry, clk, identity, cb); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-	// Dedicate one connection so the advisory lock stays held.
-	conn, err := pool.Acquire(ctx)
+// campaign holds one dedicated connection: it waits for the lock, then
+// leads until ctx ends or the session stops answering.
+func campaign(ctx context.Context, pool *pgxpool.Pool, key int64, retry time.Duration, clk clock.Clock, identity string, cb leader.Callbacks) (err error) {
+	pooled, err := pool.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("leader/pg: acquire conn: %w", err)
 	}
-	defer conn.Release()
+	// The session may still hold the lock; closing it, not returning it to the pool, releases the lock.
+	conn := pooled.Hijack()
+	defer func() { err = errors.Join(err, closeSession(ctx, conn, retry)) }()
 
 	for ctx.Err() == nil {
-		got, acqErr := tryLock(ctx, conn.Conn(), key)
+		got, acqErr := tryLock(ctx, conn, key)
 		if acqErr != nil {
 			return fmt.Errorf("leader/pg: try lock: %w", acqErr)
 		}
 		if got {
-			// The lock is held until ctx cancellation and releases when
-			// conn is released (deferred above).
-			hook.Lead(ctx, identity, cb)
+			leadWhileHeld(ctx, conn, retry, clk, identity, cb)
 			return nil
 		}
 		// Not leader: wait + retry.
 		select {
 		case <-ctx.Done():
 			return nil
-		case <-clk.After(opts.PG.Retry):
+		case <-clk.After(retry):
 		}
+	}
+	return nil
+}
+
+// sessionProbe is the part of *pgx.Conn the heartbeat needs.
+type sessionProbe interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+// leadWhileHeld runs one leadership term and ends it when ctx ends or the
+// lock session fails its heartbeat.
+func leadWhileHeld(ctx context.Context, conn sessionProbe, retry time.Duration, clk clock.Clock, identity string, cb leader.Callbacks) {
+	termCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		hook.Lead(termCtx, identity, cb)
+	}()
+	heartbeat(termCtx, conn, retry, clk)
+	cancel()
+	<-done
+}
+
+// heartbeat returns when ctx ends or a SELECT 1 on the lock session fails.
+func heartbeat(ctx context.Context, conn sessionProbe, retry time.Duration, clk clock.Clock) {
+	for ctx.Err() == nil {
+		select {
+		case <-ctx.Done():
+			return
+		case <-clk.After(retry):
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, retry)
+		_, err := conn.Exec(probeCtx, "SELECT 1")
+		cancel()
+		if err != nil {
+			return
+		}
+	}
+}
+
+// closeSession ends the lock session; pgx ignores Terminate errors, so only a socket close failure returns.
+func closeSession(ctx context.Context, conn *pgx.Conn, timeout time.Duration) error {
+	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+	if err := conn.Close(closeCtx); err != nil {
+		return fmt.Errorf("leader/pg: close lock session: %w", err)
 	}
 	return nil
 }

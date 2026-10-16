@@ -7,12 +7,10 @@
 
 from __future__ import annotations
 
-import datetime
 import json
 import re
 import sys
 from collections import Counter
-from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,7 +21,9 @@ INPUTS = (
     ".gitea/workflows/security-scan.yml",
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
+    ".github/testcontainers-split-images.txt",
     "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+    "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
     "internal/testimages/images.go",
     "scripts/ci/tiny-trainer-locks.sh",
@@ -84,6 +84,8 @@ EXPECTED = {
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "localstack/localstack", "docker"),
     ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "testcontainers/ryuk", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "nagyesta/lowkey-vault", "docker"),
+    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "testcontainers/ryuk", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -97,6 +99,13 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
+    (".github/testcontainers-split-images.txt", "localstack/localstack", "docker"),
+    (".github/testcontainers-split-images.txt", "hashicorp/vault", "docker"),
+    (".github/testcontainers-split-images.txt", "openbao/openbao", "docker"),
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"),
+    (".github/testcontainers-split-images.txt", "fsouza/fake-gcs-server", "docker"),
+    (".github/testcontainers-split-images.txt", "mcr.microsoft.com/azure-storage/azurite", "docker"),
+    (".github/testcontainers-split-images.txt", "nagyesta/lowkey-vault", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
     (
@@ -141,6 +150,7 @@ EXPECTED = {
 EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 5,
 }
 
 EXPECTED_DIGESTS = {
@@ -172,6 +182,7 @@ EXPECTED_DIGESTS = {
     "hashicorp/vault",
     "openbao/openbao",
     "localstack/localstack",
+    "nagyesta/lowkey-vault",
     "mcr.microsoft.com/devcontainers/go",
 }
 
@@ -226,9 +237,7 @@ def identities(found: list[dict[str, str]]) -> set[tuple[str, str, str]]:
     return {(item["path"], item["dep_name"], item["datasource"]) for item in found}
 
 
-# Go-authority images the primary CI test job never runs, so its cache omits
-# them: ClamAV sits behind the `integration` build tag, and split-module
-# emulators run in the Module sweep job, which pulls on demand.
+# Split-module emulators use the shard pre-pull manifest instead of the primary cache.
 CACHE_EXEMPT_IMAGES = frozenset(
     {"fsouza/fake-gcs-server", "mcr.microsoft.com/azure-storage/azurite"}
 )
@@ -253,6 +262,56 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
         print(f"test-image authorities differ beyond the declared cache exemptions: {drift[0]}", file=sys.stderr)
         return False
     return True
+
+
+SPLIT_IMAGES_PATH = ".github/testcontainers-split-images.txt"
+SPLIT_IMAGE_AUTHORITIES = {
+    "container/registry/sign/kms/aws": (
+        "container/registry/sign/kms/aws/internal/localstackdev/images.go", None,
+    ),
+    "container/registry/sign/kms/azure": (
+        "container/registry/sign/kms/azure/internal/lowkeydev/images.go", None,
+    ),
+    "container/registry/sign/kms/vault": (
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go", None,
+    ),
+    "storage/gcs": (
+        "internal/testimages/images.go", {"fsouza/fake-gcs-server", "testcontainers/ryuk"},
+    ),
+    "storage/azblob": (
+        "internal/testimages/images.go", {"mcr.microsoft.com/azure-storage/azurite", "testcontainers/ryuk"},
+    ),
+}
+
+
+def split_image_authorities_valid(found: list[dict[str, str]], content: str) -> bool:
+    """Require exact module, name, tag and digest parity with Go authorities."""
+    expected = Counter(
+        (module, item["dep_name"], item["current_value"], item["current_digest"])
+        for module, (path, names) in SPLIT_IMAGE_AUTHORITIES.items()
+        for item in found
+        if item["path"] == path and (names is None or item["dep_name"] in names)
+    )
+    actual: Counter[tuple[str, ...]] = Counter()
+    for line in content.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        match = re.fullmatch(
+            r"([a-z0-9_./-]+) ([a-z0-9][a-z0-9._/-]*):([^@\s]+)@(sha256:[a-f0-9]{64})",
+            line,
+        )
+        if match is None:
+            return False
+        actual[match.groups()] += 1
+    return actual == expected
+
+
+def test_split_image_authorities(found: list[dict[str, str]], content: str) -> bool:
+    """Report split-module pre-pull drift before tests reach Docker."""
+    if split_image_authorities_valid(found, content):
+        return True
+    print("split test-image manifest differs from Go authorities (module/name/tag/digest)", file=sys.stderr)
+    return False
 
 
 def test_trainer_manager_coverage(config: dict[str, object]) -> bool:
@@ -385,6 +444,76 @@ def test_localstack_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def trainer_python_cap_valid(config: dict[str, object]) -> bool:
+    """Require the Python cap for both TensorFlow trainer base images."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    caps = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["docker"]
+        and rule.get("matchFileNames") == [
+            "ai/tiny/trainers/gemma/**",
+            "ai/tiny/trainers/litert/**",
+        ]
+        and rule.get("matchPackageNames") == ["python"]
+        and rule.get("allowedVersions") == "<3.14"
+    ]
+    return len(caps) == 1
+
+
+def test_trainer_python_cap(config: dict[str, object]) -> bool:
+    """Report a missing trainer Python cap and prove its removal is refused."""
+    if not trainer_python_cap_valid(config):
+        print("renovate.json must hold both trainer Python bases below 3.14", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
+    ]
+    if trainer_python_cap_valid(mutated):
+        print("trainer Python cap negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def chromedp_group_valid(config: dict[str, object]) -> bool:
+    """Require chromedp and cdproto in one reviewed update group."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list):
+        return False
+    groups = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchDatasources") == ["go"]
+        and rule.get("matchPackageNames") == [
+            "github.com/chromedp/chromedp",
+            "github.com/chromedp/cdproto",
+        ]
+        and rule.get("groupName") == "chromedp"
+        and rule.get("automerge") is False
+    ]
+    return len(groups) == 1
+
+
+def test_chromedp_group(config: dict[str, object]) -> bool:
+    """Report a missing chromedp group and prove its removal is refused."""
+    if not chromedp_group_valid(config):
+        print("renovate.json must group chromedp and cdproto with automerge off", file=sys.stderr)
+        return False
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("groupName") != "chromedp"
+    ]
+    if chromedp_group_valid(mutated):
+        print("chromedp group negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
 def test_pin_inventory(found: list[dict[str, str]]) -> bool:
     """Require the exact declared nonstandard dependency inventory."""
     actual = identities(found)
@@ -450,6 +579,13 @@ def test_negative_controls(config: dict[str, object], contents: dict[str, str]) 
     if private_job_image_authority_valid(config, drifted):
         print("negative control accepted a drifting private job-image digest", file=sys.stderr)
         return False
+    split_drift = dict(contents)
+    split_drift[SPLIT_IMAGES_PATH] = re.sub(
+        r"@sha256:[a-f0-9]{64}", "@sha256:" + "0" * 64, contents[SPLIT_IMAGES_PATH], count=1,
+    )
+    if split_image_authorities_valid(extract(config, split_drift), split_drift[SPLIT_IMAGES_PATH]):
+        print("negative control accepted a drifting split test-image digest", file=sys.stderr)
+        return False
     return True
 
 
@@ -506,12 +642,22 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     return True
 
 
+PRESET = "github>plurano/horistes"
+# The preset holds minimumReleaseAge "3 days" and switches github-runner proposals off.
 MINIMUM_RELEASE_AGE = "3 days"
 
 
+def extends_preset(config: dict[str, object]) -> bool:
+    """Require the family preset in extends."""
+    extends = config.get("extends")
+    return isinstance(extends, list) and PRESET in extends
+
+
 def minimum_age_valid(config: dict[str, object]) -> bool:
-    """Require the three-day release age and refuse any setting that weakens it."""
-    if config.get("minimumReleaseAge") != MINIMUM_RELEASE_AGE:
+    """Require the preset's three-day release age and refuse any setting that weakens it."""
+    if not extends_preset(config):
+        return False
+    if config.get("minimumReleaseAge", MINIMUM_RELEASE_AGE) != MINIMUM_RELEASE_AGE:
         return False
     if config.get("internalChecksFilter", "strict") != "strict":
         return False
@@ -521,10 +667,15 @@ def minimum_age_valid(config: dict[str, object]) -> bool:
     return not any(isinstance(rule, dict) and "minimumReleaseAge" in rule for rule in rules)
 
 
+def without_preset(config: dict[str, object]) -> dict[str, object]:
+    """Copy the configuration with the family preset dropped from extends."""
+    mutated = json.loads(json.dumps(config))
+    mutated["extends"] = [entry for entry in mutated["extends"] if entry != PRESET]
+    return mutated
+
+
 def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
     """Build the configurations the age check must refuse."""
-    removed = json.loads(json.dumps(config))
-    removed.pop("minimumReleaseAge", None)
     shortened = json.loads(json.dumps(config))
     shortened["minimumReleaseAge"] = "1 day"
     unfiltered = json.loads(json.dumps(config))
@@ -532,7 +683,7 @@ def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object
     overridden = json.loads(json.dumps(config))
     overridden["packageRules"].append({"matchManagers": ["gomod"], "minimumReleaseAge": "0 days"})
     return {
-        "age removed": removed,
+        "preset removed": without_preset(config),
         "age shortened": shortened,
         "pending versions not filtered": unfiltered,
         "package rule overrides the age": overridden,
@@ -543,7 +694,8 @@ def test_minimum_age(config: dict[str, object]) -> bool:
     """Report a missing age rule and prove the check refuses each way to weaken it."""
     if not minimum_age_valid(config):
         print(
-            "renovate.json must set minimumReleaseAge to 3 days, keep the strict filter and override it nowhere",
+            f"renovate.json must extend {PRESET} (3-day release age), keep the strict filter "
+            "and override the age nowhere",
             file=sys.stderr,
         )
         return False
@@ -554,70 +706,33 @@ def test_minimum_age(config: dict[str, object]) -> bool:
     return True
 
 
-RUNNER_HOLD_EXPIRY = re.compile(r"Expires (\d{4}-\d{2}-\d{2})\.")
-# Ninety days after the hold was set on 2026-10-11; a later date needs a new decision.
-RUNNER_HOLD_LATEST_EXPIRY = "2027-01-09"
-
-
-def runner_hold_valid(config: dict[str, object], today: str) -> bool:
-    """Require the dated hold of the hosted runner image while its date has not passed."""
+def runner_rules_off(config: dict[str, object]) -> bool:
+    """Require the preset that switches runner proposals off and refuse any local runner rule."""
+    if not extends_preset(config):
+        return False
     rules = config.get("packageRules")
     if not isinstance(rules, list):
         return False
-    holds = [
-        rule
-        for rule in rules
-        if isinstance(rule, dict)
-        and rule.get("matchManagers") == ["github-actions"]
-        and rule.get("matchDepTypes") == ["github-runner"]
-        and rule.get("matchPackageNames") == ["ubuntu"]
-        and rule.get("allowedVersions") == "/^24\\.04$/"
-    ]
-    if len(holds) != 1:
-        return False
-    expiry = RUNNER_HOLD_EXPIRY.search(str(holds[0].get("description", "")))
-    return expiry is not None and today <= expiry.group(1) <= RUNNER_HOLD_LATEST_EXPIRY
-
-
-def runner_hold_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
-    """Build the configurations the runner hold check must refuse."""
-
-    def with_hold(change: Callable[[dict[str, object]], None]) -> dict[str, object]:
-        mutated = json.loads(json.dumps(config))
-        for rule in mutated["packageRules"]:
-            if rule.get("matchDepTypes") == ["github-runner"]:
-                change(rule)
-        return mutated
-
-    removed = json.loads(json.dumps(config))
-    removed["packageRules"] = [
-        rule for rule in removed["packageRules"] if rule.get("matchDepTypes") != ["github-runner"]
-    ]
-    return {
-        "hold removed": removed,
-        "hold without a date": with_hold(lambda rule: rule.update(description="Hold the runner image.")),
-        "hold dated past the limit": with_hold(
-            lambda rule: rule.update(description=str(rule["description"]).replace("2027-01-09", "2028-01-09"))
-        ),
-        "hold widened": with_hold(lambda rule: rule.update(allowedVersions="/^2[4-6]\\./")),
-    }
+    return not any(
+        isinstance(rule, dict) and "github-runner" in rule.get("matchDepTypes", []) for rule in rules
+    )
 
 
 def test_runner_hold(config: dict[str, object]) -> bool:
-    """Report a missing or expired runner hold and prove the check refuses each weakening."""
-    today = datetime.datetime.now(tz=datetime.UTC).date().isoformat()
-    if not runner_hold_valid(config, today):
+    """Keep the hosted runner label out of proposals (golusoris#815) and prove the check refuses."""
+    if not runner_rules_off(config):
         print(
-            "renovate.json must hold the runner image at ubuntu 24.04 with an expiry date that has not passed "
-            f"(latest {RUNNER_HOLD_LATEST_EXPIRY}); once golusoris#815 is done, remove the hold and this check",
+            f"renovate.json must extend {PRESET}, which switches runner proposals off, "
+            "and carry no rule of its own for github-runner",
             file=sys.stderr,
         )
         return False
-    if runner_hold_valid(config, "9999-12-31"):
-        print("runner hold negative control was accepted: expiry date passed", file=sys.stderr)
-        return False
-    for label, mutated in runner_hold_mutants(config).items():
-        if runner_hold_valid(mutated, today):
+    reenabled = json.loads(json.dumps(config))
+    reenabled["packageRules"].append(
+        {"matchManagers": ["github-actions"], "matchDepTypes": ["github-runner"], "enabled": True}
+    )
+    for label, mutated in {"preset removed": without_preset(config), "runner re-enabled": reenabled}.items():
+        if runner_rules_off(mutated):
             print(f"runner hold negative control was accepted: {label}", file=sys.stderr)
             return False
     return True
@@ -632,11 +747,14 @@ def main() -> int:
         test_pin_inventory(found),
         test_digest_inventory(found),
         test_image_authorities_match(found),
+        test_split_image_authorities(found, contents[SPLIT_IMAGES_PATH]),
         test_trainer_manager_coverage(config),
         test_private_job_image_authority(config, contents),
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
+        test_trainer_python_cap(config),
+        test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
     )

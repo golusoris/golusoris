@@ -69,13 +69,11 @@ node_modules/
 # .workingdir/ is private, git-ignored session state (PLAN.md, STATE.md,
 # decisions log, scratch files) per praetor HISS-17 — never staged, including
 # with force. Publish reviewed, sanitized documentation under docs/ instead.
-# The nested rule covers per-package copies (e.g. deploy/pulumi/.workingdir/).
-# Keep /.workingdir/ as the final line: praetor's adopt recognises this exact
-# trailing rule and will not re-append it on a future non-force adopt.
-.workingdir/
+# The praetor block below holds the unanchored .workingdir/ rule, which also
+# covers per-package copies (e.g. deploy/pulumi/.workingdir/).
 
 # BEGIN praetor private artifacts (praetorctl adopt)
-/.workingdir/
+.workingdir/
 /.standards/worktrees/
 /.agents/mcp_config.json
 /.standards/cache/

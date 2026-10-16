@@ -11,8 +11,10 @@
 //
 // Precedence, lowest to highest: Files (in order), SecretDirs (in order),
 // environment variables, and *_FILE environment indirection. Setting both
-// APP_X and APP_X_FILE fails. A reload re-applies the higher layers so a
-// changed file never overrides a secret or the environment.
+// APP_X and APP_X_FILE fails. When [Options.DisableEnv] is true, the
+// environment variable layer and *_FILE indirection are skipped. A reload
+// re-applies the higher layers so a changed file never overrides a secret or
+// the environment.
 //
 // Apps add structured config by calling [Config.Unmarshal] into their own
 // struct.
@@ -77,6 +79,10 @@ type Options struct {
 	// MaxSecretBytes caps each secret file read from SecretDirs or *_FILE;
 	// zero means DefaultMaxSecretBytes.
 	MaxSecretBytes int64
+	// DisableEnv skips loading from environment variables and skips
+	// *_FILE indirection. When true, only Files and SecretDirs populate the
+	// configuration.
+	DisableEnv bool
 }
 
 func (o Options) maxSecretBytes() int64 {
@@ -257,6 +263,9 @@ func New(opts Options) (*Config, error) {
 func (c *Config) overlay() error {
 	if err := loadSecretDirs(c.k, c.opts); err != nil {
 		return err
+	}
+	if c.opts.DisableEnv {
+		return nil
 	}
 	envProvider := env.Provider(c.opts.Delimiter, env.Opt{
 		Prefix:        c.opts.EnvPrefix,

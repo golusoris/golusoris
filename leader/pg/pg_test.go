@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jonboulle/clockwork"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -133,5 +134,44 @@ func TestNamedModule_invalidKeyFails(t *testing.T) {
 	app := fx.New(fx.NopLogger, leaderpg.NamedModule("gc_sweep", leader.Callbacks{}))
 	if err := app.Err(); err == nil || !strings.Contains(err.Error(), "leader/pg: invalid election key") {
 		t.Fatalf("err = %v, want invalid election key", err)
+	}
+}
+
+// TestBackendKillEndsLeadership terminates the lock session server-side
+// (golusoris#864): leadership must end within about one Retry and the
+// elector must win again on a fresh session.
+func TestBackendKillEndsLeadership(t *testing.T) {
+	t.Parallel()
+	pool := pg.Start(t)
+	t.Cleanup(pool.Close)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	t.Cleanup(cancel)
+
+	started := make(chan struct{}, 4)
+	stopped := make(chan struct{}, 4)
+	cb := leader.Callbacks{
+		OnStartedLeading: func(context.Context) { started <- struct{}{} },
+		OnStoppedLeading: func() { stopped <- struct{}{} },
+	}
+	opts := leaderpg.Options{Enabled: true, Name: "kill-test", PG: leaderpg.BackendOptions{Retry: 100 * time.Millisecond}}
+	go func() { _ = leaderpg.Run(ctx, pool, opts, clockwork.NewRealClock(), cb) }()
+	waitSignal(t, started, 5*time.Second, "first term")
+
+	var killed bool
+	err := pool.QueryRow(ctx, `SELECT pg_terminate_backend(pid) FROM pg_locks
+		WHERE locktype = 'advisory' AND granted AND pid <> pg_backend_pid()`).Scan(&killed)
+	if err != nil || !killed {
+		t.Fatalf("terminate lock holder: killed=%v err=%v", killed, err)
+	}
+	waitSignal(t, stopped, time.Second, "OnStoppedLeading after backend kill")
+	waitSignal(t, started, 5*time.Second, "second term on a fresh session")
+}
+
+func waitSignal(t *testing.T, ch <-chan struct{}, d time.Duration, what string) {
+	t.Helper()
+	select {
+	case <-ch:
+	case <-time.After(d):
+		t.Fatalf("%s: none within %v", what, d)
 	}
 }

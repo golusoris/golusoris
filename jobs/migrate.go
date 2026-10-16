@@ -16,6 +16,7 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 
 	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/internal/pgxpoolstate"
 )
 
 // migrateLockKey is a fixed Postgres advisory-lock key ("river" in hex) so all
@@ -91,18 +92,11 @@ func migrationLockPool(ctx context.Context, pool *pgxpool.Pool) (*pgxpool.Pool, 
 	return lockPool, nil
 }
 
-func migrationPoolConfig(pool *pgxpool.Pool) (config *pgxpool.Config, err error) {
-	defer func() {
-		if recovered := recover(); recovered != nil {
-			config = nil
-			err = fmt.Errorf("jobs: migrate: invalid pool: %v", recovered)
-		}
-	}()
-	config = pool.Config()
-	if config == nil {
+func migrationPoolConfig(pool *pgxpool.Pool) (*pgxpool.Config, error) {
+	if !pgxpoolstate.Initialized(pool) {
 		return nil, errors.New("jobs: migrate: invalid pool")
 	}
-	return config, nil
+	return pool.Config(), nil
 }
 
 func migrationConfig() *rivermigrate.Config {

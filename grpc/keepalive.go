@@ -21,7 +21,7 @@ const Infinite time.Duration = -1
 
 const (
 	defaultMaxConnectionAge      = 2 * time.Minute
-	defaultMaxConnectionAgeGrace = 5 * time.Second
+	defaultMaxConnectionAgeGrace = Infinite
 	defaultKeepaliveTime         = time.Minute
 	defaultKeepaliveTimeout      = 20 * time.Second
 	// defaultKeepaliveMinTime matches grpc-go's own enforcement default.
@@ -39,7 +39,7 @@ type KeepaliveConfig struct {
 	// connection (default 2m; negative = never).
 	MaxConnectionAge time.Duration `koanf:"max_connection_age"`
 	// MaxConnectionAgeGrace is how long RPCs still running at rotation may
-	// continue before the connection closes (default 5s; negative = unlimited).
+	// continue before the connection closes (default unlimited; positive = cap).
 	MaxConnectionAgeGrace time.Duration `koanf:"max_connection_age_grace"`
 	// Time is the idle period after which the server pings the client
 	// (default 1m; negative = never).

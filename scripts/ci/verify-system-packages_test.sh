@@ -171,8 +171,8 @@ check_wiring() {
 			return 1
 		fi
 	done
-	if [[ "$(grep -Fc 'run: bash scripts/ci/install-cgo-libs.sh' "$workflows/ci.yml")" -ne 2 ]]; then
-		printf 'ci.yml must install cgo headers in the module sweep and apidiff jobs\n' >&2
+	if [[ "$(grep -Fc 'run: bash scripts/ci/install-cgo-libs.sh' "$workflows/ci.yml")" -ne 3 ]]; then
+		printf 'ci.yml must install cgo headers in the module sweep, apidiff and fault scan jobs\n' >&2
 		return 1
 	fi
 	# praetor-api.yml is Praetor's rendering of .standards.yaml api.system_packages,

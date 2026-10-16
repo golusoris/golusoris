@@ -53,10 +53,22 @@
             "context": "API compatibility (apidiff)"
           },
           {
+            "context": "App image smoke (linux/amd64)"
+          },
+          {
+            "context": "App image smoke (linux/arm64)"
+          },
+          {
             "context": "Build"
           },
           {
             "context": "CI success"
+          },
+          {
+            "context": "Core version skew"
+          },
+          {
+            "context": "Recovered fault scan"
           },
           {
             "context": "Secret scan (gitleaks)"
@@ -125,7 +137,7 @@
             "context": "Terraform modules"
           },
           {
-            "context": "Test (race + coverage) (ubuntu-24.04, module)"
+            "context": "Test (race + coverage) (module)"
           },
           {
             "context": "Vulnerabilities (govulncheck)"
