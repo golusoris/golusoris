@@ -143,16 +143,45 @@ func (m *Manager) SaveContext(ctx context.Context, w http.ResponseWriter, s *Ses
 	if err := m.store.Save(ctx, s.ID, s.data, m.opts.TTL); err != nil {
 		return fmt.Errorf("session: save: %w", err)
 	}
+	m.setCookie(w, s.ID)
+	return nil
+}
+
+// Renew moves s to a fresh ID so an ID known before sign-in stops working
+// (session fixation); call it after login, a privilege change or a password
+// change. The data is saved under the new ID and the cookie set before the
+// old ID is deleted, so a failure in between leaves a valid session.
+func (m *Manager) Renew(ctx context.Context, w http.ResponseWriter, s *Session) error {
+	if s == nil {
+		return errors.New("session: renew: nil session")
+	}
+	id, err := genID()
+	if err != nil {
+		return fmt.Errorf("session: renew: %w", err)
+	}
+	if saveErr := m.store.Save(ctx, id, s.data, m.opts.TTL); saveErr != nil {
+		return fmt.Errorf("session: renew: save: %w", saveErr)
+	}
+	m.setCookie(w, id)
+	oldID := s.ID
+	s.ID = id
+	if delErr := m.store.Delete(ctx, oldID); delErr != nil && !isNotFound(delErr) {
+		return fmt.Errorf("session: renew: delete old: %w", delErr)
+	}
+	return nil
+}
+
+// setCookie points the session cookie at id.
+func (m *Manager) setCookie(w http.ResponseWriter, id string) {
 	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure is default-on with explicit development opt-out // nosemgrep: go.lang.security.audit.net.cookie-missing-secure.cookie-missing-secure -- Secure defaults true; AllowInsecureCookie is explicit
 		Name:     m.opts.CookieName,
-		Value:    s.ID,
+		Value:    id,
 		Path:     m.opts.Path,
 		MaxAge:   int(m.opts.TTL.Seconds()),
 		HttpOnly: true,
 		Secure:   !m.opts.AllowInsecureCookie,
 		SameSite: m.opts.SameSite,
 	})
-	return nil
 }
 
 // Destroy deletes the session data and expires the cookie.
