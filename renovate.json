@@ -225,13 +225,14 @@
     },
     {
       "customType": "regex",
-      "description": "Update immutable integration-test image references in Go and the CI cache manifest.",
+      "description": "Update immutable integration-test image references in Go and the CI pre-pull manifests.",
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
         "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
-        "/^\\.github/testcontainers-images\\.txt$/"
+        "/^\\.github/testcontainers-images\\.txt$/",
+        "/^\\.github/testcontainers-split-images\\.txt$/"
       ],
       "matchStrings": [
         "(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[^@\\\"\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
