@@ -124,7 +124,8 @@ func makeStop(ctr *tcpostgres.PostgresContainer) func() error {
 		if ctr == nil {
 			return nil
 		}
-		return terminate(ctr, terminateTimeout)
+		// One container per binary: teardown at high load took the whole terminate bound.
+		return terminate(ctr, startTimeout)
 	}
 }
 
@@ -246,11 +247,12 @@ func cloneDatabase(t *testing.T) *pgxpool.Config {
 
 func dropDatabase(t *testing.T, dbName string) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
-	defer cancel()
 	quoted := pgx.Identifier{dbName}.Sanitize()
 	shared.mu.Lock()
 	defer shared.mu.Unlock()
+	// The bound starts once the lock is held: parallel cleanups queue on it under load.
+	ctx, cancel := context.WithTimeout(context.Background(), opTimeout)
+	defer cancel()
 	if shared.admin != nil {
 		if _, err := shared.admin.Exec(ctx, "DROP DATABASE IF EXISTS "+quoted+" WITH (FORCE)"); err != nil {
 			t.Logf("testutil/pg: drop clone database %s: %v", dbName, err)
