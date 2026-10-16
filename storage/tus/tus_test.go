@@ -72,7 +72,10 @@ func bootHandler(t *testing.T, body string) (*tus.Handler, storage.Bucket) {
 		t.Fatalf("Start: %v", err)
 	}
 	t.Cleanup(func() {
-		if stopErr := app.Stop(ctx); stopErr != nil {
+		// The stop deadline starts at stop, not at boot.
+		stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if stopErr := app.Stop(stopCtx); stopErr != nil {
 			t.Fatalf("Stop: %v", stopErr)
 		}
 	})

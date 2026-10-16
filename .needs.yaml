@@ -127,7 +127,7 @@ capabilities:
         - custom.github_com_sony_gobreaker_v2
         - clikit.cobra
         - test.assert
-        - custom.github_com_stripe_stripe_go_v86
+        - custom.github_com_stripe_stripe_go_v87
         - custom.github_com_testcontainers_testcontainers_go
         - custom.github_com_testcontainers_testcontainers_go_modules_postgres
         - custom.github_com_testcontainers_testcontainers_go_modules_redis
@@ -1006,11 +1006,11 @@ dependencies:
       status: covered
       golusoris_replacement: github.com/golusoris/golusoris/testutil
       notes: Testify assertions and mocks mapped to Golusoris testutil
-    - package: github.com/stripe/stripe-go/v86
-      version: v86.4.2
+    - package: github.com/stripe/stripe-go/v87
+      version: v87.0.0
       language: go
       ecosystem: go
-      capability: custom.github_com_stripe_stripe_go_v86
+      capability: custom.github_com_stripe_stripe_go_v87
       status: gap
       notes: Third-party package without native Golusoris equivalent
     - package: github.com/testcontainers/testcontainers-go

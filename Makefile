@@ -122,6 +122,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/trivy-policy_test.sh
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
+	@bash scripts/ci/gosec-scan_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
@@ -134,11 +135,13 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
+	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
+	@python3 -B scripts/ci/pull_test_images_test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py

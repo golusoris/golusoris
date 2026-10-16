@@ -51,10 +51,10 @@ func initApp(name, module string) error {
 	}
 
 	files := map[string]string{
-		"go.mod":     goModTmpl,
-		"main.go":    mainGoTmpl,
-		"LICENSE":    eupl12Text,
-		"REUSE.toml": reuseTomlTmpl,
+		"go.mod":          goModTmpl,
+		"cmd/app/main.go": mainGoTmpl,
+		"LICENSE":         eupl12Text,
+		"REUSE.toml":      reuseTomlTmpl,
 	}
 
 	data := struct{ Name, Module, GoVersion, Year string }{
@@ -73,11 +73,14 @@ func initApp(name, module string) error {
 	}
 
 	fmt.Printf("\nApp scaffolded in ./%s (EUPL-1.2, REUSE-ready)\n", dir)
-	fmt.Printf("Next steps:\n  cd %s\n  go get github.com/golusoris/golusoris/core@latest\n  go mod tidy\n  go run .\n", dir)
+	fmt.Printf("Next steps:\n  cd %s\n  go get github.com/golusoris/golusoris/core@latest\n  go mod tidy\n  go run ./cmd/app\n", dir)
 	return nil
 }
 
 func writeTemplate(path, tmplStr string, data any) (err error) {
+	if err = os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
+		return fmt.Errorf("scaffold: create dir: %w", err)
+	}
 	t, err := template.New("").Parse(tmplStr)
 	if err != nil {
 		return fmt.Errorf("parse template: %w", err)

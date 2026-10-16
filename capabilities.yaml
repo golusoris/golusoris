@@ -955,8 +955,8 @@ packages:
   - import: github.com/golusoris/golusoris/payments/stripe
     domain: payments
     capabilities: [payments.stripe]
-    description: "Package stripe provides a thin fx-compatible wrapper around stripe-go/v86."
-    replaces: [github.com/stripe/stripe-go/v86]
+    description: "Package stripe provides a thin fx-compatible wrapper around stripe-go/v87."
+    replaces: [github.com/stripe/stripe-go/v87]
   - import: github.com/golusoris/golusoris/payments/subs
     domain: payments
     capabilities: [payments.subscriptions]

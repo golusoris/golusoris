@@ -225,12 +225,14 @@
     },
     {
       "customType": "regex",
-      "description": "Update immutable integration-test image references in Go and the CI cache manifest.",
+      "description": "Update immutable integration-test image references in Go and the CI pre-pull manifests.",
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
-        "/^\\.github/testcontainers-images\\.txt$/"
+        "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
+        "/^\\.github/testcontainers-images\\.txt$/",
+        "/^\\.github/testcontainers-split-images\\.txt$/"
       ],
       "matchStrings": [
         "(?<depName>[a-z0-9][a-z0-9._/-]*):(?<currentValue>[^@\\\"\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
@@ -451,36 +453,6 @@
       "allowedVersions": "<2026"
     },
     {
-      "description": "stripe-go v87 changes the exported payments/stripe API; hold below v87 until the v0.17.0 breaking release (milestone 4, #614), which removes this rule.",
-      "matchDatasources": [
-        "go"
-      ],
-      "matchPackageNames": [
-        "github.com/stripe/stripe-go/v86"
-      ],
-      "allowedVersions": "<87.0.0"
-    },
-    {
-      "description": "The chromedp release that #598 offers (v0.20.1) breaks pdf/pdf.go; hold until the v0.17.0 breaking release (milestone 4, #597, #598), which removes this rule.",
-      "matchDatasources": [
-        "go"
-      ],
-      "matchPackageNames": [
-        "github.com/chromedp/chromedp"
-      ],
-      "allowedVersions": "<0.17.0"
-    },
-    {
-      "description": "Tagged cdproto releases need the newer chromedp API; hold on the pseudo-version until the v0.17.0 breaking release (milestone 4, #597), which removes this rule.",
-      "matchDatasources": [
-        "go"
-      ],
-      "matchPackageNames": [
-        "github.com/chromedp/cdproto"
-      ],
-      "allowedVersions": "<0.1.0"
-    },
-    {
       "description": "Auto-merge low-risk updates (pin/digest/patch/minor) once required checks pass — keeps the queue self-clearing.",
       "matchUpdateTypes": [
         "pin",
@@ -492,6 +464,18 @@
       "automerge": true,
       "automergeStrategy": "squash",
       "platformAutomerge": true
+    },
+    {
+      "description": "chromedp and cdproto move together: a tagged cdproto removes APIs that older chromedp calls (pdf build broke on #597), so one pull request bumps both.",
+      "matchDatasources": [
+        "go"
+      ],
+      "matchPackageNames": [
+        "github.com/chromedp/chromedp",
+        "github.com/chromedp/cdproto"
+      ],
+      "groupName": "chromedp",
+      "automerge": false
     },
     {
       "description": "Review media image and APK updates as one ABI-tested set.",
@@ -518,6 +502,20 @@
       "groupName": "tiny trainer runtimes",
       "rangeStrategy": "pin",
       "automerge": false
+    },
+    {
+      "description": "tensorflow 2.21 publishes wheels for CPython 3.10-3.13 only; keep the trainer Python base below 3.14. Revisit when tensorflow ships cp314 wheels.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ai/tiny/trainers/gemma/**",
+        "ai/tiny/trainers/litert/**"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "allowedVersions": "<3.14"
     },
     {
       "description": "The custom manager owns this digest-only image so its variant remains explicit.",
