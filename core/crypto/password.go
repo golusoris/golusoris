@@ -17,8 +17,8 @@ import (
 	"github.com/alexedwards/argon2id"
 )
 
-// DefaultPasswordParams are sensible 2026 defaults for argon2id (~100ms on
-// modern hardware). Apps can override via [HashPasswordWith].
+// DefaultPasswordParams meet the OWASP argon2id minimum (checked by TestDefaultPasswordParamsMeetOWASPMinimum).
+// Apps can override via [HashPasswordWith].
 var DefaultPasswordParams = &argon2id.Params{
 	Memory:      64 * 1024,
 	Iterations:  3,

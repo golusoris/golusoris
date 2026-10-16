@@ -11,7 +11,7 @@
 //
 // Usage:
 //
-//	r, err := pdf.NewRenderer(pdf.Options{Timeout: 30 * time.Second})
+//	r, err := pdf.NewRendererContext(ctx, pdf.Options{Timeout: 30 * time.Second})
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
@@ -35,6 +35,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -46,9 +47,6 @@ const (
 	minLaunchTimeout = 60 * time.Second
 	// chromeOutputLimit bounds the browser output a launch error carries.
 	chromeOutputLimit = 4 << 10
-	// chromedpBackstop scales chromedp's URL-read and dial timers past
-	// LaunchTimeout so they never cut a launch short; their defaults are 20s and 10s.
-	chromedpBackstop = 2
 )
 
 // Options configures the PDF renderer.
@@ -91,22 +89,14 @@ type RenderOptions struct {
 }
 
 func (o RenderOptions) params() *page.PrintToPDFParams {
-	p := page.PrintToPDF()
-	p = p.WithLandscape(o.Landscape)
-	p = p.WithPrintBackground(o.PrintBackground)
-
 	scale := o.Scale
 	if scale == 0 {
 		scale = 1.0
 	}
-	p = p.WithScale(scale)
-
 	mt, mb, ml, mr := o.MarginTop, o.MarginBottom, o.MarginLeft, o.MarginRight
 	if mt == 0 && mb == 0 && ml == 0 && mr == 0 {
 		mt, mb, ml, mr = 1.0, 1.0, 1.0, 1.0
 	}
-	p = p.WithMarginTop(mt).WithMarginBottom(mb).WithMarginLeft(ml).WithMarginRight(mr)
-
 	pw, ph := o.PaperWidth, o.PaperHeight
 	if pw == 0 {
 		pw = 21.0 // A4 width in cm
@@ -114,9 +104,17 @@ func (o RenderOptions) params() *page.PrintToPDFParams {
 	if ph == 0 {
 		ph = 29.7 // A4 height in cm
 	}
-	p = p.WithPaperWidth(pw / 2.54).WithPaperHeight(ph / 2.54) // chromedp uses inches
-
-	return p
+	return &page.PrintToPDFParams{
+		Landscape:       new(o.Landscape),
+		PrintBackground: new(o.PrintBackground),
+		Scale:           scale,
+		MarginTop:       new(mt),
+		MarginBottom:    new(mb),
+		MarginLeft:      new(ml),
+		MarginRight:     new(mr),
+		PaperWidth:      pw / 2.54, // chromedp uses inches
+		PaperHeight:     ph / 2.54,
+	}
 }
 
 // Renderer renders PDFs using a persistent headless Chrome instance.
@@ -126,17 +124,16 @@ type Renderer struct {
 	opts   Options
 }
 
-// NewRenderer creates and starts a headless Chrome instance.
+// NewRendererContext creates and starts a headless Chrome instance whose
+// session lives until ctx is done or [Renderer.Close] is called.
 // Call [Renderer.Close] when done to free the browser process.
 // Start-up is bounded by [Options.LaunchTimeout]; a failed launch reports the
 // tail of Chrome's output.
-func NewRenderer(opts Options) (*Renderer, error) {
+func NewRendererContext(ctx context.Context, opts Options) (*Renderer, error) {
 	opts = opts.withDefaults()
 	output := &outputTail{}
-	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), allocatorOptions(opts, output)...)
-	ctx, ctxCancel := chromedp.NewContext(allocCtx, chromedp.WithBrowserOption(
-		chromedp.WithDialTimeout(chromedpBackstop*opts.LaunchTimeout),
-	))
+	allocCtx, cancel := chromedp.NewExecAllocator(ctx, allocatorOptions(opts, output)...)
+	browserCtx, ctxCancel := chromedp.NewContext(allocCtx)
 
 	// Merge cancels: closing allocCtx also kills ctxCancel.
 	var cancelOnce sync.Once
@@ -146,27 +143,35 @@ func NewRenderer(opts Options) (*Renderer, error) {
 			cancel()
 		})
 	}
-	startupCtx, cancelStartup := context.WithTimeout(context.Background(), opts.LaunchTimeout)
+	startupCtx, cancelStartup := context.WithTimeout(ctx, opts.LaunchTimeout)
 	stopStartup := context.AfterFunc(startupCtx, combined)
-	err := chromedp.Run(ctx)
+	err := chromedp.Do(browserCtx)
 	startupTimedOut := !stopStartup()
 	cancelStartup()
 	if err != nil || startupTimedOut {
 		combined()
 		if startupTimedOut {
-			err = fmt.Errorf("%w after %s", context.DeadlineExceeded, opts.LaunchTimeout)
+			err = startupError(startupCtx.Err(), opts.LaunchTimeout)
 		}
 		return nil, launchError(err, output.String())
 	}
 
-	return &Renderer{ctx: ctx, cancel: combined, opts: opts}, nil
+	return &Renderer{ctx: browserCtx, cancel: combined, opts: opts}, nil
+}
+
+// startupError reports why start-up stopped: the launch deadline, or the
+// caller's context ending first.
+func startupError(err error, launchTimeout time.Duration) error {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%w after %s", err, launchTimeout)
+	}
+	return err
 }
 
 func allocatorOptions(opts Options, output *outputTail) []chromedp.ExecAllocatorOption {
 	allocOpts := chromedp.DefaultExecAllocatorOptions[:]
 	allocOpts = append(allocOpts,
 		chromedp.Headless,
-		chromedp.WSURLReadTimeout(chromedpBackstop*opts.LaunchTimeout),
 		chromedp.CombinedOutput(output),
 	)
 	if opts.NoSandbox {
@@ -262,18 +267,17 @@ func (r *Renderer) render(ctx context.Context, target, description string, opts 
 	taskCtx, cancel := r.taskContext(ctx)
 	defer cancel()
 
-	var buf []byte
-	if err := chromedp.Run(taskCtx,
-		chromedp.Navigate(target),
-		chromedp.ActionFunc(func(ac context.Context) error {
-			var err error
-			buf, _, err = opts.params().Do(ac)
-			if err != nil {
-				return fmt.Errorf("pdf: print page: %w", err)
-			}
-			return nil
-		}),
-	); err != nil {
+	if err := chromedp.Do(taskCtx, chromedp.Navigate(target)); err != nil {
+		return nil, fmt.Errorf("pdf: render %s: %w", description, err)
+	}
+	buf, err := chromedp.Run(taskCtx, func(ac context.Context, tab *chromedp.Target) ([]byte, error) {
+		result, printErr := cdp.Call(ac, tab, page.PrintToPDF, *opts.params())
+		if printErr != nil {
+			return nil, fmt.Errorf("pdf: print page: %w", printErr)
+		}
+		return result.Data, nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("pdf: render %s: %w", description, err)
 	}
 	return buf, nil
