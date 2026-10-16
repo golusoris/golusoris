@@ -28,8 +28,8 @@ panic recovery, and structured slog logging built in. Opt-in via `grpc.Module`.
 - TLS is opt-in (`grpc.tls=true` + `cert_file`/`key_file`); pins TLS 1.3. Files reload on handshake via `core/tlsx` (30s min interval); bad rotation keeps last good cert.
 - mTLS: `grpc.ca_file` + `grpc.client_auth` (`none`, `request`, `require_any`, `verify_if_given`, `require_and_verify`). CA without mode = `require_and_verify`. Verifying mode without CA fails startup.
 - Message size caps default to 4 MiB in and out.
-- Keepalive defaults = pre-#589 values: age 2m, grace 5s, time 1m, timeout 20s; enforcement min_time 5m, no pings without stream. Zero = default. Negative age/grace/time = never (`Infinite`). Negative timeout/min_time fails startup.
-- Long RPCs (minutes): set `keepalive.max_connection_age` negative, or keep rotation and set `max_connection_age_grace` negative. App `ProvideServerOption(grpc.KeepaliveParams(...))` still overrides (appended last).
+- Keepalive defaults: age 2m, grace unlimited, time 1m, timeout 20s; enforcement min_time 5m, no pings without stream. Zero = default. Negative age/grace/time = never (`Infinite`). Negative timeout/min_time fails startup.
+- Long RPCs: rotation no longer cuts in-flight RPCs by default; set a positive `keepalive.max_connection_age_grace` to cap how long an old connection may live after GOAWAY. App `ProvideServerOption(grpc.KeepaliveParams(...))` still overrides (appended last).
 - `k8s/health.Module` wired -> stop hook wrapped by its `core/drain.Gate`: `GracefulStop` starts after `health.drain.delay`; stop ctx expiry -> hard `Stop`.
 - fx Stop returns only after `Serve` returned -> port closed. Covers `Serve` starting after the stop (grpc-go closes that listener on Serve's goroutine; #724).
 - `grpc.health=true` registers `grpc.health.v1`. Optional `*statuspage.Registry` in graph -> Check("") runs readiness-tagged checks (`health.Serving`); gate wired -> its `shutdown` check fails Check("") for whole drain window. fx Stop flips NOT_SERVING before `GracefulStop`. Off by default: app-registered health service would collide.
