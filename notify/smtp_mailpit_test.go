@@ -70,20 +70,18 @@ func startMailpit(t *testing.T) (string, int, string) {
 	t.Cleanup(cancel)
 
 	req := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        testimages.Mailpit,
-			ReaperImage:  testimages.Ryuk,
-			ExposedPorts: []string{"1025/tcp", "8025/tcp"},
-			// Accept exactly one credential pair over plaintext SMTP.
-			Env: map[string]string{
-				"MP_SMTP_AUTH":                "probe:probe-secret",
-				"MP_SMTP_AUTH_ALLOW_INSECURE": "true",
-			},
-			WaitingFor: wait.ForAll(
-				wait.ForListeningPort("1025/tcp"),
-				wait.ForListeningPort("8025/tcp"),
-			).WithDeadline(1 * time.Minute),
+		Image:        testimages.Mailpit,
+		ReaperImage:  testimages.Ryuk,
+		ExposedPorts: []string{"1025/tcp", "8025/tcp"},
+		// Accept exactly one credential pair over plaintext SMTP.
+		Env: map[string]string{
+			"MP_SMTP_AUTH":                "probe:probe-secret",
+			"MP_SMTP_AUTH_ALLOW_INSECURE": "true",
 		},
+		WaitingFor: wait.ForAll(
+			wait.ForListeningPort("1025/tcp"),
+			wait.ForListeningPort("8025/tcp"),
+		).WithDeadline(1 * time.Minute),
 		Started: true,
 	}
 	container, err := testcontainers.GenericContainer(ctx, req)
