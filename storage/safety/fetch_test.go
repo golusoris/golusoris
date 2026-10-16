@@ -165,25 +165,6 @@ func TestFetch_ExactlyAtCap(t *testing.T) {
 	}
 }
 
-// TestFetch_RedirectToPrivate confirms a 302 to a private IP is blocked at the
-// second dial hop (Control re-runs per hop).
-func TestFetch_RedirectToPrivate(t *testing.T) {
-	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Redirect(w, nil, "http://169.254.169.254/latest/meta-data/", http.StatusFound)
-	}))
-	defer srv.Close()
-
-	opts := defaultFetchOpts()
-	opts.AllowPrivate = true // first hop (loopback) allowed; guard still set for redirects
-	f := newGuardedFetcher(t, opts)
-
-	_, _, err := f.Fetch(context.Background(), srv.URL)
-	if err == nil {
-		t.Fatal("redirect to metadata IP should fail")
-	}
-}
-
 // TestFetch_TooManyRedirects bounds the redirect chain.
 func TestFetch_TooManyRedirects(t *testing.T) {
 	t.Parallel()

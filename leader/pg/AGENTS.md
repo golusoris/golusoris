@@ -47,6 +47,7 @@ leader:
 - Dedicates one pooled connection for lock's whole lifetime — size pool
  accordingly. lock auto-releases on session end (graceful close **or**
  crash via TCP keepalive), so there's no TTL/renewal tuning.
+- While leading, elector runs `SELECT 1` on lock session every `leader.pg.retry` (deadline = retry). Failed probe (backend killed, network loss) -> term ends (`OnStoppedLeading`), elector re-campaigns on fresh session. Lock session closed, never returned to pool.
 - `name` must be unique per elector: two electors with same name hash to  same key and contend (caller config error, not library bug).
 - Empty `leader.name` with `enabled=true` fails construction.
 - `NamedModule(key, cb)` adds election per key (options `leader.elections.<key>`, `*leader.Status` tagged `name:"<key>"`); see `leader/AGENTS.md`.

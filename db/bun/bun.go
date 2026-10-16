@@ -33,6 +33,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/internal/pgxpoolstate"
 )
 
 // Options tunes the bun ORM. Config keys live under the "db.bun" prefix.
@@ -69,16 +70,11 @@ func New(pool *pgxpool.Pool, opts Options, logger *slog.Logger) (*bun.DB, error)
 	return db, nil
 }
 
-func validatePool(pool *pgxpool.Pool) (err error) {
+func validatePool(pool *pgxpool.Pool) error {
 	if pool == nil {
 		return errors.New("db/bun: nil pool")
 	}
-	defer func() {
-		if recover() != nil {
-			err = errors.New("db/bun: invalid pool")
-		}
-	}()
-	if pool.Config() == nil {
+	if !pgxpoolstate.Initialized(pool) {
 		return errors.New("db/bun: invalid pool")
 	}
 	return nil

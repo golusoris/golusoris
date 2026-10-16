@@ -5,7 +5,6 @@
 package registry_test
 
 import (
-	"context"
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
@@ -14,7 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/v1/types"
@@ -64,16 +62,8 @@ func TestModule_StartsAndProvidesClient(t *testing.T) {
 		registry.Module,
 		fx.Populate(&c),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := app.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer func() {
-		if err := app.Stop(ctx); err != nil {
-			t.Fatalf("Stop: %v", err)
-		}
-	}()
+	app.RequireStart()
+	t.Cleanup(func() { app.RequireStop() })
 	if c == nil {
 		t.Fatal("expected *registry.Client to be populated")
 	}
@@ -126,16 +116,8 @@ func TestModule_KeychainOverride(t *testing.T) {
 		registry.Module,
 		fx.Populate(&c),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := app.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer func() {
-		if err := app.Stop(ctx); err != nil {
-			t.Fatalf("Stop: %v", err)
-		}
-	}()
+	app.RequireStart()
+	t.Cleanup(func() { app.RequireStop() })
 
 	ref := u.Host + "/test/basic:v1"
 	if _, err := c.Resolve(t.Context(), ref); err != nil {
