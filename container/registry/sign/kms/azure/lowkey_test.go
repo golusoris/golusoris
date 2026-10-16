@@ -94,6 +94,9 @@ func buildTransport(t *testing.T, containerAddr string) *http.Transport {
 
 func startLowkey(t *testing.T) (string, *http.Transport) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("lowkey: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
