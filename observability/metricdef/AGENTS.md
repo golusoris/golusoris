@@ -18,6 +18,7 @@ One metric definition shared by services, dashboard generator (`observability/gr
 | `NewCatalog(defs...)` | validated immutable set; rejects duplicates + OpenMetrics family clash (`x_total` vs gauge `x`) |
 | `Catalog.Defs()` / `Lookup` / `LookupSeries` / `Series` / `Merge` | generator + checker reads; deep copies |
 | `Catalog.Register(reg)` / `Register(reg, defs...)` | all-or-nothing registration -> `*Handles`; `External` defs skipped / refused |
+| `Catalog.RegisterOTel(m)` / `RegisterOTel(m, defs...)` | OTel synchronous float64 instruments; same handles + label guard; catalog skips External, standalone refuses |
 | `Handles.Counter/Gauge/Histogram(name)` | typed handle or error |
 | `Counter.Add(ctx, v, labels...)`, `Inc` | sampled span in ctx -> exemplar |
 | `Gauge.Set(v, labels...)`, `Add` | no exemplars (gauges carry none) |
@@ -33,6 +34,16 @@ One metric definition shared by services, dashboard generator (`observability/gr
 - buckets only on histograms, finite, strictly increasing.
 - each `Limits` key = declared label; exactly one of `Allow` / positive `MaxDistinct`.
 - `External` defs: syntax only (name may hold colons, help optional, no suffix/unit rules, no family-clash check) — emitter owns naming. Exposed-series collisions still fail.
+
+## OTel backend
+
+- Counter `_total` + unit suffix stripped before instrument creation; exporter restores exact declared name.
+- Units: `seconds` -> `s`, `bytes` -> `By`, `ratio` -> `1`; others pass only on exact exporter round-trip.
+- Ratio unit: gauges only; counters + histograms fail registration. Exporter-normalized names fail instead of silently changing.
+- Histogram boundaries: `Def.Buckets`; empty -> `prometheus.DefBuckets`.
+- Gauge Set/Add: mutex-protected state per bounded attribute set; synchronous Record, background context.
+- OTel meter: no unregister API; validation + name mapping precede creation, later meter errors cannot roll back instruments.
+- Prometheus backend retains sampled-span exemplars; OTel exemplar policy belongs to SDK.
 
 ## Usage
 

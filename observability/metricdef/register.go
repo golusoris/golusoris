@@ -13,17 +13,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/golusoris/golusoris/core/validate"
-	"github.com/golusoris/golusoris/k8s/metrics/prom"
 )
 
 // Counter is a registered counter family.
 type Counter struct {
-	vec   *prometheus.CounterVec
+	sink  counterSink
 	guard *labelGuard
 }
 
 // Add increments the series for labelValues by v (v >= 0). A sampled span in
-// ctx becomes the exemplar.
+// ctx becomes the exemplar on the Prometheus backend.
 func (c *Counter) Add(ctx context.Context, v float64, labelValues ...string) error {
 	if v < 0 || math.IsNaN(v) {
 		return fmt.Errorf("metricdef: %s: counter add %v: must be a non-negative number", c.guard.name, v)
@@ -32,17 +31,9 @@ func (c *Counter) Add(ctx context.Context, v float64, labelValues ...string) err
 	if err != nil {
 		return err
 	}
-	m, err := c.vec.GetMetricWithLabelValues(values...)
-	if err != nil {
+	if err = c.sink.add(ctx, v, values); err != nil {
 		return fmt.Errorf("metricdef: %s: %w", c.guard.name, err)
 	}
-	if adder, ok := m.(prometheus.ExemplarAdder); ok {
-		if ex := prom.ExemplarLabels(ctx); ex != nil {
-			adder.AddWithExemplar(v, ex)
-			return nil
-		}
-	}
-	m.Add(v)
 	return nil
 }
 
@@ -53,64 +44,54 @@ func (c *Counter) Inc(ctx context.Context, labelValues ...string) error {
 
 // Gauge is a registered gauge family.
 type Gauge struct {
-	vec   *prometheus.GaugeVec
+	sink  gaugeSink
 	guard *labelGuard
-}
-
-func (g *Gauge) series(labelValues []string) (prometheus.Gauge, error) {
-	values, err := g.guard.bound(labelValues)
-	if err != nil {
-		return nil, err
-	}
-	m, err := g.vec.GetMetricWithLabelValues(values...)
-	if err != nil {
-		return nil, fmt.Errorf("metricdef: %s: %w", g.guard.name, err)
-	}
-	return m, nil
 }
 
 // Set sets the series for labelValues to v.
 func (g *Gauge) Set(v float64, labelValues ...string) error {
-	m, err := g.series(labelValues)
+	values, err := g.guard.bound(labelValues)
 	if err != nil {
 		return err
 	}
-	m.Set(v)
+	if err = g.sink.set(v, values); err != nil {
+		return fmt.Errorf("metricdef: %s: %w", g.guard.name, err)
+	}
 	return nil
 }
 
 // Add adds v (may be negative) to the series for labelValues.
 func (g *Gauge) Add(v float64, labelValues ...string) error {
-	m, err := g.series(labelValues)
+	values, err := g.guard.bound(labelValues)
 	if err != nil {
 		return err
 	}
-	m.Add(v)
+	if err = g.sink.add(v, values); err != nil {
+		return fmt.Errorf("metricdef: %s: %w", g.guard.name, err)
+	}
 	return nil
 }
 
 // Histogram is a registered histogram family.
 type Histogram struct {
-	vec   *prometheus.HistogramVec
+	sink  histogramSink
 	guard *labelGuard
 }
 
 // Observe records v for labelValues; a sampled span in ctx becomes the
-// bucket's exemplar.
+// bucket's exemplar on the Prometheus backend.
 func (h *Histogram) Observe(ctx context.Context, v float64, labelValues ...string) error {
 	values, err := h.guard.bound(labelValues)
 	if err != nil {
 		return err
 	}
-	m, err := h.vec.GetMetricWithLabelValues(values...)
-	if err != nil {
+	if err = h.sink.observe(ctx, v, values); err != nil {
 		return fmt.Errorf("metricdef: %s: %w", h.guard.name, err)
 	}
-	prom.ObserveWithExemplar(ctx, m, v)
 	return nil
 }
 
-// Handles holds the registered families of one [Register] call.
+// Handles holds the registered families of one [Register] or [RegisterOTel] call.
 type Handles struct {
 	counters   map[string]*Counter
 	gauges     map[string]*Gauge
@@ -188,15 +169,15 @@ func (h *Handles) add(d Def) (prometheus.Collector, error) {
 	switch d.Kind {
 	case KindCounter:
 		vec := prometheus.NewCounterVec(prometheus.CounterOpts{Name: d.Name, Help: d.Help, Unit: d.Unit}, d.Labels)
-		h.counters[d.Name] = &Counter{vec: vec, guard: guard}
+		h.counters[d.Name] = &Counter{sink: prometheusCounter{vec: vec}, guard: guard}
 		return vec, nil
 	case KindGauge:
 		vec := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: d.Name, Help: d.Help, Unit: d.Unit}, d.Labels)
-		h.gauges[d.Name] = &Gauge{vec: vec, guard: guard}
+		h.gauges[d.Name] = &Gauge{sink: prometheusGauge{vec: vec}, guard: guard}
 		return vec, nil
 	case KindHistogram:
 		vec := prometheus.NewHistogramVec(prometheus.HistogramOpts{Name: d.Name, Help: d.Help, Unit: d.Unit, Buckets: d.Buckets}, d.Labels)
-		h.histograms[d.Name] = &Histogram{vec: vec, guard: guard}
+		h.histograms[d.Name] = &Histogram{sink: prometheusHistogram{vec: vec}, guard: guard}
 		return vec, nil
 	case KindSummary:
 	}
