@@ -66,6 +66,10 @@ docs-only mounting validates OpenAPI without MCP tool conversion.
 check fails when `SCALAR_RELEASED` is older than 45 days (job silent). Never
 bump the version line alone.
 
+## Testing
+
+`GOLUSORIS_REQUIRE_CHROME=1` turns the Chrome skip into a failure; CI sets it.
+
 ## Don't
 
 - Don't make `MCPAuthorize` permissive outside explicit trusted deployments.

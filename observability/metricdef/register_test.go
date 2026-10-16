@@ -257,3 +257,208 @@ func TestCatalogRegisterSkipsExternal(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestRegisterOrReuse_TwiceWritesSameSeries(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	h1, err := metricdef.RegisterOrReuse(reg, jobsTotal)
+	mustOK(t, err)
+	j1, err := h1.Counter(jobsTotal.Name)
+	mustOK(t, err)
+	mustOK(t, j1.Inc(t.Context(), "t1", "ok"))
+
+	h2, err := metricdef.RegisterOrReuse(reg, jobsTotal)
+	mustOK(t, err)
+	j2, err := h2.Counter(jobsTotal.Name)
+	mustOK(t, err)
+	mustOK(t, j2.Add(t.Context(), 5, "t1", "ok"))
+
+	if got := series(t, reg, jobsTotal.Name)["outcome=ok,tenant=t1"].GetCounter().GetValue(); got != 6 {
+		t.Fatalf("jobs = %v, want 6", got)
+	}
+
+	// Register (non-reuse) a second time still fails.
+	if _, err := metricdef.Register(reg, jobsTotal); err == nil {
+		t.Fatal("Register non-reuse second time succeeded, want error")
+	}
+}
+
+func TestRegisterOrReuse_ConflictingHelpRollsBackNewOnly(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	hPre, err := metricdef.RegisterOrReuse(reg, queueDepth)
+	mustOK(t, err)
+	gPre, err := hPre.Gauge(queueDepth.Name)
+	mustOK(t, err)
+	mustOK(t, gPre.Set(42, "default"))
+
+	newDef := metricdef.Def{
+		Name:   "app_workers_total",
+		Help:   "Workers total.",
+		Kind:   metricdef.KindCounter,
+		Labels: []string{"type"},
+	}
+	conflictingQueue := queueDepth
+	conflictingQueue.Help = "Conflicting help string."
+
+	// newDef will be registered first; conflictingQueue will fail in prometheus.
+	if _, err := metricdef.RegisterOrReuse(reg, newDef, conflictingQueue); err == nil {
+		t.Fatal("RegisterOrReuse with conflicting help succeeded, want error")
+	}
+
+	// newDef was rolled back (absent).
+	if got := series(t, reg, newDef.Name); len(got) != 0 {
+		t.Fatalf("%s was not rolled back: %v", newDef.Name, got)
+	}
+
+	// pre-existing queueDepth remains untouched with original value.
+	if got := series(t, reg, queueDepth.Name)["queue=default"].GetGauge().GetValue(); got != 42 {
+		t.Fatalf("%s = %v, want 42", queueDepth.Name, got)
+	}
+}
+
+func TestRegisterOrReuse_KindMismatch(t *testing.T) {
+	t.Parallel()
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: jobsTotal.Name, Help: jobsTotal.Help},
+		jobsTotal.Labels,
+	))
+
+	_, err := metricdef.RegisterOrReuse(reg, jobsTotal)
+	if err == nil {
+		t.Fatal("RegisterOrReuse over different collector type succeeded, want error")
+	}
+	if !strings.Contains(err.Error(), jobsTotal.Name) {
+		t.Fatalf("error %q does not name def %s", err, jobsTotal.Name)
+	}
+}
+
+func TestGaugeReset_ClearsSeriesAndAdmitsNewValues(t *testing.T) {
+	t.Parallel()
+	distinctGaugeDef := metricdef.Def{
+		Name:   "app_distinct_gauge",
+		Help:   "Gauge with distinct limit.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"tenant"},
+		Limits: map[string]metricdef.LabelLimit{
+			"tenant": {MaxDistinct: 2},
+		},
+	}
+	reg, h := register(t, distinctGaugeDef)
+	g, err := h.Gauge(distinctGaugeDef.Name)
+	mustOK(t, err)
+
+	mustOK(t, g.Set(10, "t1"))
+	mustOK(t, g.Set(20, "t2"))
+	if got := len(series(t, reg, distinctGaugeDef.Name)); got != 2 {
+		t.Fatalf("expected 2 series, got %d", got)
+	}
+
+	g.Reset()
+
+	// Gather must be empty for family.
+	if got := series(t, reg, distinctGaugeDef.Name); len(got) != 0 {
+		t.Fatalf("gather after Reset = %v, want empty", got)
+	}
+
+	// Admits 2 new distinct values afterwards (not OtherValue).
+	mustOK(t, g.Set(30, "t3"))
+	mustOK(t, g.Set(40, "t4"))
+
+	got := series(t, reg, distinctGaugeDef.Name)
+	if _, ok := got["tenant=other"]; ok {
+		t.Fatalf("tenant=other present after reset: %v", keys(got))
+	}
+	if v := got["tenant=t3"].GetGauge().GetValue(); v != 30 {
+		t.Errorf("t3 = %v, want 30", v)
+	}
+	if v := got["tenant=t4"].GetGauge().GetValue(); v != 40 {
+		t.Errorf("t4 = %v, want 40", v)
+	}
+}
+
+func TestGaugeDelete(t *testing.T) {
+	t.Parallel()
+	distinctGaugeDef := metricdef.Def{
+		Name:   "app_delete_gauge",
+		Help:   "Gauge for delete tests.",
+		Kind:   metricdef.KindGauge,
+		Labels: []string{"tenant"},
+		Limits: map[string]metricdef.LabelLimit{
+			"tenant": {MaxDistinct: 2},
+		},
+	}
+	reg, h := register(t, distinctGaugeDef)
+	g, err := h.Gauge(distinctGaugeDef.Name)
+	mustOK(t, err)
+
+	mustOK(t, g.Set(10, "t1"))
+
+	// Delete of existing series returns true.
+	if !g.Delete("t1") {
+		t.Error("Delete existing series returned false, want true")
+	}
+	// Delete of already deleted / absent series returns false.
+	if g.Delete("t1") {
+		t.Error("Delete absent series returned true, want false")
+	}
+	// Delete with wrong label count returns false.
+	if g.Delete() {
+		t.Error("Delete with 0 labels returned true, want false")
+	}
+	if g.Delete("t1", "extra") {
+		t.Error("Delete with 2 labels returned true, want false")
+	}
+
+	// Delete of an unseen value does not consume a distinct slot.
+	// Currently only "t1" was ever admitted. "unseen" must not consume the 2nd slot.
+	if g.Delete("unseen") {
+		t.Error("Delete unseen series returned true, want false")
+	}
+
+	// "t2" should be admitted as the 2nd distinct value (slot consumed).
+	mustOK(t, g.Set(20, "t2"))
+	got := series(t, reg, distinctGaugeDef.Name)
+	if _, ok := got["tenant=other"]; ok {
+		t.Fatalf("tenant=other present, unseen consumed a slot: %v", keys(got))
+	}
+	if v := got["tenant=t2"].GetGauge().GetValue(); v != 20 {
+		t.Errorf("t2 = %v, want 20", v)
+	}
+
+	// Guard is full: t3 folds into other; deleting t3 must keep the shared series.
+	mustOK(t, g.Set(5, "t3"))
+	if g.Delete("t3") {
+		t.Error("Delete folded value returned true, want false")
+	}
+	if _, ok := series(t, reg, distinctGaugeDef.Name)["tenant=other"]; !ok {
+		t.Fatal("Delete of a folded value removed the shared other series")
+	}
+	if !g.Delete(metricdef.OtherValue) {
+		t.Error("Delete(OtherValue) returned false, want true")
+	}
+}
+
+func TestCatalogRegisterOrReuseSkipsExternal(t *testing.T) {
+	t.Parallel()
+	external := metricdef.Def{Name: "go_goroutines", Help: "Go collector", Kind: metricdef.KindGauge, External: true}
+	cat, err := metricdef.NewCatalog(queueDepth, external)
+	mustOK(t, err)
+	reg := prometheus.NewRegistry()
+	h, err := cat.RegisterOrReuse(reg)
+	mustOK(t, err)
+	if _, gErr := h.Gauge(external.Name); gErr == nil {
+		t.Error("external def got a handle")
+	}
+	if _, gErr := h.Gauge(queueDepth.Name); gErr != nil {
+		t.Error(gErr)
+	}
+
+	// Second call reuses.
+	h2, err := cat.RegisterOrReuse(reg)
+	mustOK(t, err)
+	if _, gErr := h2.Gauge(queueDepth.Name); gErr != nil {
+		t.Error(gErr)
+	}
+}

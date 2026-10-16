@@ -27,6 +27,8 @@ const (
 	renderTimeout = 60 * time.Second
 	// vendorFontsHost serves the bundle's default fonts when they are left on.
 	vendorFontsHost = "fonts.scalar.com"
+	// requireChromeEnv forces a hard failure when Chrome is absent.
+	requireChromeEnv = "GOLUSORIS_REQUIRE_CHROME"
 )
 
 // netLogURL extracts the URL of one request-start event of Chrome's network log.
@@ -79,15 +81,12 @@ func withVendorFonts(t *testing.T, next http.Handler) http.Handler {
 	})
 }
 
-// outsideHosts renders /docs in headless Chrome with outside name resolution
-// blocked and returns the hosts, other than the test server, that the page
-// itself asked for. Chrome's own background requests carry no page initiator
-// and are left out.
-func outsideHosts(t *testing.T, chrome string, handler http.Handler) []string {
+// renderDocs renders /docs in headless Chrome and returns the DOM, the network log path and the server origin.
+func renderDocs(t *testing.T, chrome string, handler http.Handler) (dom, netLog, origin string) {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	netLog := filepath.Join(t.TempDir(), "net.json")
+	netLog = filepath.Join(t.TempDir(), "net.json")
 
 	ctx, cancel := context.WithTimeout(t.Context(), renderTimeout)
 	defer cancel()
@@ -100,14 +99,24 @@ func outsideHosts(t *testing.T, chrome string, handler http.Handler) []string {
 		"--virtual-time-budget=15000",
 		"--dump-dom", srv.URL+"/docs",
 	)
-	dom, err := cmd.Output()
+	out, err := cmd.Output()
 	if err != nil {
 		t.Fatalf("render %s/docs in Chrome: %v", srv.URL, err)
 	}
-	if !strings.Contains(string(dom), "echo an id") {
+	return string(out), netLog, srv.URL
+}
+
+// outsideHosts renders /docs in headless Chrome with outside name resolution
+// blocked and returns the hosts, other than the test server, that the page
+// itself asked for. Chrome's own background requests carry no page initiator
+// and are left out.
+func outsideHosts(t *testing.T, chrome string, handler http.Handler) []string {
+	t.Helper()
+	dom, netLog, origin := renderDocs(t, chrome, handler)
+	if !strings.Contains(dom, "echo an id") {
 		t.Fatalf("Chrome did not render the mounted document; the network log would prove nothing")
 	}
-	return pageRequestHosts(t, netLog, srv.URL)
+	return pageRequestHosts(t, netLog, origin)
 }
 
 // pageRequestHosts reads the request-start events the page origin initiated.
@@ -164,6 +173,9 @@ func findChrome(t *testing.T) string {
 		if path, err := exec.LookPath(name); err == nil {
 			return path
 		}
+	}
+	if os.Getenv(requireChromeEnv) == "1" {
+		t.Fatalf("%s=1 but no Chrome or Chromium found on PATH, and CHROME_PATH is not set: the page cannot be rendered here", requireChromeEnv)
 	}
 	t.Skip("no Chrome or Chromium found on PATH, and CHROME_PATH is not set: the page cannot be rendered here")
 	return ""
