@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
-	"math/rand"
+	"math/rand" // nosemgrep: go.lang.security.audit.crypto.math_random.math-random-used -- seeded PRNG for reproducible hyperparameter search, not security
 	"sort"
 )
 
