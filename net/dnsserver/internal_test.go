@@ -6,6 +6,7 @@ package dnsserver
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"strings"
@@ -63,30 +64,33 @@ func TestNewServeMux(t *testing.T) {
 	}
 }
 
+// TCP binds first because TIME_WAIT TCP ports refuse a listener and a UDP-chosen port may be one.
+func occupyTCPWithFreeUDP(t *testing.T) (net.Listener, string) {
+	t.Helper()
+	errs := make([]error, 0, 20)
+	for range 20 {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		addr := ln.Addr().String()
+		probe, err := net.ListenPacket("udp", addr)
+		if err != nil {
+			_ = ln.Close()
+			errs = append(errs, err)
+			continue
+		}
+		_ = probe.Close()
+		return ln, addr
+	}
+	t.Fatalf("no port with TCP held and UDP free within 20 attempts: %v", errors.Join(errs...))
+	return nil, ""
+}
+
 func TestRegister_TCPBindFailureReturnsAndCleansUDP(t *testing.T) {
 	t.Parallel()
-	var (
-		occupied net.Listener
-		addr     string
-	)
-	for range 20 {
-		probe, err := net.ListenPacket("udp", "127.0.0.1:0")
-		if err != nil {
-			continue
-		}
-		targetAddr := probe.LocalAddr().String()
-		tcpLn, err := net.Listen("tcp", targetAddr)
-		_ = probe.Close()
-		if err != nil {
-			continue
-		}
-		occupied = tcpLn
-		addr = targetAddr
-		break
-	}
-	if occupied == nil {
-		t.Fatalf("could not bind UDP probe and occupy TCP on same port within 20 attempts")
-	}
+	occupied, addr := occupyTCPWithFreeUDP(t)
 	t.Cleanup(func() { _ = occupied.Close() })
 
 	lifecycle := &lifecycleRecorder{}
