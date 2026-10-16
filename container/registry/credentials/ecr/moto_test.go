@@ -29,6 +29,9 @@ const motoDefaultAccount = "123456789012"
 
 func startMoto(t *testing.T) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("ecr: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
