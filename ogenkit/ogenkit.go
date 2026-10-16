@@ -5,7 +5,8 @@
 // Package ogenkit is the glue between ogen-generated code and golusoris
 // conventions. It provides:
 //
-//   - [ErrorHandler] that translates golusoris coded errors and ogen errors
+//   - [ErrorHandler] and [ErrorHandlerWith] that translate golusoris coded errors,
+//     mapped sentinel errors ([WithStatus]), and validation failures ([WithInvalidParams])
 //     into RFC 9457 Problem Details with their proper HTTP status.
 //   - [SlogMiddleware] / [RecoverMiddleware] — ogen middleware implementations
 //     that integrate with the framework's slog logger. Use alongside the
@@ -25,33 +26,162 @@ package ogenkit
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime/debug"
 
 	ogenmw "github.com/ogen-go/ogen/middleware"
 	"github.com/ogen-go/ogen/ogenerrors"
+	"github.com/ogen-go/ogen/validate"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
+
+// Option configures an error handler built by [ErrorHandlerWith].
+type Option func(*errorHandlerConfig)
+
+type statusMapping struct {
+	target error
+	code   gerr.Code
+}
+
+type errorHandlerConfig struct {
+	statusMappings []statusMapping
+	invalidParams  bool
+}
+
+// WithStatus maps an application sentinel error to a golusoris [gerr.Code]
+// using [errors.Is]. First match wins, following the order in which options
+// are supplied.
+//
+// Mapped 4xx responses use target.Error() as the detail message rather than
+// the incoming error's Error() string to avoid leaking wrap context (such as
+// internal queries or parameters) to clients. Mapped 5xx responses have their
+// detail redacted to "internal server error".
+func WithStatus(target error, code gerr.Code) Option {
+	return func(cfg *errorHandlerConfig) {
+		if target != nil {
+			cfg.statusMappings = append(cfg.statusMappings, statusMapping{
+				target: target,
+				code:   code,
+			})
+		}
+	}
+}
+
+// WithInvalidParams enables translation of ogen [validate.Error] occurrences
+// anywhere in the error chain into HTTP 422 (Unprocessable Entity) problem
+// details with CodeValidation ("validation"), detail "request validation failed",
+// and the InvalidParams extension member populated from validation field errors.
+func WithInvalidParams() Option {
+	return func(cfg *errorHandlerConfig) {
+		cfg.invalidParams = true
+	}
+}
 
 // ErrorHandler returns an ogenerrors.ErrorHandler that emits RFC 9457 Problem
 // Details while preserving ogen's status classification for its own errors.
 //
 // Apps pass this via ogen's generated `WithErrorHandler` option.
 func ErrorHandler(logger *slog.Logger) ogenerrors.ErrorHandler {
+	return ErrorHandlerWith(logger)
+}
+
+// ErrorHandlerWith returns an ogenerrors.ErrorHandler configured with custom
+// error mapping options.
+func ErrorHandlerWith(logger *slog.Logger, opts ...Option) ogenerrors.ErrorHandler {
+	var cfg errorHandlerConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) {
-		problem := gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), r.URL.RequestURI())
+		problem := resolveProblem(&cfg, r, err)
 		if problem.Status >= http.StatusInternalServerError {
 			logger.ErrorContext(ctx, "ogenkit: handler error",
 				slog.String("error", err.Error()),
 				slog.Int("status", problem.Status))
 		}
-		if encErr := gerr.WriteProblem(w, problem); encErr != nil {
+		if encErr := writeProblem(w, problem); encErr != nil {
 			logger.ErrorContext(ctx, "ogenkit: encode error body",
 				slog.String("error", encErr.Error()))
 		}
 	}
+}
+
+// InvalidParam is one entry of the RFC 9457 "invalid-params" extension member.
+type InvalidParam struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// problemBody adds the extension member here rather than in core/errors, so
+// this module keeps building against the released core.
+type problemBody struct {
+	gerr.ProblemDetails
+
+	InvalidParams []InvalidParam `json:"invalid-params,omitempty"` //nolint:tagliatelle // RFC 9457 extension member name is hyphenated
+}
+
+func writeProblem(w http.ResponseWriter, problem problemBody) error {
+	w.Header().Set("Content-Type", gerr.ProblemJSONMediaType)
+	w.WriteHeader(problem.Status)
+	if err := json.NewEncoder(w).Encode(problem); err != nil {
+		return fmt.Errorf("ogenkit: encode problem details: %w", err)
+	}
+	return nil
+}
+
+func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problemBody {
+	instance := ""
+	if r != nil && r.URL != nil {
+		instance = r.URL.RequestURI()
+	}
+
+	if cfg.invalidParams {
+		if valErr, ok := errors.AsType[*validate.Error](err); ok {
+			problem := gerr.ProblemFromError(
+				gerr.New(gerr.CodeValidation, "request validation failed"),
+				http.StatusUnprocessableEntity,
+				instance,
+			)
+			// CodeValidation maps to 400; RFC 9110 422 names a well-formed body that failed checks.
+			problem.Status = http.StatusUnprocessableEntity
+			problem.Title = http.StatusText(http.StatusUnprocessableEntity)
+			return problemBody{ProblemDetails: problem, InvalidParams: validationParams(valErr)}
+		}
+	}
+
+	for _, m := range cfg.statusMappings {
+		if errors.Is(err, m.target) {
+			return problemBody{ProblemDetails: gerr.ProblemFromError(
+				gerr.New(m.code, m.target.Error()),
+				m.code.Status(),
+				instance,
+			)}
+		}
+	}
+
+	return problemBody{ProblemDetails: gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), instance)}
+}
+
+func validationParams(v *validate.Error) []InvalidParam {
+	if v == nil || len(v.Fields) == 0 {
+		return nil
+	}
+	out := make([]InvalidParam, 0, len(v.Fields))
+	for _, f := range v.Fields {
+		reason := ""
+		if f.Error != nil {
+			reason = f.Error.Error()
+		}
+		out = append(out, InvalidParam{Name: f.Name, Reason: reason})
+	}
+	return out
 }
 
 // SlogMiddleware emits a structured log per ogen operation. Complements
