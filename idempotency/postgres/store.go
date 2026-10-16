@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package idempotency
+// Package postgres provides the Postgres idempotency backend.
+package postgres
 
 import (
 	"context"
@@ -14,9 +15,12 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jonboulle/clockwork"
+
+	"github.com/golusoris/golusoris/idempotency/internal/sqlstore"
+	"github.com/golusoris/golusoris/idempotency/store"
 )
 
-// MigrationsFS holds the PostgreSQL schema for [PostgresStore]; apply it
+// MigrationsFS holds the PostgreSQL schema for [Store]; apply it
 // via db/migrate (Options.WithFS) or bundle it into the app's migration set.
 //
 //go:embed migrations
@@ -53,25 +57,27 @@ WHERE scope_key IN (
 ) AND expires_at <= $1`
 )
 
-// PostgresStore is a [Store] shared by every replica through one PostgreSQL
+type sqlStore = sqlstore.Store
+
+// Store is a [store.Store] shared by every replica through one PostgreSQL
 // table. Apply [MigrationsFS] before use. Expiry uses the injected clock, so
 // replica clock skew shifts expiry by the skew.
-type PostgresStore struct {
+type Store struct {
 	sqlStore
 }
 
 var (
-	_ Store   = (*PostgresStore)(nil)
-	_ Sweeper = (*PostgresStore)(nil)
+	_ store.Store   = (*Store)(nil)
+	_ store.Sweeper = (*Store)(nil)
 )
 
-// NewPostgresStore returns a PostgresStore over pool. A nil clock uses the
+// New returns a Store over pool. A nil clock uses the
 // real clock.
-func NewPostgresStore(pool *pgxpool.Pool, clk clockwork.Clock) (*PostgresStore, error) {
+func New(pool *pgxpool.Pool, clk clockwork.Clock) (*Store, error) {
 	if pool == nil {
 		return nil, errors.New("idempotency: postgres store: nil pool")
 	}
-	return &PostgresStore{sqlStore: newSQLStore(pgRows{pool: pool}, clk)}, nil
+	return &Store{sqlStore: sqlstore.New(pgRows{pool: pool}, clk)}, nil
 }
 
 // pgRows is the PostgreSQL statement set.
@@ -79,7 +85,7 @@ type pgRows struct {
 	pool *pgxpool.Pool
 }
 
-func (p pgRows) reserve(ctx context.Context, key, token, fingerprint string, now, expires time.Time) (bool, error) {
+func (p pgRows) Reserve(ctx context.Context, key, token, fingerprint string, now, expires time.Time) (bool, error) {
 	tag, err := p.pool.Exec(ctx, pgReserveSQL, key, token, fingerprint, expires, now)
 	if err != nil {
 		return false, fmt.Errorf("postgres reserve: %w", err)
@@ -87,31 +93,31 @@ func (p pgRows) reserve(ctx context.Context, key, token, fingerprint string, now
 	return tag.RowsAffected() == 1, nil
 }
 
-func (p pgRows) lookup(ctx context.Context, key string, now time.Time) (sqlRecord, bool, error) {
-	var record sqlRecord
+func (p pgRows) Lookup(ctx context.Context, key string, now time.Time) (sqlstore.Record, bool, error) {
+	var record sqlstore.Record
 	var state int16
 	err := p.pool.QueryRow(ctx, pgLookupSQL, key, now).
-		Scan(&state, &record.fingerprint, &record.status, &record.header, &record.body)
+		Scan(&state, &record.Fingerprint, &record.Status, &record.Header, &record.Body)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return sqlRecord{}, false, nil
+		return sqlstore.Record{}, false, nil
 	}
 	if err != nil {
-		return sqlRecord{}, false, fmt.Errorf("postgres lookup: %w", err)
+		return sqlstore.Record{}, false, fmt.Errorf("postgres lookup: %w", err)
 	}
-	record.state = int(state)
+	record.State = int(state)
 	return record, true, nil
 }
 
-func (p pgRows) complete(ctx context.Context, done completion) (bool, error) {
+func (p pgRows) Complete(ctx context.Context, done sqlstore.Completion) (bool, error) {
 	tag, err := p.pool.Exec(ctx, pgCompleteSQL,
-		done.key, done.token, done.fingerprint, done.status, done.header, done.body, done.expires, done.now)
+		done.Key, done.Token, done.Fingerprint, done.Status, done.Header, done.Body, done.Expires, done.Now)
 	if err != nil {
 		return false, fmt.Errorf("postgres complete: %w", err)
 	}
 	return tag.RowsAffected() == 1, nil
 }
 
-func (p pgRows) owner(ctx context.Context, key, token string, now time.Time) (string, bool, error) {
+func (p pgRows) Owner(ctx context.Context, key, token string, now time.Time) (string, bool, error) {
 	var fingerprint string
 	err := p.pool.QueryRow(ctx, pgOwnerSQL, key, token, now).Scan(&fingerprint)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -123,7 +129,7 @@ func (p pgRows) owner(ctx context.Context, key, token string, now time.Time) (st
 	return fingerprint, true, nil
 }
 
-func (p pgRows) release(ctx context.Context, key, token string) (bool, error) {
+func (p pgRows) Release(ctx context.Context, key, token string) (bool, error) {
 	tag, err := p.pool.Exec(ctx, pgReleaseSQL, key, token)
 	if err != nil {
 		return false, fmt.Errorf("postgres release: %w", err)
@@ -131,7 +137,7 @@ func (p pgRows) release(ctx context.Context, key, token string) (bool, error) {
 	return tag.RowsAffected() == 1, nil
 }
 
-func (p pgRows) sweep(ctx context.Context, now time.Time, limit int) (int64, error) {
+func (p pgRows) Sweep(ctx context.Context, now time.Time, limit int) (int64, error) {
 	tag, err := p.pool.Exec(ctx, pgSweepSQL, now, limit)
 	if err != nil {
 		return 0, fmt.Errorf("postgres sweep: %w", err)
