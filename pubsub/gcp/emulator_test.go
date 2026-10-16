@@ -26,6 +26,9 @@ import (
 
 func startEmulator(t *testing.T) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("gcp: container-backed; skipped under -short")
+	}
 	testcontainers.SkipIfProviderIsNotHealthy(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
