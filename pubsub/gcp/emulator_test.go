@@ -35,20 +35,18 @@ func startEmulator(t *testing.T) string {
 	t.Cleanup(cancel)
 
 	req := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        testimages.PubSubEmulator,
-			ReaperImage:  testimages.Ryuk,
-			ExposedPorts: []string{"8085/tcp"},
-			Cmd: []string{
-				"gcloud", "beta", "emulators", "pubsub", "start",
-				"--host-port=0.0.0.0:8085",
-				"--project=emulator-project",
-			},
-			WaitingFor: wait.ForAll(
-				wait.ForListeningPort("8085/tcp"),
-				wait.ForLog("[pubsub] INFO: Server started, listening on 8085"),
-			).WithDeadline(4 * time.Minute),
+		Image:        testimages.PubSubEmulator,
+		ReaperImage:  testimages.Ryuk,
+		ExposedPorts: []string{"8085/tcp"},
+		Cmd: []string{
+			"gcloud", "beta", "emulators", "pubsub", "start",
+			"--host-port=0.0.0.0:8085",
+			"--project=emulator-project",
 		},
+		WaitingFor: wait.ForAll(
+			wait.ForListeningPort("8085/tcp"),
+			wait.ForLog("[pubsub] INFO: Server started, listening on 8085"),
+		).WithDeadline(4 * time.Minute),
 		Started: true,
 	}
 	container, err := testcontainers.GenericContainer(ctx, req)
