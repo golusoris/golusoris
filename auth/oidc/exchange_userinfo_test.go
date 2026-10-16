@@ -122,8 +122,8 @@ func startMockOIDCServerWithListener(t *testing.T, listener net.Listener) *mockO
 					"iat":   now.Unix(),
 					"email": "alice@example.com",
 				}
-				if strings.HasPrefix(code, "nonce:") {
-					claims["nonce"] = strings.TrimPrefix(code, "nonce:")
+				if after, ok := strings.CutPrefix(code, "nonce:"); ok {
+					claims["nonce"] = after
 				}
 				tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 				tok.Header["kid"] = "key-1"
