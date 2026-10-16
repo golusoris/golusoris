@@ -7,10 +7,10 @@ package mcp_test
 import (
 	"context"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,20 +27,42 @@ func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 type pingInput struct{}
 
-// freeAddr reserves a loopback TCP port, closes the listener, and returns the
-// address. There is a small reuse race, but it is the standard way to get a
-// free port for an fx-managed server that binds the address itself.
-func freeAddr(t *testing.T) string {
+// startAddrHandler captures the listener address so tests never reserve and release a port.
+type startAddrHandler struct {
+	mu   sync.Mutex
+	addr string
+}
+
+func (*startAddrHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *startAddrHandler) Handle(_ context.Context, record slog.Record) error {
+	if record.Message != "mcp: serving streamable-HTTP" {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "addr" {
+			h.addr = attr.Value.String()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (h *startAddrHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *startAddrHandler) WithGroup(string) slog.Handler { return h }
+
+func (h *startAddrHandler) boundAddr(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("reserve port: %v", err)
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.addr == "" {
+		t.Fatalf("server start did not log a bound address")
 	}
-	addr := ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		t.Fatalf("close reserved listener: %v", err)
-	}
-	return addr
+	return h.addr
 }
 
 // newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
@@ -71,13 +93,13 @@ func cfgFromYAML(t *testing.T, body string) *config.Config {
 // and asserts the tool is listed and callable.
 func TestModule_HTTPTransport(t *testing.T) {
 	t.Parallel()
-	addr := freeAddr(t)
-	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \""+addr+"\"\n")
+	handler := &startAddrHandler{}
+	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \"127.0.0.1:0\"\n")
 
 	app := fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
-		fx.Provide(discardLogger),
+		fx.Provide(func() *slog.Logger { return slog.New(handler) }),
 		mcp.Module,
 		fx.Invoke(func(s *mcp.Server) {
 			mcp.AddTool[pingInput, any](
@@ -96,6 +118,7 @@ func TestModule_HTTPTransport(t *testing.T) {
 	defer cancel()
 	app.RequireStart()
 	t.Cleanup(app.RequireStop)
+	addr := handler.boundAddr(t)
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}, nil)
@@ -136,18 +159,19 @@ func TestModule_HTTPTransport(t *testing.T) {
 // holding its event stream does not hold up a graceful stop.
 func TestModule_HTTPTransportStopsWithOpenSession(t *testing.T) {
 	t.Parallel()
-	addr := freeAddr(t)
-	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \""+addr+"\"\n")
+	handler := &startAddrHandler{}
+	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \"127.0.0.1:0\"\n")
 
 	app := fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
-		fx.Provide(discardLogger),
+		fx.Provide(func() *slog.Logger { return slog.New(handler) }),
 		mcp.Module,
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	app.RequireStart()
+	addr := handler.boundAddr(t)
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{Endpoint: "http://" + addr + "/mcp", HTTPClient: newTestClient(t)}, nil)
@@ -188,13 +212,14 @@ func TestModule_RejectsUnknownTransport(t *testing.T) {
 // zero tools — apps register their own.
 func TestModule_ServerHasNoToolsByDefault(t *testing.T) {
 	t.Parallel()
-	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \""+freeAddr(t)+"\"\n")
+	handler := &startAddrHandler{}
+	cfg := cfgFromYAML(t, "mcp:\n  transport: http\n  http:\n    addr: \"127.0.0.1:0\"\n")
 
 	var srv *mcp.Server
 	app := fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
-		fx.Provide(discardLogger),
+		fx.Provide(func() *slog.Logger { return slog.New(handler) }),
 		mcp.Module,
 		fx.Populate(&srv),
 	)

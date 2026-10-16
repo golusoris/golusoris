@@ -199,3 +199,92 @@ func TestOnChange(t *testing.T) {
 		// expected: no premature fire
 	}
 }
+
+// TestDisableEnvPositive verifies DisableEnv skips both env vars and *_FILE indirection.
+func TestDisableEnvPositive(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(cfgPath, []byte("port: 8080\nsecret: from-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	secretPath := filepath.Join(dir, "secret.txt")
+	if err := os.WriteFile(secretPath, []byte("from-secret-file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("APP_PORT", "9090")
+	t.Setenv("APP_SECRET_FILE", secretPath)
+	t.Setenv("APP_EXTRA", "env-extra")
+
+	c, err := config.New(config.Options{
+		EnvPrefix:     "APP_",
+		FileEnvSuffix: "_FILE",
+		Files:         []string{cfgPath},
+		DisableEnv:    true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got := c.Int("port"); got != 8080 {
+		t.Errorf("port = %d, want file value 8080", got)
+	}
+	if got := c.String("secret"); got != "from-file" {
+		t.Errorf("secret = %q, want file value 'from-file'", got)
+	}
+	if c.Exists("extra") {
+		t.Error("extra should not exist when DisableEnv is true")
+	}
+}
+
+// TestDisableEnvNegative verifies DisableEnv false retains existing env override behavior.
+func TestDisableEnvNegative(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(cfgPath, []byte("port: 8080\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("APP_PORT", "9090")
+
+	c, err := config.New(config.Options{
+		EnvPrefix:  "APP_",
+		Files:      []string{cfgPath},
+		DisableEnv: false,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got := c.Int("port"); got != 9090 {
+		t.Errorf("port = %d, want env override 9090", got)
+	}
+}
+
+// TestDisableEnvBoundary verifies DisableEnv true skips env even when explicit EnvPrefix is set.
+func TestDisableEnvBoundary(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "cfg.yaml")
+	if err := os.WriteFile(cfgPath, []byte("host: filehost\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("CUSTOM_HOST", "envhost")
+	t.Setenv("CUSTOM_PORT", "3000")
+
+	c, err := config.New(config.Options{
+		EnvPrefix:  "CUSTOM_",
+		Files:      []string{cfgPath},
+		DisableEnv: true,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if got := c.String("host"); got != "filehost" {
+		t.Errorf("host = %q, want filehost", got)
+	}
+	if c.Exists("port") {
+		t.Error("port should not exist when DisableEnv is true")
+	}
+}

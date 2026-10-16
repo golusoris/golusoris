@@ -8,10 +8,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,13 +27,42 @@ import (
 
 const drainDelay = 5 * time.Second
 
-func freeAddr(t *testing.T) string {
+// startAddrHandler captures the listener address so tests never reserve and release a port.
+type startAddrHandler struct {
+	mu   sync.Mutex
+	addr string
+}
+
+func (*startAddrHandler) Enabled(context.Context, slog.Level) bool { return true }
+
+func (h *startAddrHandler) Handle(_ context.Context, record slog.Record) error {
+	if record.Message != "httpx/server: listening" {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "addr" {
+			h.addr = attr.Value.String()
+			return false
+		}
+		return true
+	})
+	return nil
+}
+
+func (h *startAddrHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+
+func (h *startAddrHandler) WithGroup(string) slog.Handler { return h }
+
+func (h *startAddrHandler) boundAddr(t *testing.T) string {
 	t.Helper()
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := ln.Addr().String()
-	require.NoError(t, ln.Close())
-	return addr
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.addr == "" {
+		t.Fatalf("server start did not log a bound address")
+	}
+	return h.addr
 }
 
 // newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
@@ -73,13 +102,13 @@ func get(ctx context.Context, client *http.Client, url string) (int, error) {
 // /readyz failing for the whole drain window, and shuts down only after it.
 func TestModuleServesReadyz503DuringDrain(t *testing.T) {
 	t.Parallel()
-	addr := freeAddr(t)
+	handler := &startAddrHandler{}
 	fc := clock.NewFake()
 	app := fx.New(
 		fx.NopLogger,
-		fx.Supply(drainConfig(t, addr)),
+		fx.Supply(drainConfig(t, "127.0.0.1:0")),
 		fx.Provide(func() clock.Clock { return fc }),
-		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
+		fx.Provide(func() *slog.Logger { return slog.New(handler) }),
 		fx.Provide(statuspage.NewRegistry),
 		fx.Provide(func(reg *statuspage.Registry) http.Handler {
 			mux := http.NewServeMux()
@@ -94,7 +123,7 @@ func TestModuleServesReadyz503DuringDrain(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	require.NoError(t, app.Start(ctx))
-	base := "http://" + addr
+	base := "http://" + handler.boundAddr(t)
 	client := newTestClient(t)
 
 	code, err := get(ctx, client, base+"/readyz")

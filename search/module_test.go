@@ -6,25 +6,14 @@ package search
 
 import (
 	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/testutil/configfile"
 )
-
-// writeConfig writes a YAML config file into a temp dir and returns its path.
-func writeConfig(t *testing.T, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return path
-}
 
 // TestLoadOptions_DefaultsOnEmptyConfig confirms an empty config drives the
 // documented default: the in-memory backend.
@@ -47,7 +36,7 @@ func TestLoadOptions_DefaultsOnEmptyConfig(t *testing.T) {
 func TestLoadOptions_ReadsConfig(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "search:\n  backend: memory\n")},
+		Files: []string{configfile.Write(t, "search:\n  backend: memory\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -134,7 +123,7 @@ func TestOptions_EnabledDefault(t *testing.T) {
 func TestLoadOptions_ReadsEnabledFalse(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "search:\n  enabled: false\n")},
+		Files: []string{configfile.Write(t, "search:\n  enabled: false\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
