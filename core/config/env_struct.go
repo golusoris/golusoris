@@ -84,8 +84,8 @@ func envStructPaths(root envStruct, delim string) ([]string, error) {
 }
 
 func appendEnvStructFields(node envStruct, delim string, queue []envStruct, paths []string) ([]envStruct, []string) {
-	for i := range node.typ.NumField() {
-		next := envStructField(node, node.typ.Field(i), delim)
+	for field := range node.typ.Fields() {
+		next := envStructField(node, field, delim)
 		if next.typ == nil {
 			continue
 		}
@@ -130,7 +130,7 @@ func envStructTag(field reflect.StructField) (string, bool) {
 	if name == "" {
 		name = field.Name
 	}
-	for _, option := range strings.Split(options, ",") {
+	for option := range strings.SplitSeq(options, ",") {
 		switch option {
 		case "squash":
 			return "", true
