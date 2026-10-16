@@ -633,6 +633,22 @@ packages:
     capabilities: [http.idempotency, grpc.idempotency]
     description: "Package idempotency provides HTTP middleware and a gRPC unary interceptor that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header)."
     replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/idempotency/postgres
+    domain: http
+    capabilities: [http.idempotency.postgres]
+    description: "Package postgres provides the Postgres idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/redis
+    domain: http
+    capabilities: [http.idempotency.redis]
+    description: "Package redis provides the Redis idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/sqlite
+    domain: http
+    capabilities: [http.idempotency.sqlite]
+    description: "Package sqlite provides the SQLite idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/store
+    domain: http
+    capabilities: [http.idempotency.store]
+    description: "Package store provides atomic idempotency contracts and an in-memory implementation."
   - import: github.com/golusoris/golusoris/integrations/goenvoy
     domain: integrations
     capabilities: [integrations.goenvoy]
