@@ -268,7 +268,7 @@ The reusable workflow installs its required subset from explicit inputs.
 | Tool | Repository pin | Install locally |
 | --- | --- | --- |
 | `golangci-lint` | `v2.13.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2` |
-| `gosec` | `v2.29.0` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0` |
+| `gosec` | `v2.29.0` | `scripts/ci/install-gosec.sh` |
 | `govulncheck` | `v1.8.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.8.0` |
 | `mockery` | `v3.8.0` | `go install github.com/vektra/mockery/v3@v3.8.0` |
 | `air` | `v1.67.4` | `go install github.com/air-verse/air@v1.67.4` |
