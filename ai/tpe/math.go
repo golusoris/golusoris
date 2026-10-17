@@ -68,17 +68,17 @@ func normalPPFLowerHalf(p float64) float64 {
 		-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
 		1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00,
 	}
-	b := [5]float64{
+	b := [6]float64{
 		-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-		6.680131188771972e+01, -1.328068155288572e+01,
+		6.680131188771972e+01, -1.328068155288572e+01, 1,
 	}
 	c := [6]float64{
 		-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
 		-2.549732539343734e+00, 4.374664141464968e+00, 2.938163982698783e+00,
 	}
-	d := [4]float64{
+	d := [5]float64{
 		7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
-		3.754408661907416e+00,
+		3.754408661907416e+00, 1,
 	}
 	const pLow = 0.02425
 	pHigh := 1.0 - pLow
@@ -88,16 +88,16 @@ func normalPPFLowerHalf(p float64) float64 {
 	case p < pLow:
 		q := math.Sqrt(-2 * math.Log(p))
 		x = horner(q, c[:]) /
-			horner(q, append(d[:], 1))
+			horner(q, d[:])
 	case p <= pHigh:
 		q := p - 0.5
 		r := q * q
 		x = horner(r, a[:]) * q /
-			horner(r, append(b[:], 1))
+			horner(r, b[:])
 	default:
 		q := math.Sqrt(-2 * math.Log(1-p))
 		x = -horner(q, c[:]) /
-			horner(q, append(d[:], 1))
+			horner(q, d[:])
 	}
 
 	// One Halley refinement step against the true CDF.
@@ -106,7 +106,7 @@ func normalPPFLowerHalf(p float64) float64 {
 	return x - u/(1+float64(x*u/2))
 }
 
-// WHY: explicit float64 rounding stops arm64 from fusing x*y+z (Go spec allows it) so results match amd64.
+// horner evaluates c[0]*x^n+...+c[n]; explicit float64 rounding stops arm64 from fusing x*y+z (Go spec allows it) so results match amd64.
 func horner(x float64, c []float64) float64 {
 	acc := c[0]
 	for _, ci := range c[1:] {

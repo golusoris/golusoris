@@ -1,7 +1,7 @@
 {
   "provenance": {
     "generated_by": "cd ai/tpe && TPE_REGEN_ARM64=1 GOWORK=off GOARCH=arm64 go test -count=1 -run TestRegenARM64 ./",
-    "go_version": "go version go1.27.2-X:nodwarf5 linux/amd64",
+    "go_version": "go1.27.2-X:nodwarf5 linux/arm64",
     "emulator": "qemu-aarch64 binfmt",
     "seeds": [
       0,

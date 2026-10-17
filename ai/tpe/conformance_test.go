@@ -11,14 +11,12 @@ import (
 	"encoding/json"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
-// WHY: measured max after FMA-free rounding, 2026-10-17.
+// maxArchULP is the measured amd64-vs-arm64 maximum after FMA-free rounding (2026-10-17).
 const maxArchULP uint64 = 24
 
 type mathConformanceData struct {
@@ -161,14 +159,9 @@ func TestRegenARM64(t *testing.T) {
 		armTrajectories[i] = generateARM64Trajectory(t, traj)
 	}
 
-	goVer := "go version " + runtime.Version()
-	if out, err := exec.Command("go", "version").Output(); err == nil {
-		goVer = strings.TrimSpace(string(out))
-	}
-
 	provenance := &provenanceData{
 		GeneratedBy:  "cd ai/tpe && TPE_REGEN_ARM64=1 GOWORK=off GOARCH=arm64 go test -count=1 -run TestRegenARM64 ./",
-		GoVersion:    goVer,
+		GoVersion:    runtime.Version() + " " + runtime.GOOS + "/" + runtime.GOARCH,
 		Emulator:     "qemu-aarch64 binfmt",
 		Seeds:        seeds,
 		SourceGolden: "tpe_trajectory.json",
@@ -209,26 +202,7 @@ func loadTrajectoryGolden(t *testing.T, filename string) trajectoryConformanceDa
 
 func replayTrajectory(t *testing.T, traj trajectoryItem) {
 	t.Helper()
-	dims := make([]Dimension, len(traj.Dims))
-	for i, d := range traj.Dims {
-		dims[i] = Dimension{
-			Name: d.Name,
-			Kind: Kind(d.Kind),
-			Lo:   d.Lo,
-			Hi:   d.Hi,
-		}
-	}
-	cfg := Config{
-		StartupTrials: traj.Config.StartupTrials,
-		EICandidates:  traj.Config.EICandidates,
-		Gamma:         traj.Config.Gamma,
-		PriorWeight:   traj.Config.PriorWeight,
-	}
-
-	sampler, err := NewSampler(dims, cfg, traj.Seed)
-	if err != nil {
-		t.Fatalf("seed %d: NewSampler: %v", traj.Seed, err)
-	}
+	sampler := newTrajectorySampler(t, traj)
 
 	for _, step := range traj.Steps {
 		replayTrajectoryStep(t, sampler, traj.Seed, step)
@@ -258,26 +232,7 @@ func replayTrajectoryStep(t *testing.T, sampler *Sampler, seed int64, step traje
 
 func generateARM64Trajectory(t *testing.T, traj trajectoryItem) trajectoryItem {
 	t.Helper()
-	dims := make([]Dimension, len(traj.Dims))
-	for i, d := range traj.Dims {
-		dims[i] = Dimension{
-			Name: d.Name,
-			Kind: Kind(d.Kind),
-			Lo:   d.Lo,
-			Hi:   d.Hi,
-		}
-	}
-	cfg := Config{
-		StartupTrials: traj.Config.StartupTrials,
-		EICandidates:  traj.Config.EICandidates,
-		Gamma:         traj.Config.Gamma,
-		PriorWeight:   traj.Config.PriorWeight,
-	}
-
-	sampler, err := NewSampler(dims, cfg, traj.Seed)
-	if err != nil {
-		t.Fatalf("seed %d: NewSampler: %v", traj.Seed, err)
-	}
+	sampler := newTrajectorySampler(t, traj)
 
 	steps := make([]trajectoryStepItem, len(traj.Steps))
 	for i, step := range traj.Steps {
@@ -374,4 +329,29 @@ func ulpDistance(a, b float64) (uint64, bool) {
 		return bitsA - bitsB, true
 	}
 	return bitsB - bitsA, true
+}
+
+func newTrajectorySampler(t *testing.T, traj trajectoryItem) *Sampler {
+	t.Helper()
+	dims := make([]Dimension, len(traj.Dims))
+	for i, d := range traj.Dims {
+		dims[i] = Dimension{
+			Name: d.Name,
+			Kind: Kind(d.Kind),
+			Lo:   d.Lo,
+			Hi:   d.Hi,
+		}
+	}
+	cfg := Config{
+		StartupTrials: traj.Config.StartupTrials,
+		EICandidates:  traj.Config.EICandidates,
+		Gamma:         traj.Config.Gamma,
+		PriorWeight:   traj.Config.PriorWeight,
+	}
+
+	sampler, err := NewSampler(dims, cfg, traj.Seed)
+	if err != nil {
+		t.Fatalf("seed %d: NewSampler: %v", traj.Seed, err)
+	}
+	return sampler
 }
