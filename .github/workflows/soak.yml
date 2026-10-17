@@ -27,7 +27,7 @@ concurrency:
 jobs:
   soak:
     name: Run soak tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     env:
       SOAK_DURATION: ${{ inputs.duration || '2m' }}

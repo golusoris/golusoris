@@ -37,7 +37,7 @@ jobs:
   pr-title:
     name: PR title (Conventional Commits)
     if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Stop on a draft pull request
@@ -69,13 +69,13 @@ jobs:
   lint:
     name: Lint
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Lint timeout sizing (measured 2026-09-14 on the PR #447 tip, cold caches):
     # a full `golangci-lint run` of the root module (171 pkgs) costs ~810 CPU-s
     # (63 s wall on 32 cores; the go/packages load phase alone is ~530 CPU-s),
     # core ~44 CPU-s. The 65 min bound was sized for the retired self-hosted
     # runner fleet (750m guaranteed CPU, cold caches); it has not been
-    # re-measured on the hosted ubuntu-24.04 runners yet.
+    # re-measured on the hosted ubuntu-26.04 runners yet.
     #
     # Build is the sole setup-go cache writer. This job starts only after that
     # key exists, so its post step restores but never recompresses the cache.
@@ -125,13 +125,13 @@ jobs:
   gosec:
     name: Security (gosec)
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Measured with gosec v2.29.0 (171 root + 16 core pkgs) on a 32-core box:
     # root scan 61 s with an empty GOCACHE (2.4 GB of export data), 2 s warm;
     # core <1 s. Build now creates the shared cache before this job starts, so
     # this reader cannot lose the remaining job budget to a post-job upload.
     # The 45 min bound dates from the retired self-hosted runner fleet; it has
-    # not been re-measured on the hosted ubuntu-24.04 runners yet.
+    # not been re-measured on the hosted ubuntu-26.04 runners yet.
     timeout-minutes: 45
     permissions:
       contents: read
@@ -176,7 +176,7 @@ jobs:
   vuln:
     name: Vulnerabilities (govulncheck)
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Build owns the cache save; 20 minutes bounds only setup, restore, and the
     # vulnerability scan.
     timeout-minutes: 20
@@ -210,7 +210,7 @@ jobs:
           scripts/ci/go-modules.sh vuln
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
-  # The hosted ubuntu-24.04 runner owns coverage, artifacts, and the
+  # The hosted ubuntu-26.04 runner owns coverage, artifacts, and the
   # Docker-backed integration tests through its native Docker daemon.
   # go.mod is the single source of truth for the exact Go toolchain. The
   # descriptive matrix axis keeps the primary-leg metadata explicit without a
@@ -232,10 +232,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-26.04]
         toolchain: [module]
         include:
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             toolchain: module
             primary: true
     steps:
@@ -384,7 +384,7 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Sole setup-go cache writer. Run 35457471789 proved parallel writers can
     # finish their gates and then spend 13-25 minutes compressing/uploading the
     # same 1.14 GB key until the job timeout cancels them. Build verifies every
@@ -442,7 +442,7 @@ jobs:
   module-sweep:
     name: Module sweep (shard ${{ matrix.shard }})
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 65
     strategy:
       fail-fast: false
@@ -528,7 +528,7 @@ jobs:
   # ── Public documentation build ──────────────────────────────────────────────
   mkdocs:
     name: Documentation build (MkDocs)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -555,7 +555,7 @@ jobs:
   allocation-budget:
     name: Allocation budgets (HISS-03)
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Stop on a draft pull request
@@ -584,7 +584,7 @@ jobs:
   core-skew:
     name: Core version skew
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - name: Stop on a draft pull request
@@ -613,7 +613,7 @@ jobs:
   fault-recovery:
     name: Recovered fault scan
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45
     steps:
       - name: Stop on a draft pull request
@@ -775,7 +775,7 @@ jobs:
 
   shellcheck:
     name: Shell scripts (ShellCheck)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -801,7 +801,7 @@ jobs:
 
   actionlint:
     name: Workflows (actionlint)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -839,7 +839,7 @@ jobs:
 
   policy:
     name: CI policy tests
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Stop on a draft pull request
@@ -878,7 +878,7 @@ jobs:
 
   terraform:
     name: Terraform modules
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Stop on a draft pull request
@@ -904,7 +904,7 @@ jobs:
 
   kubeconform:
     name: Kubernetes schemas (kubeconform)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     steps:
       - name: Stop on a draft pull request
@@ -939,7 +939,7 @@ jobs:
   # openapi-spec input to wire spectral for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -980,7 +980,7 @@ jobs:
   apidiff:
     name: API compatibility (apidiff)
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Build owns the cache save; this job restores the same all-module key.
     timeout-minutes: 20
     steps:
@@ -1044,7 +1044,7 @@ jobs:
   dependency-review:
     name: Dependency review
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -1077,7 +1077,7 @@ jobs:
   # Scans the PR diff (and full history on push) for committed secrets.
   gitleaks:
     name: Secret scan (gitleaks)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -1117,7 +1117,7 @@ jobs:
   # source, including non-ignored untracked files, in the digest-pinned image.
   semgrep:
     name: Custom SAST (semgrep)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -1154,7 +1154,7 @@ jobs:
   dco:
     name: DCO sign-off
     if: github.actor != 'renovate[bot]' && github.actor != 'github-actions[bot]' && github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Stop on a draft pull request
@@ -1196,7 +1196,7 @@ jobs:
   attribution:
     name: Attribution (merge queue)
     if: github.event_name == 'merge_group'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -1213,7 +1213,7 @@ jobs:
   # ── REUSE / SPDX licensing compliance ────────────────────────────────────────
   reuse:
     name: Licensing (reuse lint)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Stop on a draft pull request
@@ -1248,9 +1248,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          - runner: ubuntu-26.04
             platform: linux/amd64
-          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-26.04-arm
             platform: linux/arm64
     steps:
       - name: Stop on a draft pull request
@@ -1318,7 +1318,7 @@ jobs:
       - reuse
       - apidiff
       - app-image-smoke
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Stop on a draft pull request
