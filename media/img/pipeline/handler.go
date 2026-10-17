@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/media/img"
-	"github.com/golusoris/golusoris/storage"
 )
 
 // tokenFromRequest extracts the signed token from the request. It prefers a chi

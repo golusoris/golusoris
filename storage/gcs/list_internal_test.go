@@ -18,7 +18,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"google.golang.org/api/option"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 )
 
 // stubListBucket serves every object listing with names and records the

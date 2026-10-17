@@ -21,7 +21,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/jonboulle/clockwork"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/storage/azblob"
 	"github.com/golusoris/golusoris/testutil/objstore"
 )
