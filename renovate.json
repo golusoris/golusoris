@@ -18,7 +18,8 @@
   "dockerfile": {
     "managerFilePatterns": [
       "/^tools/Dockerfile(?:\\.media)?\\.template$/",
-      "/^ai/tiny/trainers/(?:gemma|litert)/Dockerfile$/"
+      "/^ai/tiny/trainers/(?:gemma|litert)/Dockerfile$/",
+      "/^scripts/ci/backup-restore\\.Dockerfile$/"
     ]
   },
   "pip_requirements": {

@@ -103,7 +103,7 @@ func Start(t *testing.T, opts ...Options) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	container := runContainer(ctx, t, o)
+	container := startContainer(ctx, t, o)
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
@@ -147,7 +147,7 @@ func StartReplication(t *testing.T, opts ...Options) (*pgxpool.Pool, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	container := runContainer(ctx, t, o)
+	container := startContainer(ctx, t, o)
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("testutil/pg: connection string: %v", err)
@@ -198,7 +198,7 @@ func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	container := runContainer(ctx, t, o)
+	container := startContainer(ctx, t, o)
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("testutil/pg: connection string: %v", err)
@@ -219,15 +219,29 @@ func StartTimescale(t *testing.T, opts ...Options) *pgxpool.Pool {
 	return pool
 }
 
-// runContainer launches a Postgres-family container with the standard
-// credentials customizers and registers cleanup. Shared by the Start* helpers.
-func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.PostgresContainer {
+// startContainer launches a container for a test and registers cleanup via t.Cleanup.
+func startContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.PostgresContainer {
 	t.Helper()
 	if testing.Short() {
 		t.Skip("testutil/pg: container-backed; skipped under -short")
 	}
+	container, err := runContainer(ctx, o)
+	if err != nil {
+		t.Fatalf("%v", err)
+	}
+	// Fresh ctx, not the start ctx: teardown must outlive the cancelled start ctx.
+	t.Cleanup(func() { //nolint:contextcheck // cleanup intentionally uses a fresh context, not the start ctx
+		if termErr := terminate(container, terminateTimeout); termErr != nil {
+			t.Logf("%v", termErr)
+		}
+	})
+	return container
+}
+
+// runContainer launches a Postgres-family container with the standard credentials customizers.
+func runContainer(ctx context.Context, o Options) (*tcpostgres.PostgresContainer, error) {
 	if err := testimages.Validate(o.Image); err != nil {
-		t.Fatalf("testutil/pg: validate image: %v", err)
+		return nil, fmt.Errorf("testutil/pg: validate image: %w", err)
 	}
 	customizers := append([]testcontainers.ContainerCustomizer{
 		tcpostgres.WithDatabase(o.Database),
@@ -239,15 +253,9 @@ func runContainer(ctx context.Context, t *testing.T, o Options) *tcpostgres.Post
 
 	container, err := tcpostgres.Run(ctx, o.Image, customizers...)
 	if err != nil {
-		t.Fatalf("testutil/pg: start container: %v", err)
+		return nil, fmt.Errorf("testutil/pg: start container: %w", err)
 	}
-	// Fresh ctx, not the start ctx: teardown must outlive the cancelled start ctx.
-	t.Cleanup(func() { //nolint:contextcheck // cleanup intentionally uses a fresh context, not the start ctx
-		if termErr := terminate(container, terminateTimeout); termErr != nil {
-			t.Logf("%v", termErr)
-		}
-	})
-	return container
+	return container, nil
 }
 
 // terminator is the container teardown surface [terminate] needs.
@@ -285,7 +293,7 @@ func DSN(t *testing.T, opts ...Options) string {
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
 
-	container := runContainer(ctx, t, o)
+	container := startContainer(ctx, t, o)
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {

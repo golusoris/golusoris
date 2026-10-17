@@ -156,7 +156,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `auth/oidc/` | OIDC + PKCE + session storage | coreos/go-oidc/v3 |
+| `auth/oidc/` | OIDC + PKCE + nonce + session storage | coreos/go-oidc/v3 |
 | `auth/passkeys/` | WebAuthn + TOTP (MFA) | go-webauthn/webauthn + pquerna/otp |
 | `auth/jwt/` | HMAC JWT issuance, expiry, and validation | golang-jwt/jwt/v5 |
 | `auth/apikey/` | HMAC API key issuance, verification, and scopes | custom |
@@ -200,7 +200,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
-| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; interchangeable Prometheus/OTel typed handles, cardinality guard, Prometheus exemplars | prometheus/client_golang, OTel metric |
 | `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
 | `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
@@ -244,6 +244,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `notify/tracking/` | signed open-pixel and click tracking handlers | custom |
 | `notify/unsub/` | RFC 8058 one-click unsubscribe + suppression list | custom |
 | `notify/bounce/` | SES / Postmark bounce + complaint webhook handlers | custom |
+| `notify/channel/` | generic channel dispatch + secret redaction | custom |
 | `realtime/sse/` | Server-Sent Events hub | r3labs/sse |
 | `realtime/pubsub/` | synchronous local pub/sub bus plus Redis adapter | custom + rueidis |
 | `realtime/webrtc/` | bounded Pion offer/answer signaling + data-channel hooks | pion/webrtc |
@@ -387,7 +388,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `testutil/pg/` | testcontainers PostgreSQL | testcontainers-go |
+| `testutil/pg/` | testcontainers PostgreSQL + template cloning | testcontainers-go |
 | `testutil/redis/` | testcontainers Redis | testcontainers-go |
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
 | `testutil/kafka/` | testcontainers Redpanda/Kafka endpoint | testcontainers-go |
