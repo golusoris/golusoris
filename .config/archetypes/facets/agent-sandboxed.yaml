@@ -1,13 +1,21 @@
----
 id: "agent:sandboxed"
 name: "Autonomous Agent Sandboxing & Fleet Governance"
-description: "Selects the semgrep linter, the devcontainer common-utils feature,
-  the Copilot editor extension and workspace trust for repositories driven by
-  autonomous agents; it provides no resource caps, network isolation or loop
-  interception"
+description: "Enforces canonical AGENTS.md transpilation (HISS-16), cgroup resource caps, network isolation, anti-evasion hooks, and anti-loop interception"
 
 linters:
   - "semgrep"
+  - "gocyclo"
 
 devcontainer_features:
-  - "ghcr.io/devcontainers/features/common-utils:2"
+  - ghcr.io/devcontainers/features/common-utils:2:
+      installZsh: false
+      configureZshAsDefaultShell: false
+      installOhMyZsh: false
+      installOhMyZshConfig: false
+      upgradePackages: true
+      username: "vscode"
+      userUid: "1000"
+      userGid: "1000"
+      sudoers: true
+      nonFreePackages: false
+      installSsl: true
