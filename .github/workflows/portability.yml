@@ -93,6 +93,12 @@ jobs:
           $pactDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PACT_GO_LIB_DOWNLOAD_PATH=$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Time SQLite open phases on Windows (#778)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          GOFLAGS: -mod=readonly
+        run: go test -run '^TestOpenPhaseTimings$' -count=1 -v ./db/sqlite/
       - name: Build, vet, and short-test every Go module
         env:
           GOFLAGS: -mod=readonly

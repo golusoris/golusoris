@@ -202,6 +202,10 @@ packages:
     domain: ai
     capabilities: [ai.tiny_serve_ollama]
     description: "Package ollama implements a [tiny.Predictor] that serves Gemma (base + LoRA) via an [ollama](https://ollama.com) endpoint."
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/onnx
+    domain: ai
+    capabilities: [ai.tiny_serve_onnx]
+    description: "Package onnx implements a [tiny.Predictor] that executes ONNX models via an external runner subprocess speaking the vmafx-ort-runner protocol."
   - import: github.com/golusoris/golusoris/ai/tiny/serve/tflite
     domain: ai
     capabilities: [ai.tiny_serve_tflite]
@@ -733,6 +737,10 @@ packages:
     domain: leader
     capabilities: [leader.always]
     description: "Package always is the leader backend for standalone single-replica runs: the replica is leader from start to stop without any lock, so singleton tasks writte"
+  - import: github.com/golusoris/golusoris/leader/gate
+    domain: leader
+    capabilities: [leader.loop_gate]
+    description: "Package gate starts and stops a set of periodic loops as leadership comes and goes."
   - import: github.com/golusoris/golusoris/leader/k8s
     domain: leader
     capabilities: [leader.k8s]
@@ -821,6 +829,10 @@ packages:
     domain: notify
     capabilities: [notify.bounce]
     description: "Package bounce handles email bounce and complaint webhooks from SES (via SNS) and Postmark."
+  - import: github.com/golusoris/golusoris/notify/channel
+    domain: notify
+    capabilities: [notify.channel_dispatch]
+    description: "Package channel provides generic notification channel dispatch and secret redaction."
   - import: github.com/golusoris/golusoris/notify/discord
     domain: notify
     capabilities: [notify.discord]

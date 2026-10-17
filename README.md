@@ -200,7 +200,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
-| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; interchangeable Prometheus/OTel typed handles, cardinality guard, Prometheus exemplars | prometheus/client_golang, OTel metric |
 | `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
 | `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
@@ -221,6 +221,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks + `Status.IsLeader()`; `NamedModule` per singleton task | — |
 | `leader/always/` | always-leader backend for standalone single-replica runs | — |
+| `leader/gate/` | loop-lifecycle gate starting and stopping periodic jobs on leadership transitions | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
 | `leader/pg/` | PostgreSQL advisory-lock backend | jackc/pgx/v5 |
 | `systemd/` | `sd_notify` + watchdog (no-op when `NOTIFY_SOCKET` unset) | stdlib |
@@ -243,6 +244,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `notify/tracking/` | signed open-pixel and click tracking handlers | custom |
 | `notify/unsub/` | RFC 8058 one-click unsubscribe + suppression list | custom |
 | `notify/bounce/` | SES / Postmark bounce + complaint webhook handlers | custom |
+| `notify/channel/` | generic channel dispatch + secret redaction | custom |
 | `realtime/sse/` | Server-Sent Events hub | r3labs/sse |
 | `realtime/pubsub/` | synchronous local pub/sub bus plus Redis adapter | custom + rueidis |
 | `realtime/webrtc/` | bounded Pion offer/answer signaling + data-channel hooks | pion/webrtc |
@@ -304,6 +306,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `ai/tiny/` | bounded trainer/predictor contracts, registries, and container runner | custom + pgx |
 | `ai/tiny/gemma/` `ai/tiny/litert/` | digest-pinned Gemma LoRA and MobileNet V2 classifier trainer orchestration | containerized KerasHub / TensorFlow |
 | `ai/tiny/serve/` | Ollama + distributed fleet adapters; LiteRT sidecar client/protocol ([runtime #564](https://github.com/golusoris/golusoris/issues/564)) | HTTP + river |
+| `ai/tiny/serve/onnx/` | ONNX forward-pass predictor via vmafx-ort-runner subprocess protocol | os/exec (no cgo) |
 
 ### Commerce
 
