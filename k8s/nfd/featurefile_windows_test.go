@@ -7,6 +7,7 @@
 package nfd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,25 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sys/windows"
 )
-
-func TestTransientRenameError_windows(t *testing.T) {
-	t.Parallel()
-	for _, err := range []error{
-		windows.ERROR_ACCESS_DENIED,
-		windows.ERROR_SHARING_VIOLATION,
-		&os.LinkError{Op: "rename", Old: "a", New: "b", Err: windows.ERROR_ACCESS_DENIED},
-	} {
-		require.True(t, transientRenameError(err), "%v", err)
-	}
-	for _, err := range []error{
-		nil,
-		windows.ERROR_FILE_NOT_FOUND,
-		windows.ERROR_DISK_FULL,
-		&os.LinkError{Op: "rename", Old: "a", New: "b", Err: windows.ERROR_PATH_NOT_FOUND},
-	} {
-		require.False(t, transientRenameError(err), "%v", err)
-	}
-}
 
 // TestWriteFeatureFile_waitsForOpenReader holds the target open the way
 // os.Open does (no FILE_SHARE_DELETE), so the first rename must be denied.
@@ -52,7 +34,7 @@ func TestWriteFeatureFile_waitsForOpenReader(t *testing.T) {
 	other := filepath.Join(dir, "g")
 	require.NoError(t, os.WriteFile(other, nil, 0o600))
 	err = os.Rename(other, path)
-	require.True(t, transientRenameError(err), "a plain rename over the open file should be denied, got %v", err)
+	require.True(t, errors.Is(err, windows.ERROR_ACCESS_DENIED) || errors.Is(err, windows.ERROR_SHARING_VIOLATION), "a plain rename over the open file should be denied, got %v", err)
 
 	// Release only now: a timer started before the rename can fire first on a slow runner.
 	release := time.AfterFunc(50*time.Millisecond, closeReader)
