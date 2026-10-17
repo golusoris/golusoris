@@ -13,7 +13,7 @@ name: Scorecard
 # Cancel a stale run when a newer commit supersedes it (#196).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:

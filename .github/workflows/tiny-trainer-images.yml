@@ -29,7 +29,8 @@ permissions:
 
 concurrency:
   group: tiny-trainers-${{ inputs.version || github.ref }}
-  cancel-in-progress: false
+  # Only build-only PR runs cancel; the publish job keeps its own non-cancelling group.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   contracts:
