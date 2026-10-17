@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.12.0](https://github.com/golusoris/golusoris/compare/core/v0.11.0...core/v0.12.0) (2026-10-17)
+
+
+### Features
+
+* **core/validate:** add a stdlib-only nilcheck package ([#945](https://github.com/golusoris/golusoris/issues/945)) ([830d6e3](https://github.com/golusoris/golusoris/commit/830d6e37af1a00f9b6660ae3eda9364c4428eaa6))
+
+
+### Bug Fixes
+
+* **config:** map env names onto underscore struct keys in Unmarshal ([#937](https://github.com/golusoris/golusoris/issues/937)) ([456c435](https://github.com/golusoris/golusoris/commit/456c43581b12f8d451203f7c358ba3b5e266bd2b))
+
 ## [0.11.0](https://github.com/golusoris/golusoris/compare/core/v0.10.2...core/v0.11.0) (2026-10-16)
 
 
