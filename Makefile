@@ -149,6 +149,8 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
+	@python3 -B scripts/ci/regenerate.py selftest
+	@python3 -B scripts/ci/regenerate.py check
 
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
