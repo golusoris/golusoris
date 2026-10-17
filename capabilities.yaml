@@ -733,6 +733,10 @@ packages:
     domain: leader
     capabilities: [leader.always]
     description: "Package always is the leader backend for standalone single-replica runs: the replica is leader from start to stop without any lock, so singleton tasks writte"
+  - import: github.com/golusoris/golusoris/leader/gate
+    domain: leader
+    capabilities: [leader.loop_gate]
+    description: "Package gate starts and stops a set of periodic loops as leadership comes and goes."
   - import: github.com/golusoris/golusoris/leader/k8s
     domain: leader
     capabilities: [leader.k8s]

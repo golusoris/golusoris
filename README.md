@@ -221,6 +221,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks + `Status.IsLeader()`; `NamedModule` per singleton task | — |
 | `leader/always/` | always-leader backend for standalone single-replica runs | — |
+| `leader/gate/` | loop-lifecycle gate starting and stopping periodic jobs on leadership transitions | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
 | `leader/pg/` | PostgreSQL advisory-lock backend | jackc/pgx/v5 |
 | `systemd/` | `sd_notify` + watchdog (no-op when `NOTIFY_SOCKET` unset) | stdlib |
