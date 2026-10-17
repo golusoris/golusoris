@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -181,7 +182,7 @@ func newRetryRig(t *testing.T, failures int32) *retryRig {
 
 // finishFailedUpload completes one upload whose inline callback fails, then
 // waits until no request holds its lock so the next tick cannot skip it.
-func (r *retryRig) finishFailedUpload(t *testing.T) {
+func (r *retryRig) finishFailedUpload(t *testing.T) string {
 	t.Helper()
 	url := createTestUpload(t, r.srv.Client(), r.srv.URL+r.h.BasePath(), 4)
 	if status := finishTestUpload(t, r.srv.Client(), url, "data"); status != http.StatusInternalServerError {
@@ -189,6 +190,12 @@ func (r *retryRig) finishFailedUpload(t *testing.T) {
 	}
 	r.expectAttempt(t, 1)
 	id := path.Base(url)
+	r.waitForLockRelease(t, id)
+	return id
+}
+
+func (r *retryRig) waitForLockRelease(t *testing.T, id string) {
+	t.Helper()
 	for range 1000 {
 		if unlock, ok := r.h.locker.tryMaintenanceLock(id); ok {
 			unlock()
@@ -196,7 +203,23 @@ func (r *retryRig) finishFailedUpload(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	t.Fatalf("upload %s still locked after its PATCH returned", id)
+	t.Fatalf("upload %s still locked", id)
+}
+
+// waitForAcknowledgement waits until the retry tick deletes the completion record and unlocks, ensuring lifecycle stop does not race the in-flight tick.
+func (r *retryRig) waitForAcknowledgement(t *testing.T, id string) {
+	t.Helper()
+	for range 1000 {
+		_, err := r.h.scratch.Completion(context.Background(), id)
+		if errors.Is(err, tusd.ErrNotFound) {
+			if unlock, ok := r.h.locker.tryMaintenanceLock(id); ok {
+				unlock()
+				return
+			}
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("upload %s was not acknowledged within timeout", id)
 }
 
 func (r *retryRig) expectAttempt(t *testing.T, want int32) {
@@ -226,13 +249,14 @@ func (r *retryRig) expectNoAttempt(t *testing.T) {
 func TestCompletionRetryIsDurable(t *testing.T) {
 	t.Parallel()
 	rig := newRetryRig(t, 1)
-	rig.finishFailedUpload(t)
+	id := rig.finishFailedUpload(t)
 	if rig.bucket.puts.Load() != 1 {
 		t.Fatalf("Bucket Put count = %d, want 1", rig.bucket.puts.Load())
 	}
 
 	rig.clk.Advance(15 * time.Minute)
 	rig.expectAttempt(t, 2)
+	rig.waitForAcknowledgement(t, id)
 	if rig.bucket.puts.Load() != 1 {
 		t.Fatalf("Bucket Put count after retry = %d, want 1", rig.bucket.puts.Load())
 	}
@@ -247,10 +271,15 @@ func TestCompletionRetryIsDurable(t *testing.T) {
 func TestCompletionRetryRunsEveryTick(t *testing.T) {
 	t.Parallel()
 	rig := newRetryRig(t, 2)
-	rig.finishFailedUpload(t)
+	id := rig.finishFailedUpload(t)
 	for want := int32(2); want <= 3; want++ {
 		rig.clk.Advance(15 * time.Minute)
 		rig.expectAttempt(t, want)
+		if want < 3 {
+			rig.waitForLockRelease(t, id)
+		} else {
+			rig.waitForAcknowledgement(t, id)
+		}
 	}
 	rig.clk.Advance(15 * time.Minute)
 	rig.expectNoAttempt(t)
