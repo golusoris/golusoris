@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package idempotency_test
+package redis_test
 
 import (
 	"context"
@@ -13,7 +13,9 @@ import (
 	"github.com/redis/rueidis"
 	"github.com/stretchr/testify/require"
 
-	"github.com/golusoris/golusoris/idempotency"
+	"github.com/golusoris/golusoris/idempotency/internal/storetest"
+	"github.com/golusoris/golusoris/idempotency/redis"
+	"github.com/golusoris/golusoris/idempotency/store"
 	redistest "github.com/golusoris/golusoris/testutil/redis"
 )
 
@@ -22,13 +24,13 @@ const maxAdvanceScans = 1000
 
 // newRedisHarness isolates each case under its own key prefix and simulates
 // a clock advance by shortening every PTTL under that prefix by d.
-func newRedisHarness(client rueidis.Client) func(t *testing.T) storeHarness {
-	return func(t *testing.T) storeHarness {
+func newRedisHarness(client rueidis.Client) func(t *testing.T) storetest.Harness {
+	return func(t *testing.T) storetest.Harness {
 		t.Helper()
 		prefix := "conformance:" + rand.Text() + ":"
-		store, err := idempotency.NewRedisStore(client, prefix)
+		store, err := redis.New(client, prefix)
 		require.NoError(t, err)
-		return storeHarness{store: store, advance: func(t *testing.T, d time.Duration) {
+		return storetest.Harness{Store: store, Advance: func(t *testing.T, d time.Duration) {
 			t.Helper()
 			advanceRedis(t, client, prefix, d)
 		}}
@@ -60,52 +62,52 @@ func advanceRedis(t *testing.T, client rueidis.Client, prefix string, d time.Dur
 	t.Fatalf("redis SCAN did not finish in %d pages", maxAdvanceScans)
 }
 
-func TestRedisStore_Conformance(t *testing.T) {
+func TestStore_Conformance(t *testing.T) {
 	t.Parallel()
-	runStoreConformance(t, newRedisHarness(redistest.Start(t)))
+	storetest.Run(t, newRedisHarness(redistest.Start(t)))
 }
 
-// TestRedisStore_SharedAcrossReplicas is the #624 acceptance over Redis.
-func TestRedisStore_SharedAcrossReplicas(t *testing.T) {
+// TestStore_SharedAcrossReplicas is the #624 acceptance over Redis.
+func TestStore_SharedAcrossReplicas(t *testing.T) {
 	t.Parallel()
 	client := redistest.Start(t)
-	replicaA, err := idempotency.NewRedisStore(client, "shared:")
+	replicaA, err := redis.New(client, "shared:")
 	require.NoError(t, err)
-	replicaB, err := idempotency.NewRedisStore(client, "shared:")
+	replicaB, err := redis.New(client, "shared:")
 	require.NoError(t, err)
-	requireSharedAcrossReplicas(t, replicaA, replicaB)
+	storetest.SharedAcrossReplicas(t, replicaA, replicaB)
 }
 
-// TestRedisStore_RecordsExpireServerSide asserts the PX bound: Redis drops
+// TestStore_RecordsExpireServerSide asserts the PX bound: Redis drops
 // the record itself, so no sweeper runs.
-func TestRedisStore_RecordsExpireServerSide(t *testing.T) {
+func TestStore_RecordsExpireServerSide(t *testing.T) {
 	t.Parallel()
 	client := redistest.Start(t)
-	store, err := idempotency.NewRedisStore(client, "")
+	value, err := redis.New(client, "")
 	require.NoError(t, err)
-	_, err = store.Claim(t.Context(), "key", fingerprintA, 90*time.Second)
+	_, err = value.Claim(t.Context(), "key", "fingerprint-a", 90*time.Second)
 	require.NoError(t, err)
-	ttl, err := client.Do(t.Context(), client.B().Pttl().Key(idempotency.DefaultRedisPrefix+"key").Build()).AsInt64()
+	ttl, err := client.Do(t.Context(), client.B().Pttl().Key(redis.DefaultRedisPrefix+"key").Build()).AsInt64()
 	require.NoError(t, err)
 	require.Greater(t, ttl, int64(60_000))
 	require.LessOrEqual(t, ttl, int64(90_000))
-	_, isSweeper := any(store).(idempotency.Sweeper)
+	_, isSweeper := any(value).(store.Sweeper)
 	require.False(t, isSweeper)
 }
 
-func TestRedisStore_WrongTypeKeyFails(t *testing.T) {
+func TestStore_WrongTypeKeyFails(t *testing.T) {
 	t.Parallel()
 	client := redistest.Start(t)
-	store, err := idempotency.NewRedisStore(client, "wrong:")
+	store, err := redis.New(client, "wrong:")
 	require.NoError(t, err)
 	require.NoError(t, client.Do(t.Context(), client.B().Set().Key("wrong:key").Value("plain").Build()).Error())
-	_, err = store.Claim(t.Context(), "key", fingerprintA, time.Minute)
+	_, err = store.Claim(t.Context(), "key", "fingerprint-a", time.Minute)
 	require.Error(t, err)
 }
 
-func TestNewRedisStore_NilClient(t *testing.T) {
+func TestNew_NilClient(t *testing.T) {
 	t.Parallel()
-	store, err := idempotency.NewRedisStore(nil, "")
+	store, err := redis.New(nil, "")
 	require.Error(t, err)
 	require.Nil(t, store)
 }

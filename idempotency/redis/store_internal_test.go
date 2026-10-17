@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-package idempotency
+package redis
 
 import (
 	"errors"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/redis/rueidis"
+
+	"github.com/golusoris/golusoris/idempotency/store"
 )
 
 func TestRedisMillis_RoundsUp(t *testing.T) {
@@ -33,10 +35,10 @@ func TestRedisOutcome(t *testing.T) {
 	if err := redisOutcome("ok"); err != nil {
 		t.Fatalf("ok = %v", err)
 	}
-	if err := redisOutcome("lost"); !errors.Is(err, ErrReservationLost) {
+	if err := redisOutcome("lost"); !errors.Is(err, store.ErrReservationLost) {
 		t.Fatalf("lost = %v", err)
 	}
-	if err := redisOutcome("mismatch"); !errors.Is(err, ErrFingerprintMismatch) {
+	if err := redisOutcome("mismatch"); !errors.Is(err, store.ErrFingerprintMismatch) {
 		t.Fatalf("mismatch = %v", err)
 	}
 	if err := redisOutcome("weird"); err == nil {

@@ -19,8 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
-
 	"github.com/golusoris/golusoris/idempotency"
 )
 
@@ -173,32 +171,6 @@ func TestMiddleware_TypedNilStoreFailsClosed(t *testing.T) {
 	}
 	if rw.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d; want %d", rw.Code, http.StatusInternalServerError)
-	}
-}
-
-func TestNewMemoryStoreWithClock_TypedNilFallsBack(t *testing.T) {
-	t.Parallel()
-	var clk *clockwork.FakeClock
-	store := idempotency.NewMemoryStoreWithClock(clk)
-	ctx := context.Background()
-	claim, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil {
-		t.Fatalf("Claim: %v", err)
-	}
-	err = store.Commit(
-		ctx,
-		"key",
-		claim.Token,
-		"fingerprint",
-		idempotency.CachedResponse{StatusCode: http.StatusCreated},
-		time.Minute,
-	)
-	if err != nil {
-		t.Fatalf("Commit: %v", err)
-	}
-	completed, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil || completed.State != idempotency.ClaimCompleted {
-		t.Fatalf("Claim = (%+v, %v); want completed response", completed, err)
 	}
 }
 
