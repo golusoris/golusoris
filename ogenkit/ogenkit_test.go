@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 
 	ogenmw "github.com/ogen-go/ogen/middleware"
 	"github.com/ogen-go/ogen/ogenerrors"
+	"github.com/ogen-go/ogen/validate"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/ogenkit"
@@ -123,40 +125,46 @@ func TestErrorHandlerHidesInternalErrorDetail(t *testing.T) {
 	}
 }
 
+func assertServerErrorRedacted(t *testing.T, err error, wantStatus int) {
+	t.Helper()
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandler(logger)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/widgets", nil)
+
+	h(context.Background(), rr, req, err)
+
+	if rr.Code != wantStatus {
+		t.Errorf("status = %d, want %d", rr.Code, wantStatus)
+	}
+	if strings.Contains(rr.Body.String(), "leaked") {
+		t.Errorf("body leaked server error: %s", rr.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, field := range []string{"detail", "message"} {
+		if body[field] != "internal server error" {
+			t.Errorf("%s = %#v", field, body[field])
+		}
+	}
+}
+
 func TestErrorHandlerHidesCodedServerErrorDetail(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
+	cases := []struct {
 		name string
 		err  error
 		want int
 	}{
 		{name: "internal", err: gerr.Internal("database password leaked"), want: http.StatusInternalServerError},
 		{name: "unavailable", err: gerr.New(gerr.CodeUnavailable, "upstream token leaked"), want: http.StatusServiceUnavailable},
-	} {
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
-			h := ogenkit.ErrorHandler(logger)
-			rr := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, "/widgets", nil)
-
-			h(context.Background(), rr, req, tc.err)
-
-			if rr.Code != tc.want {
-				t.Errorf("status = %d, want %d", rr.Code, tc.want)
-			}
-			if strings.Contains(rr.Body.String(), "leaked") {
-				t.Errorf("body leaked server error: %s", rr.Body.String())
-			}
-			var body map[string]any
-			if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
-			for _, field := range []string{"detail", "message"} {
-				if body[field] != "internal server error" {
-					t.Errorf("%s = %#v", field, body[field])
-				}
-			}
+			assertServerErrorRedacted(t, tc.err, tc.want)
 		})
 	}
 }
@@ -199,5 +207,179 @@ func TestSlogMiddlewareLogsOperation(t *testing.T) {
 		if !bytes.Contains([]byte(out), []byte(want)) {
 			t.Errorf("log missing %q: %q", want, out)
 		}
+	}
+}
+
+func TestErrorHandlerWithMappedSentinelWrappedTwice(t *testing.T) {
+	t.Parallel()
+	errSentinel := errors.New("user not found")
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithStatus(errSentinel, gerr.CodeNotFound))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/users/42", nil)
+	wrapped := fmt.Errorf("service layer: %w", fmt.Errorf("repo layer: %w", errSentinel))
+	h(context.Background(), rr, req, wrapped)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["code"] != "not_found" {
+		t.Errorf("code = %v, want not_found", body["code"])
+	}
+	if body["status"] != float64(http.StatusNotFound) {
+		t.Errorf("status = %v, want 404", body["status"])
+	}
+	if body["type"] != "https://golusoris.dev/errors/not_found" {
+		t.Errorf("type = %v, want https://golusoris.dev/errors/not_found", body["type"])
+	}
+	if body["detail"] != "user not found" {
+		t.Errorf("detail = %v, want 'user not found' (unleaked target message)", body["detail"])
+	}
+}
+
+func assertInvalidParam(t *testing.T, item any, wantName, wantReason string) {
+	t.Helper()
+	p, ok := item.(map[string]any)
+	if !ok {
+		t.Fatalf("item not a map: %#v", item)
+	}
+	if p["name"] != wantName || p["reason"] != wantReason {
+		t.Errorf("param = %#v, want name=%s, reason=%s", p, wantName, wantReason)
+	}
+}
+
+func TestErrorHandlerWithInvalidParams(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithInvalidParams())
+
+	valErr := &validate.Error{
+		Fields: []validate.FieldError{
+			{Name: "page_size", Error: errors.New("must be positive")},
+			{Name: "sort_by", Error: errors.New("unsupported column")},
+		},
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items?page_size=-1", nil)
+	h(context.Background(), rr, req, valErr)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusUnprocessableEntity)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["code"] != "validation" {
+		t.Errorf("code = %v, want validation", body["code"])
+	}
+	if body["detail"] != "request validation failed" {
+		t.Errorf("detail = %v, want 'request validation failed'", body["detail"])
+	}
+	params, ok := body["invalid-params"].([]any)
+	if !ok || len(params) != 2 {
+		t.Fatalf("invalid-params = %#v, want 2 items", body["invalid-params"])
+	}
+	assertInvalidParam(t, params[0], "page_size", "must be positive")
+	assertInvalidParam(t, params[1], "sort_by", "unsupported column")
+}
+
+func TestErrorHandlerWithNegativeNoOptions(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger)
+
+	valErr := &validate.Error{
+		Fields: []validate.FieldError{
+			{Name: "limit", Error: errors.New("too high")},
+		},
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items", nil)
+	h(context.Background(), rr, req, valErr)
+
+	wantStatus := ogenerrors.ErrorCode(valErr)
+	if rr.Code != wantStatus {
+		t.Errorf("status = %d, want %d from ogenerrors.ErrorCode", rr.Code, wantStatus)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, exists := body["invalid-params"]; exists {
+		t.Errorf("invalid-params should not be present without WithInvalidParams()")
+	}
+
+	rrFallback := httptest.NewRecorder()
+	unmappedErr := errors.New("unexpected error")
+	h(context.Background(), rrFallback, req, unmappedErr)
+	if rrFallback.Code != http.StatusInternalServerError {
+		t.Errorf("unmapped fallback status = %d, want %d", rrFallback.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestErrorHandlerWithMappedServerErrorRedacted(t *testing.T) {
+	t.Parallel()
+	errSecretDB := errors.New("db auth failed on 10.1.2.3 with pass secret123")
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithStatus(errSecretDB, gerr.CodeInternal))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items", nil)
+	h(context.Background(), rr, req, errSecretDB)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusInternalServerError)
+	}
+	if strings.Contains(rr.Body.String(), "secret123") {
+		t.Errorf("server error leaked secret: %s", rr.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["detail"] != "internal server error" {
+		t.Errorf("detail = %v, want 'internal server error'", body["detail"])
+	}
+}
+
+func TestErrorHandlerWithBoundaryEmptyFields(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithInvalidParams())
+
+	emptyValErr := &validate.Error{Fields: nil}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/items", nil)
+	h(context.Background(), rr, req, emptyValErr)
+
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusUnprocessableEntity)
+	}
+	if strings.Contains(rr.Body.String(), "invalid-params") {
+		t.Errorf("expected no invalid-params key in raw JSON for empty fields, got: %s", rr.Body.String())
+	}
+}
+
+func TestErrorHandlerWithFirstMatchOrdering(t *testing.T) {
+	t.Parallel()
+	errConflictOrBad := errors.New("ambiguous domain error")
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger,
+		ogenkit.WithStatus(errConflictOrBad, gerr.CodeConflict),
+		ogenkit.WithStatus(errConflictOrBad, gerr.CodeBadRequest),
+	)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/items", nil)
+	h(context.Background(), rr, req, errConflictOrBad)
+
+	if rr.Code != http.StatusConflict {
+		t.Errorf("status = %d, want %d (first match should win)", rr.Code, http.StatusConflict)
 	}
 }
