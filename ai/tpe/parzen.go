@@ -96,8 +96,8 @@ func (p *parzen) sample(rng *rand.Rand) float64 {
 	if hiCDF <= loCDF {
 		return mu
 	}
-	q := loCDF + rng.Float64()*(hiCDF-loCDF)
-	v := mu + sigma*normalPPF(q)
+	q := loCDF + float64(rng.Float64()*(hiCDF-loCDF))
+	v := mu + float64(sigma*normalPPF(q))
 	return math.Max(p.lo, math.Min(p.hi, v))
 }
 
@@ -111,7 +111,7 @@ func (p *parzen) logPDF(x float64) float64 {
 		if norm <= 0 {
 			continue
 		}
-		logComponent := -0.5*z*z - math.Log(sigma) - 0.5*math.Log(2.0*math.Pi) - math.Log(norm)
+		logComponent := float64(-0.5*z*z) - math.Log(sigma) - float64(0.5*math.Log(2.0*math.Pi)) - math.Log(norm)
 		logs = append(logs, math.Log(p.weights[i])+logComponent)
 	}
 	return logSumExp(logs)

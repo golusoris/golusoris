@@ -33,7 +33,7 @@ func logSumExp(values []float64) float64 {
 
 // normalCDF is the standard normal cumulative distribution function.
 func normalCDF(z float64) float64 {
-	return 0.5 * math.Erfc(-z/math.Sqrt2)
+	return float64(0.5 * math.Erfc(-z/math.Sqrt2))
 }
 
 // normalPPF is the standard normal inverse CDF (probit), via the Acklam
@@ -87,21 +87,30 @@ func normalPPFLowerHalf(p float64) float64 {
 	switch {
 	case p < pLow:
 		q := math.Sqrt(-2 * math.Log(p))
-		x = (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q + c[5]) /
-			((((d[0]*q+d[1])*q+d[2])*q+d[3])*q + 1)
+		x = horner(q, c[:]) /
+			horner(q, append(d[:], 1))
 	case p <= pHigh:
 		q := p - 0.5
 		r := q * q
-		x = (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r + a[5]) * q /
-			(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r + 1)
+		x = horner(r, a[:]) * q /
+			horner(r, append(b[:], 1))
 	default:
 		q := math.Sqrt(-2 * math.Log(1-p))
-		x = -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q + c[5]) /
-			((((d[0]*q+d[1])*q+d[2])*q+d[3])*q + 1)
+		x = -horner(q, c[:]) /
+			horner(q, append(d[:], 1))
 	}
 
 	// One Halley refinement step against the true CDF.
-	e := 0.5*math.Erfc(-x/math.Sqrt2) - p
+	e := float64(0.5*math.Erfc(-x/math.Sqrt2)) - p
 	u := e * math.Sqrt(2*math.Pi) * math.Exp(x*x/2)
-	return x - u/(1+x*u/2)
+	return x - u/(1+float64(x*u/2))
+}
+
+// WHY: explicit float64 rounding stops arm64 from fusing x*y+z (Go spec allows it) so results match amd64.
+func horner(x float64, c []float64) float64 {
+	acc := c[0]
+	for _, ci := range c[1:] {
+		acc = float64(acc*x) + ci
+	}
+	return acc
 }

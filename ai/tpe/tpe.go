@@ -264,7 +264,7 @@ func (s *Sampler) Best() (map[string]float64, float64, bool) {
 func (s *Sampler) sampleUniform() map[string]float64 {
 	out := make(map[string]float64, len(s.dims))
 	for _, dim := range s.dims {
-		out[dim.Name] = quantise(dim.Lo+s.rng.Float64()*(dim.Hi-dim.Lo), dim)
+		out[dim.Name] = quantise(dim.Lo+float64(s.rng.Float64()*(dim.Hi-dim.Lo)), dim)
 	}
 	return out
 }
