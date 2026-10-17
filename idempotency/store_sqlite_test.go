@@ -18,11 +18,15 @@ import (
 	"github.com/golusoris/golusoris/idempotency"
 )
 
+// Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
+const testBusyTimeout = 30 * time.Second
+
 // openSQLite opens a file database so concurrent claims use real locking.
 func openSQLite(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := dbsqlite.Open(t.Context(), dbsqlite.Options{
-		Path: filepath.Join(t.TempDir(), "idempotency.db"),
+		Path:        filepath.Join(t.TempDir(), "idempotency.db"),
+		BusyTimeout: testBusyTimeout,
 	}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })

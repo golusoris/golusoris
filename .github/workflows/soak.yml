@@ -10,10 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       duration:
-        description: 'Soak test duration per area (e.g. 2m, 5m, 10m)'
+        # WHY: choices keep each package under the 30m test timeout below.
+        description: 'Soak test duration per area'
         required: false
         default: '2m'
-        type: string
+        type: choice
+        options: ['2m', '5m', '10m', '20m']
 
 permissions:
   contents: read
@@ -56,7 +58,7 @@ jobs:
           # bounded job until testcontainers/testcontainers-go#3868 ships.
           RYUK_RECONNECTION_TIMEOUT: 30m
         run: |
-          go test -tags soak -race -count=1 -v -p 4 -run 'Test.*_Soak' -timeout 50m \
+          go test -tags soak -race -count=1 -v -p 4 -run 'Test.*_Soak' -timeout 30m \
             ./jobs \
             ./realtime/pubsub \
             ./cache/twotier \
