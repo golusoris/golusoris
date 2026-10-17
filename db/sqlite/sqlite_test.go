@@ -25,10 +25,13 @@ import (
 
 func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+// Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
+const testBusyTimeout = 30 * time.Second
+
 func TestOpenFileWALRoundTrip(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "app.db")
-	db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path}, discard())
+	db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, BusyTimeout: testBusyTimeout}, discard())
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -81,7 +84,7 @@ func TestOpenPathWithURIDelimiters(t *testing.T) {
 				t.Skip("Windows reserves '?' in file names; TestDSNEscapesURIDelimiters covers its encoding")
 			}
 			path := filepath.Join(t.TempDir(), tt.file)
-			db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path}, discard())
+			db, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, BusyTimeout: testBusyTimeout}, discard())
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
@@ -120,7 +123,7 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 	}
 
 	path := filepath.Join(t.TempDir(), "ro.db")
-	rw, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, DisableWAL: true}, discard())
+	rw, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, DisableWAL: true, BusyTimeout: testBusyTimeout}, discard())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +133,7 @@ func TestOpenMemoryAndReadOnly(t *testing.T) {
 	if closeErr := rw.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	ro, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, ReadOnly: true, DisableWAL: true}, discard())
+	ro, err := sqlite.Open(t.Context(), sqlite.Options{Path: path, ReadOnly: true, DisableWAL: true, BusyTimeout: testBusyTimeout}, discard())
 	if err != nil {
 		t.Fatalf("Open read-only: %v", err)
 	}

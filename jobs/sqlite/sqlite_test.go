@@ -42,11 +42,15 @@ func (w *encodeWorker) Work(_ context.Context, job *jobs.Job[encodeArgs]) error 
 
 func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
+// Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
+const testBusyTimeout = 30 * time.Second
+
 func openDB(t *testing.T, maxConns int) *sql.DB {
 	t.Helper()
 	db, err := dbsqlite.Open(context.Background(), dbsqlite.Options{
 		Path:         filepath.Join(t.TempDir(), "jobs.db"),
 		MaxOpenConns: maxConns,
+		BusyTimeout:  testBusyTimeout,
 	}, discard())
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
