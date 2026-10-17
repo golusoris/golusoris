@@ -62,12 +62,12 @@ adoption:
 exceptions:
     - rule: HISS-19
       path: idempotency/internal/storeutil/nil.go
-      reason: "Category B (controller answer golusoris-818-dedupe): copies core/validate.IsNil so idempotency/store avoids fx and validator; removed when the root bumps to the core release carrying core/validate/nilcheck."
-      expires: "2026-10-19"
+      reason: "Category B, renewed once (controller answers golusoris-818-dedupe, golusoris-nilcheck-exc-expiry): copies core/validate/nilcheck.IsNil because no core tag up to core/v0.11.0 carries core/validate/nilcheck and downstream builds ignore the root replace; removed when the root bumps to the first core tag that carries it."
+      expires: "2026-10-22"
     - rule: HISS-19
-      path: core/validate/validate.go
-      reason: "Category B (controller answer golusoris-818-dedupe): idempotency/internal/storeutil/nil.go copies IsNil until the root bumps to the core release carrying core/validate/nilcheck."
-      expires: "2026-10-19"
+      path: core/validate/nilcheck/nilcheck.go
+      reason: "Category B, renewed once (controller answers golusoris-818-dedupe, golusoris-nilcheck-exc-expiry; moved from core/validate/validate.go after #945): idempotency/internal/storeutil/nil.go copies IsNil because no core tag up to core/v0.11.0 carries core/validate/nilcheck; removed when the root bumps to the first core tag that carries it."
+      expires: "2026-10-22"
     - rule: HISS-19
       path: storage/key.go
       reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
