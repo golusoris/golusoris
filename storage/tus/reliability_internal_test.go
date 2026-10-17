@@ -206,10 +206,13 @@ func (r *retryRig) waitForLockRelease(t *testing.T, id string) {
 	t.Fatalf("upload %s still locked", id)
 }
 
-// waitForAcknowledgement waits until the retry tick deletes the completion record and unlocks, ensuring lifecycle stop does not race the in-flight tick.
+// ackWaitLimit bounds the poll for a slow scratch filesystem; the 1s stop drain stays the latency assertion.
+const ackWaitLimit = 10 * time.Second
+
+// waitForAcknowledgement waits until the retry tick deletes the completion record and unlocks, so lifecycle stop does not race the in-flight tick.
 func (r *retryRig) waitForAcknowledgement(t *testing.T, id string) {
 	t.Helper()
-	for range 1000 {
+	for range int(ackWaitLimit / time.Millisecond) {
 		_, err := r.h.scratch.Completion(context.Background(), id)
 		if errors.Is(err, tusd.ErrNotFound) {
 			if unlock, ok := r.h.locker.tryMaintenanceLock(id); ok {
