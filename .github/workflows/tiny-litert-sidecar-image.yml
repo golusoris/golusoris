@@ -259,7 +259,7 @@ jobs:
           set -euo pipefail
           image_id=$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")
           if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-            printf 'local image returned invalid config digest: %q\n' "$image_id" >&2
+            printf 'local image returned invalid image id: %q\n' "$image_id" >&2
             exit 1
           fi
           echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
@@ -364,7 +364,7 @@ jobs:
             '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
           if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
             "$image_version" != "$VERSION" ]]; then
-            printf 'published image does not match tested config digest and source labels\n' >&2
+            printf 'published image does not match tested image id and source labels\n' >&2
             exit 1
           fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
