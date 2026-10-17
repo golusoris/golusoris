@@ -16,7 +16,7 @@ on:
 
 # Praetor engine that local hooks and Make targets run; .config/lefthook/engine.sh reads this pin.
 env:
-  PRAETOR_REF: 7057d9957b3a7b98d60899aad55bbee406e0e96c
+  PRAETOR_REF: 603d6a3433ea3ea2277474681c66ce5ca7a2c1b6
 
 permissions:
   contents: read
@@ -331,6 +331,7 @@ jobs:
         env:
           GO_MODULE_GROUP: primary
           GO_COVERAGE_DIR: .coverage/primary
+          GOLUSORIS_REQUIRE_CHROME: "1"
           # v0.44.0 can reuse a stopped shared Ryuk after a package gap
           # (testcontainers/testcontainers-go#3867). Keep it alive within this
           # bounded job until testcontainers/testcontainers-go#3868 ships.
@@ -422,6 +423,8 @@ jobs:
           . tools/tool-versions.env
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           bash scripts/ci/helm-chart_test.sh
+      - name: Restore a chart backup into a fresh database
+        run: bash scripts/ci/helm-backup-restore_test.sh
       - name: Verify all module dependencies before caching
         run: scripts/ci/go-modules.sh verify
       - name: Build and vet primary modules

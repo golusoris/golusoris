@@ -12,6 +12,8 @@ import (
 // valueGuard maps one label value to itself or [OtherValue].
 type valueGuard interface {
 	admit(value string) string
+	lookup(value string) string
+	reset()
 }
 
 type allowGuard map[string]struct{}
@@ -22,6 +24,12 @@ func (g allowGuard) admit(value string) string {
 	}
 	return OtherValue
 }
+
+func (g allowGuard) lookup(value string) string {
+	return g.admit(value)
+}
+
+func (g allowGuard) reset() {}
 
 // distinctGuard admits the first max distinct values; memory stays bounded
 // by max.
@@ -50,11 +58,34 @@ func (g *distinctGuard) admit(value string) string {
 	return value
 }
 
+func (g *distinctGuard) lookup(value string) string {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if _, ok := g.seen[value]; ok {
+		return value
+	}
+	return OtherValue
+}
+
+func (g *distinctGuard) reset() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	clear(g.seen)
+}
+
 // labelGuard checks label counts and applies per-label limits.
 type labelGuard struct {
 	name   string
 	count  int
 	guards []valueGuard // index-aligned with Def.Labels; nil = unbounded
+}
+
+func (lg *labelGuard) reset() {
+	for _, g := range lg.guards {
+		if g != nil {
+			g.reset()
+		}
+	}
 }
 
 func newLabelGuard(d Def) *labelGuard {
@@ -99,4 +130,18 @@ func (lg *labelGuard) bound(values []string) ([]string, error) {
 		out[i] = admitted
 	}
 	return out, nil
+}
+
+// known reports whether every guarded value maps to itself without admitting
+// new distinct values; a remapped value names no series of its own.
+func (lg *labelGuard) known(values []string) bool {
+	if len(values) != lg.count {
+		return false
+	}
+	for i, g := range lg.guards {
+		if g != nil && g.lookup(values[i]) != values[i] {
+			return false
+		}
+	}
+	return true
 }
