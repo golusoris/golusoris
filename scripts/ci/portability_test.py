@@ -16,7 +16,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from unittest import TestCase, main, mock
+from unittest import TestCase, main, mock, skipUnless
 
 import pact_ffi
 import portability
@@ -156,6 +156,22 @@ class PortabilityDriverTest(TestCase):
                     max_output_bytes=4,
                 )
         self.assertLess(time.monotonic() - started, 4)
+
+    @skipUnless(os.name == "posix", "process groups are POSIX")
+    def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
+        refused = (0, 1, -5, True, os.getpgrp(), mock.MagicMock(), None)
+        with (
+            mock.patch.object(portability.os, "killpg") as killpg,
+            mock.patch.object(portability.time, "sleep"),
+        ):
+            for pid in refused:
+                with self.subTest(pid=pid):
+                    failures = portability._terminate_posix_process_group(mock.Mock(pid=pid))
+                    self.assertEqual(len(failures), 1)
+            killpg.assert_not_called()
+            # pid 2 is never signalled for real: os.killpg is the mock above.
+            self.assertEqual(portability._terminate_posix_process_group(mock.Mock(pid=2)), [])
+        self.assertEqual([call.args[0] for call in killpg.call_args_list], [2, 2])
 
     def test_positive_every_module_runs_all_three_phases(self) -> None:
         manifests = ("go.mod", "nested/tool/go.mod")
