@@ -1178,7 +1178,7 @@ packages:
     replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
-    capabilities: [test.pg]
+    capabilities: [test.pg, test.pg.template]
     description: "Package pg starts a real PostgreSQL container via testcontainers-go and returns a connected [*pgxpool.Pool]."
     replaces: [github.com/jackc/pgx/v5, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/postgres]
   - import: github.com/golusoris/golusoris/testutil/prop

@@ -386,7 +386,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `testutil/pg/` | testcontainers PostgreSQL | testcontainers-go |
+| `testutil/pg/` | testcontainers PostgreSQL + template cloning | testcontainers-go |
 | `testutil/redis/` | testcontainers Redis | testcontainers-go |
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
 | `testutil/kafka/` | testcontainers Redpanda/Kafka endpoint | testcontainers-go |
