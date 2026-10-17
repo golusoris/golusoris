@@ -61,6 +61,14 @@ adoption:
 # Declared gaps, one rule and one file each; an expired entry fails its gate again.
 exceptions:
     - rule: HISS-19
+      path: idempotency/internal/storeutil/nil.go
+      reason: "Category B (controller answer golusoris-818-dedupe): copies core/validate.IsNil so idempotency/store avoids fx and validator; removed when the root bumps to the core release carrying core/validate/nilcheck."
+      expires: "2026-10-19"
+    - rule: HISS-19
+      path: core/validate/validate.go
+      reason: "Category B (controller answer golusoris-818-dedupe): idempotency/internal/storeutil/nil.go copies IsNil until the root bumps to the core release carrying core/validate/nilcheck."
+      expires: "2026-10-19"
+    - rule: HISS-19
       path: storage/key.go
       reason: "Category B, renewed once (controller answer golusoris-926-apigate-alias): core/storage copies the root storage contracts until the alias pull request golusoris#926 lands; it waits for the API gate to accept alias-identical types."
       expires: "2026-10-22"

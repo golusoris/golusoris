@@ -5,7 +5,6 @@
 package idempotency
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -236,23 +235,5 @@ func TestOptionsDefaultsReplaceUnsafeNonPositiveBounds(t *testing.T) {
 	opts.defaults()
 	if opts.TTL != 24*time.Hour || opts.MaxRequestBody != defaultBodyLimit || opts.MaxResponseBody != defaultBodyLimit {
 		t.Fatalf("defaults = %+v; want finite positive retention and body bounds", opts)
-	}
-}
-
-func TestMemoryStoreRejectsInvalidReservationArguments(t *testing.T) {
-	t.Parallel()
-	store := NewMemoryStore()
-	ctx := context.Background()
-	if _, err := store.Claim(ctx, "", "fingerprint", time.Minute); err == nil {
-		t.Fatal("Claim accepted an empty key")
-	}
-	if _, err := store.Claim(ctx, "key", "fingerprint", -time.Second); err == nil {
-		t.Fatal("Claim accepted a negative TTL")
-	}
-	if err := store.Commit(ctx, "key", "", "fingerprint", CachedResponse{}, time.Minute); err == nil {
-		t.Fatal("Commit accepted an empty token")
-	}
-	if err := store.Release(ctx, "key", ""); err == nil {
-		t.Fatal("Release accepted an empty token")
 	}
 }

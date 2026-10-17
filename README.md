@@ -261,7 +261,11 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `tenancy/` | tenant context middleware, header + subdomain extractors | custom |
-| `idempotency/` | `Idempotency-Key` middleware + gRPC interceptor; memory, Postgres, Redis, SQLite stores | custom + pgx + rueidis |
+| `idempotency/` | `Idempotency-Key` HTTP middleware, gRPC interceptors, fx modules; compatible store aliases | custom + fx + gRPC |
+| `idempotency/store/` | atomic store contracts, claim states, errors, in-memory store; lightweight store-only import | clockwork |
+| `idempotency/postgres/` | PostgreSQL idempotency store, bounded sweep, embedded migrations | jackc/pgx |
+| `idempotency/redis/` | Redis / Valkey idempotency store, atomic Lua operations, server expiry | redis/rueidis |
+| `idempotency/sqlite/` | SQLite idempotency store, schema setup, bounded sweep | database/sql |
 | `flags/` | typed feature flags with an OpenFeature-shaped provider interface | custom |
 | `audit/` | append-only audit event log with Diff + pluggable Store | custom |
 | `page/` | typed cursor + offset pagination for sqlc/ogen | custom |
@@ -402,6 +406,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
 | `junit/` | JUnit XML report writer for CI gates — suites, pass/fail/error/skip, properties, XML-illegal characters escaped; validates against junit-10.xsd | stdlib |
 | `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
+| `testutil/testctx/` | test contexts with deadlines and automatic cleanup | stdlib |
 | `testutil/configfile/` | private temporary config file writer for tests | stdlib |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
