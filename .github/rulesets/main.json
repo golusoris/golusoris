@@ -164,6 +164,12 @@
             "context": "Scorecard Analysis"
           },
           {
+            "context": "Build and smoke (litert sidecar)"
+          },
+          {
+            "context": "Sidecar contracts"
+          },
+          {
             "context": "Build and smoke (gemma)"
           },
           {

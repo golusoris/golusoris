@@ -19,6 +19,7 @@ WORKFLOW_FILES: tuple[str, ...] = (
     ".github/workflows/release-go.yml",
     ".github/workflows/release-tool-contract.yml",
     ".github/workflows/rebuild-on-base.yml",
+    ".github/workflows/tiny-litert-sidecar-image.yml",
     ".github/workflows/tiny-trainer-images.yml",
 )
 

@@ -1,0 +1,434 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: tiny litert sidecar image
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # The merge queue runs the contract and smoke jobs too.
+  merge_group:
+  push:
+    tags:
+      - 'tiny-litert-sidecar-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish immutable images instead of build-only validation'
+        required: true
+        default: false
+        type: boolean
+      version:
+        description: 'Immutable vX.Y.Z image tag; required when publish is true'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tiny-litert-sidecar-${{ inputs.version || github.ref }}
+  # Only build-only PR runs cancel; the publish job keeps its own non-cancelling group.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  contracts:
+    name: Sidecar contracts
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.1'
+
+      - name: Run positive, negative, and boundary sidecar contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          PYTHONPATH="" uv run --python 3.14 --with-requirements ai/tiny/serve/tflite/sidecar/requirements.lock \
+            --with pytest python -B -m pytest -q -p no:cacheprovider ai/tiny/serve/tflite/sidecar/test_sidecar.py
+
+      # tiny-trainer-images.yml contracts checks and audits the sidecar lock with the trainer locks.
+
+  build-smoke:
+    name: Build and smoke (litert sidecar)
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.1'
+
+      - name: Configure Docker Hub mirror
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
+
+      - name: Smoke sidecar container image
+        shell: bash
+        run: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-litert-sidecar-smoke.sh local/tiny-litert-sidecar:${{ github.sha }}
+
+  publish-policy:
+    name: Verify publication controls
+    if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    needs: contracts
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - name: Require explicit remote-control enablement
+        shell: bash
+        env:
+          PUBLISH_ENABLED: ${{ vars.TINY_LITERT_SIDECAR_PUBLISH_ENABLED }}
+        run: |
+          set -euo pipefail
+          if [[ "$PUBLISH_ENABLED" != true ]]; then
+            printf '%s\n' 'sidecar publication is blocked until the protected environment and tag ruleset exist' >&2
+            exit 1
+          fi
+
+  publish:
+    name: Publish (litert sidecar)
+    if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
+    needs: [contracts, publish-policy]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 90
+    environment: tiny-litert-sidecar-publish
+    concurrency:
+      group: tiny-litert-sidecar-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: '0.13.1'
+
+      - name: Configure Docker Hub mirror
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
+
+      - name: Resolve and validate immutable version
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_REF: ${{ github.ref }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == push ]]; then
+            version=${REF_NAME#tiny-litert-sidecar-}
+          else
+            version=$DISPATCH_VERSION
+          fi
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            printf 'version must match vX.Y.Z, got %q\n' "$version" >&2
+            exit 1
+          fi
+          expected_tag="tiny-litert-sidecar-$version"
+          if [[ "$REF_TYPE" != tag || "$REF_NAME" != "$expected_tag" || \
+            "$FULL_REF" != "refs/tags/$expected_tag" ]]; then
+            printf 'publication requires exact tag refs/tags/%s, got %q\n' \
+              "$expected_tag" "$FULL_REF" >&2
+            exit 1
+          fi
+          checked_out_sha=$(git rev-parse HEAD)
+          if [[ "$checked_out_sha" != "$SOURCE_SHA" ]]; then
+            printf 'checked-out SHA %s differs from event SHA %s\n' \
+              "$checked_out_sha" "$SOURCE_SHA" >&2
+            exit 1
+          fi
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        with:
+          version: v0.38.0
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install pinned cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Install pinned Syft
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          syft-version: v1.54.1
+
+      - name: Verify supply-chain tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v cosign
+          command -v gh
+          command -v syft
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
+
+      - name: Build exact publish candidate locally
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/serve/tflite/sidecar
+          file: ai/tiny/serve/tflite/sidecar/Dockerfile
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: local/tiny-litert-sidecar-publish:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+
+      - name: Smoke exact publish candidate
+        shell: bash
+        env:
+          IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
+          SIDECAR_SKIP_BUILD: '1'
+        run: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-litert-sidecar-smoke.sh "$IMAGE"
+
+      - name: Record tested local image identity
+        id: tested
+        shell: bash
+        env:
+          LOCAL_IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          image_id=$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")
+          if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'local image returned invalid config digest: %q\n' "$image_id" >&2
+            exit 1
+          fi
+          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve trusted resumable immutable tag
+        id: existing
+        shell: bash
+        env:
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar
+          SOURCE_SHA: ${{ github.sha }}
+          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          error_file="$RUNNER_TEMP/sidecar-inspect-error"
+          if digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" \
+            --format '{{json .Manifest.Digest}}' 2>"$error_file" | tr -d '"'); then
+            if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+              printf 'registry returned invalid digest: %q\n' "$digest" >&2
+              exit 1
+            fi
+            docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
+            docker pull "$IMAGE@$digest"
+            published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
+            revision=$(docker image inspect --format \
+              '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
+            image_version=$(docker image inspect --format \
+              '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
+            if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
+              "$image_version" != "$VERSION" ]]; then
+              printf '%s exists but differs from the tested source image; refusing reuse\n' \
+                "$IMAGE:$VERSION" >&2
+              exit 1
+            fi
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+            echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          elif grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+          else
+            cat "$error_file" >&2
+            exit 1
+          fi
+
+      - name: Push tested image
+        id: push
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        env:
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar
+          LOCAL_IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
+          push_log="$RUNNER_TEMP/sidecar-push.log"
+          docker push "$IMAGE:$VERSION" 2>&1 | tee "$push_log"
+          mapfile -t digests < <(sed -nE \
+            's/^.*digest: (sha256:[a-f0-9]{64}) size:.*$/\1/p' "$push_log")
+          if (( ${#digests[@]} != 1 )); then
+            printf 'docker push returned %d manifest digests, expected one\n' \
+              "${#digests[@]}" >&2
+            exit 1
+          fi
+          echo "digest=${digests[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify immutable published image
+        id: image
+        shell: bash
+        env:
+          EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar
+          PUSHED_DIGEST: ${{ steps.push.outputs.digest }}
+          SOURCE_SHA: ${{ github.sha }}
+          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          expected_digest=${EXISTING_DIGEST:-$PUSHED_DIGEST}
+          if [[ ! "$expected_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'publish path did not produce one expected digest: %q\n' \
+              "$expected_digest" >&2
+            exit 1
+          fi
+          digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'registry returned invalid digest: %q\n' "$digest" >&2
+            exit 1
+          fi
+          if [[ "$digest" != "$expected_digest" ]]; then
+            printf 'published digest differs from tested push: %s != %s\n' \
+              "$digest" "$expected_digest" >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
+          docker pull "$IMAGE@$digest"
+          published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
+          revision=$(docker image inspect --format \
+            '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
+          image_version=$(docker image inspect --format \
+            '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
+          if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
+            "$image_version" != "$VERSION" ]]; then
+            printf 'published image does not match tested config digest and source labels\n' >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image digest
+        shell: bash
+        env:
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar@${{ steps.image.outputs.digest }}
+        run: cosign sign --yes "$IMAGE"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+        with:
+          subject-name: ghcr.io/golusoris/tiny-litert-sidecar
+          subject-digest: ${{ steps.image.outputs.digest }}
+          push-to-registry: true
+
+      - name: Generate SPDX SBOM
+        shell: bash
+        env:
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar@${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          syft packages "$IMAGE" -o spdx-json > tiny-litert-sidecar.spdx.json
+
+      - name: Attest SBOM
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/golusoris/tiny-litert-sidecar
+          subject-digest: ${{ steps.image.outputs.digest }}
+          sbom-path: tiny-litert-sidecar.spdx.json
+          push-to-registry: true
+
+      - name: Verify published supply-chain identity
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar@${{ steps.image.outputs.digest }}
+          SOURCE_REF: ${{ github.ref }}
+          SOURCE_REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bash scripts/ci/tiny-trainer-verify-image.sh \
+            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF" \
+            tiny-litert-sidecar-image.yml tiny-litert-sidecar-
+
+      - name: Record immutable digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.image.outputs.digest }}
+          IMAGE: ghcr.io/golusoris/tiny-litert-sidecar
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > tiny-litert-sidecar.digest.txt
+          printf '%s\n' "### LiteRT sidecar" '' "\`$IMAGE:$VERSION@$DIGEST\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload digest and SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: tiny-litert-sidecar-${{ steps.version.outputs.value }}
+          path: |
+            tiny-litert-sidecar.digest.txt
+            tiny-litert-sidecar.spdx.json
+          if-no-files-found: error
+          retention-days: 90

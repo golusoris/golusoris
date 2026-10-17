@@ -11,6 +11,7 @@ import hashlib
 import http.client
 import io
 import json
+import os
 import subprocess
 import tempfile
 import threading
@@ -794,12 +795,19 @@ class TestPolicyAndServer:
     def test_missing_ai_edge_litert_raises_import_error(self) -> None:
         import sys
 
+        repo_root = Path(__file__).resolve().parents[5]
         cmd = [
             sys.executable,
             "-c",
             "import sys; sys.modules['ai_edge_litert'] = None; import ai.tiny.serve.tflite.sidecar.runtime",
         ]
-        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        res = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            env={**os.environ, "PYTHONPATH": str(repo_root)},
+        )
         assert res.returncode != 0
         assert "ai-edge-litert is required" in res.stderr
 

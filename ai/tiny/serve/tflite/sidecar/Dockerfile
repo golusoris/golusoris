@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-ARG PYTHON_IMAGE="python:3.11.16-slim-bookworm@sha256:4b4c524dc3dce996864e030c7bd9c6b0e517597189fee48f48e05b499442444b"
+ARG PYTHON_IMAGE="python:3.14.8-slim-trixie@sha256:a2b82f3c48559aa0a8446d9af49826b6e2b2016f4cd2afabfe6013ec53729170"
 FROM ${PYTHON_IMAGE}
 
 ARG VCS_REF="unknown"

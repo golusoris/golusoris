@@ -27,8 +27,12 @@ build_and_verify_image() {
 	local image="$1"
 	local repo_root="$2"
 
-	printf 'building sidecar container image: %s...\n' "$image"
-	docker build -t "$image" "$repo_root/ai/tiny/serve/tflite/sidecar"
+	if [[ "${SIDECAR_SKIP_BUILD:-0}" == "1" ]]; then
+		printf 'skipping sidecar container image build, verifying existing image: %s...\n' "$image"
+	else
+		printf 'building sidecar container image: %s...\n' "$image"
+		docker build -t "$image" "$repo_root/ai/tiny/serve/tflite/sidecar"
+	fi
 
 	local uid_gid
 	uid_gid="$(docker image inspect --format '{{.Config.User}}' "$image")"
@@ -43,7 +47,7 @@ prepare_smoke_fixtures() {
 	mkdir -p "$target_dir/models"
 
 	printf 'generating trainer-compatible minimal .tflite model...\n'
-	uv run --python 3.11.16 --with tensorflow==2.21.0 python -c "
+	uv run --python 3.13 --with tensorflow==2.21.0 python -c "
 import tensorflow as tf
 inputs = tf.keras.Input(shape=(160, 160, 3), name='image')
 x = tf.keras.layers.GlobalAveragePooling2D()(inputs)
