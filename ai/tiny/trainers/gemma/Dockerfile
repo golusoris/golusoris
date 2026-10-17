@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.20@sha256:26147acbda4f14c5add9946e2fd2ed543fc402884fd75146bd342a7f6271dc1d
+# syntax=docker/dockerfile:1.28@sha256:bb22d9815c728170f72750f4e5b0d672e06176142e1d602c7e66c050100b7e5b
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 #
 # SPDX-License-Identifier: EUPL-1.2
