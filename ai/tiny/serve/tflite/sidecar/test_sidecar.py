@@ -436,72 +436,69 @@ class TestPolicyAndServer:
             )
 
     @staticmethod
-    def _assert_pre_load_endpoints(base_url: str) -> None:
-        import urllib.request
+    def _request(
+        host: str, port: int, method: str, path: str, body: object = None
+    ) -> tuple[int, dict]:
+        conn = http.client.HTTPConnection(host, port, timeout=5.0)
+        try:
+            headers = {}
+            payload = None
+            if body is not None:
+                payload = json.dumps(body).encode()
+                headers["Content-Type"] = "application/json"
+            conn.request(method, path, body=payload, headers=headers)
+            resp = conn.getresponse()
+            raw = resp.read().decode()
+            return resp.status, json.loads(raw) if raw else {}
+        finally:
+            conn.close()
 
+    @classmethod
+    def _assert_pre_load_endpoints(cls, host: str, port: int) -> None:
         # 1. GET /healthz when not loaded -> 503
-        req = urllib.request.Request(f"{base_url}/healthz")
-        with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(req)
-        assert exc_info.value.code == HTTPStatus.SERVICE_UNAVAILABLE
-        body = json.loads(exc_info.value.read().decode())
+        status, body = cls._request(host, port, "GET", "/healthz")
+        assert status == HTTPStatus.SERVICE_UNAVAILABLE
         assert body["status"] == "not_ready"
         assert body["backend"].startswith("ai-edge-litert ")
 
         # 2. POST /classify before load -> 409
-        req = urllib.request.Request(
-            f"{base_url}/classify",
-            data=json.dumps({"image": make_test_image("PNG")}).encode(),
-            headers={"Content-Type": "application/json"},
+        status, _ = cls._request(
+            host, port, "POST", "/classify", {"image": make_test_image("PNG")}
         )
-        with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(req)
-        assert exc_info.value.code == HTTPStatus.CONFLICT
+        assert status == HTTPStatus.CONFLICT
 
-    @staticmethod
-    def _assert_load_and_classify(base_url: str, model_file: Path, sha: str) -> None:
-        import urllib.request
-
+    @classmethod
+    def _assert_load_and_classify(
+        cls, host: str, port: int, model_file: Path, sha: str
+    ) -> None:
         # 3. POST /load with valid model -> 200
         load_body = {
             "uri": f"file://{model_file}",
             "sha256": sha,
             "labels": ["cats", "dogs"],
         }
-        req = urllib.request.Request(
-            f"{base_url}/load",
-            data=json.dumps(load_body).encode(),
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req) as resp:
-            assert resp.status == HTTPStatus.OK
-            assert json.loads(resp.read().decode()) == {"status": "loaded"}
+        status, body = cls._request(host, port, "POST", "/load", load_body)
+        assert status == HTTPStatus.OK
+        assert body == {"status": "loaded"}
 
         # 4. GET /healthz after load -> 200
-        req = urllib.request.Request(f"{base_url}/healthz")
-        with urllib.request.urlopen(req) as resp:
-            assert resp.status == HTTPStatus.OK
-            health_data = json.loads(resp.read().decode())
-            assert health_data["status"] == "ready"
-            assert health_data["backend"].startswith("ai-edge-litert ")
+        status, health_data = cls._request(host, port, "GET", "/healthz")
+        assert status == HTTPStatus.OK
+        assert health_data["status"] == "ready"
+        assert health_data["backend"].startswith("ai-edge-litert ")
 
         # 5. POST /classify after load -> 200
-        req = urllib.request.Request(
-            f"{base_url}/classify",
-            data=json.dumps({"image": make_test_image("PNG")}).encode(),
-            headers={"Content-Type": "application/json"},
+        status, body = cls._request(
+            host, port, "POST", "/classify", {"image": make_test_image("PNG")}
         )
-        with urllib.request.urlopen(req) as resp:
-            assert resp.status == HTTPStatus.OK
-            scores = json.loads(resp.read().decode())["scores"]
-            assert set(scores.keys()) == {"cats", "dogs"}
-            for val in scores.values():
-                assert 0.0 <= val <= 1.0
+        assert status == HTTPStatus.OK
+        scores = body["scores"]
+        assert set(scores.keys()) == {"cats", "dogs"}
+        for val in scores.values():
+            assert 0.0 <= val <= 1.0
 
-    @staticmethod
-    def _assert_edge_endpoints(base_url: str, host: str, port: int) -> None:
-        import urllib.request
-
+    @classmethod
+    def _assert_edge_endpoints(cls, host: str, port: int) -> None:
         # 6. POST /load with oversized request body -> 413
         oversized_conn = http.client.HTTPConnection(host, port, timeout=5.0)
         oversized_conn.putrequest("POST", "/load")
@@ -513,10 +510,8 @@ class TestPolicyAndServer:
         oversized_conn.close()
 
         # 7. GET /unknown -> 404
-        req = urllib.request.Request(f"{base_url}/unknown")
-        with pytest.raises(urllib.error.HTTPError) as exc_info:
-            urllib.request.urlopen(req)
-        assert exc_info.value.code == HTTPStatus.NOT_FOUND
+        status, _ = cls._request(host, port, "GET", "/unknown")
+        assert status == HTTPStatus.NOT_FOUND
 
     def test_server_healthz_load_classify_cycle(
         self, model_dir: Path, valid_tflite_bytes: bytes
@@ -532,12 +527,11 @@ class TestPolicyAndServer:
         server_thread.start()
 
         host, port = server.server_address
-        base_url = f"http://{host}:{port}"
 
         try:
-            self._assert_pre_load_endpoints(base_url)
-            self._assert_load_and_classify(base_url, model_file, sha)
-            self._assert_edge_endpoints(base_url, host, port)
+            self._assert_pre_load_endpoints(host, port)
+            self._assert_load_and_classify(host, port, model_file, sha)
+            self._assert_edge_endpoints(host, port)
         finally:
             server.shutdown()
             server.server_close()

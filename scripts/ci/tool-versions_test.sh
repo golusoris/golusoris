@@ -433,7 +433,8 @@ fi
 if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	'.github/workflows/*.yml' '.gitea/workflows/*.yml' 'scripts/**/*.sh' \
 	':(exclude)scripts/ci/tool-versions_test.sh' \
-	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh'; then
+	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh' \
+	':(exclude)scripts/ci/tiny-litert-sidecar-publish-policy_test.sh'; then
 	printf 'workflow uses deprecated Cosign SBOM attachment instead of attestation\n' >&2
 	exit 1
 fi
