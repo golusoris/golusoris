@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/container/registry/sign
 go 1.27.2
 
 require (
-	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467
+	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
 	github.com/go-openapi/runtime v0.33.3
 	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
