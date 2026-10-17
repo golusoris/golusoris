@@ -200,7 +200,7 @@ func newModuleSQLiteStore(db *sql.DB, clk clock.Clock) (Store, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), sqliteSchemaTimeout)
 	defer cancel()
 	if err := store.EnsureSchema(ctx); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("idempotency: sqlite schema: %w", err)
 	}
 	return store, nil
 }

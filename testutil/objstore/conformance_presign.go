@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/testutil/testctx"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 
 func testURL(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	mustPut(ctx, t, b, "url/object", []byte("served"))
 	signed, err := b.URL(ctx, "url/object")
 	if err != nil {
@@ -55,7 +56,7 @@ func testPresignPut(t *testing.T, b storage.Bucket, p storage.PutPresigner, caps
 
 func testPresignUpload(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	body := []byte("uploaded by an untrusted client")
 	meta := map[string]string{"job": "42"}
 	req, err := p.PresignPut(ctx, "presign/upload.bin", time.Minute, storage.PresignPutOptions{
@@ -79,7 +80,7 @@ func testPresignUpload(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 
 func testPresignTTLBounds(t *testing.T, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	for _, ttl := range []time.Duration{0, storage.MinPresignTTL - 1, storage.MaxPresignTTL + time.Second} {
 		if _, err := p.PresignPut(ctx, "presign/ttl", ttl, storage.PresignPutOptions{}); !errors.Is(err, storage.ErrPresignTTL) {
 			t.Fatalf("PresignPut ttl %s = %v, want ErrPresignTTL", ttl, err)
@@ -94,7 +95,7 @@ func testPresignTTLBounds(t *testing.T, p storage.PutPresigner) {
 
 func testPresignInvalidOptions(t *testing.T, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	if _, err := p.PresignPut(ctx, "../escape", time.Minute, storage.PresignPutOptions{}); !errors.Is(err, storage.ErrUnsafeKey) {
 		t.Fatalf("PresignPut unsafe key = %v, want ErrUnsafeKey", err)
 	}
@@ -115,7 +116,7 @@ func testPresignInvalidOptions(t *testing.T, p storage.PutPresigner) {
 // loudly; silently dropping the constraint is a contract violation.
 func testPresignLength(t *testing.T, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	_, err := p.PresignPut(ctx, "presign/length", time.Minute, storage.PresignPutOptions{ContentLength: 5})
 	if err != nil && !errors.Is(err, storage.ErrUnsupportedConstraint) {
 		t.Fatalf("PresignPut ContentLength = %v, want nil or ErrUnsupportedConstraint", err)
@@ -124,7 +125,7 @@ func testPresignLength(t *testing.T, p storage.PutPresigner) {
 
 func testPresignOtherKey(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	req, err := p.PresignPut(ctx, "presign/target", time.Minute, storage.PresignPutOptions{})
 	if err != nil {
 		t.Fatalf("PresignPut: %v", err)
@@ -145,7 +146,7 @@ func testPresignOtherKey(t *testing.T, b storage.Bucket, p storage.PutPresigner)
 
 func testPresignExpired(t *testing.T, b storage.Bucket, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	req, err := p.PresignPut(ctx, "presign/expired", storage.MinPresignTTL, storage.PresignPutOptions{})
 	if err != nil {
 		t.Fatalf("PresignPut: %v", err)
@@ -165,7 +166,7 @@ func testPresignExpired(t *testing.T, b storage.Bucket, p storage.PutPresigner) 
 
 func testPresignHeaderMismatch(t *testing.T, p storage.PutPresigner) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	req, err := p.PresignPut(ctx, "presign/typed", time.Minute, storage.PresignPutOptions{
 		ContentType: "text/plain", ContentLength: 5,
 	})
