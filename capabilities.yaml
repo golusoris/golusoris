@@ -821,6 +821,10 @@ packages:
     domain: notify
     capabilities: [notify.bounce]
     description: "Package bounce handles email bounce and complaint webhooks from SES (via SNS) and Postmark."
+  - import: github.com/golusoris/golusoris/notify/channel
+    domain: notify
+    capabilities: [notify.channel_dispatch]
+    description: "Package channel provides generic notification channel dispatch and secret redaction."
   - import: github.com/golusoris/golusoris/notify/discord
     domain: notify
     capabilities: [notify.discord]
