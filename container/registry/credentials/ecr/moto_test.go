@@ -38,13 +38,11 @@ func startMoto(t *testing.T) string {
 	t.Cleanup(cancel)
 
 	req := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        motodev.MotoImage,
-			ReaperImage:  motodev.RyukImage,
-			ExposedPorts: []string{"5000/tcp"},
-			WaitingFor:   wait.ForHTTP("/moto-api/").WithPort("5000/tcp").WithStartupTimeout(1 * time.Minute),
-		},
-		Started: true,
+		Image:        motodev.MotoImage,
+		ReaperImage:  motodev.RyukImage,
+		ExposedPorts: []string{"5000/tcp"},
+		WaitingFor:   wait.ForHTTP("/moto-api/").WithPort("5000/tcp").WithStartupTimeout(1 * time.Minute),
+		Started:      true,
 	}
 	container, err := testcontainers.GenericContainer(ctx, req)
 	if err != nil {
