@@ -25,7 +25,7 @@ from ai.tiny.serve.tflite.sidecar.runtime import (
 logger = logging.getLogger("litert-sidecar")
 
 DEFAULT_PORT = 8501
-DEFAULT_HOST = "0.0.0.0"
+DEFAULT_HOST = "0.0.0.0"  # noqa: S104 - container sidecar serves the pod network; --host narrows the bind
 MAX_LOAD_BODY_BYTES = 1 << 20  # 1 MiB
 MAX_CLASSIFY_BODY_BYTES = 20 << 20  # 20 MiB (allows 16 MiB image base64 + JSON)
 DEFAULT_CONCURRENCY = 8
@@ -79,6 +79,35 @@ class SidecarHandler(BaseHTTPRequestHandler):
             },
         )
 
+    def _parse_load_body(self) -> tuple[str, str, list[str]] | None:
+        body = self._read_json_body(MAX_LOAD_BODY_BYTES)
+        if body is None:
+            return None
+        if not isinstance(body, dict):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST,
+                {"error": "request body must be a JSON object"},
+            )
+            return None
+
+        uri = body.get("uri")
+        sha256 = body.get("sha256")
+        labels = body.get("labels")
+
+        if not uri or not isinstance(uri, str):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "uri is required"})
+            return None
+        if not sha256 or not isinstance(sha256, str):
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": "sha256 is required"})
+            return None
+        if not labels or not isinstance(labels, list):
+            self._send_json(
+                HTTPStatus.BAD_REQUEST, {"error": "labels list is required"}
+            )
+            return None
+
+        return uri, sha256, labels
+
     def _handle_load(self) -> None:
         if not self.server.acquire_concurrency():
             self._send_json(
@@ -86,32 +115,10 @@ class SidecarHandler(BaseHTTPRequestHandler):
             )
             return
         try:
-            body = self._read_json_body(MAX_LOAD_BODY_BYTES)
-            if body is None:
+            params = self._parse_load_body()
+            if params is None:
                 return
-            if not isinstance(body, dict):
-                self._send_json(
-                    HTTPStatus.BAD_REQUEST,
-                    {"error": "request body must be a JSON object"},
-                )
-                return
-
-            uri = body.get("uri")
-            sha256 = body.get("sha256")
-            labels = body.get("labels")
-
-            if not uri or not isinstance(uri, str):
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "uri is required"})
-                return
-            if not sha256 or not isinstance(sha256, str):
-                self._send_json(HTTPStatus.BAD_REQUEST, {"error": "sha256 is required"})
-                return
-            if not labels or not isinstance(labels, list):
-                self._send_json(
-                    HTTPStatus.BAD_REQUEST, {"error": "labels list is required"}
-                )
-                return
-
+            uri, sha256, labels = params
             self.server.runtime.load(uri, sha256, labels)
             self._send_json(HTTPStatus.OK, {"status": "loaded"})
         except FileNotFoundError as exc:

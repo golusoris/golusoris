@@ -31,6 +31,11 @@ from ai.tiny.serve.tflite.sidecar.server import SidecarServer
 _CACHED_MODEL_BYTES: dict[tuple[int, tuple[int, ...]], bytes] = {}
 
 
+def expect(condition: object, message: str = "") -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
 def generate_real_tflite_model(
     num_classes: int = 2,
     input_shape: tuple[int, ...] = (160, 160, 3),
@@ -76,7 +81,9 @@ open("{tmp_path.as_posix()}", "wb").write(converter.convert())
                 "-c",
                 script,
             ]
-            subprocess.run(cmd, capture_output=True, check=True)
+            subprocess.run(  # noqa: S603 - fixed argv, sys.executable
+                cmd, capture_output=True, check=True
+            )
             payload = tmp_path.read_bytes()
         finally:
             if tmp_path.exists():
@@ -126,16 +133,16 @@ class TestRuntimeLoadAndClassify:
         sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
 
         runtime = Runtime(model_dir=model_dir)
-        assert not runtime.is_ready
+        expect(not runtime.is_ready)
 
         runtime.load(f"file://{model_file}", sha, ["cat", "dog"])
-        assert runtime.is_ready
+        expect(runtime.is_ready)
 
         img_b64 = make_test_image("PNG")
         scores = runtime.classify(img_b64)
-        assert set(scores.keys()) == {"cat", "dog"}
+        expect(set(scores.keys()) == {"cat", "dog"})
         for prob in scores.values():
-            assert 0.0 <= prob <= 1.0
+            expect(0.0 <= prob <= 1.0)
 
     def test_classify_before_load_raises(self, model_dir: Path) -> None:
         runtime = Runtime(model_dir=model_dir)
@@ -250,16 +257,16 @@ class TestRuntimeLoadAndClassify:
 
         runtime = Runtime(model_dir=model_dir)
         runtime.load(f"file://{good_file}", good_sha, ["good_a", "good_b"])
-        assert runtime.is_ready
+        expect(runtime.is_ready)
 
         # Attempt reload with bad model
         with pytest.raises(ValueError, match="malformed model"):
             runtime.load(f"file://{bad_file}", bad_sha, ["bad_a", "bad_b"])
 
         # Preserved original model
-        assert runtime.is_ready
+        expect(runtime.is_ready)
         scores = runtime.classify(make_test_image("PNG"))
-        assert set(scores.keys()) == {"good_a", "good_b"}
+        expect(set(scores.keys()) == {"good_a", "good_b"})
 
     def test_oversized_artifact_rejected(self, model_dir: Path) -> None:
         big_file = model_dir / "big.tflite"
@@ -304,7 +311,7 @@ class TestRuntimeLoadAndClassify:
         with pytest.raises(ValueError):
             runtime._preprocess_image(raw_bytes)
 
-        assert not load_called, "img.load() was called before size/pixel check!"
+        expect(not load_called, "img.load() was called before size/pixel check!")
 
     def test_image_unsupported_format(
         self, model_dir: Path, valid_tflite_bytes: bytes
@@ -335,7 +342,7 @@ class TestRuntimeLoadAndClassify:
             for _ in range(5):
                 try:
                     res = runtime.classify(img_b64)
-                    assert len(res) == 2
+                    expect(len(res) == 2)
                 except (RuntimeError, ValueError, OSError) as exc:
                     errors.append(exc)
 
@@ -354,7 +361,7 @@ class TestRuntimeLoadAndClassify:
         for t in threads:
             t.join()
 
-        assert not errors
+        expect(not errors)
 
 
 class TestPolicyAndServer:
@@ -457,15 +464,15 @@ class TestPolicyAndServer:
     def _assert_pre_load_endpoints(cls, host: str, port: int) -> None:
         # 1. GET /healthz when not loaded -> 503
         status, body = cls._request(host, port, "GET", "/healthz")
-        assert status == HTTPStatus.SERVICE_UNAVAILABLE
-        assert body["status"] == "not_ready"
-        assert body["backend"].startswith("ai-edge-litert ")
+        expect(status == HTTPStatus.SERVICE_UNAVAILABLE)
+        expect(body["status"] == "not_ready")
+        expect(body["backend"].startswith("ai-edge-litert "))
 
         # 2. POST /classify before load -> 409
         status, _ = cls._request(
             host, port, "POST", "/classify", {"image": make_test_image("PNG")}
         )
-        assert status == HTTPStatus.CONFLICT
+        expect(status == HTTPStatus.CONFLICT)
 
     @classmethod
     def _assert_load_and_classify(
@@ -478,24 +485,24 @@ class TestPolicyAndServer:
             "labels": ["cats", "dogs"],
         }
         status, body = cls._request(host, port, "POST", "/load", load_body)
-        assert status == HTTPStatus.OK
-        assert body == {"status": "loaded"}
+        expect(status == HTTPStatus.OK)
+        expect(body == {"status": "loaded"})
 
         # 4. GET /healthz after load -> 200
         status, health_data = cls._request(host, port, "GET", "/healthz")
-        assert status == HTTPStatus.OK
-        assert health_data["status"] == "ready"
-        assert health_data["backend"].startswith("ai-edge-litert ")
+        expect(status == HTTPStatus.OK)
+        expect(health_data["status"] == "ready")
+        expect(health_data["backend"].startswith("ai-edge-litert "))
 
         # 5. POST /classify after load -> 200
         status, body = cls._request(
             host, port, "POST", "/classify", {"image": make_test_image("PNG")}
         )
-        assert status == HTTPStatus.OK
+        expect(status == HTTPStatus.OK)
         scores = body["scores"]
-        assert set(scores.keys()) == {"cats", "dogs"}
+        expect(set(scores.keys()) == {"cats", "dogs"})
         for val in scores.values():
-            assert 0.0 <= val <= 1.0
+            expect(0.0 <= val <= 1.0)
 
     @classmethod
     def _assert_edge_endpoints(cls, host: str, port: int) -> None:
@@ -506,12 +513,12 @@ class TestPolicyAndServer:
         oversized_conn.putheader("Content-Length", str((1 << 20) + 1024))
         oversized_conn.endheaders()
         oversized_resp = oversized_conn.getresponse()
-        assert oversized_resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+        expect(oversized_resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         oversized_conn.close()
 
         # 7. GET /unknown -> 404
         status, _ = cls._request(host, port, "GET", "/unknown")
-        assert status == HTTPStatus.NOT_FOUND
+        expect(status == HTTPStatus.NOT_FOUND)
 
     def test_server_healthz_load_classify_cycle(
         self, model_dir: Path, valid_tflite_bytes: bytes
@@ -550,7 +557,7 @@ class TestPolicyAndServer:
             conn.putheader("Content-Length", "-1")
             conn.endheaders()
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()
@@ -598,7 +605,7 @@ class TestPolicyAndServer:
             finally:
                 s.close()
 
-            assert resp_bytes == b"" or b"408" in resp_bytes
+            expect(resp_bytes == b"" or b"408" in resp_bytes)
 
             conn = http.client.HTTPConnection(host, port, timeout=2.0)
             conn.request(
@@ -608,7 +615,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
             conn.close()
         finally:
             server.shutdown()
@@ -639,7 +646,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         finally:
             conn.close()
             server.shutdown()
@@ -656,10 +663,10 @@ class TestPolicyAndServer:
             conn = http.client.HTTPConnection(host, port, timeout=2.0)
             conn.request("GET", "/healthz")
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.SERVICE_UNAVAILABLE
+            expect(resp.status == HTTPStatus.SERVICE_UNAVAILABLE)
             data = json.loads(resp.read().decode())
-            assert "backend" in data
-            assert data["backend"].startswith("ai-edge-litert ")
+            expect("backend" in data)
+            expect(data["backend"].startswith("ai-edge-litert "))
         finally:
             conn.close()
             server.shutdown()
@@ -679,7 +686,7 @@ class TestPolicyAndServer:
             conn.putheader("Content-Length", str((20 << 20) + 1024))
             conn.endheaders()
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         finally:
             conn.close()
             server.shutdown()
@@ -712,7 +719,7 @@ class TestPolicyAndServer:
                 },
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         finally:
             conn.close()
             server.shutdown()
@@ -725,7 +732,7 @@ class TestPolicyAndServer:
         server_thread = threading.Thread(target=server.serve_forever, daemon=True)
         server_thread.start()
         host, port = server.server_address
-        assert server.acquire_concurrency(timeout=1.0)
+        expect(server.acquire_concurrency(timeout=1.0))
         try:
             conn = http.client.HTTPConnection(host, port, timeout=2.0)
             conn.request(
@@ -735,7 +742,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.TOO_MANY_REQUESTS
+            expect(resp.status == HTTPStatus.TOO_MANY_REQUESTS)
             conn.close()
         finally:
             server.release_concurrency()
@@ -761,12 +768,12 @@ class TestPolicyAndServer:
             conn = http.client.HTTPConnection(host, port, timeout=2.0)
             conn.request("GET", "/healthz")
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.OK
+            expect(resp.status == HTTPStatus.OK)
             body_text = resp.read().decode("utf-8")
             data = json.loads(body_text)
-            assert set(data.keys()) == {"status", "backend"}
-            assert "secret_confidential_weights" not in body_text
-            assert "file://" not in body_text
+            expect(set(data.keys()) == {"status", "backend"})
+            expect("secret_confidential_weights" not in body_text)
+            expect("file://" not in body_text)
         finally:
             conn.close()
             server.shutdown()
@@ -783,8 +790,8 @@ class TestPolicyAndServer:
         redirect_req = handler.redirect_request(
             req, None, 302, "Found", {}, "https://weights.example.com/v2/model.tflite"
         )
-        assert redirect_req is not None
-        assert redirect_req.full_url == "https://weights.example.com/v2/model.tflite"
+        expect(redirect_req is not None)
+        expect(redirect_req.full_url == "https://weights.example.com/v2/model.tflite")
 
     def test_missing_ai_edge_litert_raises_import_error(self) -> None:
         import sys
@@ -795,15 +802,15 @@ class TestPolicyAndServer:
             "-c",
             "import sys; sys.modules['ai_edge_litert'] = None; import ai.tiny.serve.tflite.sidecar.runtime",
         ]
-        res = subprocess.run(
+        res = subprocess.run(  # noqa: S603 - fixed argv, sys.executable
             cmd,
             capture_output=True,
             text=True,
             check=False,
             env={**os.environ, "PYTHONPATH": str(repo_root)},
         )
-        assert res.returncode != 0
-        assert "ai-edge-litert is required" in res.stderr
+        expect(res.returncode != 0)
+        expect("ai-edge-litert is required" in res.stderr)
 
     def test_content_length_non_int_returns_400(self) -> None:
         runtime = Runtime()
@@ -818,7 +825,7 @@ class TestPolicyAndServer:
             conn.putheader("Content-Length", "invalid_not_an_int")
             conn.endheaders()
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()
@@ -837,7 +844,7 @@ class TestPolicyAndServer:
             conn.putheader("Content-Type", "application/json")
             conn.endheaders()
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.LENGTH_REQUIRED
+            expect(resp.status == HTTPStatus.LENGTH_REQUIRED)
         finally:
             conn.close()
             server.shutdown()
@@ -857,7 +864,7 @@ class TestPolicyAndServer:
             conn.putheader("Content-Length", str((1 << 20) + 1024))
             conn.endheaders()
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         finally:
             conn.close()
             server.shutdown()
@@ -880,7 +887,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()
@@ -903,7 +910,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()
@@ -935,7 +942,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
+            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         finally:
             conn.close()
             server.shutdown()
@@ -967,7 +974,7 @@ class TestPolicyAndServer:
                 headers={"Content-Type": "application/json"},
             )
             resp = conn.getresponse()
-            assert resp.status == HTTPStatus.BAD_REQUEST
+            expect(resp.status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()
@@ -989,7 +996,7 @@ class TestPolicyAndServer:
                 body=b'{"sha256": "abc", "labels": ["a", "b"]}',
                 headers={"Content-Type": "application/json"},
             )
-            assert conn.getresponse().status == HTTPStatus.BAD_REQUEST
+            expect(conn.getresponse().status == HTTPStatus.BAD_REQUEST)
 
             # non-dict body
             conn.request(
@@ -998,7 +1005,7 @@ class TestPolicyAndServer:
                 body=b'["not_a_dict"]',
                 headers={"Content-Type": "application/json"},
             )
-            assert conn.getresponse().status == HTTPStatus.BAD_REQUEST
+            expect(conn.getresponse().status == HTTPStatus.BAD_REQUEST)
         finally:
             conn.close()
             server.shutdown()

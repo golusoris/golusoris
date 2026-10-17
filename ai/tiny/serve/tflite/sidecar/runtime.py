@@ -254,49 +254,56 @@ class Runtime:
             )
         return path.read_bytes()
 
+    def _validate_content_length(self, length_hdr: str | None) -> None:
+        if length_hdr is None:
+            return
+        try:
+            content_len = int(length_hdr)
+        except ValueError:
+            return
+        if content_len > self._max_artifact_bytes:
+            raise OversizedArtifactError(
+                f"oversized artifact: {content_len} bytes exceeds limit {self._max_artifact_bytes}"
+            )
+
+    def _read_response_chunks(
+        self, resp: Any, deadline: float, timeout: float, uri: str
+    ) -> bytes:
+        chunk_size = 64 * 1024
+        max_chunks = (self._max_artifact_bytes // chunk_size) + 2
+        chunks: list[bytes] = []
+        total_bytes = 0
+        for _ in range(max_chunks):
+            if time.monotonic() > deadline:
+                raise TimeoutError(
+                    f"artifact download timed out after {timeout}s: {uri}"
+                )
+            chunk = resp.read(chunk_size)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > self._max_artifact_bytes:
+                raise OversizedArtifactError(
+                    f"oversized artifact: exceeds limit {self._max_artifact_bytes}"
+                )
+            chunks.append(chunk)
+        else:
+            if resp.read(1):
+                raise OversizedArtifactError(
+                    f"oversized artifact: exceeds limit {self._max_artifact_bytes}"
+                )
+        return b"".join(chunks)
+
     def _fetch_https_artifact(self, uri: str, timeout: float) -> bytes:
         opener = urllib.request.build_opener(StrictRedirectHandler())
-        req = urllib.request.Request(
+        req = urllib.request.Request(  # noqa: S310 - scheme checked https-only in _fetch_artifact
             uri, headers={"User-Agent": "golusoris-litert-sidecar/0.1.0"}
         )
         deadline = time.monotonic() + timeout
-        chunk_size = 64 * 1024
-        max_chunks = (self._max_artifact_bytes // chunk_size) + 2
         try:
             with opener.open(req, timeout=timeout) as resp:
-                length_hdr = resp.headers.get("Content-Length")
-                if length_hdr is not None:
-                    try:
-                        content_len = int(length_hdr)
-                        if content_len > self._max_artifact_bytes:
-                            raise OversizedArtifactError(
-                                f"oversized artifact: {content_len} bytes exceeds limit {self._max_artifact_bytes}"
-                            )
-                    except ValueError as exc:
-                        if isinstance(exc, OversizedArtifactError):
-                            raise
-                chunks: list[bytes] = []
-                total_bytes = 0
-                for _ in range(max_chunks):
-                    if time.monotonic() > deadline:
-                        raise TimeoutError(
-                            f"artifact download timed out after {timeout}s: {uri}"
-                        )
-                    chunk = resp.read(chunk_size)
-                    if not chunk:
-                        break
-                    total_bytes += len(chunk)
-                    if total_bytes > self._max_artifact_bytes:
-                        raise OversizedArtifactError(
-                            f"oversized artifact: exceeds limit {self._max_artifact_bytes}"
-                        )
-                    chunks.append(chunk)
-                else:
-                    if resp.read(1):
-                        raise OversizedArtifactError(
-                            f"oversized artifact: exceeds limit {self._max_artifact_bytes}"
-                        )
-                return b"".join(chunks)
+                self._validate_content_length(resp.headers.get("Content-Length"))
+                return self._read_response_chunks(resp, deadline, timeout, uri)
         except TimeoutError as exc:
             raise TimeoutError(
                 f"artifact download timed out after {timeout}s: {uri}"
