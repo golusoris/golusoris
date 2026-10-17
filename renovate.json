@@ -229,6 +229,7 @@
       "description": "Update immutable integration-test image references in Go and the CI pre-pull manifests.",
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
+        "/^container/registry/credentials/ecr/internal/motodev/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
         "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
