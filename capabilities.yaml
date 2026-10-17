@@ -202,6 +202,10 @@ packages:
     domain: ai
     capabilities: [ai.tiny_serve_ollama]
     description: "Package ollama implements a [tiny.Predictor] that serves Gemma (base + LoRA) via an [ollama](https://ollama.com) endpoint."
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/onnx
+    domain: ai
+    capabilities: [ai.tiny_serve_onnx]
+    description: "Package onnx implements a [tiny.Predictor] that executes ONNX models via an external runner subprocess speaking the vmafx-ort-runner protocol."
   - import: github.com/golusoris/golusoris/ai/tiny/serve/tflite
     domain: ai
     capabilities: [ai.tiny_serve_tflite]
