@@ -237,11 +237,12 @@ maintainer:
    release-please refuses to open the next release PR while a merged one is
    still labelled pending.
 3. Pushing the root `vX.Y.Z` tag triggers two workflows:
-   - [`release.yml`](.github/workflows/release.yml) — goreleaser builds
-     multi-arch archives for `cmd/golusoris` and `cmd/golusoris-mcp`,
-     checksums, a keyless cosign signature bundle, per-archive SPDX SBOMs,
-     and build provenance (`actions/attest-build-provenance`), then
-     publishes the GitHub release.
+   - [`release.yml`](.github/workflows/release.yml) — calls reusable
+     [`release-build.yml`](.github/workflows/release-build.yml) which builds,
+     signs and attests (goreleaser builds multi-arch archives for
+     `cmd/golusoris` and `cmd/golusoris-mcp`, checksums, a keyless cosign
+     signature bundle, per-archive SPDX SBOMs, and build provenance via
+     `actions/attest-build-provenance`), then publishes the GitHub release.
    - [`sbom.yml`](.github/workflows/sbom.yml) — attempts source-tree SPDX and
      CycloneDX attestations and workflow artifacts. The v0.12.0 run failed
      during Rekor publication while the release workflow and its per-archive
