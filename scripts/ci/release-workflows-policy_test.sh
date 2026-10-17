@@ -151,10 +151,8 @@ check_root_release() {
 		'      - name: Publish verified immutable release' \
 		'      - name: Compose the breaking-change notes header' \
 		'scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous"' \
-		'args+=(--release-header="$RUNNER_TEMP/release-header.md")' \
-		'    needs: [require-green-ci, apidiff]' \
-		"if: \${{ !cancelled() && needs.require-green-ci.result == 'success' }}" \
-		'scripts/ci/release-notes-breaking.sh api "$previous"' \
+		'header+=(--release-header="$RUNNER_TEMP/release-header.md")' \
+		'scripts/ci/release-notes-breaking.sh api "${previous:-none}"' \
 		'--unavailable "the apidiff job ended with ${APIDIFF_RESULT}"' \
 		'release-tag-binding:start' \
 		'release-tag-binding:end' \
@@ -172,6 +170,60 @@ check_root_release() {
 		printf 'root release publishes before its smoke run\n' >&2
 		return 1
 	}
+}
+
+check_release_caller() {
+	local path="$1"
+	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
+	for contract in \
+		'    needs: [require-green-ci, apidiff]' \
+		"if: \${{ !cancelled() && needs.require-green-ci.result == 'success' }}" \
+		'uses: ./.github/workflows/release-build.yml'; do
+		grep -Fq -- "$contract" "$path" || {
+			printf 'release caller lacks contract %s\n' "$contract" >&2
+			return 1
+		}
+	done
+	if grep -Fq 'attest-build-provenance' "$path"; then
+		printf 'release caller must not attest provenance: %s\n' "$path" >&2
+		return 1
+	fi
+	if grep -Fq 'goreleaser release' "$path"; then
+		printf 'release caller must not run goreleaser: %s\n' "$path" >&2
+		return 1
+	fi
+}
+
+check_isolated_release_build() {
+	local path="$1"
+	if ! grep -Eq '^on:[[:space:]]*$' "$path" || ! grep -Fq 'workflow_call:' "$path" || \
+		grep -Eq '^  (push|pull_request|workflow_dispatch|schedule):' "$path"; then
+		printf 'release-build trigger is not only workflow_call: %s\n' "$path" >&2
+		return 1
+	fi
+	if ! grep -Fq 'goreleaser release --config=tools/.goreleaser.yml --clean' "$path"; then
+		printf 'release-build lacks clean goreleaser command: %s\n' "$path" >&2
+		return 1
+	fi
+	awk '
+		/goreleaser release --config=tools\/\.goreleaser\.yml --clean/ && !build { build = NR }
+		/actions\/attest-build-provenance@/ && !attest { attest = NR }
+		END { exit !(build && attest && build < attest) }
+	' "$path" || {
+		printf 'release-build lacks provenance attestation after goreleaser: %s\n' "$path" >&2
+		return 1
+	}
+	for forbidden in 'actions/download-artifact' 'actions/cache' 'gh run download'; do
+		if grep -Fq "$forbidden" "$path"; then
+			printf 'release-build contains forbidden artifact transfer %s: %s\n' "$forbidden" "$path" >&2
+			return 1
+		fi
+	done
+	# shellcheck disable=SC2016 # Match literal runtime variable in workflow YAML.
+	if ! grep -Fq 'release-build.yml@${GITHUB_REF}' "$path"; then
+		printf 'release-build lacks expected keyless verify identity: %s\n' "$path" >&2
+		return 1
+	fi
 }
 
 # check_unprivileged_apidiff fails when the job that runs the tagged code can write anything.
@@ -277,6 +329,7 @@ check_caller_permissions() {
 
 release_go="$repo_root/.github/workflows/release-go.yml"
 release="$repo_root/.github/workflows/release.yml"
+release_build="$repo_root/.github/workflows/release-build.yml"
 sbom="$repo_root/.github/workflows/sbom.yml"
 rebuild="$repo_root/.github/workflows/rebuild-on-base.yml"
 verifier="$repo_root/.github/workflows/verify-provenance.yml"
@@ -285,7 +338,9 @@ downstream_docs="$repo_root/docs/ci-downstream.md"
 goreleaser_config="$repo_root/tools/.goreleaser.yml"
 
 check_release_go "$release_go"
-check_root_release "$release"
+check_root_release "$release_build"
+check_isolated_release_build "$release_build"
+check_release_caller "$release"
 check_unprivileged_apidiff "$release"
 check_tag_release "$sbom"
 check_rebuild "$rebuild"
@@ -362,7 +417,7 @@ expect_failure 'release tag no longer resolves to the event commit' run_tag_bind
 	"$tag_repo" 'v1.2.3' "$tag_sha" "$tag_binding"
 
 tag_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$release_go" | head -n 1)"
-for publisher in "$release" "$sbom" "$rebuild"; do
+for publisher in "$release_build" "$sbom" "$rebuild"; do
 	publisher_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$publisher" | head -n 1)"
 	[[ "$publisher_pattern" == "$tag_pattern" ]] || {
 		printf 'release tag validators diverge: %s\n' "$publisher" >&2
@@ -394,19 +449,27 @@ expect_failure 'valid OCI tag' run_oci_tag_validator \
 	"$overlong_oci_tag" "$oci_validator"
 
 negative="$suite_root/negative.yml"
-sed '/^on:$/a\  workflow_dispatch:' "$release" >"$negative"
+sed '/^on:$/a\  workflow_dispatch:' "$release_build" >"$negative"
 expect_failure 'ref-ambiguous workflow_dispatch' check_tag_release "$negative"
 sed '/Validate canonical release tag/d' "$release_go" >"$negative"
 expect_failure 'canonical-tag failure gate' check_release_go "$negative"
-sed '/Publish verified immutable release/d' "$release" >"$negative"
+sed '/Publish verified immutable release/d' "$release_build" >"$negative"
 expect_failure 'publication contract' check_root_release "$negative"
-sed '/release_smoke\.py/d' "$release" >"$negative"
+sed '/release_smoke\.py/d' "$release_build" >"$negative"
 expect_failure 'release_smoke.py' check_root_release "$negative"
 # Move the smoke step to the end of the file, after publication.
 awk '/^      - name: Smoke-run the release binaries/ { held = 1; buf = $0 "\n"; next }
 	held && /^      - name: / { held = 0 } held { buf = buf $0 "\n"; next } { print } END { printf "%s", buf }' \
-	"$release" >"$negative"
+	"$release_build" >"$negative"
 expect_failure 'publishes before its smoke run' check_root_release "$negative"
+negative_isolated="$suite_root/negative-isolated.yml"
+cp "$release_build" "$negative_isolated"
+sed -i '/Run GoReleaser/i\      - uses: actions/download-artifact@v4' "$negative_isolated"
+expect_failure 'actions/download-artifact' check_isolated_release_build "$negative_isolated"
+negative_caller="$suite_root/negative-caller.yml"
+cp "$release" "$negative_caller"
+printf '\n      - uses: actions/attest-build-provenance@v4\n' >>"$negative_caller"
+expect_failure 'release caller must not attest provenance' check_release_caller "$negative_caller"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 sed '/"$remote_sha" != "$SOURCE_SHA"/d' "$release_go" >"$negative"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.

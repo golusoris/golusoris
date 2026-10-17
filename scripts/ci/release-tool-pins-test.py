@@ -15,7 +15,7 @@ from typing import NamedTuple
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 WORKFLOW_FILES: tuple[str, ...] = (
-    ".github/workflows/release.yml",
+    ".github/workflows/release-build.yml",
     ".github/workflows/release-go.yml",
     ".github/workflows/release-tool-contract.yml",
     ".github/workflows/rebuild-on-base.yml",
@@ -333,7 +333,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
-            path = root / ".github/workflows/release.yml"
+            path = root / ".github/workflows/release-build.yml"
             content = path.read_text(encoding="utf-8")
             content = content.replace("syft-version: v1.54.1", "syft-version: v1.54.0")
             content = content.replace("1\\.54\\.1", "1\\.54\\.0")
@@ -359,7 +359,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
-            path = root / ".github/workflows/release.yml"
+            path = root / ".github/workflows/release-build.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace("cosign-release: v3.1.3", "missing: v3.1.3"),
                 encoding="utf-8",
@@ -372,7 +372,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
-            path = root / ".github/workflows/release.yml"
+            path = root / ".github/workflows/release-build.yml"
             path.write_text(
                 path.read_text(encoding="utf-8").replace("3\\.1\\.3", "unparseable"),
                 encoding="utf-8",
@@ -385,7 +385,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
-            (root / ".github/workflows/release.yml").write_text("", encoding="utf-8")
+            (root / ".github/workflows/release-build.yml").write_text("", encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "yielded no install pins")
 
