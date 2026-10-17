@@ -145,6 +145,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@python3 -B scripts/ci/pull_test_images_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
+	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
 
@@ -248,6 +249,10 @@ fault-recovery: ## fail when a short test recovers a nil-dereference fault (gola
 .PHONY: kubeconform
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
+
+.PHONY: helm-backup-restore
+helm-backup-restore: ## restore a Helm chart backup into a fresh database
+	@bash scripts/ci/helm-backup-restore_test.sh
 
 .PHONY: buf-lint
 buf-lint: ## lint tracked protobuf files and check the vendored KEDA contract against upstream
