@@ -11,8 +11,10 @@
 //
 // Precedence, lowest to highest: Files (in order), SecretDirs (in order),
 // environment variables, and *_FILE environment indirection. Setting both
-// APP_X and APP_X_FILE fails. A reload re-applies the higher layers so a
-// changed file never overrides a secret or the environment.
+// APP_X and APP_X_FILE fails. When [Options.DisableEnv] is true, the
+// environment variable layer and *_FILE indirection are skipped. A reload
+// re-applies the higher layers so a changed file never overrides a secret or
+// the environment.
 //
 // Apps add structured config by calling [Config.Unmarshal] into their own
 // struct.
@@ -55,10 +57,9 @@ type Options struct {
 	Watch bool
 	// CompoundKeys opts specific leaf keys out of the env->koanf underscore
 	// split. Each entry is the desired koanf path (e.g. "search.api_key" or
-	// "auth.oidc.issuer_url"). Without it, APP_SEARCH_API_KEY maps to
-	// search.api.key; listing "search.api_key" makes it map to search.api_key
-	// instead. Default behavior (split every underscore) is unchanged when
-	// this is empty.
+	// "auth.oidc.issuer_url"). This controls the stored tree and getters;
+	// Unmarshal also resolves underscore paths from destination struct tags
+	// automatically. Explicit entries take precedence over inferred paths.
 	CompoundKeys []string
 	// Logger receives file-watch and SIGHUP reload failures. Nil means
 	// slog.Default(), which the log module rewires to the app handler.
@@ -77,6 +78,10 @@ type Options struct {
 	// MaxSecretBytes caps each secret file read from SecretDirs or *_FILE;
 	// zero means DefaultMaxSecretBytes.
 	MaxSecretBytes int64
+	// DisableEnv skips loading from environment variables and skips
+	// *_FILE indirection. When true, only Files and SecretDirs populate the
+	// configuration.
+	DisableEnv bool
 }
 
 func (o Options) maxSecretBytes() int64 {
@@ -103,6 +108,7 @@ type Config struct {
 
 	mu        sync.RWMutex
 	listeners []func()
+	envValues map[string]string
 }
 
 // Get returns the value for path or "" if absent.
@@ -134,8 +140,15 @@ func (c *Config) All() map[string]any { return c.k.All() }
 
 // Unmarshal decodes a key (or "" for root) into a struct. String values like
 // "5s" decode into [time.Duration]; comma-separated strings decode into
-// []string. Struct tags use the `koanf` key (e.g. `koanf:"dsn"`).
+// []string. Struct tags use the `koanf` key (e.g. `koanf:"dsn"`). With a
+// nonempty EnvPrefix and env enabled, underscore paths inferred from a pointer
+// to a struct receive env overrides captured at load/reload, after the main
+// decode. Traversal is bounded to 32 struct levels and 4096 fields; exceeding
+// either limit returns an error. Unmatched fields retain decoded/default values.
+// Automatic underscore mapping does not resolve FileEnvSuffix indirection.
 func (c *Config) Unmarshal(path string, into any) error {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	conf := koanf.UnmarshalConf{
 		Tag: "koanf",
 		DecoderConfig: &mapstructure.DecoderConfig{
@@ -150,7 +163,7 @@ func (c *Config) Unmarshal(path string, into any) error {
 	if err := c.k.UnmarshalWithConf(path, into, conf); err != nil {
 		return fmt.Errorf("config: unmarshal %q: %w", path, err)
 	}
-	return nil
+	return c.unmarshalEnv(path, into, conf)
 }
 
 // OnChange registers a callback fired whenever a watched config file changes
@@ -255,17 +268,35 @@ func New(opts Options) (*Config, error) {
 // overlay applies the layers above Files: secret dirs, env (APP_DB_HOST ->
 // db.host), then *_FILE indirection.
 func (c *Config) overlay() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := loadSecretDirs(c.k, c.opts); err != nil {
 		return err
 	}
+	if c.opts.DisableEnv {
+		c.envValues = nil
+		return nil
+	}
+	values := make(map[string]string)
+	transform := envTransform(c.opts)
 	envProvider := env.Provider(c.opts.Delimiter, env.Opt{
-		Prefix:        c.opts.EnvPrefix,
-		TransformFunc: envTransform(c.opts),
+		Prefix: c.opts.EnvPrefix,
+		TransformFunc: func(name, value string) (string, any) {
+			key, result := transform(name, value)
+			if key != "" && c.opts.EnvPrefix != "" {
+				values[strings.TrimPrefix(name, c.opts.EnvPrefix)] = value
+			}
+			return key, result
+		},
 	})
 	if err := c.k.Load(envProvider, nil); err != nil {
 		return fmt.Errorf("config: load env: %w", err)
 	}
-	return loadFileEnv(c.k, c.opts)
+	if err := loadFileEnv(c.k, c.opts); err != nil {
+		return err
+	}
+	c.envValues = values
+	return nil
 }
 
 // logger returns the reload-failure logger, defaulting to slog.Default().

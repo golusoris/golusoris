@@ -122,8 +122,10 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/trivy-policy_test.sh
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
+	@bash scripts/ci/gosec-scan_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
+	@bash scripts/ci/template-workflows-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
@@ -134,12 +136,16 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
+	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
+	@python3 -B scripts/ci/pull_test_images_test.py
+	@python3 -B scripts/ci/release-tool-pins-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
+	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
 
@@ -216,6 +222,10 @@ shellcheck: ## lint every repository-owned shell script with the pinned ShellChe
 actionlint: ## lint GitHub and Gitea workflow YAML with the pinned actionlint
 	@bash scripts/ci/actionlint.sh
 
+.PHONY: template-workflows
+template-workflows: ## check template workflows against their pinned reusable workflows
+	@bash scripts/ci/template-workflows.sh
+
 .PHONY: terraform-validate
 terraform-validate: ## format and validate every Terraform module with locked providers
 	@bash scripts/ci/terraform-validate.sh
@@ -239,6 +249,10 @@ fault-recovery: ## fail when a short test recovers a nil-dereference fault (gola
 .PHONY: kubeconform
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
+
+.PHONY: helm-backup-restore
+helm-backup-restore: ## restore a Helm chart backup into a fresh database
+	@bash scripts/ci/helm-backup-restore_test.sh
 
 .PHONY: buf-lint
 buf-lint: ## lint tracked protobuf files and check the vendored KEDA contract against upstream
@@ -280,7 +294,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

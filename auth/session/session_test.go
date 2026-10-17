@@ -63,6 +63,155 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRenewPreservesDataAndRotatesCookie(t *testing.T) {
+	t.Parallel()
+	store := session.NewMemoryStore()
+	mgr := mustManager(t, store, session.Options{
+		CookieName: "custom-sid", TTL: time.Hour, Path: "/app", SameSite: http.SameSiteStrictMode,
+	})
+	r := httptest.NewRequest(http.MethodPost, "/login", nil)
+	sess, err := mgr.Load(r)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sess.Set("uid", "user-42")
+	saved := httptest.NewRecorder()
+	if err := mgr.SaveContext(r.Context(), saved, sess); err != nil {
+		t.Fatalf("SaveContext: %v", err)
+	}
+	oldID := sess.ID
+	w := httptest.NewRecorder()
+	if err := mgr.Renew(r.Context(), w, sess); err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if sess.ID == oldID {
+		t.Fatal("Renew did not rotate the session ID")
+	}
+	cookie := renewedCookie(t, w, sess.ID)
+	savedCookies := saved.Result().Cookies()
+	if len(savedCookies) != 1 {
+		t.Fatalf("saved cookies = %v, want one cookie", savedCookies)
+	}
+	savedCookies[0].Value = sess.ID
+	if cookie.String() != savedCookies[0].String() {
+		t.Errorf("renewed cookie = %s, want %s", cookie, savedCookies[0])
+	}
+	assertStoredUID(t, store, sess.ID, "user-42")
+	if _, err := store.Load(r.Context(), oldID); !isNotFoundErr(err) {
+		t.Errorf("Load(old) = %v, want not-found", err)
+	}
+}
+
+func TestRenewFreshSession(t *testing.T) {
+	t.Parallel()
+	store := &deleteFailStore{Store: session.NewMemoryStore(), err: gerr.NotFound("session not found")}
+	mgr := mustManager(t, store, session.Options{})
+	r := httptest.NewRequest(http.MethodPost, "/login", nil)
+	sess, err := mgr.Load(r)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	oldID := sess.ID
+	if _, err := store.Load(r.Context(), oldID); !isNotFoundErr(err) {
+		t.Fatalf("Load(fresh) = %v, want not-found", err)
+	}
+	if err := mgr.Renew(r.Context(), httptest.NewRecorder(), sess); err != nil {
+		t.Fatalf("Renew: %v", err)
+	}
+	if sess.ID == oldID {
+		t.Fatal("Renew did not rotate the fresh session ID")
+	}
+	if _, err := store.Load(r.Context(), sess.ID); err != nil {
+		t.Fatalf("Load(new): %v", err)
+	}
+}
+
+func TestRenewRejectsNilSession(t *testing.T) {
+	t.Parallel()
+	mgr := mustManager(t, session.NewMemoryStore(), session.Options{})
+	w := httptest.NewRecorder()
+	err := mgr.Renew(t.Context(), w, nil)
+	if err == nil || err.Error() != "session: renew: nil session" {
+		t.Fatalf("Renew(nil) = %v, want session: renew: nil session", err)
+	}
+	if w.Header().Get("Set-Cookie") != "" {
+		t.Error("Renew(nil) set a cookie")
+	}
+}
+
+func TestRenewSaveFailurePreservesOldSession(t *testing.T) {
+	t.Parallel()
+	store := session.NewMemoryStore()
+	mgr := mustManager(t, store, session.Options{})
+	r := httptest.NewRequest(http.MethodPost, "/login", nil)
+	sess, err := mgr.Load(r)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sess.Set("uid", "user-42")
+	if err := mgr.SaveContext(r.Context(), httptest.NewRecorder(), sess); err != nil {
+		t.Fatalf("SaveContext: %v", err)
+	}
+	oldID := sess.ID
+	sess.Set("uid", "changed")
+	cause := errors.New("save failed")
+	failing := mustManager(t, &saveFailStore{Store: store, err: cause}, session.Options{})
+	w := httptest.NewRecorder()
+	if err := failing.Renew(r.Context(), w, sess); !errors.Is(err, cause) || err.Error() != "session: renew: save: save failed" {
+		t.Errorf("Renew = %v, want wrapped save failure", err)
+	}
+	if sess.ID != oldID {
+		t.Errorf("ID = %q, want unchanged %q", sess.ID, oldID)
+	}
+	if w.Header().Get("Set-Cookie") != "" {
+		t.Error("failed Renew set a cookie")
+	}
+	assertStoredUID(t, store, oldID, "user-42")
+}
+
+func TestRenewDeleteFailureKeepsNewSession(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("delete failed")
+	store := &deleteFailStore{Store: session.NewMemoryStore(), err: cause}
+	mgr := mustManager(t, store, session.Options{})
+	r := httptest.NewRequest(http.MethodPost, "/login", nil)
+	sess, err := mgr.Load(r)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	sess.Set("uid", "user-42")
+	if err := mgr.SaveContext(r.Context(), httptest.NewRecorder(), sess); err != nil {
+		t.Fatalf("SaveContext: %v", err)
+	}
+	oldID := sess.ID
+	w := httptest.NewRecorder()
+	if err := mgr.Renew(r.Context(), w, sess); !errors.Is(err, cause) || err.Error() != "session: renew: delete old: delete failed" {
+		t.Errorf("Renew = %v, want wrapped delete failure", err)
+	}
+	if sess.ID == oldID {
+		t.Fatal("Renew did not update the session ID before delete failed")
+	}
+	_ = renewedCookie(t, w, sess.ID)
+	assertStoredUID(t, store, sess.ID, "user-42")
+}
+
+func renewedCookie(t *testing.T, w *httptest.ResponseRecorder, id string) *http.Cookie {
+	t.Helper()
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].Value != id {
+		t.Fatalf("renewed cookies = %v, want one cookie with ID %q", cookies, id)
+	}
+	return cookies[0]
+}
+
+func assertStoredUID(t *testing.T, store session.Store, id, uid string) {
+	t.Helper()
+	data, err := store.Load(t.Context(), id)
+	if err != nil || data["uid"] != uid {
+		t.Errorf("Load(%q) = %v, %v, want uid %q", id, data, err, uid)
+	}
+}
+
 func TestDestroyExpiresCookie(t *testing.T) {
 	t.Parallel()
 	store := session.NewMemoryStore()
@@ -359,6 +508,22 @@ func TestNewMemoryStoreWithClockRejectsNil(t *testing.T) {
 		t.Fatalf("NewMemoryStoreWithClock rejected valid clock: %v", err)
 	}
 }
+
+type saveFailStore struct {
+	session.Store
+	err error
+}
+
+func (s *saveFailStore) Save(context.Context, string, map[string]any, time.Duration) error {
+	return s.err
+}
+
+type deleteFailStore struct {
+	session.Store
+	err error
+}
+
+func (s *deleteFailStore) Delete(context.Context, string) error { return s.err }
 
 type contextStore struct{}
 

@@ -9,7 +9,8 @@
 // checks (testutil/promcheck) read through [Catalog.Defs].
 //
 // Stateless: no fx module. Build a [Catalog] at package level, call
-// [Catalog.Register] once per process with the app's registerer.
+// [Catalog.Register] with the app's registerer or [Catalog.RegisterOTel]
+// with its OTel meter.
 package metricdef
 
 import (

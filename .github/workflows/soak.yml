@@ -1,0 +1,65 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Soak tests
+
+on:
+  schedule:
+    - cron: '0 4 * * 0' # weekly Sunday at 04:00 UTC
+  workflow_dispatch:
+    inputs:
+      duration:
+        # WHY: choices keep each package under the 30m test timeout below.
+        description: 'Soak test duration per area'
+        required: false
+        default: '2m'
+        type: choice
+        options: ['2m', '5m', '10m', '20m']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  soak:
+    name: Run soak tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SOAK_DURATION: ${{ inputs.duration || '2m' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Verify Docker daemon is reachable
+        run: docker info
+      - name: Initialize summary table
+        shell: bash
+        run: |
+          {
+            printf '## Soak Test Results\n\n'
+            printf '| Area | Duration | Goroutines (Start &rarr; End, Delta) | Heap Slope | Ops/s (First &rarr; Last Window) |\n'
+            printf '| :--- | :--- | :--- | :--- | :--- |\n'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Run soak tests (go -p 4)
+        env:
+          # v0.44.0 can reuse a stopped shared Ryuk after a package gap
+          # (testcontainers/testcontainers-go#3867). Keep it alive within this
+          # bounded job until testcontainers/testcontainers-go#3868 ships.
+          RYUK_RECONNECTION_TIMEOUT: 30m
+        run: |
+          go test -tags soak -race -count=1 -v -p 4 -run 'Test.*_Soak' -timeout 30m \
+            ./jobs \
+            ./realtime/pubsub \
+            ./cache/twotier \
+            ./outbox

@@ -14,11 +14,11 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 )
 
-func TestKeepalive_defaultsKeepTodaysValues(t *testing.T) {
+func TestKeepalive_defaults(t *testing.T) {
 	t.Parallel()
 	got := KeepaliveConfig{}.withDefaults()
 	require.Equal(t, 2*time.Minute, got.MaxConnectionAge)
-	require.Equal(t, 5*time.Second, got.MaxConnectionAgeGrace)
+	require.Equal(t, Infinite, got.MaxConnectionAgeGrace)
 	require.Equal(t, time.Minute, got.Time)
 	require.Equal(t, 20*time.Second, got.Timeout)
 	require.Equal(t, 5*time.Minute, got.MinTime)
@@ -53,13 +53,20 @@ func TestKeepalive_serverParameters(t *testing.T) {
 	require.Equal(t, grpcInfinity, got.Time)
 	require.Equal(t, 3*time.Second, got.Timeout)
 
-	finite := defaultKeepalive().serverParameters()
-	require.Equal(t, 2*time.Minute, finite.MaxConnectionAge)
-	require.Equal(t, 5*time.Second, finite.MaxConnectionAgeGrace)
+	defaults := defaultKeepalive().serverParameters()
+	require.Equal(t, 2*time.Minute, defaults.MaxConnectionAge)
+	require.Equal(t, grpcInfinity, defaults.MaxConnectionAgeGrace)
 
 	policy := KeepaliveConfig{MinTime: time.Minute, PermitWithoutStream: true}.enforcementPolicy()
 	require.Equal(t, time.Minute, policy.MinTime)
 	require.True(t, policy.PermitWithoutStream)
+}
+
+func TestKeepalive_preservesPositiveGrace(t *testing.T) {
+	t.Parallel()
+	got := KeepaliveConfig{MaxConnectionAgeGrace: 5 * time.Second}.withDefaults()
+	require.Equal(t, 5*time.Second, got.MaxConnectionAgeGrace)
+	require.Equal(t, 5*time.Second, got.serverParameters().MaxConnectionAgeGrace)
 }
 
 func TestKeepalive_validate(t *testing.T) {
@@ -87,14 +94,4 @@ func TestLoadConfig_keepaliveFromEnv(t *testing.T) {
 	require.Equal(t, 10*time.Minute, c.Keepalive.MaxConnectionAgeGrace)
 	require.Equal(t, 30*time.Second, c.Keepalive.Time)
 	require.Equal(t, 20*time.Second, c.Keepalive.Timeout, "unset keys keep defaults")
-}
-
-// TestLoadConfig_compoundKeysNeeded documents the env split without CompoundKeys.
-func TestLoadConfig_compoundKeysNeeded(t *testing.T) {
-	t.Setenv("TESTKB_GRPC_KEEPALIVE_MAX_CONNECTION_AGE", "-1s")
-	cfg, err := config.New(config.Options{EnvPrefix: "TESTKB_"})
-	require.NoError(t, err)
-	c, err := loadConfig(cfg)
-	require.NoError(t, err)
-	require.Equal(t, defaultMaxConnectionAge, c.Keepalive.MaxConnectionAge)
 }

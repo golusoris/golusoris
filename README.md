@@ -98,6 +98,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/id/` | UUIDv7 and KSUID generators | google/uuid · segmentio/ksuid |
 | `core/retry/` | `Do(ctx, fn, Policy, clock)`: capped exponential backoff, jitter, retryable predicate, context-bounded waits | stdlib |
 | `core/validate/` | go-playground/validator wrapper with i18n error messages | go-playground/validator/v10 |
+| `core/validate/nilcheck/` | nil and typed-nil detection for dependency checks | stdlib |
 | `core/version/` | build metadata (ldflags / VCS) as a typed `Info` | stdlib |
 | `core/clikit/` | cobra + fx CLI builder; bash/zsh/fish/PowerShell completions, man pages, generated-file drift check (`clikit/tui` bubbletea helpers stay in the root module) | spf13/cobra |
 | `core/mcp/` | MCP server fx module — stdio + streamable-HTTP | modelcontextprotocol/go-sdk |
@@ -105,6 +106,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `core/astx/` | source walker, AST import rewriter (codemods), func metrics, go.mod reader | golang.org/x/mod |
 | `core/capabilities/` | schema + loader for the root `capabilities.yaml` contract | — |
 | `core/tlsx/` | file-backed TLS: cert/key/CA reloaded lazily on handshake or loaded once into a client config, client-auth policy parsing; `tlsxtest/` issues throwaway test certificates | stdlib |
+| `core/storage/` | backend-neutral object storage contracts: `Bucket`, `Object`, key cleaning, bounded listing and `Walk`, presign and checksum validation; backends implement them without the root module graph | golang.org/x/net (httpguts) |
 | `i18n/` | locale negotiation middleware, message catalog | nicksnyder/go-i18n |
 
 ### Database & data
@@ -154,7 +156,7 @@ checksum and patched-source hash, then fail closed on drift.
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `auth/oidc/` | OIDC + PKCE + session storage | coreos/go-oidc/v3 |
+| `auth/oidc/` | OIDC + PKCE + nonce + session storage | coreos/go-oidc/v3 |
 | `auth/passkeys/` | WebAuthn + TOTP (MFA) | go-webauthn/webauthn + pquerna/otp |
 | `auth/jwt/` | HMAC JWT issuance, expiry, and validation | golang-jwt/jwt/v5 |
 | `auth/apikey/` | HMAC API key issuance, verification, and scopes | custom |
@@ -198,7 +200,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
-| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; interchangeable Prometheus/OTel typed handles, cardinality guard, Prometheus exemplars | prometheus/client_golang, OTel metric |
 | `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
 | `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
@@ -219,6 +221,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `container/runtime/` | detect runtime (k8s / docker / podman / systemd / bare) + unified Info | stdlib |
 | `leader/` | pluggable leader-election interface + Callbacks + `Status.IsLeader()`; `NamedModule` per singleton task | — |
 | `leader/always/` | always-leader backend for standalone single-replica runs | — |
+| `leader/gate/` | loop-lifecycle gate starting and stopping periodic jobs on leadership transitions | — |
 | `leader/k8s/` | Kubernetes Lease backend | k8s.io/client-go |
 | `leader/pg/` | PostgreSQL advisory-lock backend | jackc/pgx/v5 |
 | `systemd/` | `sd_notify` + watchdog (no-op when `NOTIFY_SOCKET` unset) | stdlib |
@@ -241,6 +244,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `notify/tracking/` | signed open-pixel and click tracking handlers | custom |
 | `notify/unsub/` | RFC 8058 one-click unsubscribe + suppression list | custom |
 | `notify/bounce/` | SES / Postmark bounce + complaint webhook handlers | custom |
+| `notify/channel/` | generic channel dispatch + secret redaction | custom |
 | `realtime/sse/` | Server-Sent Events hub | r3labs/sse |
 | `realtime/pubsub/` | synchronous local pub/sub bus plus Redis adapter | custom + rueidis |
 | `realtime/webrtc/` | bounded Pion offer/answer signaling + data-channel hooks | pion/webrtc |
@@ -257,7 +261,11 @@ checksum and patched-source hash, then fail closed on drift.
 | Module | Purpose | Key dep |
 | --- | --- | --- |
 | `tenancy/` | tenant context middleware, header + subdomain extractors | custom |
-| `idempotency/` | `Idempotency-Key` middleware + gRPC interceptor; memory, Postgres, Redis, SQLite stores | custom + pgx + rueidis |
+| `idempotency/` | `Idempotency-Key` HTTP middleware, gRPC interceptors, fx modules; compatible store aliases | custom + fx + gRPC |
+| `idempotency/store/` | atomic store contracts, claim states, errors, in-memory store; lightweight store-only import | clockwork |
+| `idempotency/postgres/` | PostgreSQL idempotency store, bounded sweep, embedded migrations | jackc/pgx |
+| `idempotency/redis/` | Redis / Valkey idempotency store, atomic Lua operations, server expiry | redis/rueidis |
+| `idempotency/sqlite/` | SQLite idempotency store, schema setup, bounded sweep | database/sql |
 | `flags/` | typed feature flags with an OpenFeature-shaped provider interface | custom |
 | `audit/` | append-only audit event log with Diff + pluggable Store | custom |
 | `page/` | typed cursor + offset pagination for sqlc/ogen | custom |
@@ -302,6 +310,8 @@ checksum and patched-source hash, then fail closed on drift.
 | `ai/tiny/` | bounded trainer/predictor contracts, registries, and container runner | custom + pgx |
 | `ai/tiny/gemma/` `ai/tiny/litert/` | digest-pinned Gemma LoRA and MobileNet V2 classifier trainer orchestration | containerized KerasHub / TensorFlow |
 | `ai/tiny/serve/` | Ollama + distributed fleet adapters; LiteRT sidecar client/protocol ([runtime #564](https://github.com/golusoris/golusoris/issues/564)) | HTTP + river |
+| `ai/tiny/serve/onnx/` | ONNX forward-pass predictor via vmafx-ort-runner subprocess protocol | os/exec (no cgo) |
+| `ai/tpe/` | Tree-structured Parzen Estimator for hyperparameter search | custom |
 
 ### Commerce
 
@@ -351,6 +361,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `container/registry/credentials/gar/` | Artifact Registry credentials via Application Default Credentials | golang.org/x/oauth2/google |
 | `container/registry/credentials/acr/` | ACR credentials via Entra workload identity + token exchange | Azure/azure-sdk-for-go/sdk/azidentity |
 | `container/registry/sign/` | in-process Sigstore signing and verification by digest — key (KMS `crypto.Signer`) or keyless Fulcio, optional Rekor + TSA; bundle pushed as OCI 1.1 referrer that `cosign verify` accepts; `Verify` checks those and cosign v3 bundles against a key or certificate identity, tlog / TSA / SCT policy and annotations; `ImageLayout` / `VerifyLayout` do the same inside an OCI image layout offline; GitHub Actions and projected service-account ID token sources | sigstore/sigstore-go |
+| `container/registry/sign/signtest/` | shared in-process registry and seeded image setup for KMS signing tests | go-containerregistry |
 | `container/registry/sign/kms/vault/` | `crypto.Signer` over a HashiCorp Vault or OpenBao transit key (ECDSA, RSA, Ed25519) for `sign.Image`; token or Kubernetes / JWT service-account login with re-login on expiry; per-call timeout; key version pinned | stdlib `net/http` (no Vault SDK) |
 | `container/registry/sign/kms/aws/` | `crypto.Signer` over an AWS KMS asymmetric key (ECDSA, RSA, Ed25519) for `sign.Image`; default credential chain incl. IRSA and EKS Pod Identity; key ARN pinned behind aliases; per-call timeout | aws-sdk-go-v2 service/kms + config |
 | `container/registry/sign/kms/gcp/` | `crypto.Signer` over a Cloud KMS key version (ECDSA, RSA, Ed25519) for `sign.Image`; Application Default Credentials incl. GKE Workload Identity and workload identity federation; CRC32C-checked requests and answers; per-request timeout | stdlib `net/http` + golang.org/x/oauth2 (no Cloud KMS SDK) |
@@ -383,7 +394,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 | Module | Purpose | Key dep |
 | --- | --- | --- |
-| `testutil/pg/` | testcontainers PostgreSQL | testcontainers-go |
+| `testutil/pg/` | testcontainers PostgreSQL + template cloning | testcontainers-go |
 | `testutil/redis/` | testcontainers Redis | testcontainers-go |
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
 | `testutil/kafka/` | testcontainers Redpanda/Kafka endpoint | testcontainers-go |
@@ -396,6 +407,8 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | `testutil/fuzz/` | fuzz corpus directory helpers + round-trip assertion | stdlib |
 | `junit/` | JUnit XML report writer for CI gates — suites, pass/fail/error/skip, properties, XML-illegal characters escaped; validates against junit-10.xsd | stdlib |
 | `testutil/fixture/` | typed CSV fixture loading — `Load`/`MustLoad` into struct slices | jszwec/csvutil |
+| `testutil/testctx/` | test contexts with deadlines and automatic cleanup | stdlib |
+| `testutil/configfile/` | private temporary config file writer for tests | stdlib |
 | `testutil/load/` | vegeta load-test harness — `Attack`, `Assert`, `MaxP99` | tsenart/vegeta |
 | `testutil/mutation/` | go-mutesting runner + score assertion | avito-tech/go-mutesting |
 | `testutil/prop/` | property-based testing (own go.mod) | leanovate/gopter |

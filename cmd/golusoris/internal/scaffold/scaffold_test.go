@@ -6,6 +6,8 @@ package scaffold_test
 
 import (
 	"bytes"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -35,10 +37,46 @@ func TestInitCmd_createsFiles(t *testing.T) { //nolint:paralleltest // mutates g
 		t.Fatalf("init: %v", err)
 	}
 
-	for _, f := range []string{"myapp/go.mod", "myapp/main.go"} {
+	for _, f := range []string{
+		"myapp/go.mod",
+		"myapp/cmd/app/main.go",
+		"myapp/LICENSE",
+		"myapp/REUSE.toml",
+	} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("expected file %s to exist: %v", f, err)
 		}
+	}
+
+	rootMain := filepath.Join(dir, "myapp/main.go")
+	if _, err := os.Stat(rootMain); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("expected root main.go not to exist, got: %v", err)
+	}
+}
+
+func TestInitCmd_invalidName(t *testing.T) {
+	t.Parallel()
+	cmd := scaffold.InitCmd()
+	cmd.SetArgs([]string{"bad/name"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for invalid name")
+	}
+	if !strings.Contains(err.Error(), "contains invalid characters") {
+		t.Errorf("expected invalid characters error, got: %v", err)
+	}
+}
+
+func TestInitCmd_emptyName(t *testing.T) {
+	t.Parallel()
+	cmd := scaffold.InitCmd()
+	cmd.SetArgs([]string{""})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("expected error for empty name")
+	}
+	if !strings.Contains(err.Error(), "name must not be empty") {
+		t.Errorf("expected empty name error, got: %v", err)
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"go.uber.org/fx"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
+	"github.com/golusoris/golusoris/core/validate/nilcheck"
 )
 
 // Validator wraps *validator.Validate.
@@ -26,13 +27,7 @@ type Validator struct{ v *validator.Validate }
 // IsNil reports whether value is nil, including an interface that contains a
 // typed-nil channel, function, map, pointer, or slice.
 func IsNil(value any) bool {
-	if value == nil {
-		return true
-	}
-	reflected := reflect.ValueOf(value)
-	kind := reflected.Kind()
-	return (kind == reflect.Chan || kind == reflect.Func || kind == reflect.Interface ||
-		kind == reflect.Map || kind == reflect.Pointer || kind == reflect.Slice) && reflected.IsNil()
+	return nilcheck.IsNil(value)
 }
 
 // New returns a Validator with sane defaults: tag name "validate", json-name

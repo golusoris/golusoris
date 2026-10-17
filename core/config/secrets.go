@@ -142,7 +142,7 @@ func readSecretPath(path string, limit int64) (_ string, err error) {
 // file content becomes the key <NAME> maps to. Setting the plain variable
 // too is ambiguous and fails.
 func loadFileEnv(k *koanf.Koanf, opts Options) error {
-	if opts.FileEnvSuffix == "" {
+	if opts.DisableEnv || opts.FileEnvSuffix == "" {
 		return nil
 	}
 	lookup := compoundLookup(opts)

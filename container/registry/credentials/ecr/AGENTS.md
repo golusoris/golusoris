@@ -25,3 +25,4 @@ fx.New(..., credentials.Module, ecr.Module)
 - Fake ECR endpoint via `ecr.Options.BaseEndpoint`.
 - IRSA path: fake STS + ECR via `AWS_ENDPOINT_URL_STS` / `AWS_ENDPOINT_URL_ECR`, loopback-only HTTP client.
 - SDK quirk: plain `AWS_ENDPOINT_URL` does not reach STS web identity client (credentials resolve before base endpoint); service-specific vars do.
+- `moto_test.go` runs provider against moto server container; skips without Docker.

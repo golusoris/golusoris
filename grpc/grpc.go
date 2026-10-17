@@ -34,7 +34,7 @@
 //	grpc.max_send_size  # max outgoing message size in bytes (default: 4 MiB)
 //	grpc.health         # register grpc.health.v1 fed by readiness checks
 //	grpc.keepalive.max_connection_age        # default 2m; negative = never
-//	grpc.keepalive.max_connection_age_grace  # default 5s; negative = unlimited
+//	grpc.keepalive.max_connection_age_grace  # default unlimited; positive = cap
 //	grpc.keepalive.time                      # server ping interval (default 1m)
 //	grpc.keepalive.timeout                   # ping ack timeout (default 20s)
 //	grpc.keepalive.min_time                  # min client ping interval (default 5m)

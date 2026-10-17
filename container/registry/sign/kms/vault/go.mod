@@ -3,9 +3,7 @@ module github.com/golusoris/golusoris/container/registry/sign/kms/vault
 go 1.27.2
 
 require (
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261010011436-78871beb284a
-	github.com/google/go-containerregistry v0.22.1
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015163412-c9de8c9a6f0e
 	github.com/moby/moby/api v1.56.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
@@ -66,8 +64,10 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b // indirect
 	github.com/golusoris/golusoris/core v0.10.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
+	github.com/google/go-containerregistry v0.22.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect

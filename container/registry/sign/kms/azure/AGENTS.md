@@ -44,7 +44,8 @@ sigs, err := sign.Verify(ctx, client, ref, sign.Policy{Key: s.Public(), Insecure
   - Bounds: Timeout bounds `Sign` + `New`; 1ns valid but times out.
 - `default_test.go` (not parallel, `t.Setenv`): `NewDefaultAzureCredential` with AKS workload identity variables + `AZURE_AUTHORITY_HOST` -> fake Entra (MSAL instance + tenant discovery, client assertion grant); token cached across 2 signs; rejected assertion.
 - `image_test.go`: `sign.Image` -> `sign.Verify` (ggcr in-process registry) for P-256/384/521, RSA via fake; foreign key -> `ErrNoValidSignature`; denied vault -> `sign.Image` fails.
-- Gaps: no Key Vault emulator; fake follows data-plane REST shape azkeys v1.5.0 sends. Managed identity (IMDS) path not exercised.
+- `lowkey_test.go` runs signer against Lowkey Vault container, skips without Docker.
+- Gaps: fake follows data-plane REST shape azkeys v1.5.0 sends. Managed identity (IMDS) path not exercised.
 
 ## Notes
 

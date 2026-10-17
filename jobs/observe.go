@@ -10,6 +10,8 @@ import (
 
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
+
+	"github.com/golusoris/golusoris/internal/riverclientstate"
 )
 
 // Observer receives job lifecycle signals so apps can record metrics (enqueue
@@ -89,14 +91,11 @@ func ObserveClient[TTx any](c *river.Client[TTx], obs Observer) (cancel func()) 
 	return cancel
 }
 
-func subscribeWorkerEvents[TTx any](c *river.Client[TTx]) (sub <-chan *river.Event, cancel func()) {
-	cancel = func() {}
-	defer func() {
-		// River intentionally panics when Subscribe is called on an insert-only
-		// client; completion observation is a no-op for that supported mode.
-		if recover() != nil {
-			sub = nil
-		}
-	}()
+func subscribeWorkerEvents[TTx any](c *river.Client[TTx]) (<-chan *river.Event, func()) {
+	// River panics when Subscribe is called on an insert-only client;
+	// completion observation is a no-op for that supported mode.
+	if !riverclientstate.WorksJobs(c) {
+		return nil, func() {}
+	}
 	return c.Subscribe(river.EventKindJobCompleted, river.EventKindJobFailed)
 }
