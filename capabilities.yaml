@@ -825,6 +825,10 @@ packages:
     domain: notify
     capabilities: [notify.bounce]
     description: "Package bounce handles email bounce and complaint webhooks from SES (via SNS) and Postmark."
+  - import: github.com/golusoris/golusoris/notify/channel
+    domain: notify
+    capabilities: [notify.channel_dispatch]
+    description: "Package channel provides generic notification channel dispatch and secret redaction."
   - import: github.com/golusoris/golusoris/notify/discord
     domain: notify
     capabilities: [notify.discord]
@@ -1182,7 +1186,7 @@ packages:
     replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
-    capabilities: [test.pg]
+    capabilities: [test.pg, test.pg.template]
     description: "Package pg starts a real PostgreSQL container via testcontainers-go and returns a connected [*pgxpool.Pool]."
     replaces: [github.com/jackc/pgx/v5, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/postgres]
   - import: github.com/golusoris/golusoris/testutil/prop

@@ -20,6 +20,7 @@ import (
 	"golang.org/x/oauth2"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/testutil/configfile"
 )
 
 func TestOptions_withDefaults_addsDefaultScopes(t *testing.T) {
@@ -92,6 +93,29 @@ func TestLoadOptions_appliesDefaultsOnEmpty(t *testing.T) {
 	require.NotEmpty(t, opts.Scopes, "defaults should populate Scopes")
 	require.Equal(t, defaultDiscoveryTimeout, opts.DiscoveryTimeout)
 	require.Equal(t, defaultDiscoveryTimeout, opts.HTTPClient.Timeout)
+}
+
+func TestLoadOptions_readsLazyDiscovery(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{
+		Files: []string{configfile.Write(t, "auth:\n  oidc:\n    lazy_discovery: true\n")},
+	})
+	require.NoError(t, err)
+	opts, err := loadOptions(cfg)
+	require.NoError(t, err)
+	require.True(t, opts.LazyDiscovery)
+}
+
+func TestNewProvider_unexportedHelper(t *testing.T) {
+	t.Parallel()
+	p, err := newProvider(Options{
+		LazyDiscovery: true,
+		IssuerURL:     "https://issuer.example.test",
+		ClientID:      "test-client",
+		RedirectURL:   "https://app.example.test/callback",
+	}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, p)
 }
 
 // TestPKCEVerifier_isRFC7636Compliant: RFC 7636 §4.1 specifies the

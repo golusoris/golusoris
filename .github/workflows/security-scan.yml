@@ -72,17 +72,31 @@ jobs:
           # correct by construction. They are replayed against .semgrep.yml,
           # in both directions, by scripts/hiss/semgrep-fixtures.sh
           # (`make hiss-fixtures`), which scans them from a temporary copy.
+          #
+          # One file, one rule exemption (category D, controller answer
+          # golusoris-971-semgrep-path-exclusion): raw-html-format misreads the
+          # error message templates of Praetor's minified figure bundle as HTML.
+          # The file gets every other rule in a second scan; the step fails once
+          # the entry expires.
+          exempt_path=tools/figures/player/loader.js
+          exempt_rule=javascript.express.security.injection.raw-html-format.raw-html-format
+          exempt_expires=2027-02-14
+          if [[ "$(date -u +%F)" > "$exempt_expires" ]]; then
+            echo "::error::Semgrep exemption for $exempt_path expired on $exempt_expires"
+            exit 1
+          fi
           semgrep_image="semgrep/semgrep:${SEMGREP_VERSION}@${SEMGREP_IMAGE_DIGEST}"
           tar -cf - --exclude=.git . \
-            | docker run --rm -i "$semgrep_image" \
-                sh -ec 'mkdir -p /src && tar -xf - -C /src && \
-                  semgrep scan \
-                    --config p/golang \
-                    --config p/javascript \
-                    --config p/security-audit \
+            | docker run --rm -i -e "exempt_path=$exempt_path" -e "exempt_rule=$exempt_rule" \
+                "$semgrep_image" \
+                sh -ec 'mkdir -p /src && tar -xf - -C /src && cd /src && \
+                  set -- --config p/golang --config p/javascript \
+                    --config p/security-audit --error --metrics=off --quiet && \
+                  semgrep scan "$@" \
                     --exclude .config/hiss/testdata \
                     --exclude .config/hiss/semgrep/testdata \
-                    --error --metrics=off --quiet /src'
+                    --exclude "$exempt_path" . && \
+                  semgrep scan "$@" --exclude-rule "$exempt_rule" "$exempt_path"'
 
       - name: Run Trivy dependency, secret, and IaC gate
         shell: bash

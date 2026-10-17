@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -34,10 +35,14 @@ func twoMigrations() fstest.MapFS {
 	}
 }
 
+// Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
+const testBusyTimeout = 30 * time.Second
+
 func tempDB(t *testing.T) dbsqlite.Options {
 	t.Helper()
 	opts := dbsqlite.DefaultOptions()
 	opts.Path = filepath.Join(t.TempDir(), "app.db")
+	opts.BusyTimeout = testBusyTimeout
 	return opts
 }
 
