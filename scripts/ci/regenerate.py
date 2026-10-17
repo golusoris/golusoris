@@ -73,8 +73,8 @@ def discover_modules(
     if not script.is_file():
         raise CheckError(f"module discovery script not found: {script}")
     try:
-        proc = subprocess.run(
-            ["bash", str(script), "list"],
+        proc = subprocess.run(  # noqa: S603 - fixed bash command on a repository script.
+            ["bash", str(script), "list"],  # noqa: S607 - bash executable on runner PATH.
             cwd=root,
             capture_output=True,
             text=True,
@@ -130,8 +130,8 @@ def check_declared(root: Path, expected: list[str] | None = None) -> list[str]:
 
 def run_git(args: list[str], root: Path, timeout: int = GIT_TIMEOUT_SECONDS) -> str:
     try:
-        proc = subprocess.run(
-            ["git", *args],
+        proc = subprocess.run(  # noqa: S603 - git with arguments built in this file.
+            ["git", *args],  # noqa: S607 - git executable on runner PATH.
             cwd=root,
             capture_output=True,
             text=True,
@@ -149,7 +149,7 @@ def run_git(args: list[str], root: Path, timeout: int = GIT_TIMEOUT_SECONDS) -> 
 def git_status_bytes(root: Path, timeout: int = GIT_TIMEOUT_SECONDS) -> bytes:
     try:
         proc = subprocess.run(
-            ["git", "status", "--porcelain=v1", "-z"],
+            ["git", "status", "--porcelain=v1", "-z"],  # noqa: S607 - git executable on runner PATH.
             cwd=root,
             capture_output=True,
             timeout=timeout,
@@ -220,7 +220,7 @@ def run_update_command(
     env: dict[str, str] | None = None,
 ) -> None:
     try:
-        proc = subprocess.run(
+        proc = subprocess.run(  # noqa: S603 - go command lines built in this file.
             cmd,
             cwd=cwd,
             env=env,
@@ -382,7 +382,7 @@ def offline_env() -> dict[str, str]:
 
 def fixture_tidy(module_dir: Path) -> None:
     subprocess.run(
-        ["go", "mod", "tidy"],
+        ["go", "mod", "tidy"],  # noqa: S607 - go executable on runner PATH.
         cwd=module_dir,
         env=offline_env(),
         check=True,
@@ -393,7 +393,7 @@ def fixture_tidy(module_dir: Path) -> None:
 def fixture_verify(repo: Path) -> subprocess.CompletedProcess[str]:
     """The Build job's verify step, on the fixture's own copy of go-modules.sh."""
     return subprocess.run(
-        ["bash", "scripts/ci/go-modules.sh", "verify"],
+        ["bash", "scripts/ci/go-modules.sh", "verify"],  # noqa: S607 - bash executable on runner PATH.
         cwd=repo,
         env=offline_env(),
         capture_output=True,
@@ -695,7 +695,7 @@ def run_declared_cases(repo: Path, generated: list[str]) -> tuple[list[str], int
         ("# comment\n\n" + "\n".join(generated) + "\n", False),
         ("\n".join(generated[:-1]) + "\n", True),
         ("\n".join(generated) + "\ntracked.txt\n", True),
-        ("\n".join(generated + [generated[0]]) + "\n", True),
+        ("\n".join([*generated, generated[0]]) + "\n", True),
     )
     for text, should_refuse in cases:
         (repo / ".github").mkdir(parents=True, exist_ok=True)
@@ -746,6 +746,43 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         return failures, total_refused, total_accepted
 
 
+def report(failures: list[str]) -> bool:
+    for failure in failures:
+        print(f"FAIL: {failure}", file=sys.stderr)
+    return bool(failures)
+
+
+def run_selftest(root: Path) -> int:
+    failures, refused, accepted = selftest(root)
+    if report(failures):
+        return 1
+    print(f"PASS: regenerate selftest ({refused} plants refused, {accepted} accepted)")
+    return 0
+
+
+def run_check(root: Path) -> int:
+    if report(check_declared(root)):
+        return 1
+    count = len(get_generated_files(root))
+    print(f"PASS: regenerate check ({count} generated files, {DECLARED} equal)")
+    return 0
+
+
+def run_write(root: Path, out_arg: Path | None) -> int:
+    if not out_arg:
+        raise CheckError("--out DIR is required for write")
+    if report(check_declared(root)):
+        return 1
+    failures, message = write_regenerated(out_arg.resolve(), root)
+    if report(failures):
+        return 1
+    if message == "nothing to regenerate":
+        print("PASS: nothing to regenerate")
+    else:
+        print(f"PASS: regenerate write ({message})")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("command", choices=("write", "check", "selftest"))
@@ -757,42 +794,10 @@ def main() -> int:
     root = args.root.resolve()
     try:
         if args.command == "selftest":
-            failures, refused, accepted = selftest(root)
-            for failure in failures:
-                print(f"FAIL: {failure}", file=sys.stderr)
-            if failures:
-                return 1
-            print(
-                f"PASS: regenerate selftest ({refused} plants refused, {accepted} accepted)"
-            )
-            return 0
+            return run_selftest(root)
         if args.command == "check":
-            failures = check_declared(root)
-            for failure in failures:
-                print(f"FAIL: {failure}", file=sys.stderr)
-            if failures:
-                return 1
-            count = len(get_generated_files(root))
-            print(f"PASS: regenerate check ({count} generated files, {DECLARED} equal)")
-            return 0
-        if not args.out:
-            raise CheckError("--out DIR is required for write")
-        out = args.out.resolve()
-        failures = check_declared(root)
-        if failures:
-            for failure in failures:
-                print(f"FAIL: {failure}", file=sys.stderr)
-            return 1
-        failures, message = write_regenerated(out, root)
-        for failure in failures:
-            print(f"FAIL: {failure}", file=sys.stderr)
-        if failures:
-            return 1
-        if message == "nothing to regenerate":
-            print("PASS: nothing to regenerate")
-        else:
-            print(f"PASS: regenerate write ({message})")
-        return 0
+            return run_check(root)
+        return run_write(root, args.out)
     except CheckError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
