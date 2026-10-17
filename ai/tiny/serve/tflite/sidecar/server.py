@@ -211,8 +211,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
                 self._send_json(
                     HTTPStatus.REQUEST_TIMEOUT, {"error": "request read timed out"}
                 )
-            except OSError:
-                pass
+            except OSError as exc:
+                logger.debug("client left before the timeout response was sent: %s", exc)
             self.close_connection = True
             return None
 
@@ -276,7 +276,8 @@ class SidecarServer(ThreadingHTTPServer):
         try:
             self._concurrency_sem.release()
         except ValueError:
-            pass
+            # BoundedSemaphore refuses a release beyond its bound; one stray release must not fail the request.
+            logger.debug("concurrency release without matching acquire ignored")
 
 
 def main(argv: list[str] | None = None) -> int:
