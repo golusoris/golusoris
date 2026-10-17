@@ -55,7 +55,7 @@ Renovate commits; dependency review and DCO are both skipped outside
 pull-request events, and the aggregate validates those skips explicitly.
 Main branch protection separately requires the Conventional-Commit PR title and
 GitHub-managed CodeQL `Analyze (go)` checks. Repository Actions run on
-GitHub-hosted runners (`runs-on: ubuntu-24.04`) with pinned action SHAs; each
+GitHub-hosted runners (`runs-on: ubuntu-26.04`) with pinned action SHAs; each
 job installs its tools at the versions pinned in `tools/tool-versions.env`.
 
 The following controls have enforcement distinct from the blocking

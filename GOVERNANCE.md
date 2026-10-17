@@ -174,7 +174,7 @@ Classic branch protection above remains authoritative.
 
 Classic protection does not set `enforce_admins`, so the BDFL can merge a
 PR past a required check that never ran. That bypass is reserved for one
-situation — the GitHub-hosted runners (`ubuntu-24.04`) are unavailable and
+situation — the GitHub-hosted runners (`ubuntu-26.04`) are unavailable and
 cannot produce the check — and the merge must carry a comment on the PR
 naming the check that could not run and why, before the merge happens.
 
