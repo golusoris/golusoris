@@ -200,7 +200,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `observability/profiling/` | in-process Pyroscope continuous profiling | grafana/pyroscope-go |
 | `observability/pprof/` | auth-gated `/debug/pprof` endpoint | stdlib |
 | `observability/statuspage/` | public `/status` page — uptime + dependency health | custom |
-| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; typed handles, cardinality guard, exemplars | prometheus/client_golang |
+| `observability/metricdef/` | one metric catalog for services, dashboards, rules + checks; interchangeable Prometheus/OTel typed handles, cardinality guard, Prometheus exemplars | prometheus/client_golang, OTel metric |
 | `observability/grafana/` | Grafana dashboards generated from metricdef defs — rate/quantile/stat panels, variables, annotations, links, units, thresholds | grafana/grafana-foundation-sdk |
 | `observability/rules/` | PrometheusRule + promtool rule files with mandatory runbook URLs; multi-window multi-burn-rate SLO alerts | prometheus-operator/prometheus-operator (apis) |
 
