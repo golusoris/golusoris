@@ -57,3 +57,7 @@ if suppressed, _ := unsubSvc.IsSuppressed(ctx, email); suppressed {
 - Transactional fan-out: `Multi`, never `Send`.
 - Never build HTML directly in Sender — templates live in app,
  senders receive rendered string.
+
+## Tests
+
+- `smtp_mailpit_test.go`: sends through a real Mailpit container; skips without Docker.
