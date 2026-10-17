@@ -35,22 +35,18 @@ Injected clients are cloned. Positive timeout stays. Zero timeout becomes 30s.
 
 ## Sidecar contract
 
-Application-supplied compatible sidecar loads `.tflite` artifact at
-`tiny.Model.URI` and exposes:
+Compatible sidecar loads `.tflite` artifact at `tiny.Model.URI` and exposes:
 
-- `POST /load     {"uri": "...", "labels": [...]}` → 200 on success.
-- `POST /classify {"input": <any>}` → `{"scores": {label: prob}}`.
+- `POST /load     {"uri": "...", "sha256": "...", "labels": [...]}` → 200 on success.
+- `POST /classify {"image": "<base64>"}` → `{"scores": {label: prob}}`.
 - `GET  /healthz` → 200 when ready.
 
-`Load` accepts only text, image, or audio classifiers and requires at least two
-unique non-empty labels before contacting the sidecar.
-`Predict` requires the exact loaded label set and finite probabilities in
-`[0,1]`; missing or foreign labels fail.
+`Load` requires TaskKind=classify, Format=tflite, Modality=image, expected SHA-256
+in `Model.Metadata["sha256"]`, non-empty URI, and at least two unique non-empty labels.
+`Predict` accepts encoded image bytes (`[]byte`) or base64 string, sends typed
+`{"image": "<base64>"}`, and validates finite probabilities in `[0,1]` matching loaded labels.
 
-Repository ships no sidecar implementation or image. `golusoris/golusoris#564`
-tracks implementation, integration proof, and attested publication.
-
-`input` is forwarded verbatim as JSON; sidecar interprets it per model's modality (text string, image path/bytes, audio samples).
+Sidecar implementation ships in `ai/tiny/serve/tflite/sidecar/`.
 
 ## Runtime status
 
@@ -75,3 +71,10 @@ required.
 - Don't call `Predict` before `Load` — it errors `Load not called`.
 - Don't create inline `http.Client{}` in production. Prefer `extclient.New()` or
   parent `httpx` transport for retry, circuit-breaker, and OTel.
+
+## Sidecar publication and verification
+
+- Image: `ghcr.io/golusoris/tiny-litert-sidecar`.
+- Tag namespace: `tiny-litert-sidecar-vX.Y.Z`.
+- Gate: `vars.TINY_LITERT_SIDECAR_PUBLISH_ENABLED == true`, environment `tiny-litert-sidecar-publish`.
+- Verify: `bash scripts/ci/tiny-trainer-verify-image.sh ghcr.io/golusoris/tiny-litert-sidecar@sha256:... golusoris/golusoris <sha> refs/tags/tiny-litert-sidecar-vX.Y.Z tiny-litert-sidecar-image.yml tiny-litert-sidecar-`.

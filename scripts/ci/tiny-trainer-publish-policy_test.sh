@@ -138,7 +138,8 @@ source_ref='refs/tags/tiny-trainers-v1.2.3'
 call_log="$suite_root/calls"
 PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 
 require_literal "$call_log" $'cosign\tverify'
 require_literal "$call_log" $'--certificate-identity\thttps://github.com/golusoris/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
@@ -182,13 +183,16 @@ fi
 
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/heads/main
+	"$image" golusoris/golusoris "$source_sha" refs/heads/main \
+	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=cosign \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=gh \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 
 workflow="$repo_root/.github/workflows/tiny-trainer-images.yml"
 check_workflow "$workflow"

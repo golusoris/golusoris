@@ -421,7 +421,8 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/ci/tiny-trainer-verify-image.sh \
-            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF"
+            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF" \
+            tiny-trainer-images.yml tiny-trainers-
 
       - name: Record immutable digest
         shell: bash
