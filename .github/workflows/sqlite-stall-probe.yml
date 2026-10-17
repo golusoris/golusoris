@@ -1,0 +1,83 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: SQLite Stall Probe
+
+on:
+  pull_request:
+    paths:
+      - 'db/sqlite/stallprobe_test.go'
+      - '.github/workflows/sqlite-stall-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  probe:
+    name: SQLite Stall Probe (${{ matrix.os }}, ${{ matrix.variant }}, ${{ matrix.attempt }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-2025
+          - ubuntu-24.04
+        variant:
+          - default
+          - defender-excluded
+          - file-load
+        attempt: [1, 2, 3]
+        exclude:
+          - os: ubuntu-24.04
+            variant: defender-excluded
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      # Exclude the TEMP dir the failing tests used (C:), not RUNNER_TEMP (D:), so only scanning changes.
+      - name: Exclude the test temp directory from Microsoft Defender
+        if: runner.os == 'Windows' && matrix.variant == 'defender-excluded'
+        shell: pwsh
+        run: |
+          Add-MpPreference -ExclusionPath $env:TEMP
+      - name: Record Microsoft Defender status
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled,AMServiceEnabled | Format-List
+          (Get-MpPreference).ExclusionPath
+          "TEMP=$env:TEMP"
+      - name: Run SQLite stall probe
+        shell: bash
+        env:
+          GOFLAGS: -mod=readonly
+          VARIANT: ${{ matrix.variant }}
+        run: |
+          set -euo pipefail
+          if [[ "$VARIANT" == "file-load" ]]; then
+            export STALLPROBE_P=4 STALLPROBE_N=600
+            # Same short mode as the Platform Neutrality job; the failing packages plus file-heavy neighbours.
+            go test -short -count=3 ./storage/... ./db/... ./idempotency/... ./cache/... ./jobs/... > "$RUNNER_TEMP/load.log" 2>&1 &
+            load_pid=$!
+            probe_rc=0
+            go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/ || probe_rc=$?
+            load_rc=0
+            wait "$load_pid" || load_rc=$?
+            echo "probe_rc=$probe_rc load_rc=$load_rc"
+            if [[ "$load_rc" != 0 ]]; then grep -E -- '--- FAIL|^FAIL' "$RUNNER_TEMP/load.log" | head -40; fi
+            [[ "$probe_rc" == 0 && "$load_rc" == 0 ]]
+          else
+            export STALLPROBE_P=1
+            go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/
+          fi

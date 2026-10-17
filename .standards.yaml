@@ -60,13 +60,17 @@ adoption:
 
 # Declared gaps, one rule and one file each; an expired entry fails its gate again.
 exceptions:
-    - rule: HISS-11
-      path: .github/workflows/release.yml
-      reason: Release provenance is attested in the caller's build job (SLSA Build L2), not an isolated reusable workflow (L3); tracked in golusoris#619.
-      expires: "2027-01-05"
+    - rule: HISS-19
+      path: idempotency/internal/storeutil/nil.go
+      reason: "Category B, renewed once (controller answers golusoris-818-dedupe, golusoris-nilcheck-exc-expiry): copies core/validate/nilcheck.IsNil because no core tag up to core/v0.11.0 carries core/validate/nilcheck and downstream builds ignore the root replace; removed when the root bumps to the first core tag that carries it."
+      expires: "2026-10-22"
+    - rule: HISS-19
+      path: core/validate/nilcheck/nilcheck.go
+      reason: "Category B, renewed once (controller answers golusoris-818-dedupe, golusoris-nilcheck-exc-expiry; moved from core/validate/validate.go after #945): idempotency/internal/storeutil/nil.go copies IsNil because no core tag up to core/v0.11.0 carries core/validate/nilcheck; removed when the root bumps to the first core tag that carries it."
+      expires: "2026-10-22"
     - rule: HISS-18
       path: .github/workflows/ci.yml
-      reason: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always().
+      reason: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always().
       expires: "2027-01-06"
 
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the

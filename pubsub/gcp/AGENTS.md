@@ -102,3 +102,7 @@ change needed.
 - Don't add config field for Pub/Sub emulator endpoint — SDK already
  honors `PUBSUB_EMULATOR_HOST`, and `pstest` tests dial fake server
  directly via `option.WithGRPCConn` (see Testing above).
+
+## Tests
+
+`emulator_test.go` runs the fx module against the real Pub/Sub emulator container and skips without Docker.

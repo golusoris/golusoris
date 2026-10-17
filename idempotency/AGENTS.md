@@ -10,6 +10,22 @@ HTTP middleware + gRPC unary interceptor enforcing idempotency keys
 (draft-ietf-httpapi-idempotency-key-header). First call for scoped key runs
 handler, stores bounded outcome; completed retry replays it without handler.
 
+## Layout
+
+| Package | Ownership |
+| --- | --- |
+| `idempotency/` | HTTP middleware, gRPC interceptors, fx modules; deprecated aliases / constructors |
+| `store/` | Contracts, errors, claim states, memory implementation; clockwork dependency only |
+| `postgres/` | PostgreSQL dialect + embedded migrations |
+| `redis/` | Redis / Valkey Lua backend + default prefix |
+| `sqlite/` | SQLite dialect + schema setup |
+| `internal/sqlstore/` | Shared SQL algorithm + dialect boundary |
+| `internal/storeutil/` | Argument validation + typed-nil check; standard library only |
+| `internal/storetest/` | Shared contract / replay fixtures; test imports only |
+
+Store-only consumers -> `github.com/golusoris/golusoris/idempotency/store`.
+Existing umbrella names retain type / sentinel identity through compatibility aliases.
+
 ## Core types
 
 | Type | Purpose |

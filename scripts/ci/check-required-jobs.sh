@@ -38,6 +38,8 @@ main() {
 	require_success allocation-budget "${ALLOCATION_BUDGET:?}"
 	require_success core-skew "${CORE_SKEW:?}"
 	require_success fault-recovery "${FAULT_RECOVERY:?}"
+	require_success release-binaries "${RELEASE_BINARIES:?}"
+	require_success release-smoke "${RELEASE_SMOKE:?}"
 	require_success shellcheck "${SHELLCHECK:?}"
 	require_success actionlint "${ACTIONLINT:?}"
 	require_success policy "${CI_POLICY:?}"

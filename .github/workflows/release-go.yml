@@ -23,9 +23,9 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: Runner label the release job runs on. Defaults to the GitHub-hosted ubuntu-24.04 image; pass a self-hosted runner-set label to run elsewhere.
+        description: Runner label the release job runs on. Defaults to the GitHub-hosted ubuntu-26.04 image; pass a self-hosted runner-set label to run elsewhere.
         type: string
-        default: ubuntu-24.04
+        default: ubuntu-26.04
       image-name:
         description: OCI image name (e.g. ghcr.io/myorg/myapp)
         type: string

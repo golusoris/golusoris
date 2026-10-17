@@ -22,6 +22,7 @@ INPUTS = (
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
     ".github/testcontainers-split-images.txt",
+    "container/registry/credentials/ecr/internal/motodev/images.go",
     "container/registry/sign/kms/aws/internal/localstackdev/images.go",
     "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
     "container/registry/sign/kms/vault/internal/vaultdev/images.go",
@@ -77,8 +78,12 @@ EXPECTED = {
     ("internal/testimages/images.go", "versity/versitygw", "docker"),
     ("internal/testimages/images.go", "testcontainers/ryuk", "docker"),
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
+    ("internal/testimages/images.go", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
+    ("internal/testimages/images.go", "axllent/mailpit", "docker"),
     ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
     ("internal/testimages/images.go", "mcr.microsoft.com/azure-storage/azurite", "docker"),
+    ("container/registry/credentials/ecr/internal/motodev/images.go", "motoserver/moto", "docker"),
+    ("container/registry/credentials/ecr/internal/motodev/images.go", "testcontainers/ryuk", "docker"),
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "hashicorp/vault", "docker"),
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "openbao/openbao", "docker"),
     ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
@@ -99,6 +104,9 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
+    (".github/testcontainers-images.txt", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
+    (".github/testcontainers-images.txt", "axllent/mailpit", "docker"),
+    (".github/testcontainers-split-images.txt", "motoserver/moto", "docker"),
     (".github/testcontainers-split-images.txt", "localstack/localstack", "docker"),
     (".github/testcontainers-split-images.txt", "hashicorp/vault", "docker"),
     (".github/testcontainers-split-images.txt", "openbao/openbao", "docker"),
@@ -150,7 +158,7 @@ EXPECTED = {
 EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
-    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 5,
+    (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 6,
 }
 
 EXPECTED_DIGESTS = {
@@ -177,6 +185,9 @@ EXPECTED_DIGESTS = {
     "versity/versitygw",
     "testcontainers/ryuk",
     "clamav/clamav",
+    "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+    "axllent/mailpit",
+    "motoserver/moto",
     "fsouza/fake-gcs-server",
     "mcr.microsoft.com/azure-storage/azurite",
     "hashicorp/vault",
@@ -266,6 +277,9 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
 
 SPLIT_IMAGES_PATH = ".github/testcontainers-split-images.txt"
 SPLIT_IMAGE_AUTHORITIES = {
+    "container/registry": (
+        "container/registry/credentials/ecr/internal/motodev/images.go", None,
+    ),
     "container/registry/sign/kms/aws": (
         "container/registry/sign/kms/aws/internal/localstackdev/images.go", None,
     ),
@@ -738,6 +752,47 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
+    """Require Renovate ownership and digest pins for the backup-restore Dockerfile."""
+    manager = config.get("dockerfile")
+    if not isinstance(manager, dict):
+        print("Renovate lacks dockerfile manager", file=sys.stderr)
+        return False
+    patterns = manager.get("managerFilePatterns")
+    if not isinstance(patterns, list):
+        print("Renovate dockerfile manager lacks managerFilePatterns", file=sys.stderr)
+        return False
+    target = "scripts/ci/backup-restore.Dockerfile"
+    if not any(matches_file(str(pattern), target) for pattern in patterns):
+        print(f"Renovate dockerfile manager does not own {target}", file=sys.stderr)
+        return False
+
+    dockerfile = ROOT / target
+    if not dockerfile.is_file():
+        print(f"missing Dockerfile: {target}", file=sys.stderr)
+        return False
+
+    from_pattern = re.compile(
+        r"^FROM\s+[a-zA-Z0-9_./-]+:[a-zA-Z0-9_.-]+@sha256:[a-f0-9]{64}(?:\s+[Aa][Ss]\s+\S+)?$"
+    )
+    from_lines = [
+        line.strip()
+        for line in dockerfile.read_text(encoding="utf-8").splitlines()
+        if re.match(r"\s*FROM\b", line, re.IGNORECASE)
+    ]
+    if not from_lines:
+        print(f"{target} contains no FROM instructions", file=sys.stderr)
+        return False
+    for line in from_lines:
+        if not from_pattern.fullmatch(line):
+            print(
+                f"{target} line does not match name:tag@sha256:<64 hex>: {line}",
+                file=sys.stderr,
+            )
+            return False
+    return True
+
+
 def main() -> int:
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
@@ -757,6 +812,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_backup_restore_dockerfile(config),
     )
     if not all(checks):
         return 1

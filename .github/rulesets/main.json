@@ -101,6 +101,27 @@
             "context": "CI policy tests"
           },
           {
+            "context": "Release binaries"
+          },
+          {
+            "context": "Release binary smoke (linux/amd64)"
+          },
+          {
+            "context": "Release binary smoke (linux/arm64)"
+          },
+          {
+            "context": "Release binary smoke (darwin/amd64)"
+          },
+          {
+            "context": "Release binary smoke (darwin/arm64)"
+          },
+          {
+            "context": "Release binary smoke (windows/amd64)"
+          },
+          {
+            "context": "Release binary smoke (windows/arm64)"
+          },
+          {
             "context": "Licensing (reuse lint)"
           },
           {

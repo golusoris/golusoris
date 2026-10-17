@@ -13,12 +13,16 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - .github/workflows/release.yml
+      - .github/workflows/release-build.yml
       - .github/workflows/release-go.yml
       - .github/workflows/release-tool-contract.yml
       - .github/workflows/rebuild-on-base.yml
       - .github/workflows/tiny-trainer-images.yml
       - tools/tool-versions.env
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -26,7 +30,7 @@ permissions:
 jobs:
   tools:
     name: Verify pinned release tools
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

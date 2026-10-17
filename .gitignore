@@ -5,8 +5,6 @@ _audit/
 bin/
 coverage*.out
 dist/
-# Praetor's vendored figure engine ships its built bundle.
-!/tools/figures/dist/
 *.exe
 *.dll
 *.so
@@ -77,4 +75,6 @@ node_modules/
 /.standards/worktrees/
 /.agents/mcp_config.json
 /.standards/cache/
+/.claude/settings.local.json
+/.standards-receipt.json
 # END praetor private artifacts

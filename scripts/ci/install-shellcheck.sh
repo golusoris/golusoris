@@ -36,7 +36,7 @@ Linux/x86_64)
 	expected_digest="$SHELLCHECK_LINUX_X64_SHA256"
 	;;
 *)
-	# CI installs ShellCheck on hosted ubuntu-24.04 x64 only; other hosts install it themselves.
+	# CI installs ShellCheck on hosted ubuntu-26.04 x64 only; other hosts install it themselves.
 	printf 'no pinned ShellCheck archive digest for %s\n' "$platform" >&2
 	exit 1
 	;;

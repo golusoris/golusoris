@@ -31,7 +31,7 @@ make verify-all
 | **HISS-08** | Determinism | Rule 8 | No dynamic execution or dynamic code loading; no unsafe libc equivalents. | Required full-tree Semgrep dynamic-code rules; all-module `gosec` |
 | **HISS-09** | Reference Safety | Rule 9 | Mandatory `// SAFETY:` proof for every `unsafe` block and pointer cast. | All-module `gosec`; required full-tree Semgrep proof rule; HISS scan |
 | **HISS-10** | Warning Hygiene | Rule 10 | Zero-warning tolerance across compiler, linter, and format sweeps. | Required Go, Ruff/Python, Clang/C, docs, Shell, workflow, Terraform, and Kubernetes-schema gates; `make verify-all` mirrors them |
-| **HISS-11** | Supply Chain | — | Digest-pinned dependencies, SLSA 3 provenance, cosign signatures, SBOM per release. | Direct attestations currently measure at Build L2; no L3 conformance gate. `cordanaLLM/praetor#330` tracks enforcement; digest, SBOM, cosign, Scorecard, lock gates remain |
+| **HISS-11** | Supply Chain | — | Digest-pinned dependencies, SLSA 3 provenance, cosign signatures, SBOM per release. | `praetorctl audit` measures Build L3: reusable `release-build.yml` builds and attests in one job; `release-workflows-policy_test.sh` refuses caller attest; digest, SBOM, cosign, Scorecard, lock gates |
 | **HISS-12** | Secrets | — | Zero credentials in working tree or git history. | Lefthook staged `gitleaks`; CI full-history `gitleaks` |
 | **HISS-13** | Debt Ratchet | — | Total infractions may never increase; baseline only ratchets down. | `.standards-baseline.json` enforced by `praetorctl audit` |
 | **HISS-14** | Public ABI | — | Public contracts append-only; any break carries a `Migration:` footer. | Required all-module `apidiff` execution; incompatibilities informational before v1.0; PR checklist |
@@ -165,7 +165,7 @@ Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 - Clang/clang-tidy 22.1.8: full-tree C warnings; reproducible checked eBPF object
 - All-module `apidiff` versus previous root tag; execution required, incompatibilities informational before v1.0
 - Conventional-commit PR title
-- Runners: GitHub-hosted `ubuntu-24.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
+- Runners: GitHub-hosted `ubuntu-26.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
 - Docker Hub pulls -> `scripts/ci/docker-hub-mirror.sh` (mirror.gcr.io, same digests) right after checkout in every pulling job; anonymous Hub pulls hit rate limit (#739).
 
 ## Working Agreements
