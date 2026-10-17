@@ -160,14 +160,14 @@ check_root_release() {
 		'release-tag-binding:end' \
 		'"$remote_sha" != "$SOURCE_SHA"' \
 		"'\\tfalse\\ttrue'" \
-		'scripts/ci/release-smoke.sh "$RELEASE_TAG"'; do
+		'python3 -B scripts/ci/release_smoke.py --version "$RELEASE_TAG" --target linux/amd64'; do
 		grep -Fq -- "$contract" "$path" || {
 			printf 'root release lacks publication contract %s\n' "$contract" >&2
 			return 1
 		}
 	done
 	# The binaries must be smoke-run before the draft is published.
-	awk '/release-smoke.sh/ && !smoke { smoke = NR } /- name: Publish verified immutable release/ { publish = NR }
+	awk '/release_smoke.py/ && !smoke { smoke = NR } /- name: Publish verified immutable release/ { publish = NR }
 		END { exit !(smoke && publish && smoke < publish) }' "$path" || {
 		printf 'root release publishes before its smoke run\n' >&2
 		return 1
@@ -400,8 +400,8 @@ sed '/Validate canonical release tag/d' "$release_go" >"$negative"
 expect_failure 'canonical-tag failure gate' check_release_go "$negative"
 sed '/Publish verified immutable release/d' "$release" >"$negative"
 expect_failure 'publication contract' check_root_release "$negative"
-sed '/release-smoke.sh/d' "$release" >"$negative"
-expect_failure 'release-smoke.sh' check_root_release "$negative"
+sed '/release_smoke\.py/d' "$release" >"$negative"
+expect_failure 'release_smoke.py' check_root_release "$negative"
 # Move the smoke step to the end of the file, after publication.
 awk '/^      - name: Smoke-run the release binaries/ { held = 1; buf = $0 "\n"; next }
 	held && /^      - name: / { held = 0 } held { buf = buf $0 "\n"; next } { print } END { printf "%s", buf }' \

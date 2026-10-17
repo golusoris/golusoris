@@ -649,6 +649,130 @@ jobs:
       - name: Fail on any recovered nil-dereference fault
         run: bash scripts/ci/fault-recovery.sh
 
+  release-binaries:
+    name: Release binaries
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # GoReleaser derives the snapshot version from the latest tag.
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Install pinned GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: v2.18.3
+          install-only: true
+      - name: Verify pinned GoReleaser
+        shell: bash
+        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+      - name: Pin the snapshot base to the root release tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Module tags such as tiny-trainers-v0.1.0 are newer than vX.Y.Z and not semver.
+          tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')"
+          echo "GORELEASER_CURRENT_TAG=$tag" >> "$GITHUB_ENV"
+      - name: Build every release target
+        run: goreleaser build --config=tools/.goreleaser.yml --snapshot --clean
+      - name: Record the snapshot version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(jq -r .version dist/metadata.json)"
+          if [[ -z "$version" || "$version" == null ]]; then
+            echo '::error::dist/metadata.json carries no version.'
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      # tar keeps the executable bit, which upload-artifact drops.
+      - name: Pack the binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t binaries < <(jq -r '.[] | select(.type == "Binary") | .path' dist/artifacts.json)
+          tar -cf "$RUNNER_TEMP/release-binaries.tar" dist/artifacts.json dist/metadata.json "${binaries[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: release-binaries
+          path: ${{ runner.temp }}/release-binaries.tar
+          retention-days: 1
+          if-no-files-found: error
+
+  release-smoke:
+    name: Release binary smoke (${{ matrix.target }})
+    needs: release-binaries
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: linux/amd64
+            runner: ubuntu-24.04
+          - target: linux/arm64
+            runner: ubuntu-24.04-arm
+          - target: darwin/amd64
+            runner: macos-15-intel
+          - target: darwin/arm64
+            runner: macos-26
+          - target: windows/amd64
+            runner: windows-2025
+          - target: windows/arm64
+            runner: windows-11-arm
+    steps:
+      - name: Stop on a draft pull request
+        if: github.event.pull_request.draft == true
+        shell: bash
+        env:
+          TITLE: Gate not run on a draft
+          MESSAGE: >-
+            The gate did not run because the pull request is a draft.
+            It runs when the pull request is marked ready for review.
+        run: |
+          echo "::error title=$TITLE::$MESSAGE"
+          echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-binaries
+          path: ${{ runner.temp }}
+      - name: Unpack the binaries
+        shell: bash
+        # Stdin, because Git Bash tar reads the D:\ in a Windows path as a remote host.
+        run: tar -xf - <"$RUNNER_TEMP/release-binaries.tar"
+      - name: Run each CLI on its own target
+        shell: bash
+        env:
+          VERSION: ${{ needs.release-binaries.outputs.version }}
+          TARGET: ${{ matrix.target }}
+        run: python -B scripts/ci/release_smoke.py --version "$VERSION" --target "$TARGET"
+
   shellcheck:
     name: Shell scripts (ShellCheck)
     runs-on: ubuntu-24.04
@@ -1178,6 +1302,8 @@ jobs:
       - allocation-budget
       - core-skew
       - fault-recovery
+      - release-binaries
+      - release-smoke
       - shellcheck
       - actionlint
       - policy
@@ -1223,6 +1349,8 @@ jobs:
           ALLOCATION_BUDGET: ${{ needs.allocation-budget.result }}
           CORE_SKEW: ${{ needs.core-skew.result }}
           FAULT_RECOVERY: ${{ needs.fault-recovery.result }}
+          RELEASE_BINARIES: ${{ needs.release-binaries.result }}
+          RELEASE_SMOKE: ${{ needs.release-smoke.result }}
           SHELLCHECK: ${{ needs.shellcheck.result }}
           ACTIONLINT: ${{ needs.actionlint.result }}
           CI_POLICY: ${{ needs.policy.result }}
