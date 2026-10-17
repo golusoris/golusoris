@@ -174,6 +174,15 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.mani
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[]}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
+containerd_manifest=$(printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"%s"}}' "$config_digest")
+containerd_digest="sha256:$(printf '%s' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+printf '%s' "$containerd_manifest" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	"$containerd_digest" >/dev/null
+different_digest="sha256:$(printf '%s ' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$containerd_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$different_digest'"
+index_manifest='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
+index_digest="sha256:$(printf '%s' "$index_manifest" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$index_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$index_digest'"
 if head -c 1048577 /dev/zero | \
 	python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" "$config_digest" \
 	>/dev/null 2>&1; then
