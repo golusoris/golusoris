@@ -203,10 +203,11 @@ breaking changes are permitted between minor versions and called out in the
 commit `Migration:` footer and the changelog.
 
 Pushing the root `vX.Y.Z` tag triggers
-[`release.yml`](.github/workflows/release.yml) (goreleaser): multi-arch
-archives for `cmd/golusoris` and `cmd/golusoris-mcp`, a checksum manifest,
-per-archive SPDX SBOMs (syft), cosign keyless signatures, and build provenance
-(`actions/attest-build-provenance`). The
+[`release.yml`](.github/workflows/release.yml), which calls the reusable
+[`release-build.yml`](.github/workflows/release-build.yml); that workflow builds,
+signs and attests (goreleaser): multi-arch archives for `cmd/golusoris` and
+`cmd/golusoris-mcp`, a checksum manifest, per-archive SPDX SBOMs (syft), cosign
+keyless signatures, and build provenance (`actions/attest-build-provenance`). The
 [v0.12.0 release run](https://github.com/golusoris/golusoris/actions/runs/35001126039)
 successfully published those release assets. [`sbom.yml`](.github/workflows/sbom.yml)
 separately attempts source-tree SPDX and CycloneDX attestations for each root
