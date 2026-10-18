@@ -44,7 +44,7 @@ func TestJobs_Soak(t *testing.T) {
 	w := &soakWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
 		// WHY: the harness default queue runs 2 workers; with a 100ms fetch cooldown that drains ~20 jobs/s, below the ~40/s insert pace.
-		Queues: map[string]jobs.QueueConfig{soakQueue: {Max: 10}},
+		Queues: map[string]jobs.QueueConfig{soakQueue: {Max: 2}},
 		Register: func(workers *jobs.Workers) {
 			if err := jobs.Register(workers, w); err != nil {
 				t.Fatalf("Register: %v", err)
