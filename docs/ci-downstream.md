@@ -48,7 +48,7 @@ Targets after inclusion:
 | `make tidy` | `go mod tidy` |
 | `make gen` | `sqlc` + `ogen` + `mockery` |
 | `make dev` | `air` hot-reload |
-| `make spec-lint` | `spectral lint` the OpenAPI spec |
+| `make spec-lint` | `vacuum lint` the OpenAPI spec with `tools/spectral.yaml` |
 
 Override any tool binary or path by setting its variable before inclusion —
 every tool is a `?=` default:
@@ -83,7 +83,7 @@ runs, as separate jobs: Conventional-Commits PR-title check, lint
 test (`-race` with a coverage-threshold gate — Linux by default via the
 `runs-on` input; the job's steps also branch for a macOS leg, skipping
 Docker-requiring packages, for a caller that wraps this workflow in its own
-`runs-on` matrix), build, OpenAPI spectral lint, and apidiff.
+`runs-on` matrix), build, OpenAPI lint (vacuum), and apidiff.
 
 ```yaml
 # myapp/.github/workflows/ci.yml
@@ -157,7 +157,7 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 | `container` | *(empty)* | image to run the Go jobs in (cgo/system-lib builds) |
 | `system-packages` | *(empty)* | Debian packages (`name` or `name=version`) every Go job needs |
 | `install-system-packages` | `true` | install `system-packages` with bounded `apt-get` calls before verifying them; set `false` on a self-hosted image that already contains them |
-| `openapi-spec` | *(empty)* | path to an OpenAPI spec for spectral lint; empty = skip |
+| `openapi-spec` | *(empty)* | path to an OpenAPI spec for the vacuum lint; empty = skip |
 | `skip-apidiff` | `false` | set `true` for a first release with no prior tag |
 
 ## 3. Reusable release workflow — `release-go.yml`

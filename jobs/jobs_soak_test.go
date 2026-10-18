@@ -21,6 +21,8 @@ import (
 	rivertest "github.com/golusoris/golusoris/testutil/river"
 )
 
+const soakQueue = "soak"
+
 type soakArgs struct {
 	ID int64 `json:"id"`
 }
@@ -41,6 +43,8 @@ func (w *soakWorker) Work(_ context.Context, _ *river.Job[soakArgs]) error {
 func TestJobs_Soak(t *testing.T) {
 	w := &soakWorker{}
 	rv := rivertest.Start(t, rivertest.Options{
+		// WHY: the harness default queue runs 2 workers; with a 100ms fetch cooldown that drains ~20 jobs/s, below the ~40/s insert pace.
+		Queues: map[string]jobs.QueueConfig{soakQueue: {Max: 10}},
 		Register: func(workers *jobs.Workers) {
 			if err := jobs.Register(workers, w); err != nil {
 				t.Fatalf("Register: %v", err)
@@ -53,7 +57,7 @@ func TestJobs_Soak(t *testing.T) {
 		id := counter.Add(1)
 		opCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
-		if _, err := rv.Client.Insert(opCtx, soakArgs{ID: id}, nil); err != nil {
+		if _, err := rv.Client.Insert(opCtx, soakArgs{ID: id}, &river.InsertOpts{Queue: soakQueue}); err != nil {
 			return fmt.Errorf("jobs soak insert: %w", err)
 		}
 		return nil

@@ -15,7 +15,7 @@ AIR         ?= air
 SQLC        ?= sqlc
 OGEN        ?= ogen
 MIGRATE     ?= migrate
-SPECTRAL    ?= spectral
+VACUUM      ?= vacuum
 
 PKG ?= ./...
 
@@ -81,8 +81,8 @@ tidy: ## go mod tidy
 	$(GO) mod tidy
 
 .PHONY: spec-lint
-spec-lint: ## OpenAPI lint (spectral)
-	$(SPECTRAL) lint --ruleset tools/spectral.yaml openapi.yaml
+spec-lint: ## OpenAPI lint (vacuum, Spectral-format ruleset)
+	$(VACUUM) lint -r tools/spectral.yaml -b openapi.yaml
 
 .PHONY: clean
 clean: ## remove build artifacts

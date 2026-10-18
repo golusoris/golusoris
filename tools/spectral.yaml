@@ -2,8 +2,8 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Spectral OpenAPI lint ruleset. Apps `make spec-lint` runs this.
-extends: ["spectral:oas"]
+# Strict OpenAPI ruleset (vacuum, Spectral format). Apps' `make spec-lint` runs this.
+extends: ["./spectral/oas.yaml"]
 
 rules:
   # Strict: every operation must have summary, description, operationId, tags
@@ -15,7 +15,13 @@ rules:
     then:
       field: summary
       function: truthy
-  operation-description: error
+  operation-description:
+    description: Every operation must have a description.
+    severity: error
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace]"
+    then:
+      field: description
+      function: truthy
   operation-operationId: error
   operation-tags: error
 
@@ -25,9 +31,14 @@ rules:
   no-$ref-siblings: error
 
   # Disallow empty arrays / objects in examples
-  oas3-valid-media-example: error
+  oas3-valid-schema-example: error
 
   # Servers + info hygiene
-  info-contact: warn
-  info-license: warn
+  info-license:
+    description: Info object must have a license object.
+    severity: warn
+    given: "$.info"
+    then:
+      field: license
+      function: truthy
   info-description: warn

@@ -124,11 +124,12 @@ jobs:
           bash scripts/ci/terraform-validate.sh
           bash scripts/ci/kubeconform.sh
           bash scripts/ci/reuse-lint.sh
-          npm ci --prefix tools/spectral --ignore-scripts --no-audit --no-fund
-          scripts/ci/spectral-default-test.sh
+          bash scripts/ci/install-vacuum.sh "$(go env GOPATH)/bin"
+          bash scripts/ci/install-vacuum_test.sh
+          VACUUM="$(go env GOPATH)/bin/vacuum" bash scripts/ci/openapi-ruleset-test.sh
           if [ -f examples/full/openapi.yaml ]; then
-            tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral/oas.yaml --fail-severity warn
-            tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
+            "$(go env GOPATH)/bin/vacuum" lint examples/full/openapi.yaml -r tools/spectral/oas.yaml -n warn -b -q
+            "$(go env GOPATH)/bin/vacuum" lint examples/full/openapi.yaml -r tools/spectral.yaml -n warn -b -q
           fi
 
       - name: API compatibility against the previous tag

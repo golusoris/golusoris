@@ -573,63 +573,48 @@ for input in golangci-version gofumpt-version gosec-version govulncheck-version 
 	fi
 done
 
-spectral_version="$(jq -r '.dependencies["@stoplight/spectral-cli"]' "$repo_root/tools/spectral/package.json")"
-workflow_spectral_version="$(awk '
-	$1 == "spectral-version:" { in_spectral = 1; next }
-	in_spectral && $1 == "default:" { print $2; exit }
-' "$repo_root/.github/workflows/ci-go.yml")"
-if [[ -z "$spectral_version" || "$spectral_version" == "null" || "$workflow_spectral_version" != "$spectral_version" ]]; then
-	printf 'reusable Spectral version %s does not match package authority %s\n' \
-		"${workflow_spectral_version:-missing}" "${spectral_version:-missing}" >&2
-	exit 1
-fi
-spectral_lock="$repo_root/tools/spectral/package-lock.json"
-if [[ "$(jq -er '.lockfileVersion' "$spectral_lock")" != 3 ]] || \
-	[[ "$(jq -er '.packages[""].dependencies["@stoplight/spectral-cli"]' "$spectral_lock")" != "$spectral_version" ]] || \
-	[[ "$(jq -er '.packages["node_modules/@stoplight/spectral-cli"].version' "$spectral_lock")" != "$spectral_version" ]] || \
-	! jq -e '[.packages | to_entries[] | select(.key | startswith("node_modules/")) | select(.value.link != true) | select((.value.integrity // "") == "")] | length == 0' \
-		"$spectral_lock" >/dev/null; then
-	printf 'Spectral lock authority lacks complete package integrity\n' >&2
+if ! grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-versions.env" | \
+	grep -Fxq '# renovate: datasource=go depName=github.com/daveshanley/vacuum versioning=semver'; then
+	printf 'vacuum pin is not tracked by the dependency bot\n' >&2
 	exit 1
 fi
 reusable_workflow="$repo_root/.github/workflows/ci-go.yml"
 # shellcheck disable=SC2016 # Match literal GitHub expressions in workflow YAML.
 for marker in \
 	'JOB_CONTEXT: ${{ toJSON(job) }}' \
-	'job.workflow_repository' \
-	'job.workflow_sha' \
+	'.workflow_repository' \
+	'.workflow_sha' \
 	'repository: ${{ steps.workflow-source.outputs.repository }}' \
 	'ref: ${{ steps.workflow-source.outputs.sha }}' \
 	'path: .golusoris-ci' \
-	'scripts/ci/spectral-default-test.sh' \
-	'npm ci --prefix .golusoris-ci/tools/spectral --ignore-scripts --no-audit --no-fund' \
-	'.golusoris-ci/scripts/ci/spectral-default-test.sh' \
-	'ARGS+=(--ruleset .golusoris-ci/tools/spectral/oas.yaml)' \
-	'.golusoris-ci/tools/spectral/node_modules/.bin/spectral'; do
+	'go-version-file: .golusoris-ci/go.mod' \
+	'bash .golusoris-ci/scripts/ci/install-vacuum.sh "$RUNNER_TEMP/vacuum-bin"' \
+	'bash .golusoris-ci/scripts/ci/openapi-ruleset-test.sh' \
+	'ARGS+=(-r .golusoris-ci/tools/spectral/oas.yaml)' \
+	'"$RUNNER_TEMP/vacuum-bin/vacuum" "${ARGS[@]}"'; do
 	if ! grep -Fq "$marker" "$reusable_workflow"; then
-		printf 'reusable Spectral job bypasses its workflow-revision lock authority: %s\n' \
+		printf 'reusable OpenAPI lint job bypasses its workflow-revision pin authority: %s\n' \
 			"$marker" >&2
 		exit 1
 	fi
 done
 if [[ "$(sed -n '/^extends:/p' "$repo_root/tools/spectral/oas.yaml")" != \
 	'extends: ["spectral:oas"]' ]]; then
-	printf 'reusable Spectral default ruleset does not extend locked OAS rules\n' >&2
+	printf 'default OpenAPI ruleset does not extend the spectral:oas rules\n' >&2
 	exit 1
 fi
-for direct_workflow in \
+for workflow in \
+	"$reusable_workflow" \
 	"$repo_root/.github/workflows/ci.yml" \
 	"$repo_root/.gitea/workflows/ci.yml"; do
-	if ! grep -Fq 'npm ci --prefix tools/spectral --ignore-scripts --no-audit --no-fund' \
-		"$direct_workflow"; then
-		printf 'direct Spectral install permits lifecycle scripts: %s\n' "$direct_workflow" >&2
+	if ! grep -Fq 'scripts/ci/install-vacuum.sh' "$workflow"; then
+		printf 'OpenAPI lint skips the module-sum verified vacuum install: %s\n' "$workflow" >&2
+		exit 1
+	fi
+	if grep -Eq 'go install[^[:cntrl:]]*daveshanley/vacuum|@stoplight/spectral-cli|tools/spectral/node_modules' "$workflow"; then
+		printf 'OpenAPI lint resolves an unverified linter: %s\n' "$workflow" >&2
 		exit 1
 	fi
 done
-if grep -Eq 'npx[^[:cntrl:]]*@stoplight/spectral-cli|SPECTRAL_VERSION:' \
-	"$reusable_workflow"; then
-	printf 'reusable Spectral job resolves a caller-controlled npm graph\n' >&2
-	exit 1
-fi
 
 printf 'tool-version authority tests passed\n'
