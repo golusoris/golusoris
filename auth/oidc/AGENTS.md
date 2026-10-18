@@ -25,6 +25,14 @@ Legacy/eager alternative: `AuthURL(state)` plus `Exchange(ctx, code, verifier)`.
 - `auth.oidc.scopes`; default `openid,email,profile`
 - `auth.oidc.discovery_timeout`; default `10s`
 - `auth.oidc.lazy_discovery`; default `false`
+- `auth.oidc.disable_offline_access`; default `false`
+
+## Errors
+
+- `ErrExchange` -> token exchange failure with IdP.
+- `ErrIDTokenMissing` -> response lacks `id_token`.
+- `ErrIDTokenInvalid` -> ID token verification failure (`gerr.Unauthorized` wrapped).
+- `ErrNonceMismatch` -> empty or mismatched nonce (`gerr.Unauthorized` wrapped).
 
 ## Construction
 

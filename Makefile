@@ -143,6 +143,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
 	@python3 -B scripts/ci/pull_test_images_test.py
+	@python3 -B scripts/ci/windows-panic-rescan_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
