@@ -70,8 +70,8 @@ exceptions:
       expires: "2026-10-25"
     - rule: HISS-18
       path: .github/workflows/ci.yml
-      reason: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always().
-      expires: "2027-01-06"
+      reason: "Category A, 90 days from 2026-10-18, renewed after re-review: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always(). The pinned engine reads no always() (without this entry it reports each of those jobs as skippable on a draft, measured 2026-10-18). Closed by cordanaLLM/praetor#1368."
+      expires: "2027-01-16"
 
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
