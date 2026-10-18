@@ -70,7 +70,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b // indirect
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261015163412-c9de8c9a6f0e // indirect
 	github.com/golusoris/golusoris/core v0.11.0 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
