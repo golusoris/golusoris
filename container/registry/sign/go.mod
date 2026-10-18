@@ -7,7 +7,7 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
 	github.com/go-openapi/runtime v0.33.3
 	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
-	github.com/golusoris/golusoris/core v0.10.2
+	github.com/golusoris/golusoris/core v0.11.0
 	github.com/google/go-containerregistry v0.22.1
 	github.com/in-toto/attestation v1.2.0
 	github.com/jonboulle/clockwork v0.5.0
