@@ -3,8 +3,8 @@
   "@id": "https://github.com/golusoris/golusoris/security/vex/2026-09-19",
   "author": "https://github.com/golusoris",
   "timestamp": "2026-09-19T20:56:00Z",
-  "last_updated": "2026-10-18T16:02:00Z",
-  "version": 5,
+  "last_updated": "2026-10-18T21:44:00Z",
+  "version": 6,
   "statements": [
     {
       "vulnerability": {
@@ -23,7 +23,7 @@
       "vulnerability": {
         "name": "GO-2026-5932"
       },
-      "timestamp": "2026-10-11T00:14:00Z",
+      "timestamp": "2026-10-18T21:44:00Z",
       "products": [
         {
           "@id": "pkg:golang/golang.org/x/crypto"
@@ -31,8 +31,8 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "The advisory covers the unmaintained package golang.org/x/crypto/openpgp in every release of the module and has no fixed version. No module of this repository has that package in its import graph (31 modules listed with go list -deps on 2026-10-11); the policy test rechecks the root and core graphs, and the reachability scan of every module rejects a call into it.",
-      "status_notes": "expires: 2027-01-09"
+      "impact_statement": "The advisory covers the unmaintained package golang.org/x/crypto/openpgp in every release of the module and has no fixed version. No module of this repository has that package in its import graph (31 modules listed with go list -deps -test on 2026-10-18); the policy test rechecks the root and core graphs, and the reachability scan of every module rejects a call into it. Category D, renewed 2026-10-18 after re-review: OSV still lists no fixed version (record modified 2026-07-10).",
+      "status_notes": "expires: 2027-02-15"
     }
   ]
 }

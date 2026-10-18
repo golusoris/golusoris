@@ -6,5 +6,5 @@
 
 [[IgnoredVulns]]
 id = "GO-2026-5932"
-ignoreUntil = 2027-01-09
+ignoreUntil = 2027-02-15
 reason = "See .trivy/openvex.json: The advisory covers the unmaintained package golang.org/x/crypto/openpgp in every release of the module and has no fixed version."
