@@ -284,11 +284,13 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 		return gateA.Running() || gateB.Running()
 	}, electionBound, "initial leader election")
 
-	leaderGate := gateA
+	leaderGate, followerGate := gateA, gateB
+	leaderLoop := loopA
 	cancelLeader := cancelA
 	leaderIsA := true
 	if gateB.Running() {
-		leaderGate = gateB
+		leaderGate, followerGate = gateB, gateA
+		leaderLoop = loopB
 		cancelLeader = cancelB
 		leaderIsA = false
 	}
@@ -297,13 +299,12 @@ func TestLeaderFailover_SessionLoss(t *testing.T) {
 	terminatedAt := clk.Now()
 	terminateAdvisoryBackend(t, adminPool)
 
+	// The old leader re-campaigns at once, so it may win the freed lock before the follower retries.
 	takeover := pollUntil(t, clk, func() bool {
-		if leaderIsA {
-			return gateB.Running()
-		}
-		return gateA.Running()
-	}, failoverBound, "follower takeover")
-	t.Logf("session loss failover takeover: %v", takeover)
+		_, stops := leaderLoop.counts()
+		return followerGate.Running() || (stops > 0 && leaderGate.Running())
+	}, failoverBound, "new leadership term")
+	t.Logf("session loss failover takeover: %v (follower won: %v)", takeover, followerGate.Running())
 
 	time.Sleep(2 * defaultTestRetry)
 	cancelLeader()

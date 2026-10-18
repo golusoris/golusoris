@@ -170,6 +170,7 @@ cosign_version_workflows=(
 	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
 	"$repo_root/.github/workflows/release-tool-contract.yml"
+	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
 	"$repo_root/.github/workflows/tiny-trainer-images.yml"
 	"$repo_root/.github/workflows/verify-provenance.yml"
 )
@@ -243,11 +244,11 @@ require_inputs() {
 check_release_tool_installs() {
 	local workflows="$1"
 	local name workflow
-	for name in rebuild-on-base release-build release-go release-tool-contract tiny-trainer-images verify-provenance; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
 		require_inputs "$workflows/$name.yml" sigstore/cosign-installer \
 			cosign-release "v$COSIGN_VERSION" || return 1
 	done
-	for name in rebuild-on-base release-build release-go release-tool-contract tiny-trainer-images; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images; do
 		require_inputs "$workflows/$name.yml" anchore/sbom-action/download-syft \
 			syft-version "v$SYFT_VERSION" || return 1
 	done
@@ -267,7 +268,7 @@ check_release_tool_installs() {
 				syft-version "v$SYFT_VERSION" || return 1
 		fi
 	done
-	for name in rebuild-on-base release-build release-go release-tool-contract tiny-trainer-images verify-provenance; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
 		if grep -HnE 'pre-baked|verify-arc-runner-tools' "$workflows/$name.yml"; then
 			printf 'release-tool workflow relies on a pre-baked runner image\n' >&2
 			return 1
@@ -391,6 +392,7 @@ fi
 sbom_attestation_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
 	"$repo_root/.github/workflows/release-go.yml"
+	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
 	"$repo_root/.github/workflows/tiny-trainer-images.yml"
 )
 for workflow in "${sbom_attestation_workflows[@]}"; do
@@ -408,6 +410,7 @@ attestation_workflow_paths=(
 	'.github/workflows/release-build.yml'
 	'.github/workflows/release-go.yml'
 	'.github/workflows/sbom.yml'
+	'.github/workflows/tiny-litert-sidecar-image.yml'
 	'.github/workflows/tiny-trainer-images.yml'
 )
 for relative_workflow in "${attestation_workflow_paths[@]}"; do
@@ -430,7 +433,8 @@ fi
 if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	'.github/workflows/*.yml' '.gitea/workflows/*.yml' 'scripts/**/*.sh' \
 	':(exclude)scripts/ci/tool-versions_test.sh' \
-	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh'; then
+	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh' \
+	':(exclude)scripts/ci/tiny-litert-sidecar-publish-policy_test.sh'; then
 	printf 'workflow uses deprecated Cosign SBOM attachment instead of attestation\n' >&2
 	exit 1
 fi

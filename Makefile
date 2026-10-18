@@ -103,7 +103,7 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
-ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
+ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
@@ -149,6 +149,8 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
+	@python3 -B scripts/ci/regenerate.py selftest
+	@python3 -B scripts/ci/regenerate.py check
 
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
@@ -174,8 +176,16 @@ tiny-trainer-test: tiny-trainer-locks-check tiny-trainer-vuln tiny-trainer-publi
 tiny-trainer-publish-policy-test: ## verify fail-closed trainer publication and supply-chain identity
 	@bash scripts/ci/tiny-trainer-publish-policy_test.sh
 
+.PHONY: tiny-litert-sidecar-test
+tiny-litert-sidecar-test: tiny-litert-sidecar-publish-policy-test ## execute tiny litert sidecar contracts and test suite
+	@PYTHONPATH= uv run --python 3.14 --with-requirements ai/tiny/serve/tflite/sidecar/requirements.lock --with pytest python -B -m pytest -q -p no:cacheprovider ai/tiny/serve/tflite/sidecar/test_sidecar.py
+
+.PHONY: tiny-litert-sidecar-publish-policy-test
+tiny-litert-sidecar-publish-policy-test: ## verify fail-closed sidecar publication and supply-chain identity
+	@bash scripts/ci/tiny-litert-sidecar-publish-policy_test.sh
+
 .PHONY: python-test python-tests
-python-test: tiny-trainer-test ## execute the required Python regression suites
+python-test: tiny-trainer-test tiny-litert-sidecar-test ## execute the required Python regression suites
 	@bash scripts/ci/python-tests.sh
 
 python-tests: python-test ## alias for the Python regression gate

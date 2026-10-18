@@ -37,6 +37,10 @@ Thumbs.db
 tmp/
 .tmp/
 
+# Python bytecode from local test runs.
+__pycache__/
+*.py[cod]
+
 # Claude Code runtime state (personal, machine-local).
 # Team-shared config lives in .claude/settings.json + .claude/hooks/.
 .claude/settings.local.json
