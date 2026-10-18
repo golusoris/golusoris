@@ -933,10 +933,10 @@ jobs:
       - name: Validate static and rendered Kubernetes resources
         run: bash scripts/ci/kubeconform.sh
 
-  # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────────
+  # ── OpenAPI spec lint (vacuum; job id kept for the required check) ───────────
   # The framework has no single openapi.yaml (apps generate their own with ogen).
   # This step lints the example app spec if present; apps use ci-go.yml's
-  # openapi-spec input to wire spectral for their own spec.
+  # openapi-spec input to wire the lint for their own spec.
   spectral:
     name: OpenAPI lint (spectral)
     runs-on: ubuntu-26.04
@@ -963,18 +963,26 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Install spectral (hash-pinned via lockfile)
-        run: npm ci --prefix tools/spectral --ignore-scripts --no-audit --no-fund
-      - name: Verify locked default OAS ruleset
-        run: scripts/ci/spectral-default-test.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Install vacuum (module sum pinned)
+        run: |
+          bash scripts/ci/install-vacuum.sh "$RUNNER_TEMP/vacuum-bin"
+          echo "$RUNNER_TEMP/vacuum-bin" >> "$GITHUB_PATH"
+      - name: Verify OpenAPI ruleset contract
+        run: |
+          bash scripts/ci/install-vacuum_test.sh
+          bash scripts/ci/openapi-ruleset-test.sh
       - name: Lint spec
         if: steps.spec-check.outputs.exists == 'true'
         run: |
-          tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral/oas.yaml --fail-severity warn
-          tools/spectral/node_modules/.bin/spectral lint examples/full/openapi.yaml --ruleset tools/spectral.yaml --fail-severity warn
+          vacuum lint examples/full/openapi.yaml -r tools/spectral/oas.yaml -n warn -b -q
+          vacuum lint examples/full/openapi.yaml -r tools/spectral.yaml -n warn -b -q
       - name: No spec to lint
         if: steps.spec-check.outputs.exists != 'true'
-        run: echo "No OpenAPI spec found at examples/full/openapi.yaml — skipping spectral."
+        run: echo "No OpenAPI spec found at examples/full/openapi.yaml — skipping the lint."
 
   # ── API compatibility (apidiff vs previous tag) ──────────────────────────────
   apidiff:

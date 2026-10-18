@@ -137,7 +137,7 @@ References:
 | --- | --- | --- |
 | **RFC 9457 Problem Details for HTTP** | Adopted | `ogenkit` error handler emits `application/problem+json` with `type`/`title`/`status`/`detail`/`instance` |
 | **RFC 9110 HTTP Semantics** | Adopted | chi router + `httpx/middleware` follow status-code semantics (4xx client-fault, 5xx server-fault, 3xx redirects, 1xx expect-continue) |
-| **OpenAPI 3.1** | Pinned | ogen generates from 3.1 specs; apps' `openapi.yaml` lints via spectral (`tools/spectral.yaml`) |
+| **OpenAPI 3.1** | Pinned | ogen generates from 3.1 specs; apps' `openapi.yaml` lints via vacuum (Spectral-format `tools/spectral.yaml`) |
 | **JSON Schema 2020-12** | Pinned | santhosh-tekuri/jsonschema for external-schema validation; ogen-generated types use matching semantics |
 | **OpenTelemetry Semantic Conventions v1.26** | Pinned | `go.opentelemetry.io/otel/semconv/v1.26.0` for span/metric attribute names (`service.*`, `http.*`, `db.*`, `messaging.*`) |
 | **RFC 7519 JWT** | Adopted | `auth/jwt/` uses `golang-jwt/jwt/v5` |

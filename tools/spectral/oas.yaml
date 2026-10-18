@@ -2,4 +2,49 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
+# Default OpenAPI ruleset for vacuum: the spectral:oas verdicts, restated where vacuum differs.
 extends: ["spectral:oas"]
+
+rules:
+  # vacuum-only checks that spectral:oas never ran; off keeps the verdicts it gave.
+  allof-conflicts: off
+  camel-case-properties: off
+  component-description: off
+  description-duplication: off
+  duplicate-paths: off
+  info-license-spdx: off
+  migrate-zally-ignore: off
+  no-ambiguous-paths: off
+  no-http-verbs-in-path: off
+  no-request-body: off
+  no-unnecessary-combinator: off
+  nullable-enum-contains-null: off
+  oas-missing-type: off
+  oas-schema-check: off
+  oas3-example-external-check: off
+  oas3-missing-example: off
+  path-item-refs: off
+  paths-kebab-case: off
+  # spectral:oas rules vacuum does not ship, restated with core functions.
+  info-contact:
+    description: Info object must have a contact object.
+    severity: warn
+    given: "$.info"
+    then:
+      field: contact
+      function: truthy
+  oas3-server-trailing-slash:
+    description: Server URL must not end with a slash.
+    severity: warn
+    given: "$.servers[*].url"
+    then:
+      function: pattern
+      functionOptions:
+        notMatch: "/$"
+  operation-description:
+    description: Every operation must have a description.
+    severity: warn
+    given: "$.paths[*][get,put,post,delete,options,head,patch,trace]"
+    then:
+      field: description
+      function: truthy

@@ -104,19 +104,19 @@ on:
         type: boolean
         default: false
       openapi-spec:
-        description: Path to OpenAPI spec file for spectral lint (empty = skip)
+        description: Path to OpenAPI spec file for the vacuum lint (empty = skip)
         type: string
         default: ""
       spectral-ruleset:
-        description: Path to a Spectral ruleset (empty = spectral's built-in oas ruleset)
+        description: Path to a Spectral-format ruleset vacuum runs (empty = the called revision's tools/spectral/oas.yaml)
         type: string
         default: ""
       spectral-version:
-        description: "Deprecated/unused; Spectral resolves from this workflow revision's package lock"
+        description: "Deprecated/unused; vacuum resolves from this workflow revision's tools/tool-versions.env"
         type: string
         default: 6.17.0
       spectral-fail-severity:
-        description: Minimum severity that fails the spectral lint (error|warn|info|hint)
+        description: Minimum severity that fails the vacuum lint (error|warn|info|hint)
         type: string
         default: warn
 
@@ -567,11 +567,11 @@ jobs:
       # Explicit, so a caller's lint config cannot drop vet (HISS-10).
       - run: go vet ./...
 
-  # ── OpenAPI spec lint (spectral) ─────────────────────────────────────────
+  # ── OpenAPI spec lint (vacuum; job id kept for callers' required checks) ─
   # Caller-driven: lints the spec named by `openapi-spec` from the CALLER's
   # checkout, using the caller's `spectral-ruleset` (or the called revision's
-  # locked OAS ruleset when none is given). The executable and dependency graph
-  # come from the called workflow revision's integrity-checked package lock.
+  # default ruleset when none is given). The vacuum version and module sum come
+  # from the called workflow revision's tools/tool-versions.env.
   # Not Go-module-scoped, so `working-directory` is not wired here — spec and
   # ruleset paths are always given by the caller relative to the repo root.
   spectral:
@@ -581,42 +581,41 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.22.0
       - name: Resolve called workflow source
         id: workflow-source
         env:
           JOB_CONTEXT: ${{ toJSON(job) }}
         run: |
-          node <<'JS'
-          const fs = require('node:fs');
-          const job = JSON.parse(process.env.JOB_CONTEXT);
-          if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(job.workflow_repository)) {
-            throw new Error('called workflow repository identity is unavailable');
-          }
-          if (!/^[0-9a-f]{40}$/.test(job.workflow_sha)) {
-            throw new Error('called workflow revision identity is unavailable');
-          }
-          fs.appendFileSync(
-            process.env.GITHUB_OUTPUT,
-            `repository=${job.workflow_repository}\nsha=${job.workflow_sha}\n`,
-          );
-          JS
-      - name: Check out locked Spectral authority
+          set -euo pipefail
+          repository="$(jq -r '.workflow_repository // ""' <<<"$JOB_CONTEXT")"
+          sha="$(jq -r '.workflow_sha // ""' <<<"$JOB_CONTEXT")"
+          if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+            echo "called workflow repository identity is unavailable" >&2
+            exit 1
+          fi
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "called workflow revision identity is unavailable" >&2
+            exit 1
+          fi
+          printf 'repository=%s\nsha=%s\n' "$repository" "$sha" >> "$GITHUB_OUTPUT"
+      - name: Check out pinned vacuum authority
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ steps.workflow-source.outputs.repository }}
           ref: ${{ steps.workflow-source.outputs.sha }}
           sparse-checkout: |
-            tools/spectral
-            scripts/ci/spectral-default-test.sh
+            tools
+            scripts/ci
           path: .golusoris-ci
           persist-credentials: false
-      - name: Install locked Spectral graph
-        run: npm ci --prefix .golusoris-ci/tools/spectral --ignore-scripts --no-audit --no-fund
-      - name: Verify locked default OAS ruleset
-        run: .golusoris-ci/scripts/ci/spectral-default-test.sh
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: .golusoris-ci/go.mod
+          cache: false
+      - name: Install vacuum (module sum pinned)
+        run: bash .golusoris-ci/scripts/ci/install-vacuum.sh "$RUNNER_TEMP/vacuum-bin"
+      - name: Verify default OpenAPI ruleset contract
+        run: VACUUM="$RUNNER_TEMP/vacuum-bin/vacuum" bash .golusoris-ci/scripts/ci/openapi-ruleset-test.sh
       - name: Lint OpenAPI spec
         env:
           SPEC: ${{ inputs.openapi-spec }}
@@ -624,13 +623,13 @@ jobs:
           FAIL_SEVERITY: ${{ inputs.spectral-fail-severity }}
         run: |
           set -euo pipefail
-          ARGS=(lint "$SPEC" --fail-severity "$FAIL_SEVERITY")
+          ARGS=(lint "$SPEC" -n "$FAIL_SEVERITY" -b -q)
           if [ -n "$RULESET" ]; then
-            ARGS+=(--ruleset "$RULESET")
+            ARGS+=(-r "$RULESET")
           else
-            ARGS+=(--ruleset .golusoris-ci/tools/spectral/oas.yaml)
+            ARGS+=(-r .golusoris-ci/tools/spectral/oas.yaml)
           fi
-          .golusoris-ci/tools/spectral/node_modules/.bin/spectral "${ARGS[@]}"
+          "$RUNNER_TEMP/vacuum-bin/vacuum" "${ARGS[@]}"
 
   # ── API compatibility (apidiff vs previous tag) ───────────────────────────
   apidiff:
