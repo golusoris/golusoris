@@ -93,6 +93,7 @@ func TestLoadOptions_appliesDefaultsOnEmpty(t *testing.T) {
 	require.NotEmpty(t, opts.Scopes, "defaults should populate Scopes")
 	require.Equal(t, defaultDiscoveryTimeout, opts.DiscoveryTimeout)
 	require.Equal(t, defaultDiscoveryTimeout, opts.HTTPClient.Timeout)
+	require.False(t, opts.DisableOfflineAccess)
 }
 
 func TestLoadOptions_readsLazyDiscovery(t *testing.T) {
@@ -104,6 +105,43 @@ func TestLoadOptions_readsLazyDiscovery(t *testing.T) {
 	opts, err := loadOptions(cfg)
 	require.NoError(t, err)
 	require.True(t, opts.LazyDiscovery)
+}
+
+func TestLoadOptions_readsDisableOfflineAccess(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{
+		Files: []string{configfile.Write(t, "auth:\n  oidc:\n    disable_offline_access: true\n")},
+	})
+	require.NoError(t, err)
+	opts, err := loadOptions(cfg)
+	require.NoError(t, err)
+	require.True(t, opts.DisableOfflineAccess)
+}
+
+func TestProvider_authCodeURL_offlineAccess(t *testing.T) {
+	t.Parallel()
+	pDefault := &Provider{cfg: oauth2.Config{
+		ClientID: "client",
+		Endpoint: oauth2.Endpoint{AuthURL: "https://issuer.example.test/authorize"},
+	}}
+	u, _, err := pDefault.authCodeURL("state")
+	require.NoError(t, err)
+	parsed, err := url.Parse(u)
+	require.NoError(t, err)
+	require.Equal(t, "offline", parsed.Query().Get("access_type"))
+
+	pDisabled := &Provider{
+		opts: Options{DisableOfflineAccess: true},
+		cfg: oauth2.Config{
+			ClientID: "client",
+			Endpoint: oauth2.Endpoint{AuthURL: "https://issuer.example.test/authorize"},
+		},
+	}
+	u, _, err = pDisabled.authCodeURL("state")
+	require.NoError(t, err)
+	parsed, err = url.Parse(u)
+	require.NoError(t, err)
+	require.False(t, parsed.Query().Has("access_type"))
 }
 
 func TestNewProvider_unexportedHelper(t *testing.T) {
