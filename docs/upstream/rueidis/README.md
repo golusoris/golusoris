@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# redis/rueidis — v1.0.78 snapshot
+# redis/rueidis — v1.0.79 snapshot
 
-Pinned: **v1.0.78**
-Source: [tagged source](https://github.com/redis/rueidis/tree/v1.0.78)
+Pinned: **v1.0.79**
+Source: [tagged source](https://github.com/redis/rueidis/tree/v1.0.79)
 
 ## Client construction
 
@@ -64,11 +64,20 @@ defer cancel()
 All Redis calls use the caller's bounded `ctx`; do not replace it with
 `context.Background()`.
 
+## Changes since v1.0.78
+
+- `NewClient` no longer returns a non-nil `Client` wrapping a nil pointer when
+  construction fails; check `err` before using the client.
+- Blocking commands built with `.UnblockOnCancel()` send `CLIENT UNBLOCK` on
+  context cancellation and keep the connection.
+- New helpers: `MUnlink` (slot-grouped unlink) and `ClusterScanner`.
+- `rueidislock` is unchanged; `rueidislimiter` gained an opt-in GCRA algorithm.
+
 ## golusoris usage
 
 - `cache/redis/` — `rueidis.Client` + `rueidislock.Locker` provided via fx.
 
 ## Links
 
-- [Tagged source](https://github.com/redis/rueidis/tree/v1.0.78)
-- [Package documentation](https://pkg.go.dev/github.com/redis/rueidis@v1.0.78)
+- [Tagged source](https://github.com/redis/rueidis/tree/v1.0.79)
+- [Package documentation](https://pkg.go.dev/github.com/redis/rueidis@v1.0.79)

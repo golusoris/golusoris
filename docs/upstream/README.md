@@ -27,7 +27,7 @@ mapping authority; its authority column says where each pin is resolved.
 | `github.com/riverqueue/river` | `v0.49.0` | root | [river/](river/README.md) |
 | `github.com/knadh/koanf/v2` | `v2.3.8` | root + core | [koanf/](koanf/README.md) |
 | `github.com/maypok86/otter/v2` | `v2.3.0` | root | [otter/](otter/README.md) |
-| `github.com/redis/rueidis` | `v1.0.78` | root | [rueidis/](rueidis/README.md) |
+| `github.com/redis/rueidis` | `v1.0.79` | root | [rueidis/](rueidis/README.md) |
 | `github.com/casbin/casbin/v3` | `v3.11.0` | root | [casbin/](casbin/README.md) |
 | `github.com/go-webauthn/webauthn` | `v0.18.2` | root | [webauthn/](webauthn/README.md) |
 | `go.opentelemetry.io/otel` | `v1.47.0` | root | [otel/](otel/README.md) |
