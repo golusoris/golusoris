@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/golusoris/golusoris/testutil/httpclient"
 )
 
 func TestNewSenderBoundsInjectedHTTPClient(t *testing.T) {
@@ -17,10 +19,5 @@ func TestNewSenderBoundsInjectedHTTPClient(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sender.hc == injected || injected.Timeout != 0 || sender.hc.Timeout != 10*time.Second {
-		t.Fatalf("sender/source timeout = %s/%s", sender.hc.Timeout, injected.Timeout)
-	}
-	if sender.hc.Transport != injected.Transport {
-		t.Fatal("injected transport was not preserved")
-	}
+	httpclient.AssertBoundedClone(t, injected, sender.hc, 10*time.Second)
 }
