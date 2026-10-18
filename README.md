@@ -278,6 +278,7 @@ checksum and patched-source hash, then fail closed on drift.
 | `storage/tus/` | resumable uploads (tus protocol) | tus/tusd |
 | `storage/safety/` | Animation-safe raster metadata strip + SSRF guards + path-traversal protection + magic-byte content-type detection | code.dny.dev/ssrf + h2non/filetype + stdlib |
 | `storage/scan/` | ClamAV malware scan for uploads (fail-closed) | baruwa-enterprise/clamd |
+| `storage/storagetest/` | shared paged-listing conformance check for `storage.Bucket` backends | stdlib |
 | `archive/` | zip / tar / rar / 7z / brotli / zstd extract + create + recursive dir copy | mholt/archives + otiai10/copy |
 | `media/av/` | probe/transcode interfaces; no runtime backend bundled | application-provided |
 | `media/img/` | image-processing interfaces; no runtime backend bundled | application-provided |
