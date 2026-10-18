@@ -30,7 +30,7 @@ import (
 	"google.golang.org/api/iamcredentials/v1"
 	"google.golang.org/api/option"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 )
 
 func offlineBucket(t *testing.T, signer *urlSigner) *Bucket {

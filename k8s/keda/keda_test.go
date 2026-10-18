@@ -244,11 +244,18 @@ func TestNewScaler_RejectsInvalidInput(t *testing.T) {
 	}
 }
 
+// Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
+const testBusyTimeout = 30 * time.Second
+
 // TestModule_endToEndOverSQLite runs the real chain without Docker: SQLite
 // queue -> jobs.MetricsModule collector -> keda.Module -> gRPC client.
 func TestModule_endToEndOverSQLite(t *testing.T) {
 	t.Parallel()
-	db, err := dbsqlite.Open(context.Background(), dbsqlite.Options{Path: filepath.Join(t.TempDir(), "q.db"), MaxOpenConns: 1}, discard())
+	db, err := dbsqlite.Open(context.Background(), dbsqlite.Options{
+		Path:         filepath.Join(t.TempDir(), "q.db"),
+		MaxOpenConns: 1,
+		BusyTimeout:  testBusyTimeout,
+	}, discard())
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}

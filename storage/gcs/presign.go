@@ -15,7 +15,7 @@ import (
 
 	gstorage "cloud.google.com/go/storage"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 )
 
 const (

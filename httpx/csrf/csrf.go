@@ -17,7 +17,7 @@
 //
 // Config keys (env: APP_HTTP_CSRF_*):
 //
-//	http.csrf.secret  # 32-byte key (hex or base64); required to enable
+//	http.csrf.secret  # optional 32-byte key (hex or base64); empty uses net/http.CrossOriginProtection
 package csrf
 
 import (
@@ -40,24 +40,25 @@ import (
 // ignored — filippo.io/csrf/gorilla enforces same-origin via Fetch
 // metadata, not cookies.
 type Options struct {
-	// Secret is a 32-byte key, hex- or base64-encoded. Required.
+	// Secret is an optional 32-byte key, hex- or base64-encoded.
 	Secret string `koanf:"secret"`
 	Secure bool   `koanf:"secure"`
 	Domain string `koanf:"domain"`
 	Path   string `koanf:"path"`
 }
 
-// DefaultOptions returns Secure=true, Path="/". Secret is intentionally
-// zero-valued: CSRF is no-op until an app sets it.
+// DefaultOptions returns Secure=true, Path="/". Secret is zero-valued, which
+// selects [http.CrossOriginProtection] in [New].
 func DefaultOptions() Options {
 	return Options{Secure: true, Path: "/"}
 }
 
-// New returns a CSRF [middleware.Middleware]. When opts.Secret is empty the
-// returned middleware is a no-op — apps without sessions don't need CSRF.
+// New returns a CSRF [middleware.Middleware]. When opts.Secret is empty it
+// enforces the same same-origin check through [http.CrossOriginProtection],
+// so an unset secret never disables protection.
 func New(opts Options) (middleware.Middleware, error) {
 	if opts.Secret == "" {
-		return identity, nil
+		return http.NewCrossOriginProtection().Handler, nil
 	}
 	key, err := decodeKey(opts.Secret)
 	if err != nil {
@@ -69,8 +70,6 @@ func New(opts Options) (middleware.Middleware, error) {
 // Token returns compatibility random text. The middleware ignores its value;
 // same-origin request metadata is the authoritative check.
 func Token(r *http.Request) string { return gcsrf.Token(r) } //nolint:staticcheck // retained for template compatibility; token value is not authoritative
-
-func identity(next http.Handler) http.Handler { return next }
 
 func decodeKey(s string) ([]byte, error) {
 	if b, err := hex.DecodeString(s); err == nil && len(b) == 32 {

@@ -6,6 +6,7 @@ package tflite_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -22,7 +23,7 @@ import (
 )
 
 // newServer builds a LiteRT sidecar mock. /load records the request and
-// returns 200; /classify returns the canned score map.
+// returns 200; /classify records the request and returns the canned score map.
 func newServer(t *testing.T, scores map[string]float32) (*httptest.Server, *loadCapture) {
 	t.Helper()
 	capture := &loadCapture{}
@@ -35,7 +36,9 @@ func newServer(t *testing.T, scores map[string]float32) (*httptest.Server, *load
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	mux.HandleFunc("/classify", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/classify", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(body, &capture.classifyReq)
 		resp, _ := json.Marshal(map[string]any{"scores": scores})
 		_, _ = w.Write(resp)
 	})
@@ -45,39 +48,84 @@ func newServer(t *testing.T, scores map[string]float32) (*httptest.Server, *load
 type loadCapture struct {
 	req struct {
 		URI    string   `json:"uri"`
+		SHA256 string   `json:"sha256"`
 		Labels []string `json:"labels"`
+	}
+	classifyReq struct {
+		Image string `json:"image"`
 	}
 }
 
+const testSHA256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
 func classifyModel() tiny.Model {
 	return tiny.Model{
-		Name:     "intent",
-		URI:      "s3://bucket/models/intent/job-1/model.tflite",
+		Name:     "pets",
+		URI:      "https://storage.example.com/models/pets/v1/model.tflite",
 		Format:   tiny.FormatTFLite,
-		Modality: tiny.ModalityText,
+		Modality: tiny.ModalityImage,
 		TaskKind: tiny.TaskClassify,
-		Labels:   []string{"spam", "ham"},
+		Labels:   []string{"cat", "dog"},
+		Metadata: map[string]string{
+			"sha256": testSHA256,
+		},
 	}
 }
 
 func TestPredictor_LoadAndPredict_happyPath(t *testing.T) {
 	t.Parallel()
-	srv, capture := newServer(t, map[string]float32{"spam": 0.9, "ham": 0.1})
+	srv, capture := newServer(t, map[string]float32{"cat": 0.9, "dog": 0.1})
 	defer srv.Close()
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
 	require.NoError(t, p.Load(context.Background(), classifyModel()))
-	require.Equal(t, "s3://bucket/models/intent/job-1/model.tflite", capture.req.URI)
-	require.Equal(t, []string{"spam", "ham"}, capture.req.Labels)
+	require.Equal(t, "https://storage.example.com/models/pets/v1/model.tflite", capture.req.URI)
+	require.Equal(t, testSHA256, capture.req.SHA256)
+	require.Equal(t, []string{"cat", "dog"}, capture.req.Labels)
 
-	got, err := p.Predict(t.Context(), "buy now")
+	fakeBytes := []byte("image-bytes-png")
+	got, err := p.Predict(t.Context(), fakeBytes)
 	require.NoError(t, err)
+	require.Equal(t, base64.StdEncoding.EncodeToString(fakeBytes), capture.classifyReq.Image)
 	require.Len(t, got.Labels, 2)
-	// Sorted desc by score: spam (0.9) first.
-	require.Equal(t, "spam", got.Labels[0].Label)
+	// Sorted desc by score: cat (0.9) first.
+	require.Equal(t, "cat", got.Labels[0].Label)
 	require.InDelta(t, 0.9, got.Labels[0].Score, 1e-6)
-	require.Equal(t, "ham", got.Labels[1].Label)
+	require.Equal(t, "dog", got.Labels[1].Label)
 	require.NoError(t, p.Close())
+}
+
+func TestPredictor_Predict_acceptsBase64String(t *testing.T) {
+	t.Parallel()
+	srv, capture := newServer(t, map[string]float32{"cat": 0.8, "dog": 0.2})
+	defer srv.Close()
+
+	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
+	require.NoError(t, p.Load(t.Context(), classifyModel()))
+
+	rawB64 := "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAAAAAA6fptVAAAACklEQVR4nGNiAAAABgADNjd8qAAAAABJRU5ErkJggg=="
+	got, err := p.Predict(t.Context(), rawB64)
+	require.NoError(t, err)
+	require.Equal(t, rawB64, capture.classifyReq.Image)
+	require.Len(t, got.Labels, 2)
+}
+
+func TestPredictor_Predict_rejectsUnsupportedInputType(t *testing.T) {
+	t.Parallel()
+	srv, _ := newServer(t, map[string]float32{"cat": 0.5, "dog": 0.5})
+	defer srv.Close()
+
+	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
+	require.NoError(t, p.Load(t.Context(), classifyModel()))
+
+	_, err := p.Predict(t.Context(), 12345)
+	require.ErrorContains(t, err, "unsupported input type")
+
+	_, err = p.Predict(t.Context(), []byte{})
+	require.ErrorContains(t, err, "empty image bytes")
+
+	_, err = p.Predict(t.Context(), "   ")
+	require.ErrorContains(t, err, "empty image string")
 }
 
 func TestPredictor_Predict_topK(t *testing.T) {
@@ -89,7 +137,7 @@ func TestPredictor_Predict_topK(t *testing.T) {
 	model := classifyModel()
 	model.Labels = []string{"a", "b", "c"}
 	require.NoError(t, p.Load(t.Context(), model))
-	got, err := p.Predict(t.Context(), "x")
+	got, err := p.Predict(t.Context(), []byte("sample"))
 	require.NoError(t, err)
 	require.Len(t, got.Labels, 2)
 	require.Equal(t, "a", got.Labels[0].Label)
@@ -105,7 +153,7 @@ func TestPredictor_Predict_tieBrokenByLabel(t *testing.T) {
 	model := classifyModel()
 	model.Labels = []string{"apple", "zebra"}
 	require.NoError(t, p.Load(t.Context(), model))
-	got, err := p.Predict(t.Context(), "x")
+	got, err := p.Predict(t.Context(), []byte("sample"))
 	require.NoError(t, err)
 	// Equal scores → deterministic order by label asc.
 	require.Equal(t, "apple", got.Labels[0].Label)
@@ -130,6 +178,19 @@ func TestPredictor_Load_rejectsWrongFormat(t *testing.T) {
 	require.ErrorContains(t, err, "Format")
 }
 
+func TestPredictor_Load_rejectsNonImageModality(t *testing.T) {
+	t.Parallel()
+	p := tflite.NewPredictor(tflite.Options{Endpoint: "http://127.0.0.1:9"})
+	m := classifyModel()
+	m.Modality = tiny.ModalityText
+	err := p.Load(t.Context(), m)
+	require.ErrorContains(t, err, "Modality")
+
+	m.Modality = tiny.ModalityAudio
+	err = p.Load(t.Context(), m)
+	require.ErrorContains(t, err, "Modality")
+}
+
 func TestPredictor_Load_rejectsEmptyURI(t *testing.T) {
 	t.Parallel()
 	p := tflite.NewPredictor(tflite.Options{Endpoint: "http://127.0.0.1:9"})
@@ -137,6 +198,19 @@ func TestPredictor_Load_rejectsEmptyURI(t *testing.T) {
 	m.URI = ""
 	err := p.Load(t.Context(), m)
 	require.ErrorContains(t, err, "URI empty")
+}
+
+func TestPredictor_Load_rejectsMissingSha256(t *testing.T) {
+	t.Parallel()
+	p := tflite.NewPredictor(tflite.Options{Endpoint: "http://127.0.0.1:9"})
+	m := classifyModel()
+	m.Metadata = nil
+	err := p.Load(t.Context(), m)
+	require.ErrorContains(t, err, "sha256 empty")
+
+	m.Metadata = map[string]string{"sha256": ""}
+	err = p.Load(t.Context(), m)
+	require.ErrorContains(t, err, "sha256 empty")
 }
 
 func TestPredictor_Load_rejectsInvalidClassifierMetadata(t *testing.T) {
@@ -180,7 +254,7 @@ func TestPredictor_Load_sidecarError(t *testing.T) {
 func TestPredictor_Predict_notLoaded(t *testing.T) {
 	t.Parallel()
 	p := tflite.NewPredictor(tflite.Options{Endpoint: "http://127.0.0.1:9"})
-	_, err := p.Predict(t.Context(), "x")
+	_, err := p.Predict(t.Context(), []byte("sample"))
 	require.ErrorContains(t, err, "Load not called")
 }
 
@@ -198,7 +272,7 @@ func TestPredictor_Predict_serverError(t *testing.T) {
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
 	require.NoError(t, p.Load(t.Context(), classifyModel()))
-	_, err := p.Predict(t.Context(), "x")
+	_, err := p.Predict(t.Context(), []byte("sample"))
 	require.ErrorContains(t, err, "status 500")
 }
 
@@ -216,7 +290,7 @@ func TestPredictor_Predict_noScores(t *testing.T) {
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
 	require.NoError(t, p.Load(t.Context(), classifyModel()))
-	_, err := p.Predict(t.Context(), "x")
+	_, err := p.Predict(t.Context(), []byte("sample"))
 	require.ErrorContains(t, err, "no scores")
 }
 
@@ -227,10 +301,10 @@ func TestPredictor_Predict_rejectsScoresOutsideLoadedModel(t *testing.T) {
 		scores map[string]float32
 		want   string
 	}{
-		{name: "missing label", scores: map[string]float32{"spam": 1}, want: "label count"},
-		{name: "foreign label", scores: map[string]float32{"spam": 0.5, "other": 0.5}, want: "not loaded"},
-		{name: "negative probability", scores: map[string]float32{"spam": -0.1, "ham": 1}, want: "probability"},
-		{name: "probability above one", scores: map[string]float32{"spam": 1.1, "ham": 0}, want: "probability"},
+		{name: "missing label", scores: map[string]float32{"cat": 1}, want: "label count"},
+		{name: "foreign label", scores: map[string]float32{"cat": 0.5, "other": 0.5}, want: "not loaded"},
+		{name: "negative probability", scores: map[string]float32{"cat": -0.1, "dog": 1}, want: "outside [0,1]"},
+		{name: "probability above one", scores: map[string]float32{"cat": 1.1, "dog": 0}, want: "outside [0,1]"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -239,7 +313,7 @@ func TestPredictor_Predict_rejectsScoresOutsideLoadedModel(t *testing.T) {
 			defer srv.Close()
 			predictor := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
 			require.NoError(t, predictor.Load(t.Context(), classifyModel()))
-			_, err := predictor.Predict(t.Context(), "x")
+			_, err := predictor.Predict(t.Context(), []byte("sample"))
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -247,8 +321,6 @@ func TestPredictor_Predict_rejectsScoresOutsideLoadedModel(t *testing.T) {
 
 func TestPredictor_Predict_rejectsOversizedBody(t *testing.T) {
 	t.Parallel()
-	// A big-but-valid JSON body; MaxResponseBytes rejects it before a
-	// truncated prefix can be decoded.
 	mux := http.NewServeMux()
 	mux.HandleFunc("/load", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -261,7 +333,7 @@ func TestPredictor_Predict_rejectsOversizedBody(t *testing.T) {
 
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL, MaxResponseBytes: 32})
 	require.NoError(t, p.Load(t.Context(), classifyModel()))
-	_, err := p.Predict(t.Context(), "x")
+	_, err := p.Predict(t.Context(), []byte("sample"))
 	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
 }
 
@@ -273,15 +345,13 @@ func TestPredictor_Close_noop(t *testing.T) {
 
 func TestNewPredictor_defaults(t *testing.T) {
 	t.Parallel()
-	// Zero options must not panic and must apply defaults (covered by a
-	// Predict against a live mock to exercise the default client).
 	srv, _ := newServer(t, map[string]float32{"a": 1, "b": 0})
 	defer srv.Close()
 	p := tflite.NewPredictor(tflite.Options{Endpoint: srv.URL})
 	model := classifyModel()
 	model.Labels = []string{"a", "b"}
 	require.NoError(t, p.Load(t.Context(), model))
-	got, err := p.Predict(t.Context(), "x")
+	got, err := p.Predict(t.Context(), []byte("sample"))
 	require.NoError(t, err)
 	require.Equal(t, "a", got.Labels[0].Label)
 }
@@ -292,7 +362,6 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-// closeFailBody reads payload normally but fails Close with err.
 type closeFailBody struct {
 	io.Reader
 	err error
@@ -300,7 +369,6 @@ type closeFailBody struct {
 
 func (b *closeFailBody) Close() error { return b.err }
 
-// Negative: a failed sidecar body close surfaces from post (via Load).
 func TestPredictor_Load_closeErrorReturnsErr(t *testing.T) {
 	t.Parallel()
 	hc := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {

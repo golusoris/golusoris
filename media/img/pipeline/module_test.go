@@ -7,12 +7,18 @@ package pipeline_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,9 +28,9 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/media/img"
 	"github.com/golusoris/golusoris/media/img/pipeline"
-	"github.com/golusoris/golusoris/storage"
 )
 
 // writeConfig writes a YAML config file into a temp dir and returns its path.
@@ -37,18 +43,133 @@ func writeConfig(t *testing.T, body string) string {
 	return path
 }
 
+type memoryObject struct {
+	body   []byte
+	object storage.Object
+}
+
+type mapBucket struct {
+	mu      sync.RWMutex
+	objects map[string]memoryObject
+}
+
+func (b *mapBucket) Put(ctx context.Context, key string, src io.Reader, opts storage.PutOptions) (storage.Object, error) {
+	if err := ctx.Err(); err != nil {
+		return storage.Object{}, err
+	}
+	body, err := io.ReadAll(src)
+	if err != nil {
+		return storage.Object{}, fmt.Errorf("pipeline: test bucket put: %w", err)
+	}
+	contentType := opts.ContentType
+	if contentType == "" {
+		contentType = storage.DefaultContentType
+	}
+	obj := storage.Object{Key: key, Size: int64(len(body)), ContentType: contentType, Metadata: maps.Clone(opts.Metadata)}
+	b.mu.Lock()
+	if b.objects == nil {
+		b.objects = make(map[string]memoryObject)
+	}
+	b.objects[key] = memoryObject{body: append([]byte(nil), body...), object: obj}
+	b.mu.Unlock()
+	return cloneObject(obj), nil
+}
+
+func (b *mapBucket) Get(ctx context.Context, key string) (io.ReadCloser, storage.Object, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, storage.Object{}, err
+	}
+	b.mu.RLock()
+	entry, ok := b.objects[key]
+	b.mu.RUnlock()
+	if !ok {
+		return nil, storage.Object{}, storage.ErrNotFound
+	}
+	body := append([]byte(nil), entry.body...)
+	return io.NopCloser(bytes.NewReader(body)), cloneObject(entry.object), nil
+}
+
+func (b *mapBucket) Delete(ctx context.Context, key string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	b.mu.Lock()
+	delete(b.objects, key)
+	b.mu.Unlock()
+	return nil
+}
+
+func (b *mapBucket) Exists(ctx context.Context, key string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	b.mu.RLock()
+	_, ok := b.objects[key]
+	b.mu.RUnlock()
+	return ok, nil
+}
+
+func (b *mapBucket) Stat(ctx context.Context, key string) (storage.Object, error) {
+	if err := ctx.Err(); err != nil {
+		return storage.Object{}, err
+	}
+	b.mu.RLock()
+	entry, ok := b.objects[key]
+	b.mu.RUnlock()
+	if !ok {
+		return storage.Object{}, storage.ErrNotFound
+	}
+	return cloneObject(entry.object), nil
+}
+
+func (b *mapBucket) List(ctx context.Context, opts storage.ListOptions) ([]storage.Object, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	query, empty, err := storage.NormalizeListOptions(opts)
+	if err != nil || empty {
+		return nil, err
+	}
+	b.mu.RLock()
+	objects := make([]storage.Object, 0, len(b.objects))
+	for key, entry := range b.objects {
+		if strings.HasPrefix(key, query.Prefix) && key > query.StartAfter {
+			objects = append(objects, cloneObject(entry.object))
+		}
+	}
+	b.mu.RUnlock()
+	sort.Slice(objects, func(left, right int) bool { return objects[left].Key < objects[right].Key })
+	if len(objects) > query.Limit {
+		objects = objects[:query.Limit]
+	}
+	return objects, nil
+}
+
+func (b *mapBucket) URL(_ context.Context, _ string) (string, error) {
+	return "", errors.New("pipeline: test bucket URL unsupported")
+}
+
+func cloneObject(obj storage.Object) storage.Object {
+	obj.Metadata = maps.Clone(obj.Metadata)
+	return obj
+}
+
+func newMapBucket(objects map[string][]byte) *mapBucket {
+	bucket := &mapBucket{objects: make(map[string]memoryObject, len(objects))}
+	for key, body := range objects {
+		content := append([]byte(nil), body...)
+		obj := storage.Object{Key: key, Size: int64(len(content)), ContentType: storage.DefaultContentType}
+		bucket.objects[key] = memoryObject{body: content, object: obj}
+	}
+	return bucket
+}
+
 // bootModule boots the fx Module against a config that supplies the signing
-// secret, a LocalBucket seeded with "logo.png", and a fake clock, and returns
+// secret, an in-memory bucket seeded with "logo.png", and a fake clock, and returns
 // the populated pipeline, named handler, and bucket.
 func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Handler, storage.Bucket) {
 	t.Helper()
-	dataDir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dataDir, "logo.png"), []byte("rawbytes"), 0o600); err != nil {
-		t.Fatalf("seed object: %v", err)
-	}
-	cfgFile := writeConfig(t,
-		"media:\n  img:\n    pipeline:\n      secret: "+testSecret+"\n"+
-			"storage:\n  local:\n    path: "+dataDir+"\n")
+	cfgFile := writeConfig(t, "media:\n  img:\n    pipeline:\n      secret: "+testSecret+"\n")
 
 	cfg, err := config.New(config.Options{Files: []string{cfgFile}, Watch: false})
 	if err != nil {
@@ -56,11 +177,11 @@ func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Han
 	}
 
 	fc := clockwork.NewFakeClock()
+	bkt := newMapBucket(map[string][]byte{"logo.png": []byte("rawbytes")})
 
 	var (
-		p   *pipeline.Pipeline
-		h   http.Handler
-		bkt storage.Bucket
+		p *pipeline.Pipeline
+		h http.Handler
 	)
 	app := fxtest.New(
 		t,
@@ -68,9 +189,9 @@ func bootModule(t *testing.T, ctx context.Context) (*pipeline.Pipeline, http.Han
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		fx.Provide(func() clock.Clock { return fc }),
 		fx.Provide(func() img.Processor { return stubProcessor{} }),
-		storage.Module,
+		fx.Provide(func() storage.Bucket { return bkt }),
 		pipeline.Module,
-		fx.Populate(&p, &bkt),
+		fx.Populate(&p),
 		fx.Populate(fx.Annotate(&h, fx.ParamTags(`name:"media.img.pipeline"`))),
 	)
 	if startErr := app.Start(ctx); startErr != nil {
@@ -130,13 +251,7 @@ func TestModule_wiresPipelineAndHandler(t *testing.T) {
 func TestSourceFromBucket(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	bucket, err := storage.NewLocalBucket(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewLocalBucket: %v", err)
-	}
-	if _, err = bucket.Put(ctx, "source.png", bytes.NewBufferString("source-bytes"), storage.PutOptions{}); err != nil {
-		t.Fatalf("bucket.Put: %v", err)
-	}
+	bucket := newMapBucket(map[string][]byte{"source.png": []byte("source-bytes")})
 
 	source := pipeline.SourceFromBucket(bucket)
 	if source == nil {
@@ -157,7 +272,7 @@ func TestSourceFromBucket(t *testing.T) {
 	if pipeline.SourceFromBucket(nil) != nil {
 		t.Fatal("SourceFromBucket(nil) must return nil")
 	}
-	var typedNilBucket *storage.LocalBucket
+	var typedNilBucket *mapBucket
 	if pipeline.SourceFromBucket(typedNilBucket) != nil {
 		t.Fatal("SourceFromBucket(typed nil) must return nil")
 	}
@@ -168,8 +283,7 @@ func TestSourceFromBucket(t *testing.T) {
 // resize proxy.
 func TestModule_loadOptionsMissingSecret(t *testing.T) {
 	t.Parallel()
-	dataDir := t.TempDir()
-	cfgFile := writeConfig(t, "storage:\n  local:\n    path: "+dataDir+"\n")
+	cfgFile := writeConfig(t, "media:\n  img:\n    pipeline: {}\n")
 	cfg, err := config.New(config.Options{Files: []string{cfgFile}, Watch: false})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -182,7 +296,7 @@ func TestModule_loadOptionsMissingSecret(t *testing.T) {
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		fx.Provide(func() clock.Clock { return clockwork.NewFakeClock() }),
 		fx.Provide(func() img.Processor { return stubProcessor{} }),
-		storage.Module,
+		fx.Provide(func() storage.Bucket { return newMapBucket(map[string][]byte{}) }),
 		pipeline.Module,
 		fx.Populate(&p),
 	)

@@ -10,8 +10,9 @@ Test helper: build main package, run binary, capture output + exit code.
 
 ## Contract
 
-- `Build(tb, pkg, ldflags)` -> `go build -trimpath -ldflags <ldflags>` into
+- `Build(tb, pkg, ldflags)` -> `go build -ldflags <ldflags>` into
   `tb.TempDir()`; `.exe` suffix on Windows. Build failure -> `tb.Fatalf`.
+  No `-trimpath`; warm compile cache reuse.
 - `Run(tb, bin, args...)` -> `Result{Stdout, Stderr, ExitCode}`. Non-zero exit
   -> `ExitCode`, test continues. Start failure or `Timeout` overrun -> `tb.Fatalf`.
 - Tests only. Never import from non-test code.

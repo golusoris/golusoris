@@ -23,12 +23,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	gooidc "github.com/coreos/go-oidc/v3/oidc"
@@ -40,6 +42,18 @@ import (
 )
 
 const defaultDiscoveryTimeout = 10 * time.Second
+
+// Sentinels returned or wrapped on OIDC flow failures.
+var (
+	// ErrExchange indicates the authorization code exchange with the IdP failed.
+	ErrExchange = errors.New("auth/oidc: code exchange failed")
+	// ErrIDTokenMissing indicates the token response did not contain an id_token.
+	ErrIDTokenMissing = errors.New("auth/oidc: no id_token in response")
+	// ErrIDTokenInvalid indicates ID token verification failed.
+	ErrIDTokenInvalid = errors.New("auth/oidc: id_token verification failed")
+	// ErrNonceMismatch indicates the ID token nonce claim was missing or mismatched.
+	ErrNonceMismatch = errors.New("auth/oidc: nonce mismatch")
+)
 
 // Options configure the OIDC provider.
 type Options struct {
@@ -57,6 +71,11 @@ type Options struct {
 	Scopes []string `koanf:"scopes"`
 	// DiscoveryTimeout bounds OIDC discovery and the default HTTP client.
 	DiscoveryTimeout time.Duration `koanf:"discovery_timeout"`
+	// LazyDiscovery defers OIDC discovery until the first operation requiring it.
+	LazyDiscovery bool `koanf:"lazy_discovery"`
+	// DisableOfflineAccess omits oauth2.AccessTypeOffline from authorization requests.
+	// Google-specific refresh-token request; login-only flows set true.
+	DisableOfflineAccess bool `koanf:"disable_offline_access"`
 	// HTTPClient performs discovery and subsequent OIDC requests. A copy gains
 	// DiscoveryTimeout when its Timeout is not already positive.
 	HTTPClient *http.Client `koanf:"-"`
@@ -94,12 +113,37 @@ func loadOptions(cfg *config.Config) (Options, error) {
 	return opts.withDefaults(), nil
 }
 
+// AuthRequest holds the authorization URL, the PKCE verifier, and the OIDC nonce.
+// Store Verifier and Nonce in the session, pass back to [Provider.Complete].
+type AuthRequest struct {
+	URL      string
+	Verifier string
+	Nonce    string
+}
+
 // TokenSet holds the tokens returned after a successful code exchange.
 type TokenSet struct {
 	AccessToken  string
 	RefreshToken string
 	IDToken      string
 	Expiry       time.Time
+	// Subject is the subject identifier from the verified ID token.
+	Subject string
+	// Nonce is the nonce claim from the verified ID token.
+	Nonce   string
+	idToken *gooidc.IDToken
+}
+
+// Claims unmarshals the verified ID token claims into v.
+// Returns an error if the TokenSet has no verified ID token.
+func (t TokenSet) Claims(v any) error {
+	if t.idToken == nil {
+		return errors.New("auth/oidc: no verified id_token")
+	}
+	if err := t.idToken.Claims(v); err != nil {
+		return fmt.Errorf("auth/oidc: decode claims: %w", err)
+	}
+	return nil
 }
 
 // UserInfo contains the claims from the OIDC UserInfo endpoint.
@@ -114,6 +158,8 @@ type UserInfo struct {
 
 // Provider wraps the go-oidc provider + oauth2 config.
 type Provider struct {
+	mu       sync.Mutex
+	opts     Options
 	provider *gooidc.Provider
 	cfg      oauth2.Config
 	verifier *gooidc.IDTokenVerifier
@@ -122,12 +168,15 @@ type Provider struct {
 }
 
 func newProvider(opts Options, logger *slog.Logger) (*Provider, error) {
-	return NewProvider(context.Background(), opts, logger)
+	ctx, cancel := context.WithTimeout(context.Background(), opts.withDefaults().DiscoveryTimeout)
+	defer cancel()
+	return NewProvider(ctx, opts, logger)
 }
 
 // NewProvider performs bounded OIDC discovery using opts.HTTPClient. The
 // supplied context controls startup cancellation in addition to the configured
-// discovery timeout.
+// discovery timeout. When opts.LazyDiscovery is true, discovery is deferred until
+// the first call that requires it.
 func NewProvider(ctx context.Context, opts Options, logger *slog.Logger) (*Provider, error) {
 	opts = opts.withDefaults()
 	if opts.IssuerURL == "" || opts.ClientID == "" || opts.RedirectURL == "" {
@@ -136,29 +185,65 @@ func NewProvider(ctx context.Context, opts Options, logger *slog.Logger) (*Provi
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	discoveryCtx, cancel := context.WithTimeout(ctx, opts.DiscoveryTimeout)
-	defer cancel()
-	discoveryCtx = gooidc.ClientContext(discoveryCtx, opts.HTTPClient)
-	prov, err := gooidc.NewProvider(discoveryCtx, opts.IssuerURL)
-	if err != nil {
-		return nil, fmt.Errorf("auth/oidc: discover provider: %w", err)
-	}
-	verifier := prov.Verifier(&gooidc.Config{ClientID: opts.ClientID})
 	cfg := oauth2.Config{
 		ClientID:     opts.ClientID,
 		ClientSecret: opts.ClientSecret,
 		RedirectURL:  opts.RedirectURL,
-		Endpoint:     prov.Endpoint(),
 		Scopes:       opts.Scopes,
 	}
-	logger.InfoContext(ctx, "auth/oidc: provider ready", slog.String("issuer", opts.IssuerURL))
-	return &Provider{provider: prov, cfg: cfg, verifier: verifier, logger: logger, client: opts.HTTPClient}, nil
+	p := &Provider{
+		opts:   opts,
+		cfg:    cfg,
+		logger: logger,
+		client: opts.HTTPClient,
+	}
+	if opts.LazyDiscovery {
+		return p, nil
+	}
+	if err := p.ensureDiscovery(ctx); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (p *Provider) ensureDiscovery(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.provider != nil {
+		return nil
+	}
+	discoveryCtx, cancel := context.WithTimeout(ctx, p.opts.DiscoveryTimeout)
+	defer cancel()
+	discoveryCtx = gooidc.ClientContext(discoveryCtx, p.client)
+
+	prov, err := gooidc.NewProvider(discoveryCtx, p.opts.IssuerURL)
+	if err != nil {
+		return fmt.Errorf("auth/oidc: discover provider: %w", err)
+	}
+	p.provider = prov
+	p.verifier = prov.Verifier(&gooidc.Config{ClientID: p.opts.ClientID})
+	p.cfg.Endpoint = prov.Endpoint()
+	p.logger.InfoContext(ctx, "auth/oidc: provider ready", slog.String("issuer", p.opts.IssuerURL))
+	return nil
 }
 
 // AuthURL returns the IdP authorization URL and the PKCE verifier.
 // Store verifier in the session before redirecting; pass it to
 // [Exchange] on callback. Fails only when the OS entropy source does.
+// On a lazy provider not yet discovered, AuthURL returns an error.
 func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
+	p.mu.Lock()
+	notDiscovered := p.opts.LazyDiscovery && p.provider == nil
+	p.mu.Unlock()
+	if notDiscovered {
+		return "", "", errors.New("auth/oidc: lazy provider not discovered; use Begin")
+	}
+	return p.authCodeURL(state)
+}
+
+// authCodeURL builds the S256 PKCE authorization URL shared by AuthURL and Begin.
+func (p *Provider) authCodeURL(state string, extra ...oauth2.AuthCodeOption) (url, verifier string, err error) {
 	if state == "" {
 		return "", "", errors.New("auth/oidc: state must not be empty")
 	}
@@ -166,45 +251,101 @@ func (p *Provider) AuthURL(state string) (url, verifier string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	challenge := pkceChallenge(verifier)
-	url = p.cfg.AuthCodeURL(
-		state,
-		oauth2.AccessTypeOffline,
-		oauth2.SetAuthURLParam("code_challenge", challenge),
+	opts := make([]oauth2.AuthCodeOption, 0, 3+len(extra))
+	if !p.opts.DisableOfflineAccess {
+		opts = append(opts, oauth2.AccessTypeOffline)
+	}
+	opts = append(opts,
+		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(verifier)),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 	)
-	return url, verifier, nil
+	opts = append(opts, extra...)
+	return p.cfg.AuthCodeURL(state, opts...), verifier, nil
 }
 
-// Exchange trades an authorization code for tokens. verifier must
-// match the one returned by [AuthURL] for this session.
-func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSet, error) {
+// Begin initiates an OIDC authentication flow with PKCE and nonce.
+// Store Verifier and Nonce from [AuthRequest] in the session, and pass them
+// back to [Provider.Complete] upon callback.
+func (p *Provider) Begin(ctx context.Context, state string) (AuthRequest, error) {
+	if state == "" {
+		return AuthRequest{}, errors.New("auth/oidc: state must not be empty")
+	}
+	if err := p.ensureDiscovery(ctx); err != nil {
+		return AuthRequest{}, err
+	}
+	nonce, err := randomSecret("generate nonce")
+	if err != nil {
+		return AuthRequest{}, err
+	}
+	authURL, verifier, err := p.authCodeURL(state, gooidc.Nonce(nonce))
+	if err != nil {
+		return AuthRequest{}, err
+	}
+	return AuthRequest{URL: authURL, Verifier: verifier, Nonce: nonce}, nil
+}
+
+func (p *Provider) exchange(ctx context.Context, code, verifier string) (TokenSet, error) {
 	ctx = gooidc.ClientContext(ctx, p.client)
 	tok, err := p.cfg.Exchange(
 		ctx, code,
 		oauth2.SetAuthURLParam("code_verifier", verifier),
 	)
 	if err != nil {
-		return TokenSet{}, fmt.Errorf("auth/oidc: exchange: %w", err)
+		return TokenSet{}, fmt.Errorf("%w: %w", ErrExchange, err)
 	}
 	rawID, ok := tok.Extra("id_token").(string)
 	if !ok {
-		return TokenSet{}, errors.New("auth/oidc: no id_token in response")
+		return TokenSet{}, ErrIDTokenMissing
 	}
-	if _, verifyErr := p.verifier.Verify(ctx, rawID); verifyErr != nil {
-		return TokenSet{}, fmt.Errorf("%w: auth/oidc: verify id_token: %w", gerr.Unauthorized("invalid id_token"), verifyErr)
+	idTok, verifyErr := p.verifier.Verify(ctx, rawID)
+	if verifyErr != nil {
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: verify id_token: %w", gerr.Unauthorized("invalid id_token"), ErrIDTokenInvalid, verifyErr)
 	}
 	return TokenSet{
 		AccessToken:  tok.AccessToken,
 		RefreshToken: tok.RefreshToken,
 		IDToken:      rawID,
 		Expiry:       tok.Expiry,
+		Subject:      idTok.Subject,
+		Nonce:        idTok.Nonce,
+		idToken:      idTok,
 	}, nil
+}
+
+// Exchange trades an authorization code for tokens. verifier must
+// match the one returned by [AuthURL] for this session.
+func (p *Provider) Exchange(ctx context.Context, code, verifier string) (TokenSet, error) {
+	if err := p.ensureDiscovery(ctx); err != nil {
+		return TokenSet{}, err
+	}
+	return p.exchange(ctx, code, verifier)
+}
+
+// Complete completes the authentication flow by exchanging code for tokens and
+// validating the ID token nonce against req.Nonce.
+func (p *Provider) Complete(ctx context.Context, code string, req AuthRequest) (TokenSet, error) {
+	if err := p.ensureDiscovery(ctx); err != nil {
+		return TokenSet{}, err
+	}
+	if req.Nonce == "" {
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: nonce must not be empty", gerr.Unauthorized("empty nonce"), ErrNonceMismatch)
+	}
+	toks, err := p.exchange(ctx, code, req.Verifier)
+	if err != nil {
+		return TokenSet{}, err
+	}
+	if toks.Nonce == "" || subtle.ConstantTimeCompare([]byte(req.Nonce), []byte(toks.Nonce)) != 1 {
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: verify id_token: nonce mismatch", gerr.Unauthorized("nonce mismatch"), ErrNonceMismatch)
+	}
+	return toks, nil
 }
 
 // UserInfo fetches claims from the IdP's UserInfo endpoint using the
 // access token.
 func (p *Provider) UserInfo(ctx context.Context, accessToken string) (UserInfo, error) {
+	if err := p.ensureDiscovery(ctx); err != nil {
+		return UserInfo{}, err
+	}
 	ctx = gooidc.ClientContext(ctx, p.client)
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
 	ui, err := p.provider.UserInfo(ctx, ts)
@@ -239,12 +380,16 @@ var Module = fx.Module(
 
 // --- PKCE helpers ---
 
-func pkceVerifier() (string, error) {
+func randomSecret(op string) (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("auth/oidc: pkce verifier: %w", err)
+		return "", fmt.Errorf("auth/oidc: %s: %w", op, err)
 	}
 	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+func pkceVerifier() (string, error) {
+	return randomSecret("pkce verifier")
 }
 
 func pkceChallenge(verifier string) string {

@@ -3,34 +3,30 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 // Package tflite implements a [tiny.Predictor] that serves LiteRT
-// (`.tflite`) classifiers produced by [ai/tiny/litert] via a Python
+// (`.tflite`) image classifiers produced by [ai/tiny/litert] via a Python
 // inference sidecar over HTTP.
 //
 // Why a sidecar, not in-process: LiteRT inference in Go requires CGo
 // bindings to libtensorflowlite, which drags a C toolchain + platform
 // build matrix into every consumer. Mirroring the ollama adapter, this
-// package is a thin HTTP client to an application-supplied long-running
-// sidecar that holds the interpreter. Golusoris does not currently ship that
-// runtime; golusoris/golusoris#564 tracks implementation and publication.
-// The sidecar loads the `.tflite` artifact referenced by [tiny.Model.URI]
-// and exposes:
+// package is a thin HTTP client to a sidecar runtime that holds the
+// interpreter. The sidecar implementation lives under
+// ai/tiny/serve/tflite/sidecar. The sidecar loads the `.tflite` artifact
+// referenced by [tiny.Model.URI] and exposes:
 //
-//   - POST /load     {"uri": "...", "labels": [...]}  → 200 on success
-//   - POST /classify {"input": <any>}                  → {"scores": {label: prob}}
-//   - GET  /healthz                                    → 200 when ready
+//   - POST /load     {"uri": "...", "sha256": "...", "labels": [...]} → 200 on success
+//   - POST /classify {"image": "<base64>"}                            → {"scores": {label: prob}}
+//   - GET  /healthz                                                   → 200 when ready
 //
-// The Go predictor validates the model is a classifier, registers it
+// The Go predictor validates the model is an image classifier, registers it
 // with the sidecar on Load, and maps the sidecar's score map onto a
 // sorted [tiny.Prediction.Labels] slice.
-//
-// Runtime status: this client protocol is implemented and tested with HTTP
-// mocks. No compatible sidecar image or native backend ships yet. The
-// interface below lets applications supply either without consumer changes.
 package tflite
 
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,36 +93,48 @@ func NewPredictor(opts Options) *Predictor {
 // loadRequest is the body posted to the sidecar's /load endpoint.
 type loadRequest struct {
 	URI    string   `json:"uri"`
+	SHA256 string   `json:"sha256"`
 	Labels []string `json:"labels,omitempty"`
 }
 
-// Load validates m is a LiteRT classifier and registers its artifact
+// classifyRequest is the typed body posted to the sidecar's /classify endpoint.
+type classifyRequest struct {
+	Image string `json:"image"`
+}
+
+// Load validates m is a LiteRT image classifier and registers its artifact
 // with the sidecar via POST /load. It records the label set for mapping
 // scores at Predict time.
 func (p *Predictor) Load(ctx context.Context, m tiny.Model) error {
 	if m.TaskKind != tiny.TaskClassify {
-		return fmt.Errorf("ai/tiny/serve/tflite: TaskKind=%s not supported (want classify)", m.TaskKind)
+		return fmt.Errorf("ai/tiny/serve/tflite: load: TaskKind=%s not supported (want classify)", m.TaskKind)
 	}
 	if m.Format != tiny.FormatTFLite {
-		return fmt.Errorf("ai/tiny/serve/tflite: Format=%s not supported (want tflite)", m.Format)
+		return fmt.Errorf("ai/tiny/serve/tflite: load: Format=%s not supported (want tflite)", m.Format)
 	}
-	switch m.Modality {
-	case tiny.ModalityText, tiny.ModalityImage, tiny.ModalityAudio:
-	default:
-		return fmt.Errorf("ai/tiny/serve/tflite: Modality=%s not supported", m.Modality)
+	if m.Modality != tiny.ModalityImage {
+		return fmt.Errorf("ai/tiny/serve/tflite: load: Modality=%s not supported (want image)", m.Modality)
 	}
 	if err := tiny.ValidateClassifierLabels(m.Labels); err != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: validate labels: %w", err)
+		return fmt.Errorf("ai/tiny/serve/tflite: load: validate labels: %w", err)
 	}
 	if m.URI == "" {
-		return errors.New("ai/tiny/serve/tflite: model.URI empty")
+		return errors.New("ai/tiny/serve/tflite: load: model.URI empty")
 	}
-	body, mErr := json.Marshal(loadRequest{URI: m.URI, Labels: m.Labels})
+	sha256 := m.Metadata["sha256"]
+	if sha256 == "" {
+		return errors.New("ai/tiny/serve/tflite: load: model metadata sha256 empty")
+	}
+	body, mErr := json.Marshal(loadRequest{
+		URI:    m.URI,
+		SHA256: sha256,
+		Labels: m.Labels,
+	})
 	if mErr != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: marshal load: %w", mErr)
+		return fmt.Errorf("ai/tiny/serve/tflite: load: marshal load: %w", mErr)
 	}
 	if err := p.post(ctx, "/load", body, nil); err != nil {
-		return err
+		return fmt.Errorf("ai/tiny/serve/tflite: load: %w", err)
 	}
 	labels := make(map[string]struct{}, len(m.Labels))
 	for _, label := range m.Labels {
@@ -140,50 +148,72 @@ func (p *Predictor) Load(ctx context.Context, m tiny.Model) error {
 	return nil
 }
 
-// Predict sends input to the sidecar, verifies the response contains exactly
-// the loaded model's labels with finite probabilities in [0,1], and maps it
-// onto a sorted [tiny.Prediction.Labels] slice (desc by score). Input is passed
-// through verbatim as JSON; the sidecar interprets it per the model's modality.
+// Predict sends the typed image input to the sidecar, verifies the response
+// contains exactly the loaded model's labels with finite probabilities in [0,1],
+// and maps it onto a sorted [tiny.Prediction.Labels] slice (desc by score).
+// Input must be encoded image bytes ([]byte) or a base64 string.
 func (p *Predictor) Predict(ctx context.Context, input any) (tiny.Prediction, error) {
 	p.mu.RLock()
 	loaded := p.loaded
 	labels := p.labels
 	p.mu.RUnlock()
 	if !loaded {
-		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: Load not called")
+		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: predict: Load not called")
 	}
-	reqBody, mErr := json.Marshal(map[string]any{"input": input})
+	imageB64, err := extractImageBase64(input)
+	if err != nil {
+		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/tflite: predict: %w", err)
+	}
+	reqBody, mErr := json.Marshal(classifyRequest{Image: imageB64})
 	if mErr != nil {
-		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/tflite: marshal request: %w", mErr)
+		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/tflite: predict: marshal request: %w", mErr)
 	}
 	var out struct {
 		Scores map[string]float32 `json:"scores"`
 	}
 	if err := p.post(ctx, "/classify", reqBody, &out); err != nil {
-		return tiny.Prediction{}, err
+		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/tflite: predict: %w", err)
 	}
 	if out.Scores == nil {
-		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: sidecar returned no scores")
+		return tiny.Prediction{}, errors.New("ai/tiny/serve/tflite: predict: sidecar returned no scores")
 	}
 	if err := validateScores(out.Scores, labels); err != nil {
-		return tiny.Prediction{}, err
+		return tiny.Prediction{}, fmt.Errorf("ai/tiny/serve/tflite: predict: %w", err)
 	}
 	return tiny.Prediction{Labels: p.sortScores(out.Scores)}, nil
+}
+
+func extractImageBase64(input any) (string, error) {
+	switch v := input.(type) {
+	case []byte:
+		if len(v) == 0 {
+			return "", errors.New("empty image bytes")
+		}
+		return base64.StdEncoding.EncodeToString(v), nil
+	case string:
+		clean := strings.TrimSpace(v)
+		if clean == "" {
+			return "", errors.New("empty image string")
+		}
+		return clean, nil
+	default:
+		return "", fmt.Errorf("unsupported input type %T (want []byte or base64 string)", input)
+	}
 }
 
 func validateScores(scores map[string]float32, labels map[string]struct{}) error {
 	if len(scores) != len(labels) {
 		return fmt.Errorf(
-			"ai/tiny/serve/tflite: sidecar label count %d does not match loaded model %d",
+			"sidecar label count %d does not match loaded model %d",
 			len(scores), len(labels),
 		)
 	}
 	for label, score := range scores {
 		if _, loaded := labels[label]; !loaded {
-			return fmt.Errorf("ai/tiny/serve/tflite: sidecar label %q was not loaded", label)
+			return fmt.Errorf("sidecar label %q was not loaded", label)
 		}
 		if score < 0 || score > 1 || math.IsNaN(float64(score)) || math.IsInf(float64(score), 0) {
-			return fmt.Errorf("ai/tiny/serve/tflite: sidecar probability for %q is outside [0,1]", label)
+			return fmt.Errorf("sidecar probability for %q is outside [0,1]", label)
 		}
 	}
 	return nil
@@ -219,26 +249,26 @@ func (p *Predictor) post(ctx context.Context, path string, body []byte, out any)
 	req, rErr := http.NewRequestWithContext(ctx, http.MethodPost,
 		strings.TrimRight(p.opts.Endpoint, "/")+path, bytes.NewReader(body))
 	if rErr != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: build %s request: %w", path, rErr)
+		return fmt.Errorf("ai/tiny/serve/tflite: post: build %s request: %w", path, rErr)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, dErr := p.opts.HTTPClient.Do(req)
 	if dErr != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: %s request: %w", path, dErr)
+		return fmt.Errorf("ai/tiny/serve/tflite: post: %s request: %w", path, dErr)
 	}
 	defer func() { gerr.CloseInto(resp.Body, &err, "ai/tiny/serve/tflite: close "+path+" body") }()
 	respBody, readErr := httpclient.ReadAllBounded(resp.Body, p.opts.MaxResponseBytes)
 	if readErr != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: read %s body: %w", path, readErr)
+		return fmt.Errorf("ai/tiny/serve/tflite: post: read %s body: %w", path, readErr)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("ai/tiny/serve/tflite: %s status %d: %s", path, resp.StatusCode, truncate(string(respBody), 200))
+		return fmt.Errorf("ai/tiny/serve/tflite: post: %s status %d: %s", path, resp.StatusCode, truncate(string(respBody), 200))
 	}
 	if out == nil {
 		return nil
 	}
 	if jErr := json.Unmarshal(respBody, out); jErr != nil {
-		return fmt.Errorf("ai/tiny/serve/tflite: decode %s response: %w", path, jErr)
+		return fmt.Errorf("ai/tiny/serve/tflite: post: decode %s response: %w", path, jErr)
 	}
 	return nil
 }

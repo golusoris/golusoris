@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/storage/gcs"
 )
 

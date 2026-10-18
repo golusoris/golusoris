@@ -6,6 +6,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — validate/
 
+`nilcheck/`: stdlib-only nil detection; local contract: [AGENTS.md](nilcheck/AGENTS.md).
+
 Wraps [go-playground/validator](https://github.com/go-playground/validator)
 with golusoris conventions: failures map to `*errors.Error` with
 `errors.CodeValidation` (→ HTTP 400), and messages reference **JSON** field

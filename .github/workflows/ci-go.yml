@@ -9,7 +9,7 @@
 #     ci:
 #       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
 #       with:
-#         runs-on: ubuntu-24.04
+#         runs-on: ubuntu-26.04
 #         working-directory: .
 #         go-version-file: go.mod
 #         coverage-threshold: 70
@@ -20,9 +20,9 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: Runner label every job in this workflow runs on (the test job's matrix included). Defaults to the GitHub-hosted ubuntu-24.04 image; pass a self-hosted runner-set label to run elsewhere.
+        description: Runner label every job in this workflow runs on (the test job's matrix included). Defaults to the GitHub-hosted ubuntu-26.04 image; pass a self-hosted runner-set label to run elsewhere.
         type: string
-        default: ubuntu-24.04
+        default: ubuntu-26.04
       working-directory:
         description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses:` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
         type: string
@@ -273,12 +273,34 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
+      - name: Check out golusoris gosec guard
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
+        with:
+          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
+          sparse-checkout: tools/gosec-scan.sh
+          sparse-checkout-cone-mode: false
+          path: .golusoris-gosec
+          persist-credentials: false
       - name: gosec
+        shell: bash
         env:
           GOSEC_VERSION: ${{ inputs.gosec-version }}
           GOSEC_XTOOLS_VERSION: ${{ inputs.gosec-xtools-version }}
+          WORKFLOW_REPOSITORY: ${{ fromJSON(toJSON(job)).workflow_repository }}
+          WORKFLOW_SHA: ${{ fromJSON(toJSON(job)).workflow_sha }}
         run: |
           set -euo pipefail
+          gosec_root="${GITHUB_WORKSPACE}/.golusoris-gosec"
+          # Remove the helper checkout even when the scan fails so later gates see a clean tree.
+          trap 'rm -rf "$gosec_root"' EXIT
+          # The guard must come from this workflow's revision, not the caller's tree.
+          if [[ ! "$WORKFLOW_REPOSITORY" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ || \
+            ! "$WORKFLOW_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::called workflow revision identity is unavailable"
+            exit 1
+          fi
           # gosec's own x/tools pin cannot read Go 1.27.2 export data; build it against a newer one.
           work="$(mktemp -d)"
           (
@@ -290,7 +312,7 @@ jobs:
           # One gating scan writes SARIF and logs findings. testdata is excluded
           # because gosec's own walk includes fixtures that `go list ./...` does
           # not; real exceptions belong at the finding with a reason.
-          gosec -exclude-generated -exclude-dir=testdata -fmt sarif \
+          bash "${GITHUB_WORKSPACE}/.golusoris-gosec/tools/gosec-scan.sh" gosec -exclude-generated -exclude-dir=testdata -fmt sarif \
             -out gosec.sarif -stdout -verbose text ./...
       # A fork pull request gets no security-events write token; skip rather than fail open.
       - name: Upload SARIF
@@ -369,7 +391,7 @@ jobs:
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
   # The Linux leg owns coverage, artifacts, and Docker-backed tests; the
-  # default hosted ubuntu-24.04 image ships the Docker daemon they need.
+  # default hosted ubuntu-26.04 image ships the Docker daemon they need.
   test:
     name: Test (race + coverage)
     needs: build

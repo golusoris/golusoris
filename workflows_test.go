@@ -223,7 +223,7 @@ permissions: {contents: read}
 jobs:
   gate:
     permissions: {contents: read, checks: read}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps: [{run: "true"}]
 `
 
