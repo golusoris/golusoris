@@ -24,6 +24,7 @@ import (
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/internal/dirsync"
+	"github.com/golusoris/golusoris/internal/robustfs"
 )
 
 // scratchEntry is the append-capable, offset-tracking view of one in-progress
@@ -916,7 +917,7 @@ func (s *localScratch) DeleteCompletion(ctx context.Context, id string) error {
 	if err = checkScratchContext(ctx, "delete completion before remove"); err != nil {
 		return err
 	}
-	if err = os.Remove(completionPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	if err = robustfs.Remove(completionPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("tus: remove completion: %w", err)
 	}
 	if err == nil {
@@ -965,7 +966,7 @@ func removeScratchUploadFiles(ctx context.Context, paths ...string) error {
 		if err := checkScratchContext(ctx, "remove upload before file remove"); err != nil {
 			return errors.Join(append([]error{err}, removeErrs...)...)
 		}
-		if removeErr := os.Remove(candidate); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+		if removeErr := robustfs.Remove(candidate); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 			removeErrs = append(removeErrs, removeErr)
 		}
 	}
@@ -1164,7 +1165,7 @@ func writeStateFile(ctx context.Context, path string, content []byte) (err error
 	if err = checkScratchContext(ctx, "save completion before rename"); err != nil {
 		return err
 	}
-	if err = os.Rename(tempPath, path); err != nil {
+	if err = robustfs.Rename(tempPath, path); err != nil {
 		return fmt.Errorf("tus: replace completion state: %w", err)
 	}
 	return syncParentDir(path)

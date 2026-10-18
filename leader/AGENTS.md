@@ -33,6 +33,7 @@ Single-leader election with pluggable backends.
  `st := leader.NewStatus(); k8s.Module(st.Observe(cb))`.
 - Status true from `OnStartedLeading` until term ctx ends or
  `OnStoppedLeading`; term id stops late cancel clearing newer term.
+- `leader/gate`: loop-lifecycle gate starting and stopping periodic jobs on leadership transitions (`leader_loops` group).
 
 ## Trade-offs
 

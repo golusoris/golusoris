@@ -9,7 +9,7 @@
 #     ci:
 #       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
 #       with:
-#         runs-on: ubuntu-24.04
+#         runs-on: ubuntu-26.04
 #         working-directory: .
 #         go-version-file: go.mod
 #         coverage-threshold: 70
@@ -20,9 +20,9 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: Runner label every job in this workflow runs on (the test job's matrix included). Defaults to the GitHub-hosted ubuntu-24.04 image; pass a self-hosted runner-set label to run elsewhere.
+        description: Runner label every job in this workflow runs on (the test job's matrix included). Defaults to the GitHub-hosted ubuntu-26.04 image; pass a self-hosted runner-set label to run elsewhere.
         type: string
-        default: ubuntu-24.04
+        default: ubuntu-26.04
       working-directory:
         description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses:` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
         type: string
@@ -391,7 +391,7 @@ jobs:
 
   # ── Tests + coverage ──────────────────────────────────────────────────────
   # The Linux leg owns coverage, artifacts, and Docker-backed tests; the
-  # default hosted ubuntu-24.04 image ships the Docker daemon they need.
+  # default hosted ubuntu-26.04 image ships the Docker daemon they need.
   test:
     name: Test (race + coverage)
     needs: build

@@ -18,7 +18,9 @@ func hexKey(t *testing.T) string {
 	return hex.EncodeToString(make([]byte, 32))
 }
 
-func TestNoSecretIsNoop(t *testing.T) {
+// TestNoSecretBlocksCrossSitePOST: an unset secret must not disable
+// protection; cross-site browser POSTs are refused and non-browser POSTs pass.
+func TestNoSecretBlocksCrossSitePOST(t *testing.T) {
 	t.Parallel()
 	mw, err := csrf.New(csrf.Options{})
 	if err != nil {
@@ -27,10 +29,24 @@ func TestNoSecretIsNoop(t *testing.T) {
 	h := mw(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusTeapot)
 	}))
-	rr := httptest.NewRecorder()
-	h.ServeHTTP(rr, httptest.NewRequest(http.MethodPost, "/", nil))
-	if rr.Code != http.StatusTeapot {
-		t.Errorf("status = %d, want pass-through", rr.Code)
+	cases := []struct {
+		name, fetchSite string
+		want            int
+	}{
+		{"cross-site", "cross-site", http.StatusForbidden},
+		{"same-origin", "same-origin", http.StatusTeapot},
+		{"non-browser", "", http.StatusTeapot},
+	}
+	for _, tc := range cases {
+		req := httptest.NewRequest(http.MethodPost, "/", nil)
+		if tc.fetchSite != "" {
+			req.Header.Set("Sec-Fetch-Site", tc.fetchSite)
+		}
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != tc.want {
+			t.Errorf("%s: status = %d, want %d", tc.name, rr.Code, tc.want)
+		}
 	}
 }
 

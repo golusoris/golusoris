@@ -37,7 +37,7 @@ Linux/x86_64)
 	expected_digest="$GITLEAKS_LINUX_X64_SHA256"
 	;;
 *)
-	# CI installs gitleaks on hosted ubuntu-24.04 x64 only; other hosts install it themselves.
+	# CI installs gitleaks on hosted ubuntu-26.04 x64 only; other hosts install it themselves.
 	printf 'no pinned gitleaks archive digest for %s\n' "$platform" >&2
 	exit 1
 	;;

@@ -102,7 +102,7 @@ jobs:
   ci:
     uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
     with:
-      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
+      runs-on: ubuntu-26.04               # default; or your self-hosted runner-set label
       working-directory: .                  # dir holding go.mod; "." for a root module
       go-version-file: go.mod
       coverage-threshold: 70          # 85 for security-critical packages
@@ -145,7 +145,7 @@ at the top of `.github/workflows/ci-go.yml` for the full list and defaults):
 
 | Input | Default | Purpose |
 | --- | --- | --- |
-| `runs-on` | `ubuntu-24.04` | runner label every job runs on: GitHub-hosted by default, or your own self-hosted runner-set label |
+| `runs-on` | `ubuntu-26.04` | runner label every job runs on: GitHub-hosted by default, or your own self-hosted runner-set label |
 | `working-directory` | `.` | directory holding your module's go.mod, relative to the repo root; set for apps whose module is not at the repo root |
 | `go-version-file` | `go.mod` | where the Go version is resolved from — **relative to the repo root**, not `working-directory` (see the input's own description in `ci-go.yml`); a non-root module must pass e.g. `<working-directory>/go.mod` |
 | `coverage-threshold` | `70` | minimum total coverage %; `0` skips the check |
@@ -187,7 +187,7 @@ jobs:
   release:
     uses: golusoris/golusoris/.github/workflows/release-go.yml@fedcba9876543210fedcba9876543210fedcba98
     with:
-      runs-on: ubuntu-24.04               # default; or your self-hosted runner-set label
+      runs-on: ubuntu-26.04               # default; or your self-hosted runner-set label
       image-name: ghcr.io/myorg/myapp     # required
       goreleaser-config: tools/.goreleaser.yml
 ```
@@ -268,7 +268,7 @@ The reusable workflow installs its required subset from explicit inputs.
 | Tool | Repository pin | Install locally |
 | --- | --- | --- |
 | `golangci-lint` | `v2.13.2` | `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2` |
-| `gosec` | `v2.29.0` | `go install github.com/securego/gosec/v2/cmd/gosec@v2.29.0` |
+| `gosec` | `v2.29.0` | `scripts/ci/install-gosec.sh` |
 | `govulncheck` | `v1.8.0` | `go install golang.org/x/vuln/cmd/govulncheck@v1.8.0` |
 | `mockery` | `v3.8.0` | `go install github.com/vektra/mockery/v3@v3.8.0` |
 | `air` | `v1.67.4` | `go install github.com/air-verse/air@v1.67.4` |

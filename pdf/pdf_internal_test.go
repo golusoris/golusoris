@@ -7,25 +7,34 @@ package pdf
 import (
 	"context"
 	"errors"
-	"net"
+	"math"
 	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/chromedp/cdproto/page"
 )
 
 // fakeChromeEnv makes this test binary act as a Chrome that never serves DevTools; a script has no Windows form.
-const fakeChromeEnv = "GOLUSORIS_PDF_FAKE_CHROME"
+const (
+	fakeChromeEnv    = "GOLUSORIS_PDF_FAKE_CHROME"
+	fakeChromePIDEnv = "GOLUSORIS_PDF_FAKE_CHROME_PID_FILE"
+)
 
 const (
 	fakeChromeHang       = "hang"
 	fakeChromeExit       = "exit"
-	fakeChromeMute       = "mute"
+	fakeChromePipe       = "pipe"
 	fakeChromeDiagnostic = "fake chrome: profile still loading"
 	fakeChromeHangLimit  = 30 * time.Second
 	fakeLaunchTimeout    = 2 * time.Second
-	// chromedpDialDefault is chromedp v0.16.0's NewBrowser dial timeout (browser.go).
-	chromedpDialDefault = 10 * time.Second
 )
 
 func TestMain(m *testing.M) {
@@ -37,20 +46,27 @@ func TestMain(m *testing.M) {
 	case fakeChromeExit:
 		_, _ = os.Stderr.WriteString(fakeChromeDiagnostic + "\n")
 		os.Exit(1)
-	case fakeChromeMute:
-		muteDevTools()
+	case fakeChromePipe:
+		mutePipeDevTools()
 	}
 	os.Exit(m.Run())
 }
 
-// muteDevTools announces a DevTools endpoint whose listener never completes the
-// websocket handshake, like a cold Chrome that printed its URL but is still paging in.
-func muteDevTools() {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
+// mutePipeDevTools keeps the inherited CDP pipes open without answering commands.
+func mutePipeDevTools() {
+	if !slices.Contains(os.Args, "--remote-debugging-pipe") {
+		_, _ = os.Stderr.WriteString("fake chrome: missing pipe transport\n")
 		os.Exit(4)
 	}
-	_, _ = os.Stderr.WriteString("DevTools listening on ws://" + listener.Addr().String() + "/devtools/browser/fake\n")
+	for _, arg := range os.Args {
+		if strings.HasPrefix(arg, "--remote-debugging-port") || strings.HasPrefix(arg, "--remote-debugging-address") {
+			_, _ = os.Stderr.WriteString("fake chrome: unexpected debugging port\n")
+			os.Exit(4)
+		}
+	}
+	if err := os.WriteFile(os.Getenv(fakeChromePIDEnv), []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+		os.Exit(4)
+	}
 	time.Sleep(fakeChromeHangLimit)
 	os.Exit(3)
 }
@@ -76,6 +92,59 @@ func TestOptionsWithDefaultsSeparatesLaunchFromRenderTimeout(t *testing.T) {
 			if got.Timeout != tt.wantRender || got.LaunchTimeout != tt.wantLaunch {
 				t.Fatalf("withDefaults() = render %s launch %s; want %s / %s",
 					got.Timeout, got.LaunchTimeout, tt.wantRender, tt.wantLaunch)
+			}
+		})
+	}
+}
+
+func TestRenderOptionsParams(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   RenderOptions
+		want page.PrintToPDFParams
+	}{
+		{
+			name: "defaults",
+			want: page.PrintToPDFParams{
+				Landscape: new(false), PrintBackground: new(false), Scale: 1,
+				MarginTop: new(1.0), MarginBottom: new(1.0), MarginLeft: new(1.0), MarginRight: new(1.0),
+				PaperWidth: 21.0 / 2.54, PaperHeight: 29.7 / 2.54,
+			},
+		},
+		{
+			name: "custom",
+			in: RenderOptions{
+				Landscape: true, PrintBackground: true, Scale: 1.25,
+				MarginTop: 2, MarginBottom: 3, MarginLeft: 4, MarginRight: 5,
+				PaperWidth: 25.4, PaperHeight: 50.8,
+			},
+			want: page.PrintToPDFParams{
+				Landscape: new(true), PrintBackground: new(true), Scale: 1.25,
+				MarginTop: new(2.0), MarginBottom: new(3.0), MarginLeft: new(4.0), MarginRight: new(5.0),
+				PaperWidth: 25.4 / 2.54, PaperHeight: 50.8 / 2.54,
+			},
+		},
+		{
+			name: "explicit zero margins and partial paper",
+			in:   RenderOptions{MarginTop: 0.5, PaperWidth: 25.4},
+			want: page.PrintToPDFParams{
+				Landscape: new(false), PrintBackground: new(false), Scale: 1,
+				MarginTop: new(0.5), MarginBottom: new(0.0), MarginLeft: new(0.0), MarginRight: new(0.0),
+				PaperWidth: 25.4 / 2.54, PaperHeight: 29.7 / 2.54,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.in.params()
+			if math.Abs(got.PaperWidth-tt.want.PaperWidth) > 1e-12 || math.Abs(got.PaperHeight-tt.want.PaperHeight) > 1e-12 {
+				t.Errorf("paper = %g x %g; want %g x %g", got.PaperWidth, got.PaperHeight, tt.want.PaperWidth, tt.want.PaperHeight)
+			}
+			got.PaperWidth, got.PaperHeight = tt.want.PaperWidth, tt.want.PaperHeight
+			if !reflect.DeepEqual(*got, tt.want) {
+				t.Fatalf("params() = %+v; want %+v", *got, tt.want)
 			}
 		})
 	}
@@ -139,48 +208,108 @@ func TestLaunchErrorCarriesChromeOutputOnce(t *testing.T) {
 
 func TestNewRendererLaunchTimeoutReportsChromeOutput(t *testing.T) {
 	t.Setenv(fakeChromeEnv, fakeChromeHang)
-	renderer, err := NewRenderer(Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
+	renderer, err := NewRendererContext(t.Context(), Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
 	if err == nil {
 		renderer.Close()
-		t.Fatal("NewRenderer() = nil error for a Chrome that never serves DevTools")
+		t.Fatal("NewRendererContext() = nil error for a Chrome that never serves DevTools")
 	}
 	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("NewRenderer() error = %v; want context.DeadlineExceeded", err)
+		t.Fatalf("NewRendererContext() error = %v; want context.DeadlineExceeded", err)
 	}
 	if !strings.Contains(err.Error(), fakeChromeDiagnostic) {
-		t.Fatalf("NewRenderer() error = %v; want Chrome output %q", err, fakeChromeDiagnostic)
+		t.Fatalf("NewRendererContext() error = %v; want Chrome output %q", err, fakeChromeDiagnostic)
 	}
 }
 
 func TestNewRendererReportsChromeExitOutputOnce(t *testing.T) {
 	t.Setenv(fakeChromeEnv, fakeChromeExit)
-	renderer, err := NewRenderer(Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
+	renderer, err := NewRendererContext(t.Context(), Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
 	if err == nil {
 		renderer.Close()
-		t.Fatal("NewRenderer() = nil error for a Chrome that exits")
+		t.Fatal("NewRendererContext() = nil error for a Chrome that exits")
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("NewRenderer() error = %v; want the exit, not the deadline", err)
+		t.Fatalf("NewRendererContext() error = %v; want the exit, not the deadline", err)
 	}
 	if got := strings.Count(err.Error(), fakeChromeDiagnostic); got != 1 {
-		t.Fatalf("NewRenderer() error = %v; Chrome output appears %d times, want 1", err, got)
+		t.Fatalf("NewRendererContext() error = %v; Chrome output appears %d times, want 1", err, got)
 	}
 }
 
-func TestNewRendererLaunchTimeoutOwnsWebsocketDial(t *testing.T) {
-	if testing.Short() {
-		t.Skip("must outlast chromedp's 10s default dial timeout")
-	}
-	t.Setenv(fakeChromeEnv, fakeChromeMute)
-	launch := chromedpDialDefault + time.Second
-	renderer, err := NewRenderer(Options{ChromePath: testExecutable(t), LaunchTimeout: launch})
+func TestNewRendererLaunchTimeoutOwnsSilentPipe(t *testing.T) {
+	t.Setenv(fakeChromeEnv, fakeChromePipe)
+	pidFile := filepath.Join(t.TempDir(), "chrome.pid")
+	t.Setenv(fakeChromePIDEnv, pidFile)
+	started := time.Now()
+	renderer, err := NewRendererContext(t.Context(), Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
+	elapsed := time.Since(started)
 	if err == nil {
 		renderer.Close()
-		t.Fatal("NewRenderer() = nil error for a DevTools endpoint that never answers")
+		t.Fatal("NewRendererContext() = nil error for a CDP pipe that never answers")
 	}
-	if want := "context deadline exceeded after " + launch.String(); !strings.Contains(err.Error(), want) {
-		t.Fatalf("NewRenderer() error = %v; want the %s launch deadline to end the dial (%q)", err, launch, want)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("NewRendererContext() error = %v; want context.DeadlineExceeded", err)
 	}
+	if elapsed < fakeLaunchTimeout || elapsed > fakeLaunchTimeout+time.Second {
+		t.Errorf("NewRendererContext() elapsed = %s; want [%s, %s]", elapsed, fakeLaunchTimeout, fakeLaunchTimeout+time.Second)
+	}
+	assertFakeChromeReaped(t, pidFile)
+	assertChromeGoroutinesStopped(t)
+	t.Logf("silent pipe canceled and reaped after %s", elapsed)
+}
+
+func assertFakeChromeReaped(t *testing.T, pidFile string) {
+	t.Helper()
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("fake Chrome did not start with pipe transport: %v", err)
+	}
+	pid, err := strconv.Atoi(string(data))
+	if err != nil {
+		t.Fatalf("fake Chrome PID: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		t.Log("process probe unavailable: Windows does not support signal 0")
+		return
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		t.Fatalf("FindProcess(%d): %v", pid, err)
+	}
+	defer process.Release()
+	if err := process.Signal(syscall.Signal(0)); !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
+		t.Errorf("fake Chrome PID %d still exists or probe failed: %v", pid, err)
+	}
+}
+
+func assertChromeGoroutinesStopped(t *testing.T) {
+	t.Helper()
+	stack := make([]byte, 1<<20)
+	for range 100 {
+		n := runtime.Stack(stack, true)
+		if !strings.Contains(string(stack[:n]), "github.com/chromedp/chromedp") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Errorf("chromedp goroutines remain after canceled launch:\n%s", stack[:runtime.Stack(stack, true)])
+}
+
+func TestNewRendererExpiredLaunchTimeout(t *testing.T) {
+	t.Setenv(fakeChromeEnv, fakeChromeHang)
+	started := time.Now()
+	renderer, err := NewRendererContext(t.Context(), Options{ChromePath: testExecutable(t), LaunchTimeout: -time.Nanosecond})
+	if err == nil {
+		renderer.Close()
+		t.Fatal("NewRendererContext() = nil error for an expired launch budget")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("NewRendererContext() error = %v; want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(started); elapsed > time.Second {
+		t.Errorf("NewRendererContext() elapsed = %s; want at most 1s", elapsed)
+	}
+	assertChromeGoroutinesStopped(t)
 }
 
 // testExecutable is this test binary, which TestMain turns into a Chrome stand-in under fakeChromeEnv.
@@ -243,5 +372,19 @@ func TestTaskContextHonorsRendererCancellation(t *testing.T) {
 	<-task.Done()
 	if !errors.Is(task.Err(), context.Canceled) {
 		t.Fatalf("task.Err() = %v, want context.Canceled", task.Err())
+	}
+}
+
+func TestNewRendererContextCancelledCaller(t *testing.T) {
+	t.Setenv(fakeChromeEnv, fakeChromeHang)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	renderer, err := NewRendererContext(ctx, Options{ChromePath: testExecutable(t), LaunchTimeout: fakeLaunchTimeout})
+	if err == nil {
+		renderer.Close()
+		t.Fatal("NewRendererContext() = nil error for a cancelled caller context")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("NewRendererContext() error = %v; want context.Canceled", err)
 	}
 }

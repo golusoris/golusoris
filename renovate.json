@@ -18,7 +18,8 @@
   "dockerfile": {
     "managerFilePatterns": [
       "/^tools/Dockerfile(?:\\.media)?\\.template$/",
-      "/^ai/tiny/trainers/(?:gemma|litert)/Dockerfile$/"
+      "/^ai/tiny/trainers/(?:gemma|litert)/Dockerfile$/",
+      "/^scripts/ci/backup-restore\\.Dockerfile$/"
     ]
   },
   "pip_requirements": {
@@ -228,6 +229,7 @@
       "description": "Update immutable integration-test image references in Go and the CI pre-pull manifests.",
       "managerFilePatterns": [
         "/^internal/testimages/images\\.go$/",
+        "/^container/registry/credentials/ecr/internal/motodev/images\\.go$/",
         "/^container/registry/sign/kms/vault/internal/vaultdev/images\\.go$/",
         "/^container/registry/sign/kms/aws/internal/localstackdev/images\\.go$/",
         "/^container/registry/sign/kms/azure/internal/lowkeydev/images\\.go$/",
@@ -641,9 +643,9 @@
         "tools/figures/third_party/interfig/upstream/src/svg.ts",
         "tools/figures/third_party/interfig/upstream/src/geometry.ts",
         "tools/figures/third_party/interfig/upstream/src/model.ts",
-        "tools/figures/dist/loader.js",
-        "tools/figures/dist/player.js",
-        "tools/figures/dist/THIRD-PARTY-LICENSES.txt",
+        "tools/figures/player/loader.js",
+        "tools/figures/player/player.js",
+        "tools/figures/player/THIRD-PARTY-LICENSES.txt",
         "tools/figures/figures.css",
         "tools/figures/mkdocs_hook.py",
         "tools/figures/astro.mjs",
