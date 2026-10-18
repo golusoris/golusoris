@@ -1,0 +1,56 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# Weekly watch for the db/bun Windows panic of #800: reopens the issue when a
+# failed Portability Windows log shows a db/bun nil-pointer panic.
+name: Windows panic rescan
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'   # Mondays 05:23 UTC
+  workflow_dispatch: {}
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/windows-panic-rescan.yml
+      - scripts/ci/windows-panic-rescan.py
+      - scripts/ci/windows-panic-rescan_test.py
+
+permissions:
+  contents: read
+
+jobs:
+  rescan:
+    name: Rescan Portability Windows logs
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      # Job logs need actions: read; anonymous reads of them return 403.
+      actions: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Stub tests
+        run: python3 -B scripts/ci/windows-panic-rescan_test.py
+      # The known pre-fix crash must register as a hit with this job's token.
+      - name: Planted hit on a recorded crash
+        run: |
+          status=0
+          python3 -B scripts/ci/windows-panic-rescan.py --run-id 38072234214 || status=$?
+          if [[ "$status" != 1 ]]; then
+            echo "expected a hit (exit 1) on run 38072234214, got exit $status" >&2
+            exit 1
+          fi
+      - name: Rescan and reopen
+        if: github.event_name != 'pull_request'
+        run: python3 -B scripts/ci/windows-panic-rescan.py --reopen

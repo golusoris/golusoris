@@ -43,6 +43,18 @@ import (
 
 const defaultDiscoveryTimeout = 10 * time.Second
 
+// Sentinels returned or wrapped on OIDC flow failures.
+var (
+	// ErrExchange indicates the authorization code exchange with the IdP failed.
+	ErrExchange = errors.New("auth/oidc: code exchange failed")
+	// ErrIDTokenMissing indicates the token response did not contain an id_token.
+	ErrIDTokenMissing = errors.New("auth/oidc: no id_token in response")
+	// ErrIDTokenInvalid indicates ID token verification failed.
+	ErrIDTokenInvalid = errors.New("auth/oidc: id_token verification failed")
+	// ErrNonceMismatch indicates the ID token nonce claim was missing or mismatched.
+	ErrNonceMismatch = errors.New("auth/oidc: nonce mismatch")
+)
+
 // Options configure the OIDC provider.
 type Options struct {
 	// IssuerURL is the OIDC issuer (e.g. "https://accounts.google.com").
@@ -61,6 +73,9 @@ type Options struct {
 	DiscoveryTimeout time.Duration `koanf:"discovery_timeout"`
 	// LazyDiscovery defers OIDC discovery until the first operation requiring it.
 	LazyDiscovery bool `koanf:"lazy_discovery"`
+	// DisableOfflineAccess omits oauth2.AccessTypeOffline from authorization requests.
+	// Google-specific refresh-token request; login-only flows set true.
+	DisableOfflineAccess bool `koanf:"disable_offline_access"`
 	// HTTPClient performs discovery and subsequent OIDC requests. A copy gains
 	// DiscoveryTimeout when its Timeout is not already positive.
 	HTTPClient *http.Client `koanf:"-"`
@@ -236,11 +251,15 @@ func (p *Provider) authCodeURL(state string, extra ...oauth2.AuthCodeOption) (ur
 	if err != nil {
 		return "", "", err
 	}
-	opts := append([]oauth2.AuthCodeOption{
-		oauth2.AccessTypeOffline,
+	opts := make([]oauth2.AuthCodeOption, 0, 3+len(extra))
+	if !p.opts.DisableOfflineAccess {
+		opts = append(opts, oauth2.AccessTypeOffline)
+	}
+	opts = append(opts,
 		oauth2.SetAuthURLParam("code_challenge", pkceChallenge(verifier)),
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
-	}, extra...)
+	)
+	opts = append(opts, extra...)
 	return p.cfg.AuthCodeURL(state, opts...), verifier, nil
 }
 
@@ -272,15 +291,15 @@ func (p *Provider) exchange(ctx context.Context, code, verifier string) (TokenSe
 		oauth2.SetAuthURLParam("code_verifier", verifier),
 	)
 	if err != nil {
-		return TokenSet{}, fmt.Errorf("auth/oidc: exchange: %w", err)
+		return TokenSet{}, fmt.Errorf("%w: %w", ErrExchange, err)
 	}
 	rawID, ok := tok.Extra("id_token").(string)
 	if !ok {
-		return TokenSet{}, errors.New("auth/oidc: no id_token in response")
+		return TokenSet{}, ErrIDTokenMissing
 	}
 	idTok, verifyErr := p.verifier.Verify(ctx, rawID)
 	if verifyErr != nil {
-		return TokenSet{}, fmt.Errorf("%w: auth/oidc: verify id_token: %w", gerr.Unauthorized("invalid id_token"), verifyErr)
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: verify id_token: %w", gerr.Unauthorized("invalid id_token"), ErrIDTokenInvalid, verifyErr)
 	}
 	return TokenSet{
 		AccessToken:  tok.AccessToken,
@@ -309,14 +328,14 @@ func (p *Provider) Complete(ctx context.Context, code string, req AuthRequest) (
 		return TokenSet{}, err
 	}
 	if req.Nonce == "" {
-		return TokenSet{}, fmt.Errorf("%w: auth/oidc: nonce must not be empty", gerr.Unauthorized("empty nonce"))
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: nonce must not be empty", gerr.Unauthorized("empty nonce"), ErrNonceMismatch)
 	}
 	toks, err := p.exchange(ctx, code, req.Verifier)
 	if err != nil {
 		return TokenSet{}, err
 	}
 	if toks.Nonce == "" || subtle.ConstantTimeCompare([]byte(req.Nonce), []byte(toks.Nonce)) != 1 {
-		return TokenSet{}, fmt.Errorf("%w: auth/oidc: verify id_token: nonce mismatch", gerr.Unauthorized("nonce mismatch"))
+		return TokenSet{}, fmt.Errorf("%w: %w: auth/oidc: verify id_token: nonce mismatch", gerr.Unauthorized("nonce mismatch"), ErrNonceMismatch)
 	}
 	return toks, nil
 }

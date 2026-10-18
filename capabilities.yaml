@@ -1150,6 +1150,10 @@ packages:
     domain: test
     capabilities: [test.configfile]
     description: "Package configfile writes caller-provided test configuration to a private temporary YAML file."
+  - import: github.com/golusoris/golusoris/testutil/httpclient
+    domain: test
+    capabilities: [test.httpclient]
+    description: "Package httpclient asserts that a constructor cloned an injected HTTP client with a bounded timeout."
   - import: github.com/golusoris/golusoris/testutil/factory
     domain: test
     capabilities: [test.factory]
