@@ -158,6 +158,11 @@ packages:
     capabilities: [validate.struct]
     description: "Package validate wraps go-playground/validator with golusoris conventions: errors map to errors.Validation with a structured message describing failed fields by"
     replaces: [github.com/go-playground/validator/v10]
+  - import: github.com/golusoris/golusoris/core/validate/nilcheck
+    module: github.com/golusoris/golusoris/core
+    domain: validate
+    capabilities: [validate.nilcheck]
+    description: "Package nilcheck detects nil values, including typed-nil values in interfaces."
   - import: github.com/golusoris/golusoris/core/version
     module: github.com/golusoris/golusoris/core
     domain: build
@@ -197,10 +202,18 @@ packages:
     domain: ai
     capabilities: [ai.tiny_serve_ollama]
     description: "Package ollama implements a [tiny.Predictor] that serves Gemma (base + LoRA) via an [ollama](https://ollama.com) endpoint."
+  - import: github.com/golusoris/golusoris/ai/tiny/serve/onnx
+    domain: ai
+    capabilities: [ai.tiny_serve_onnx]
+    description: "Package onnx implements a [tiny.Predictor] that executes ONNX models via an external runner subprocess speaking the vmafx-ort-runner protocol."
   - import: github.com/golusoris/golusoris/ai/tiny/serve/tflite
     domain: ai
     capabilities: [ai.tiny_serve_tflite]
     description: "Package tflite implements a [tiny.Predictor] that serves LiteRT (`.tflite`) classifiers produced by ai/tiny/litert via a Python inference sidecar over HTTP."
+  - import: github.com/golusoris/golusoris/ai/tpe
+    domain: ai
+    capabilities: [ai.hyperparameter_search]
+    description: "Package tpe provides a Tree-structured Parzen Estimator (TPE) for hyperparameter search and black-box optimization over mixed continuous and discrete parameter spaces."
   - import: github.com/golusoris/golusoris/ai/vector
     domain: ai
     capabilities: [ai.embeddings, ai.vector_search]
@@ -633,6 +646,22 @@ packages:
     capabilities: [http.idempotency, grpc.idempotency]
     description: "Package idempotency provides HTTP middleware and a gRPC unary interceptor that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header)."
     replaces: [github.com/jonboulle/clockwork]
+  - import: github.com/golusoris/golusoris/idempotency/postgres
+    domain: http
+    capabilities: [http.idempotency.postgres]
+    description: "Package postgres provides the Postgres idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/redis
+    domain: http
+    capabilities: [http.idempotency.redis]
+    description: "Package redis provides the Redis idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/sqlite
+    domain: http
+    capabilities: [http.idempotency.sqlite]
+    description: "Package sqlite provides the SQLite idempotency backend."
+  - import: github.com/golusoris/golusoris/idempotency/store
+    domain: http
+    capabilities: [http.idempotency.store]
+    description: "Package store provides atomic idempotency contracts and an in-memory implementation."
   - import: github.com/golusoris/golusoris/integrations/goenvoy
     domain: integrations
     capabilities: [integrations.goenvoy]
@@ -728,6 +757,10 @@ packages:
     domain: leader
     capabilities: [leader.always]
     description: "Package always is the leader backend for standalone single-replica runs: the replica is leader from start to stop without any lock, so singleton tasks writte"
+  - import: github.com/golusoris/golusoris/leader/gate
+    domain: leader
+    capabilities: [leader.loop_gate]
+    description: "Package gate starts and stops a set of periodic loops as leadership comes and goes."
   - import: github.com/golusoris/golusoris/leader/k8s
     domain: leader
     capabilities: [leader.k8s]
@@ -816,6 +849,10 @@ packages:
     domain: notify
     capabilities: [notify.bounce]
     description: "Package bounce handles email bounce and complaint webhooks from SES (via SNS) and Postmark."
+  - import: github.com/golusoris/golusoris/notify/channel
+    domain: notify
+    capabilities: [notify.channel_dispatch]
+    description: "Package channel provides generic notification channel dispatch and secret redaction."
   - import: github.com/golusoris/golusoris/notify/discord
     domain: notify
     capabilities: [notify.discord]
@@ -1113,6 +1150,10 @@ packages:
     domain: test
     capabilities: [test.configfile]
     description: "Package configfile writes caller-provided test configuration to a private temporary YAML file."
+  - import: github.com/golusoris/golusoris/testutil/httpclient
+    domain: test
+    capabilities: [test.httpclient]
+    description: "Package httpclient asserts that a constructor cloned an injected HTTP client with a bounded timeout."
   - import: github.com/golusoris/golusoris/testutil/factory
     domain: test
     capabilities: [test.factory]
@@ -1123,6 +1164,10 @@ packages:
     capabilities: [test.fixture]
     description: "Package fixture loads typed test fixtures from testdata CSV files into slices of structs, backed by jszwec/csvutil."
     replaces: [github.com/jszwec/csvutil]
+  - import: github.com/golusoris/golusoris/testutil/testctx
+    domain: test
+    capabilities: [testutil.testctx]
+    description: "Package testctx provides test contexts with deadlines and automatic cleanup."
   - import: github.com/golusoris/golusoris/testutil/fuzz
     domain: test
     capabilities: [test.fuzz]
@@ -1173,7 +1218,7 @@ packages:
     replaces: [github.com/prometheus/prometheus]
   - import: github.com/golusoris/golusoris/testutil/pg
     domain: test
-    capabilities: [test.pg]
+    capabilities: [test.pg, test.pg.template]
     description: "Package pg starts a real PostgreSQL container via testcontainers-go and returns a connected [*pgxpool.Pool]."
     replaces: [github.com/jackc/pgx/v5, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/postgres]
   - import: github.com/golusoris/golusoris/testutil/prop

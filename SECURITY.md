@@ -55,7 +55,7 @@ Renovate commits; dependency review and DCO are both skipped outside
 pull-request events, and the aggregate validates those skips explicitly.
 Main branch protection separately requires the Conventional-Commit PR title and
 GitHub-managed CodeQL `Analyze (go)` checks. Repository Actions run on
-GitHub-hosted runners (`runs-on: ubuntu-24.04`) with pinned action SHAs; each
+GitHub-hosted runners (`runs-on: ubuntu-26.04`) with pinned action SHAs; each
 job installs its tools at the versions pinned in `tools/tool-versions.env`.
 
 The following controls have enforcement distinct from the blocking
@@ -118,15 +118,31 @@ Releases are:
   and earlier remain MIT
 
 The framework itself ships as archives (no container image); verify a
-downloaded release's checksums against the cosign bundle published
-alongside it (`checksums.txt` + `checksums.txt.sigstore.json`):
+downloaded release's checksums against the cosign bundle published alongside
+it (`checksums.txt` + `checksums.txt.sigstore.json`). Releases from `v0.18.0` on
+are signed by `release-build.yml`, while `v0.17.0` and earlier were signed by
+`release.yml`:
 
 ```bash
+# v0.18.0 and later:
+cosign verify-blob \
+  --bundle checksums.txt.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
+  --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+  checksums.txt
+
+# v0.17.0 and earlier:
 cosign verify-blob \
   --bundle checksums.txt.sigstore.json \
   --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release.yml@refs/tags/.*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   checksums.txt
+```
+
+For `v0.18.0` and later, verify build provenance with the GitHub CLI:
+
+```bash
+gh attestation verify <archive> --repo golusoris/golusoris --signer-workflow golusoris/golusoris/.github/workflows/release-build.yml
 ```
 
 ## Dependencies

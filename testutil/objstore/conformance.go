@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/testutil/testctx"
 )
 
 const conformanceTimeout = 2 * time.Minute
@@ -52,16 +53,9 @@ func RunConformance(t *testing.T, b storage.Bucket, caps Capabilities) {
 	}
 }
 
-func testContext(t *testing.T) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), conformanceTimeout)
-	t.Cleanup(cancel)
-	return ctx
-}
-
 func testRoundTrip(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	body := []byte("conformance round trip")
 	meta := map[string]string{"owner": "alice"}
 	obj, err := b.Put(ctx, "roundtrip/a b+c.txt", bytes.NewReader(body), storage.PutOptions{
@@ -82,7 +76,7 @@ func testRoundTrip(t *testing.T, b storage.Bucket) {
 
 func testEmptyObject(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	if _, err := b.Put(ctx, "empty/zero", bytes.NewReader(nil), storage.PutOptions{}); err != nil {
 		t.Fatalf("Put empty: %v", err)
 	}
@@ -97,7 +91,7 @@ func testEmptyObject(t *testing.T, b storage.Bucket) {
 
 func testStatExistsDelete(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	key := "stat/object"
 	mustPut(ctx, t, b, key, []byte("12345"))
 	stat, err := b.Stat(ctx, key)
@@ -120,7 +114,7 @@ func testStatExistsDelete(t *testing.T, b storage.Bucket) {
 
 func testMissingKey(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	if _, err := b.Stat(ctx, "missing/key"); !errors.Is(err, storage.ErrNotFound) {
 		t.Fatalf("Stat missing = %v, want ErrNotFound", err)
 	}
@@ -138,7 +132,7 @@ func testMissingKey(t *testing.T, b storage.Bucket) {
 
 func testList(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	for _, key := range []string{"list/a", "list/b", "list/c", "listing-other/d"} {
 		mustPut(ctx, t, b, key, []byte(key))
 	}
@@ -167,7 +161,7 @@ func testList(t *testing.T, b storage.Bucket) {
 
 func testUnsafeKeys(t *testing.T, b storage.Bucket) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	for _, key := range []string{"", "../escape", "a/../b", "/abs", "a//b"} {
 		if _, err := b.Put(ctx, key, bytes.NewReader(nil), storage.PutOptions{}); !errors.Is(err, storage.ErrUnsafeKey) {
 			t.Fatalf("Put(%q) = %v, want ErrUnsafeKey", key, err)
@@ -180,7 +174,7 @@ func testUnsafeKeys(t *testing.T, b storage.Bucket) {
 
 func testCopy(t *testing.T, b storage.Bucket, c storage.Copier) {
 	t.Helper()
-	ctx := testContext(t)
+	ctx := testctx.Deadline(t, conformanceTimeout)
 	meta := map[string]string{"stage": "raw"}
 	body := []byte("copy me")
 	if _, err := b.Put(ctx, "copy/src", bytes.NewReader(body), storage.PutOptions{

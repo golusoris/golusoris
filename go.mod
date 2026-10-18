@@ -53,7 +53,7 @@ require (
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.10.2
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-foundation-sdk/go v0.0.20
 	github.com/grafana/pyroscope-go v1.4.3
@@ -90,6 +90,7 @@ require (
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.72.1
+	github.com/prometheus/otlptranslator v1.0.0
 	github.com/redis/rueidis v1.0.78
 	github.com/riverqueue/river v0.49.0
 	github.com/riverqueue/river/riverdriver v0.49.0
@@ -111,7 +112,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/redpanda v0.44.0
 	github.com/tsenart/vegeta/v12 v12.13.0
 	github.com/tus/tusd/v2 v2.10.1
-	github.com/twmb/franz-go v1.22.1
+	github.com/twmb/franz-go v1.22.2
 	github.com/ulule/limiter/v3 v3.11.2
 	github.com/uptrace/bun v1.3.0
 	github.com/uptrace/bun/dialect/pgdialect v1.3.0
@@ -138,7 +139,7 @@ require (
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/exp v0.0.0-20261009195045-ca0d7ba23607
+	golang.org/x/exp v0.0.0-20261014143641-f0251eb4aa3e
 	golang.org/x/net v0.61.0
 	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
@@ -282,7 +283,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.20.1 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/pgzip v1.2.6 // indirect
 	github.com/knadh/koanf/maps v0.1.3 // indirect
@@ -337,7 +338,7 @@ require (
 	github.com/paulmach/orb v0.13.0 // indirect
 	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.30 // indirect
+	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pion/datachannel v1.6.3 // indirect
 	github.com/pion/dtls/v3 v3.1.10 // indirect
 	github.com/pion/ice/v4 v4.4.7 // indirect
@@ -356,7 +357,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
-	github.com/prometheus/otlptranslator v1.0.0 // indirect
 	github.com/prometheus/procfs v0.22.0 // indirect
 	github.com/puzpuzpuz/xsync/v3 v3.5.1 // indirect
 	github.com/redis/go-redis/v9 v9.20.1 // indirect
@@ -391,7 +391,7 @@ require (
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
-	github.com/twmb/franz-go/pkg/kmsg v1.14.0 // indirect
+	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.16 // indirect
 	github.com/vektah/gqlparser/v2 v2.5.37 // indirect
 	github.com/vincent-petithory/dataurl v1.0.0 // indirect
@@ -420,7 +420,7 @@ require (
 	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
-	golang.org/x/tools v0.51.0 // indirect
+	golang.org/x/tools v0.52.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/genproto v0.0.0-20260715232425-e75dac1f907d // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect

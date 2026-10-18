@@ -36,7 +36,7 @@ require (
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
-	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.21.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cyberphone/json-canonicalization v0.0.0-20241213102144-19d51d7fe467 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f // indirect
@@ -79,7 +79,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b // indirect
-	github.com/golusoris/golusoris/core v0.10.1 // indirect
+	github.com/golusoris/golusoris/core v0.10.2 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -125,7 +125,7 @@ require (
 	github.com/sigstore/protobuf-specs v0.5.2 // indirect
 	github.com/sigstore/rekor v1.5.4 // indirect
 	github.com/sigstore/rekor-tiles/v2 v2.3.0 // indirect
-	github.com/sigstore/sigstore v1.11.0 // indirect
+	github.com/sigstore/sigstore v1.11.1 // indirect
 	github.com/sigstore/sigstore-go v1.3.0 // indirect
 	github.com/sigstore/timestamp-authority/v2 v2.1.3 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect

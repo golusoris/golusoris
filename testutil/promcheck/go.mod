@@ -4,7 +4,7 @@ go 1.27.2
 
 require (
 	github.com/golusoris/golusoris v0.16.5
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.10.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.72.1
@@ -37,7 +37,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/jonboulle/clockwork v0.5.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.20.1 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/knadh/koanf/maps v0.1.3 // indirect
 	github.com/knadh/koanf/parsers/json v1.0.1 // indirect
 	github.com/knadh/koanf/parsers/yaml v1.1.1 // indirect

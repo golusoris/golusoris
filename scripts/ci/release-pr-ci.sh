@@ -10,7 +10,7 @@
 # check.
 #   usage: scripts/ci/release-pr-ci.sh OWNER/REPO
 #   needs: gh with a token that may read pull requests and write actions
-#   env:   RELEASE_PR_CI_TRIES (default 6), RELEASE_PR_CI_WAIT seconds (default 10)
+#   env:   RELEASE_PR_CI_TRIES (default 18), RELEASE_PR_CI_WAIT seconds (default 10)
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -19,7 +19,7 @@ if [ $# -ne 1 ]; then
 fi
 REPO="$1"
 GH="${GH_BIN:-gh}"
-TRIES="${RELEASE_PR_CI_TRIES:-6}"
+TRIES="${RELEASE_PR_CI_TRIES:-18}"
 WAIT="${RELEASE_PR_CI_WAIT:-10}"
 if [[ ! "$TRIES" =~ ^[1-9][0-9]?$ ]] || [[ ! "$WAIT" =~ ^[0-9]{1,3}$ ]]; then
 	echo "error: unexpected RELEASE_PR_CI_TRIES or RELEASE_PR_CI_WAIT" >&2

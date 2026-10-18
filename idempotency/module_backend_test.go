@@ -19,6 +19,7 @@ import (
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/idempotency"
+	"github.com/golusoris/golusoris/idempotency/internal/storetest"
 )
 
 // newConfig loads an idempotency YAML block the way apps configure it.
@@ -42,7 +43,7 @@ func moduleOptions(cfg *config.Config, extra ...fx.Option) []fx.Option {
 
 func TestModule_SelectsSQLiteBackend(t *testing.T) {
 	t.Parallel()
-	db := openSQLite(t)
+	db := storetest.OpenSQLite(t)
 	var store idempotency.Store
 	app := fxtest.New(t, moduleOptions(
 		newConfig(t, "  store: sqlite\n"),

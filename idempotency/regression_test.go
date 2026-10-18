@@ -5,8 +5,6 @@
 package idempotency_test
 
 import (
-	"context"
-	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,8 +12,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/jonboulle/clockwork"
 
 	"github.com/golusoris/golusoris/idempotency"
 	"github.com/golusoris/golusoris/tenancy"
@@ -301,85 +297,6 @@ func TestMiddleware_PanicReleasesReservation(t *testing.T) {
 	response := sendIdempotentRequest(handler, "/payments", "key", "payload")
 	if response.Code != http.StatusNoContent || calls.Load() != 2 {
 		t.Fatalf("retry = (%d, calls %d); want 204 after released reservation", response.Code, calls.Load())
-	}
-}
-
-func TestMemoryStore_ExpiredEntryCanBeReplaced(t *testing.T) {
-	t.Parallel()
-	clock := clockwork.NewFakeClockAt(time.Unix(1_700_000_000, 0))
-	store := idempotency.NewMemoryStoreWithClock(clock)
-	ctx := context.Background()
-	oldClaim, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil {
-		t.Fatalf("Claim old: %v", err)
-	}
-	err = store.Commit(
-		ctx,
-		"key",
-		oldClaim.Token,
-		"fingerprint",
-		idempotency.CachedResponse{Body: []byte("old")},
-		time.Minute,
-	)
-	if err != nil {
-		t.Fatalf("Commit old: %v", err)
-	}
-	clock.Advance(2 * time.Minute)
-	newClaim, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil || newClaim.State != idempotency.ClaimAcquired {
-		t.Fatalf("Claim expired = (%+v, %v); want acquired", newClaim, err)
-	}
-	err = store.Commit(
-		ctx,
-		"key",
-		newClaim.Token,
-		"fingerprint",
-		idempotency.CachedResponse{Body: []byte("new")},
-		time.Minute,
-	)
-	if err != nil {
-		t.Fatalf("Commit replacement: %v", err)
-	}
-	completed, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil || completed.State != idempotency.ClaimCompleted || string(completed.Response.Body) != "new" {
-		t.Fatalf("Claim replacement = (%+v, %v); want new completed response", completed, err)
-	}
-}
-
-func TestMemoryStore_StaleTokenCannotOverwriteReplacement(t *testing.T) {
-	t.Parallel()
-	clock := clockwork.NewFakeClockAt(time.Unix(1_700_000_000, 0))
-	store := idempotency.NewMemoryStoreWithClock(clock)
-	ctx := context.Background()
-	stale, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil {
-		t.Fatalf("Claim stale: %v", err)
-	}
-	clock.Advance(2 * time.Minute)
-	current, err := store.Claim(ctx, "key", "fingerprint", time.Minute)
-	if err != nil {
-		t.Fatalf("Claim current: %v", err)
-	}
-	err = store.Commit(
-		ctx,
-		"key",
-		stale.Token,
-		"fingerprint",
-		idempotency.CachedResponse{Body: []byte("stale")},
-		time.Minute,
-	)
-	if !errors.Is(err, idempotency.ErrReservationLost) {
-		t.Fatalf("stale Commit error = %v; want ErrReservationLost", err)
-	}
-	if err := store.Commit(
-		ctx,
-		"key",
-		current.Token,
-		"fingerprint",
-		idempotency.CachedResponse{Body: []byte("current")},
-		time.Minute,
-	); err != nil {
-		t.Fatalf("Commit current: %v", err)
 	}
 }
 
