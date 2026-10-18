@@ -28,7 +28,7 @@ srv, err := api.NewServer(handler,
 - Handler code returns `*gerr.Error` via helpers like `gerr.NotFound`.
   `ErrorHandler` emits RFC 9457 `application/problem+json`; legacy
   `{code, message}` remains as extension fields.
-- `ErrorHandlerWith` maps sentinel errors via `WithStatus` and validation field errors to 422 `invalid-params` via `WithInvalidParams`.
+- `ErrorHandlerWith` maps sentinel errors via `WithStatus` or `WithPublicStatus` (unredacted 5xx chain detail, deliberate caller opt-in), validation field errors to 422 `invalid-params` via `WithInvalidParams`. Problem responses set `Cache-Control: no-store`.
 - Ogen errors retain status classification and emit `about:blank` Problem
   Details; legacy `error_message` remains as extension field.
 - `SlogMiddleware` logs per ogen operation; separate from outer `httpx/middleware.Logger` logging per HTTP request.

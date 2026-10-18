@@ -383,3 +383,274 @@ func TestErrorHandlerWithFirstMatchOrdering(t *testing.T) {
 		t.Errorf("status = %d, want %d (first match should win)", rr.Code, http.StatusConflict)
 	}
 }
+
+type publicStatusCase struct {
+	name       string
+	code       gerr.Code
+	wantStatus int
+	wantType   string
+	wantTitle  string
+}
+
+func assertPublicProblem(t *testing.T, rr *httptest.ResponseRecorder, tc publicStatusCase, wantDetail string) {
+	t.Helper()
+	if rr.Code != tc.wantStatus {
+		t.Errorf("status = %d, want %d", rr.Code, tc.wantStatus)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "application/problem+json" {
+		t.Errorf("Content-Type = %q", ct)
+	}
+	if cc := rr.Header().Get("Cache-Control"); cc != "no-store" {
+		t.Errorf("Cache-Control = %q, want %q", cc, "no-store")
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	want := map[string]any{
+		"status":        float64(tc.wantStatus),
+		"type":          tc.wantType,
+		"title":         tc.wantTitle,
+		"code":          string(tc.code),
+		"instance":      "/media/queue",
+		"detail":        wantDetail,
+		"error_message": wantDetail,
+		"message":       wantDetail,
+	}
+	for key, val := range want {
+		if body[key] != val {
+			t.Errorf("%s = %v, want %v", key, body[key], val)
+		}
+	}
+}
+
+func TestErrorHandlerWithPublicStatus(t *testing.T) {
+	t.Parallel()
+	errUpstream := errors.New("upstream connection reset")
+	wrapped := fmt.Errorf("sonarr unreachable: %w", errUpstream)
+
+	cases := []publicStatusCase{
+		{
+			name:       "unavailable 503",
+			code:       gerr.CodeUnavailable,
+			wantStatus: http.StatusServiceUnavailable,
+			wantType:   "https://golusoris.dev/errors/unavailable",
+			wantTitle:  "Service Unavailable",
+		},
+		{
+			name:       "timeout 504",
+			code:       gerr.CodeTimeout,
+			wantStatus: http.StatusGatewayTimeout,
+			wantType:   "https://golusoris.dev/errors/timeout",
+			wantTitle:  "Gateway Timeout",
+		},
+		{
+			name:       "internal 500",
+			code:       gerr.CodeInternal,
+			wantStatus: http.StatusInternalServerError,
+			wantType:   "https://golusoris.dev/errors/internal",
+			wantTitle:  "Internal Server Error",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+			h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithPublicStatus(errUpstream, tc.code))
+
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/media/queue", nil)
+			h(context.Background(), rr, req, wrapped)
+
+			assertPublicProblem(t, rr, tc, wrapped.Error())
+		})
+	}
+}
+
+func TestErrorHandlerWithStatusRedactsServerError(t *testing.T) {
+	t.Parallel()
+	errUpstream := errors.New("upstream connection reset")
+	wrapped := fmt.Errorf("sonarr unreachable: %w", errUpstream)
+
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithStatus(errUpstream, gerr.CodeUnavailable))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/media/queue", nil)
+	h(context.Background(), rr, req, wrapped)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["detail"] != "internal server error" {
+		t.Errorf("detail = %v, want 'internal server error'", body["detail"])
+	}
+	if body["error_message"] != "internal server error" {
+		t.Errorf("error_message = %v, want 'internal server error'", body["error_message"])
+	}
+	if strings.Contains(rr.Body.String(), "sonarr unreachable") {
+		t.Errorf("body leaked wrapped error: %s", rr.Body.String())
+	}
+}
+
+func TestErrorHandlerUnmappedErrorRedacted500(t *testing.T) {
+	t.Parallel()
+	errUpstream := errors.New("upstream connection reset")
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithPublicStatus(errUpstream, gerr.CodeUnavailable))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/media/queue", nil)
+	unmapped := errors.New("unexpected database leak")
+	h(context.Background(), rr, req, unmapped)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["detail"] != "internal server error" {
+		t.Errorf("detail = %v, want 'internal server error'", body["detail"])
+	}
+	if strings.Contains(rr.Body.String(), "database leak") {
+		t.Errorf("body leaked unmapped error: %s", rr.Body.String())
+	}
+}
+
+func TestErrorHandlerWithPublicStatus4xxUsesIncomingError(t *testing.T) {
+	t.Parallel()
+	errSentinel := errors.New("item not found")
+	wrapped := fmt.Errorf("service layer: %w", errSentinel)
+
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithPublicStatus(errSentinel, gerr.CodeNotFound))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items/123", nil)
+	h(context.Background(), rr, req, wrapped)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	wantDetail := wrapped.Error()
+	if body["detail"] != wantDetail {
+		t.Errorf("detail = %v, want %q (incoming err.Error())", body["detail"], wantDetail)
+	}
+	if body["error_message"] != wantDetail {
+		t.Errorf("error_message = %v, want %q", body["error_message"], wantDetail)
+	}
+}
+
+func TestErrorHandlerWithPublicStatusNilTargetIgnored(t *testing.T) {
+	t.Parallel()
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger, ogenkit.WithPublicStatus(nil, gerr.CodeUnavailable))
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items", nil)
+	errTest := errors.New("some error")
+	h(context.Background(), rr, req, errTest)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("status = %d, want 500", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["detail"] != "internal server error" {
+		t.Errorf("detail = %v, want 'internal server error'", body["detail"])
+	}
+}
+
+func TestErrorHandlerWithStatusPrecedenceOverPublicStatus(t *testing.T) {
+	t.Parallel()
+	errTarget := errors.New("backend failed")
+	wrapped := fmt.Errorf("wrapper: %w", errTarget)
+
+	logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+	h := ogenkit.ErrorHandlerWith(logger,
+		ogenkit.WithStatus(errTarget, gerr.CodeUnavailable),
+		ogenkit.WithPublicStatus(errTarget, gerr.CodeUnavailable),
+	)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/items", nil)
+	h(context.Background(), rr, req, wrapped)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", rr.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body["detail"] != "internal server error" {
+		t.Errorf("detail = %v, want 'internal server error' (WithStatus wins)", body["detail"])
+	}
+	if strings.Contains(rr.Body.String(), "backend failed") || strings.Contains(rr.Body.String(), "wrapper") {
+		t.Errorf("body leaked error detail: %s", rr.Body.String())
+	}
+}
+
+func TestErrorHandlerCacheControlNoStore(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name       string
+		err        error
+		opts       []ogenkit.Option
+		wantStatus int
+	}{
+		{
+			name:       "4xx response",
+			err:        gerr.NotFound("missing entity"),
+			wantStatus: http.StatusNotFound,
+		},
+		{
+			name:       "5xx response",
+			err:        errors.New("unexpected crash"),
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name: "422 invalid-params response",
+			err: &validate.Error{
+				Fields: []validate.FieldError{
+					{Name: "field", Error: errors.New("invalid")},
+				},
+			},
+			opts:       []ogenkit.Option{ogenkit.WithInvalidParams()},
+			wantStatus: http.StatusUnprocessableEntity,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			logger := slog.New(slog.NewJSONHandler(new(bytes.Buffer), nil))
+			h := ogenkit.ErrorHandlerWith(logger, tc.opts...)
+
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/test", nil)
+			h(context.Background(), rr, req, tc.err)
+
+			if rr.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rr.Code, tc.wantStatus)
+			}
+			if cc := rr.Header().Get("Cache-Control"); cc != "no-store" {
+				t.Errorf("Cache-Control = %q, want %q", cc, "no-store")
+			}
+		})
+	}
+}
