@@ -44,7 +44,7 @@ const (
 	// PubSubEmulator is the Google Cloud Pub/Sub emulator integration-test image.
 	PubSubEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:588.0.0-emulators@sha256:be2f0e582a94c9e06e7a384fe2b3b39d590eeb8da65a110eda991598c100fe80"
 	// Mailpit is the SMTP server and API emulator image for notify tests.
-	Mailpit = "axllent/mailpit:v1.31.5@sha256:94f6b70c1436defae6799d9ac7ff0eeff9540465b842026d5cdb018f1c0234ea"
+	Mailpit = "axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")

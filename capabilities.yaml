@@ -1128,6 +1128,10 @@ packages:
     capabilities: [storage.malware_scan]
     description: "Package scan scans untrusted upload bytes for malware via ClamAV's clamd daemon (over TCP or a unix socket) and maps the result to a typed [Verdict]."
     replaces: [github.com/baruwa-enterprise/clamd]
+  - import: github.com/golusoris/golusoris/storage/storagetest
+    domain: test
+    capabilities: [test.storage]
+    description: "Package storagetest provides shared conformance helpers for testing storage.Bucket implementations."
   - import: github.com/golusoris/golusoris/storage/tus
     domain: storage
     capabilities: [storage.tus]

@@ -6,7 +6,7 @@ container/registry motoserver/moto:5.2.4@sha256:120b1589c6df7e35d2092935f6ff7244
 container/registry testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0
 container/registry/sign/kms/aws localstack/localstack:4.14.0@sha256:3ebc37595918b8accb852f8048fef2aff047d465167edd655528065b07bc364a
 container/registry/sign/kms/aws testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0
-container/registry/sign/kms/azure nagyesta/lowkey-vault:7.3.112@sha256:2636ad677e0e9b98f16b82f36dae16748bcb0d3eee7c9ac6d357f9e9a233be3a
+container/registry/sign/kms/azure nagyesta/lowkey-vault:7.3.127@sha256:d92adc63759571b2ef68e84f4fad94e6d9603c1faf9d338a2d90c2302303c952
 container/registry/sign/kms/azure testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0
 container/registry/sign/kms/vault hashicorp/vault:2.2.0@sha256:e0acd3c681bdf57f002d7214e5d050b876e1704678005c6b0406dd96a65be919
 container/registry/sign/kms/vault openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf
