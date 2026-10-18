@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	sdk "github.com/stripe/stripe-go/v86"
+	sdk "github.com/stripe/stripe-go/v87"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 

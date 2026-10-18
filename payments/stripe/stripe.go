@@ -2,12 +2,12 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package stripe provides a thin fx-compatible wrapper around stripe-go/v86.
+// Package stripe provides a thin fx-compatible wrapper around stripe-go/v87.
 // It exposes a [Client] covering the most common SaaS payment flows:
 // payment intents, checkout sessions, and customer portal.
 // The inbound webhook signature middleware lives in [webhooks/in.Stripe].
 //
-// Picks: stripe/stripe-go v86 (official SDK, new-style stripe.Client API).
+// Picks: stripe/stripe-go v87 (official SDK, new-style stripe.Client API).
 //
 // Usage:
 //
@@ -26,7 +26,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	sdk "github.com/stripe/stripe-go/v86"
+	sdk "github.com/stripe/stripe-go/v87"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"

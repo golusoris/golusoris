@@ -33,6 +33,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/validate/content"
+
+	"github.com/golusoris/golusoris/internal/robustfs"
 )
 
 // DefaultDir is the features.d directory nfd-worker reads.
@@ -153,7 +155,9 @@ func writeAtomic(dir, name string, body []byte) error {
 	}
 	tmpPath := tmp.Name()
 	if err = fillTemp(tmp, body); err == nil {
-		err = osRenamer().replace(tmpPath, filepath.Join(dir, name))
+		if renameErr := robustfs.Rename(tmpPath, filepath.Join(dir, name)); renameErr != nil {
+			err = fmt.Errorf("nfd: rename into place: %w", renameErr)
+		}
 	}
 	if err != nil {
 		if rmErr := os.Remove(tmpPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {

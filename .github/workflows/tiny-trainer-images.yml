@@ -29,12 +29,13 @@ permissions:
 
 concurrency:
   group: tiny-trainers-${{ inputs.version || github.ref }}
-  cancel-in-progress: false
+  # Only build-only PR runs cancel; the publish job keeps its own non-cancelling group.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   contracts:
     name: Python contracts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - name: Stop on a draft pull request
@@ -72,7 +73,7 @@ jobs:
 
   build-only:
     name: Build and smoke (${{ matrix.trainer }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -123,7 +124,7 @@ jobs:
     name: Verify publication controls
     if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: contracts
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     steps:
       - name: Require explicit remote-control enablement
@@ -141,7 +142,7 @@ jobs:
     name: Publish (${{ matrix.trainer }})
     if: github.event_name != 'pull_request' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish))
     needs: [contracts, publish-policy]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 90
     environment: tiny-trainer-publish
     concurrency:
@@ -269,7 +270,7 @@ jobs:
           set -euo pipefail
           image_id=$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")
           if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-            printf 'local image returned invalid config digest: %q\n' "$image_id" >&2
+            printf 'local image returned invalid image id: %q\n' "$image_id" >&2
             exit 1
           fi
           echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
@@ -374,7 +375,7 @@ jobs:
             '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
           if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
             "$image_version" != "$VERSION" ]]; then
-            printf 'published image does not match tested config digest and source labels\n' >&2
+            printf 'published image does not match tested image id and source labels\n' >&2
             exit 1
           fi
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -420,7 +421,8 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/ci/tiny-trainer-verify-image.sh \
-            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF"
+            "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF" \
+            tiny-trainer-images.yml tiny-trainers-
 
       - name: Record immutable digest
         shell: bash

@@ -11,10 +11,10 @@ import (
 	"time"
 
 	"go.uber.org/fx"
-	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/flags"
+	"github.com/golusoris/golusoris/testutil/fxtest"
 )
 
 func newTestConfig(t *testing.T) *config.Config {
@@ -32,23 +32,15 @@ func TestModule_DefaultBackendNoop(t *testing.T) {
 
 	var client *flags.Client
 	var provider flags.Provider
-	app := fxtest.New(
+	fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
 		flags.Module,
 		fx.Populate(&client, &provider),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if err := app.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer func() {
-		if err := app.Stop(ctx); err != nil {
-			t.Fatalf("Stop: %v", err)
-		}
-	}()
 
 	if got := provider.Metadata().Name; got != "noop" {
 		t.Errorf("default backend: got %q, want %q", got, "noop")
@@ -67,7 +59,7 @@ func TestModule_MemoryBackend(t *testing.T) {
 	cfg := newTestConfig(t)
 
 	var provider flags.Provider
-	app := fxtest.New(
+	fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
 		fx.Provide(func() *slog.Logger { return slog.New(slog.DiscardHandler) }),
@@ -76,17 +68,6 @@ func TestModule_MemoryBackend(t *testing.T) {
 		flags.Module,
 		fx.Populate(&provider),
 	)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := app.Start(ctx); err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	defer func() {
-		if err := app.Stop(ctx); err != nil {
-			t.Fatalf("Stop: %v", err)
-		}
-	}()
-
 	if got := provider.Metadata().Name; got != "memory" {
 		t.Errorf("backend: got %q, want %q", got, "memory")
 	}

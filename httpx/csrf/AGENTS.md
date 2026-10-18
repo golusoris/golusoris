@@ -10,7 +10,7 @@ Browser same-origin CSRF enforcement via `filippo.io/csrf/gorilla`.
 
 ## Contract
 
-- `http.csrf.secret` empty -> no-op middleware.
+- `http.csrf.secret` empty -> `net/http.CrossOriginProtection`, same same-origin check; never a no-op.
 - Nonempty secret must decode to 32 bytes; compatibility enable switch only. Pinned dependency ignores key value.
 - Unsafe cross-site browser requests -> 403 via `Sec-Fetch-Site` / `Origin` checks.
 - Requests without browser origin metadata -> allowed as non-browser traffic.

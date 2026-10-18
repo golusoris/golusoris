@@ -18,7 +18,7 @@ symmetric encryption, and secure-random helpers. Stateless functions work direct
 | `HashPassword(plain)` | argon2id hash with `DefaultPasswordParams`, returns PHC string |
 | `HashPasswordWith(plain, *argon2id.Params)` | hash with custom params |
 | `VerifyPassword(plain, hash)` | returns `(match, needsRehash, err)` |
-| `DefaultPasswordParams` | 2026 argon2id defaults (~100ms/hash) |
+| `DefaultPasswordParams` | argon2id defaults (64 MiB, t=3, p=2) at or above the OWASP minimum |
 | `Seal(key, plaintext)` | AES-GCM encrypt → `nonce‖ciphertext` |
 | `Open(key, sealed)` | AES-GCM decrypt |
 | `RandomBytes(n)` | n cryptographically-secure random bytes |

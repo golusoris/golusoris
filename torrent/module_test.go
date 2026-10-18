@@ -7,8 +7,6 @@ package torrent_test
 import (
 	"context"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -16,18 +14,9 @@ import (
 	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/testutil/configfile"
 	"github.com/golusoris/golusoris/torrent"
 )
-
-// writeConfig writes a YAML config file into a temp dir and returns its path.
-func writeConfig(t *testing.T, body string) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return path
-}
 
 // bootClient boots the torrent Module against cfg and returns the Client. The
 // fx app is stopped via t.Cleanup. It does not call Start (so no qbittorrent
@@ -54,7 +43,7 @@ func bootClient(t *testing.T, cfg *config.Config) (torrent.Client, error) {
 func TestModule_DefaultBackendIsTransmission(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "torrent:\n  transmission:\n    url: http://localhost:9091/transmission/rpc\n")},
+		Files: []string{configfile.Write(t, "torrent:\n  transmission:\n    url: http://localhost:9091/transmission/rpc\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -73,7 +62,7 @@ func TestModule_DefaultBackendIsTransmission(t *testing.T) {
 func TestModule_UnsupportedBackend(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "torrent:\n  backend: deluge\n")},
+		Files: []string{configfile.Write(t, "torrent:\n  backend: deluge\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -88,7 +77,7 @@ func TestModule_UnsupportedBackend(t *testing.T) {
 func TestModule_SelectsRTorrent(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "torrent:\n  backend: rtorrent\n  rtorrent:\n    addr: http://localhost:8000/RPC2\n")},
+		Files: []string{configfile.Write(t, "torrent:\n  backend: rtorrent\n  rtorrent:\n    addr: http://localhost:8000/RPC2\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -107,7 +96,7 @@ func TestModule_SelectsRTorrent(t *testing.T) {
 func TestModule_DefaultTimeoutApplied(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "torrent:\n  backend: rtorrent\n  timeout: 0s\n  rtorrent:\n    addr: http://localhost:8000/RPC2\n")},
+		Files: []string{configfile.Write(t, "torrent:\n  backend: rtorrent\n  timeout: 0s\n  rtorrent:\n    addr: http://localhost:8000/RPC2\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)
@@ -123,7 +112,7 @@ func TestModule_DefaultTimeoutApplied(t *testing.T) {
 func TestModule_QBittorrentLoginViaLifecycle(t *testing.T) {
 	t.Parallel()
 	cfg, err := config.New(config.Options{
-		Files: []string{writeConfig(t, "torrent:\n  backend: qbittorrent\n  qbittorrent:\n    host: http://127.0.0.1:1\n    username: a\n    password: b\n")},
+		Files: []string{configfile.Write(t, "torrent:\n  backend: qbittorrent\n  qbittorrent:\n    host: http://127.0.0.1:1\n    username: a\n    password: b\n")},
 	})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)

@@ -9,13 +9,18 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
+# pull_request_target runs carry the base ref, so the PR number keys the group.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
+
 permissions:
   contents: read
 
 jobs:
   label:
     name: Label by path
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read

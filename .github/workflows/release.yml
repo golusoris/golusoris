@@ -14,8 +14,8 @@
 #   - Multi-arch tarballs (+ zip on windows) for cmd/golusoris and cmd/golusoris-mcp
 #   - checksums.txt + checksums.txt.sigstore.json (cosign keyless bundle)
 #   - SPDX SBOMs on the archives (syft)
-#   - Build-provenance attestations on all release artifacts
-#     (actions/attest-build-provenance; no SLSA level claimed)
+#   - Build-provenance attestations on all release artifacts (build + attest run
+#     in release-build.yml, reusable, SLSA Build L3)
 name: release
 
 on:
@@ -48,7 +48,7 @@ jobs:
   # Unprivileged on purpose: it runs the tagged code and hands only text to the release job.
   apidiff:
     name: API compatibility summary
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -104,187 +104,17 @@ jobs:
           cat "$RUNNER_TEMP/api-section.md"
           echo "section=$(base64 -w0 <"$RUNNER_TEMP/api-section.md")" >>"$GITHUB_OUTPUT"
 
-  goreleaser:
+  release-build:
     name: GoReleaser
     needs: [require-green-ci, apidiff]
     # The API summary is informational: when its job fails, the notes say so and the release goes on.
     if: ${{ !cancelled() && needs.require-green-ci.result == 'success' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      GOFLAGS: -mod=readonly
+    uses: ./.github/workflows/release-build.yml
     permissions:
-      contents: write       # create the GitHub Release + upload artifacts
-      id-token: write       # cosign keyless OIDC + build provenance
-      attestations: write   # actions/attest-build-provenance
+      contents: write
+      id-token: write
+      attestations: write
       artifact-metadata: write
-    steps:
-      - name: Validate canonical release tag
-        shell: bash
-        env:
-          RELEASE_REF: ${{ github.ref }}
-          RELEASE_REF_NAME: ${{ github.ref_name }}
-          RELEASE_REF_TYPE: ${{ github.ref_type }}
-        run: |
-          set -euo pipefail
-          TAG_PATTERN='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
-          if [[ "$RELEASE_REF_TYPE" != tag || \
-            "$RELEASE_REF" != "refs/tags/$RELEASE_REF_NAME" || \
-            ! "$RELEASE_REF_NAME" =~ $TAG_PATTERN ]]; then
-            echo "::error::release requires an immutable canonical SemVer tag; got ${RELEASE_REF}."
-            exit 1
-          fi
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # cosign goes first: goreleaser-action verifies its checksums signature
-      # with the cosign it finds on PATH.
-      - name: Install pinned cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v3.1.3
-
-      - name: Install pinned Syft
-        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          syft-version: v1.54.1
-
-      - name: Install pinned GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
-        with:
-          version: v2.18.3
-          install-only: true
-
-      - name: Verify pinned release tools
-        shell: bash
-        run: |
-          set -euo pipefail
-          for tool in cosign syft goreleaser gh; do command -v "$tool"; done
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
-
-      - name: Compose the breaking-change notes header
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          APIDIFF_RESULT: ${{ needs.apidiff.result }}
-          API_SECTION: ${{ needs.apidiff.outputs.section }}
-        run: |
-          set -euo pipefail
-          # Breaking entries count from the last published release: a tag can ship without one (#740).
-          previous="$(scripts/ci/previous-published-release.sh "$RELEASE_TAG")"
-          scripts/ci/release-notes-breaking.sh notes "$RELEASE_TAG" "$previous" \
-            >"$RUNNER_TEMP/breaking.md"
-          if [[ "$APIDIFF_RESULT" == success && -n "$API_SECTION" ]]; then
-            base64 -d <<<"$API_SECTION" >"$RUNNER_TEMP/api.md"
-          else
-            scripts/ci/release-notes-breaking.sh api "${previous:-none}" \
-              --unavailable "the apidiff job ended with ${APIDIFF_RESULT}" >"$RUNNER_TEMP/api.md"
-          fi
-          if [[ -s "$RUNNER_TEMP/breaking.md" ]]; then
-            {
-              cat "$RUNNER_TEMP/breaking.md"
-              printf '\n'
-              cat "$RUNNER_TEMP/api.md"
-            } >"$RUNNER_TEMP/release-header.md"
-          else
-            cp "$RUNNER_TEMP/api.md" "$RUNNER_TEMP/release-header.md"
-          fi
-          cat "$RUNNER_TEMP/release-header.md"
-
-      - name: Run GoReleaser
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          args=(release --config=tools/.goreleaser.yml --clean)
-          # The header always carries the API compatibility section; the guard keeps a failed compose visible.
-          if [[ -s "$RUNNER_TEMP/release-header.md" ]]; then
-            args+=(--release-header="$RUNNER_TEMP/release-header.md")
-          fi
-          goreleaser "${args[@]}"
-
-      # The draft stays unpublished unless each host-runnable CLI reports this tag.
-      - name: Smoke-run the release binaries
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: scripts/ci/release-smoke.sh "$RELEASE_TAG"
-
-      - name: Verify the keyless checksum bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          cosign verify-blob \
-            --bundle dist/checksums.txt.sigstore.json \
-            --certificate-identity "https://github.com/${GITHUB_REPOSITORY}/.github/workflows/release.yml@${GITHUB_REF}" \
-            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-            dist/checksums.txt
-
-      - name: Attest release archives
-        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
-        with:
-          # Also attest the per-archive SPDX SBOMs goreleaser emits, so the
-          # header's "provenance on all release artifacts" holds directly, not
-          # just transitively via the attested checksums.txt (issue #192).
-          subject-path: 'dist/*.tar.gz,dist/*.zip,dist/checksums.txt,dist/*.sbom.json'
-
-      - name: Publish verified immutable release
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.ref_name }}
-          SOURCE_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          # release-tag-binding:start
-          if ! remote_refs="$(git ls-remote --exit-code origin \
-            "refs/tags/${RELEASE_TAG}" "refs/tags/${RELEASE_TAG}^{}")"; then
-            echo '::error::release tag no longer exists on the remote.'
-            exit 1
-          fi
-          if ! remote_sha="$(printf '%s\n' "$remote_refs" | awk \
-            -v direct="refs/tags/${RELEASE_TAG}" \
-            -v peeled="refs/tags/${RELEASE_TAG}^{}" '
-              $2 == direct { direct_sha = $1; direct_count++ }
-              $2 == peeled { peeled_sha = $1; peeled_count++ }
-              END {
-                if (direct_count != 1 || peeled_count > 1) exit 1
-                print peeled_count == 1 ? peeled_sha : direct_sha
-              }
-            ')"; then
-            echo '::error::release tag remote identity is ambiguous.'
-            exit 1
-          fi
-          if [[ ! "$remote_sha" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ || \
-            "$remote_sha" != "$SOURCE_SHA" ]]; then
-            echo '::error::release tag no longer resolves to the event commit.'
-            exit 1
-          fi
-          # release-tag-binding:end
-          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json tagName,isDraft --jq '[.tagName, .isDraft] | @tsv')"
-          if [[ "$state" != "$RELEASE_TAG"$'\ttrue' ]]; then
-            echo '::error::GoReleaser did not leave the expected draft release.'
-            exit 1
-          fi
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --verify-tag --draft=false
-          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json tagName,isDraft,isImmutable \
-            --jq '[.tagName, .isDraft, .isImmutable] | @tsv')"
-          if [[ "$state" != "$RELEASE_TAG"$'\tfalse\ttrue' ]]; then
-            echo '::error::verified immutable release publication did not converge.'
-            exit 1
-          fi
+    with:
+      api-result: ${{ needs.apidiff.result }}
+      api-section: ${{ needs.apidiff.outputs.section }}

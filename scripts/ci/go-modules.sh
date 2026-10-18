@@ -226,10 +226,10 @@ run_module() {
 				gosec_args+=(-conf "$REPO_ROOT/.gosec.json")
 			fi
 			if [[ "$module" == "." && -n "${GOSEC_ROOT_SARIF:-}" ]]; then
-				(cd "$REPO_ROOT" && gosec "${gosec_args[@]}" \
+				(cd "$REPO_ROOT" && "$REPO_ROOT/tools/gosec-scan.sh" gosec "${gosec_args[@]}" \
 					-fmt sarif -out "$GOSEC_ROOT_SARIF" -stdout -verbose text ./...)
 			else
-				(cd "$REPO_ROOT/$module" && gosec -quiet "${gosec_args[@]}" ./...)
+				(cd "$REPO_ROOT/$module" && "$REPO_ROOT/tools/gosec-scan.sh" gosec "${gosec_args[@]}" ./...)
 			fi
 			;;
 		vuln)

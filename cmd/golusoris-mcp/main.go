@@ -153,7 +153,7 @@ type mcpTool struct {
 var mcpTools = []mcpTool{
 	{
 		name:        "golusoris_init",
-		description: "Scaffold a new golusoris application with a go.mod and main.go.",
+		description: "Scaffold a new golusoris application with a go.mod and cmd/app/main.go.",
 		inputSchema: json.RawMessage(`{
 			"type": "object",
 			"required": ["name"],

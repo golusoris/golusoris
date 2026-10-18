@@ -13,7 +13,7 @@ name: Scorecard
 # Cancel a stale run when a newer commit supersedes it (#196).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   push:
@@ -36,7 +36,7 @@ permissions:
 jobs:
   analysis:
     name: Scorecard Analysis
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -72,7 +72,7 @@ jobs:
           persist-credentials: false
       - name: Run Scorecard
         if: github.event_name != 'merge_group'
-        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif

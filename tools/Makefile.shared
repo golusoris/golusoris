@@ -2,6 +2,9 @@
 #   include $(GOLUSORIS)/tools/Makefile.shared
 # or copy targets verbatim.
 
+# Capture this fragment's directory before later includes change MAKEFILE_LIST.
+GOLUSORIS_TOOLS_DIR := $(dir $(lastword $(MAKEFILE_LIST)))
+
 GO          ?= go
 GOLANGCI    ?= golangci-lint
 GOVULNCHECK ?= govulncheck
@@ -30,7 +33,7 @@ vuln: ## govulncheck
 
 .PHONY: gosec
 gosec: ## gosec scan
-	$(GOSEC) -quiet $(PKG)
+	bash "$(GOLUSORIS_TOOLS_DIR)gosec-scan.sh" $(GOSEC) $(PKG)
 
 .PHONY: sec
 sec: vuln gosec ## All security checks

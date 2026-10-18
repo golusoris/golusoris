@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.0](https://github.com/golusoris/golusoris/compare/core/v0.10.2...core/v0.11.0) (2026-10-16)
+
+
+### Features
+
+* **core/config:** add Options.DisableEnv to skip the environment ([#873](https://github.com/golusoris/golusoris/issues/873)) ([93e46dd](https://github.com/golusoris/golusoris/commit/93e46dd0ae96cb3876de847e61365dd7d1666713)), closes [#727](https://github.com/golusoris/golusoris/issues/727)
+* **core/storage:** add the backend-neutral storage API ([#919](https://github.com/golusoris/golusoris/issues/919)) ([06a7313](https://github.com/golusoris/golusoris/commit/06a7313ad880bd0c11bd5b467f0709d982253f08))
+
 ## [0.10.2](https://github.com/golusoris/golusoris/compare/core/v0.10.1...core/v0.10.2) (2026-10-10)
 
 

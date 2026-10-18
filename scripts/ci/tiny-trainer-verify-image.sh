@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-if (( $# != 4 )); then
-	printf 'usage: %s IMAGE@DIGEST OWNER/REPO SOURCE_SHA SOURCE_REF\n' "${0##*/}" >&2
+if (( $# != 6 )); then
+	printf 'usage: %s IMAGE@DIGEST OWNER/REPO SOURCE_SHA SOURCE_REF WORKFLOW_FILE TAG_PREFIX\n' "${0##*/}" >&2
 	exit 2
 fi
 
@@ -14,10 +14,11 @@ image="$1"
 repository="$2"
 source_sha="$3"
 source_ref="$4"
-workflow="$repository/.github/workflows/tiny-trainer-images.yml"
+workflow_file="$5"
+tag_prefix="$6"
 
 if [[ ! "$image" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[a-f0-9]{64}$ ]]; then
-	printf 'invalid trainer image digest: %q\n' "$image" >&2
+	printf 'invalid image digest: %q\n' "$image" >&2
 	exit 1
 fi
 if [[ ! "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
@@ -28,10 +29,20 @@ if [[ ! "$source_sha" =~ ^[a-f0-9]{40}$ ]]; then
 	printf 'invalid source SHA: %q\n' "$source_sha" >&2
 	exit 1
 fi
-if [[ ! "$source_ref" =~ ^refs/tags/tiny-trainers-v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-	printf 'invalid trainer source ref: %q\n' "$source_ref" >&2
+if [[ ! "$tag_prefix" =~ ^[a-z0-9-]+-$ ]]; then
+	printf 'invalid tag prefix: %q\n' "$tag_prefix" >&2
 	exit 1
 fi
+if [[ ! "$workflow_file" =~ ^[a-zA-Z0-9_.-]+\.ya?ml$ ]]; then
+	printf 'invalid workflow file: %q\n' "$workflow_file" >&2
+	exit 1
+fi
+if [[ ! "$source_ref" =~ ^refs/tags/${tag_prefix}v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	printf 'invalid source ref: %q\n' "$source_ref" >&2
+	exit 1
+fi
+
+workflow="$repository/.github/workflows/$workflow_file"
 
 identity="https://github.com/$workflow@$source_ref"
 cosign verify \

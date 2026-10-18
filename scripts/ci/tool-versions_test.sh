@@ -149,14 +149,28 @@ if grep -En 'go install [^[:space:]]+@v[0-9]' "${direct_workflows[@]}"; then
 	printf 'direct workflow bypasses tools/tool-versions.env\n' >&2
 	exit 1
 fi
+for workflow in "${direct_workflows[@]}"; do
+	if ! grep -Fq 'scripts/ci/install-gosec.sh' "$workflow"; then
+		printf 'direct workflow bypasses scripts/ci/install-gosec.sh: %s\n' "$workflow" >&2
+		exit 1
+	fi
+done
+for workflow in "$repo_root"/.github/workflows/*.yml "$repo_root"/.gitea/workflows/*.yml; do
+	if grep -En 'go install [^[:space:]]*gosec@' "$workflow"; then
+		printf 'workflow runs raw go install for gosec instead of scripts/ci/install-gosec.sh: %s\n' \
+			"$workflow" >&2
+		exit 1
+	fi
+done
 
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
 cosign_version_guard="cosign version | grep -Eq '$cosign_version_pattern'"
 cosign_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
+	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
 	"$repo_root/.github/workflows/release-tool-contract.yml"
-	"$repo_root/.github/workflows/release.yml"
+	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
 	"$repo_root/.github/workflows/tiny-trainer-images.yml"
 	"$repo_root/.github/workflows/verify-provenance.yml"
 )
@@ -230,15 +244,15 @@ require_inputs() {
 check_release_tool_installs() {
 	local workflows="$1"
 	local name workflow
-	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images verify-provenance; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
 		require_inputs "$workflows/$name.yml" sigstore/cosign-installer \
 			cosign-release "v$COSIGN_VERSION" || return 1
 	done
-	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images; do
 		require_inputs "$workflows/$name.yml" anchore/sbom-action/download-syft \
 			syft-version "v$SYFT_VERSION" || return 1
 	done
-	for name in release-go release-tool-contract release; do
+	for name in release-build release-go release-tool-contract; do
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
 			version "v$GORELEASER_VERSION" || return 1
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
@@ -254,7 +268,7 @@ check_release_tool_installs() {
 				syft-version "v$SYFT_VERSION" || return 1
 		fi
 	done
-	for name in rebuild-on-base release-go release-tool-contract release tiny-trainer-images verify-provenance; do
+	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
 		if grep -HnE 'pre-baked|verify-arc-runner-tools' "$workflows/$name.yml"; then
 			printf 'release-tool workflow relies on a pre-baked runner image\n' >&2
 			return 1
@@ -293,13 +307,13 @@ expect_install_rejection() {
 		exit 1
 	fi
 }
-expect_install_rejection cosign-drift release.yml \
+expect_install_rejection cosign-drift release-build.yml \
 	"s/cosign-release: v$COSIGN_VERSION/cosign-release: v0.0.1/"
 expect_install_rejection syft-drift tiny-trainer-images.yml \
 	"s/syft-version: v$SYFT_VERSION/syft-version: v0.0.1/"
 expect_install_rejection goreleaser-drift release-go.yml \
 	"s/version: v$GORELEASER_VERSION/version: v0.0.1/"
-expect_install_rejection goreleaser-runs release.yml '/install-only: true/d'
+expect_install_rejection goreleaser-runs release-build.yml '/install-only: true/d'
 expect_install_rejection missing-cosign verify-provenance.yml \
 	's/uses: sigstore\/cosign-installer@/uses: example\/cosign-installer@/'
 expect_install_rejection prebaked rebuild-on-base.yml \
@@ -315,15 +329,15 @@ syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
 goreleaser_version_guard="goreleaser --version | grep -Eq '$goreleaser_version_pattern'"
 syft_version_guard="syft version | grep -Eq '$syft_version_pattern'"
 goreleaser_version_workflows=(
+	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
 	"$repo_root/.github/workflows/release-tool-contract.yml"
-	"$repo_root/.github/workflows/release.yml"
 )
 syft_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
+	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
 	"$repo_root/.github/workflows/release-tool-contract.yml"
-	"$repo_root/.github/workflows/release.yml"
 	"$repo_root/.github/workflows/tiny-trainer-images.yml"
 )
 for workflow in "${goreleaser_version_workflows[@]}"; do
@@ -378,6 +392,7 @@ fi
 sbom_attestation_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
 	"$repo_root/.github/workflows/release-go.yml"
+	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
 	"$repo_root/.github/workflows/tiny-trainer-images.yml"
 )
 for workflow in "${sbom_attestation_workflows[@]}"; do
@@ -392,9 +407,10 @@ for workflow in "${sbom_attestation_workflows[@]}"; do
 done
 attestation_workflow_paths=(
 	'.github/workflows/rebuild-on-base.yml'
+	'.github/workflows/release-build.yml'
 	'.github/workflows/release-go.yml'
-	'.github/workflows/release.yml'
 	'.github/workflows/sbom.yml'
+	'.github/workflows/tiny-litert-sidecar-image.yml'
 	'.github/workflows/tiny-trainer-images.yml'
 )
 for relative_workflow in "${attestation_workflow_paths[@]}"; do
@@ -417,7 +433,8 @@ fi
 if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	'.github/workflows/*.yml' '.gitea/workflows/*.yml' 'scripts/**/*.sh' \
 	':(exclude)scripts/ci/tool-versions_test.sh' \
-	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh'; then
+	':(exclude)scripts/ci/tiny-trainer-publish-policy_test.sh' \
+	':(exclude)scripts/ci/tiny-litert-sidecar-publish-policy_test.sh'; then
 	printf 'workflow uses deprecated Cosign SBOM attachment instead of attestation\n' >&2
 	exit 1
 fi

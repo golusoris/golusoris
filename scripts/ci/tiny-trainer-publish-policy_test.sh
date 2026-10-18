@@ -138,7 +138,8 @@ source_ref='refs/tags/tiny-trainers-v1.2.3'
 call_log="$suite_root/calls"
 PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 
 require_literal "$call_log" $'cosign\tverify'
 require_literal "$call_log" $'--certificate-identity\thttps://github.com/golusoris/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
@@ -173,6 +174,15 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.mani
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[]}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
+containerd_manifest=$(printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"%s"}}' "$config_digest")
+containerd_digest="sha256:$(printf '%s' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+printf '%s' "$containerd_manifest" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	"$containerd_digest" >/dev/null
+different_digest="sha256:$(printf '%s ' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$containerd_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$different_digest'"
+index_manifest='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
+index_digest="sha256:$(printf '%s' "$index_manifest" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$index_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$index_digest'"
 if head -c 1048577 /dev/zero | \
 	python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" "$config_digest" \
 	>/dev/null 2>&1; then
@@ -182,13 +192,16 @@ fi
 
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/heads/main
+	"$image" golusoris/golusoris "$source_sha" refs/heads/main \
+	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=cosign \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=gh \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref"
+	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	tiny-trainer-images.yml tiny-trainers-
 
 workflow="$repo_root/.github/workflows/tiny-trainer-images.yml"
 check_workflow "$workflow"

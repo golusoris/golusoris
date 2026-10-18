@@ -16,6 +16,7 @@ serve/
   internal/httpoptions/ # shared bounded HTTP option normalization
   ollama/   # Ollama HTTP API → Gemma / Gemma 3n (text, generate)
   tflite/   # HTTP client protocol for app-supplied LiteRT classifier sidecar
+  onnx/     # vmafx-ort-runner subprocess protocol → ONNX (regress, classify, embed)
   fleet/    # distributed-inference recipe: Predictor over jobs/ + leader/
 ```
 

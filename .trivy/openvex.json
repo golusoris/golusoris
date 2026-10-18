@@ -3,8 +3,8 @@
   "@id": "https://github.com/golusoris/golusoris/security/vex/2026-09-19",
   "author": "https://github.com/golusoris",
   "timestamp": "2026-09-19T20:56:00Z",
-  "last_updated": "2026-10-11T00:14:00Z",
-  "version": 3,
+  "last_updated": "2026-10-15T18:10:00Z",
+  "version": 4,
   "statements": [
     {
       "vulnerability": {
@@ -26,7 +26,7 @@
           "GHSA-vfj7-8cjw-p6xm"
         ]
       },
-      "timestamp": "2026-10-10T17:57:00Z",
+      "timestamp": "2026-10-15T18:10:00Z",
       "products": [
         {
           "@id": "pkg:npm/braces@3.0.3"
@@ -34,8 +34,8 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
-      "impact_statement": "braces enters only through tools/spectral/package-lock.json (@stoplight/spectral-cli > fast-glob > micromatch > braces) and runs only in the OpenAPI lint job, on a path named by the workflow file. The v0.16.1 release archives and their SBOMs contain no npm package. No patched braces release exists.",
-      "status_notes": "expires: 2027-01-10"
+      "impact_statement": "braces enters only through tools/spectral/package-lock.json (@stoplight/spectral-cli > fast-glob > micromatch > braces) and runs only in the OpenAPI lint job, on a path named by the workflow file. The v0.16.1 release archives and their SBOMs contain no npm package. No patched braces release exists. Category C exception (10 days) for advisory GHSA-vfj7-8cjw-p6xm, renewed 2026-10-15; the dependency bot re-checks daily for a patched braces release.",
+      "status_notes": "expires: 2026-10-25"
     },
     {
       "vulnerability": {
