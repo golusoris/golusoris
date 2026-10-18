@@ -61,6 +61,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),
     ("tools/tool-versions.env", "koalaman/shellcheck", "github-releases"),
     ("tools/tool-versions.env", "github.com/rhysd/actionlint", "go"),
+    ("tools/tool-versions.env", "github.com/daveshanley/vacuum", "go"),
     ("tools/tool-versions.env", "goreleaser/goreleaser", "github-releases"),
     ("tools/tool-versions.env", "anchore/syft", "github-releases"),
     ("tools/tool-versions.env", "sigstore/cosign", "github-releases"),
