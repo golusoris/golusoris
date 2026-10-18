@@ -6,7 +6,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/service/kms v1.61.4
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015163412-c9de8c9a6f0e
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015200537-b544145a689f
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
