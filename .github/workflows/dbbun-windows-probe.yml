@@ -1,0 +1,54 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+# Temporary probe for issue 800 (db/bun Windows access violation); never merged.
+name: db-bun Windows probe
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    name: db-bun Windows probe (${{ matrix.variant }} host ${{ matrix.host }})
+    runs-on: windows-2025
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        host: ['1', '2', '3', '4', '5', '6']
+        variant: [fixed, planted]
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: '**/go.sum'
+      - name: Host CPU
+        shell: pwsh
+        run: Get-CimInstance Win32_Processor | Select-Object -ExpandProperty Name
+      - name: Plant the recovered-fault validatePool
+        if: matrix.variant == 'planted'
+        shell: bash
+        run: cp .github/probe/bun_planted.go.txt db/bun/bun.go
+      - name: Stress db/bun
+        shell: bash
+        env:
+          GOTRACEBACK: all
+        run: |
+          fails=0
+          for round in 1 2 3 4 5; do
+            if ! go test -short -count=100 -p 4 ./db/bun/ > "$RUNNER_TEMP/out.txt" 2>&1; then
+              fails=$((fails + 1))
+              echo "--- round $round failed"; head -c 6000 "$RUNNER_TEMP/out.txt"
+            fi
+          done
+          echo "RESULT ${{ matrix.variant }} failed rounds=$fails of 5"
+          exit "$fails"
