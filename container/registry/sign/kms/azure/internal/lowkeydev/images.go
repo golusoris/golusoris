@@ -12,7 +12,7 @@ package lowkeydev
 const (
 	// LowkeyVaultImage is the Azure Key Vault emulator the signer tests run
 	// against.
-	LowkeyVaultImage = "nagyesta/lowkey-vault:7.3.112@sha256:2636ad677e0e9b98f16b82f36dae16748bcb0d3eee7c9ac6d357f9e9a233be3a"
+	LowkeyVaultImage = "nagyesta/lowkey-vault:7.3.127@sha256:d92adc63759571b2ef68e84f4fad94e6d9603c1faf9d338a2d90c2302303c952"
 	// RyukImage is the testcontainers resource reaper, as in
 	// internal/testimages.
 	RyukImage = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
