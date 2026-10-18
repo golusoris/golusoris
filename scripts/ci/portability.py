@@ -255,18 +255,30 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> tuple[int, str]
         return -1, "; ".join(failures)
 
 
+def _signal_group_target(process: subprocess.Popen[bytes]) -> int | None:
+    """Return the child's own group id, or None when signalling it could reach other processes."""
+    pgid = process.pid
+    # killpg(1) is kill(-1) and killpg(0) is the caller's group; a test double's pid can index to 1.
+    if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 1 or pgid == os.getpgrp():
+        return None
+    return pgid
+
+
 def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> list[str]:
     """Signal the isolated POSIX process group with bounded TERM then KILL."""
+    pgid = _signal_group_target(process)
+    if pgid is None:
+        return [f"refused to signal process group {process.pid!r}"]
     failures: list[str] = []
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
         pass
     except OSError as error:
         failures.append(f"terminate process group: {error}")
     time.sleep(PROCESS_TERMINATE_GRACE_SECONDS)
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
         pass
     except OSError as error:
