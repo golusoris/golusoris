@@ -9,10 +9,17 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log/slog"
 	"math/big"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,15 +28,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/auth/oidc"
+	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
 type mockOIDCServer struct {
-	server *httptest.Server
-	rsaKey *rsa.PrivateKey
-	badKey *rsa.PrivateKey
+	server         *httptest.Server
+	rsaKey         *rsa.PrivateKey
+	badKey         *rsa.PrivateKey
+	discoveryCount atomic.Int64
 }
 
 func startMockOIDCServer(t *testing.T) *mockOIDCServer {
+	t.Helper()
+	return startMockOIDCServerWithListener(t, nil)
+}
+
+func startMockOIDCServerWithListener(t *testing.T, listener net.Listener) *mockOIDCServer {
 	t.Helper()
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -37,10 +51,16 @@ func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 	badKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
+	mockServer := &mockOIDCServer{
+		rsaKey: rsaKey,
+		badKey: badKey,
+	}
+
 	var serverURL string
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
+			mockServer.discoveryCount.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"issuer":                                serverURL,
@@ -77,6 +97,9 @@ func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 			case "err-400":
 				w.WriteHeader(http.StatusBadRequest)
 				_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
+			case "err-500":
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": "server_error"})
 			case "missing-id-token":
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -96,11 +119,15 @@ func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 				// go-oidc checks exp against the wall clock.
 				now := clockwork.NewRealClock().Now()
 				claims := jwt.MapClaims{
-					"iss": serverURL,
-					"sub": "user-42",
-					"aud": aud,
-					"exp": now.Add(time.Hour).Unix(),
-					"iat": now.Unix(),
+					"iss":   serverURL,
+					"sub":   "user-42",
+					"aud":   aud,
+					"exp":   now.Add(time.Hour).Unix(),
+					"iat":   now.Unix(),
+					"email": "alice@example.com",
+				}
+				if after, ok := strings.CutPrefix(code, "nonce:"); ok {
+					claims["nonce"] = after
 				}
 				tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 				tok.Header["kid"] = "key-1"
@@ -138,15 +165,21 @@ func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 		}
 	})
 
-	server := httptest.NewServer(handler)
+	var server *httptest.Server
+	if listener == nil {
+		server = httptest.NewServer(handler)
+	} else {
+		server = &httptest.Server{
+			Listener: listener,
+			Config:   &http.Server{Handler: handler},
+		}
+		server.Start()
+	}
 	t.Cleanup(server.Close)
 	serverURL = server.URL
 
-	return &mockOIDCServer{
-		server: server,
-		rsaKey: rsaKey,
-		badKey: badKey,
-	}
+	mockServer.server = server
+	return mockServer
 }
 
 func newTestProvider(t *testing.T, issuerURL string) *oidc.Provider {
@@ -161,6 +194,14 @@ func newTestProvider(t *testing.T, issuerURL string) *oidc.Provider {
 	return p
 }
 
+func requireUnauthorized(t *testing.T, err error) {
+	t.Helper()
+	require.Error(t, err)
+	var coded *gerr.Error
+	require.True(t, errors.As(err, &coded), "error must wrap *gerr.Error: %v", err)
+	require.Equal(t, gerr.CodeUnauthorized, coded.Code)
+}
+
 func TestProvider_Exchange(t *testing.T) {
 	t.Parallel()
 	mock := startMockOIDCServer(t)
@@ -173,26 +214,254 @@ func TestProvider_Exchange(t *testing.T) {
 	require.Equal(t, "valid-access-token", tokens.AccessToken)
 	require.Equal(t, "valid-refresh-token", tokens.RefreshToken)
 	require.NotEmpty(t, tokens.IDToken)
+	require.Equal(t, "user-42", tokens.Subject)
+	require.Empty(t, tokens.Nonce)
+	require.False(t, errors.Is(err, oidc.ErrExchange))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenInvalid))
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
+
+	var claims struct {
+		Email string `json:"email"`
+	}
+	require.NoError(t, tokens.Claims(&claims))
+	require.Equal(t, "alice@example.com", claims.Email)
+
+	var zeroTokens oidc.TokenSet
+	require.EqualError(t, zeroTokens.Claims(&claims), "auth/oidc: no verified id_token")
 
 	// Negative: token endpoint returns 400
 	_, err = provider.Exchange(ctx, "err-400", "test-verifier")
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "auth/oidc: exchange")
+	require.ErrorIs(t, err, oidc.ErrExchange)
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenInvalid))
+
+	// Negative: token endpoint returns 500
+	_, err = provider.Exchange(ctx, "err-500", "test-verifier")
+	require.Error(t, err)
+	require.ErrorIs(t, err, oidc.ErrExchange)
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
 
 	// Negative: response missing id_token
 	_, err = provider.Exchange(ctx, "missing-id-token", "test-verifier")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "no id_token in response")
+	require.ErrorIs(t, err, oidc.ErrIDTokenMissing)
+	require.False(t, errors.Is(err, oidc.ErrIDTokenInvalid))
+	require.False(t, errors.Is(err, oidc.ErrExchange))
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
 
 	// Negative: id_token with untrusted signature
 	_, err = provider.Exchange(ctx, "bad-sig", "test-verifier")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid id_token")
+	require.ErrorIs(t, err, oidc.ErrIDTokenInvalid)
+	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
+	require.False(t, errors.Is(err, oidc.ErrExchange))
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
 
 	// Negative: id_token with wrong audience
 	_, err = provider.Exchange(ctx, "bad-aud", "test-verifier")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid id_token")
+	require.ErrorIs(t, err, oidc.ErrIDTokenInvalid)
+	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
+	require.False(t, errors.Is(err, oidc.ErrExchange))
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
+}
+
+func TestProvider_Begin(t *testing.T) {
+	t.Parallel()
+	mock := startMockOIDCServer(t)
+	provider := newTestProvider(t, mock.server.URL)
+	ctx := t.Context()
+
+	// Empty state -> error
+	_, err := provider.Begin(ctx, "")
+	require.EqualError(t, err, "auth/oidc: state must not be empty")
+
+	// Call 1: valid URL containing nonce and code_challenge, nonce 43 chars
+	req1, err := provider.Begin(ctx, "state-1")
+	require.NoError(t, err)
+	require.Len(t, req1.Nonce, 43)
+	require.Len(t, req1.Verifier, 43)
+	require.Contains(t, req1.URL, "nonce="+req1.Nonce)
+	require.Contains(t, req1.URL, "code_challenge=")
+	require.Contains(t, req1.URL, "state=state-1")
+
+	// Call 2: different nonces and verifiers
+	req2, err := provider.Begin(ctx, "state-2")
+	require.NoError(t, err)
+	require.Len(t, req2.Nonce, 43)
+	require.NotEqual(t, req1.Nonce, req2.Nonce)
+	require.NotEqual(t, req1.Verifier, req2.Verifier)
+}
+
+func TestProvider_Complete(t *testing.T) {
+	t.Parallel()
+	mock := startMockOIDCServer(t)
+	provider := newTestProvider(t, mock.server.URL)
+	ctx := t.Context()
+
+	req, err := provider.Begin(ctx, "test-state")
+	require.NoError(t, err)
+
+	// Happy path: fake IdP signing id_token carrying the nonce
+	tokens, err := provider.Complete(ctx, "nonce:"+req.Nonce, req)
+	require.NoError(t, err)
+	require.Equal(t, "user-42", tokens.Subject)
+	require.Equal(t, req.Nonce, tokens.Nonce)
+	require.False(t, errors.Is(err, oidc.ErrExchange))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
+	require.False(t, errors.Is(err, oidc.ErrIDTokenInvalid))
+	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
+	var claims struct {
+		Email string `json:"email"`
+	}
+	require.NoError(t, tokens.Claims(&claims))
+	require.Equal(t, "alice@example.com", claims.Email)
+
+	// Nonce mismatch -> unauthorized
+	_, err = provider.Complete(ctx, "nonce:wrong-nonce", req)
+	requireUnauthorized(t, err)
+	require.Contains(t, err.Error(), "nonce mismatch")
+	require.ErrorIs(t, err, oidc.ErrNonceMismatch)
+
+	// id_token without nonce -> unauthorized
+	_, err = provider.Complete(ctx, "valid", req)
+	requireUnauthorized(t, err)
+	require.Contains(t, err.Error(), "nonce mismatch")
+	require.ErrorIs(t, err, oidc.ErrNonceMismatch)
+
+	// req.Nonce empty -> error
+	emptyNonceReq := req
+	emptyNonceReq.Nonce = ""
+	_, err = provider.Complete(ctx, "nonce:"+req.Nonce, emptyNonceReq)
+	requireUnauthorized(t, err)
+	require.ErrorIs(t, err, oidc.ErrNonceMismatch)
+}
+
+func TestProvider_OfflineAccess_AuthURL_And_Begin(t *testing.T) {
+	t.Parallel()
+	mock := startMockOIDCServer(t)
+	ctx := t.Context()
+
+	// Default Options: both AuthURL and Begin include access_type=offline
+	defaultProvider := newTestProvider(t, mock.server.URL)
+	authURL, _, err := defaultProvider.AuthURL("state-default")
+	require.NoError(t, err)
+	parsedAuthURL, err := url.Parse(authURL)
+	require.NoError(t, err)
+	require.Equal(t, "offline", parsedAuthURL.Query().Get("access_type"))
+
+	beginReq, err := defaultProvider.Begin(ctx, "state-default")
+	require.NoError(t, err)
+	parsedBeginURL, err := url.Parse(beginReq.URL)
+	require.NoError(t, err)
+	require.Equal(t, "offline", parsedBeginURL.Query().Get("access_type"))
+
+	// DisableOfflineAccess=true: both AuthURL and Begin omit access_type
+	disabledProvider, err := oidc.NewProvider(ctx, oidc.Options{
+		IssuerURL:            mock.server.URL,
+		ClientID:             "test-client",
+		RedirectURL:          "https://app.example.com/callback",
+		DiscoveryTimeout:     5 * time.Second,
+		DisableOfflineAccess: true,
+	}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	authURLDisabled, _, err := disabledProvider.AuthURL("state-disabled")
+	require.NoError(t, err)
+	parsedAuthURLDisabled, err := url.Parse(authURLDisabled)
+	require.NoError(t, err)
+	require.False(t, parsedAuthURLDisabled.Query().Has("access_type"))
+
+	beginReqDisabled, err := disabledProvider.Begin(ctx, "state-disabled")
+	require.NoError(t, err)
+	parsedBeginURLDisabled, err := url.Parse(beginReqDisabled.URL)
+	require.NoError(t, err)
+	require.False(t, parsedBeginURLDisabled.Query().Has("access_type"))
+}
+
+func TestProvider_LazyDiscovery(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+
+	provider, err := oidc.NewProvider(ctx, oidc.Options{
+		IssuerURL:        "http://" + addr,
+		ClientID:         "test-client",
+		RedirectURL:      "https://app.example.com/callback",
+		DiscoveryTimeout: 200 * time.Millisecond,
+		LazyDiscovery:    true,
+	}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+	require.NotNil(t, provider)
+
+	_, _, err = provider.AuthURL("test-state")
+	require.EqualError(t, err, "auth/oidc: lazy provider not discovered; use Begin")
+
+	clock := clockwork.NewRealClock()
+	start := clock.Now()
+	_, err = provider.Begin(ctx, "test-state")
+	elapsed := clock.Since(start)
+	require.Error(t, err)
+	require.Less(t, elapsed, 2*time.Second)
+
+	newListener, err := net.Listen("tcp", addr)
+	require.NoError(t, err)
+	_ = startMockOIDCServerWithListener(t, newListener)
+
+	req, err := provider.Begin(ctx, "test-state")
+	require.NoError(t, err)
+	require.NotEmpty(t, req.URL)
+
+	authURL, verifier, err := provider.AuthURL("test-state")
+	require.NoError(t, err)
+	require.NotEmpty(t, authURL)
+	require.NotEmpty(t, verifier)
+}
+
+func TestProvider_LazyDiscovery_ConcurrentBegin(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	mock := startMockOIDCServer(t)
+
+	provider, err := oidc.NewProvider(ctx, oidc.Options{
+		IssuerURL:        mock.server.URL,
+		ClientID:         "test-client",
+		RedirectURL:      "https://app.example.com/callback",
+		DiscoveryTimeout: 5 * time.Second,
+		LazyDiscovery:    true,
+	}, slog.New(slog.DiscardHandler))
+	require.NoError(t, err)
+
+	mock.discoveryCount.Store(0)
+	const concurrentRoutines = 8
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrentRoutines)
+
+	for i := range concurrentRoutines {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, bErr := provider.Begin(ctx, fmt.Sprintf("state-%d", idx))
+			errCh <- bErr
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	for bErr := range errCh {
+		require.NoError(t, bErr)
+	}
+	require.Equal(t, int64(1), mock.discoveryCount.Load())
 }
 
 func TestProvider_UserInfo(t *testing.T) {

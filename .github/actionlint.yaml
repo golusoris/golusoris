@@ -13,3 +13,4 @@ self-hosted-runner:
   labels:
     - cauda-k8s-office-canary
     - ubuntu-26.04
+    - ubuntu-26.04-arm

@@ -32,7 +32,11 @@ def _kill_bounded(process):
     """
     try:
         if hasattr(os, "killpg"):
-            os.killpg(process.pid, signal.SIGKILL)
+            pgid = process.pid
+            # killpg(1) is kill(-1) and killpg(0) is the caller's group; never signal either.
+            if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 1 or pgid == os.getpgrp():
+                return
+            os.killpg(pgid, signal.SIGKILL)
         else:
             process.kill()
     except (ProcessLookupError, PermissionError):

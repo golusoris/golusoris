@@ -153,6 +153,7 @@ type Prediction struct {
 	Embedding []float32    // embed output
 	Text      string       // generate output
 	Raw       any          // trainer-specific escape hatch
+	Value     float64      // regress output
 }
 
 // LabelScore is one entry in a classifier output.

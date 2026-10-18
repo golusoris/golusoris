@@ -34,6 +34,7 @@
       "parameters": {
         "dismiss_stale_reviews_on_push": true,
         "require_code_owner_review": false,
+        "require_extra_approval_for_unattributed_changes": true,
         "require_last_push_approval": false,
         "required_approving_review_count": 0,
         "required_review_thread_resolution": true
@@ -51,6 +52,12 @@
           },
           {
             "context": "API compatibility (apidiff)"
+          },
+          {
+            "context": "App image smoke (linux/amd64)"
+          },
+          {
+            "context": "App image smoke (linux/arm64)"
           },
           {
             "context": "Build"
@@ -95,6 +102,27 @@
             "context": "CI policy tests"
           },
           {
+            "context": "Release binaries"
+          },
+          {
+            "context": "Release binary smoke (linux/amd64)"
+          },
+          {
+            "context": "Release binary smoke (linux/arm64)"
+          },
+          {
+            "context": "Release binary smoke (darwin/amd64)"
+          },
+          {
+            "context": "Release binary smoke (darwin/arm64)"
+          },
+          {
+            "context": "Release binary smoke (windows/amd64)"
+          },
+          {
+            "context": "Release binary smoke (windows/arm64)"
+          },
+          {
             "context": "Licensing (reuse lint)"
           },
           {
@@ -110,7 +138,7 @@
             "context": "Terraform modules"
           },
           {
-            "context": "Test (race + coverage) (ubuntu-24.04, module)"
+            "context": "Test (race + coverage) (module)"
           },
           {
             "context": "Vulnerabilities (govulncheck)"
@@ -135,6 +163,12 @@
           },
           {
             "context": "Scorecard Analysis"
+          },
+          {
+            "context": "Build and smoke (litert sidecar)"
+          },
+          {
+            "context": "Sidecar contracts"
           },
           {
             "context": "Build and smoke (gemma)"

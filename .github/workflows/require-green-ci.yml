@@ -39,7 +39,7 @@ permissions:
 jobs:
   require-green-ci:
     name: Require green CI on the tagged commit
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     # Covers the 90 min poll below plus checkout.
     timeout-minutes: 100
     permissions:

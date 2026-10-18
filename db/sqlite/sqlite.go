@@ -140,11 +140,16 @@ func Open(ctx context.Context, opts Options, logger *slog.Logger) (*sql.DB, erro
 // connectAndPing opens one connection and pings it. Its error names the step
 // that failed and what is on disk, so a timeout shows how far the open got
 // (#778): "connect" is the driver opening the file and applying the DSN
-// pragmas, "ping" the round trip after it.
+// pragmas, including an open that outlasts ctx, "ping" the round trip after it.
 func connectAndPing(ctx context.Context, db *sql.DB, path string) error {
 	conn, err := db.Conn(ctx)
 	if err != nil {
 		return fmt.Errorf("db/sqlite: connect %s: %w (%s)", path, err, diskState(path))
+	}
+	// The driver's open cannot be cancelled, so a slow open succeeds and the expired deadline only shows here.
+	if err = ctx.Err(); err != nil {
+		lateErr := fmt.Errorf("db/sqlite: connect %s finished after the open deadline: %w (%s)", path, err, diskState(path))
+		return errors.Join(lateErr, releaseConn(conn, path))
 	}
 	if err = conn.PingContext(ctx); err != nil {
 		pingErr := fmt.Errorf("db/sqlite: ping %s: %w (%s)", path, err, diskState(path))

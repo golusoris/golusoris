@@ -66,3 +66,51 @@ func TestDiskStateMemory(t *testing.T) {
 		t.Fatalf("diskState(memory) = %q", got)
 	}
 }
+
+// lateConnector ends ctx while connecting, like an open the driver cannot cancel; ending it
+// here rather than on a timer keeps database/sql from failing before Connect runs.
+type lateConnector struct{ cancel context.CancelFunc }
+
+func (c lateConnector) Connect(context.Context) (driver.Conn, error) {
+	c.cancel()
+	return pingFailConn{}, nil
+}
+func (lateConnector) Driver() driver.Driver { return pingFailDriver{} }
+
+func TestConnectAndPingNamesALateConnect(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	db := sql.OpenDB(lateConnector{cancel: cancel})
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
+	path := filepath.Join(t.TempDir(), "absent.db")
+	err := connectAndPing(ctx, db, path)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("connectAndPing = %v, want the context error", err)
+	}
+	if !strings.Contains(err.Error(), "db/sqlite: connect "+path+" finished after the open deadline") ||
+		strings.Contains(err.Error(), "ping") {
+		t.Fatalf("error does not name the late connect: %v", err)
+	}
+}
+
+func TestConnectAndPingWithinDeadline(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	db := sql.OpenDB(lateConnector{cancel: cancel})
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close: %v", err)
+		}
+	})
+	cancel()
+	path := filepath.Join(t.TempDir(), "x.db")
+	err := connectAndPing(ctx, db, path)
+	if !errors.Is(err, context.Canceled) || !strings.HasPrefix(err.Error(), "db/sqlite: connect "+path+": ") {
+		t.Fatalf("connectAndPing with a done ctx = %v, want the plain connect error", err)
+	}
+}

@@ -15,9 +15,9 @@ import (
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
+	"github.com/golusoris/golusoris/core/storage"
 	"github.com/golusoris/golusoris/core/validate"
 	"github.com/golusoris/golusoris/media/img"
-	"github.com/golusoris/golusoris/storage"
 )
 
 // bucketSource adapts a storage.Bucket to the narrow [Source] the pipeline
@@ -65,7 +65,7 @@ func newPipeline(opts Options, proc img.Processor, b storage.Bucket, clk clock.C
 //
 //	fx.New(
 //	    golusoris.Core,
-//	    storage.Module,        // provides storage.Bucket
+//	    fx.Provide(func() storage.Bucket { return bucket }),
 //	    clock.Module,          // provides clock.Clock
 //	    pipeline.Module,       // provides *pipeline.Pipeline + the handler
 //	)

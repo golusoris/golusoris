@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from unittest import TestCase, main, mock
+from unittest import TestCase, main, mock, skipUnless
 
 sys.path.insert(0, str(Path(__file__).parent))
 import checkpoint
@@ -567,6 +567,30 @@ class ThreadedBoundedOutput(TestCase):
     def test_boundary_output_exactly_at_the_limit_is_accepted(self):
         process = self.start("import os; os.write(1, b'x' * 512); os.write(2, b'y' * 512)")
         self.assertEqual(common._bounded_output_threaded(process, 10, 1024), b"x" * 512)
+
+
+@skipUnless(hasattr(os, "killpg"), "process groups are POSIX")
+class KillBoundedSignalGuard(TestCase):
+    """_kill_bounded never signals a group that could reach other processes."""
+
+    # os.killpg is mocked in every case; no pid here is ever signalled for real.
+    def test_positive_child_group_is_killed(self):
+        with mock.patch.object(common.os, "killpg") as killpg:
+            common._kill_bounded(mock.Mock(pid=2))
+        killpg.assert_called_once_with(2, common.signal.SIGKILL)
+
+    def test_negative_unbounded_targets_are_refused(self):
+        refused = (0, -5, True, os.getpgrp(), mock.MagicMock(), None)
+        with mock.patch.object(common.os, "killpg") as killpg:
+            for pid in refused:
+                with self.subTest(pid=pid):
+                    common._kill_bounded(mock.Mock(pid=pid))
+        killpg.assert_not_called()
+
+    def test_boundary_pid_one_is_refused(self):
+        with mock.patch.object(common.os, "killpg") as killpg:
+            common._kill_bounded(mock.Mock(pid=1))
+        killpg.assert_not_called()
 
 
 if __name__ == "__main__":

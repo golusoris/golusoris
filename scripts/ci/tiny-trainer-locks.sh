@@ -11,8 +11,8 @@ UV_DIGEST=sha256:1c97a153d9c2308c89ca4fb19766483db3256a86313806fed99b1c59a9767b6
 UV_IMAGE="ghcr.io/astral-sh/uv:${UV_VERSION}@${UV_DIGEST}"
 # renovate: datasource=pypi depName=pip-audit
 PIP_AUDIT_VERSION=2.10.1
-MAX_TRAINERS=2
-MAX_LOCK_CONTEXTS=3
+MAX_LOCK_TARGETS=3
+MAX_LOCK_CONTEXTS=4
 AUDIT_PYTHON_VERSION=3.11.16
 # Resolve as of this upload cutoff so --check compares the lock with its inputs,
 # not with whatever PyPI published since; move it forward deliberately with --write.
@@ -31,6 +31,7 @@ compile_lock() {
 	local source="$1"
 	local python_version="$2"
 	local work="$3"
+	local cutoff="${4:-$LOCK_EXCLUDE_NEWER}"
 	mkdir -p "$work"
 	install -m 0644 "$source" "$work/requirements.in"
 	docker run --rm \
@@ -41,7 +42,7 @@ compile_lock() {
 		--mount "type=bind,src=$work,dst=/src" \
 		--workdir /src \
 		"$UV_IMAGE" uv pip compile --quiet --generate-hashes --no-emit-index-url \
-		--exclude-newer "$LOCK_EXCLUDE_NEWER" \
+		--exclude-newer "$cutoff" \
 		--python-version "$python_version" --output-file requirements.lock requirements.in
 }
 
@@ -97,7 +98,8 @@ audit_locks() {
 			for lock in \
 				/src/scripts/ci/tiny-trainer-pip-audit.lock \
 				/src/ai/tiny/trainers/gemma/requirements.lock \
-				/src/ai/tiny/trainers/litert/requirements.lock
+				/src/ai/tiny/trainers/litert/requirements.lock \
+				/src/ai/tiny/serve/tflite/sidecar/requirements.lock
 			do
 				/audit/venv/bin/pip-audit --strict --require-hashes --disable-pip \
 					--progress-spinner off --requirement "$lock"
@@ -111,13 +113,22 @@ main() {
 		printf 'usage: %s [--check|--write|--audit]\n' "${0##*/}" >&2
 		return 2
 	fi
-	local root index trainer python_version work
+	local root index target python_version cutoff work
 	root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 	tiny_trainer_lock_tmp="$(mktemp -d "${TMPDIR:-/tmp}/tiny-trainer-locks.XXXXXX")"
-	local -a trainers=(gemma litert)
-	local -a versions=(3.11.16 3.11.16)
-	if (( ${#trainers[@]} != MAX_TRAINERS || ${#versions[@]} != MAX_TRAINERS )); then
-		printf 'trainer lock authority must contain exactly %d entries\n' "$MAX_TRAINERS" >&2
+	local -a targets=(
+		"ai/tiny/trainers/gemma"
+		"ai/tiny/trainers/litert"
+		"ai/tiny/serve/tflite/sidecar"
+	)
+	local -a versions=(3.11.16 3.11.16 3.14)
+	local -a cutoffs=(
+		"$LOCK_EXCLUDE_NEWER"
+		"$LOCK_EXCLUDE_NEWER"
+		2026-10-17T00:00:00Z
+	)
+	if (( ${#targets[@]} != MAX_LOCK_TARGETS || ${#versions[@]} != MAX_LOCK_TARGETS || ${#cutoffs[@]} != MAX_LOCK_TARGETS )); then
+		printf 'lock authority must contain exactly %d target entries\n' "$MAX_LOCK_TARGETS" >&2
 		return 1
 	fi
 	if [[ "$mode" == --audit ]]; then
@@ -125,13 +136,14 @@ main() {
 		printf 'tiny trainer locks: audit (%d contexts)\n' "$MAX_LOCK_CONTEXTS"
 		return
 	fi
-	for index in "${!trainers[@]}"; do
-		trainer="${trainers[$index]}"
+	for index in "${!targets[@]}"; do
+		target="${targets[$index]}"
 		python_version="${versions[$index]}"
-		work="$tiny_trainer_lock_tmp/$trainer"
-		compile_lock "$root/ai/tiny/trainers/$trainer/requirements.in" "$python_version" "$work"
+		cutoff="${cutoffs[$index]}"
+		work="$tiny_trainer_lock_tmp/target-$index"
+		compile_lock "$root/$target/requirements.in" "$python_version" "$work" "$cutoff"
 		materialize_lock "$mode" "$work/requirements.lock" \
-			"$root/ai/tiny/trainers/$trainer/requirements.lock"
+			"$root/$target/requirements.lock"
 	done
 	printf 'pip-audit==%s\n' "$PIP_AUDIT_VERSION" >"$tiny_trainer_lock_tmp/pip-audit.in"
 	work="$tiny_trainer_lock_tmp/pip-audit"

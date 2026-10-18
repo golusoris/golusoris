@@ -44,7 +44,8 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0018](0018-eupl-relicense-and-reuse.md) | Relicense to EUPL-1.2 + CC-BY-SA-4.0, REUSE, DCO | Accepted | licensing, compliance, governance |
 | [ADR-0019](0019-praetor-governance-and-capability-contract.md) | Adopt praetor governance; publish `capabilities.yaml` | Accepted | governance, agents, tooling, fleet |
 | [ADR-0020](0020-praetor-conformance-and-release-hardening.md) | Second-wave praetor conformance and release hardening | Proposed | governance, ci, security, releases, praetor |
-| [ADR-0021](0021-github-hosted-runners.md) | Run golusoris CI on GitHub-hosted runners | Accepted | ci, supply-chain, governance |
+| [ADR-0021](0021-github-hosted-runners.md) | Run golusoris CI on GitHub-hosted runners | Superseded by ADR-0022 (runner label) | ci, supply-chain, governance |
+| [ADR-0022](0022-ubuntu-26-04-runners.md) | Run golusoris CI on ubuntu-26.04 GitHub-hosted runners | Accepted | ci, supply-chain, governance |
 
 ## Numbering policy
 

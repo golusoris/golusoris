@@ -15,6 +15,7 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/integrations/goenvoy"
+	"github.com/golusoris/golusoris/testutil/configfile"
 )
 
 func discardLogger() *slog.Logger {
@@ -48,10 +49,7 @@ integrations:
 // unless the app declares them as CompoundKeys.
 func writeConfig(t *testing.T, body string) *config.Config {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
+	path := configfile.Write(t, body)
 	cfg, err := config.New(config.Options{EnvPrefix: "APP_", Delimiter: ".", Watch: false, Files: []string{path}})
 	if err != nil {
 		t.Fatalf("config.New: %v", err)

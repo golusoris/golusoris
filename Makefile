@@ -103,7 +103,7 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
-ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
+ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
@@ -114,7 +114,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/verify-system-packages_test.sh
 	@bash scripts/ci/release-workflows-policy_test.sh
-	@bash scripts/ci/release-smoke_test.sh
+	@python3 -B scripts/ci/release_smoke_test.py
 	@bash scripts/ci/scalar-bundle-update_test.sh
 	@bash scripts/ci/release-notes-breaking_test.sh
 	@bash scripts/ci/generation-policy_test.sh
@@ -122,8 +122,10 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/trivy-policy_test.sh
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
+	@bash scripts/ci/gosec-scan_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
+	@bash scripts/ci/template-workflows-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
@@ -134,14 +136,24 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test docs-upstream-v
 	@bash scripts/ci/buf-lint-policy_test.sh
 	@bash scripts/ci/reuse-lint-policy_test.sh
 	@bash scripts/ci/docker-hub-mirror_test.sh
+	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
+	@python3 -B scripts/ci/pull_test_images_test.py
+	@python3 -B scripts/ci/windows-panic-rescan_test.py
+	@python3 -B scripts/ci/release-tool-pins-test.py
+	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
+	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
+	@python3 -B scripts/ci/regenerate.py selftest
+	@python3 -B scripts/ci/regenerate.py check
+	@python3 -B scripts/ci/osv-ignores.py selftest
+	@python3 -B scripts/ci/osv-ignores.py check
 
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
@@ -167,8 +179,16 @@ tiny-trainer-test: tiny-trainer-locks-check tiny-trainer-vuln tiny-trainer-publi
 tiny-trainer-publish-policy-test: ## verify fail-closed trainer publication and supply-chain identity
 	@bash scripts/ci/tiny-trainer-publish-policy_test.sh
 
+.PHONY: tiny-litert-sidecar-test
+tiny-litert-sidecar-test: tiny-litert-sidecar-publish-policy-test ## execute tiny litert sidecar contracts and test suite
+	@PYTHONPATH= uv run --python 3.14 --with-requirements ai/tiny/serve/tflite/sidecar/requirements.lock --with pytest python -B -m pytest -q -p no:cacheprovider ai/tiny/serve/tflite/sidecar/test_sidecar.py
+
+.PHONY: tiny-litert-sidecar-publish-policy-test
+tiny-litert-sidecar-publish-policy-test: ## verify fail-closed sidecar publication and supply-chain identity
+	@bash scripts/ci/tiny-litert-sidecar-publish-policy_test.sh
+
 .PHONY: python-test python-tests
-python-test: tiny-trainer-test ## execute the required Python regression suites
+python-test: tiny-trainer-test tiny-litert-sidecar-test ## execute the required Python regression suites
 	@bash scripts/ci/python-tests.sh
 
 python-tests: python-test ## alias for the Python regression gate
@@ -216,6 +236,10 @@ shellcheck: ## lint every repository-owned shell script with the pinned ShellChe
 actionlint: ## lint GitHub and Gitea workflow YAML with the pinned actionlint
 	@bash scripts/ci/actionlint.sh
 
+.PHONY: template-workflows
+template-workflows: ## check template workflows against their pinned reusable workflows
+	@bash scripts/ci/template-workflows.sh
+
 .PHONY: terraform-validate
 terraform-validate: ## format and validate every Terraform module with locked providers
 	@bash scripts/ci/terraform-validate.sh
@@ -239,6 +263,10 @@ fault-recovery: ## fail when a short test recovers a nil-dereference fault (gola
 .PHONY: kubeconform
 kubeconform: ## validate static and rendered Kubernetes manifests against pinned schemas
 	@bash scripts/ci/kubeconform.sh
+
+.PHONY: helm-backup-restore
+helm-backup-restore: ## restore a Helm chart backup into a fresh database
+	@bash scripts/ci/helm-backup-restore_test.sh
 
 .PHONY: buf-lint
 buf-lint: ## lint tracked protobuf files and check the vendored KEDA contract against upstream
@@ -280,7 +308,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

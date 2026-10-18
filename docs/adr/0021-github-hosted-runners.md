@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # ADR-0021: Run golusoris CI on GitHub-hosted runners
 
-- **Status**: Accepted
+- **Status**: Superseded by ADR-0022 (runner label)
 - **Date**: 2026-10-08
 - **Deciders**: maintainer
 - **Tags**: `ci`, `supply-chain`, `governance`
@@ -37,7 +37,9 @@ System libraries the cgo modules link are installed by
 `scripts/ci/install-cgo-libs.sh`. The reusable `ci-go.yml` and
 `release-go.yml` default to `ubuntu-24.04` and install declared system
 packages instead of only verifying them (input `install-system-packages`).
-The live ruleset requires `Test (race + coverage) (ubuntu-24.04, module)`.
+The live ruleset requires `Test (race + coverage) (module)`. The check
+name carries no runner label, so an image bump does not rename a
+required check (#815).
 
 ## Alternatives considered
 
@@ -46,7 +48,7 @@ The live ruleset requires `Test (race + coverage) (ubuntu-24.04, module)`.
 | Keep ARC and resize the fleet | Warm caches, no per-job tool installs | Capacity work outside this repository; the fleet was down, not only slow | Blocks every merge until infrastructure outside the repository recovers |
 | Mixed: hosted for pull requests, ARC for releases | Release toolchain stays pre-baked | Two runner contracts to maintain; releases still depend on the fleet | One contract is simpler, and the release tools are now declared pins |
 | `ubuntu-latest` | No label bumps | The image changes under the repository without review | Pinned label, bumped deliberately |
-| `ubuntu-26.04` (used by the Praetor-managed workflows) | Matches the locked Praetor gates | Newer image; the cgo package names were verified on 24.04 | 24.04 for now; revisit with the next image bump |
+| `ubuntu-26.04` (used by the Praetor-managed workflows) | Matches the locked Praetor gates | Newer image; the cgo package names were verified on 24.04 | 24.04 for now; superseded by ADR-0022 |
 
 ## Consequences
 

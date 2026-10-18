@@ -9,10 +9,12 @@ readonly max_go_files=16384
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly script_dir
 
-# Exception (one file, all rules): Semgrep's Go parser rejects generic type
-# aliases while the ruleset holds a for-range pattern (semgrep/semgrep#11972),
-# and jobs/types.go re-exports River's generic types that way. After the expiry
-# Semgrep scans the file again and the gate fails until the parser is fixed.
+# Exception (one file, parser errors only): Semgrep's Go parser rejects
+# generic type aliases (semgrep/semgrep#11972, fix PR semgrep/semgrep#11977
+# open). jobs/types.go re-exports River's generic types that way. The partial
+# parse still applies rules elsewhere in the file. After the expiry, the
+# validator stops tolerating the parser error and the gate fails until the
+# parser is fixed upstream.
 readonly generic_alias_exception=jobs/types.go
 readonly generic_alias_exception_expires=20261107
 scan_work=''
@@ -57,13 +59,6 @@ collect_files() {
 			printf 'Semgrep refuses symlink input: %s\n' "$path" >&2
 			return 1
 		fi
-		# SEMGREP_EXCEPTION_DATE (YYYYMMDD) lets the policy test move past the expiry.
-		if [[ "$path" == "$generic_alias_exception" ]] &&
-			((${SEMGREP_EXCEPTION_DATE:-$(date -u +%Y%m%d)} <= generic_alias_exception_expires)); then
-			printf 'Semgrep skips %s: exception until %s (semgrep/semgrep#11972)\n' \
-				"$path" "$generic_alias_exception_expires" >&2
-			continue
-		fi
 		[[ -f "$root/$path" ]] || continue
 		files+=("$path")
 		if (( ${#files[@]} > max_go_files )); then
@@ -75,7 +70,7 @@ collect_files() {
 }
 
 validate_report() {
-	python3 -B "$script_dir/semgrep-report.py" "$1" "$2"
+	python3 -B "$script_dir/semgrep-report.py" "$@"
 }
 
 # snapshot_sources copies the configuration and main's selected files into stage and lists them.
@@ -122,12 +117,25 @@ scan_snapshot() {
 		' >"$report"
 	scan_statuses=("${PIPESTATUS[@]}")
 	set -e
-	if ! validate_report "$report" "$expected"; then
-		return 1
-	fi
-	if (( scan_statuses[0] != 0 || scan_statuses[1] != 0 )); then
+	if (( scan_statuses[0] != 0 )); then
 		printf 'Semgrep scan pipeline failed: tar=%d docker=%d\n' \
 			"${scan_statuses[0]}" "${scan_statuses[1]}" >&2
+		return 1
+	fi
+	local -a validator_args=(
+		"$report"
+		"$expected"
+		"--scanner-status" "${scan_statuses[1]}"
+		"--stage-dir" "$stage"
+	)
+	if ((${SEMGREP_EXCEPTION_DATE:-$(date -u +%Y%m%d)} <= generic_alias_exception_expires)); then
+		local expires_formatted="${generic_alias_exception_expires:0:4}-${generic_alias_exception_expires:4:2}-${generic_alias_exception_expires:6:2}"
+		validator_args+=(
+			"--tolerate-alias-parse" "$generic_alias_exception"
+			"--alias-parse-expires" "$expires_formatted"
+		)
+	fi
+	if ! validate_report "${validator_args[@]}"; then
 		return 1
 	fi
 }
