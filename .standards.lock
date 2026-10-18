@@ -1,26 +1,21 @@
----
 version: 1
-pinned_version: v0.0.0+catalog.4f92951255ff
-digest: sha256:e2f97d9227b65edcff0c7f5218b5bbedc8adfdc11056fdd73b6c58489db46b1d
+pinned_version: v1.0.0
+digest: sha256:8cbb0f9d0b1550bb876a8110c080d7105f4934d865f44e69087876aa581ee640
+generated_at: ""
 profiles:
-  - id: framework
-    version: v0.0.0+catalog.4f92951255ff
-    digest:
-      sha256:625c316942f79c37e04e2e9ccac1ddd73cc6c5c4521f9327c3cf4250c3192aab
+    - id: framework
+      version: v1.0.0
+      digest: sha256:fb7d9bad7cae273636ec73bfda3eec18d5038bf113a8c62ff076be22a3c8cac0
 facets:
-  - id: security:high
-    version: v0.0.0+catalog.4f92951255ff
-    digest:
-      sha256:9bd59f0725d472b1516ba74556feada0e3868f4642bc08dd2d67a2cc26e87778
-  - id: api:public-contract
-    version: v0.0.0+catalog.4f92951255ff
-    digest:
-      sha256:c921d361fcd84da16ee8cf6423d49a1c686c98ed95b62517c903ff2651258276
-  - id: docs:seo-portal
-    version: v0.0.0+catalog.4f92951255ff
-    digest:
-      sha256:145722c161ed8e436369d573c2b736fe7f579b8a1e33a85119e3b10268563428
-  - id: agent:sandboxed
-    version: v0.0.0+catalog.4f92951255ff
-    digest:
-      sha256:bc87486dea71e54d20549d6054dcf290d3d700e37b304cbdb6d6c1a2def895f2
+    - id: security:high
+      version: v1.0.0
+      digest: sha256:c6e8340392ee7d26eebeaeabf47e95736f94cb1fcc6ff1a96df37e4c0745ccc6
+    - id: api:public-contract
+      version: v1.0.0
+      digest: sha256:2ae5299a014b6e9c348571f4d91b1f2bcec021984c9f00c3eef351ccb9a4b47d
+    - id: docs:seo-portal
+      version: v1.0.0
+      digest: sha256:d222f198ce627785948b838c50683edcf174b50bd096a3cf8159671e80105244
+    - id: agent:sandboxed
+      version: v1.0.0
+      digest: sha256:659d6b5167ee7aa248d75835ccccf22bfb338a683b37e965441f4a229a0c66c1
