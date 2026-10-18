@@ -104,8 +104,8 @@ Jobs that feed the **CI success** aggregate:
 - `reuse` — REUSE/SPDX licensing compliance (`capabilities.yaml` drift is
   covered here too, via the `TestCapabilities` test in the root suite —
   every package must be in the capability contract)
-- `spectral` — OpenAPI lint; a missing example spec is an explicit successful
-  no-op
+- `spectral` — OpenAPI lint with vacuum; a missing example spec is an
+  explicit successful no-op
 - `dependency-review` — fails on high/critical advisories or a GPL/AGPL
   licence entering the tree (PR-only; explicitly skipped on other events)
 - `gitleaks` — full-history secret scan

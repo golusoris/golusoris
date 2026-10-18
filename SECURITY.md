@@ -50,9 +50,10 @@ The blocking `CI success` aggregate in `.github/workflows/ci.yml` covers
 formatting; lint, gosec, govulncheck, tidiness, build/vet, API diff, and race
 tests across all 31 Go modules; Python and C gates; allocation budgets;
 documentation, shell, workflow, Terraform, and Kubernetes checks; Semgrep,
-Spectral, dependency review, gitleaks, DCO, and REUSE. DCO is not applicable to
-Renovate commits; dependency review and DCO are both skipped outside
-pull-request events, and the aggregate validates those skips explicitly.
+the OpenAPI lint (vacuum), dependency review, gitleaks, DCO, and REUSE. DCO is
+not applicable to Renovate commits; dependency review and DCO are both skipped
+outside pull-request events, and the aggregate validates those skips
+explicitly.
 Main branch protection separately requires the Conventional-Commit PR title and
 GitHub-managed CodeQL `Analyze (go)` checks. Repository Actions run on
 GitHub-hosted runners (`runs-on: ubuntu-26.04`) with pinned action SHAs; each
