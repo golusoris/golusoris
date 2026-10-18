@@ -1,0 +1,70 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+#
+# Files the merge train may commit to a dependency update from the artifact
+# regenerated-<head sha> of .github/workflows/regenerate.yml (contract:
+# plurano/horistes, decision record 0032). One path per line; the train reads
+# this file from the default branch and never commits a path missing here.
+# scripts/ci/regenerate.py refuses a list that differs from its own table.
+container/registry/go.mod
+container/registry/go.sum
+container/registry/sign/go.mod
+container/registry/sign/go.sum
+container/registry/sign/kms/aws/go.mod
+container/registry/sign/kms/aws/go.sum
+container/registry/sign/kms/azure/go.mod
+container/registry/sign/kms/azure/go.sum
+container/registry/sign/kms/gcp/go.mod
+container/registry/sign/kms/gcp/go.sum
+container/registry/sign/kms/vault/go.mod
+container/registry/sign/kms/vault/go.sum
+core/go.mod
+core/go.sum
+deploy/go.mod
+deploy/go.sum
+go.mod
+go.sum
+hw/fssnap/go.mod
+hw/fssnap/go.sum
+hw/gpio/go.mod
+hw/gpio/go.sum
+hw/robotics/go.mod
+hw/robotics/go.sum
+hw/udev/go.mod
+hw/udev/go.sum
+k8s/nri/go.mod
+k8s/nri/go.sum
+media/3d/go.mod
+media/3d/go.sum
+media/audio/go.mod
+media/audio/go.sum
+media/av/go.mod
+media/av/go.sum
+media/cv/go.mod
+media/cv/go.sum
+media/game/go.mod
+media/game/go.sum
+media/img/go.mod
+media/img/go.sum
+ocr/go.mod
+ocr/go.sum
+pdf/go.mod
+pdf/go.sum
+science/bio/go.mod
+science/bio/go.sum
+science/numerical/go.mod
+science/numerical/go.sum
+science/plot/go.mod
+science/plot/go.sum
+storage/azblob/go.mod
+storage/azblob/go.sum
+storage/gcs/go.mod
+storage/gcs/go.sum
+testutil/pact/go.mod
+testutil/pact/go.sum
+testutil/promcheck/go.mod
+testutil/promcheck/go.sum
+web3/evm/go.mod
+web3/evm/go.sum
+web3/solana/go.mod
+web3/solana/go.sum

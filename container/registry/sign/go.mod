@@ -7,13 +7,13 @@ require (
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
 	github.com/go-openapi/runtime v0.33.3
 	github.com/golusoris/golusoris/container/registry v0.0.0-20261010054231-5e0e1abd505b
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.11.0
 	github.com/google/go-containerregistry v0.22.1
 	github.com/in-toto/attestation v1.2.0
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/sigstore/protobuf-specs v0.5.2
 	github.com/sigstore/rekor v1.5.4
-	github.com/sigstore/sigstore v1.11.0
+	github.com/sigstore/sigstore v1.11.1
 	github.com/sigstore/sigstore-go v1.3.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -24,7 +24,7 @@ require (
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.3 // indirect
-	github.com/coreos/go-oidc/v3 v3.20.0 // indirect
+	github.com/coreos/go-oidc/v3 v3.21.0 // indirect
 	github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f // indirect
 	github.com/docker/cli v29.7.2+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect

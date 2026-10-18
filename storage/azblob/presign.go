@@ -14,7 +14,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/sas"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/service"
 
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 )
 
 const (

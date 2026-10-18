@@ -143,12 +143,17 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py
 	@python3 -B scripts/ci/pull_test_images_test.py
+	@python3 -B scripts/ci/windows-panic-rescan_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
 	@python3 -B scripts/ci/hiss_coverage_counts.py
+	@python3 -B scripts/ci/regenerate.py selftest
+	@python3 -B scripts/ci/regenerate.py check
+	@python3 -B scripts/ci/osv-ignores.py selftest
+	@python3 -B scripts/ci/osv-ignores.py check
 
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking

@@ -38,7 +38,7 @@ import (
 	"google.golang.org/api/option"
 
 	"github.com/golusoris/golusoris/core/clock"
-	"github.com/golusoris/golusoris/storage"
+	"github.com/golusoris/golusoris/core/storage"
 )
 
 const (

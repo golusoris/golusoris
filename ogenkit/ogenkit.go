@@ -6,7 +6,7 @@
 // conventions. It provides:
 //
 //   - [ErrorHandler] and [ErrorHandlerWith] that translate golusoris coded errors,
-//     mapped sentinel errors ([WithStatus]), and validation failures ([WithInvalidParams])
+//     mapped sentinel errors ([WithStatus], [WithPublicStatus]), and validation failures ([WithInvalidParams])
 //     into RFC 9457 Problem Details with their proper HTTP status.
 //   - [SlogMiddleware] / [RecoverMiddleware] — ogen middleware implementations
 //     that integrate with the framework's slog logger. Use alongside the
@@ -46,6 +46,7 @@ type Option func(*errorHandlerConfig)
 type statusMapping struct {
 	target error
 	code   gerr.Code
+	public bool
 }
 
 type errorHandlerConfig struct {
@@ -67,6 +68,26 @@ func WithStatus(target error, code gerr.Code) Option {
 			cfg.statusMappings = append(cfg.statusMappings, statusMapping{
 				target: target,
 				code:   code,
+				public: false,
+			})
+		}
+	}
+}
+
+// WithPublicStatus maps an application sentinel error to a golusoris [gerr.Code]
+// using [errors.Is], exposing the incoming error's full error chain message as
+// the problem detail even when the status is 5xx. First match wins, following
+// the order in which options are supplied. A nil target is ignored.
+//
+// Detail exposure is deliberate; callers must only map errors whose text is safe
+// for clients.
+func WithPublicStatus(target error, code gerr.Code) Option {
+	return func(cfg *errorHandlerConfig) {
+		if target != nil {
+			cfg.statusMappings = append(cfg.statusMappings, statusMapping{
+				target: target,
+				code:   code,
+				public: true,
 			})
 		}
 	}
@@ -129,6 +150,7 @@ type problemBody struct {
 
 func writeProblem(w http.ResponseWriter, problem problemBody) error {
 	w.Header().Set("Content-Type", gerr.ProblemJSONMediaType)
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(problem.Status)
 	if err := json.NewEncoder(w).Encode(problem); err != nil {
 		return fmt.Errorf("ogenkit: encode problem details: %w", err)
@@ -158,11 +180,18 @@ func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problem
 
 	for _, m := range cfg.statusMappings {
 		if errors.Is(err, m.target) {
-			return problemBody{ProblemDetails: gerr.ProblemFromError(
+			problem := gerr.ProblemFromError(
 				gerr.New(m.code, m.target.Error()),
 				m.code.Status(),
 				instance,
-			)}
+			)
+			if m.public {
+				detail := err.Error()
+				problem.Detail = detail
+				problem.ErrorMessage = detail
+				problem.Message = detail
+			}
+			return problemBody{ProblemDetails: problem}
 		}
 	}
 

@@ -7,7 +7,7 @@ require (
 	cloud.google.com/go/compute/metadata v0.10.0
 	cloud.google.com/go/storage v1.69.0
 	github.com/golusoris/golusoris v0.16.5
-	github.com/golusoris/golusoris/core v0.10.1
+	github.com/golusoris/golusoris/core v0.11.0
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
 	google.golang.org/api v0.304.0
@@ -70,7 +70,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.23 // indirect
 	github.com/googleapis/gax-go/v2 v2.26.2 // indirect
-	github.com/klauspost/compress v1.20.1 // indirect
+	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/knadh/koanf/maps v0.1.3 // indirect
 	github.com/knadh/koanf/parsers/json v1.0.1 // indirect
 	github.com/knadh/koanf/parsers/yaml v1.1.1 // indirect

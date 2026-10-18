@@ -257,16 +257,20 @@ def _terminate_process_tree(process: subprocess.Popen[bytes]) -> tuple[int, str]
 
 def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> list[str]:
     """Signal the isolated POSIX process group with bounded TERM then KILL."""
+    pgid = process.pid
+    # killpg(1) is kill(-1) and killpg(0) is the caller's group; a test double's pid can index to 1.
+    if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 1 or pgid == os.getpgrp():
+        return [f"refused to signal process group {pgid!r}"]
     failures: list[str] = []
     try:
-        os.killpg(process.pid, signal.SIGTERM)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
         pass
     except OSError as error:
         failures.append(f"terminate process group: {error}")
     time.sleep(PROCESS_TERMINATE_GRACE_SECONDS)
     try:
-        os.killpg(process.pid, signal.SIGKILL)
+        os.killpg(pgid, signal.SIGKILL)
     except ProcessLookupError:
         pass
     except OSError as error:
