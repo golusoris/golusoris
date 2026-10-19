@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# CI-only source cluster for scripts/ci/cnpg-restore.sh; archives WAL and backups to VersityGW.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-source
+  namespace: cnpg-restore
+spec:
+  instances: 1
+  imageName: "@CNPG_POSTGRES_IMAGE@"
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+  storage:
+    size: 1Gi
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://backups/
+      endpointURL: http://versitygw.cnpg-restore.svc:7070
+      s3Credentials:
+        accessKeyId:
+          name: s3-creds
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: s3-creds
+          key: SECRET_ACCESS_KEY
+      wal:
+        maxParallel: 1
