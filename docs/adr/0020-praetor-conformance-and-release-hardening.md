@@ -59,7 +59,10 @@ issue #429 and its per-area tasks #432–#434.
    artifacts a library does not need (cordanaLLM/praetor#36); `standardsctl
    gate run --path=.` already passes stages 1–3 (lockfile, HISS scan,
    security) and fails only stage 4, the flavor check the held-back jobs
-   would run (`#495`).
+   would run (`#495`). #633 later removed the two held-back jobs from
+   `lefthook.yml`; `.standards.yaml` now declines the
+   `working-dir-and-flavor` adoption step instead, citing the same upstream
+   bug.
 3. **Canonical config paths.** `.golangci.yml` and `.gosec.json` move to the
    repository root, the paths praetor's flavor definitions and gate require
    (`#494`). The prior `tools/gosec.exclude-rules` path-scoped exclusion list
@@ -82,11 +85,13 @@ issue #429 and its per-area tasks #432–#434.
    legs. It cannot render `CI success` (`if: always()`) or the conditional
    pull-request gates for PR title, DCO, and dependency review because
    `RequiredStatusContexts` excludes those job conditions
-   (`cordanaLLM/praetor#76`). Applying the declaration with
-   `praetorctl sync --remote` would therefore weaken the live gate and remains
-   blocked. GitHub continues to enforce classic branch protection with
-   `CI success`, `PR title (Conventional Commits)`, and `Analyze (go)`; no
-   active branch ruleset targets `main`.
+   (`cordanaLLM/praetor#76`). Measured state on 2026-10-19:
+   [cordanaLLM/praetor#76](https://github.com/cordanaLLM/praetor/issues/76)
+   is closed, and the active `praetor-main-protection` ruleset on `main`
+   matches `.github/rulesets/main.json` exactly (same rule types, 45 required
+   contexts including `CI success`, zero required approvals, signed commits,
+   linear history). Classic branch protection still runs alongside it and
+   requires `CI success` and `PR title (Conventional Commits)`.
 6. **Releases are immutable, with a source-tree SBOM attestation workflow.** GitHub
    immutable releases are enabled for this repository (`v0.10.1` is the
    first release published under it). Because an immutable release accepts
@@ -99,7 +104,9 @@ issue #429 and its per-area tasks #432–#434.
    `actions/attest-build-provenance`. Hosted publication remains an observed
    result, not a configuration guarantee: the v0.12.0 release and per-archive
    SBOMs succeeded, while its separate source-tree workflow failed during
-   Rekor publication. The added retry path must be proven by a later tag.
+   Rekor publication. Later tags proved the retry path: `sbom.yml` succeeded
+   for every tag from `v0.16.1` through `v0.17.0`
+   ([v0.17.0 run](https://github.com/golusoris/golusoris/actions/runs/38862386567)).
 7. **`template/` pins the reusable workflows at a tagged commit, not a
    floating ref.** `template/.github/workflows/{ci,release}.yml` reference
    `golusoris/golusoris/.github/workflows/{ci-go,release-go,scorecard}.yml`
@@ -124,39 +131,42 @@ issue #429 and its per-area tasks #432–#434.
 | Leave `.golangci.yml`/`.gosec.json` under `tools/` and symlink from root | Avoids repointing every consumer | Praetor's flavor definitions look for the file at the root path, not a symlink target, by name; `standardsctl gate run` failed before reaching the security scan | Canonical root paths, every consumer repointed |
 | Mutable releases, SBOMs attached as release assets | One artifact surface (the release page) | Immutable releases (once enabled) reject post-publication asset uploads outright | GitHub attestations for source-tree SBOMs instead of release assets |
 | Apply the new ruleset to GitHub immediately | Enforcement matches the declared policy right away | Rulesets carry no admin bypass; an in-flight fleet-gated PR that cannot yet satisfy every declared check would be locked out with no override | Declare the policy now, apply it once in-flight PRs land |
-| Block every merge on ARC-backed required checks finishing, regardless of queue depth | Uniform enforcement, no manual step | The fleet is measurably undersized today; a solo maintainer with a green local gate would otherwise be blocked by runner contention alone | Documented, commented admin-merge exception until the fleet is resized |
+| Block every merge on ARC-backed required checks finishing, regardless of queue depth | Uniform enforcement, no manual step | The fleet is measurably undersized today; a solo maintainer with a green local gate would otherwise be blocked by runner contention alone | Documented, commented admin-merge exception until the fleet is resized; withdrawn by [ADR-0021](0021-github-hosted-runners.md) |
 
 ## Consequences
 
-- **Positive**: the HISS baseline remains zero. Current Praetor
-  `fae37a35d44e` reaches only its two false-positive HISS-07 findings for the
-  canonical `panic(http.ErrAbortHandler)` connection-abort path; upstream
-  `cordanaLLM/praetor#331` tracks the scanner fix and #393 tracks the missing
-  signed-waiver verifier. No baseline or gate bypass masks either finding.
+- **Positive**: the HISS baseline remains zero. Praetor `fae37a35d44e`
+  reported two false-positive HISS-07 findings for the canonical
+  `panic(http.ErrAbortHandler)` connection-abort path; both upstream issues
+  are now closed:
+  [cordanaLLM/praetor#331](https://github.com/cordanaLLM/praetor/issues/331)
+  (the scanner fix) and
+  [cordanaLLM/praetor#393](https://github.com/cordanaLLM/praetor/issues/393)
+  (the signed-waiver verifier). No baseline or gate bypass masks a finding.
   `standardsctl gate run` passes stages 1–3; the devcontainer builds and
   `standardsctl devcontainer --verify` passes; the branch
   protection policy is declared in a file (`.github/rulesets/main.json`)
   instead of only existing as a GitHub UI setting; releases carry build
   provenance attestations, cosign signatures, and per-archive SBOMs, while a
-  separate workflow attempts source-tree SBOM attestations; downstream apps
+  separate workflow publishes source-tree SBOM attestations; downstream apps
   pin reproducible, verifiable workflow versions instead of a floating branch
   ref.
-- **Negative**: `flavor-audit` and `gate` stay disabled in `lefthook.yml`
-  pending an external fix (cordanaLLM/praetor#36), so stage 4 (flavor
-  conformance) of praetor's gate is not locally enforced until then;
-  `.workingdir/` state is no longer versioned in git, so continuity across
-  sessions depends entirely on tooling outside the repository; the generated
-  ruleset cannot yet preserve the live aggregate and conditional PR checks;
-  the admin-merge exception is a human judgment call recorded in prose
-  (PR/commit rationale), not a machine-checked gate.
-- **Neutral / follow-ups**: keep remote ruleset reconciliation blocked until
-  `cordanaLLM/praetor#76` can preserve the live gate and every newly declared
-  matrix context has a hosted green; then regenerate and review the exact
-  payload before `praetorctl sync --remote` (epic task #434). Re-enable
-  `flavor-audit` and `gate` once
-  cordanaLLM/praetor#36 is fixed and `praetorctl flavor audit .` exits 0 on
-  `main`; retire the admin-merge exception once the ARC runner resize noted
-  in the `ci.yml` Lint job comment is applied.
+- **Negative**: flavor conformance (stage 4 of praetor's gate) is not
+  enforced pending an external fix:
+  [cordanaLLM/praetor#36](https://github.com/cordanaLLM/praetor/issues/36)
+  is still open, and on 2026-10-19 the pinned engine still audits this
+  library as `go-service` (`praetorctl flavor audit .` exits 1 at 62.5%,
+  missing a service `Dockerfile` and `security.yml`); `.workingdir/` state
+  is no longer versioned in git, so continuity across sessions depends
+  entirely on tooling outside the repository; the generated ruleset does not
+  carry the conditional `PR title (Conventional Commits)` check, which only
+  classic branch protection still requires.
+- **Neutral / follow-ups**: remote ruleset reconciliation is done; the
+  remaining step under epic task #434 is retiring classic branch protection
+  once the ruleset carries every check it requires. Adopt the flavor step
+  once cordanaLLM/praetor#36 is fixed and `praetorctl flavor audit .` exits
+  0 on `main`. The admin-merge exception needs no follow-up: ADR-0021
+  withdrew it.
 
 ## References
 
