@@ -474,6 +474,50 @@ paths:
 	}
 }
 
+// kin-openapi >=0.150 defaults explode=false for delimited styles.
+func TestBuildProxyRequestDefaultsExplodeForDelimitedStyles(t *testing.T) {
+	t.Parallel()
+	spec := []byte(`openapi: 3.0.3
+info:
+  title: Explode Defaults
+  version: "1"
+paths:
+  /items:
+    get:
+      operationId: getItems
+      parameters:
+        - {name: spaces, in: query, style: spaceDelimited, schema: {type: array, items: {type: string}}}
+        - {name: pipes, in: query, style: pipeDelimited, schema: {type: array, items: {type: string}}}
+        - {name: tags, in: query, style: form, schema: {type: array, items: {type: string}}}
+      responses: {'200': {description: ok}}
+`)
+	tools, err := openAPIToTools(spec)
+	if err != nil {
+		t.Fatalf("openAPIToTools: %v", err)
+	}
+	args, err := json.Marshal(map[string]any{
+		"spaces": []string{"red", "blue"},
+		"pipes":  []string{"red", "blue"},
+		"tags":   []string{"red", "blue"},
+	})
+	if err != nil {
+		t.Fatalf("marshal args: %v", err)
+	}
+	req, errRes := buildProxyRequest(
+		context.Background(), Options{BaseURL: "https://api.test"}, tools[0], args,
+	)
+	if errRes != nil {
+		if content, ok := errRes.Content[0].(*mcp.TextContent); ok {
+			t.Fatalf("buildProxyRequest: %s", content.Text)
+		}
+		t.Fatalf("buildProxyRequest: %+v", errRes.Content)
+	}
+	wantQuery := "pipes=red%7Cblue&spaces=red+blue&tags=red&tags=blue"
+	if got := req.URL.RawQuery; got != wantQuery {
+		t.Errorf("query = %q, want %q", got, wantQuery)
+	}
+}
+
 func TestOpenAPIToToolsSortsByName(t *testing.T) {
 	t.Parallel()
 	spec := []byte(`openapi: 3.0.3
