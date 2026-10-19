@@ -53,7 +53,7 @@ require (
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2
-	github.com/golusoris/golusoris/core v0.11.0
+	github.com/golusoris/golusoris/core v0.12.0
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-foundation-sdk/go v0.0.20
 	github.com/grafana/pyroscope-go v1.4.3
