@@ -30,6 +30,7 @@ SDK's job, with token mount already in place.
  log this on startup so deploys can verify they're on right path.
 - Default QPS=20, Burst=30 match client-go's controller defaults.
 - Apps that build many informers should bump these (typical: 100/200).
+- Envtest suite (build tag `envtest`) requires real kube-apiserver; runs in CI only.
 
 ## Don't
 
