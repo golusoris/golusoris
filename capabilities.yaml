@@ -9,6 +9,7 @@
 # Maintained by hand; capabilities_test.go fails on drift from the tree.
 version: 1
 framework: github.com/golusoris/golusoris
+builder_kits: [golusoris/golusoris, golusoris/goenvoy]
 modules:
   - github.com/golusoris/golusoris/container/registry
   - github.com/golusoris/golusoris/container/registry/sign
