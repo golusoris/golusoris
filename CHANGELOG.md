@@ -15,6 +15,70 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.18.0](https://github.com/golusoris/golusoris/compare/v0.17.0...v0.18.0) (2026-10-19)
+
+
+### ⚠ BREAKING CHANGES
+
+* **storage:** alias the shared API from core/storage ([#926](https://github.com/golusoris/golusoris/issues/926))
+* **ai/tiny/serve/tflite:** ship a LiteRT classifier sidecar with an attested image pipeline ([#976](https://github.com/golusoris/golusoris/issues/976))
+* **deps:** update chromedp to v0.21.0 in pdf ([#949](https://github.com/golusoris/golusoris/issues/949))
+* **deps:** move payments/stripe to stripe-go v87
+
+### Features
+
+* **ai/tiny/serve/onnx:** serve ONNX models through an external runner ([#963](https://github.com/golusoris/golusoris/issues/963)) ([dded214](https://github.com/golusoris/golusoris/commit/dded214857a25f90e195c19b4a331203e803762e))
+* **ai/tiny/serve/tflite:** ship a LiteRT classifier sidecar with an attested image pipeline ([#976](https://github.com/golusoris/golusoris/issues/976)) ([142922f](https://github.com/golusoris/golusoris/commit/142922f9e38789986a93f222012239a6a10e0ec2))
+* **ai/tpe:** add a Tree-structured Parzen Estimator sampler ([#962](https://github.com/golusoris/golusoris/issues/962)) ([63277a9](https://github.com/golusoris/golusoris/commit/63277a9c3b29eb79673d4666200c227baef4f657))
+* **auth/oidc:** add nonce-checked Begin/Complete and lazy discovery ([#960](https://github.com/golusoris/golusoris/issues/960)) ([fb52de8](https://github.com/golusoris/golusoris/commit/fb52de898e46d803a23ae92b44a07b0608a93ff2))
+* **auth/oidc:** make offline access optional and export refusal sentinels ([#992](https://github.com/golusoris/golusoris/issues/992)) ([05d3b37](https://github.com/golusoris/golusoris/commit/05d3b377ccad19323c895295045b3ef5a5fa2a76)), closes [#989](https://github.com/golusoris/golusoris/issues/989)
+* **auth/session:** add Manager.Renew to rotate the session id ([#931](https://github.com/golusoris/golusoris/issues/931)) ([a00f9b2](https://github.com/golusoris/golusoris/commit/a00f9b280ecb9fa3ad28e08e96b0686d68db0e02))
+* **core/capabilities:** add a validated builder_kits field to the index ([#1014](https://github.com/golusoris/golusoris/issues/1014)) ([f717cbf](https://github.com/golusoris/golusoris/commit/f717cbff8619084544c9a9e693e39a71e4031de2))
+* **core/validate:** add a stdlib-only nilcheck package ([#945](https://github.com/golusoris/golusoris/issues/945)) ([830d6e3](https://github.com/golusoris/golusoris/commit/830d6e37af1a00f9b6660ae3eda9364c4428eaa6))
+* **leader/gate:** add a loop gate that runs singleton loops on the leader ([#964](https://github.com/golusoris/golusoris/issues/964)) ([0eeae16](https://github.com/golusoris/golusoris/commit/0eeae169637cd1ce080fee7f16e733e78bd98c7c))
+* **notify/channel:** route one channel config to its sender or webhook ([#966](https://github.com/golusoris/golusoris/issues/966)) ([4b38032](https://github.com/golusoris/golusoris/commit/4b38032b7734d9457336ce29f1d79d70ee3ce585))
+* **observability/metricdef:** register a catalog on an OTel meter ([#936](https://github.com/golusoris/golusoris/issues/936)) ([3c71076](https://github.com/golusoris/golusoris/commit/3c71076f1a8a79ba10c9e58890637976e95744e0))
+* **observability/metricdef:** reuse registered families, reset gauges ([#959](https://github.com/golusoris/golusoris/issues/959)) ([6127550](https://github.com/golusoris/golusoris/commit/61275506cddaa09e93527ec2cc8d7d8919583743))
+* **ogenkit:** add WithPublicStatus and no-store problem responses ([#991](https://github.com/golusoris/golusoris/issues/991)) ([5e41a9c](https://github.com/golusoris/golusoris/commit/5e41a9c9cf55a9d183be0f7450ceb291d0bd5c78)), closes [#988](https://github.com/golusoris/golusoris/issues/988)
+* **ogenkit:** map sentinel errors and validation fields in the error handler ([#967](https://github.com/golusoris/golusoris/issues/967)) ([70923ea](https://github.com/golusoris/golusoris/commit/70923ead68a84a443d07d4d25b21a754d25a4cb1))
+* **testutil/pg:** clone per-test databases from a migrated template ([#965](https://github.com/golusoris/golusoris/issues/965)) ([e3e0898](https://github.com/golusoris/golusoris/commit/e3e08982f06444447b0779b2c7b1fbccadad849c))
+
+
+### Bug Fixes
+
+* bound the three baselined deadline-free contexts ([#1013](https://github.com/golusoris/golusoris/issues/1013)) ([2d163c4](https://github.com/golusoris/golusoris/commit/2d163c48d2fef15d1881c3d7e938dcd3e9028c42))
+* **ci:** accept the containerd image id in the tiny image identity check ([#977](https://github.com/golusoris/golusoris/issues/977)) ([e5ebb47](https://github.com/golusoris/golusoris/commit/e5ebb47db408ea5099d6bcbba24ef10be176bba4)), closes [#564](https://github.com/golusoris/golusoris/issues/564)
+* **ci:** lint OpenAPI specs with vacuum instead of spectral-cli ([#1009](https://github.com/golusoris/golusoris/issues/1009)) ([d1d62e8](https://github.com/golusoris/golusoris/commit/d1d62e83e508ae044c59026cb1d58eb8665be43d))
+* **ci:** refuse to signal a process group that is not the child's own ([#983](https://github.com/golusoris/golusoris/issues/983)) ([a6833c3](https://github.com/golusoris/golusoris/commit/a6833c37898d5a46732dcfa60e95e0135b528c24))
+* **cmd/golusoris:** scaffold the app entry point at cmd/app ([#881](https://github.com/golusoris/golusoris/issues/881)) ([63da06d](https://github.com/golusoris/golusoris/commit/63da06d5209fd8d31be86b28e51441577fb57493))
+* **config:** map env names onto underscore struct keys in Unmarshal ([#937](https://github.com/golusoris/golusoris/issues/937)) ([456c435](https://github.com/golusoris/golusoris/commit/456c43581b12f8d451203f7c358ba3b5e266bd2b))
+* **container/registry/sign/kms/azure:** accept EC coordinates without leading zeros ([#935](https://github.com/golusoris/golusoris/issues/935)) ([28a9b6d](https://github.com/golusoris/golusoris/commit/28a9b6d59285f24ba7551521c2e03558955e3038))
+* **deps:** move off the retracted mimetype v1.4.15 ([#1004](https://github.com/golusoris/golusoris/issues/1004)) ([9761bf6](https://github.com/golusoris/golusoris/commit/9761bf6848588a0a375a437f2036fa65cb46d7b8))
+* **deps:** move payments/stripe to stripe-go v87 ([ebd183b](https://github.com/golusoris/golusoris/commit/ebd183b5b3dbf47fb8d6b4ba40181b7e110bb938))
+* **deps:** update chromedp to v0.21.0 in pdf ([#949](https://github.com/golusoris/golusoris/issues/949)) ([76f9f67](https://github.com/golusoris/golusoris/commit/76f9f67b5f7baacf0b08b7952a256e284685673c))
+* **deps:** update github.com/cyberphone/json-canonicalization digest to 32a4819 ([#885](https://github.com/golusoris/golusoris/issues/885)) ([8fcddfa](https://github.com/golusoris/golusoris/commit/8fcddfa822d4b3eee45f1dafa4634c2cbe0987dc))
+* **deps:** update github.com/golusoris/golusoris/container/registry digest to c9de8c9 ([#886](https://github.com/golusoris/golusoris/issues/886)) ([717bbfa](https://github.com/golusoris/golusoris/commit/717bbfa54f7114ee95ecdba0c2c774efb3d0b79e))
+* **deps:** update github.com/golusoris/golusoris/container/registry/sign digest to b544145 ([#917](https://github.com/golusoris/golusoris/issues/917)) ([2de918d](https://github.com/golusoris/golusoris/commit/2de918d7c1d22b896b7525942d51d46557fd6ffc))
+* **deps:** update golang.org/x/exp digest to f0251eb ([#660](https://github.com/golusoris/golusoris/issues/660)) ([d216279](https://github.com/golusoris/golusoris/commit/d21627928c72ac375fedbcaa2f7baa8e63fb4ef0))
+* **deps:** update module github.com/azure/azure-sdk-for-go/sdk/azidentity to v1.15.0 ([#906](https://github.com/golusoris/golusoris/issues/906)) ([39447f4](https://github.com/golusoris/golusoris/commit/39447f4f2bc1fe6eaad58b4dc27bc9c6869e293e))
+* **deps:** update module github.com/chromedp/cdproto to v0.158.0 ([#941](https://github.com/golusoris/golusoris/issues/941)) ([fd6115e](https://github.com/golusoris/golusoris/commit/fd6115e0db6422762c45c8d2230abe4acc269e19))
+* **deps:** update module github.com/go-chi/chi/v5 to v5.5.0 ([#1010](https://github.com/golusoris/golusoris/issues/1010)) ([b9ecfd7](https://github.com/golusoris/golusoris/commit/b9ecfd710a1d3734903d94d72f410c7f7a6a8928))
+* **deps:** update module github.com/golusoris/golusoris/core to v0.10.2 ([#896](https://github.com/golusoris/golusoris/issues/896)) ([3e16e36](https://github.com/golusoris/golusoris/commit/3e16e368a803416a03cb997c61f7d45c34791529))
+* **deps:** update module github.com/pulumi/pulumi-aws/sdk/v7 to v7.51.0 ([#603](https://github.com/golusoris/golusoris/issues/603)) ([c1d1cf8](https://github.com/golusoris/golusoris/commit/c1d1cf8a68fd92121f867b89675eacc85b57add2))
+* **deps:** update module github.com/redis/rueidis to v1.0.79 ([#897](https://github.com/golusoris/golusoris/issues/897)) ([8751bdc](https://github.com/golusoris/golusoris/commit/8751bdcc45203ff86ba803e4d2745937aaf1aba6))
+* **deps:** update module github.com/sigstore/sigstore to v1.11.1 ([#762](https://github.com/golusoris/golusoris/issues/762)) ([46990e6](https://github.com/golusoris/golusoris/commit/46990e6a1503153b77fcb6e5e4a19aa290f74711))
+* **deps:** update module github.com/twmb/franz-go to v1.22.2 ([#899](https://github.com/golusoris/golusoris/issues/899)) ([7ea0edc](https://github.com/golusoris/golusoris/commit/7ea0edc7f71afbfc1b32629b4dd7c279194c2adc))
+* **deps:** update module google.golang.org/api to v0.304.0 ([#608](https://github.com/golusoris/golusoris/issues/608)) ([388f666](https://github.com/golusoris/golusoris/commit/388f666f3817156300e8a5d759c8c9ccbe113e27))
+* **grpc:** stop connection rotation from cutting in-flight RPCs ([#933](https://github.com/golusoris/golusoris/issues/933)) ([0e8cb37](https://github.com/golusoris/golusoris/commit/0e8cb378fdfc705bf41b76482d7b57933e8714b4))
+* **httpx/csrf:** enforce same-origin checks when no secret is set ([#986](https://github.com/golusoris/golusoris/issues/986)) ([271c20f](https://github.com/golusoris/golusoris/commit/271c20f02592ae4872e2f73ff10f26447c9837c3))
+* **tools:** fail the gosec goals when gosec scanned no file ([#932](https://github.com/golusoris/golusoris/issues/932)) ([6618dc8](https://github.com/golusoris/golusoris/commit/6618dc8be48e46513fcd1f30b872776f76b0be8d))
+
+
+### Code Refactoring
+
+* **idempotency:** split stores into store, postgres, redis, sqlite ([#939](https://github.com/golusoris/golusoris/issues/939)) ([7c719aa](https://github.com/golusoris/golusoris/commit/7c719aad13f77e38350e7749fc2b93b722995bf0))
+* **storage:** alias the shared API from core/storage ([#926](https://github.com/golusoris/golusoris/issues/926)) ([5962552](https://github.com/golusoris/golusoris/commit/5962552d28017cedee237701250fe0ea50e6b259))
+
 ## [0.17.0](https://github.com/golusoris/golusoris/compare/v0.16.5...v0.17.0) (2026-10-16)
 
 

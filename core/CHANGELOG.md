@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/golusoris/golusoris/compare/core/v0.11.0...core/v0.12.0) (2026-10-19)
+
+
+### Features
+
+* **core/capabilities:** add a validated builder_kits field to the index ([#1014](https://github.com/golusoris/golusoris/issues/1014)) ([f717cbf](https://github.com/golusoris/golusoris/commit/f717cbff8619084544c9a9e693e39a71e4031de2))
+* **core/validate:** add a stdlib-only nilcheck package ([#945](https://github.com/golusoris/golusoris/issues/945)) ([830d6e3](https://github.com/golusoris/golusoris/commit/830d6e37af1a00f9b6660ae3eda9364c4428eaa6))
+
+
+### Bug Fixes
+
+* **config:** map env names onto underscore struct keys in Unmarshal ([#937](https://github.com/golusoris/golusoris/issues/937)) ([456c435](https://github.com/golusoris/golusoris/commit/456c43581b12f8d451203f7c358ba3b5e266bd2b))
+* **deps:** move off the retracted mimetype v1.4.15 ([#1004](https://github.com/golusoris/golusoris/issues/1004)) ([9761bf6](https://github.com/golusoris/golusoris/commit/9761bf6848588a0a375a437f2036fa65cb46d7b8))
+
 ## [0.11.0](https://github.com/golusoris/golusoris/compare/core/v0.10.2...core/v0.11.0) (2026-10-16)
 
 
