@@ -15,6 +15,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
+	"github.com/golusoris/golusoris/core/validate/nilcheck"
 	"github.com/golusoris/golusoris/idempotency/internal/storeutil"
 	"github.com/golusoris/golusoris/idempotency/store"
 )
@@ -74,7 +75,7 @@ type Store struct {
 
 // New returns the shared algorithm over a dialect backend.
 func New(rows RowBackend, clk clockwork.Clock) Store {
-	if storeutil.IsNil(clk) {
+	if nilcheck.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
 	return Store{rows: rows, clk: clk}

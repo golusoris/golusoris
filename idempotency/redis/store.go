@@ -17,6 +17,7 @@ import (
 
 	"github.com/redis/rueidis"
 
+	"github.com/golusoris/golusoris/core/validate/nilcheck"
 	"github.com/golusoris/golusoris/idempotency/internal/storeutil"
 	"github.com/golusoris/golusoris/idempotency/store"
 )
@@ -70,7 +71,7 @@ type redisResponse struct {
 // New returns a Store over client. An empty prefix uses
 // [DefaultRedisPrefix].
 func New(client rueidis.Client, prefix string) (*Store, error) {
-	if storeutil.IsNil(client) {
+	if nilcheck.IsNil(client) {
 		return nil, errors.New("idempotency: redis store: nil client")
 	}
 	if prefix == "" {
