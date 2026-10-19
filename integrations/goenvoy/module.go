@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/golusoris/goenvoy/arr/sonarr"
 	"github.com/golusoris/goenvoy/metadata/anime/anilist"
@@ -45,6 +46,7 @@ func loadOptions(cfg *config.Config) (Options, error) {
 // lookups return the same instance.
 type Registry struct {
 	f             *factory
+	buildTimeout  time.Duration
 	mu            sync.RWMutex
 	sonarr        map[string]*sonarr.Client
 	tmdb          map[string]*tmdb.Client
@@ -58,28 +60,28 @@ type Registry struct {
 
 // Sonarr returns the Sonarr client configured under name.
 func (r *Registry) Sonarr(name string) (*sonarr.Client, error) {
-	return registryClient(&r.mu, r.sonarr, r.sonarrBuilds, name, func() (*sonarr.Client, error) {
+	return registryClient(&r.mu, r.sonarr, r.sonarrBuilds, name, r.buildTimeout, func() (*sonarr.Client, error) {
 		return r.f.newSonarr(name)
 	})
 }
 
 // TMDb returns the TMDb client configured under name.
 func (r *Registry) TMDb(name string) (*tmdb.Client, error) {
-	return registryClient(&r.mu, r.tmdb, r.tmdbBuilds, name, func() (*tmdb.Client, error) {
+	return registryClient(&r.mu, r.tmdb, r.tmdbBuilds, name, r.buildTimeout, func() (*tmdb.Client, error) {
 		return r.f.newTMDb(name)
 	})
 }
 
 // AniList returns the AniList client configured under name.
 func (r *Registry) AniList(name string) (*anilist.Client, error) {
-	return registryClient(&r.mu, r.anilist, r.anilistBuilds, name, func() (*anilist.Client, error) {
+	return registryClient(&r.mu, r.anilist, r.anilistBuilds, name, r.buildTimeout, func() (*anilist.Client, error) {
 		return r.f.newAniList(name)
 	})
 }
 
 // Trakt returns the Trakt client configured under name.
 func (r *Registry) Trakt(name string) (*trakt.Client, error) {
-	return registryClient(&r.mu, r.trakt, r.traktBuilds, name, func() (*trakt.Client, error) {
+	return registryClient(&r.mu, r.trakt, r.traktBuilds, name, r.buildTimeout, func() (*trakt.Client, error) {
 		return r.f.newTrakt(name)
 	})
 }
@@ -123,6 +125,7 @@ func newRegistry(p registryParams) *Registry {
 func newRegistryFromFactory(f *factory) *Registry {
 	return &Registry{
 		f:             f,
+		buildTimeout:  defaultClientBuildTimeout,
 		sonarr:        make(map[string]*sonarr.Client),
 		tmdb:          make(map[string]*tmdb.Client),
 		anilist:       make(map[string]*anilist.Client),
@@ -134,11 +137,16 @@ func newRegistryFromFactory(f *factory) *Registry {
 	}
 }
 
+// defaultClientBuildTimeout bounds one client build; builds are local
+// constructors, so the bound only trips on a wedged factory.
+const defaultClientBuildTimeout = 30 * time.Second
+
 func registryClient[T any](
 	mu *sync.RWMutex,
 	clients map[string]T,
 	builds *singleflight.Group[string, T],
 	name string,
+	timeout time.Duration,
 	build func() (T, error),
 ) (T, error) {
 	mu.RLock()
@@ -148,7 +156,9 @@ func registryClient[T any](
 		return value, nil
 	}
 
-	value, _, err := builds.Do(context.Background(), name, func(context.Context) (T, error) {
+	buildCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	value, _, err := builds.Do(buildCtx, name, func(ctx context.Context) (T, error) {
 		mu.RLock()
 		cached, found := clients[name]
 		mu.RUnlock()
@@ -156,10 +166,17 @@ func registryClient[T any](
 			return cached, nil
 		}
 
+		var zero T
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return zero, ctxErr
+		}
 		created, buildErr := build()
 		if buildErr != nil {
-			var zero T
 			return zero, buildErr
+		}
+		// An overrun build is dropped so the next lookup retries it.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return zero, ctxErr
 		}
 		mu.Lock()
 		clients[name] = created

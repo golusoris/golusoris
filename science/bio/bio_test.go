@@ -12,6 +12,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	bio "github.com/golusoris/golusoris/science/bio"
 )
@@ -200,6 +201,33 @@ func TestParseFASTALegacyWrapperIsBounded(t *testing.T) {
 	_, err := bio.ParseFASTA(strings.NewReader(input))
 	if !errors.Is(err, bio.ErrFASTALineTooLong) {
 		t.Fatalf("error = %v, want ErrFASTALineTooLong", err)
+	}
+}
+
+// TestParseFASTADeadline covers the wrapper deadline: positive (the default
+// deadline leaves a valid parse intact), negative (an expired deadline stops
+// the parse), and boundary (a deadline of exactly now counts as expired).
+func TestParseFASTADeadline(t *testing.T) {
+	t.Parallel()
+
+	if bio.DefaultFASTATimeout <= 0 {
+		t.Fatalf("DefaultFASTATimeout = %v, want positive", bio.DefaultFASTATimeout)
+	}
+	got, err := bio.ParseFASTA(strings.NewReader(">x\nac\n"))
+	if err != nil || len(got) != 1 || got[0].Seq != "AC" {
+		t.Fatalf("ParseFASTA = (%v, %v), want one AC record", got, err)
+	}
+
+	for name, timeout := range map[string]time.Duration{"expired": -time.Second, "exactly now": 0} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			_, parseErr := bio.ParseFASTAContext(ctx, strings.NewReader(">x\nAC\n"), bio.FASTAOptions{})
+			if !errors.Is(parseErr, context.DeadlineExceeded) {
+				t.Fatalf("error = %v, want context.DeadlineExceeded", parseErr)
+			}
+		})
 	}
 }
 
