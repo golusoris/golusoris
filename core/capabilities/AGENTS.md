@@ -16,6 +16,7 @@ this file; root test `capabilities_test.go` keeps it in sync with tree.
 ```yaml
 version: 1
 framework: github.com/golusoris/golusoris        # root module
+builder_kits: [golusoris/golusoris, golusoris/goenvoy]  # <owner>/<name>, <= 8; [0] gets demand requests
 modules: [github.com/golusoris/golusoris/core]   # every published Go module
 packages:
   - import: github.com/golusoris/golusoris/core/config

@@ -6,6 +6,7 @@ package capabilities_test
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 
 const valid = `version: 1
 framework: github.com/golusoris/golusoris
+builder_kits: [golusoris/golusoris, golusoris/goenvoy]
 modules:
   - github.com/golusoris/golusoris/core
 packages:
@@ -69,6 +71,29 @@ func TestParseValid(t *testing.T) {
 	if _, ok := idx.Lookup("nope"); ok {
 		t.Fatal("Lookup of unknown import must fail")
 	}
+	if got := strings.Join(idx.BuilderKits, ","); got != "golusoris/golusoris,golusoris/goenvoy" {
+		t.Fatalf("BuilderKits: %s", got)
+	}
+}
+
+func TestParseBuilderKitBounds(t *testing.T) {
+	t.Parallel()
+	kits := make([]string, capabilities.MaxBuilderKits)
+	for i := range kits {
+		kits[i] = fmt.Sprintf("o/k%d", i)
+	}
+	atLimit := strings.Replace(valid, "[golusoris/golusoris, golusoris/goenvoy]", "["+strings.Join(kits, ", ")+"]", 1)
+	if _, err := capabilities.Parse([]byte(atLimit)); err != nil {
+		t.Fatalf("%d builder kits: %v", capabilities.MaxBuilderKits, err)
+	}
+	overLimit := strings.Replace(atLimit, "[o/k0,", "[o/extra, o/k0,", 1)
+	if _, err := capabilities.Parse([]byte(overLimit)); !errors.Is(err, capabilities.ErrInvalid) {
+		t.Fatalf("%d builder kits: got %v want ErrInvalid", capabilities.MaxBuilderKits+1, err)
+	}
+	none := strings.Replace(valid, "builder_kits: [golusoris/golusoris, golusoris/goenvoy]\n", "", 1)
+	if idx, err := capabilities.Parse([]byte(none)); err != nil || len(idx.BuilderKits) != 0 {
+		t.Fatalf("no builder kits: %v %v", idx, err)
+	}
 }
 
 func requireLegacyReplacements(replacements func() map[string]string) func() map[string]string {
@@ -98,6 +123,12 @@ func TestParseRejects(t *testing.T) {
 		{"foreign module", strings.Replace(valid, "github.com/golusoris/golusoris/core", "github.com/golusoris/golusoris-evil/core", 1), capabilities.ErrInvalid},
 		{"unknown status", valid + "  - import: github.com/golusoris/golusoris/z\n    domain: z\n    capabilities: [z.a]\n    status: alpha\n", capabilities.ErrInvalid},
 		{"unknown field (strict yaml)", valid + "extra: 1\n", nil},
+		{"builder kits not a list", strings.Replace(valid, "[golusoris/golusoris, golusoris/goenvoy]", "golusoris/golusoris", 1), nil},
+		{"builder kit without owner", strings.Replace(valid, "golusoris/goenvoy]", "goenvoy]", 1), capabilities.ErrInvalid},
+		{"builder kit with extra segment", strings.Replace(valid, "golusoris/goenvoy]", "golusoris/goenvoy/x]", 1), capabilities.ErrInvalid},
+		{"builder kit dot-dot name", strings.Replace(valid, "golusoris/goenvoy]", "golusoris/..]", 1), capabilities.ErrInvalid},
+		{"builder kit owner double hyphen", strings.Replace(valid, "golusoris/goenvoy]", "a--b/goenvoy]", 1), capabilities.ErrInvalid},
+		{"duplicate builder kit", strings.Replace(valid, "golusoris/goenvoy]", "golusoris/golusoris]", 1), capabilities.ErrInvalid},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
