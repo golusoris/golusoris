@@ -6,7 +6,7 @@
 // conventions. It provides:
 //
 //   - [ErrorHandler] and [ErrorHandlerWith] that translate golusoris coded errors,
-//     mapped sentinel errors ([WithStatus], [WithPublicStatus]), and validation failures ([WithInvalidParams])
+//     mapped sentinel errors ([WithStatus], [WithPublicStatus], [WithHTTPStatus]), and validation failures ([WithInvalidParams])
 //     into RFC 9457 Problem Details with their proper HTTP status.
 //   - [SlogMiddleware] / [RecoverMiddleware] — ogen middleware implementations
 //     that integrate with the framework's slog logger. Use alongside the
@@ -47,11 +47,16 @@ type statusMapping struct {
 	target error
 	code   gerr.Code
 	public bool
+	// httpStatus non-zero selects a [WithHTTPStatus] mapping; code is unused then.
+	httpStatus int
+	detail     string
 }
 
 type errorHandlerConfig struct {
 	statusMappings []statusMapping
 	invalidParams  bool
+	pathInstance   bool
+	decodeDetail   string
 }
 
 // WithStatus maps an application sentinel error to a golusoris [gerr.Code]
@@ -89,6 +94,45 @@ func WithPublicStatus(target error, code gerr.Code) Option {
 				code:   code,
 				public: true,
 			})
+		}
+	}
+}
+
+// WithHTTPStatus maps an application sentinel error to any HTTP status in
+// 400..599 using [errors.Is], for statuses no [gerr.Code] carries (such as 502
+// or 422). The problem detail is public; an empty public exposes the incoming
+// error's full chain message, a deliberate caller opt-in like
+// [WithPublicStatus]. First match wins across all mapping options, following
+// the order in which options are supplied. A nil target or a status outside
+// 400..599 is ignored.
+func WithHTTPStatus(target error, status int, public string) Option {
+	return func(cfg *errorHandlerConfig) {
+		if target == nil || status < http.StatusBadRequest || status > maxProblemStatus {
+			return
+		}
+		cfg.statusMappings = append(cfg.statusMappings, statusMapping{
+			target:     target,
+			httpStatus: status,
+			detail:     public,
+		})
+	}
+}
+
+// WithPathInstance sets the problem instance to the request URL path only,
+// so query strings never reach the response body.
+func WithPathInstance() Option {
+	return func(cfg *errorHandlerConfig) {
+		cfg.pathInstance = true
+	}
+}
+
+// WithDecodeDetail replaces the problem detail of ogen request and parameter
+// decode errors with the fixed public text, instead of ogen's raw decoder
+// message. Status classification stays ogen's. An empty public is ignored.
+func WithDecodeDetail(public string) Option {
+	return func(cfg *errorHandlerConfig) {
+		if public != "" {
+			cfg.decodeDetail = public
 		}
 	}
 }
@@ -158,11 +202,69 @@ func writeProblem(w http.ResponseWriter, problem problemBody) error {
 	return nil
 }
 
-func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problemBody {
-	instance := ""
-	if r != nil && r.URL != nil {
-		instance = r.URL.RequestURI()
+// maxProblemStatus is the highest status RFC 9110 classifies as an error.
+const maxProblemStatus = 599
+
+func problemInstance(cfg *errorHandlerConfig, r *http.Request) string {
+	switch {
+	case r == nil || r.URL == nil:
+		return ""
+	case cfg.pathInstance:
+		return r.URL.Path
+	default:
+		return r.URL.RequestURI()
 	}
+}
+
+func isDecodeError(err error) bool {
+	if _, ok := errors.AsType[*ogenerrors.DecodeRequestError](err); ok {
+		return true
+	}
+	_, ok := errors.AsType[*ogenerrors.DecodeParamsError](err)
+	return ok
+}
+
+func httpStatusProblem(m statusMapping, err error, instance string) problemBody {
+	detail := m.detail
+	if detail == "" {
+		detail = err.Error()
+	}
+	return problemBody{
+		Type:         "about:blank",
+		Title:        http.StatusText(m.httpStatus),
+		Status:       m.httpStatus,
+		Detail:       detail,
+		Instance:     instance,
+		ErrorMessage: detail,
+	}
+}
+
+func codedProblem(m statusMapping, err error, instance string) problemBody {
+	problem := gerr.ProblemFromError(
+		gerr.New(m.code, m.target.Error()),
+		m.code.Status(),
+		instance,
+	)
+	if m.public {
+		detail := err.Error()
+		problem.Detail = detail
+		problem.ErrorMessage = detail
+		problem.Message = detail
+	}
+	return problemBody{ProblemDetails: problem}
+}
+
+func fallbackProblem(cfg *errorHandlerConfig, err error, instance string) problemBody {
+	problem := gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), instance)
+	if cfg.decodeDetail != "" && problem.Status < http.StatusInternalServerError && isDecodeError(err) {
+		problem.Detail = cfg.decodeDetail
+		problem.ErrorMessage = cfg.decodeDetail
+	}
+	return problemBody{ProblemDetails: problem}
+}
+
+func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problemBody {
+	instance := problemInstance(cfg, r)
 
 	if cfg.invalidParams {
 		if valErr, ok := errors.AsType[*validate.Error](err); ok {
@@ -179,23 +281,16 @@ func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problem
 	}
 
 	for _, m := range cfg.statusMappings {
-		if errors.Is(err, m.target) {
-			problem := gerr.ProblemFromError(
-				gerr.New(m.code, m.target.Error()),
-				m.code.Status(),
-				instance,
-			)
-			if m.public {
-				detail := err.Error()
-				problem.Detail = detail
-				problem.ErrorMessage = detail
-				problem.Message = detail
-			}
-			return problemBody{ProblemDetails: problem}
+		if !errors.Is(err, m.target) {
+			continue
 		}
+		if m.httpStatus != 0 {
+			return httpStatusProblem(m, err, instance)
+		}
+		return codedProblem(m, err, instance)
 	}
 
-	return problemBody{ProblemDetails: gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), instance)}
+	return fallbackProblem(cfg, err, instance)
 }
 
 func validationParams(v *validate.Error) []InvalidParam {
