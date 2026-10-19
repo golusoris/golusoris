@@ -55,10 +55,31 @@ func TestWithPinnedReaper(t *testing.T) {
 
 func TestRepositoryPinsAreValid(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{Postgres, PostGIS, Pgvector, Timescale, TimescaleApache, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Azurite, Ryuk, ClamAV, PubSubEmulator, Mailpit} {
+	for _, image := range []string{Postgres, PostGIS, Pgvector, Timescale, TimescaleApache, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Azurite, Ryuk, ClamAV, PubSubEmulator, Mailpit, StripeMock} {
 		if err := Validate(image); err != nil {
 			t.Errorf("Validate(%q) error = %v", image, err)
 		}
+	}
+}
+
+// cacheManifestPins lists the images the primary pre-pull cache must carry, each unseen.
+func cacheManifestPins() map[string]bool {
+	return map[string]bool{
+		Postgres:        false,
+		PostGIS:         false,
+		Pgvector:        false,
+		Timescale:       false,
+		TimescaleApache: false,
+		Redis:           false,
+		NATS:            false,
+		ClickHouse:      false,
+		Redpanda:        false,
+		VersityGW:       false,
+		Ryuk:            false,
+		ClamAV:          false,
+		PubSubEmulator:  false,
+		Mailpit:         false,
+		StripeMock:      false,
 	}
 }
 
@@ -83,22 +104,7 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 		t.Fatalf("manifest exceeds %d bytes", manifestReadLimit)
 	}
 
-	want := map[string]bool{
-		Postgres:        false,
-		PostGIS:         false,
-		Pgvector:        false,
-		Timescale:       false,
-		TimescaleApache: false,
-		Redis:           false,
-		NATS:            false,
-		ClickHouse:      false,
-		Redpanda:        false,
-		VersityGW:       false,
-		Ryuk:            false,
-		ClamAV:          false,
-		PubSubEmulator:  false,
-		Mailpit:         false,
-	}
+	want := cacheManifestPins()
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
