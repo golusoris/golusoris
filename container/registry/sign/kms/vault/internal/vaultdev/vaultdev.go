@@ -53,7 +53,14 @@ const (
 	// portTries bounds the search for two adjacent free host ports.
 	portTries = 32
 	maxBody   = 1 << 20
+	// hostTries bounds host-network starts on fresh port pairs.
+	hostTries = 3
+	maxLog    = 2048
+	bindInUse = "address already in use"
 )
+
+// errPortTaken marks a start that failed because the listen port was taken.
+var errPortTaken = errors.New("listen port taken")
 
 // Server is a running dev-mode server: unsealed, in-memory, root token set.
 type Server struct {
@@ -87,19 +94,41 @@ func StartHostNetwork(t *testing.T, f Flavor) Server {
 	if runtime.GOOS != "linux" {
 		t.Skipf("testutil/vaultdev: host networking needs a Linux Docker engine, not %s", runtime.GOOS)
 	}
+	srv, err := startHostNetwork(t, f, freePortPair)
+	if err != nil {
+		t.Fatalf("testutil/vaultdev: %v", err)
+	}
+	return ready(t, srv)
+}
+
+// startHostNetwork retries on a fresh port pair: a parallel test can take the
+// probed ports before the server binds them.
+func startHostNetwork(t *testing.T, f Flavor, pick func(*testing.T) int) (Server, error) {
+	t.Helper()
 	image, prefix := flavor(t, f)
 	token := rootToken(t)
-	listen := "127.0.0.1:" + strconv.Itoa(freePortPair(t))
-	start(t, testcontainers.ContainerRequest{
-		Image: image,
-		Env: map[string]string{
-			prefix + "_DEV_ROOT_TOKEN_ID":  token,
-			prefix + "_DEV_LISTEN_ADDRESS": listen,
-		},
-		HostConfigModifier: func(hc *container.HostConfig) { hc.NetworkMode = "host" },
-		WaitingFor:         wait.ForLog(readyLog),
-	}, false)
-	return ready(t, Server{Address: "http://" + listen, Token: token, Flavor: f})
+	var last error
+	for range hostTries {
+		listen := "127.0.0.1:" + strconv.Itoa(pick(t))
+		_, err := launch(t, testcontainers.ContainerRequest{
+			Image: image,
+			Env: map[string]string{
+				prefix + "_DEV_ROOT_TOKEN_ID":  token,
+				prefix + "_DEV_LISTEN_ADDRESS": listen,
+			},
+			HostConfigModifier: func(hc *container.HostConfig) { hc.NetworkMode = "host" },
+			WaitingFor:         wait.ForLog(readyLog),
+		})
+		if err == nil {
+			return Server{Address: "http://" + listen, Token: token, Flavor: f}, nil
+		}
+		if !errors.Is(err, errPortTaken) {
+			return Server{}, err
+		}
+		last = err
+		t.Logf("testutil/vaultdev: %s taken, retrying: %v", listen, err)
+	}
+	return Server{}, fmt.Errorf("start on host network, %d tries: %w", hostTries, last)
 }
 
 // Response is the API envelope; Data and Auth are nil when absent.
@@ -220,6 +249,30 @@ func closeListener(t *testing.T, l net.Listener) {
 // start boots req and returns host:port of apiPort when mapped is set.
 func start(t *testing.T, req testcontainers.ContainerRequest, mapped bool) string {
 	t.Helper()
+	ctr, err := launch(t, req)
+	if err != nil {
+		t.Fatalf("testutil/vaultdev: %v", err)
+	}
+	if !mapped {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), callTimeout)
+	defer cancel()
+	host, err := ctr.Host(ctx)
+	if err != nil {
+		t.Fatalf("testutil/vaultdev: host: %v", err)
+	}
+	port, err := ctr.MappedPort(ctx, apiPort)
+	if err != nil {
+		t.Fatalf("testutil/vaultdev: mapped port: %v", err)
+	}
+	return net.JoinHostPort(host, port.Port())
+}
+
+// launch starts req and terminates the container at cleanup, also when the
+// start failed. A failed start carries the container log tail.
+func launch(t *testing.T, req testcontainers.ContainerRequest) (testcontainers.Container, error) {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("testutil/vaultdev: container-backed; skipped under -short")
 	}
@@ -233,28 +286,44 @@ func start(t *testing.T, req testcontainers.ContainerRequest, mapped bool) strin
 		ContainerRequest: req,
 		Started:          true,
 	})
+	if ctr != nil {
+		t.Cleanup(func() { terminate(t, ctr) })
+	}
+	if err == nil {
+		return ctr, nil
+	}
+	logs := logTail(ctx, ctr)
+	if bytes.Contains(logs, []byte(bindInUse)) {
+		err = errors.Join(errPortTaken, err)
+	}
+	return nil, fmt.Errorf("start container: %w; log: %s", err, logs)
+}
+
+func terminate(t *testing.T, ctr testcontainers.Container) {
+	t.Helper()
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), stopTimeout)
+	defer stopCancel()
+	if termErr := ctr.Terminate(stopCtx); termErr != nil {
+		t.Logf("testutil/vaultdev: terminate container: %v", termErr)
+	}
+}
+
+// logTail returns the last maxLog bytes of the container log, or the read
+// error as text.
+func logTail(ctx context.Context, ctr testcontainers.Container) []byte {
+	if ctr == nil {
+		return []byte("(no container)")
+	}
+	rc, err := ctr.Logs(ctx)
 	if err != nil {
-		t.Fatalf("testutil/vaultdev: start container: %v", err)
+		return []byte("(logs: " + err.Error() + ")")
 	}
-	t.Cleanup(func() {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), stopTimeout)
-		defer stopCancel()
-		if termErr := ctr.Terminate(stopCtx); termErr != nil {
-			t.Logf("testutil/vaultdev: terminate container: %v", termErr)
-		}
-	})
-	if !mapped {
-		return ""
-	}
-	host, err := ctr.Host(ctx)
+	raw, err := io.ReadAll(io.LimitReader(rc, maxBody))
+	err = errors.Join(err, rc.Close())
 	if err != nil {
-		t.Fatalf("testutil/vaultdev: host: %v", err)
+		return []byte("(logs: " + err.Error() + ")")
 	}
-	port, err := ctr.MappedPort(ctx, apiPort)
-	if err != nil {
-		t.Fatalf("testutil/vaultdev: mapped port: %v", err)
-	}
-	return net.JoinHostPort(host, port.Port())
+	return bytes.TrimSpace(raw[max(0, len(raw)-maxLog):])
 }
 
 // ready polls sys/health until the server answers unsealed and active.
