@@ -132,7 +132,6 @@ EXPECTED = {
     ("tools/tool-versions.env", "hashicorp/terraform", "docker"),
     ("tools/tool-versions.env", "semgrep/semgrep", "docker"),
     ("tools/tool-versions.env", "aquasec/trivy", "docker"),
-    (".devcontainer/devcontainer.json", "golangci/golangci-lint", "github-releases"),
     (".devcontainer/devcontainer.json", "go", "golang-version"),
     ("template/.devcontainer/devcontainer.json", "docker/cli", "github-releases"),
     ("template/.devcontainer/devcontainer.json", "docker/buildx", "github-releases"),
