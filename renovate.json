@@ -245,20 +245,6 @@
     },
     {
       "customType": "regex",
-      "description": "Track the root Dev Container Go and golangci-lint feature options.",
-      "managerFilePatterns": [
-        "/^\\.devcontainer/devcontainer\\.json$/"
-      ],
-      "matchStrings": [
-        "\"golangciLintVersion\"\\s*:\\s*\"(?<currentValue>[^\"]+)\""
-      ],
-      "datasourceTemplate": "github-releases",
-      "depNameTemplate": "golangci/golangci-lint",
-      "versioningTemplate": "semver",
-      "extractVersionTemplate": "^v(?<version>.*)$"
-    },
-    {
-      "customType": "regex",
       "description": "Track the root Dev Container Go feature option.",
       "managerFilePatterns": [
         "/^\\.devcontainer/devcontainer\\.json$/"

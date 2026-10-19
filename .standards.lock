@@ -1,11 +1,11 @@
 version: 1
 pinned_version: v1.0.0
-digest: sha256:8cbb0f9d0b1550bb876a8110c080d7105f4934d865f44e69087876aa581ee640
+digest: sha256:61a9fccda52391397399f83393b2b3e1980a720cb69070dd95c3aae24d6fab63
 generated_at: ""
 profiles:
     - id: framework
       version: v1.0.0
-      digest: sha256:fb7d9bad7cae273636ec73bfda3eec18d5038bf113a8c62ff076be22a3c8cac0
+      digest: sha256:7e3e031048b0768736cf24a298ad5b0647bb9bdc320cfa69144f3d31382a0e8b
 facets:
     - id: security:high
       version: v1.0.0
