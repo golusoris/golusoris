@@ -19,8 +19,8 @@
       "username": "vscode"
     },
     "ghcr.io/devcontainers/features/go:1": {
-      "golangciLintVersion": "2.13.2",
-      "version": "1.27.1"
+      "installGoTools": false,
+      "version": "1.27.2"
     }
   },
   "customizations": {
@@ -28,12 +28,12 @@
       "bootstrap": {
         "version": 1,
         "state": "source-bundle",
-        "builderImage": "docker.io/library/golang:1.27-alpine@sha256:4cb7ac979db5fcc41cae44b2227ba5ab8a51e8807f40d9ba4dee20a0ad960b5b",
+        "builderImage": "docker.io/library/golang@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d",
         "baseImage": "mcr.microsoft.com/devcontainers/base@sha256:91eff046d5c12318fc98e59258982b87ba896c467427ed8b5dab5a02107a5db7",
         "sourceSHA256": "sha256:452c21cdace89e772f42f91501752cc336c072e781801522a5a775cfab05ef9a",
         "archiveSHA256": "sha256:50b90640dd25f84942e7ce69c79216b1e7b2788478a2bdd043062312047843a6",
         "archiveParts": 7,
-        "dockerfileSHA256": "sha256:81c8f6119d2f98a859f6273583edbc37874afa711621044fa1e7953bd045ccee"
+        "dockerfileSHA256": "sha256:a541a4a78a0a93f928d7070bb48ed4e99f44778a21c06f3b372620b053eba929"
       }
     },
     "vscode": {
