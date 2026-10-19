@@ -19,6 +19,11 @@ Sentry client + slog bridge. Off by default (empty DSN = no-op).
 - Lower levels are ignored — Sentry is for errors, not noise.
 - Flush grace (`sentry.flush.timeout`, default 5s) runs on fx Stop so in-flight events don't get dropped.
 
+## Tests
+
+- `sentry_test.go`, `handler_test.go`: DSN gating, flush, defaults, slog bridge level routing and fanout. No event leaves process.
+- `integration_test.go` (`-tags integration`): Bugsink container (`testimages.Bugsink`); slog error and `CaptureMessage` read back via Bugsink canonical API; wrong DSN key -> zero issues; Warn -> breadcrumb only, Error -> one issue. CI step `Run the Bugsink integration suite` fails on skip.
+
 ## Don't
 
 - Don't use Sentry for metrics/traces unless you have Sentry Performance budget. OTel is routing layer for those.
