@@ -229,14 +229,14 @@ func httpStatusProblem(m statusMapping, err error, instance string) problemBody 
 	if detail == "" {
 		detail = err.Error()
 	}
-	return problemBody{ProblemDetails: gerr.ProblemDetails{
+	return problemBody{
 		Type:         "about:blank",
 		Title:        http.StatusText(m.httpStatus),
 		Status:       m.httpStatus,
 		Detail:       detail,
 		Instance:     instance,
 		ErrorMessage: detail,
-	}}
+	}
 }
 
 func codedProblem(m statusMapping, err error, instance string) problemBody {
