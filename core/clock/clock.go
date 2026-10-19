@@ -31,3 +31,41 @@ var Module = fx.Module(
 
 // NewFake returns a controllable fake clock for tests. Sugar over clockwork.
 func NewFake() *clockwork.FakeClock { return clockwork.NewFakeClock() }
+
+func plantedOverCap(n int) int {
+	r := 0
+	if n == 1 {
+		r++
+	}
+	if n == 2 {
+		r++
+	}
+	if n == 3 {
+		r++
+	}
+	if n == 4 {
+		r++
+	}
+	if n == 5 {
+		r++
+	}
+	if n == 6 {
+		r++
+	}
+	if n == 7 {
+		r++
+	}
+	if n == 8 {
+		r++
+	}
+	if n == 9 {
+		r++
+	}
+	if n == 10 {
+		r++
+	}
+	if n == 11 {
+		r++
+	}
+	return r
+}
