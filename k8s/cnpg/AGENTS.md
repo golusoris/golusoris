@@ -52,6 +52,7 @@ Get bounded by 5s or caller deadline (registry default 2s).
 
 ## Tests
 
+- Envtest suite (build tag `envtest`) tests CRD status schema against live kube-apiserver; runs in CI only.
 - `restore_kind_test.go` (`//go:build cnpgkind`): validates `BackupCheck` against live CNPG in kind cluster.
 - `TestKind_BackupCheck_Positive`: backup health returns nil post-backup.
 - `TestKind_BackupCheck_Negative`: missing cluster returns `ErrClusterNotFound`.
