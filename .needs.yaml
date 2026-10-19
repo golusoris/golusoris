@@ -3,11 +3,14 @@ repository: github.com/golusoris/golusoris
 language: go
 languages:
     - go
-go_version: 1.27.1
+    - typescript
+    - svelte
+go_version: 1.27.2
 framework: github.com/golusoris/golusoris
 builder_kits:
     - golusoris/golusoris
     - golusoris/goenvoy
+    - golusoris/sveltesentio
 capabilities:
     required:
         - telemetry.logging
@@ -21,13 +24,14 @@ capabilities:
         - custom.github_com_Khan_genqlient
         - custom.github_com_Masterminds_semver_v3
         - custom.github_com_SherClockHolmes_webpush_go
-        - custom.github_com_alexedwards_argon2id
         - custom.github_com_autobrr_go_qbittorrent
         - custom.github_com_autobrr_go_rtorrent
         - custom.github_com_aws_aws_sdk_go_v2
         - custom.github_com_aws_aws_sdk_go_v2_config
         - custom.github_com_aws_aws_sdk_go_v2_credentials
+        - custom.github_com_aws_aws_sdk_go_v2_feature_s3_transfermanager
         - custom.github_com_aws_aws_sdk_go_v2_service_s3
+        - custom.github_com_aws_aws_sdk_go_v2_service_sts
         - custom.github_com_aws_smithy_go
         - custom.github_com_baruwa_enterprise_clamd
         - custom.github_com_benbjohnson_hashfs
@@ -36,31 +40,19 @@ capabilities:
         - custom.github_com_caddyserver_certmagic
         - custom.github_com_casbin_casbin_v3
         - custom.github_com_cespare_xxhash_v2
-        - custom.github_com_chromedp_cdproto
-        - custom.github_com_chromedp_chromedp
         - kernel.ebpf
         - custom.github_com_coder_websocket
-        - custom.github_com_containerd_nri
         - auth.oidc
         - custom.github_com_emersion_go_smtp
-        - custom.github_com_ethereum_go_ethereum
-        - custom.github_com_exaring_ebur128
         - custom.github_com_felixge_httpsnoop
         - custom.github_com_fsnotify_fsnotify
-        - custom.github_com_g3n_engine
-        - custom.github_com_gagliardetto_binary
+        - custom.github_com_fxamacker_cbor_v2
         - http.openapi
         - custom.github_com_getsentry_sentry_go
         - custom.github_com_gkampitakis_go_snaps
-        - custom.github_com_go_audio_aiff
-        - custom.github_com_go_audio_audio
-        - custom.github_com_go_audio_wav
         - http.router
-        - custom.github_com_go_faster_errors
         - custom.github_com_go_logr_logr
         - custom.github_com_go_playground_form_v4
-        - custom.github_com_go_playground_validator_v10
-        - custom.github_com_go_viper_mapstructure_v2
         - custom.github_com_go_webauthn_webauthn
         - auth.jwt
         - custom.github_com_golang_migrate_migrate_v4
@@ -70,34 +62,26 @@ capabilities:
         - custom.github_com_golusoris_goenvoy_metadata_anime_anilist
         - custom.github_com_golusoris_goenvoy_metadata_tracking_trakt
         - custom.github_com_golusoris_goenvoy_metadata_video_tmdb
-        - custom.github_com_golusoris_golusoris_core
-        - custom.github_com_google_go_containerregistry
         - id.uuid
+        - custom.github_com_grafana_grafana_foundation_sdk_go
         - custom.github_com_grafana_pyroscope_go
         - custom.github_com_grpc_ecosystem_go_grpc_middleware_v2
         - custom.github_com_h2non_filetype
-        - custom.github_com_hajimehoshi_ebiten_v2
-        - custom.github_com_hajimehoshi_go_mp3
         - custom.github_com_hashicorp_go_retryablehttp
         - custom.github_com_hekmon_transmissionrpc_v3
         - custom.github_com_invopop_jsonschema
         - custom.github_com_jackc_pglogrepl
         - db.postgres
-        - custom.github_com_jfreymuth_oggvorbis
-        - custom.github_com_jochenvg_go_udev
         - custom.github_com_jonboulle_clockwork
         - custom.github_com_jszwec_csvutil
-        - custom.github_com_knadh_koanf
-        - config.loader
         - custom.github_com_leanovate_gopter
-        - custom.github_com_mattn_go_isatty
         - custom.github_com_maypok86_otter_v2
-        - custom.github_com_mewkiz_flac
         - custom.github_com_mholt_archives
         - custom.github_com_miekg_dns
         - custom.github_com_minio_selfupdate
         - mcp.server
         - pubsub.nats
+        - custom.github_com_nats_io_nkeys
         - custom.github_com_nbutton23_zxcvbn_go
         - custom.github_com_nguyenthenguyen_docx
         - custom.github_com_nicksnyder_go_i18n_v2
@@ -105,25 +89,22 @@ capabilities:
         - custom.github_com_onsi_gomega
         - custom.github_com_oschwald_maxminddb_golang_v2
         - custom.github_com_otiai10_copy
-        - custom.github_com_otiai10_gosseract_v2
-        - custom.github_com_pact_foundation_pact_go_v2
-        - custom.github_com_pdfcpu_pdfcpu
         - custom.github_com_pgvector_pgvector_go
         - custom.github_com_pgvector_pgvector_go_pgx
         - custom.github_com_pion_webrtc_v4
         - custom.github_com_pquerna_otp
+        - custom.github_com_prometheus_operator_prometheus_operator_pkg_apis_monitoring
         - telemetry.prometheus
         - custom.github_com_prometheus_client_model
-        - custom.github_com_pulumi_pulumi
-        - custom.github_com_pulumi_pulumi_aws
+        - custom.github_com_prometheus_common
+        - custom.github_com_prometheus_otlptranslator
         - cache.redis
         - jobs.queue
+        - custom.github_com_riverqueue_rivercontrib_otelriver
         - jobs.cron
         - custom.github_com_romsar_gonertia_v3
         - custom.github_com_rs_cors
         - custom.github_com_santhosh_tekuri_jsonschema_v6
-        - custom.github_com_segmentio_ksuid
-        - custom.github_com_solana_foundation_solana_go_v2
         - custom.github_com_sony_gobreaker_v2
         - clikit.cobra
         - test.assert
@@ -139,7 +120,7 @@ capabilities:
         - db.orm
         - custom.github_com_wneessen_go_mail
         - custom.github_com_xuri_excelize_v2
-        - custom.github_com_yuin_goldmark
+        - custom.github_com_yuin_goldmark_v2
         - custom.github_com_zeebo_blake3
         - custom.go_opentelemetry_io_contrib_bridges_otelslog
         - custom.go_opentelemetry_io_contrib_instrumentation_google_golang_org_grpc_otelgrpc
@@ -148,1239 +129,1810 @@ capabilities:
         - custom.go_temporal_io_sdk
         - runtime.di
         - custom.go_uber_org_goleak
-        - custom.go_yaml_in_yaml_v3
-        - custom.gobot_io_x
         - custom.golang_org_x_crypto
         - custom.golang_org_x_exp
-        - custom.golang_org_x_mod
+        - custom.golang_org_x_net
         - custom.golang_org_x_oauth2
         - custom.golang_org_x_sync
         - custom.golang_org_x_sys
         - custom.golang_org_x_text
-        - custom.gonum_org_v1
         - custom.google_golang_org_api
         - custom.google_golang_org_grpc
+        - custom.google_golang_org_protobuf
+        - custom.k8s_io_api
         - custom.k8s_io_apimachinery
         - custom.k8s_io_client_go
+        - custom.k8s_io_dynamic_resource_allocation
         - custom.modernc_org_sqlite
-        - custom.periph_io_x
         - custom.riverqueue_com_riverui
         - custom.sigs_k8s_io_controller_runtime
+        - custom.sigs_k8s_io_yaml
+        - custom.github_com_alexedwards_argon2id
+        - custom.github_com_chromedp_cdproto
+        - custom.github_com_chromedp_chromedp
+        - custom.github_com_containerd_nri
+        - custom.github_com_ethereum_go_ethereum
+        - custom.github_com_exaring_ebur128
+        - custom.github_com_g3n_engine
+        - custom.github_com_gagliardetto_binary
+        - custom.github_com_go_audio_aiff
+        - custom.github_com_go_audio_audio
+        - custom.github_com_go_audio_wav
+        - custom.github_com_go_faster_errors
+        - custom.github_com_go_playground_validator_v10
+        - custom.github_com_go_viper_mapstructure_v2
+        - custom.github_com_golusoris_golusoris_core
+        - custom.github_com_google_go_containerregistry
+        - custom.github_com_hajimehoshi_ebiten_v2
+        - custom.github_com_hajimehoshi_go_mp3
+        - custom.github_com_jfreymuth_oggvorbis
+        - custom.github_com_jochenvg_go_udev
+        - custom.github_com_knadh_koanf
+        - config.loader
+        - custom.github_com_mattn_go_isatty
+        - custom.github_com_mewkiz_flac
+        - custom.github_com_otiai10_gosseract_v2
+        - custom.github_com_pact_foundation_pact_go_v2
+        - custom.github_com_pdfcpu_pdfcpu
+        - custom.github_com_pulumi_pulumi
+        - custom.github_com_pulumi_pulumi_aws
+        - custom.github_com_segmentio_ksuid
+        - custom.github_com_solana_foundation_solana_go_v2
+        - custom.github_com_yuin_goldmark
+        - custom.go_yaml_in_yaml_v3
+        - custom.gobot_io_x
+        - custom.golang_org_x_mod
+        - custom.gonum_org_v1
+        - custom.periph_io_x
+        - custom.github_com_Azure_azure_sdk_for_go_sdk_azcore
+        - custom.github_com_Azure_azure_sdk_for_go_sdk_azidentity
+        - custom.github_com_aws_aws_sdk_go_v2_service_ecr
+        - custom.github_com_cyberphone_json_canonicalization
+        - custom.github_com_digitorus_timestamp
+        - custom.github_com_go_openapi_runtime
+        - custom.github_com_in_toto_attestation
+        - custom.github_com_sigstore_protobuf_specs
+        - custom.github_com_sigstore_rekor
+        - custom.github_com_sigstore_sigstore
+        - custom.github_com_sigstore_sigstore_go
+        - custom.github_com_aws_aws_sdk_go_v2_service_kms
+        - custom.github_com_Azure_azure_sdk_for_go_sdk_security_keyvault_azkeys
+        - custom.github_com_moby_moby_api
+        - custom.github_com_knadh_koanf_parsers_json
+        - custom.github_com_knadh_koanf_parsers_yaml
+        - custom.github_com_knadh_koanf_providers_env_v2
+        - custom.github_com_knadh_koanf_providers_file
+        - custom.github_com_spf13_pflag
+        - config.yaml
+        - custom.github_com_pulumi_pulumi_aws_sdk_v7
+        - custom.github_com_pulumi_pulumi_sdk_v3
+        - custom.periph_io_x_conn_v3
+        - custom.gobot_io_x_gobot_v2
+        - custom.github_com_davidbyttow_govips_v2
+        - custom.gonum_org_v1_gonum
+        - custom.gonum_org_v1_plot
+        - custom.github_com_Azure_azure_sdk_for_go_sdk_storage_azblob
+        - custom.cloud_google_com_go_auth
+        - custom.cloud_google_com_go_compute_metadata
+        - custom.cloud_google_com_go_storage
+        - custom.github_com_prometheus_prometheus
+        - ui.external.js_yaml
+        - ui.external.jsonc_parser
+        - ui.external.markdownlint
+        - ui.external.micromark
+        - ui.external.micromark_extension_mdxjs
+        - ui.external.parse5
+        - ui.external.smol_toml
 dependencies:
     - package: charm.land/bubbletea/v2
-      version: v2.0.9
+      version: v2.1.0
       language: go
       ecosystem: go
-      capability: custom.charm_land_bubbletea_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: clikit.tui
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/clikit/tui
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/clikit/tui for clikit.tui
     - package: cloud.google.com/go/pubsub/v2
       version: v2.7.0
       language: go
       ecosystem: go
-      capability: custom.cloud_google_com_go_pubsub_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: pubsub.gcp
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/pubsub/gcp
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pubsub/gcp for pubsub.gcp
     - package: code.dny.dev/ssrf
       version: v0.3.0
       language: go
       ecosystem: go
-      capability: custom.code_dny_dev_ssrf
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.safety
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/safety
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/safety for storage.safety
     - package: filippo.io/csrf
       version: v0.2.1
       language: go
       ecosystem: go
-      capability: custom.filippo_io_csrf
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.csrf
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/csrf
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/csrf for http.csrf
     - package: github.com/99designs/gqlgen
       version: v0.17.95
       language: go
       ecosystem: go
-      capability: custom.github_com_99designs_gqlgen
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: graphql.server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/graphql
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/graphql for graphql.server
     - package: github.com/CAFxX/httpcompression
       version: v0.0.9
       language: go
       ecosystem: go
-      capability: custom.github_com_CAFxX_httpcompression
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.middleware
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/middleware
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/middleware for http.middleware
     - package: github.com/ClickHouse/clickhouse-go/v2
-      version: v2.48.0
+      version: v2.49.0
       language: go
       ecosystem: go
       capability: db.clickhouse
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/db/clickhouse
-      notes: High-performance analytical column-store database
+      framework_replacement: github.com/golusoris/golusoris/db/clickhouse
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/clickhouse for db.clickhouse
     - package: github.com/Khan/genqlient
       version: v0.8.1
       language: go
       ecosystem: go
-      capability: custom.github_com_Khan_genqlient
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: graphql.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/graphql/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/graphql/client for graphql.client
     - package: github.com/Masterminds/semver/v3
       version: v3.5.0
       language: go
       ecosystem: go
       capability: custom.github_com_Masterminds_semver_v3
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/SherClockHolmes/webpush-go
       version: v1.4.0
       language: go
       ecosystem: go
-      capability: custom.github_com_SherClockHolmes_webpush_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/alexedwards/argon2id
-      language: go
-      ecosystem: go
-      capability: custom.github_com_alexedwards_argon2id
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: notify.webpush
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/notify/webpush
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/notify/webpush for notify.webpush
     - package: github.com/autobrr/go-qbittorrent
       version: v1.19.0
       language: go
       ecosystem: go
-      capability: custom.github_com_autobrr_go_qbittorrent
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: media.torrent
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/torrent
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/torrent for media.torrent
     - package: github.com/autobrr/go-rtorrent
-      version: v1.12.0
+      version: v1.13.0
       language: go
       ecosystem: go
-      capability: custom.github_com_autobrr_go_rtorrent
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: media.torrent
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/torrent
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/torrent for media.torrent
     - package: github.com/aws/aws-sdk-go-v2
-      version: v1.47.0
+      version: v1.47.3
       language: go
       ecosystem: go
-      capability: custom.github_com_aws_aws_sdk_go_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
     - package: github.com/aws/aws-sdk-go-v2/config
-      version: v1.33.5
+      version: v1.33.9
       language: go
       ecosystem: go
-      capability: custom.github_com_aws_aws_sdk_go_v2_config
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
     - package: github.com/aws/aws-sdk-go-v2/credentials
-      version: v1.20.5
+      version: v1.20.9
       language: go
       ecosystem: go
-      capability: custom.github_com_aws_aws_sdk_go_v2_credentials
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
+    - package: github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager
+      version: v0.4.16
+      language: go
+      ecosystem: go
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
     - package: github.com/aws/aws-sdk-go-v2/service/s3
-      version: v1.113.1
+      version: v1.114.3
       language: go
       ecosystem: go
-      capability: custom.github_com_aws_aws_sdk_go_v2_service_s3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
+    - package: github.com/aws/aws-sdk-go-v2/service/sts
+      version: v1.51.4
+      language: go
+      ecosystem: go
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
     - package: github.com/aws/smithy-go
-      version: v1.28.2
+      version: v1.28.5
       language: go
       ecosystem: go
-      capability: custom.github_com_aws_smithy_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.bucket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage for storage.bucket
     - package: github.com/baruwa-enterprise/clamd
       version: v1.0.1
       language: go
       ecosystem: go
-      capability: custom.github_com_baruwa_enterprise_clamd
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.malware_scan
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/scan
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/scan for storage.malware_scan
     - package: github.com/benbjohnson/hashfs
       version: v0.2.2
       language: go
       ecosystem: go
-      capability: custom.github_com_benbjohnson_hashfs
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.static_hashed
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/static/hashfs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/static/hashfs for http.static_hashed
     - package: github.com/bmaupin/go-epub
       version: v1.1.0
       language: go
       ecosystem: go
-      capability: custom.github_com_bmaupin_go_epub
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: docs.epub
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/docs/epub
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/docs/epub for docs.epub
     - package: github.com/brianvoe/gofakeit/v7
-      version: v7.17.1
+      version: v7.18.0
       language: go
       ecosystem: go
-      capability: custom.github_com_brianvoe_gofakeit_v7
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.factory
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/factory
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/factory for test.factory
     - package: github.com/caddyserver/certmagic
-      version: v0.25.4
+      version: v0.25.6
       language: go
       ecosystem: go
-      capability: custom.github_com_caddyserver_certmagic
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.autotls_certmagic
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/autotls/certmagic
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/autotls/certmagic for http.autotls_certmagic
     - package: github.com/casbin/casbin/v3
       version: v3.11.0
       language: go
       ecosystem: go
-      capability: custom.github_com_casbin_casbin_v3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: authz.casbin
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/authz
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/authz for authz.casbin
     - package: github.com/cespare/xxhash/v2
       version: v2.3.0
       language: go
       ecosystem: go
-      capability: custom.github_com_cespare_xxhash_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/chromedp/cdproto
-      language: go
-      ecosystem: go
-      capability: custom.github_com_chromedp_cdproto
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/chromedp/chromedp
-      language: go
-      ecosystem: go
-      capability: custom.github_com_chromedp_chromedp
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: crypto.hash
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/hash
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/hash for crypto.hash
     - package: github.com/cilium/ebpf
       version: v0.22.0
       language: go
       ecosystem: go
       capability: kernel.ebpf
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/ebpf
-      notes: Kernel tracing and XDP/TC networking hooks
+      framework_replacement: github.com/golusoris/golusoris/ebpf
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ebpf for kernel.ebpf
     - package: github.com/coder/websocket
       version: v1.8.15
       language: go
       ecosystem: go
-      capability: custom.github_com_coder_websocket
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/containerd/nri
-      language: go
-      ecosystem: go
-      capability: custom.github_com_containerd_nri
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.websocket
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/ws
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/ws for http.websocket
     - package: github.com/coreos/go-oidc/v3
       version: v3.21.0
       language: go
       ecosystem: go
       capability: auth.oidc
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/auth/oidc
-      notes: OpenID Connect verification and claims extraction
+      framework_replacement: github.com/golusoris/golusoris/auth/oidc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/auth/oidc for auth.oidc
     - package: github.com/emersion/go-smtp
       version: v0.25.0
       language: go
       ecosystem: go
-      capability: custom.github_com_emersion_go_smtp
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/ethereum/go-ethereum
-      language: go
-      ecosystem: go
-      capability: custom.github_com_ethereum_go_ethereum
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/exaring/ebur128
-      language: go
-      ecosystem: go
-      capability: custom.github_com_exaring_ebur128
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: net.smtp_server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/net/smtpserver
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/net/smtpserver for net.smtp_server
     - package: github.com/felixge/httpsnoop
       version: v1.1.0
       language: go
       ecosystem: go
       capability: custom.github_com_felixge_httpsnoop
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/fsnotify/fsnotify
       version: v1.10.1
       language: go
       ecosystem: go
-      capability: custom.github_com_fsnotify_fsnotify
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/g3n/engine
+      capability: fs.watch
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/fs/watch
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/fs/watch for fs.watch
+    - package: github.com/fxamacker/cbor/v2
+      version: v2.9.6
       language: go
       ecosystem: go
-      capability: custom.github_com_g3n_engine
+      capability: custom.github_com_fxamacker_cbor_v2
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/gagliardetto/binary
-      language: go
-      ecosystem: go
-      capability: custom.github_com_gagliardetto_binary
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/getkin/kin-openapi
-      version: v0.149.0
+      version: v0.151.0
       language: go
       ecosystem: go
       capability: http.openapi
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/apidocs
-      notes: OpenAPI 3.0 validation and specification parser
+      framework_replacement: github.com/golusoris/golusoris/apidocs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/apidocs for http.openapi
     - package: github.com/getsentry/sentry-go
-      version: v0.49.0
+      version: v0.50.0
       language: go
       ecosystem: go
-      capability: custom.github_com_getsentry_sentry_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: telemetry.sentry
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/observability/sentry
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/observability/sentry for telemetry.sentry
     - package: github.com/gkampitakis/go-snaps
       version: v0.5.23
       language: go
       ecosystem: go
-      capability: custom.github_com_gkampitakis_go_snaps
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/go-audio/aiff
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_audio_aiff
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/go-audio/audio
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_audio_audio
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/go-audio/wav
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_audio_wav
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.snapshot
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/snapshot
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/snapshot for test.snapshot
     - package: github.com/go-chi/chi/v5
-      version: v5.3.2
+      version: v5.5.0
       language: go
       ecosystem: go
       capability: http.router
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/httpx
-      notes: Composable net/http middleware and router
-    - package: github.com/go-faster/errors
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_faster_errors
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      framework_replacement: github.com/golusoris/golusoris/httpx/router
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/router for http.router
     - package: github.com/go-logr/logr
       version: v1.4.4
       language: go
       ecosystem: go
-      capability: custom.github_com_go_logr_logr
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: k8s.operator
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/operator
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/operator for k8s.operator
     - package: github.com/go-playground/form/v4
-      version: v4.3.1
+      version: v4.5.0
       language: go
       ecosystem: go
-      capability: custom.github_com_go_playground_form_v4
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/go-playground/validator/v10
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_playground_validator_v10
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/go-viper/mapstructure/v2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_go_viper_mapstructure_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.form
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/form
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/form for http.form
     - package: github.com/go-webauthn/webauthn
       version: v0.18.2
       language: go
       ecosystem: go
-      capability: custom.github_com_go_webauthn_webauthn
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: auth.passkeys
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/auth/passkeys
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/auth/passkeys for auth.passkeys
     - package: github.com/golang-jwt/jwt/v5
       version: v5.3.1
       language: go
       ecosystem: go
       capability: auth.jwt
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/auth/jwt
-      notes: Secure HMAC/RSA/Ed25519 token issuance and verification
+      framework_replacement: github.com/golusoris/golusoris/auth/jwt
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/auth/jwt for auth.jwt
     - package: github.com/golang-migrate/migrate/v4
       version: v4.20.1
       language: go
       ecosystem: go
-      capability: custom.github_com_golang_migrate_migrate_v4
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: db.migrate
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/db/migrate
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/migrate for db.migrate
     - package: github.com/golusoris/goenvoy/arr/sonarr
       version: v1.3.1
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_arr_sonarr
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/golusoris/goenvoy/arr/v2
       version: v2.1.0
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_arr_v2
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/golusoris/goenvoy/metadata
       version: v1.3.1
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_metadata
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/golusoris/goenvoy/metadata/anime/anilist
-      version: v1.3.1-0.20260906000323-66546eaf9315
+      version: v1.3.1
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_metadata_anime_anilist
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/golusoris/goenvoy/metadata/tracking/trakt
-      version: v1.3.1
+      version: v1.3.2
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_metadata_tracking_trakt
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/golusoris/goenvoy/metadata/video/tmdb
-      version: v1.3.1
+      version: v1.3.2
       language: go
       ecosystem: go
       capability: custom.github_com_golusoris_goenvoy_metadata_video_tmdb
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/golusoris/golusoris/core
-      version: v0.9.2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_golusoris_golusoris_core
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/google/go-containerregistry
-      language: go
-      ecosystem: go
-      capability: custom.github_com_google_go_containerregistry
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/google/uuid
       version: v1.6.0
       language: go
       ecosystem: go
       capability: id.uuid
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/core/id
-      notes: V4 and V7 UUID generation
-    - package: github.com/grafana/pyroscope-go
-      version: v1.4.2
+      framework_replacement: github.com/golusoris/golusoris/core/id
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/id for id.uuid
+    - package: github.com/grafana/grafana-foundation-sdk/go
+      version: v0.0.20
       language: go
       ecosystem: go
-      capability: custom.github_com_grafana_pyroscope_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: telemetry.dashboards
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/observability/grafana
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/observability/grafana for telemetry.dashboards
+    - package: github.com/grafana/pyroscope-go
+      version: v1.4.3
+      language: go
+      ecosystem: go
+      capability: telemetry.profiling
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/observability/profiling
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/observability/profiling for telemetry.profiling
     - package: github.com/grpc-ecosystem/go-grpc-middleware/v2
       version: v2.3.4
       language: go
       ecosystem: go
-      capability: custom.github_com_grpc_ecosystem_go_grpc_middleware_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: grpc.server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/grpc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/grpc for grpc.server
     - package: github.com/h2non/filetype
       version: v1.1.3
       language: go
       ecosystem: go
       capability: custom.github_com_h2non_filetype
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/hajimehoshi/ebiten/v2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_hajimehoshi_ebiten_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/hajimehoshi/go-mp3
-      language: go
-      ecosystem: go
-      capability: custom.github_com_hajimehoshi_go_mp3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/hashicorp/go-retryablehttp
       version: v0.7.8
       language: go
       ecosystem: go
-      capability: custom.github_com_hashicorp_go_retryablehttp
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/client for http.client
     - package: github.com/hekmon/transmissionrpc/v3
       version: v3.0.0
       language: go
       ecosystem: go
-      capability: custom.github_com_hekmon_transmissionrpc_v3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: media.torrent
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/torrent
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/torrent for media.torrent
     - package: github.com/invopop/jsonschema
       version: v0.14.0
       language: go
       ecosystem: go
       capability: custom.github_com_invopop_jsonschema
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/jackc/pglogrepl
-      version: v0.0.0-20260824121319-4ae5c490f7ce
+      version: v0.0.0-20261003132456-662581bb6bb6
       language: go
       ecosystem: go
-      capability: custom.github_com_jackc_pglogrepl
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: db.cdc
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/db/cdc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/cdc for db.cdc
     - package: github.com/jackc/pgx/v5
       version: v5.11.0
       language: go
       ecosystem: go
       capability: db.postgres
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/db/pgx
-      notes: Direct PostgreSQL driver and pool integration
-    - package: github.com/jfreymuth/oggvorbis
-      language: go
-      ecosystem: go
-      capability: custom.github_com_jfreymuth_oggvorbis
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/jochenvg/go-udev
-      language: go
-      ecosystem: go
-      capability: custom.github_com_jochenvg_go_udev
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      framework_replacement: github.com/golusoris/golusoris/db/pgx
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/pgx for db.postgres
     - package: github.com/jonboulle/clockwork
       version: v0.5.0
       language: go
       ecosystem: go
-      capability: custom.github_com_jonboulle_clockwork
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: ai.tiny
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/ai/tiny
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ai/tiny for ai.tiny
     - package: github.com/jszwec/csvutil
       version: v1.10.0
       language: go
       ecosystem: go
-      capability: custom.github_com_jszwec_csvutil
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/knadh/koanf
-      language: go
-      ecosystem: go
-      capability: custom.github_com_knadh_koanf
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/knadh/koanf/v2
-      language: go
-      ecosystem: go
-      capability: config.loader
+      capability: test.fixture
       status: covered
-      notes: Retain koanf as the modular configuration engine; Golusoris config provides the application adapter (Golusoris ADR-0002).
-      relationship:
-        kind: wrapped-by
-        framework_package: github.com/golusoris/golusoris/core/config
-        basis: catalog-declared
+      framework_replacement: github.com/golusoris/golusoris/testutil/fixture
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/fixture for test.fixture
     - package: github.com/leanovate/gopter
       version: v0.2.11
       language: go
       ecosystem: go
-      capability: custom.github_com_leanovate_gopter
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/lmittmann/tint
-      language: go
-      ecosystem: go
-      capability: telemetry.logging
+      capability: test.prop
       status: covered
-      notes: Retain tint as an optional slog handler; Golusoris log configures tint or JSON without changing the application logging API (Golusoris ADR-0003).
-      relationship:
-        kind: wrapped-by
-        framework_package: github.com/golusoris/golusoris/core/log
-        basis: catalog-declared
-    - package: github.com/mattn/go-isatty
-      language: go
-      ecosystem: go
-      capability: custom.github_com_mattn_go_isatty
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      framework_replacement: github.com/golusoris/golusoris/testutil/prop
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/prop for test.prop
     - package: github.com/maypok86/otter/v2
       version: v2.3.0
       language: go
       ecosystem: go
-      capability: custom.github_com_maypok86_otter_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/mewkiz/flac
-      language: go
-      ecosystem: go
-      capability: custom.github_com_mewkiz_flac
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: cache.inmemory
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/cache/memory
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/cache/memory for cache.inmemory
     - package: github.com/mholt/archives
       version: v0.1.5
       language: go
       ecosystem: go
-      capability: custom.github_com_mholt_archives
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: files.archive
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/archive
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/archive for files.archive
     - package: github.com/miekg/dns
       version: v1.1.73
       language: go
       ecosystem: go
-      capability: custom.github_com_miekg_dns
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: net.dns_server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/net/dnsserver
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/net/dnsserver for net.dns_server
     - package: github.com/minio/selfupdate
       version: v0.6.0
       language: go
       ecosystem: go
-      capability: custom.github_com_minio_selfupdate
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: cli.selfupdate
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/selfupdate
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/selfupdate for cli.selfupdate
     - package: github.com/modelcontextprotocol/go-sdk
       version: v1.8.0
       language: go
       ecosystem: go
       capability: mcp.server
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/core/mcp
-      notes: Official MCP Go SDK wrapped in Golusoris mcp module
+      framework_replacement: github.com/golusoris/golusoris/core/mcp
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/mcp for mcp.server
     - package: github.com/nats-io/nats.go
       version: v1.54.0
       language: go
       ecosystem: go
       capability: pubsub.nats
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/pubsub/nats
-      notes: NATS Core and JetStream messaging client
+      framework_replacement: github.com/golusoris/golusoris/pubsub/nats
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pubsub/nats for pubsub.nats
+    - package: github.com/nats-io/nkeys
+      version: v0.4.16
+      language: go
+      ecosystem: go
+      capability: custom.github_com_nats_io_nkeys
+      status: gap
+      notes: Third-party package without a target framework equivalent
     - package: github.com/nbutton23/zxcvbn-go
       version: v0.0.0-20210217022336-fa2cb2858354
       language: go
       ecosystem: go
-      capability: custom.github_com_nbutton23_zxcvbn_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: auth.password_policy
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/auth/policy
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/auth/policy for auth.password_policy
     - package: github.com/nguyenthenguyen/docx
       version: v0.0.0-20230621112118-9c8e795a11db
       language: go
       ecosystem: go
-      capability: custom.github_com_nguyenthenguyen_docx
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: docs.docx
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/docs/docx
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/docs/docx for docs.docx
     - package: github.com/nicksnyder/go-i18n/v2
       version: v2.6.1
       language: go
       ecosystem: go
-      capability: custom.github_com_nicksnyder_go_i18n_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: i18n.messages
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/i18n
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/i18n for i18n.messages
     - package: github.com/ogen-go/ogen
       version: v1.24.0
       language: go
       ecosystem: go
-      capability: http.openapi
+      capability: http.openapi_server
       status: covered
-      notes: Retain ogen for OpenAPI generation and runtime imports; ogenkit supplies integration helpers, not replacement APIs (Golusoris ADR-0004). A module dependency alone does not prove generator execution.
-      relationship:
-        kind: tooling
-        framework_package: github.com/golusoris/golusoris/ogenkit
-        basis: catalog-declared
+      framework_replacement: github.com/golusoris/golusoris/ogenkit
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ogenkit for http.openapi_server
     - package: github.com/onsi/ginkgo/v2
-      version: v2.33.0
+      version: v2.33.1
       language: go
       ecosystem: go
       capability: custom.github_com_onsi_ginkgo_v2
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/onsi/gomega
-      version: v1.43.1
+      version: v1.44.0
       language: go
       ecosystem: go
       capability: custom.github_com_onsi_gomega
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/oschwald/maxminddb-golang/v2
-      version: v2.6.0
+      version: v2.8.0
       language: go
       ecosystem: go
-      capability: custom.github_com_oschwald_maxminddb_golang_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: net.geoip
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/geoip
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/geoip for net.geoip
     - package: github.com/otiai10/copy
       version: v1.14.1
       language: go
       ecosystem: go
-      capability: custom.github_com_otiai10_copy
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/otiai10/gosseract/v2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_otiai10_gosseract_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/pact-foundation/pact-go/v2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_pact_foundation_pact_go_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/pdfcpu/pdfcpu
-      language: go
-      ecosystem: go
-      capability: custom.github_com_pdfcpu_pdfcpu
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: files.archive
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/archive
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/archive for files.archive
     - package: github.com/pgvector/pgvector-go
       version: v0.4.1
       language: go
       ecosystem: go
-      capability: custom.github_com_pgvector_pgvector_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: ai.embeddings
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/ai/vector
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ai/vector for ai.embeddings
     - package: github.com/pgvector/pgvector-go/pgx
       version: v0.4.1
       language: go
       ecosystem: go
-      capability: custom.github_com_pgvector_pgvector_go_pgx
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: ai.embeddings
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/ai/vector
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ai/vector for ai.embeddings
     - package: github.com/pion/webrtc/v4
-      version: v4.2.20
+      version: v4.2.23
       language: go
       ecosystem: go
-      capability: custom.github_com_pion_webrtc_v4
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: realtime.webrtc
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/realtime/webrtc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/realtime/webrtc for realtime.webrtc
     - package: github.com/pquerna/otp
       version: v1.5.0
       language: go
       ecosystem: go
-      capability: custom.github_com_pquerna_otp
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: auth.passkeys
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/auth/passkeys
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/auth/passkeys for auth.passkeys
+    - package: github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring
+      version: v0.94.1
+      language: go
+      ecosystem: go
+      capability: telemetry.alerting
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/observability/rules
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/observability/rules for telemetry.alerting
     - package: github.com/prometheus/client_golang
-      version: v1.24.1
+      version: v1.25.0
       language: go
       ecosystem: go
       capability: telemetry.prometheus
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/observability
-      notes: Prometheus metrics collector and scraping handler
+      framework_replacement: github.com/golusoris/golusoris/k8s/metrics/prom
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/metrics/prom for telemetry.prometheus
     - package: github.com/prometheus/client_model
       version: v0.6.3
       language: go
       ecosystem: go
-      capability: custom.github_com_prometheus_client_model
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/pulumi/pulumi
+      capability: telemetry.prometheus
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/metrics/prom
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/metrics/prom for telemetry.prometheus
+    - package: github.com/prometheus/common
+      version: v0.72.1
       language: go
       ecosystem: go
-      capability: custom.github_com_pulumi_pulumi
+      capability: custom.github_com_prometheus_common
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/pulumi/pulumi-aws
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/prometheus/otlptranslator
+      version: v1.0.0
       language: go
       ecosystem: go
-      capability: custom.github_com_pulumi_pulumi_aws
+      capability: custom.github_com_prometheus_otlptranslator
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: github.com/redis/rueidis
-      version: v1.0.78
+      version: v1.0.79
       language: go
       ecosystem: go
       capability: cache.redis
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/cache/redis
-      notes: Fast auto-pipelining Redis client
+      framework_replacement: github.com/golusoris/golusoris/cache/redis
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/cache/redis for cache.redis
     - package: github.com/riverqueue/river
       version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/jobs
-      notes: Native River queue engine wrapped in Golusoris
+      framework_replacement: github.com/golusoris/golusoris/jobs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs for jobs.queue
+    - package: github.com/riverqueue/river/riverdriver
+      version: v0.49.0
+      language: go
+      ecosystem: go
+      capability: jobs.queue
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jobs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs for jobs.queue
     - package: github.com/riverqueue/river/riverdriver/riverpgxv5
       version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/jobs
-      notes: Native River queue engine wrapped in Golusoris
+      framework_replacement: github.com/golusoris/golusoris/jobs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs for jobs.queue
+    - package: github.com/riverqueue/river/riverdriver/riversqlite
+      version: v0.49.0
+      language: go
+      ecosystem: go
+      capability: jobs.queue_sqlite
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jobs/sqlite
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs/sqlite for jobs.queue_sqlite
     - package: github.com/riverqueue/river/rivertype
       version: v0.49.0
       language: go
       ecosystem: go
       capability: jobs.queue
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/jobs
-      notes: Native River queue engine wrapped in Golusoris
+      framework_replacement: github.com/golusoris/golusoris/jobs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs for jobs.queue
+    - package: github.com/riverqueue/rivercontrib/otelriver
+      version: v0.12.0
+      language: go
+      ecosystem: go
+      capability: jobs.queue
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jobs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs for jobs.queue
     - package: github.com/robfig/cron/v3
       version: v3.0.1
       language: go
       ecosystem: go
       capability: jobs.cron
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/jobs/cron
-      notes: Scheduled recurring task manager
+      framework_replacement: github.com/golusoris/golusoris/jobs/cron
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs/cron for jobs.cron
     - package: github.com/romsar/gonertia/v3
       version: v3.0.0
       language: go
       ecosystem: go
-      capability: custom.github_com_romsar_gonertia_v3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.inertia
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/inertia
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/inertia for http.inertia
     - package: github.com/rs/cors
       version: v1.11.1
       language: go
       ecosystem: go
-      capability: custom.github_com_rs_cors
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.cors
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/cors
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/cors for http.cors
     - package: github.com/santhosh-tekuri/jsonschema/v6
       version: v6.0.3
       language: go
       ecosystem: go
-      capability: custom.github_com_santhosh_tekuri_jsonschema_v6
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/segmentio/ksuid
-      language: go
-      ecosystem: go
-      capability: custom.github_com_segmentio_ksuid
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/solana-foundation/solana-go/v2
-      language: go
-      ecosystem: go
-      capability: custom.github_com_solana_foundation_solana_go_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: validate.jsonschema
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jsonschema
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jsonschema for validate.jsonschema
     - package: github.com/sony/gobreaker/v2
       version: v2.4.0
       language: go
       ecosystem: go
-      capability: custom.github_com_sony_gobreaker_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/client for http.client
     - package: github.com/spf13/cobra
       version: v1.10.2
       language: go
       ecosystem: go
       capability: clikit.cobra
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/core/clikit
-      notes: Command line interface framework with flags
+      framework_replacement: github.com/golusoris/golusoris/core/clikit
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/clikit for clikit.cobra
     - package: github.com/stretchr/testify
       version: v1.12.1
       language: go
       ecosystem: go
       capability: test.assert
-      status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/testutil
-      notes: Testify assertions and mocks mapped to Golusoris testutil
+      status: gap
+      notes: Test assertions and mocks
     - package: github.com/stripe/stripe-go/v87
       version: v87.0.0
       language: go
       ecosystem: go
-      capability: custom.github_com_stripe_stripe_go_v87
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: payments.stripe
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/payments/stripe
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/payments/stripe for payments.stripe
     - package: github.com/testcontainers/testcontainers-go
       version: v0.44.0
       language: go
       ecosystem: go
-      capability: custom.github_com_testcontainers_testcontainers_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.clickhouse
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/clickhouse
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/clickhouse for test.clickhouse
     - package: github.com/testcontainers/testcontainers-go/modules/postgres
       version: v0.44.0
       language: go
       ecosystem: go
-      capability: custom.github_com_testcontainers_testcontainers_go_modules_postgres
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.pg
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/pg
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/pg for test.pg
     - package: github.com/testcontainers/testcontainers-go/modules/redis
       version: v0.44.0
       language: go
       ecosystem: go
-      capability: custom.github_com_testcontainers_testcontainers_go_modules_redis
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.redis
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/redis
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/redis for test.redis
     - package: github.com/testcontainers/testcontainers-go/modules/redpanda
       version: v0.44.0
       language: go
       ecosystem: go
-      capability: custom.github_com_testcontainers_testcontainers_go_modules_redpanda
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.kafka
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/kafka
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/kafka for test.kafka
     - package: github.com/tsenart/vegeta/v12
       version: v12.13.0
       language: go
       ecosystem: go
-      capability: custom.github_com_tsenart_vegeta_v12
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: test.load
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/load
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/load for test.load
     - package: github.com/tus/tusd/v2
       version: v2.10.1
       language: go
       ecosystem: go
-      capability: custom.github_com_tus_tusd_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: storage.tus
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/tus
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/tus for storage.tus
     - package: github.com/twmb/franz-go
-      version: v1.22.0
+      version: v1.22.2
       language: go
       ecosystem: go
-      capability: custom.github_com_twmb_franz_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: pubsub.kafka
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/pubsub/kafka
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pubsub/kafka for pubsub.kafka
     - package: github.com/ulule/limiter/v3
       version: v3.11.2
       language: go
       ecosystem: go
-      capability: custom.github_com_ulule_limiter_v3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.ratelimit
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/ratelimit
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/ratelimit for http.ratelimit
     - package: github.com/uptrace/bun
-      version: v1.2.18
+      version: v1.3.0
       language: go
       ecosystem: go
       capability: db.orm
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/db/bun
-      notes: Idiomatic Go SQL-first query builder
+      framework_replacement: github.com/golusoris/golusoris/db/bun
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/bun for db.orm
     - package: github.com/uptrace/bun/dialect/pgdialect
-      version: v1.2.18
+      version: v1.3.0
       language: go
       ecosystem: go
       capability: db.orm
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/db/bun
-      notes: Idiomatic Go SQL-first query builder
+      framework_replacement: github.com/golusoris/golusoris/db/bun
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/bun for db.orm
     - package: github.com/uptrace/bun/extra/bundebug
-      version: v1.2.18
+      version: v1.3.0
       language: go
       ecosystem: go
       capability: db.orm
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/db/bun
-      notes: Idiomatic Go SQL-first query builder
+      framework_replacement: github.com/golusoris/golusoris/db/bun
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/bun for db.orm
     - package: github.com/wneessen/go-mail
       version: v0.8.1
       language: go
       ecosystem: go
-      capability: custom.github_com_wneessen_go_mail
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: notify.core
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/notify
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/notify for notify.core
     - package: github.com/xuri/excelize/v2
-      version: v2.11.0
+      version: v2.11.1-0.20261011032807-402e3bdd9eae
       language: go
       ecosystem: go
-      capability: custom.github_com_xuri_excelize_v2
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: github.com/yuin/goldmark
-      version: v1.8.6
+      capability: docs.xlsx
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/docs/xlsx
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/docs/xlsx for docs.xlsx
+    - package: github.com/yuin/goldmark/v2
+      version: v2.1.6
       language: go
       ecosystem: go
-      capability: custom.github_com_yuin_goldmark
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: docs.markdown
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/markdown
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/markdown for docs.markdown
     - package: github.com/zeebo/blake3
       version: v0.2.4
       language: go
       ecosystem: go
-      capability: custom.github_com_zeebo_blake3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: crypto.hash
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/hash
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/hash for crypto.hash
     - package: go.opentelemetry.io/contrib/bridges/otelslog
-      version: v0.20.1
+      version: v0.21.0
       language: go
       ecosystem: go
-      capability: custom.go_opentelemetry_io_contrib_bridges_otelslog
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: telemetry.otel
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc
-      version: v0.71.0
+      version: v0.72.0
       language: go
       ecosystem: go
-      capability: custom.go_opentelemetry_io_contrib_instrumentation_google_golang_org_grpc_otelgrpc
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: grpc.server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/grpc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/grpc for grpc.server
     - package: go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
-      version: v0.71.0
+      version: v0.72.0
       language: go
       ecosystem: go
-      capability: custom.go_opentelemetry_io_contrib_instrumentation_net_http_otelhttp
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: http.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/httpx/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/client for http.client
     - package: go.opentelemetry.io/otel
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc
-      version: v0.22.0
+      version: v0.23.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
+    - package: go.opentelemetry.io/otel/exporters/prometheus
+      version: v0.69.0
+      language: go
+      ecosystem: go
+      capability: telemetry.otel
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/log
-      version: v0.22.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/metric
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/sdk
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/sdk/log
-      version: v0.22.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/sdk/metric
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
       capability: telemetry.otel
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/otel
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/otel for telemetry.otel
     - package: go.opentelemetry.io/otel/trace
-      version: v1.46.0
+      version: v1.47.0
       language: go
       ecosystem: go
-      capability: telemetry.otel
+      capability: http.client
       status: covered
-      golusoris_replacement: github.com/golusoris/golusoris/otel
-      notes: OpenTelemetry trace, metric, and baggage context propagation
+      framework_replacement: github.com/golusoris/golusoris/httpx/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/httpx/client for http.client
     - package: go.temporal.io/sdk
-      version: v1.49.0
+      version: v1.50.0
       language: go
       ecosystem: go
-      capability: custom.go_temporal_io_sdk
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: jobs.workflow
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jobs/workflow
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs/workflow for jobs.workflow
     - package: go.uber.org/fx
       version: v1.24.0
       language: go
       ecosystem: go
       capability: runtime.di
-      status: native
-      notes: Retain fx as the dependency-injection and lifecycle foundation; compose Golusoris modules through fx rather than replacing it with clikit (Golusoris ADR-0001).
-      relationship:
-        kind: foundation
-        basis: catalog-declared
+      status: gap
+      notes: Dependency injection and application lifecycle
     - package: go.uber.org/goleak
       version: v1.3.0
       language: go
       ecosystem: go
       capability: custom.go_uber_org_goleak
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: go.yaml.in/yaml/v3
-      language: go
-      ecosystem: go
-      capability: custom.go_yaml_in_yaml_v3
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: gobot.io/x
-      language: go
-      ecosystem: go
-      capability: custom.gobot_io_x
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/crypto
-      version: v0.57.0
+      version: v0.58.0
       language: go
       ecosystem: go
       capability: custom.golang_org_x_crypto
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/exp
-      version: v0.0.0-20260908205506-85c1c2202aba
+      version: v0.0.0-20261014143641-f0251eb4aa3e
       language: go
       ecosystem: go
       capability: custom.golang_org_x_exp
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: golang.org/x/mod
+      notes: Third-party package without a target framework equivalent
+    - package: golang.org/x/net
+      version: v0.61.0
       language: go
       ecosystem: go
-      capability: custom.golang_org_x_mod
+      capability: custom.golang_org_x_net
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/oauth2
       version: v0.37.0
       language: go
       ecosystem: go
       capability: custom.golang_org_x_oauth2
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/sync
-      version: v0.23.0
+      version: v0.24.0
       language: go
       ecosystem: go
       capability: custom.golang_org_x_sync
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/sys
-      version: v0.48.0
+      version: v0.49.0
       language: go
       ecosystem: go
       capability: custom.golang_org_x_sys
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: golang.org/x/text
-      version: v0.42.0
+      version: v0.43.0
       language: go
       ecosystem: go
       capability: custom.golang_org_x_text
       status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: gonum.org/v1
-      language: go
-      ecosystem: go
-      capability: custom.gonum_org_v1
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: google.golang.org/api
-      version: v0.298.0
+      version: v0.304.0
       language: go
       ecosystem: go
       capability: custom.google_golang_org_api
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
     - package: google.golang.org/grpc
       version: v1.84.0
       language: go
       ecosystem: go
-      capability: custom.google_golang_org_grpc
+      capability: grpc.server
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/grpc
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/grpc for grpc.server
+    - package: google.golang.org/protobuf
+      version: v1.36.12
+      language: go
+      ecosystem: go
+      capability: custom.google_golang_org_protobuf
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
+    - package: k8s.io/api
+      version: v0.37.1
+      language: go
+      ecosystem: go
+      capability: k8s.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/client for k8s.client
     - package: k8s.io/apimachinery
-      version: v0.37.0
+      version: v0.37.1
       language: go
       ecosystem: go
-      capability: custom.k8s_io_apimachinery
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: k8s.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/client for k8s.client
     - package: k8s.io/client-go
-      version: v0.37.0
+      version: v0.37.1
       language: go
       ecosystem: go
-      capability: custom.k8s_io_client_go
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: k8s.client
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/client
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/client for k8s.client
+    - package: k8s.io/dynamic-resource-allocation
+      version: v0.37.1
+      language: go
+      ecosystem: go
+      capability: k8s.dra
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/dra
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/dra for k8s.dra
     - package: modernc.org/sqlite
-      version: v1.59.0
+      version: v1.60.1
       language: go
       ecosystem: go
-      capability: custom.modernc_org_sqlite
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
-    - package: periph.io/x
-      language: go
-      ecosystem: go
-      capability: custom.periph_io_x
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: db.sqlite
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/db/sqlite
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/db/sqlite for db.sqlite
     - package: riverqueue.com/riverui
-      version: v0.20.0
+      version: v0.21.0
       language: go
       ecosystem: go
-      capability: custom.riverqueue_com_riverui
-      status: gap
-      notes: Third-party package without native Golusoris equivalent
+      capability: jobs.ui
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/jobs/ui
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/jobs/ui for jobs.ui
     - package: sigs.k8s.io/controller-runtime
-      version: v0.25.1
+      version: v0.25.2
       language: go
       ecosystem: go
-      capability: custom.sigs_k8s_io_controller_runtime
+      capability: k8s.operator
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/operator
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/operator for k8s.operator
+    - package: sigs.k8s.io/yaml
+      version: v1.6.0
+      language: go
+      ecosystem: go
+      capability: config.yaml
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/codec/yaml
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/codec/yaml for config.yaml
+    - package: github.com/Azure/azure-sdk-for-go/sdk/azcore
+      version: v1.23.3
+      language: go
+      ecosystem: go
+      capability: custom.github_com_Azure_azure_sdk_for_go_sdk_azcore
       status: gap
-      notes: Third-party package without native Golusoris equivalent
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/Azure/azure-sdk-for-go/sdk/azidentity
+      version: v1.15.0
+      language: go
+      ecosystem: go
+      capability: storage.azblob
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/azblob
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/azblob for storage.azblob
+    - package: github.com/aws/aws-sdk-go-v2/service/ecr
+      version: v1.66.4
+      language: go
+      ecosystem: go
+      capability: custom.github_com_aws_aws_sdk_go_v2_service_ecr
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/google/go-containerregistry
+      version: v0.22.1
+      language: go
+      ecosystem: go
+      capability: registry.image
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/container/registry
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/container/registry for registry.image
+    - package: github.com/cyberphone/json-canonicalization
+      version: v0.0.0-20261011152517-32a48195b9b2
+      language: go
+      ecosystem: go
+      capability: custom.github_com_cyberphone_json_canonicalization
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/digitorus/timestamp
+      version: v0.0.0-20260914073129-b4b58b92aa51
+      language: go
+      ecosystem: go
+      capability: custom.github_com_digitorus_timestamp
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/go-openapi/runtime
+      version: v0.33.3
+      language: go
+      ecosystem: go
+      capability: custom.github_com_go_openapi_runtime
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/in-toto/attestation
+      version: v1.2.0
+      language: go
+      ecosystem: go
+      capability: custom.github_com_in_toto_attestation
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/sigstore/protobuf-specs
+      version: v0.5.2
+      language: go
+      ecosystem: go
+      capability: custom.github_com_sigstore_protobuf_specs
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/sigstore/rekor
+      version: v1.5.4
+      language: go
+      ecosystem: go
+      capability: custom.github_com_sigstore_rekor
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/sigstore/sigstore
+      version: v1.11.1
+      language: go
+      ecosystem: go
+      capability: custom.github_com_sigstore_sigstore
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/sigstore/sigstore-go
+      version: v1.3.0
+      language: go
+      ecosystem: go
+      capability: registry.sign
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/container/registry/sign
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/container/registry/sign for registry.sign
+    - package: github.com/aws/aws-sdk-go-v2/service/kms
+      version: v1.61.4
+      language: go
+      ecosystem: go
+      capability: custom.github_com_aws_aws_sdk_go_v2_service_kms
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys
+      version: v1.5.0
+      language: go
+      ecosystem: go
+      capability: custom.github_com_Azure_azure_sdk_for_go_sdk_security_keyvault_azkeys
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/moby/moby/api
+      version: v1.56.1
+      language: go
+      ecosystem: go
+      capability: custom.github_com_moby_moby_api
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/alexedwards/argon2id
+      version: v1.0.0
+      language: go
+      ecosystem: go
+      capability: crypto.password
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/crypto
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/crypto for crypto.password
+    - package: github.com/go-faster/errors
+      version: v0.8.0
+      language: go
+      ecosystem: go
+      capability: errors.typed
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/errors
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/errors for errors.typed
+    - package: github.com/go-playground/validator/v10
+      version: v10.30.5
+      language: go
+      ecosystem: go
+      capability: validate.struct
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/validate
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/validate for validate.struct
+    - package: github.com/go-viper/mapstructure/v2
+      version: v2.5.0
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/knadh/koanf/parsers/json
+      version: v1.0.1
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/knadh/koanf/parsers/yaml
+      version: v1.1.1
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/knadh/koanf/providers/env/v2
+      version: v2.0.2
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/knadh/koanf/providers/file
+      version: v1.2.1
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/knadh/koanf/v2
+      version: v2.3.8
+      language: go
+      ecosystem: go
+      capability: config.loader
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/config
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/config for config.loader
+    - package: github.com/lmittmann/tint
+      version: v1.2.1
+      language: go
+      ecosystem: go
+      capability: telemetry.logging
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/log
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/log for telemetry.logging
+    - package: github.com/mattn/go-isatty
+      version: v0.0.24
+      language: go
+      ecosystem: go
+      capability: telemetry.logging
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/log
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/log for telemetry.logging
+    - package: github.com/segmentio/ksuid
+      version: v1.0.4
+      language: go
+      ecosystem: go
+      capability: id.uuid
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/id
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/id for id.uuid
+    - package: github.com/spf13/pflag
+      version: v1.0.10
+      language: go
+      ecosystem: go
+      capability: clikit.cli
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/clikit
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/clikit for clikit.cli
+    - package: go.yaml.in/yaml/v3
+      version: v3.0.5
+      language: go
+      ecosystem: go
+      capability: config.yaml
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/core/codec/yaml
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/core/codec/yaml for config.yaml
+    - package: golang.org/x/mod
+      version: v0.42.0
+      language: go
+      ecosystem: go
+      capability: custom.golang_org_x_mod
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/pulumi/pulumi-aws/sdk/v7
+      version: v7.51.0
+      language: go
+      ecosystem: go
+      capability: deploy.multiregion
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/deploy/multiregion
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/deploy/multiregion for deploy.multiregion
+    - package: github.com/pulumi/pulumi/sdk/v3
+      version: v3.268.0
+      language: go
+      ecosystem: go
+      capability: deploy.multiregion
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/deploy/multiregion
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/deploy/multiregion for deploy.multiregion
+    - package: periph.io/x/conn/v3
+      version: v3.7.3
+      language: go
+      ecosystem: go
+      capability: hw.gpio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/hw/gpio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/hw/gpio for hw.gpio
+    - package: gobot.io/x/gobot/v2
+      version: v2.6.0
+      language: go
+      ecosystem: go
+      capability: hw.robotics
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/hw/robotics
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/hw/robotics for hw.robotics
+    - package: github.com/jochenvg/go-udev
+      version: v0.0.0-20240801134859-b65ed646224b
+      language: go
+      ecosystem: go
+      capability: hw.udev
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/hw/udev
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/hw/udev for hw.udev
+    - package: github.com/containerd/nri
+      version: v0.12.3
+      language: go
+      ecosystem: go
+      capability: k8s.nri
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/k8s/nri
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/k8s/nri for k8s.nri
+    - package: github.com/g3n/engine
+      version: v0.2.0
+      language: go
+      ecosystem: go
+      capability: media.3d
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/3d
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/3d for media.3d
+    - package: github.com/exaring/ebur128
+      version: v0.0.0-20260217210235-a476130e2d41
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/go-audio/aiff
+      version: v1.1.0
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/go-audio/audio
+      version: v1.0.0
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/go-audio/wav
+      version: v1.1.0
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/hajimehoshi/go-mp3
+      version: v0.3.4
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/jfreymuth/oggvorbis
+      version: v1.0.5
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/mewkiz/flac
+      version: v1.0.14
+      language: go
+      ecosystem: go
+      capability: media.audio
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/audio
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/audio for media.audio
+    - package: github.com/hajimehoshi/ebiten/v2
+      version: v2.10.5
+      language: go
+      ecosystem: go
+      capability: media.game
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/media/game
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/media/game for media.game
+    - package: github.com/davidbyttow/govips/v2
+      version: v2.19.0
+      language: go
+      ecosystem: go
+      capability: custom.github_com_davidbyttow_govips_v2
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: github.com/otiai10/gosseract/v2
+      language: go
+      ecosystem: go
+      capability: media.ocr
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/ocr
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/ocr for media.ocr
+    - package: github.com/chromedp/cdproto
+      version: v0.158.0
+      language: go
+      ecosystem: go
+      capability: docs.pdf
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/pdf
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pdf for docs.pdf
+    - package: github.com/chromedp/chromedp
+      version: v0.21.0
+      language: go
+      ecosystem: go
+      capability: docs.pdf
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/pdf
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pdf for docs.pdf
+    - package: github.com/pdfcpu/pdfcpu
+      version: v0.16.2
+      language: go
+      ecosystem: go
+      capability: docs.pdf_parse
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/pdf/parse
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/pdf/parse for docs.pdf_parse
+    - package: gonum.org/v1/gonum
+      version: v0.17.0
+      language: go
+      ecosystem: go
+      capability: science.numerical
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/science/numerical
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/science/numerical for science.numerical
+    - package: gonum.org/v1/plot
+      version: v0.17.0
+      language: go
+      ecosystem: go
+      capability: science.plot
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/science/plot
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/science/plot for science.plot
+    - package: github.com/Azure/azure-sdk-for-go/sdk/storage/azblob
+      version: v1.8.2
+      language: go
+      ecosystem: go
+      capability: storage.azblob
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/azblob
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/azblob for storage.azblob
+    - package: cloud.google.com/go/auth
+      version: v0.24.1
+      language: go
+      ecosystem: go
+      capability: custom.cloud_google_com_go_auth
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: cloud.google.com/go/compute/metadata
+      version: v0.10.0
+      language: go
+      ecosystem: go
+      capability: custom.cloud_google_com_go_compute_metadata
+      status: gap
+      notes: Third-party package without a target framework equivalent
+    - package: cloud.google.com/go/storage
+      version: v1.69.0
+      language: go
+      ecosystem: go
+      capability: storage.gcs
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/storage/gcs
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/storage/gcs for storage.gcs
+    - package: github.com/pact-foundation/pact-go/v2
+      version: v2.8.0
+      language: go
+      ecosystem: go
+      capability: test.pact
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/pact
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/pact for test.pact
+    - package: github.com/prometheus/prometheus
+      version: v0.315.0
+      language: go
+      ecosystem: go
+      capability: test.promql
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/testutil/promcheck
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/testutil/promcheck for test.promql
+    - package: js-yaml
+      version: 5.4.3
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.js_yaml
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: jsonc-parser
+      version: 3.3.1
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.jsonc_parser
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: markdownlint
+      version: 0.41.1
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.markdownlint
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: micromark
+      version: 4.0.3
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.micromark
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: micromark-extension-mdxjs
+      version: 3.0.0
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.micromark_extension_mdxjs
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: parse5
+      version: 8.0.1
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.parse5
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: smol-toml
+      version: 1.9.0
+      language: typescript
+      ecosystem: npm
+      capability: ui.external.smol_toml
+      status: gap
+      target_builder_kit: golusoris/sveltesentio
+      notes: External npm dependency requiring a target framework adapter or evaluation
+    - package: github.com/ethereum/go-ethereum
+      version: v1.17.8
+      language: go
+      ecosystem: go
+      capability: web3.evm
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/web3/evm
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/web3/evm for web3.evm
+    - package: github.com/gagliardetto/binary
+      version: v0.8.0
+      language: go
+      ecosystem: go
+      capability: web3.solana
+      status: covered
+      framework_replacement: github.com/golusoris/golusoris/web3/solana
+      notes: capabilities.yaml declares github.com/golusoris/golusoris/web3/solana for web3.solana
+    - package: github.com/solana-foundation/solana-go/v2
+      version: v2.1.0
+      language: go
+      ecosystem: go
+      capability: custom.github_com_solana_foundation_solana_go_v2
+      status: gap
+      notes: Third-party package without a target framework equivalent
 standard_library_imports:
     - package: log/slog
       language: go
       ecosystem: go
       capability: telemetry.logging
-      status: native
-      notes: Retain the standard-library structured logging API; Golusoris log configures its handlers (Golusoris ADR-0003).
-      relationship:
-        kind: foundation
-        basis: catalog-declared
+      status: gap
+      notes: Standard-library structured logging API
 readiness:
     basis: catalog-declared
-    score: 20.588235294117645
-    total_third_party_deps: 170
-    covered_deps: 35
-    gap_deps: 135
-updated_at: 2026-09-19T20:33:48.866931376Z
+    score: 76.14678899082568
+    total_third_party_deps: 218
+    covered_deps: 166
+    gap_deps: 52
+updated_at: 2026-10-19T01:57:01.18555407Z
