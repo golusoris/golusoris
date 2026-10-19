@@ -17,6 +17,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
+	"github.com/golusoris/golusoris/core/validate/nilcheck"
 	"github.com/golusoris/golusoris/idempotency/internal/storeutil"
 )
 
@@ -109,7 +110,7 @@ func NewMemoryStore() *MemoryStore {
 
 // NewMemoryStoreWithClock returns an empty MemoryStore with an injected clock.
 func NewMemoryStoreWithClock(clk clockwork.Clock) *MemoryStore {
-	if isNil(clk) {
+	if nilcheck.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
 	return &MemoryStore{entries: map[string]memEntry{}, clk: clk}
@@ -241,6 +242,3 @@ var (
 	// ErrReservationLost reports that a token no longer owns its reservation.
 	ErrReservationLost = errors.New("idempotency: reservation lost")
 )
-
-// isNil preserves typed-nil clocks supplied by callers.
-func isNil(value any) bool { return storeutil.IsNil(value) }
