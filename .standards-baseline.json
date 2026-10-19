@@ -1,36 +1,8 @@
 {
   "version": 1,
-  "generated_at": "2026-10-18T03:34:14Z",
+  "generated_at": "2026-10-19T00:58:11Z",
   "repository": "golusoris/golusoris",
-  "commit_sha": "5e41a9c9cf55a9d183be0f7450ceb291d0bd5c78",
-  "total_infractions": 3,
-  "infractions": [
-    {
-      "rule_id": "HISS-02",
-      "file_path": "integrations/goenvoy/module.go",
-      "line_number": 151,
-      "symbol": "registryClient",
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "fn:registryClient",
-      "fingerprint": "integrations/goenvoy/module.go:HISS-02:fn:registryClient#1"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "science/bio/fasta.go",
-      "line_number": 56,
-      "symbol": "ParseFASTA",
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "fn:ParseFASTA",
-      "fingerprint": "science/bio/fasta.go:HISS-02:fn:ParseFASTA#1"
-    },
-    {
-      "rule_id": "HISS-02",
-      "file_path": "testutil/river/river.go",
-      "line_number": 140,
-      "symbol": "startHarness",
-      "message": "Context without a deadline reaches a call; derive it with context.WithTimeout or context.WithDeadline",
-      "anchor": "fn:startHarness",
-      "fingerprint": "testutil/river/river.go:HISS-02:fn:startHarness#1"
-    }
-  ]
+  "commit_sha": "2ae162ad41b0c0d27d7a7c299ae1ab332ec30b3e",
+  "total_infractions": 0,
+  "infractions": []
 }

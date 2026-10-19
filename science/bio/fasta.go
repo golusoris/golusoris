@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"strings"
+	"time"
 )
 
 const fastaReadBufferSize = 64 << 10
@@ -24,6 +25,8 @@ const (
 	DefaultFASTAMaxRecords = 100_000
 	// DefaultFASTAMaxLineBytes caps one logical line, excluding its newline.
 	DefaultFASTAMaxLineBytes = 1 << 20
+	// DefaultFASTATimeout bounds one ParseFASTA call.
+	DefaultFASTATimeout = 2 * time.Minute
 )
 
 var (
@@ -51,9 +54,12 @@ type FASTAOptions struct {
 	MaxLineBytes int
 }
 
-// ParseFASTA reads FASTA records with finite default limits.
+// ParseFASTA reads FASTA records with finite default limits and a
+// [DefaultFASTATimeout] deadline.
 func ParseFASTA(r io.Reader) ([]Sequence, error) {
-	return ParseFASTAContext(context.Background(), r, FASTAOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultFASTATimeout)
+	defer cancel()
+	return ParseFASTAContext(ctx, r, FASTAOptions{})
 }
 
 // ParseFASTAContext reads FASTA records while enforcing context cancellation
