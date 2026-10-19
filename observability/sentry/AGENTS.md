@@ -26,4 +26,4 @@ Sentry client + slog bridge. Off by default (empty DSN = no-op).
 
 ## Don't
 
-- Don't use Sentry for metrics/traces unless you have Sentry Performance budget. OTel is routing layer for those.
+- Don't use Sentry for metrics/traces without Sentry Performance budget. OTel is routing layer for those.
