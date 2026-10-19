@@ -44,6 +44,7 @@ kubeconfig), so it needs cluster access at start. default probes (`healthz` and
 manager.Options` mapping, defaults — without cluster. Reconciler-level
 coverage belongs in **app** via controller-runtime `envtest` (downloads local `kube-apiserver` + `etcd`); that's integration concern, not shipped
 here.
+
 - Envtest suite (build tag `envtest`) tests manager startup and namespace read against live kube-apiserver; runs in CI only.
 
 ## Don't
