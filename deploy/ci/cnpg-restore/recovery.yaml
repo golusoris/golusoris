@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# CI-only cluster bootstrapped from the pg-source backup for scripts/ci/cnpg-restore.sh.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: pg-recovery
+  namespace: cnpg-restore
+spec:
+  instances: 1
+  imageName: "@CNPG_POSTGRES_IMAGE@"
+  storage:
+    size: 1Gi
+  bootstrap:
+    recovery:
+      source: pg-source
+  externalClusters:
+    - name: pg-source
+      barmanObjectStore:
+        destinationPath: s3://backups/
+        endpointURL: http://versitygw.cnpg-restore.svc:7070
+        s3Credentials:
+          accessKeyId:
+            name: s3-creds
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: s3-creds
+            key: SECRET_ACCESS_KEY
+        wal:
+          maxParallel: 1

@@ -919,7 +919,7 @@ jobs:
   kubeconform:
     name: Kubernetes schemas (kubeconform)
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - name: Stop on a draft pull request
         if: github.event.pull_request.draft == true
@@ -942,10 +942,28 @@ jobs:
         run: |
           . tools/tool-versions.env
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: Validate static and rendered Kubernetes resources
         run: bash scripts/ci/kubeconform.sh
+      # Gap C14-02: a CNPG backup must bootstrap a recovery cluster with equal data.
+      - name: Run CNPG backup restore in kind
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/cnpg-restore.log"
+          bash scripts/ci/cnpg-restore.sh 2>&1 | tee "$LOG"
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the CNPG restore kind suite skipped instead of running"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestKind_' "$LOG"; then
+            echo "::error::no CNPG kind tests passed"
+            exit 1
+          fi
 
   # ── OpenAPI spec lint (vacuum; job id kept for the required check) ───────────
   # The framework has no single openapi.yaml (apps generate their own with ogen).
