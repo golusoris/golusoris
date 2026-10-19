@@ -49,3 +49,4 @@ Get bounded by 5s or caller deadline (registry default 2s).
 - Don't pick `maxAge` = schedule interval; allow backup runtime slack
  (daily schedule -> ~26h).
 - RBAC: `get` on `clusters.postgresql.cnpg.io` in namespace.
+- Envtest suite (build tag `envtest`) tests CRD status schema against live kube-apiserver; runs in CI only.

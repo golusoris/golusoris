@@ -56,6 +56,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "github.com/ogen-go/ogen", "go"),
     ("tools/tool-versions.env", "github.com/golang-migrate/migrate/v4", "go"),
     ("tools/tool-versions.env", "sigs.k8s.io/controller-tools", "go"),
+    ("tools/tool-versions.env", "sigs.k8s.io/controller-runtime/tools/setup-envtest", "go"),
     ("tools/tool-versions.env", "github.com/avito-tech/go-mutesting", "go"),
     ("tools/tool-versions.env", "helm.sh/helm/v4", "go"),
     ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),

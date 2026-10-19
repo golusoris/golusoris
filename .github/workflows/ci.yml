@@ -364,6 +364,29 @@ jobs:
             echo "::error::the ClamAV integration suite skipped instead of running"
             exit 1
           fi
+      - name: Run the envtest suite
+        if: matrix.primary
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "sigs.k8s.io/controller-runtime/tools/setup-envtest@${SETUP_ENVTEST_VERSION}"
+          assets="$(setup-envtest use "${ENVTEST_K8S_VERSION}" --bin-dir "$RUNNER_TEMP/envtest" -p path)"
+          export KUBEBUILDER_ASSETS="$assets"
+          crd="$RUNNER_TEMP/cnpg-clusters.yaml"
+          curl -fsSL --retry 3 -o "$crd" "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/${CNPG_CRD_VERSION}/config/crd/bases/postgresql.cnpg.io_clusters.yaml"
+          echo "${CNPG_CRD_SHA256}  $crd" | sha256sum -c -
+          export CNPG_CRD_PATH="$crd"
+          LOG="$RUNNER_TEMP/envtest.log"
+          go test -race -count=1 -v -tags envtest -run '^TestEnvtest_' -timeout 10m ./k8s/client/ ./k8s/cnpg/ ./k8s/operator/ | tee "$LOG"
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the envtest suite skipped instead of running"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestEnvtest_' "$LOG"; then
+            echo "::error::no envtest tests passed"
+            exit 1
+          fi
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |
