@@ -56,3 +56,7 @@ pi, err := client.CreatePaymentIntent(ctx, 999, "usd", "cus_xxx")
 - Don't log `pi.ClientSecret` — it grants access to payment method.
 - Don't hardcode secret key — always use env vars / `secrets/`.
 - Don't call Stripe APIs in hot paths without timeouts.
+
+## Tests
+
+- `integration_test.go` (`-tags integration`): runs against real `stripe-mock` container.
