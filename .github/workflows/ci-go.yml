@@ -453,6 +453,22 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
+      # The engine audit cannot read the input, so this step holds it to the 30m per-package bound.
+      - name: Bound the test timeout
+        shell: bash
+        env:
+          TEST_TIMEOUT: ${{ inputs.test-timeout }}
+        run: |
+          if [[ ! "$TEST_TIMEOUT" =~ ^([0-9]+h)?([0-9]+m)?([0-9]+s)?$ || -z "$TEST_TIMEOUT" ]]; then
+            echo "::error::test-timeout '$TEST_TIMEOUT' is not a whole h/m/s duration"
+            exit 1
+          fi
+          hours=${BASH_REMATCH[1]%h} minutes=${BASH_REMATCH[2]%m} secs=${BASH_REMATCH[3]%s}
+          seconds=$(( 10#${hours:-0} * 3600 + 10#${minutes:-0} * 60 + 10#${secs:-0} ))
+          if (( seconds > 1800 )); then
+            echo "::error::test-timeout $TEST_TIMEOUT exceeds the 30m per-package bound"
+            exit 1
+          fi
       # Fail fast with a clear signal if testcontainers have no Docker daemon
       # (matches ci.yml's own preflight — issue #198).
       - name: Verify Docker is reachable

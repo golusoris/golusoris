@@ -33,10 +33,6 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {
         _ENGINE_REASON,
         "2026-10-26",
     ),
-    ".github/workflows/reuse.yml": (
-        _ENGINE_REASON,
-        "2026-10-26",
-    ),
 }
 
 _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?P<rest>.*)$")
