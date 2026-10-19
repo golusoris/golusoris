@@ -131,6 +131,8 @@ EXPECTED = {
         "git-refs",
     ),
     ("tools/tool-versions.env", "kubernetes/kubernetes", "github-releases"),
+    ("tools/tool-versions.env", "kubernetes-sigs/kind", "github-releases"),
+    ("tools/tool-versions.env", "cloudnative-pg/cloudnative-pg", "github-releases"),
     ("tools/tool-versions.env", "squidfunk/mkdocs-material", "docker"),
     ("tools/tool-versions.env", "hashicorp/terraform", "docker"),
     ("tools/tool-versions.env", "semgrep/semgrep", "docker"),
@@ -162,6 +164,7 @@ EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 6,
+    ("tools/tool-versions.env", "kubernetes/kubernetes", "github-releases"): 2,
 }
 
 EXPECTED_DIGESTS = {
