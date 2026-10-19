@@ -127,16 +127,34 @@ func newJobsClient(t *testing.T, pool *pgxpool.Pool, opts Options, workers *jobs
 	return client
 }
 
+// defaultHarnessLifetime bounds the pollers when the test binary runs
+// without -timeout; it matches go test's default.
+const defaultHarnessLifetime = 10 * time.Minute
+
+// deadliner is the Deadline half of *testing.T.
+type deadliner interface {
+	Deadline() (time.Time, bool)
+}
+
+// harnessDeadline is the test binary's deadline, or now plus
+// defaultHarnessLifetime when none is set.
+func harnessDeadline(src deadliner, now time.Time) time.Time {
+	if deadline, ok := src.Deadline(); ok {
+		return deadline
+	}
+	return now.Add(defaultHarnessLifetime)
+}
+
 // startHarness starts client's pollers when workers are registered — a
 // harness with no workers is insert-only and needs no Start. Start ctx must
 // outlive this call: river uses it as the parent for its long-running
-// pollers, so cancellation and Stop are tied to t.Cleanup instead.
+// pollers, so it lasts until the test deadline and Stop is tied to t.Cleanup.
 func startHarness(t *testing.T, client *jobs.Client, opts Options) {
 	t.Helper()
 	if opts.Register == nil {
 		return
 	}
-	startCtx, startCancel := context.WithCancel(context.Background())
+	startCtx, startCancel := context.WithDeadline(context.Background(), harnessDeadline(t, time.Now()))
 	if err := client.Start(startCtx); err != nil {
 		startCancel()
 		t.Fatalf("testutil/river: start: %v", err)

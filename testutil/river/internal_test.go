@@ -50,3 +50,28 @@ func TestOptions_withDefaults(t *testing.T) {
 		}
 	})
 }
+
+type fixedDeadline struct {
+	at time.Time
+	ok bool
+}
+
+func (f fixedDeadline) Deadline() (time.Time, bool) { return f.at, f.ok }
+
+// TestHarnessDeadline covers the poller bound: positive (the test deadline
+// wins), negative (no deadline falls back to the default lifetime), and
+// boundary (a deadline already at now is kept, not extended).
+func TestHarnessDeadline(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 19, 3, 0, 0, 0, time.UTC)
+
+	if got := harnessDeadline(fixedDeadline{at: now.Add(time.Minute), ok: true}, now); !got.Equal(now.Add(time.Minute)) {
+		t.Errorf("with test deadline = %v, want %v", got, now.Add(time.Minute))
+	}
+	if got := harnessDeadline(fixedDeadline{}, now); !got.Equal(now.Add(defaultHarnessLifetime)) {
+		t.Errorf("without test deadline = %v, want %v", got, now.Add(defaultHarnessLifetime))
+	}
+	if got := harnessDeadline(fixedDeadline{at: now, ok: true}, now); !got.Equal(now) {
+		t.Errorf("deadline at now = %v, want %v", got, now)
+	}
+}
