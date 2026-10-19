@@ -31,19 +31,37 @@ spec:
       labels:
         app: versitygw
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: init-bucket
           image: "@CNPG_POSTGRES_IMAGE@"
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-c", "mkdir -p /data/backups"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
           volumeMounts:
             - name: data
               mountPath: /data
       containers:
         - name: versitygw
           image: "@VERSITY_IMAGE@"
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           args: ["posix", "/data"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            readOnlyRootFilesystem: true
           env:
             - name: ROOT_ACCESS_KEY
               value: golusoris-test
@@ -55,8 +73,12 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}
 ---
 apiVersion: v1

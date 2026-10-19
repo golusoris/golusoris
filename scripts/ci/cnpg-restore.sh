@@ -73,17 +73,17 @@ diag() {
 dump_diagnostics() {
 	printf '=== DIAGNOSTICS: CNPG RESTORE FAILURE ===\n' >&2
 	if command -v kubectl >/dev/null 2>&1 && [[ -f "${KUBECONFIG:-}" ]]; then
-		printf '--- kubectl get cluster,backup,pods -A -o wide ---\n' >&2
+		printf '%s\n' '--- kubectl get cluster,backup,pods -A -o wide ---' >&2
 		diag kubectl get cluster,backup,pods -A -o wide
-		printf '--- operator logs ---\n' >&2
+		printf '%s\n' '--- operator logs ---' >&2
 		diag kubectl logs -n cnpg-system -l app.kubernetes.io/name=cloudnative-pg --tail=200
-		printf '--- describe source cluster ---\n' >&2
+		printf '%s\n' '--- describe source cluster ---' >&2
 		diag kubectl describe cluster pg-source -n cnpg-restore
-		printf '--- describe recovery cluster ---\n' >&2
+		printf '%s\n' '--- describe recovery cluster ---' >&2
 		diag kubectl describe cluster pg-recovery -n cnpg-restore
-		printf '--- describe backups ---\n' >&2
+		printf '%s\n' '--- describe backups ---' >&2
 		diag kubectl describe backup -n cnpg-restore
-		printf '--- versitygw logs ---\n' >&2
+		printf '%s\n' '--- versitygw logs ---' >&2
 		diag kubectl logs -n cnpg-restore -l app=versitygw --tail=100
 	fi
 	printf '=== END DIAGNOSTICS ===\n' >&2
@@ -123,7 +123,7 @@ readonly manifest_dir="$repo_root/deploy/ci/cnpg-restore"
 # render writes a manifest with its @...@ image tokens replaced by the pins.
 render() {
 	local name="$1" out="$work_dir/$1"
-	sed -e "s|@CNPG_POSTGRES_IMAGE@|${CNPG_POSTGRES_IMAGE}|g" -e "s|@VERSITY_IMAGE@|${versity_tag}|g" \
+	sed -e "s|@CNPG_POSTGRES_IMAGE@|${CNPG_POSTGRES_IMAGE}|g" -e "s|@VERSITY_IMAGE@|${versity_ref}|g" \
 		"$manifest_dir/$name" >"$out"
 	if grep -q '@[A-Z_]*@' "$out"; then
 		printf 'cnpg-restore: unrendered token left in %s\n' "$name" >&2
@@ -164,11 +164,8 @@ create_cluster() {
 		printf 'cnpg-restore: VersityGW image constant not found in images.go\n' >&2
 		exit 1
 	fi
-	# kind loads by tag; the tag points at the digest-pinned pull and pods never pull it.
-	versity_tag="${versity_image%@*}"
-	docker pull "$versity_image"
-	docker tag "$versity_image" "$versity_tag"
-	kind load docker-image "$versity_tag" --name "$cluster_name"
+	# Node pulls the Docker Hub image by digest through the mirror; kind load breaks on Docker 29 containerd-store multi-arch saves.
+	versity_ref="mirror.gcr.io/${versity_image}"
 }
 
 install_operator() {
@@ -234,5 +231,5 @@ main() {
 	printf 'cnpg-restore: restore verified and kind tests passed\n'
 }
 
-versity_tag=""
+versity_ref=""
 main "$@"
