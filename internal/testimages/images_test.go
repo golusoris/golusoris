@@ -62,6 +62,27 @@ func TestRepositoryPinsAreValid(t *testing.T) {
 	}
 }
 
+// cacheManifestPins lists the images the primary pre-pull cache must carry, each unseen.
+func cacheManifestPins() map[string]bool {
+	return map[string]bool{
+		Postgres:        false,
+		PostGIS:         false,
+		Pgvector:        false,
+		Timescale:       false,
+		TimescaleApache: false,
+		Redis:           false,
+		NATS:            false,
+		ClickHouse:      false,
+		Redpanda:        false,
+		VersityGW:       false,
+		Ryuk:            false,
+		ClamAV:          false,
+		PubSubEmulator:  false,
+		Mailpit:         false,
+		Bugsink:         false,
+	}
+}
+
 func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join("..", "..", ".github", "testcontainers-images.txt")
@@ -83,22 +104,7 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 		t.Fatalf("manifest exceeds %d bytes", manifestReadLimit)
 	}
 
-	want := map[string]bool{
-		Postgres:        false,
-		PostGIS:         false,
-		Pgvector:        false,
-		Timescale:       false,
-		TimescaleApache: false,
-		Redis:           false,
-		NATS:            false,
-		ClickHouse:      false,
-		Redpanda:        false,
-		VersityGW:       false,
-		Ryuk:            false,
-		ClamAV:          false,
-		PubSubEmulator:  false,
-		Mailpit:         false,
-	}
+	want := cacheManifestPins()
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
