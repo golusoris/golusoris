@@ -6,7 +6,7 @@
 # (cordanallm/praetor: needs scan | report | migrate) resolves .needs.yaml demands
 # against this file; capabilities_test.go keeps it in sync with the tree.
 # Schema: core/capabilities (version 1). Keys: domain.name[.sub], lowercase.
-# Regenerate the skeleton with scripts/capabilities/generate.py; hand-tune keys.
+# Maintained by hand; capabilities_test.go fails on drift from the tree.
 version: 1
 framework: github.com/golusoris/golusoris
 modules:

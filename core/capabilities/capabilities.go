@@ -27,6 +27,10 @@ const SchemaVersion = 1
 // FileName is the conventional location, relative to the framework repo root.
 const FileName = "capabilities.yaml"
 
+// MaxBuilderKits bounds BuilderKits, as the needs engine bounds
+// framework.targets.<language>.builder_kits.
+const MaxBuilderKits = 8
+
 // Sentinel errors. Compare with errors.Is.
 var (
 	ErrSchemaVersion = errors.New("capabilities: unsupported schema version")
@@ -36,6 +40,13 @@ var (
 // keyRE is the capability key grammar: `domain.name[.sub]`, lowercase; the
 // domain starts with a letter, later elements may start with a digit (media.3d).
 var keyRE = regexp.MustCompile(`^[a-z][a-z0-9]*(\.[a-z0-9][a-z0-9_]*)+$`)
+
+// GitHub login and repository name grammars, as the needs engine checks a
+// builder-kit coordinate.
+var (
+	ownerRE = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$`)
+	repoRE  = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+)
 
 // Status is a package's maturity.
 type Status string
@@ -69,10 +80,13 @@ type Package struct {
 
 // Index is the parsed capabilities.yaml.
 type Index struct {
-	Version   int       `yaml:"version" json:"version"`
-	Framework string    `yaml:"framework" json:"framework"`
-	Modules   []string  `yaml:"modules" json:"modules"`
-	Packages  []Package `yaml:"packages" json:"packages"`
+	Version   int    `yaml:"version" json:"version"`
+	Framework string `yaml:"framework" json:"framework"`
+	// BuilderKits are the framework's repositories as <owner>/<name>; entry 0
+	// receives the demand requests the needs engine routes to the framework.
+	BuilderKits []string  `yaml:"builder_kits,omitempty" json:"builder_kits,omitempty"`
+	Modules     []string  `yaml:"modules" json:"modules"`
+	Packages    []Package `yaml:"packages" json:"packages"`
 }
 
 // Parse decodes and validates an index.
@@ -100,15 +114,18 @@ func Load(path string) (*Index, error) {
 }
 
 // Validate enforces the schema invariants: supported version, framework set,
-// unique imports under the framework prefix, at least one well-formed key per
-// package, known status, and modules referenced by packages declared in
-// Modules.
+// well-formed unique builder kits, unique imports under the framework prefix,
+// at least one well-formed key per package, known status, and modules
+// referenced by packages declared in Modules.
 func (idx *Index) Validate() error {
 	if idx.Version != SchemaVersion {
 		return fmt.Errorf("%w: %d (want %d)", ErrSchemaVersion, idx.Version, SchemaVersion)
 	}
 	if idx.Framework == "" {
 		return fmt.Errorf("%w: framework must be set", ErrInvalid)
+	}
+	if err := validateBuilderKits(idx.BuilderKits); err != nil {
+		return err
 	}
 	modules := make(map[string]bool, len(idx.Modules)+1)
 	modules[idx.Framework] = true
@@ -128,6 +145,31 @@ func (idx *Index) Validate() error {
 		}
 	}
 	return nil
+}
+
+func validateBuilderKits(kits []string) error {
+	if len(kits) > MaxBuilderKits {
+		return fmt.Errorf("%w: %d builder kits (at most %d)", ErrInvalid, len(kits), MaxBuilderKits)
+	}
+	for i, kit := range kits {
+		if !validCoordinate(kit) {
+			return fmt.Errorf("%w: builder kit %q is not an <owner>/<name> coordinate", ErrInvalid, kit)
+		}
+		if slices.Contains(kits[:i], kit) {
+			return fmt.Errorf("%w: duplicate builder kit %s", ErrInvalid, kit)
+		}
+	}
+	return nil
+}
+
+// validCoordinate reports whether kit is a GitHub <owner>/<name>: a login of at
+// most 39 bytes without "--" and a name of at most 100 bytes other than . or ..
+func validCoordinate(kit string) bool {
+	owner, name, ok := strings.Cut(kit, "/")
+	if !ok || len(owner) > 39 || !ownerRE.MatchString(owner) || strings.Contains(owner, "--") {
+		return false
+	}
+	return len(name) <= 100 && repoRE.MatchString(name) && name != "." && name != ".."
 }
 
 func (idx *Index) validatePackage(p *Package, seen, modules map[string]bool) error {
