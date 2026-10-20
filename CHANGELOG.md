@@ -15,6 +15,31 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.19.0](https://github.com/golusoris/golusoris/compare/v0.18.0...v0.19.0) (2026-10-20)
+
+
+### Features
+
+* **auth/oidc:** add a session-backed login and callback flow ([#1046](https://github.com/golusoris/golusoris/issues/1046)) ([647998a](https://github.com/golusoris/golusoris/commit/647998aeb7f0002b86995e6a61363b30b67e3c43))
+* **capabilities:** declare builder_kits; require core v0.12.0 ([#1023](https://github.com/golusoris/golusoris/issues/1023)) ([c27fec5](https://github.com/golusoris/golusoris/commit/c27fec51b24008d549f13ae70fb5e1220e60671e))
+* **ogenkit:** map sentinels to any status, path-only instance, fixed decode detail ([#1045](https://github.com/golusoris/golusoris/issues/1045)) ([88f4b1a](https://github.com/golusoris/golusoris/commit/88f4b1a34e538fa6972e72ad0e8d40124e7bf92b))
+
+
+### Bug Fixes
+
+* **deps:** update module github.com/davidbyttow/govips/v2 to v2.20.0 ([#1043](https://github.com/golusoris/golusoris/issues/1043)) ([1e5edbc](https://github.com/golusoris/golusoris/commit/1e5edbc539796ef2a09517e96fd74f46d13157a1))
+* **deps:** update module github.com/golusoris/golusoris to v0.17.0 ([#1025](https://github.com/golusoris/golusoris/issues/1025)) ([e7f8c6a](https://github.com/golusoris/golusoris/commit/e7f8c6a47848880dbd3a3ec5119949cba47ac7b9))
+* **deps:** update module github.com/grafana/grafana-foundation-sdk/go to v0.0.21 ([#1040](https://github.com/golusoris/golusoris/issues/1040)) ([464bb19](https://github.com/golusoris/golusoris/commit/464bb19c42fff37f78b5ed71a605e40bd0bbfabe))
+* **deps:** update module github.com/pion/webrtc/v4 to v4.2.24 ([#1033](https://github.com/golusoris/golusoris/issues/1033)) ([93194d2](https://github.com/golusoris/golusoris/commit/93194d24881606204f834454918a82fe2193f95f))
+* **deps:** update module github.com/pulumi/pulumi-aws/sdk/v7 to v7.51.1 ([#1041](https://github.com/golusoris/golusoris/issues/1041)) ([5b4585a](https://github.com/golusoris/golusoris/commit/5b4585a7a4b327008a9fa121e635e5f6e56f12d0))
+* **deps:** update module github.com/pulumi/pulumi/sdk/v3 to v3.269.0 ([#1034](https://github.com/golusoris/golusoris/issues/1034)) ([971d60d](https://github.com/golusoris/golusoris/commit/971d60d1e8d04301d3130ffe7ac12ea42930e64b))
+* **vault:** retry host-network dev servers when the probed port is taken ([#1042](https://github.com/golusoris/golusoris/issues/1042)) ([539fc25](https://github.com/golusoris/golusoris/commit/539fc2556a4cd442a72414ed26ce22f04e8ace84))
+
+
+### Code Refactoring
+
+* **idempotency:** use core nilcheck and drop the HISS-19 exceptions ([#1027](https://github.com/golusoris/golusoris/issues/1027)) ([3dfadad](https://github.com/golusoris/golusoris/commit/3dfadadf4658d1d6664d8f31113cd679ecbe6ebc))
+
 ## [0.18.0](https://github.com/golusoris/golusoris/compare/v0.17.0...v0.18.0) (2026-10-19)
 
 
