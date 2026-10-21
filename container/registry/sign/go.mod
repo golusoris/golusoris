@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/container/registry/sign
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2

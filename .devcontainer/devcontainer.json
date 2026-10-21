@@ -20,7 +20,7 @@
     },
     "ghcr.io/devcontainers/features/go:1": {
       "installGoTools": false,
-      "version": "1.27.2"
+      "version": "1.27.3"
     }
   },
   "customizations": {
