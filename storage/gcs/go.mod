@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/storage/gcs
 
-go 1.27.2
+go 1.27.3
 
 require (
 	cloud.google.com/go/auth v0.24.1

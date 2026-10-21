@@ -29,7 +29,7 @@ linters:
 
 devcontainer_features:
   - ghcr.io/devcontainers/features/go:1:
-      version: "1.27.2"
+      version: "1.27.3"
       installGoTools: false
   - ghcr.io/devcontainers/features/common-utils:2:
       installZsh: false

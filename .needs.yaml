@@ -5,7 +5,7 @@ languages:
     - go
     - typescript
     - svelte
-go_version: 1.27.2
+go_version: 1.27.3
 framework: github.com/golusoris/golusoris
 builder_kits:
     - golusoris/golusoris

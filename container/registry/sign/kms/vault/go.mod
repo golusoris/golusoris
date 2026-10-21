@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/container/registry/sign/kms/vault
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015200537-b544145a689f
