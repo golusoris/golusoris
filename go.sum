@@ -450,8 +450,8 @@ github.com/golang/protobuf v1.5.1/go.mod h1:DopwsBzvsk0Fs44TXzsVbJyPhcCPeIwnvohx
 github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
-github.com/golusoris/goenvoy/arr/sonarr v1.3.1 h1:ki8xErBh5ORBhUvCKc7V1Tg74WYcwYt4UhZj7pKsEJA=
-github.com/golusoris/goenvoy/arr/sonarr v1.3.1/go.mod h1:BkkbLWHttCnqvXhLoPaLW0g/q0Mf349zzr1M2dG/0Ro=
+github.com/golusoris/goenvoy/arr/sonarr v1.4.0 h1:zrYhgyWnAgdwwFeFnD7adnDcJ6jy0JMaTV4gpAuL3WE=
+github.com/golusoris/goenvoy/arr/sonarr v1.4.0/go.mod h1:b7T/l5VqlBAXTOq4pYtYflrHbT2qY2uFt6W0MU+9YvA=
 github.com/golusoris/goenvoy/arr/v2 v2.1.0 h1:zUzG6zLH49JBII8zxAYUwoTa/a/nX7Qc8gXk45py/0k=
 github.com/golusoris/goenvoy/arr/v2 v2.1.0/go.mod h1:sLkd48dAGp87Z3hqeg6mcHBXHEU6mtzupet2Z2ar82I=
 github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=

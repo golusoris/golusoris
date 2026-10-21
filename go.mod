@@ -47,7 +47,7 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
-	github.com/golusoris/goenvoy/arr/sonarr v1.3.1
+	github.com/golusoris/goenvoy/arr/sonarr v1.4.0
 	github.com/golusoris/goenvoy/arr/v2 v2.1.0
 	github.com/golusoris/goenvoy/metadata v1.3.1
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1
