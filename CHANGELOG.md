@@ -15,6 +15,25 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.20.0](https://github.com/golusoris/golusoris/compare/v0.19.0...v0.20.0) (2026-10-22)
+
+
+### Features
+
+* **ogenkit:** export the problem resolver and add NewError options ([#1061](https://github.com/golusoris/golusoris/issues/1061)) ([3c25f36](https://github.com/golusoris/golusoris/commit/3c25f3635fffeb211f502987424ce9b9093bcaa7))
+
+
+### Bug Fixes
+
+* **deps:** move to Go 1.27.3 for the crypto/x509 advisory GO-2026-6809 ([#1053](https://github.com/golusoris/golusoris/issues/1053)) ([4068f44](https://github.com/golusoris/golusoris/commit/4068f44158562512abea169348060486e7b076ab))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.4.0 ([#1051](https://github.com/golusoris/golusoris/issues/1051)) ([d0a5305](https://github.com/golusoris/golusoris/commit/d0a53050a61d2f66b0d344d45609570375c20921))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.5.0 ([#1057](https://github.com/golusoris/golusoris/issues/1057)) ([ea1a426](https://github.com/golusoris/golusoris/commit/ea1a42680f399c15d973c967ac21fade0a0bb626))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.5.1 ([#1058](https://github.com/golusoris/golusoris/issues/1058)) ([fdc761c](https://github.com/golusoris/golusoris/commit/fdc761cd6b0f571252a9c8f5cf19e4d223fb4b1e))
+* **deps:** update module github.com/golusoris/goenvoy/arr/v2 to v2.2.0 ([#1056](https://github.com/golusoris/golusoris/issues/1056)) ([2033066](https://github.com/golusoris/golusoris/commit/2033066d5fa68185f1b7417e49dd6d7eeea4ad50))
+* **deps:** update module github.com/golusoris/goenvoy/arr/v2 to v2.4.0 ([#1066](https://github.com/golusoris/golusoris/issues/1066)) ([8a0a758](https://github.com/golusoris/golusoris/commit/8a0a7582c9ad46589efb0139d8afec3e32c7c7c9))
+* **deps:** update module github.com/pulumi/pulumi/sdk/v3 to v3.270.0 ([#1044](https://github.com/golusoris/golusoris/issues/1044)) ([1046161](https://github.com/golusoris/golusoris/commit/1046161a4a57cbca34d010d8f9bcff77c4a8b40c))
+* **release:** sign off the release pull request commit ([#1048](https://github.com/golusoris/golusoris/issues/1048)) ([256146f](https://github.com/golusoris/golusoris/commit/256146faf6f699bdf22cc3871fc4b25e2171f5be))
+
 ## [0.19.0](https://github.com/golusoris/golusoris/compare/v0.18.0...v0.19.0) (2026-10-20)
 
 
