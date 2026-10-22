@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/auth v0.24.1
 	cloud.google.com/go/compute/metadata v0.10.0
 	cloud.google.com/go/storage v1.69.0
-	github.com/golusoris/golusoris v0.17.0
+	github.com/golusoris/golusoris v0.18.0
 	github.com/golusoris/golusoris/core v0.12.0
 	github.com/jonboulle/clockwork v0.5.0
 	go.uber.org/fx v1.24.0
