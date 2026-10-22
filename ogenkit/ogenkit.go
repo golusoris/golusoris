@@ -8,6 +8,8 @@
 //   - [ErrorHandler] and [ErrorHandlerWith] that translate golusoris coded errors,
 //     mapped sentinel errors ([WithStatus], [WithPublicStatus], [WithHTTPStatus]), and validation failures ([WithInvalidParams])
 //     into RFC 9457 Problem Details with their proper HTTP status.
+//   - [Resolver] for resolving errors in ogen Handler.NewError implementations
+//     into RFC 9457 [Problem] responses.
 //   - [SlogMiddleware] / [RecoverMiddleware] — ogen middleware implementations
 //     that integrate with the framework's slog logger. Use alongside the
 //     httpx/middleware stack on the outer chi router; these cover spans
@@ -40,7 +42,8 @@ import (
 	gerr "github.com/golusoris/golusoris/core/errors"
 )
 
-// Option configures an error handler built by [ErrorHandlerWith].
+// Option configures an error handler built by [ErrorHandlerWith] or a [Resolver]
+// built by [NewResolver].
 type Option func(*errorHandlerConfig)
 
 type statusMapping struct {
@@ -57,6 +60,10 @@ type errorHandlerConfig struct {
 	invalidParams  bool
 	pathInstance   bool
 	decodeDetail   string
+	fallbackDetail string
+	validationType string
+	securityStatus int
+	securityDetail string
 }
 
 // WithStatus maps an application sentinel error to a golusoris [gerr.Code]
@@ -147,6 +154,63 @@ func WithInvalidParams() Option {
 	}
 }
 
+// WithFallbackDetail sets the problem detail and error message for unmapped
+// errors whose status is 500 or higher. If problem.Message is populated, it is
+// also updated to the public detail. An empty public string is ignored.
+func WithFallbackDetail(public string) Option {
+	return func(cfg *errorHandlerConfig) {
+		if public != "" {
+			cfg.fallbackDetail = public
+		}
+	}
+}
+
+// WithValidationType sets the RFC 9457 problem type URI for validation failures.
+// It only takes effect when [WithInvalidParams] is enabled. An empty uri is ignored.
+func WithValidationType(uri string) Option {
+	return func(cfg *errorHandlerConfig) {
+		if uri != "" {
+			cfg.validationType = uri
+		}
+	}
+}
+
+// WithSecurityStatus maps security errors to the given HTTP status and public detail.
+// An empty public detail uses the standard HTTP status text. A status outside 400..599 is ignored.
+func WithSecurityStatus(status int, public string) Option {
+	return func(cfg *errorHandlerConfig) {
+		if status < http.StatusBadRequest || status > maxProblemStatus {
+			return
+		}
+		cfg.securityStatus = status
+		cfg.securityDetail = public
+	}
+}
+
+// Resolver translates application errors into RFC 9457 [Problem] responses for
+// ogen Handler.NewError(ctx, err), which has no request, sharing its mapping table with [ErrorHandlerWith].
+type Resolver struct {
+	cfg errorHandlerConfig
+}
+
+// NewResolver constructs a [Resolver] configured with the supplied options.
+// Non-nil options are applied once in the order provided.
+func NewResolver(opts ...Option) *Resolver {
+	var cfg errorHandlerConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&cfg)
+		}
+	}
+	return &Resolver{cfg: cfg}
+}
+
+// Resolve translates err into a [Problem]. The HTTP request r may be nil, in
+// which case the instance member remains empty.
+func (rv *Resolver) Resolve(r *http.Request, err error) Problem {
+	return resolveProblem(&rv.cfg, r, err)
+}
+
 // ErrorHandler returns an ogenerrors.ErrorHandler that emits RFC 9457 Problem
 // Details while preserving ogen's status classification for its own errors.
 //
@@ -158,14 +222,9 @@ func ErrorHandler(logger *slog.Logger) ogenerrors.ErrorHandler {
 // ErrorHandlerWith returns an ogenerrors.ErrorHandler configured with custom
 // error mapping options.
 func ErrorHandlerWith(logger *slog.Logger, opts ...Option) ogenerrors.ErrorHandler {
-	var cfg errorHandlerConfig
-	for _, opt := range opts {
-		if opt != nil {
-			opt(&cfg)
-		}
-	}
+	rv := NewResolver(opts...)
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) {
-		problem := resolveProblem(&cfg, r, err)
+		problem := rv.Resolve(r, err)
 		if problem.Status >= http.StatusInternalServerError {
 			logger.ErrorContext(ctx, "ogenkit: handler error",
 				slog.String("error", err.Error()),
@@ -184,15 +243,15 @@ type InvalidParam struct {
 	Reason string `json:"reason"`
 }
 
-// problemBody adds the extension member here rather than in core/errors, so
-// this module keeps building against the released core.
-type problemBody struct {
+// Problem is the RFC 9457 body that [ErrorHandlerWith] writes and
+// [Resolver.Resolve] returns.
+type Problem struct {
 	gerr.ProblemDetails
 
 	InvalidParams []InvalidParam `json:"invalid-params,omitempty"` //nolint:tagliatelle // RFC 9457 extension member name is hyphenated
 }
 
-func writeProblem(w http.ResponseWriter, problem problemBody) error {
+func writeProblem(w http.ResponseWriter, problem Problem) error {
 	w.Header().Set("Content-Type", gerr.ProblemJSONMediaType)
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(problem.Status)
@@ -224,22 +283,24 @@ func isDecodeError(err error) bool {
 	return ok
 }
 
-func httpStatusProblem(m statusMapping, err error, instance string) problemBody {
+func httpStatusProblem(m statusMapping, err error, instance string) Problem {
 	detail := m.detail
 	if detail == "" {
 		detail = err.Error()
 	}
-	return problemBody{
-		Type:         "about:blank",
-		Title:        http.StatusText(m.httpStatus),
-		Status:       m.httpStatus,
-		Detail:       detail,
-		Instance:     instance,
-		ErrorMessage: detail,
+	return Problem{
+		ProblemDetails: gerr.ProblemDetails{
+			Type:         "about:blank",
+			Title:        http.StatusText(m.httpStatus),
+			Status:       m.httpStatus,
+			Detail:       detail,
+			Instance:     instance,
+			ErrorMessage: detail,
+		},
 	}
 }
 
-func codedProblem(m statusMapping, err error, instance string) problemBody {
+func codedProblem(m statusMapping, err error, instance string) Problem {
 	problem := gerr.ProblemFromError(
 		gerr.New(m.code, m.target.Error()),
 		m.code.Status(),
@@ -251,32 +312,70 @@ func codedProblem(m statusMapping, err error, instance string) problemBody {
 		problem.ErrorMessage = detail
 		problem.Message = detail
 	}
-	return problemBody{ProblemDetails: problem}
+	return Problem{ProblemDetails: problem}
 }
 
-func fallbackProblem(cfg *errorHandlerConfig, err error, instance string) problemBody {
+func securityProblem(cfg *errorHandlerConfig, instance string) Problem {
+	status := cfg.securityStatus
+	detail := cfg.securityDetail
+	if detail == "" {
+		detail = http.StatusText(status)
+	}
+	return Problem{
+		ProblemDetails: gerr.ProblemDetails{
+			Type:         "about:blank",
+			Title:        http.StatusText(status),
+			Status:       status,
+			Detail:       detail,
+			Instance:     instance,
+			ErrorMessage: detail,
+		},
+	}
+}
+
+func validationProblem(cfg *errorHandlerConfig, valErr *validate.Error, instance string) Problem {
+	problem := gerr.ProblemFromError(
+		gerr.New(gerr.CodeValidation, "request validation failed"),
+		http.StatusUnprocessableEntity,
+		instance,
+	)
+	// CodeValidation maps to 400; RFC 9110 422 names a well-formed body that failed checks.
+	problem.Status = http.StatusUnprocessableEntity
+	problem.Title = http.StatusText(http.StatusUnprocessableEntity)
+	if cfg.validationType != "" {
+		problem.Type = cfg.validationType
+	}
+	return Problem{ProblemDetails: problem, InvalidParams: validationParams(valErr)}
+}
+
+func fallbackProblem(cfg *errorHandlerConfig, err error, instance string) Problem {
 	problem := gerr.ProblemFromError(err, ogenerrors.ErrorCode(err), instance)
 	if cfg.decodeDetail != "" && problem.Status < http.StatusInternalServerError && isDecodeError(err) {
 		problem.Detail = cfg.decodeDetail
 		problem.ErrorMessage = cfg.decodeDetail
 	}
-	return problemBody{ProblemDetails: problem}
+	if cfg.fallbackDetail != "" && problem.Status >= http.StatusInternalServerError {
+		problem.Detail = cfg.fallbackDetail
+		problem.ErrorMessage = cfg.fallbackDetail
+		if problem.Message != "" {
+			problem.Message = cfg.fallbackDetail
+		}
+	}
+	return Problem{ProblemDetails: problem}
 }
 
-func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) problemBody {
+func resolveProblem(cfg *errorHandlerConfig, r *http.Request, err error) Problem {
 	instance := problemInstance(cfg, r)
 
 	if cfg.invalidParams {
 		if valErr, ok := errors.AsType[*validate.Error](err); ok {
-			problem := gerr.ProblemFromError(
-				gerr.New(gerr.CodeValidation, "request validation failed"),
-				http.StatusUnprocessableEntity,
-				instance,
-			)
-			// CodeValidation maps to 400; RFC 9110 422 names a well-formed body that failed checks.
-			problem.Status = http.StatusUnprocessableEntity
-			problem.Title = http.StatusText(http.StatusUnprocessableEntity)
-			return problemBody{ProblemDetails: problem, InvalidParams: validationParams(valErr)}
+			return validationProblem(cfg, valErr, instance)
+		}
+	}
+
+	if cfg.securityStatus != 0 {
+		if _, ok := errors.AsType[*ogenerrors.SecurityError](err); ok {
+			return securityProblem(cfg, instance)
 		}
 	}
 
