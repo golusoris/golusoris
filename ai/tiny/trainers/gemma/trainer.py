@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import json
 import math
@@ -64,13 +63,13 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     if unknown:
         raise contract.ContractError(f"unsupported Gemma hyperparameter: {unknown[0]}")
     values = {
-        "epochs": _integer(raw, "epochs", 1, 1, 100),
-        "batch_size": _integer(raw, "batch_size", 1, 1, 1024),
-        "learning_rate": _number(raw, "learning_rate", 5e-5, 1e-8, 1.0),
-        "weight_decay": _number(raw, "weight_decay", 0.01, 0.0, 1.0),
-        "lora_rank": _integer(raw, "lora_rank", 4, 1, 256),
-        "sequence_length": _integer(raw, "sequence_length", 512, 8, 32_768),
-        "max_examples": _integer(raw, "max_examples", 100_000, 1, MAX_EXAMPLES),
+        "epochs": contract.integer_field(raw, "epochs", 1, 1, 100),
+        "batch_size": contract.integer_field(raw, "batch_size", 1, 1, 1024),
+        "learning_rate": contract.number_field(raw, "learning_rate", 5e-5, 1e-8, 1.0),
+        "weight_decay": contract.number_field(raw, "weight_decay", 0.01, 0.0, 1.0),
+        "lora_rank": contract.integer_field(raw, "lora_rank", 4, 1, 256),
+        "sequence_length": contract.integer_field(raw, "sequence_length", 512, 8, 32_768),
+        "max_examples": contract.integer_field(raw, "max_examples", 100_000, 1, MAX_EXAMPLES),
     }
     dtype_policy = raw.get("dtype_policy", "bfloat16")
     if dtype_policy not in {"float32", "float16", "bfloat16", "mixed_float16", "mixed_bfloat16"}:
@@ -190,25 +189,6 @@ def contract_smoke(config: Mapping[str, Any], dataset: Path, output: Path) -> No
     )
 
 
-def _integer(
-    values: Mapping[str, Any], name: str, default: int, minimum: int, maximum: int
-) -> int:
-    value = values.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
-        raise contract.ContractError(f"{name} must be an integer in [{minimum}, {maximum}]")
-    return value
-
-
-def _number(
-    values: Mapping[str, Any], name: str, default: float, minimum: float, maximum: float
-) -> float:
-    value = values.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise contract.ContractError(f"{name} must be a number")
-    number = float(value)
-    if not math.isfinite(number) or not minimum <= number <= maximum:
-        raise contract.ContractError(f"{name} must be finite in [{minimum}, {maximum}]")
-    return number
 
 
 def _final_metrics(history: Mapping[str, Any]) -> dict[str, float]:
@@ -224,18 +204,12 @@ def _final_metrics(history: Mapping[str, Any]) -> dict[str, float]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--contract-smoke",
-        action="store_true",
-        help="validate container I/O only; emitted artifact is not a model",
-    )
-    args = parser.parse_args(argv)
+    smoke_requested = contract.contract_smoke_requested(argv)
     try:
         config = contract.load_config()
         with tempfile.TemporaryDirectory(prefix="tiny-gemma-") as temporary:
             dataset = contract.materialize_dataset(config, Path(temporary))
-            action = contract_smoke if args.contract_smoke else train
+            action = contract_smoke if smoke_requested else train
             action(config, dataset, contract.OUTPUT_ROOT)
     except contract.ContractError as exc:
         print(f"tiny-gemma-trainer: contract: {exc}", file=sys.stderr)
