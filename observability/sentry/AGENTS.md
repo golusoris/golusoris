@@ -22,7 +22,7 @@ Sentry client + slog bridge. Off by default (empty DSN = no-op).
 ## Tests
 
 - `sentry_test.go`, `handler_test.go`: DSN gating, flush, defaults, slog bridge level routing and fanout. No event leaves process.
-- Gap: no test sends event to Sentry-protocol server; transport, envelope encoding and DSN auth not exercised. Closing route: Bugsink (single-container Sentry-SDK-compatible server) under testcontainers.
+- `integration_test.go` (`-tags integration`): Bugsink container (`testimages.Bugsink`); slog error and `CaptureMessage` read back via Bugsink canonical API; wrong DSN key -> zero issues; Warn -> breadcrumb only, Error -> one issue. CI step `Run the Bugsink integration suite` fails on skip.
 
 ## Don't
 
