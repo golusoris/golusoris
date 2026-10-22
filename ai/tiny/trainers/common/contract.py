@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import argparse
 import json
+import math
 import os
 import shutil
 import stat
@@ -61,6 +63,45 @@ def object_field(config: Mapping[str, Any], name: str) -> dict[str, Any]:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ContractError(f"{name} must be an object with string keys")
     return value
+
+
+def integer_field(
+    values: Mapping[str, Any], name: str, default: int, minimum: int, maximum: int
+) -> int:
+    """Return one bounded integer field or default."""
+    value = values.get(name, default)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not minimum <= value <= maximum
+    ):
+        raise ContractError(f"{name} must be an integer in [{minimum}, {maximum}]")
+    return value
+
+
+def number_field(
+    values: Mapping[str, Any], name: str, default: float, minimum: float, maximum: float
+) -> float:
+    """Return one bounded float field or default."""
+    value = values.get(name, default)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ContractError(f"{name} must be a number")
+    number = float(value)
+    if not math.isfinite(number) or not minimum <= number <= maximum:
+        raise ContractError(f"{name} must be finite in [{minimum}, {maximum}]")
+    return number
+
+
+def contract_smoke_requested(argv: list[str] | None = None) -> bool:
+    """Return whether smoke validation was requested on the container CLI."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--contract-smoke",
+        action="store_true",
+        help="validate container I/O only; emitted artifact is not a model",
+    )
+    args = parser.parse_args(argv)
+    return bool(args.contract_smoke)
 
 
 def materialize_dataset(
