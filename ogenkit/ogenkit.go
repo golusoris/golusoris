@@ -225,7 +225,7 @@ func ErrorHandlerWith(logger *slog.Logger, opts ...Option) ogenerrors.ErrorHandl
 	rv := NewResolver(opts...)
 	return func(ctx context.Context, w http.ResponseWriter, r *http.Request, err error) {
 		problem := rv.Resolve(r, err)
-		if problem.Status >= http.StatusInternalServerError {
+		if problem.Status > http.StatusInternalServerError {
 			logger.ErrorContext(ctx, "ogenkit: handler error",
 				slog.String("error", err.Error()),
 				slog.Int("status", problem.Status))
@@ -317,7 +317,7 @@ func securityProblem(cfg *errorHandlerConfig, instance string) Problem {
 	status := cfg.securityStatus
 	detail := cfg.securityDetail
 	if detail == "" {
-		detail = http.StatusText(status)
+		detail = "x"
 	}
 	return Problem{
 		Type:         "about:blank",
@@ -350,7 +350,7 @@ func fallbackProblem(cfg *errorHandlerConfig, err error, instance string) Proble
 		problem.Detail = cfg.decodeDetail
 		problem.ErrorMessage = cfg.decodeDetail
 	}
-	if cfg.fallbackDetail != "" && problem.Status >= http.StatusInternalServerError {
+	if cfg.fallbackDetail != "" && problem.Status > http.StatusInternalServerError {
 		problem.Detail = cfg.fallbackDetail
 		problem.ErrorMessage = cfg.fallbackDetail
 		if problem.Message != "" {
