@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import argparse
 import importlib
 import math
 import struct
@@ -70,10 +69,10 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
     if unknown:
         raise contract.ContractError(f"unsupported LiteRT hyperparameter: {unknown[0]}")
     values: dict[str, Any] = {
-        "epochs": _integer(raw, "epochs", 10, 1, 1000),
-        "batch_size": _integer(raw, "batch_size", 8, 1, 4096),
-        "learning_rate": _number(raw, "learning_rate", 0.001, 1e-8, 1.0),
-        "validation_fraction": _number(raw, "validation_fraction", 0.2, 0.01, 0.5),
+        "epochs": contract.integer_field(raw, "epochs", 10, 1, 1000),
+        "batch_size": contract.integer_field(raw, "batch_size", 8, 1, 4096),
+        "learning_rate": contract.number_field(raw, "learning_rate", 0.001, 1e-8, 1.0),
+        "validation_fraction": contract.number_field(raw, "validation_fraction", 0.2, 0.01, 0.5),
     }
     values["do_data_augmentation"] = _boolean(raw, "do_data_augmentation", True)
     values["do_fine_tuning"] = _boolean(raw, "do_fine_tuning", False)
@@ -390,25 +389,6 @@ def _evaluation_metrics(evaluation: Any) -> dict[str, float]:
     return metrics
 
 
-def _integer(
-    values: Mapping[str, Any], name: str, default: int, minimum: int, maximum: int
-) -> int:
-    value = values.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
-        raise contract.ContractError(f"{name} must be an integer in [{minimum}, {maximum}]")
-    return value
-
-
-def _number(
-    values: Mapping[str, Any], name: str, default: float, minimum: float, maximum: float
-) -> float:
-    value = values.get(name, default)
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise contract.ContractError(f"{name} must be a number")
-    number = float(value)
-    if not math.isfinite(number) or not minimum <= number <= maximum:
-        raise contract.ContractError(f"{name} must be finite in [{minimum}, {maximum}]")
-    return number
 
 
 def _boolean(values: Mapping[str, Any], name: str, default: bool) -> bool:
@@ -419,13 +399,7 @@ def _boolean(values: Mapping[str, Any], name: str, default: bool) -> bool:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--contract-smoke",
-        action="store_true",
-        help="validate container I/O only; emitted artifact is not a model",
-    )
-    args = parser.parse_args(argv)
+    smoke_requested = contract.contract_smoke_requested(argv)
     try:
         config = contract.load_config()
         with tempfile.TemporaryDirectory(
@@ -433,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         ) as temporary:
             workspace = Path(temporary)
             dataset = contract.materialize_dataset(config, workspace / "fetch")
-            action = contract_smoke if args.contract_smoke else train
+            action = contract_smoke if smoke_requested else train
             action(config, dataset, contract.OUTPUT_ROOT, workspace)
     except contract.ContractError as exc:
         print(f"tiny-litert-trainer: contract: {exc}", file=sys.stderr)
