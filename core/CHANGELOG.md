@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/golusoris/golusoris/compare/core/v0.12.0...core/v0.12.1) (2026-10-22)
+
+
+### Bug Fixes
+
+* **deps:** move to Go 1.27.3 for the crypto/x509 advisory GO-2026-6809 ([#1053](https://github.com/golusoris/golusoris/issues/1053)) ([4068f44](https://github.com/golusoris/golusoris/commit/4068f44158562512abea169348060486e7b076ab))
+
 ## [0.12.0](https://github.com/golusoris/golusoris/compare/core/v0.11.0...core/v0.12.0) (2026-10-19)
 
 
