@@ -16,6 +16,13 @@ OIDC plus OAuth 2.0 PKCE client. `coreos/go-oidc/v3`. Bounded discovery.
 4. `UserInfo(ctx, accessToken)` -> claims.
 Legacy/eager alternative: `AuthURL(state)` plus `Exchange(ctx, code, verifier)`.
 
+## Session flow
+
+- `NewSessionFlow(provider, SessionFlowOptions{Sessions, Clock, MaxAge, OnSuccess, OnError})` -> `Login` + `Callback` handlers (`http.HandlerFunc` shape).
+- `Login`: random state + `Begin`; state, nonce, verifier, issued-at -> `auth/session`; 302 to IdP.
+- `Callback`: flow keys deleted + saved before checks (single use, replay fails); IdP `error` -> `ErrFlowIDP` (code quoted, max 64 bytes); state mismatch or missing -> `ErrFlowState`; age > `MaxAge` (default 10m) -> `ErrFlowExpired`; no code -> `ErrFlowCode`; `Complete` sentinels pass through; success -> `Session.Renew` then `OnSuccess(w, r, sess, toks)`.
+- `OnSuccess` stores identity, saves, responds. Claim authorization (allowed users, groups) stays caller-side.
+
 ## Config
 
 - `auth.oidc.issuer_url`

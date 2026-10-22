@@ -61,7 +61,7 @@ path "transit/sign/<key>" { capabilities = ["update"] }   # ed25519 (no hash suf
 ## internal/vaultdev
 
 - `Start(t, vaultdev.Vault|vaultdev.OpenBao)` -> `Server{Address, Token, Flavor}`; mapped port; random per-test root token (gitleaks clean).
-- `StartHostNetwork(t, flavor)`: host network, `127.0.0.1:<free port>` (dev cluster listener = port+1); server reaches test httptest servers (TokenReview fake). Linux only, skip elsewhere (Docker Desktop: no host networking).
+- `StartHostNetwork(t, flavor)`: host network, `127.0.0.1:<free port>` (dev cluster listener = port+1); server reaches test httptest servers (TokenReview fake). Linux only, skip elsewhere (Docker Desktop: no host networking). Bind `address already in use` (parallel test took probed port) -> fresh pair, max 3 tries; failed start terminated, error carries log tail. `vaultdev_test.go`: taken first port -> retry ok; always taken -> `errPortTaken` after 3 picks.
 - `srv.Write` / `srv.Read`: root-token API call, path without `/v1/`, `Response{Data, Auth}`; non-2xx fails test.
 - Pins `images.go`: `VaultImage` (hashicorp/vault 2.1.2, BUSL test use), `OpenBaoImage` (openbao/openbao 2.7.1), `RyukImage` (reaper). Renovate test-image manager covers file; `scripts/ci/renovate-policy-test.py` expects 3 pins; `TestRyukMatchesRootPin` = lockstep with root `internal/testimages`. Absent from CI cache manifest (module sweep pulls).
 - Ready = dev banner log + `sys/health` 200 (bounded poll). No startgate (root-internal): 4 boots max per run.

@@ -364,6 +364,43 @@ jobs:
             echo "::error::the ClamAV integration suite skipped instead of running"
             exit 1
           fi
+      - name: Run the envtest suite
+        if: matrix.primary
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          . tools/tool-versions.env
+          go install "sigs.k8s.io/controller-runtime/tools/setup-envtest@${SETUP_ENVTEST_VERSION}"
+          assets="$(setup-envtest use "${ENVTEST_K8S_VERSION}" --bin-dir "$RUNNER_TEMP/envtest" -p path)"
+          export KUBEBUILDER_ASSETS="$assets"
+          crd="$RUNNER_TEMP/cnpg-clusters.yaml"
+          curl -fsSL --retry 3 -o "$crd" "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/${CNPG_CRD_VERSION}/config/crd/bases/postgresql.cnpg.io_clusters.yaml"
+          echo "${CNPG_CRD_SHA256}  $crd" | sha256sum -c -
+          export CNPG_CRD_PATH="$crd"
+          LOG="$RUNNER_TEMP/envtest.log"
+          go test -race -count=1 -v -tags envtest -run '^TestEnvtest_' -timeout 10m ./k8s/client/ ./k8s/cnpg/ ./k8s/operator/ | tee "$LOG"
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the envtest suite skipped instead of running"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestEnvtest_' "$LOG"; then
+            echo "::error::no envtest tests passed"
+            exit 1
+          fi
+      - name: Run the stripe-mock integration suite
+        if: matrix.primary
+        timeout-minutes: 10
+        env:
+          RYUK_RECONNECTION_TIMEOUT: 30m
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/stripe-mock-integration.log"
+          go test -race -count=1 -v -tags integration -run '^TestIntegration_' -timeout 5m ./payments/stripe/ | tee "$LOG"
+          # The suite skips without Docker; here a skip is a failure, not a pass.
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the stripe-mock integration suite skipped instead of running"
+            exit 1
+          fi
       - name: Run the Bugsink integration suite
         if: matrix.primary
         timeout-minutes: 15
@@ -919,7 +956,7 @@ jobs:
   kubeconform:
     name: Kubernetes schemas (kubeconform)
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - name: Stop on a draft pull request
         if: github.event.pull_request.draft == true
@@ -942,10 +979,28 @@ jobs:
         run: |
           . tools/tool-versions.env
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+      - name: Pull Docker Hub images through mirror.gcr.io
+        shell: bash
+        run: bash scripts/ci/docker-hub-mirror.sh
       - name: Verify Docker daemon
         run: docker info
       - name: Validate static and rendered Kubernetes resources
         run: bash scripts/ci/kubeconform.sh
+      # Gap C14-02: a CNPG backup must bootstrap a recovery cluster with equal data.
+      - name: Run CNPG backup restore in kind
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/cnpg-restore.log"
+          bash scripts/ci/cnpg-restore.sh 2>&1 | tee "$LOG"
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the CNPG restore kind suite skipped instead of running"
+            exit 1
+          fi
+          if ! grep -q -- '--- PASS: TestKind_' "$LOG"; then
+            echo "::error::no CNPG kind tests passed"
+            exit 1
+          fi
 
   # ── OpenAPI spec lint (vacuum; job id kept for the required check) ───────────
   # The framework has no single openapi.yaml (apps generate their own with ogen).

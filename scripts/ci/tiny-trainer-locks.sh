@@ -17,6 +17,8 @@ AUDIT_PYTHON_VERSION=3.11.16
 # Resolve as of this upload cutoff so --check compares the lock with its inputs,
 # not with whatever PyPI published since; move it forward deliberately with --write.
 LOCK_EXCLUDE_NEWER=2026-10-08T00:00:00Z
+# certifi below 2026.10.19 trusts compromised emSign roots (PYSEC-2026-4320); only certifi moves past the cutoff.
+LOCK_CERTIFI_EXCLUDE_NEWER=certifi=2026-10-21T00:00:00Z
 tiny_trainer_lock_tmp=
 
 cleanup_lock_tmp() {
@@ -42,7 +44,7 @@ compile_lock() {
 		--mount "type=bind,src=$work,dst=/src" \
 		--workdir /src \
 		"$UV_IMAGE" uv pip compile --quiet --generate-hashes --no-emit-index-url \
-		--exclude-newer "$cutoff" \
+		--exclude-newer "$cutoff" --exclude-newer-package "$LOCK_CERTIFI_EXCLUDE_NEWER" \
 		--python-version "$python_version" --output-file requirements.lock requirements.in
 }
 

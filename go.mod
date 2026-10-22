@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.27.2
+go 1.27.3
 
 replace github.com/golusoris/golusoris/core => ./core
 
@@ -47,15 +47,15 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
-	github.com/golusoris/goenvoy/arr/sonarr v1.3.1
-	github.com/golusoris/goenvoy/arr/v2 v2.1.0
+	github.com/golusoris/goenvoy/arr/sonarr v1.5.1
+	github.com/golusoris/goenvoy/arr/v2 v2.3.0
 	github.com/golusoris/goenvoy/metadata v1.3.1
 	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2
 	github.com/golusoris/golusoris/core v0.12.0
 	github.com/google/uuid v1.6.0
-	github.com/grafana/grafana-foundation-sdk/go v0.0.20
+	github.com/grafana/grafana-foundation-sdk/go v0.0.21
 	github.com/grafana/pyroscope-go v1.4.3
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/h2non/filetype v1.1.3

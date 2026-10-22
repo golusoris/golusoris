@@ -56,6 +56,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "github.com/ogen-go/ogen", "go"),
     ("tools/tool-versions.env", "github.com/golang-migrate/migrate/v4", "go"),
     ("tools/tool-versions.env", "sigs.k8s.io/controller-tools", "go"),
+    ("tools/tool-versions.env", "sigs.k8s.io/controller-runtime/tools/setup-envtest", "go"),
     ("tools/tool-versions.env", "github.com/avito-tech/go-mutesting", "go"),
     ("tools/tool-versions.env", "helm.sh/helm/v4", "go"),
     ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),
@@ -81,6 +82,7 @@ EXPECTED = {
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
     ("internal/testimages/images.go", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
     ("internal/testimages/images.go", "axllent/mailpit", "docker"),
+    ("internal/testimages/images.go", "stripe/stripe-mock", "docker"),
     ("internal/testimages/images.go", "bugsink/bugsink", "docker"),
     ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
     ("internal/testimages/images.go", "mcr.microsoft.com/azure-storage/azurite", "docker"),
@@ -108,6 +110,7 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
     (".github/testcontainers-images.txt", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
     (".github/testcontainers-images.txt", "axllent/mailpit", "docker"),
+    (".github/testcontainers-images.txt", "stripe/stripe-mock", "docker"),
     (".github/testcontainers-images.txt", "bugsink/bugsink", "docker"),
     (".github/testcontainers-split-images.txt", "motoserver/moto", "docker"),
     (".github/testcontainers-split-images.txt", "localstack/localstack", "docker"),
@@ -130,6 +133,8 @@ EXPECTED = {
         "git-refs",
     ),
     ("tools/tool-versions.env", "kubernetes/kubernetes", "github-releases"),
+    ("tools/tool-versions.env", "kubernetes-sigs/kind", "github-releases"),
+    ("tools/tool-versions.env", "cloudnative-pg/cloudnative-pg", "github-releases"),
     ("tools/tool-versions.env", "squidfunk/mkdocs-material", "docker"),
     ("tools/tool-versions.env", "hashicorp/terraform", "docker"),
     ("tools/tool-versions.env", "semgrep/semgrep", "docker"),
@@ -161,6 +166,7 @@ EXPECTED_MULTIPLICITY = {
     ("internal/testimages/images.go", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-images.txt", "timescale/timescaledb", "docker"): 2,
     (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"): 6,
+    ("tools/tool-versions.env", "kubernetes/kubernetes", "github-releases"): 2,
 }
 
 EXPECTED_DIGESTS = {
@@ -189,6 +195,7 @@ EXPECTED_DIGESTS = {
     "clamav/clamav",
     "gcr.io/google.com/cloudsdktool/google-cloud-cli",
     "axllent/mailpit",
+    "stripe/stripe-mock",
     "bugsink/bugsink",
     "motoserver/moto",
     "fsouza/fake-gcs-server",

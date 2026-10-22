@@ -55,7 +55,7 @@ func TestWithPinnedReaper(t *testing.T) {
 
 func TestRepositoryPinsAreValid(t *testing.T) {
 	t.Parallel()
-	for _, image := range []string{Postgres, PostGIS, Pgvector, Timescale, TimescaleApache, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Azurite, Ryuk, ClamAV, PubSubEmulator, Mailpit, Bugsink} {
+	for _, image := range []string{Postgres, PostGIS, Pgvector, Timescale, TimescaleApache, Redis, NATS, ClickHouse, Redpanda, VersityGW, FakeGCSServer, Azurite, Ryuk, ClamAV, PubSubEmulator, Mailpit, StripeMock, Bugsink} {
 		if err := Validate(image); err != nil {
 			t.Errorf("Validate(%q) error = %v", image, err)
 		}
@@ -79,6 +79,7 @@ func cacheManifestPins() map[string]bool {
 		ClamAV:          false,
 		PubSubEmulator:  false,
 		Mailpit:         false,
+		StripeMock:      false,
 		Bugsink:         false,
 	}
 }

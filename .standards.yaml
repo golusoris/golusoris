@@ -101,8 +101,8 @@ overrides:
         dismiss_stale_reviews: true
         # Live ruleset praetor-main-protection already requires it; declared so the audit keeps the stricter value.
         require_extra_approval_for_unattributed_changes: true
-        # main merges through a merge queue; only merge_group workflows can be required.
-        merge_queue: true
+        # main merges without a merge queue since 2026-10-20: queue squashes added bot co-authors (golusoris-queue-bot-coauthor).
+        merge_queue: false
     supply_chain:
         slsa_level: 3
         enforce_cosign: true
