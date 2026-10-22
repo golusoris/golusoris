@@ -454,12 +454,12 @@ github.com/golusoris/goenvoy/arr/sonarr v1.5.2 h1:c2riTb2fJ/mSsBqXxJumwwoY65UtAt
 github.com/golusoris/goenvoy/arr/sonarr v1.5.2/go.mod h1:gjGGnbvip4dBO5aH2TxnYYcNTUwxRkBCrp7/hyAjF8I=
 github.com/golusoris/goenvoy/arr/v2 v2.5.0 h1:Qn1ZMPWYhODhXtyoH2B2NfVGWhNO94vO+SJSU/llINE=
 github.com/golusoris/goenvoy/arr/v2 v2.5.0/go.mod h1:N8X0AruGwgFDK9ApxRrfrsQYURom/kodVN2rGFXVEm4=
-github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=
-github.com/golusoris/goenvoy/metadata v1.3.1/go.mod h1:VDXGvMyayQDRBpacFqT9pZAHactFkqkHPFQLxgvu2Ao=
+github.com/golusoris/goenvoy/metadata v1.4.0 h1:XPYrNS2Kq1QLvtRtM28ZcDyUOnkBeh4H1+2/PM+1ph8=
+github.com/golusoris/goenvoy/metadata v1.4.0/go.mod h1:VEJ5vqTGsrZF8LQEhiTNpQUW8Ju897k+yKVcXD/GGTY=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2 h1:uvkeQVFVUa56qHp7MaVPSuyEguSVj2ka7FSjmmsTSHU=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2/go.mod h1:PPptW5Q4wL0H4/bIMDZ01z53AhnpzeItcAowbEc+uJQ=
-github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2 h1:5vbOpwp5g3EPxdxDQwTc+BswA9/h8Vv+ocT7ccszScY=
-github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2/go.mod h1:tlTsUi8FMU/SHaoUds2J3OvQlYs42uYiTA2XIJc1QQc=
+github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.3 h1:aZD0d9TMZRskpd4zre0mQa5W+6/1yuASiPz/Smg6jTk=
+github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.3/go.mod h1:DnR3EN3QKNAenpFc0uwlERHb5kQASIgUTj1d2ZoaxtQ=
 github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2 h1:ZJxxPT/pIHfrDeCrQN5j50IwCy8ucBrPEyr622urTP8=
 github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2/go.mod h1:f1MTJHgvshNpXJGtGAt7044ez6flyFDhtZLbv3IxXMQ=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f h1:jopqB+UTSdJGEJT8tEqYyE29zN91fi2827oLET8tl7k=
