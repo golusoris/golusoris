@@ -110,6 +110,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
 	@bash scripts/ci/release-pr-ci_test.sh
+	@bash scripts/ci/require-green-ci_test.sh
 	@bash scripts/ci/install-gitleaks_test.sh
 	@bash scripts/ci/install-shellcheck_test.sh
 	@bash scripts/ci/install-vacuum_test.sh

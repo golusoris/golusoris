@@ -45,6 +45,8 @@ jobs:
     permissions:
       contents: read
       checks: read
+      # The aggregate check appears only when CI finishes; the run status says whether to keep waiting.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -57,57 +59,7 @@ jobs:
           REF: ${{ inputs.ref }}
         run: |
           set -euo pipefail
-          sha=$(git rev-parse HEAD)
-          echo "Gating ${REF} (${sha}) on check \"${CHECK_NAME}\""
-
-          # HISS-02: scalar bounds on the wait. The tag lands seconds after the
-          # merge commit, so the check is nearly always still running when we
-          # arrive -- waiting is the normal path, not the exception. Main's CI
-          # is slow on cold runners (Lint alone is allowed 65 min), hence
-          # the generous ceiling. Finite, though: a tag that cannot show a
-          # green CI is not a release.
-          POLL_INTERVAL_SECONDS=30
-          POLL_ATTEMPTS=180          # 180 x 30 s = 90 min
-          # A queued workflow registers its check runs within seconds, but a
-          # busy runner queue can delay that. Tolerate an absent check only this
-          # long; past it, "no check" means "unverified commit".
-          MISSING_GRACE_ATTEMPTS=20  # 10 min
-
-          for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
-            # gh's built-in --jq keeps the gate independent of a separate jq
-            # binary on the runner image.
-            # A re-run attaches a second check run with the same name to the
-            # same commit, so take the most recently started one.
-            state=$(gh api \
-              "repos/${GITHUB_REPOSITORY}/commits/${sha}/check-runs?check_name=${CHECK_NAME// /%20}&per_page=100" \
-              --jq '[.check_runs[]] | sort_by(.started_at) | last
-                    | if . == null then "missing none"
-                      else "\(.status) \(.conclusion // "none")" end')
-            status=${state%% *}
-            conclusion=${state##* }
-
-            case "$status" in
-              completed)
-                if [ "$conclusion" = "success" ]; then
-                  echo "\"${CHECK_NAME}\" passed on ${sha}."
-                  exit 0
-                fi
-                echo "::error::\"${CHECK_NAME}\" concluded ${conclusion} on ${sha} — refusing to publish."
-                exit 1
-                ;;
-              missing)
-                if [ "$attempt" -gt "$MISSING_GRACE_ATTEMPTS" ]; then
-                  echo "::error::no \"${CHECK_NAME}\" check run on ${sha} — refusing to publish an unverified commit."
-                  exit 1
-                fi
-                echo "attempt ${attempt}/${POLL_ATTEMPTS}: no \"${CHECK_NAME}\" yet; waiting ${POLL_INTERVAL_SECONDS}s"
-                ;;
-              *)
-                echo "attempt ${attempt}/${POLL_ATTEMPTS}: \"${CHECK_NAME}\" is ${status}; waiting ${POLL_INTERVAL_SECONDS}s"
-                ;;
-            esac
-            sleep "$POLL_INTERVAL_SECONDS"
-          done
-
-          echo "::error::\"${CHECK_NAME}\" did not conclude on ${sha} within $((POLL_ATTEMPTS * POLL_INTERVAL_SECONDS / 60)) min — refusing to publish."
-          exit 1
+          SHA=$(git rev-parse HEAD)
+          export SHA
+          echo "Gating ${REF} (${SHA})"
+          bash scripts/ci/require-green-ci.sh
