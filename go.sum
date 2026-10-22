@@ -452,8 +452,8 @@ github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/golusoris/goenvoy/arr/sonarr v1.5.1 h1:AjuzespjMqFU5BsvLA4yZ9LcmYK4CL9HKkaG35EpCXk=
 github.com/golusoris/goenvoy/arr/sonarr v1.5.1/go.mod h1:3FCbKin0fmszGzG/kN1toh39yBFhPg4j2ixBhkjpoUU=
-github.com/golusoris/goenvoy/arr/v2 v2.3.0 h1:QAiGsbuFhRLc7SjvoG7rf40SujYcvwHqEyqKij3HX9o=
-github.com/golusoris/goenvoy/arr/v2 v2.3.0/go.mod h1:N8X0AruGwgFDK9ApxRrfrsQYURom/kodVN2rGFXVEm4=
+github.com/golusoris/goenvoy/arr/v2 v2.5.0 h1:Qn1ZMPWYhODhXtyoH2B2NfVGWhNO94vO+SJSU/llINE=
+github.com/golusoris/goenvoy/arr/v2 v2.5.0/go.mod h1:N8X0AruGwgFDK9ApxRrfrsQYURom/kodVN2rGFXVEm4=
 github.com/golusoris/goenvoy/metadata v1.3.1 h1:mkEn588COjf3QV8DD5Swhq4P8+MKrEsOiU2SF+MYEpY=
 github.com/golusoris/goenvoy/metadata v1.3.1/go.mod h1:VDXGvMyayQDRBpacFqT9pZAHactFkqkHPFQLxgvu2Ao=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1 h1:nCM4/V1Nq2aiEC2s3ZYY2g17T6sAPxVUowjVtknik6Y=
