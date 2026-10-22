@@ -73,7 +73,7 @@ def integer_field(
     if (
         isinstance(value, bool)
         or not isinstance(value, int)
-        or not minimum <= value <= maximum
+        or not minimum < value <= maximum
     ):
         raise ContractError(f"{name} must be an integer in [{minimum}, {maximum}]")
     return value
