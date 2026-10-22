@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/pdf
 
-go 1.27.2
+go 1.27.3
 
 require (
 	github.com/chromedp/cdproto v0.158.0

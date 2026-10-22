@@ -45,7 +45,16 @@ Get bounded by 5s or caller deadline (registry default 2s).
 
 ## Don't
 
-- Don't tag readiness: stale backup must not pull pods from service.
-- Don't pick `maxAge` = schedule interval; allow backup runtime slack
+- No readiness tag: stale backup never pulls pods from service.
+- No `maxAge` = schedule interval; allow backup runtime slack
  (daily schedule -> ~26h).
 - RBAC: `get` on `clusters.postgresql.cnpg.io` in namespace.
+
+## Tests
+
+- Envtest suite (build tag `envtest`) tests CRD status schema against live kube-apiserver; runs in CI only.
+- `restore_kind_test.go` (`//go:build cnpgkind`): validates `BackupCheck` against live CNPG in kind cluster.
+- `TestKind_BackupCheck_Positive`: backup health returns nil post-backup.
+- `TestKind_BackupCheck_Negative`: missing cluster returns `ErrClusterNotFound`.
+- `TestKind_BackupCheck_Boundary`: recovery cluster without backup returns `ErrNoBackup`.
+- Skips when `KUBECONFIG` empty. CI step `Run CNPG backup restore in kind` (job `kubeconform`) runs `scripts/ci/cnpg-restore.sh`, fails on skip.

@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+# CI-only on-demand base backup of pg-source for scripts/ci/cnpg-restore.sh.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Backup
+metadata:
+  name: pg-source-backup
+  namespace: cnpg-restore
+spec:
+  cluster:
+    name: pg-source
+  method: barmanObjectStore

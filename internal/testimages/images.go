@@ -30,7 +30,7 @@ const (
 	// ClickHouse is the default ClickHouse integration-test image.
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
-	Redpanda = "redpandadata/redpanda:v26.2.4@sha256:c98c2f04a751e6646012cc701bac5183252cee44c88ba1dfa412e4c7124f2e89"
+	Redpanda = "redpandadata/redpanda:v26.2.5@sha256:badca2d958f81da675c3055a9ecb6ebb590325582bcf16936148ffd65e96e920"
 	// VersityGW is the S3-compatible gateway that enforces SigV4 for storage tests.
 	VersityGW = "versity/versitygw:v1.9.0@sha256:eb7f786fcd91e72194e48fcf1ac16302d686bf8e3a71434bdbc067a6efd3fdc7"
 	// FakeGCSServer is the GCS emulator for the storage/gcs module tests.
@@ -40,11 +40,13 @@ const (
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the malware-scanner image; it ships its signatures, so clamd starts offline.
-	ClamAV = "clamav/clamav:1.5.4@sha256:638d90201ee7ee6a82d249a2fc23b132e578673b5f1f2766852b127676ca1ef6"
+	ClamAV = "clamav/clamav:1.5.4@sha256:e19130cdebaeacc71fa46eab3ed6f69941f2f22aa5e08d55e9197f8edf43ce5e"
 	// PubSubEmulator is the Google Cloud Pub/Sub emulator integration-test image.
 	PubSubEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:588.0.0-emulators@sha256:be2f0e582a94c9e06e7a384fe2b3b39d590eeb8da65a110eda991598c100fe80"
 	// Mailpit is the SMTP server and API emulator image for notify tests.
 	Mailpit = "axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387"
+	// StripeMock is the Stripe API emulator image for payments/stripe integration tests.
+	StripeMock = "stripe/stripe-mock:v0.206.0@sha256:aeb96b83e87a893d2ac005e363ac01ffa6e59a5ad85b49c155dfc9129de02e78"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")

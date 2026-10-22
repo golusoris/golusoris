@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris
 
-go 1.27.2
+go 1.27.3
 
 replace github.com/golusoris/golusoris/core => ./core
 
@@ -47,15 +47,15 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
-	github.com/golusoris/goenvoy/arr/sonarr v1.3.1
-	github.com/golusoris/goenvoy/arr/v2 v2.1.0
-	github.com/golusoris/goenvoy/metadata v1.3.1
-	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.1
-	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.2
+	github.com/golusoris/goenvoy/arr/sonarr v1.5.2
+	github.com/golusoris/goenvoy/arr/v2 v2.5.0
+	github.com/golusoris/goenvoy/metadata v1.4.0
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2
+	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.3
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2
 	github.com/golusoris/golusoris/core v0.12.0
 	github.com/google/uuid v1.6.0
-	github.com/grafana/grafana-foundation-sdk/go v0.0.20
+	github.com/grafana/grafana-foundation-sdk/go v0.0.21
 	github.com/grafana/pyroscope-go v1.4.3
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/h2non/filetype v1.1.3
@@ -84,7 +84,7 @@ require (
 	github.com/otiai10/copy v1.14.1
 	github.com/pgvector/pgvector-go v0.4.1
 	github.com/pgvector/pgvector-go/pgx v0.4.1
-	github.com/pion/webrtc/v4 v4.2.23
+	github.com/pion/webrtc/v4 v4.2.24
 	github.com/pquerna/otp v1.5.0
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.1
 	github.com/prometheus/client_golang v1.25.0
@@ -340,7 +340,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.33 // indirect
 	github.com/pion/datachannel v1.6.3 // indirect
-	github.com/pion/dtls/v3 v3.1.10 // indirect
+	github.com/pion/dtls/v3 v3.1.13 // indirect
 	github.com/pion/ice/v4 v4.4.7 // indirect
 	github.com/pion/interceptor v0.1.49 // indirect
 	github.com/pion/logging v0.2.4 // indirect

@@ -2,11 +2,11 @@
 // root go.mod. Both reference programs share this dependency authority.
 module github.com/golusoris/golusoris/deploy
 
-go 1.27.2
+go 1.27.3
 
 require (
-	github.com/pulumi/pulumi-aws/sdk/v7 v7.51.0
-	github.com/pulumi/pulumi/sdk/v3 v3.268.0
+	github.com/pulumi/pulumi-aws/sdk/v7 v7.51.1
+	github.com/pulumi/pulumi/sdk/v3 v3.270.0
 )
 
 require (
