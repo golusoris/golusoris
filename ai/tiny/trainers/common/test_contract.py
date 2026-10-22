@@ -11,6 +11,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 from trainers.common import contract
 
@@ -127,6 +128,59 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(contract._copy_bounded(io.BytesIO(b"1234"), destination, 4), 4)
         with self.assertRaisesRegex(contract.ContractError, "beyond 4"):
             contract._copy_bounded(io.BytesIO(b"12345"), io.BytesIO(), 4)
+
+    def test_integer_field_positive_and_boundary(self) -> None:
+        self.assertEqual(contract.integer_field({}, "epochs", 10, 1, 100), 10)
+        self.assertEqual(
+            contract.integer_field({"epochs": 50}, "epochs", 10, 1, 100), 50
+        )
+        self.assertEqual(contract.integer_field({"epochs": 1}, "epochs", 10, 1, 100), 1)
+        self.assertEqual(
+            contract.integer_field({"epochs": 100}, "epochs", 10, 1, 100), 100
+        )
+
+    def test_integer_field_negative_and_boundary_rejection(self) -> None:
+        with self.assertRaisesRegex(contract.ContractError, "must be an integer"):
+            contract.integer_field({"epochs": True}, "epochs", 10, 1, 100)
+        with self.assertRaisesRegex(contract.ContractError, "must be an integer"):
+            contract.integer_field({"epochs": "50"}, "epochs", 10, 1, 100)
+        with self.assertRaisesRegex(contract.ContractError, "must be an integer"):
+            contract.integer_field({"epochs": 50.5}, "epochs", 10, 1, 100)
+        with self.assertRaisesRegex(contract.ContractError, r"in \[1, 100\]"):
+            contract.integer_field({"epochs": 0}, "epochs", 10, 1, 100)
+        with self.assertRaisesRegex(contract.ContractError, r"in \[1, 100\]"):
+            contract.integer_field({"epochs": 101}, "epochs", 10, 1, 100)
+
+    def test_number_field_positive_and_boundary(self) -> None:
+        self.assertEqual(contract.number_field({}, "lr", 0.01, 0.0, 1.0), 0.01)
+        self.assertEqual(contract.number_field({"lr": 0.5}, "lr", 0.01, 0.0, 1.0), 0.5)
+        self.assertEqual(contract.number_field({"lr": 1}, "lr", 0.01, 0.0, 1.0), 1.0)
+        self.assertEqual(contract.number_field({"lr": 0.0}, "lr", 0.01, 0.0, 1.0), 0.0)
+        self.assertEqual(contract.number_field({"lr": 1.0}, "lr", 0.01, 0.0, 1.0), 1.0)
+
+    def test_number_field_negative_and_boundary_rejection(self) -> None:
+        with self.assertRaisesRegex(contract.ContractError, "must be a number"):
+            contract.number_field({"lr": True}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, "must be a number"):
+            contract.number_field({"lr": False}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, "must be a number"):
+            contract.number_field({"lr": "0.5"}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, "must be finite"):
+            contract.number_field({"lr": float("nan")}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, "must be finite"):
+            contract.number_field({"lr": float("inf")}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, "must be finite"):
+            contract.number_field({"lr": float("-inf")}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, r"in \[0.0, 1.0\]"):
+            contract.number_field({"lr": -0.0001}, "lr", 0.01, 0.0, 1.0)
+        with self.assertRaisesRegex(contract.ContractError, r"in \[0.0, 1.0\]"):
+            contract.number_field({"lr": 1.0001}, "lr", 0.01, 0.0, 1.0)
+
+    def test_contract_smoke_requested(self) -> None:
+        self.assertFalse(contract.contract_smoke_requested([]))
+        self.assertTrue(contract.contract_smoke_requested(["--contract-smoke"]))
+        with mock.patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+            contract.contract_smoke_requested(["--unknown-flag"])
 
 
 if __name__ == "__main__":

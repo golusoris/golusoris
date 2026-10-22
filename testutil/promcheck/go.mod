@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/testutil/promcheck
 go 1.27.3
 
 require (
-	github.com/golusoris/golusoris v0.17.0
+	github.com/golusoris/golusoris v0.18.0
 	github.com/golusoris/golusoris/core v0.12.0
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
