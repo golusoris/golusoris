@@ -289,14 +289,12 @@ func httpStatusProblem(m statusMapping, err error, instance string) Problem {
 		detail = err.Error()
 	}
 	return Problem{
-		ProblemDetails: gerr.ProblemDetails{
-			Type:         "about:blank",
-			Title:        http.StatusText(m.httpStatus),
-			Status:       m.httpStatus,
-			Detail:       detail,
-			Instance:     instance,
-			ErrorMessage: detail,
-		},
+		Type:         "about:blank",
+		Title:        http.StatusText(m.httpStatus),
+		Status:       m.httpStatus,
+		Detail:       detail,
+		Instance:     instance,
+		ErrorMessage: detail,
 	}
 }
 
@@ -322,14 +320,12 @@ func securityProblem(cfg *errorHandlerConfig, instance string) Problem {
 		detail = http.StatusText(status)
 	}
 	return Problem{
-		ProblemDetails: gerr.ProblemDetails{
-			Type:         "about:blank",
-			Title:        http.StatusText(status),
-			Status:       status,
-			Detail:       detail,
-			Instance:     instance,
-			ErrorMessage: detail,
-		},
+		Type:         "about:blank",
+		Title:        http.StatusText(status),
+		Status:       status,
+		Detail:       detail,
+		Instance:     instance,
+		ErrorMessage: detail,
 	}
 }
 
