@@ -29,10 +29,12 @@ jobs:
   require-green-ci:
     uses: ./.github/workflows/require-green-ci.yml
     # A called workflow gets no more than its caller grants; the gate reads
-    # check runs, so without checks: read the tag run fails at startup.
+    # check runs and CI workflow runs, so without checks: read and actions: read
+    # the tag run fails at startup.
     permissions:
       contents: read
       checks: read
+      actions: read
     with:
       ref: ${{ github.sha }}
 

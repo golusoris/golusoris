@@ -401,6 +401,20 @@ jobs:
             echo "::error::the stripe-mock integration suite skipped instead of running"
             exit 1
           fi
+      - name: Run the Bugsink integration suite
+        if: matrix.primary
+        timeout-minutes: 15
+        env:
+          RYUK_RECONNECTION_TIMEOUT: 30m
+        run: |
+          set -euo pipefail
+          LOG="$RUNNER_TEMP/bugsink-integration.log"
+          go test -race -count=1 -v -tags integration -run '^TestIntegration_' -timeout 10m ./observability/sentry/ | tee "$LOG"
+          # The suite skips without Docker; here a skip is a failure, not a pass.
+          if grep -q -- '--- SKIP' "$LOG"; then
+            echo "::error::the Bugsink integration suite skipped instead of running"
+            exit 1
+          fi
       - name: Check coverage threshold (70%)
         if: matrix.primary
         run: |
