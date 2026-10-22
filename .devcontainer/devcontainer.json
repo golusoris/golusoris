@@ -6,22 +6,10 @@
   },
   "features": {
     "ghcr.io/devcontainers/features/common-utils:2": {
-      "configureZshAsDefaultShell": false,
-      "installOhMyZsh": false,
-      "installOhMyZshConfig": false,
-      "installSsl": true,
       "installZsh": false,
-      "nonFreePackages": false,
-      "sudoers": true,
-      "upgradePackages": true,
-      "userGid": "1000",
-      "userUid": "1000",
-      "username": "vscode"
+      "upgradePackages": true
     },
-    "ghcr.io/devcontainers/features/go:1": {
-      "installGoTools": false,
-      "version": "1.27.3"
-    }
+    "ghcr.io/devcontainers/features/go:1": {}
   },
   "customizations": {
     "praetor": {
@@ -30,10 +18,11 @@
         "state": "source-bundle",
         "builderImage": "docker.io/library/golang@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d",
         "baseImage": "mcr.microsoft.com/devcontainers/base@sha256:91eff046d5c12318fc98e59258982b87ba896c467427ed8b5dab5a02107a5db7",
-        "sourceSHA256": "sha256:452c21cdace89e772f42f91501752cc336c072e781801522a5a775cfab05ef9a",
-        "archiveSHA256": "sha256:50b90640dd25f84942e7ce69c79216b1e7b2788478a2bdd043062312047843a6",
+        "golangciLintVersion": "v2.15.0",
+        "sourceSHA256": "sha256:244709ec5539d57630528be4d45375321c16450a3170cee129a1898c971beabb",
+        "archiveSHA256": "sha256:3ccc3bf0df559799c0852b22302f50965248e68ace5becdf97e7067e9180ecfa",
         "archiveParts": 7,
-        "dockerfileSHA256": "sha256:a541a4a78a0a93f928d7070bb48ed4e99f44778a21c06f3b372620b053eba929"
+        "dockerfileSHA256": "sha256:b1197d59b5b4c9ba346e7d9b02118b35e74012393aa52820c368d7214821e868"
       }
     },
     "vscode": {
