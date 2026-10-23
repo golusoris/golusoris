@@ -19,7 +19,7 @@ readonly verifier="$repo_root/scripts/ci/verify-system-packages.sh"
 readonly cgo_installer="$repo_root/scripts/ci/install-cgo-libs.sh"
 fake_bin="$suite_root/bin"
 mkdir -p "$fake_bin"
-for tool in awk bash dirname env timeout; do
+for tool in awk bash cp dirname env id mkdir timeout; do
 	ln -s "$(command -v "$tool")" "$fake_bin/$tool"
 done
 
@@ -28,6 +28,10 @@ cat >"$fake_bin/sudo" <<'EOF'
 [[ "$1" == -n ]] || exit 97
 shift
 exec "$@"
+EOF
+cat >"$fake_bin/chown" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >>"${CHOWN_LOG:-/dev/null}"
 EOF
 cat >"$fake_bin/apt-get" <<'EOF'
 #!/usr/bin/env bash
@@ -38,9 +42,14 @@ install)
 	[[ "${FAIL_APT:-}" != install ]] || exit 100
 	for arg in "$@"; do
 		case "$arg" in
-		install | -y | --no-install-recommends | -o | Acquire::Retries=*) ;;
-		*=*) printf '%s %s\n' "${arg%%=*}" "${arg#*=}" >>"$INSTALLED" ;;
-		*) printf '%s 1.0\n' "$arg" >>"$INSTALLED" ;;
+		install | -y | --no-install-recommends | -o | Acquire::* | Dir::Cache::Archives=* | APT::Keep-Downloaded-Packages=true) ;;
+		*=*)
+			pkg="${arg%%=*}"
+			printf '%s %s\n' "$pkg" "${arg#*=}" >>"$INSTALLED"
+			;;
+		*)
+			printf '%s 1.0\n' "$arg" >>"$INSTALLED"
+			;;
 		esac
 	done
 	;;
@@ -54,10 +63,11 @@ version="$(awk -v p="$package" '$1 == p { v = $2 } END { print v }' "$INSTALLED"
 [[ -n "$version" ]] || exit 1
 printf 'installed %s' "$version"
 EOF
-chmod +x "$fake_bin/sudo" "$fake_bin/apt-get" "$fake_bin/dpkg-query"
+chmod +x "$fake_bin/sudo" "$fake_bin/chown" "$fake_bin/apt-get" "$fake_bin/dpkg-query"
 
 reset_state() {
 	: >"$suite_root/apt.log"
+	: >"$suite_root/chown.log"
 	printf 'libfoo-dev 1.0\n' >"$suite_root/installed"
 }
 
@@ -65,7 +75,9 @@ run_in() {
 	local path="$1"
 	shift
 	env -i PATH="$path" APT_LOG="$suite_root/apt.log" \
+		CHOWN_LOG="$suite_root/chown.log" \
 		INSTALLED="$suite_root/installed" FAIL_APT="${FAIL_APT:-}" \
+		APT_ARCHIVE_DIR="${APT_ARCHIVE_DIR:-}" \
 		"$BASH" "$@"
 }
 
@@ -113,9 +125,43 @@ require_no_apt
 # Positive: --install updates, installs with bounded retries, then verifies.
 reset_state
 run_verifier --install libbar-dev 'libbaz-dev=2.1' >/dev/null
-require_log 'update -o Acquire::Retries=3'
-require_log 'install -y --no-install-recommends -o Acquire::Retries=3 libbar-dev libbaz-dev=2.1'
+require_log 'update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'
+require_log 'install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 libbar-dev libbaz-dev=2.1'
 run_verifier libbar-dev 'libbaz-dev=2.1'
+
+# Positive: APT_ARCHIVE_DIR set configures Dir::Cache::Archives, keeps debs, creates partial, and chowns.
+reset_state
+fake_cache="$suite_root/fake-cache"
+APT_ARCHIVE_DIR="$fake_cache" run_verifier --install libbar-dev >/dev/null
+require_log 'update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'
+require_log "install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::Archives=$fake_cache -o APT::Keep-Downloaded-Packages=true libbar-dev"
+if grep '^update ' "$suite_root/apt.log" | grep -E -q 'Dir::Cache::Archives|APT::Keep-Downloaded-Packages'; then
+	printf 'apt-get update unexpectedly received archive options: %s\n' "$(cat "$suite_root/apt.log")" >&2
+	exit 1
+fi
+if [[ ! -d "$fake_cache/partial" ]]; then
+	printf 'APT_ARCHIVE_DIR/partial was not created: %s\n' "$fake_cache/partial" >&2
+	exit 1
+fi
+expected_chown="-R $(id -u):$(id -g) $fake_cache"
+if ! grep -Fxq -- "$expected_chown" "$suite_root/chown.log"; then
+	printf 'chown was not called as: %s\nlog:\n%s\n' "$expected_chown" "$(cat "$suite_root/chown.log")" >&2
+	exit 1
+fi
+
+# Positive: APT_ARCHIVE_DIR unset passes neither option and performs no chown.
+reset_state
+APT_ARCHIVE_DIR="" run_verifier --install libbar-dev >/dev/null
+require_log 'update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'
+require_log 'install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 libbar-dev'
+if grep -E -q 'Dir::Cache::Archives|APT::Keep-Downloaded-Packages' "$suite_root/apt.log"; then
+	printf 'apt-get received archive options when APT_ARCHIVE_DIR was unset\n' >&2
+	exit 1
+fi
+if [[ -s "$suite_root/chown.log" ]]; then
+	printf 'chown ran although APT_ARCHIVE_DIR was unset: %s\n' "$(cat "$suite_root/chown.log")" >&2
+	exit 1
+fi
 
 # Negative: a failing apt-get install fails the step.
 reset_state
@@ -158,23 +204,54 @@ expect_failure 'require a Debian-family runner with dpkg-query' \
 # Positive: the cgo wrapper installs exactly the declared header set.
 reset_state
 run_in "$fake_bin" "$cgo_installer" >/dev/null
-require_log 'install -y --no-install-recommends -o Acquire::Retries=3 libudev-dev libopenal-dev libvorbis-dev libgl-dev libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev'
+require_log 'install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 libudev-dev libopenal-dev libvorbis-dev libgl-dev libx11-dev libxrandr-dev libxxf86vm-dev libxi-dev libxcursor-dev libxinerama-dev'
+
+check_action_wiring() {
+	local actions="$1"
+	local action_file="$actions/install-cgo-libs/action.yml"
+	if [[ ! -f "$action_file" ]]; then
+		printf 'install-cgo-libs action manifest missing: %s\n' "$action_file" >&2
+		return 1
+	fi
+	if ! grep -Fq 'run: bash scripts/ci/install-cgo-libs.sh' "$action_file"; then
+		printf 'install-cgo-libs action must run install-cgo-libs.sh\n' >&2
+		return 1
+	fi
+	if ! grep -Fq 'APT_ARCHIVE_DIR:' "$action_file"; then
+		printf 'install-cgo-libs action must set APT_ARCHIVE_DIR\n' >&2
+		return 1
+	fi
+	if ! grep -Fq 'uses: actions/cache/restore@' "$action_file"; then
+		printf 'install-cgo-libs action must restore apt cache\n' >&2
+		return 1
+	fi
+}
 
 # check_wiring proves the workflows install cgo headers and system packages
 # through these scripts, never inline and never from the caller's workspace.
 check_wiring() {
 	local workflows="$1"
+	local actions="${2:-$repo_root/.github/actions}"
 	local name
-	for name in ci portability; do
-		if ! grep -Fq 'run: bash scripts/ci/install-cgo-libs.sh' "$workflows/$name.yml"; then
-			printf '%s.yml does not install cgo headers through install-cgo-libs.sh\n' "$name" >&2
+	for name in ci portability release; do
+		if ! grep -Fq 'uses: ./.github/actions/install-cgo-libs' "$workflows/$name.yml"; then
+			printf '%s.yml does not install cgo headers through ./.github/actions/install-cgo-libs\n' "$name" >&2
 			return 1
 		fi
 	done
-	if [[ "$(grep -Fc 'run: bash scripts/ci/install-cgo-libs.sh' "$workflows/ci.yml")" -ne 3 ]]; then
+	if [[ "$(grep -Fc 'uses: ./.github/actions/install-cgo-libs' "$workflows/ci.yml")" -ne 3 ]]; then
 		printf 'ci.yml must install cgo headers in the module sweep, apidiff and fault scan jobs\n' >&2
 		return 1
 	fi
+	if [[ "$(grep -Fc 'uses: ./.github/actions/install-cgo-libs' "$workflows/portability.yml")" -ne 1 ]]; then
+		printf 'portability.yml must install cgo headers in the Linux job\n' >&2
+		return 1
+	fi
+	if [[ "$(grep -Fc 'uses: ./.github/actions/install-cgo-libs' "$workflows/release.yml")" -ne 1 ]]; then
+		printf 'release.yml must install cgo headers in the apidiff job\n' >&2
+		return 1
+	fi
+	check_action_wiring "$actions" || return 1
 	# praetor-api.yml is Praetor's rendering of .standards.yaml api.system_packages,
 	# byte-locked by its audit; check_api_packages keeps that list equal to ours.
 	if grep -rHn --exclude=praetor-api.yml 'libudev-dev' "$workflows"; then
@@ -205,7 +282,7 @@ check_wiring() {
 	fi
 }
 
-check_wiring "$repo_root/.github/workflows"
+check_wiring "$repo_root/.github/workflows" "$repo_root/.github/actions"
 
 # check_api_packages proves .standards.yaml api.system_packages, which Praetor
 # renders into praetor-api.yml, lists exactly the packages install-cgo-libs.sh installs.
@@ -237,26 +314,44 @@ expect_api_packages_rejection api-package-missing '/^    - libxinerama-dev$/d'
 expect_api_packages_rejection api-package-extra 's/^    - libudev-dev$/    - libudev-dev\n    - libfoo-dev/'
 expect_wiring_rejection() {
 	local name="$1" file="$2" expression="$3"
-	cp -R "$repo_root/.github/workflows" "$suite_root/$name"
-	sed -i "$expression" "$suite_root/$name/$file"
-	if cmp -s "$repo_root/.github/workflows/$file" "$suite_root/$name/$file"; then
+	local work_dir="$suite_root/$name"
+	mkdir -p "$work_dir/workflows" "$work_dir/actions"
+	cp -R "$repo_root/.github/workflows/." "$work_dir/workflows/"
+	cp -R "$repo_root/.github/actions/." "$work_dir/actions/"
+	local target cmp_src
+	if [[ -f "$work_dir/workflows/$file" ]]; then
+		target="$work_dir/workflows/$file"
+		cmp_src="$repo_root/.github/workflows/$file"
+	elif [[ -f "$work_dir/actions/$file" ]]; then
+		target="$work_dir/actions/$file"
+		cmp_src="$repo_root/.github/actions/$file"
+	else
+		printf 'negative control %s: file %s not found in workflows or actions\n' "$name" "$file" >&2
+		exit 1
+	fi
+	sed -i "$expression" "$target"
+	if cmp -s "$cmp_src" "$target"; then
 		printf 'negative control %s did not mutate %s\n' "$name" "$file" >&2
 		exit 1
 	fi
-	if check_wiring "$suite_root/$name" >/dev/null 2>&1; then
+	if check_wiring "$work_dir/workflows" "$work_dir/actions" >/dev/null 2>&1; then
 		printf 'workflow wiring check accepted negative control %s\n' "$name" >&2
 		exit 1
 	fi
 }
 expect_wiring_rejection inline-cgo portability.yml \
-	's|run: bash scripts/ci/install-cgo-libs.sh|run: sudo apt-get install -y libudev-dev|'
+	's|uses: \./\.github/actions/install-cgo-libs|run: sudo apt-get install -y libudev-dev|'
 expect_wiring_rejection sweep-without-cgo ci.yml \
-	'0,\|run: bash scripts/ci/install-cgo-libs.sh|s||run: "true"|'
+	'0,\|uses: \./\.github/actions/install-cgo-libs|s||run: "true"|'
 # shellcheck disable=SC2016 # Plant the literal caller-workspace path.
 expect_wiring_rejection caller-script ci-go.yml \
 	's|bash "$ci_root/scripts/ci/verify-system-packages.sh"|bash "${GITHUB_WORKSPACE}/scripts/ci/verify-system-packages.sh"|'
 # shellcheck disable=SC2016 # Plant against the literal runtime variable.
 expect_wiring_rejection install-ungated ci-go.yml \
 	's|if \[\[ "$INSTALL_SYSTEM_PACKAGES" == true \]\]; then|if true; then|'
+expect_wiring_rejection action-without-restore install-cgo-libs/action.yml \
+	'/uses: actions\/cache\/restore@/d'
+expect_wiring_rejection action-without-archive-dir install-cgo-libs/action.yml \
+	'/APT_ARCHIVE_DIR:/d'
 
 printf 'system package install and verify policy tests passed\n'

@@ -536,8 +536,8 @@ jobs:
           cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules in this sweep; hosted images lack their headers.
       - name: Install cgo system libraries
-        timeout-minutes: 10
-        run: bash scripts/ci/install-cgo-libs.sh
+        timeout-minutes: 15
+        uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
       - name: Install verified Pact FFI
         run: |
@@ -687,8 +687,8 @@ jobs:
           cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules; hosted images lack their headers.
       - name: Install cgo system libraries
-        timeout-minutes: 10
-        run: bash scripts/ci/install-cgo-libs.sh
+        timeout-minutes: 15
+        uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
       - name: Install verified Pact FFI
         run: |
@@ -1083,8 +1083,8 @@ jobs:
           cache-dependency-path: '**/go.sum'
       # apidiff type-checks every module, including the cgo ones.
       - name: Install cgo system libraries
-        timeout-minutes: 10
-        run: bash scripts/ci/install-cgo-libs.sh
+        timeout-minutes: 15
+        uses: ./.github/actions/install-cgo-libs
       - name: Install apidiff
         run: |
           set -euo pipefail

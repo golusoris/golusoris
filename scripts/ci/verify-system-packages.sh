@@ -13,7 +13,7 @@ set -euo pipefail
 readonly max_packages=64
 readonly apt_retries=3
 readonly apt_update_timeout_seconds=180
-readonly apt_install_timeout_seconds=420
+readonly apt_install_timeout_seconds=600
 
 usage() {
   echo "usage: ${0##*/} [--install] <package[=version]>..." >&2
@@ -36,10 +36,29 @@ install_packages() {
     echo "::error::installing system packages requires a Debian-family runner with apt-get"
     return 1
   fi
+  local -a archive_opts=()
+  if [[ -n "${APT_ARCHIVE_DIR:-}" ]]; then
+    mkdir -p "$APT_ARCHIVE_DIR/partial"
+    archive_opts=(
+      -o "Dir::Cache::Archives=$APT_ARCHIVE_DIR"
+      -o APT::Keep-Downloaded-Packages=true
+    )
+  fi
   as_root timeout "$apt_update_timeout_seconds" \
-    apt-get update -o Acquire::Retries="$apt_retries"
+    apt-get update \
+    -o Acquire::Retries="$apt_retries" \
+    -o Acquire::http::Timeout=30 \
+    -o Acquire::https::Timeout=30
   as_root env DEBIAN_FRONTEND=noninteractive timeout "$apt_install_timeout_seconds" \
-    apt-get install -y --no-install-recommends -o Acquire::Retries="$apt_retries" "$@"
+    apt-get install -y --no-install-recommends \
+    -o Acquire::Retries="$apt_retries" \
+    -o Acquire::http::Timeout=30 \
+    -o Acquire::https::Timeout=30 \
+    "${archive_opts[@]}" \
+    "$@"
+  if [[ -n "${APT_ARCHIVE_DIR:-}" ]]; then
+    as_root chown -R "$(id -u):$(id -g)" "$APT_ARCHIVE_DIR"
+  fi
 }
 
 install=false
