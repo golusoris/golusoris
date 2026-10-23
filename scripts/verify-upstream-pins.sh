@@ -127,7 +127,7 @@ check_scalar() {
   if ! grep -Fq "@scalar/api-reference $plain" "$root/apidocs/embed/scalar.js"; then
     record_failure "@scalar/api-reference: scalar.js header does not identify $plain"
   fi
-  # The weekly job rebuilds the bundle; an old release date means it has been silent.
+  # The scheduled job checks bundle age; an old release date means updates have stalled.
   if ! age="$(bash "$root/scripts/ci/scalar-bundle-update.sh" age-check 2>&1)"; then
     record_failure "@scalar/api-reference: ${age#scalar bundle: }"
   fi
