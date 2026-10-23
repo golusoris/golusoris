@@ -102,12 +102,14 @@ expect_file() {
 	fi
 }
 
-# The newest release at least three days old wins over a younger one and over a pre-release.
 good="$fixture_dir/registry-good"
 make_registry "$good" 1.1.0 ''
+
+# Positive: bumped version in SCALAR_VERSION rewrites bundle, release date, and docs rows.
 tree="$fixture_dir/tree"
 make_tree "$tree"
-expect_output 'updated 1.0.0 -> 1.1.0 (released 2026-01-05)' run_script "$tree" "$good" 2026-01-10
+printf '1.1.0\n' >"$tree/apidocs/embed/SCALAR_VERSION"
+expect_output 'updated 1.0.0 -> 1.1.0 (released 2026-01-05)' run_script "$tree" "$good" 2026-01-10 regenerate
 expect_file "$tree/apidocs/embed/SCALAR_VERSION" 1.1.0
 expect_file "$tree/apidocs/embed/SCALAR_RELEASED" 2026-01-05
 grep -Fq '@scalar/api-reference 1.1.0' "$tree/apidocs/embed/scalar.js"
@@ -124,39 +126,60 @@ if grep -Fq '1.0.0' "$tree/docs/upstream/scalar/README.md"; then
 	exit 1
 fi
 
-# A second run changes nothing.
+# Boundary: a second run changes nothing (already current).
 before="$(cat "$tree/apidocs/embed/scalar.js" "$tree/docs/upstream/README.md" | cksum)"
-expect_output '1.1.0 is current' run_script "$tree" "$good" 2026-01-10
+expect_output '1.1.0 is current' run_script "$tree" "$good" 2026-01-10 regenerate
 [[ "$(cat "$tree/apidocs/embed/scalar.js" "$tree/docs/upstream/README.md" | cksum)" == "$before" ]]
 
-# Every newer release is younger than three days: nothing is taken.
+# Boundary: exactly three days old accepted.
+exact="$fixture_dir/tree-exact"
+make_tree "$exact"
+printf '1.1.0\n' >"$exact/apidocs/embed/SCALAR_VERSION"
+expect_output 'updated 1.0.0 -> 1.1.0 (released 2026-01-05)' run_script "$exact" "$good" '2026-01-08 10:00:00' regenerate
+expect_file "$exact/apidocs/embed/SCALAR_VERSION" 1.1.0
+expect_file "$exact/apidocs/embed/SCALAR_RELEASED" 2026-01-05
+grep -Fq '@scalar/api-reference 1.1.0' "$exact/apidocs/embed/scalar.js"
+
+# Negative: version younger than three days is refused and files are unchanged.
 young="$fixture_dir/tree-young"
 make_tree "$young"
-expect_output '1.0.0 is current' run_script "$young" "$good" 2026-01-06
-expect_file "$young/apidocs/embed/SCALAR_VERSION" 1.0.0
+printf '1.1.0\n' >"$young/apidocs/embed/SCALAR_VERSION"
+expect_refusal 'is younger than 3 days' run_script "$young" "$good" 2026-01-06 regenerate
+expect_file "$young/apidocs/embed/SCALAR_RELEASED" 2025-12-01
+grep -Fq '@scalar/api-reference 1.0.0' "$young/apidocs/embed/scalar.js"
 
-# A tarball that does not match the registry's sha512 is refused and nothing is written.
+# Negative: version absent from registry is refused and files are unchanged.
+absent="$fixture_dir/tree-absent"
+make_tree "$absent"
+printf '9.9.9\n' >"$absent/apidocs/embed/SCALAR_VERSION"
+expect_refusal 'version 9.9.9 is not in the registry' run_script "$absent" "$good" 2026-01-10 regenerate
+grep -Fq '@scalar/api-reference 1.0.0' "$absent/apidocs/embed/scalar.js"
+
+# Negative: sha512 mismatch is refused and files are unchanged.
 tampered="$fixture_dir/registry-tampered"
 make_registry "$tampered" 1.1.0 'sha512-AAAA'
 untouched="$fixture_dir/tree-tampered"
 make_tree "$untouched"
-expect_refusal "does not match the registry's sha512" run_script "$untouched" "$tampered" 2026-01-10
-expect_file "$untouched/apidocs/embed/SCALAR_VERSION" 1.0.0
+printf '1.1.0\n' >"$untouched/apidocs/embed/SCALAR_VERSION"
+expect_refusal "does not match the registry's sha512" run_script "$untouched" "$tampered" 2026-01-10 regenerate
+grep -Fq '@scalar/api-reference 1.0.0' "$untouched/apidocs/embed/scalar.js"
 
-# A bundle that names another version is refused and nothing is written.
+# Negative: a bundle that names another version is refused and files are unchanged.
 misnamed="$fixture_dir/registry-misnamed"
 make_registry "$misnamed" 9.9.9 ''
 unnamed="$fixture_dir/tree-misnamed"
 make_tree "$unnamed"
-expect_refusal 'does not name its own version' run_script "$unnamed" "$misnamed" 2026-01-10
-expect_file "$unnamed/apidocs/embed/SCALAR_VERSION" 1.0.0
+printf '1.1.0\n' >"$unnamed/apidocs/embed/SCALAR_VERSION"
+expect_refusal 'does not name its own version' run_script "$unnamed" "$misnamed" 2026-01-10 regenerate
+grep -Fq '@scalar/api-reference 1.0.0' "$unnamed/apidocs/embed/scalar.js"
+expect_file "$unnamed/apidocs/embed/SCALAR_RELEASED" 2025-12-01
 
 # Age check: inside the bound, past it, and with an unusable date file.
 expect_output 'is 5 days old' run_script "$tree" "$good" 2026-01-10 age-check
-expect_refusal 'the scheduled bundle job produced nothing' run_script "$tree" "$good" 2026-02-20 age-check
+expect_refusal 'the Renovate update path produced nothing' run_script "$tree" "$good" 2026-02-20 age-check
 printf 'soon\n' >"$tree/apidocs/embed/SCALAR_RELEASED"
 expect_refusal 'SCALAR_RELEASED is not a date' run_script "$tree" "$good" 2026-01-10 age-check
 rm "$tree/apidocs/embed/SCALAR_RELEASED"
 expect_refusal 'SCALAR_RELEASED is missing' run_script "$tree" "$good" 2026-01-10 age-check
 
-printf 'Scalar bundle update and age-check tests passed\n'
+printf 'Scalar bundle regenerate and age-check tests passed\n'

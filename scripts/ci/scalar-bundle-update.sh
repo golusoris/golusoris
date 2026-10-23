@@ -5,12 +5,12 @@
 
 # Rebuilds the embedded API-docs bundle from the package registry, or checks its age.
 #
-#   scalar-bundle-update.sh            take the newest stable release that is at least
-#                                      min_age_days old, verify the tarball against the
-#                                      registry's sha512, and write the bundle, its version,
-#                                      its release date and the docs/upstream pin
-#   scalar-bundle-update.sh age-check  fail when the embedded release is older than
-#                                      max_age_days, which means the scheduled job is silent
+#   scalar-bundle-update.sh regenerate  rebuild the bundle for the version bumped in
+#                                       apidocs/embed/SCALAR_VERSION, verify the tarball
+#                                       against the registry's sha512, and rewrite
+#                                       scalar.js, SCALAR_RELEASED and docs/upstream pins
+#   scalar-bundle-update.sh age-check   fail when the embedded release is older than
+#                                       max_age_days, which means updates have stalled
 
 set -euo pipefail
 
@@ -24,9 +24,10 @@ readonly embed_dir="$root/apidocs/embed"
 readonly day_seconds=86400
 # A release is adopted once it is three days old (the update rule of the fleet).
 readonly min_age_days=3
-# The job runs weekly. Upstream's longest gap between two releases in the 24 months to
-# 2026-10 was 20 days, so an embedded release older than 20 + 3 (age rule) + 14 (two job
-# intervals) + 7 (landing the pull request) = 44 days means the job produced nothing.
+# Renovate proposes a release once it is min_age_days old. Upstream's longest gap between
+# two releases in the 24 months to 2026-10 was 20 days, so an embedded release older than
+# 20 + 3 (age rule) + 14 (Renovate and merge-train slack) + 7 (landing the pull request)
+# = 44 days means the update path produced nothing.
 readonly max_age_days=45
 
 now_epoch="${SCALAR_NOW_EPOCH:-$(date -u +%s)}"
@@ -45,26 +46,9 @@ age_check() {
 	released_epoch="$(date -u -d "$released" +%s)" || fail "SCALAR_RELEASED is not a calendar date: $released"
 	age_days=$(((now_epoch - released_epoch) / day_seconds))
 	if ((age_days > max_age_days)); then
-		fail "embedded release of $released is $age_days days old, bound $max_age_days: the scheduled bundle job produced nothing; run it or scripts/ci/scalar-bundle-update.sh"
+		fail "embedded release of $released is $age_days days old, bound $max_age_days: the Renovate update path produced nothing; check the @scalar/api-reference update pull request"
 	fi
 	printf 'scalar bundle: embedded release of %s is %d days old (bound %d)\n' "$released" "$age_days" "$max_age_days"
-}
-
-# newest_eligible META: the highest plain x.y.z version published at or before the age cut-off.
-newest_eligible() {
-	local cutoff=$((now_epoch - min_age_days * day_seconds))
-	jq -r --argjson cutoff "$cutoff" '
-		.time as $published
-		| [.versions | keys[]
-			| select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
-			| select(($published[.] | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) <= $cutoff)]
-		| sort_by(split(".") | map(tonumber))
-		| last // ""' "$1"
-}
-
-# is_newer CANDIDATE CURRENT: true when CANDIDATE sorts after CURRENT.
-is_newer() {
-	[[ "$1" != "$2" ]] && [[ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" == "$1" ]]
 }
 
 fetch_bundle() {
@@ -90,28 +74,48 @@ write_pin() {
 	sed -i "s/${current//./\\.}/$version/g" "$root/docs/upstream/scalar/README.md"
 }
 
-update() {
-	local work meta current version released
+regenerate() {
+	local version raw_prev previous work meta pub_iso has_version cutoff pub_epoch released
+	[[ -f "$embed_dir/SCALAR_VERSION" ]] || fail 'apidocs/embed/SCALAR_VERSION is missing'
+	version="$(tr -d '\r\n' <"$embed_dir/SCALAR_VERSION")"
+	[[ -n "$version" ]] || fail 'apidocs/embed/SCALAR_VERSION is empty'
+
+	[[ -f "$root/docs/upstream/README.md" ]] || fail 'docs/upstream/README.md is missing'
+	raw_prev="$(awk -F '|' -v pkg="\`$package\`" '$2 ~ pkg { gsub(/[ `]/, "", $3); print $3 }' "$root/docs/upstream/README.md")"
+	previous="${raw_prev#v}"
+	[[ -n "$previous" ]] || fail 'could not determine previous version from docs/upstream/README.md'
+
+	if [[ -f "$embed_dir/scalar.js" ]] && grep -Fq "$package $version" "$embed_dir/scalar.js" && [[ "$previous" == "$version" ]]; then
+		printf 'scalar bundle: %s is current\n' "$version"
+		exit 0
+	fi
+
 	work="$(mktemp -d "${TMPDIR:-/tmp}/scalar-bundle.XXXXXX")"
 	# shellcheck disable=SC2064 # expand now: the directory name is fixed here.
 	trap "rm -rf '$work'" EXIT
 	meta="$work/meta.json"
 	curl -fsS --max-time 60 "$registry/@scalar%2Fapi-reference" -o "$meta"
-	current="$(tr -d '\r\n' <"$embed_dir/SCALAR_VERSION")"
-	version="$(newest_eligible "$meta")"
-	if [[ -z "$version" ]] || ! is_newer "$version" "$current"; then
-		printf 'scalar bundle: %s is current (newest release at least %d days old: %s)\n' \
-			"$current" "$min_age_days" "${version:-none}"
-		return
+
+	pub_iso="$(jq -r --arg v "$version" '.time[$v] // ""' "$meta")"
+	has_version="$(jq -r --arg v "$version" '.versions[$v] != null' "$meta")"
+	if [[ "$has_version" != "true" || -z "$pub_iso" ]]; then
+		fail "version $version is not in the registry"
 	fi
+
+	cutoff=$((now_epoch - min_age_days * day_seconds))
+	pub_epoch="$(jq -rn --arg t "$pub_iso" '($t | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601)')"
+	if ((pub_epoch > cutoff)); then
+		fail "release of $version is younger than $min_age_days days"
+	fi
+
 	fetch_bundle "$meta" "$version" "$work"
 	released="$(jq -r --arg v "$version" '.time[$v][0:10]' "$meta")"
-	write_pin "$current" "$version" "$released" "$work"
-	printf 'scalar bundle: updated %s -> %s (released %s)\n' "$current" "$version" "$released"
+	write_pin "$previous" "$version" "$released" "$work"
+	printf 'scalar bundle: updated %s -> %s (released %s)\n' "$previous" "$version" "$released"
 }
 
-case "${1:-update}" in
-update) update ;;
+case "${1:-regenerate}" in
+regenerate) regenerate ;;
 age-check) age_check ;;
 *) fail "unknown command: $1" ;;
 esac

@@ -402,6 +402,19 @@
       "depNameTemplate": "mcr.microsoft.com/devcontainers/go",
       "versioningTemplate": "docker",
       "autoReplaceStringTemplate": "# renovate: datasource=docker depName=mcr.microsoft.com/devcontainers/go\\n    # renovate-version: {{{newValue}}}\\n    image: mcr.microsoft.com/devcontainers/go@{{{newDigest}}}"
+    },
+    {
+      "customType": "regex",
+      "description": "Track the standalone Scalar API reference browser bundle release.",
+      "managerFilePatterns": [
+        "/^apidocs/embed/SCALAR_VERSION$/"
+      ],
+      "matchStrings": [
+        "^(?<currentValue>\\d+\\.\\d+\\.\\d+)\\n"
+      ],
+      "datasourceTemplate": "npm",
+      "depNameTemplate": "@scalar/api-reference",
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
