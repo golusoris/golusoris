@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Install cgo system libraries
+description: Restore cached apt archives, install cgo Debian headers, and save downloaded packages
+
+runs:
+  using: composite
+  steps:
+    - name: Restore cached apt archives
+      id: apt-cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/apt-archives
+        key: apt-${{ runner.os }}-${{ runner.arch }}-cgo-${{ hashFiles('scripts/ci/install-cgo-libs.sh') }}
+
+    - name: Install cgo Debian headers
+      shell: bash
+      env:
+        APT_ARCHIVE_DIR: ${{ runner.temp }}/apt-archives
+      run: bash scripts/ci/install-cgo-libs.sh
+
+    - name: Save apt archives cache
+      # success(): a failed install would pin an empty or partial archive set under the immutable key.
+      if: success() && steps.apt-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ runner.temp }}/apt-archives
+        key: apt-${{ runner.os }}-${{ runner.arch }}-cgo-${{ hashFiles('scripts/ci/install-cgo-libs.sh') }}
