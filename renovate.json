@@ -519,6 +519,19 @@
       "allowedVersions": "<3.14"
     },
     {
+      "description": "ai-edge-litert 2.3.0 publishes wheels for CPython 3.10-3.14 only; keep the TFLite sidecar Python base below 3.15. Revisit when ai-edge-litert ships a cp315 wheel.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchFileNames": [
+        "ai/tiny/serve/tflite/sidecar/Dockerfile"
+      ],
+      "matchPackageNames": [
+        "python"
+      ],
+      "allowedVersions": "<3.15"
+    },
+    {
       "description": "The custom manager owns this digest-only image so its variant remains explicit.",
       "matchManagers": [
         "docker-compose"

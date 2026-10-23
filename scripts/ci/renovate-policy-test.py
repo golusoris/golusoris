@@ -468,8 +468,8 @@ def test_localstack_hold(config: dict[str, object]) -> bool:
     return True
 
 
-def trainer_python_cap_valid(config: dict[str, object]) -> bool:
-    """Require the Python cap for both TensorFlow trainer base images."""
+def python_cap_valid(config: dict[str, object], files: list[str], cap: str) -> bool:
+    """Require exactly one docker Python cap rule for files at cap."""
     rules = config.get("packageRules")
     if not isinstance(rules, list):
         return False
@@ -478,14 +478,34 @@ def trainer_python_cap_valid(config: dict[str, object]) -> bool:
         for rule in rules
         if isinstance(rule, dict)
         and rule.get("matchDatasources") == ["docker"]
-        and rule.get("matchFileNames") == [
-            "ai/tiny/trainers/gemma/**",
-            "ai/tiny/trainers/litert/**",
-        ]
+        and rule.get("matchFileNames") == files
         and rule.get("matchPackageNames") == ["python"]
-        and rule.get("allowedVersions") == "<3.14"
+        and rule.get("allowedVersions") == cap
     ]
     return len(caps) == 1
+
+
+TRAINER_FILES = ["ai/tiny/trainers/gemma/**", "ai/tiny/trainers/litert/**"]
+SIDECAR_FILES = ["ai/tiny/serve/tflite/sidecar/Dockerfile"]
+
+
+def trainer_python_cap_valid(config: dict[str, object]) -> bool:
+    """Require the Python cap for both TensorFlow trainer base images."""
+    return python_cap_valid(config, TRAINER_FILES, "<3.14")
+
+
+def sidecar_python_cap_valid(config: dict[str, object]) -> bool:
+    """Require the Python cap for the ai-edge-litert sidecar base image."""
+    return python_cap_valid(config, SIDECAR_FILES, "<3.15")
+
+
+def without_python_rules(config: dict[str, object]) -> dict[str, object]:
+    """Return a copy of config with every Python package rule removed."""
+    mutated = json.loads(json.dumps(config))
+    mutated["packageRules"] = [
+        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
+    ]
+    return mutated
 
 
 def test_trainer_python_cap(config: dict[str, object]) -> bool:
@@ -493,12 +513,19 @@ def test_trainer_python_cap(config: dict[str, object]) -> bool:
     if not trainer_python_cap_valid(config):
         print("renovate.json must hold both trainer Python bases below 3.14", file=sys.stderr)
         return False
-    mutated = json.loads(json.dumps(config))
-    mutated["packageRules"] = [
-        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
-    ]
-    if trainer_python_cap_valid(mutated):
+    if trainer_python_cap_valid(without_python_rules(config)):
         print("trainer Python cap negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def test_sidecar_python_cap(config: dict[str, object]) -> bool:
+    """Report a missing sidecar Python cap and prove its removal is refused."""
+    if not sidecar_python_cap_valid(config):
+        print("renovate.json must hold the TFLite sidecar Python base below 3.15", file=sys.stderr)
+        return False
+    if sidecar_python_cap_valid(without_python_rules(config)):
+        print("sidecar Python cap negative control was accepted", file=sys.stderr)
         return False
     return True
 
@@ -819,6 +846,7 @@ def main() -> int:
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
         test_trainer_python_cap(config),
+        test_sidecar_python_cap(config),
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
