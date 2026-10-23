@@ -18,7 +18,7 @@
       "iptablesSwitchAtRuntime": true
     },
     "ghcr.io/devcontainers/features/node:2": {
-      "version": "24.22.0",
+      "version": "24.22.1",
       "nodeGypDependencies": true,
       "nvmInstallPath": "/usr/local/share/nvm",
       "npmVersion": "12.2.1",

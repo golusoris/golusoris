@@ -64,10 +64,6 @@ exceptions:
       path: .github/workflows/ci.yml
       reason: "Category A, 90 days from 2026-10-18, renewed after re-review: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always(). The pinned engine reads no always() (without this entry it reports each of those jobs as skippable on a draft, measured 2026-10-18). Closed by cordanaLLM/praetor#1368."
       expires: "2027-01-16"
-    - rule: test-timeout
-      path: .github/workflows/ci-go.yml
-      reason: "Category B, 3 days from 2026-10-19 (controller answer golusoris-repin-test-timeout): lines 483 and 500 pass -timeout=${{ inputs.test-timeout }}, the public input of this reusable workflow, which the pinned engine cannot read; the Bound the test timeout step fails a value above 30m. Closed by engine order engine-test-timeout-input-bound-20261019."
-      expires: "2026-10-22"
 
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
