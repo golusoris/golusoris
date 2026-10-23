@@ -15,6 +15,28 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.20.1](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.20.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **ci:** cache cgo apt archives and bound stalled mirror fetches ([#1079](https://github.com/golusoris/golusoris/issues/1079)) ([41f7e76](https://github.com/golusoris/golusoris/commit/41f7e7623e8858bd94580dea3001e74edda1834d))
+* **ci:** keep require-green-ci waiting through a CI re-run ([#1073](https://github.com/golusoris/golusoris/issues/1073)) ([789b52a](https://github.com/golusoris/golusoris/commit/789b52ad920f7c8885b89203ba95f3069ffedd2f))
+* **ci:** let Renovate and the merge train update the Scalar bundle ([#1081](https://github.com/golusoris/golusoris/issues/1081)) ([bec0944](https://github.com/golusoris/golusoris/commit/bec09441c87e0d9d53cce36a3efaf0c9b6dfa950))
+* **ci:** wait for the CI run before failing the release gate ([#1068](https://github.com/golusoris/golusoris/issues/1068)) ([e3265a0](https://github.com/golusoris/golusoris/commit/e3265a0d5d7ec085639109e47aa262cd75eac859))
+* **deps:** update aws-sdk-go-v2 monorepo ([#1080](https://github.com/golusoris/golusoris/issues/1080)) ([ab27421](https://github.com/golusoris/golusoris/commit/ab274210e1e055f16b80ed03277bafc0e6b2924f))
+* **deps:** update module github.com/chromedp/cdproto to v0.158.3 ([#1028](https://github.com/golusoris/golusoris/issues/1028)) ([6278bf2](https://github.com/golusoris/golusoris/commit/6278bf22b3e70e95569b655dcf2c9bb0fdd159b1))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.5.2 ([#1067](https://github.com/golusoris/golusoris/issues/1067)) ([d6e716c](https://github.com/golusoris/golusoris/commit/d6e716c7d9604fd39e8109932427aa6116421920))
+* **deps:** update module github.com/golusoris/goenvoy/metadata to v1.4.1 ([#1072](https://github.com/golusoris/golusoris/issues/1072)) ([9fb50bc](https://github.com/golusoris/golusoris/commit/9fb50bc4d312d84258b8a16c4545bd727517dbf7))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/anime/anilist to v1.3.2 ([#1070](https://github.com/golusoris/golusoris/issues/1070)) ([47d239f](https://github.com/golusoris/golusoris/commit/47d239f79f6d700be0d9ec342b22e329b673be6d))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/tracking/trakt to v1.3.3 ([#1071](https://github.com/golusoris/golusoris/issues/1071)) ([308de31](https://github.com/golusoris/golusoris/commit/308de31840fa3901d7ba2f0fcd7d614703305ac1))
+* **deps:** update module github.com/golusoris/golusoris to v0.18.0 ([#1075](https://github.com/golusoris/golusoris/issues/1075)) ([2f7a9b6](https://github.com/golusoris/golusoris/commit/2f7a9b68550933c3e2d5d193ce912a95dd860aff))
+
+
+### Code Refactoring
+
+* **ai:** share tiny trainer field validators and smoke flag ([#1064](https://github.com/golusoris/golusoris/issues/1064)) ([4829fd1](https://github.com/golusoris/golusoris/commit/4829fd1194bfb6673d253eb0513e448f6bf9bcac))
+
 ## [0.20.0](https://github.com/golusoris/golusoris/compare/v0.19.0...v0.20.0) (2026-10-22)
 
 
