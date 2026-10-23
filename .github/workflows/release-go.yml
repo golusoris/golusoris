@@ -198,7 +198,7 @@ jobs:
           NODE
           )"
           REMOTE_DIGEST="$(docker buildx imagetools inspect \
-            "$EXPECTED_IMAGE_REF" --format '{{json .Manifest.Digest}}' | tr -d '"')"
+            "$EXPECTED_IMAGE_REF" --format '{{json .Manifest.Digest}}' | tr -d \")"
           if [[ ! "$REMOTE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ || \
             "$REMOTE_DIGEST" != "$DIGEST" ]]; then
             echo "::error::registry digest does not match the current GoReleaser receipt."
