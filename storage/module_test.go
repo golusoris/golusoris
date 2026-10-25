@@ -69,8 +69,6 @@ func TestModule_DefaultBackendIsLocal(t *testing.T) {
 // TestModule_DefaultsOnEmptyConfig confirms an empty config drives the
 // documented defaults (local backend, "./data"). The constructed bucket must
 // be a *LocalBucket. t.Chdir isolates the created ./data inside a temp dir.
-//
-//nolint:paralleltest // t.Chdir forbids t.Parallel; the test mutates the working dir.
 func TestModule_DefaultsOnEmptyConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 	cfg, err := config.New(config.Options{})

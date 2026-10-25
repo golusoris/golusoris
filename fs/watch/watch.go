@@ -155,8 +155,9 @@ func (w *Watcher) step(timer *time.Timer, pending map[string]struct{}) (*time.Ti
 		pending[ev.Name] = struct{}{}
 		return resetTimer(timer, w.opts.Debounce), true
 
-	case <-w.inner.Errors:
-		// Errors are surfaced by closing Events; callers can reopen a watcher.
+	case err := <-w.inner.Errors:
+		// Any error, or nil from a closed channel, ends the run; callers can reopen a watcher.
+		_ = err
 		return timer, false
 
 	case <-timerC:

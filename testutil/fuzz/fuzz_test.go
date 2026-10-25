@@ -55,7 +55,7 @@ func TestCorpusFiles_emptyDir(t *testing.T) {
 	}
 }
 
-func TestCorpusDir(t *testing.T) { //nolint:paralleltest // t.Chdir mutates process cwd
+func TestCorpusDir(t *testing.T) {
 	t.Chdir(t.TempDir())
 	dir := fuzz.CorpusDir(t, "MyFuzz")
 	if dir == "" {
@@ -63,7 +63,7 @@ func TestCorpusDir(t *testing.T) { //nolint:paralleltest // t.Chdir mutates proc
 	}
 }
 
-func TestCorpusFiles_empty(t *testing.T) { //nolint:paralleltest // t.Chdir mutates process cwd
+func TestCorpusFiles_empty(t *testing.T) {
 	t.Chdir(t.TempDir())
 	paths := fuzz.CorpusFiles(t, "MyFuzz")
 	if paths == nil {

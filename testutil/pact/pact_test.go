@@ -138,8 +138,6 @@ func TestChild(t *testing.T) {
 // TestContractRoundTrip records a pact and verifies a matching provider.
 // Not parallel: t.Chdir, and pact-go writes pacts and logs below the
 // working directory.
-//
-//nolint:paralleltest // t.Chdir.
 func TestContractRoundTrip(t *testing.T) {
 	t.Chdir(t.TempDir())
 	file := recordPact(t)
