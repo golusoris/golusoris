@@ -261,7 +261,7 @@ def check_release_tool_pins(root: Path) -> list[str]:
 
 
 VALID_FIXTURE_ENV = """\
-COSIGN_VERSION=3.1.3
+COSIGN_VERSION=3.1.4
 SYFT_VERSION=1.54.1
 GORELEASER_VERSION=2.18.3
 """
@@ -270,7 +270,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v3.1.3
+          cosign-release: v3.1.4
       - name: Install syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
@@ -285,7 +285,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
           version: v0.38.0
       - name: Verify tools
         run: |
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
@@ -349,11 +349,11 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / "tools/tool-versions.env"
             path.write_text(
-                path.read_text(encoding="utf-8").replace("COSIGN_VERSION=3.1.3", "COSIGN_VERSION=3.1.2"),
+                path.read_text(encoding="utf-8").replace("COSIGN_VERSION=3.1.4", "COSIGN_VERSION=3.1.2"),
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "cosign: env 3.1.2 != workflow pin 3.1.3")
+            self.assert_planted_defect(problems, "cosign: env 3.1.2 != workflow pin 3.1.4")
 
     def test_planted_action_without_version_key(self) -> None:
         # Tests detection of installer action lacking required version key.
@@ -362,7 +362,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-build.yml"
             path.write_text(
-                path.read_text(encoding="utf-8").replace("cosign-release: v3.1.3", "missing: v3.1.3"),
+                path.read_text(encoding="utf-8").replace("cosign-release: v3.1.4", "missing: v3.1.4"),
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
@@ -375,7 +375,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-build.yml"
             path.write_text(
-                path.read_text(encoding="utf-8").replace("3\\.1\\.3", "unparseable"),
+                path.read_text(encoding="utf-8").replace("3\\.1\\.4", "unparseable"),
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)

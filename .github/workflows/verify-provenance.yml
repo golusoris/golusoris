@@ -144,7 +144,7 @@ jobs:
         if: ${{ inputs.verify-signature }}
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v3.1.3
+          cosign-release: v3.1.4
 
       - name: Verify pinned cosign
         if: ${{ inputs.verify-signature }}
@@ -152,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v cosign
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
 
       - name: Verify cosign signature (keyless)
         if: ${{ inputs.verify-signature }}

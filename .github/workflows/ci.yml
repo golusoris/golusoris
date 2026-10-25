@@ -168,7 +168,7 @@ jobs:
       # A fork pull request gets no security-events write token; every other run must upload.
       - name: Upload SARIF
         if: always() && github.event.pull_request.draft != true && github.event.pull_request.head.repo.fork != true
-        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: gosec.sarif
 
@@ -806,7 +806,7 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.15'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

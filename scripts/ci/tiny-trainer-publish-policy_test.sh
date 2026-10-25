@@ -56,7 +56,7 @@ check_workflow() {
 		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"docker push \"\$IMAGE:\$VERSION\" 2>&1 | tee \"\$push_log\""
-		"v?3\\.1\\.3(\\+dirty)?"
+		"v?3\\.1\\.4(\\+dirty)?"
 		"Generate SPDX SBOM"
 	)
 	for literal in "${literals[@]}"; do
@@ -153,13 +153,13 @@ if (( $(grep -c '^gh' "$call_log") != 2 )); then
 	exit 1
 fi
 
-cosign_version_pattern='^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
-printf 'GitVersion: v3.1.3+dirty\n' | grep -Eq "$cosign_version_pattern"
-if printf 'GitVersion: v3.1.4\n' | grep -Eq "$cosign_version_pattern"; then
+cosign_version_pattern='^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
+printf 'GitVersion: v3.1.4+dirty\n' | grep -Eq "$cosign_version_pattern"
+if printf 'GitVersion: v3.1.5\n' | grep -Eq "$cosign_version_pattern"; then
 	printf 'Cosign version check accepted a foreign release\n' >&2
 	exit 1
 fi
-if printf 'GitVersion: v3.1.3+dirty.untrusted\n' | grep -Eq "$cosign_version_pattern"; then
+if printf 'GitVersion: v3.1.4+dirty.untrusted\n' | grep -Eq "$cosign_version_pattern"; then
 	printf 'Cosign version check accepted foreign build metadata\n' >&2
 	exit 1
 fi
