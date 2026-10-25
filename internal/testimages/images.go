@@ -16,7 +16,7 @@ const (
 	// Postgres is the default PostgreSQL integration-test image.
 	Postgres = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
 	// PostGIS is the PostgreSQL 18 PostGIS integration-test image.
-	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:ffcf0c4b904e41b9779f8098007fb5a9484025319c18c70cf8e1bcebb742b9b7"
+	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:fd143c649af607c6872a1e59ccb3e43c299f207ab975a4c286fbb204b6e6f7b7"
 	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
 	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
