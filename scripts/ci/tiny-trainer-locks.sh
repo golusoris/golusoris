@@ -16,7 +16,7 @@ MAX_LOCK_CONTEXTS=4
 AUDIT_PYTHON_VERSION=3.11.16
 # Resolve as of this upload cutoff so --check compares the lock with its inputs,
 # not with whatever PyPI published since; move it forward deliberately with --write.
-LOCK_EXCLUDE_NEWER=2026-10-08T00:00:00Z
+LOCK_EXCLUDE_NEWER=2026-10-20T00:00:00Z
 # certifi below 2026.10.19 trusts compromised emSign roots (PYSEC-2026-4320); only certifi moves past the cutoff.
 LOCK_CERTIFI_EXCLUDE_NEWER=certifi=2026-10-21T00:00:00Z
 tiny_trainer_lock_tmp=
