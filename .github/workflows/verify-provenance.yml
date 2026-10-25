@@ -152,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v cosign
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.3(\+dirty)?[[:space:]]*$'
+          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
 
       - name: Verify cosign signature (keyless)
         if: ${{ inputs.verify-signature }}
