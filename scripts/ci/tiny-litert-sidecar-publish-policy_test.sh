@@ -80,7 +80,7 @@ check_workflow() {
 		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"docker push \"\$IMAGE:\$VERSION\" 2>&1 | tee \"\$push_log\""
-		"v?3\\.1\\.3(\\+dirty)?"
+		"v?3\\.1\\.4(\\+dirty)?"
 		"Generate SPDX SBOM"
 	)
 	for literal in "${literals[@]}"; do
