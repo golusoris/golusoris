@@ -59,12 +59,13 @@ docs-only mounting validates OpenAPI without MCP tool conversion.
 
 ## Scalar bundle
 
-`apidocs/embed/scalar.js` pins `@scalar/api-reference`. Weekly workflow
-`scalar-bundle.yml` runs `scripts/ci/scalar-bundle-update.sh`: newest release
->= 3 days old, tarball sha512 checked, bundle + `SCALAR_VERSION` +
-`SCALAR_RELEASED` + `docs/upstream` pin rewritten, pull request opened. Pin
-check fails when `SCALAR_RELEASED` is older than 45 days (job silent). Never
-bump the version line alone.
+`apidocs/embed/scalar.js` pins `@scalar/api-reference`. Renovate bumps
+`SCALAR_VERSION` on `renovate/` branches; `regenerate.yml` runs
+`scripts/ci/regenerate.py write` -> `scripts/ci/scalar-bundle-update.sh regenerate`
+(tarball sha512 checked, bundle + `SCALAR_RELEASED` + `docs/upstream` pins
+rewritten); merge train commits artifact signed (plurano/horistes ADR-0032).
+Scheduled `scalar-bundle.yml` runs `scripts/ci/scalar-bundle-update.sh age-check`,
+failing when `SCALAR_RELEASED` older than 45 days. Never bump version line alone.
 
 ## Testing
 

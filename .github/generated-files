@@ -6,6 +6,8 @@
 # plurano/horistes, decision record 0032). One path per line; the train reads
 # this file from the default branch and never commits a path missing here.
 # scripts/ci/regenerate.py refuses a list that differs from its own table.
+apidocs/embed/SCALAR_RELEASED
+apidocs/embed/scalar.js
 container/registry/go.mod
 container/registry/go.sum
 container/registry/sign/go.mod
@@ -22,6 +24,8 @@ core/go.mod
 core/go.sum
 deploy/go.mod
 deploy/go.sum
+docs/upstream/README.md
+docs/upstream/scalar/README.md
 go.mod
 go.sum
 hw/fssnap/go.mod

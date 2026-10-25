@@ -5,10 +5,11 @@
 """Regenerate generated repository files and write an artifact manifest.
 
 When dependencies are bumped on renovate branches, modules that replace a bumped
-local module must be tidied so go.mod and go.sum match the updated graph. This
-tool executes go mod tidy across all modules, verifies that no unexpected files
-were modified or deleted, and writes a directory containing the regenerated files
-and a manifest describing them.
+local module must be tidied so go.mod and go.sum match the updated graph, and
+embedded assets such as the Scalar API reference browser bundle are rebuilt.
+This tool executes go mod tidy across all modules, rebuilds the Scalar bundle,
+verifies that no unexpected files were modified or deleted, and writes a directory
+containing the regenerated files and a manifest describing them.
 
     write       run update commands, verify changes, and write artifact to --out
     check       hold the table below to the declared list .github/generated-files
@@ -40,6 +41,7 @@ SCHEMA = "horistes.generated-files.v1"
 DECLARED = ".github/generated-files"
 MODULE_TIMEOUT_SECONDS = 300
 DEFAULT_TIMEOUT_SECONDS = 60
+SCALAR_TIMEOUT_SECONDS = 600
 GIT_TIMEOUT_SECONDS = 60
 MODULES_DISCOVERY_TIMEOUT_SECONDS = 60
 MAX_STATUS_ENTRIES = 2048
@@ -48,6 +50,12 @@ MAX_CHANGED_FILES = 256
 MAX_DECLARED_LINES = 1024
 # A replace chain settles one link per pass; the deepest chain here is four modules.
 MAX_TIDY_PASSES = 6
+SCALAR_PATHS = [
+    "apidocs/embed/SCALAR_RELEASED",
+    "apidocs/embed/scalar.js",
+    "docs/upstream/README.md",
+    "docs/upstream/scalar/README.md",
+]
 
 
 class CheckError(Exception):
@@ -102,6 +110,7 @@ def get_generated_files(root: Path) -> list[str]:
             paths.extend(["go.mod", "go.sum"])
         else:
             paths.extend([f"{m}/go.mod", f"{m}/go.sum"])
+    paths.extend(SCALAR_PATHS)
     return sorted(paths)
 
 
@@ -281,6 +290,28 @@ def tidy_until_stable(
     raise CheckError(f"go mod tidy did not converge after {MAX_TIDY_PASSES} passes")
 
 
+def copy_changed_files(
+    root: Path, out: Path, changed: list[str]
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    bound = min(len(changed), MAX_CHANGED_FILES)
+    for i in range(bound):
+        path_str = changed[i]
+        src = root / path_str
+        dst = out / "files" / path_str
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        data = src.read_bytes()
+        dst.write_bytes(data)
+        records.append(
+            {
+                "bytes": len(data),
+                "path": path_str,
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        )
+    return records
+
+
 def write_regenerated(
     out: Path,
     root: Path,
@@ -304,6 +335,11 @@ def write_regenerated(
         allowed = set(get_generated_files(root))
         pre_existing = {p for p in allowed if (root / p).is_file()}
         executed = tidy_until_stable(root, discover_modules(root), allowed, after_pass)
+        scalar_script = root / "scripts" / "ci" / "scalar-bundle-update.sh"
+        if scalar_script.is_file():
+            scalar_cmd = ["bash", "scripts/ci/scalar-bundle-update.sh", "regenerate"]
+            run_update_command(scalar_cmd, root, SCALAR_TIMEOUT_SECONDS)
+            executed.append(scalar_cmd)
 
     raw_status = git_status_bytes(root)
     if not raw_status:
@@ -315,38 +351,26 @@ def write_regenerated(
     if not changed:
         return [], "nothing to regenerate"
 
-    file_records: list[dict[str, Any]] = []
-    bound_changed = min(len(changed), MAX_CHANGED_FILES)
-    for i in range(bound_changed):
-        path_str = changed[i]
-        src = root / path_str
-        dst = out / "files" / path_str
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        data = src.read_bytes()
-        dst.write_bytes(data)
-        file_records.append(
-            {
-                "bytes": len(data),
-                "path": path_str,
-                "sha256": hashlib.sha256(data).hexdigest(),
-            }
-        )
+    file_records = copy_changed_files(root, out, changed)
     manifest_text = build_manifest(head, file_records, executed)
     out.mkdir(parents=True, exist_ok=True)
     (out / "manifest.json").write_text(manifest_text, encoding="utf-8")
     return [], f"{len(file_records)} files at {head}"
 
 
-FIXTURE_GENERATED = [
-    "a/go.mod",
-    "a/go.sum",
-    "b/go.mod",
-    "b/go.sum",
-    "c/go.mod",
-    "c/go.sum",
-    "go.mod",
-    "go.sum",
-]
+FIXTURE_GENERATED = sorted(
+    [
+        "a/go.mod",
+        "a/go.sum",
+        "b/go.mod",
+        "b/go.sum",
+        "c/go.mod",
+        "c/go.sum",
+        "go.mod",
+        "go.sum",
+        *SCALAR_PATHS,
+    ]
+)
 
 # c has no dependencies; a needs c and b needs a, each joined by a local replace.
 FIXTURE_FILES = {
@@ -540,6 +564,38 @@ def run_plant_cases_ab(repo: Path, temp_dir: Path) -> tuple[list[str], int]:
     return failures, refused
 
 
+def run_plant_case_scalar_unlisted(repo: Path, temp_dir: Path) -> tuple[list[str], int]:
+    """Proves an unlisted path is refused when the scalar step writes outside the table."""
+    failures: list[str] = []
+    refused = 0
+
+    reset_fixture_repo(repo)
+    out_scalar = temp_dir / "out-scalar-unlisted"
+    script = repo / "scripts" / "ci" / "scalar-bundle-update.sh"
+    script.parent.mkdir(parents=True, exist_ok=True)
+    script.write_text(
+        "#!/usr/bin/env bash\nprintf 'leak\\n' > outside_scalar.txt\n",
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    run_git(["add", "scripts/ci/scalar-bundle-update.sh"], repo)
+    run_git(["commit", "-m", "plant scalar script"], repo)
+
+    fails, _ = write_regenerated(out_scalar, repo)
+    if not fails or not any("outside_scalar.txt" in f for f in fails):
+        failures.append(
+            f"scalar unlisted plant not refused with outside_scalar.txt: {fails}"
+        )
+    else:
+        refused += 1
+    if (out_scalar / "manifest.json").exists():
+        failures.append("scalar unlisted plant wrote manifest.json")
+
+    run_git(["reset", "--hard", "HEAD~1"], repo)
+    reset_fixture_repo(repo)
+    return failures, refused
+
+
 def run_plant_case_c(repo: Path, temp_dir: Path) -> tuple[list[str], int]:
     failures: list[str] = []
     refused = 0
@@ -696,6 +752,7 @@ def run_declared_cases(repo: Path, generated: list[str]) -> tuple[list[str], int
         ("\n".join(generated[:-1]) + "\n", True),
         ("\n".join(generated) + "\ntracked.txt\n", True),
         ("\n".join([*generated, generated[0]]) + "\n", True),
+        ("\n".join(p for p in generated if p not in SCALAR_PATHS) + "\n", True),
     )
     for text, should_refuse in cases:
         (repo / ".github").mkdir(parents=True, exist_ok=True)
@@ -728,6 +785,8 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         failures, refused_rep, accepted_rep = run_repair_cases(repo, temp_dir)
         fails_ab, refused_ab = run_plant_cases_ab(repo, temp_dir)
         failures.extend(fails_ab)
+        fails_sc, refused_sc = run_plant_case_scalar_unlisted(repo, temp_dir)
+        failures.extend(fails_sc)
         fails_c, refused_c = run_plant_case_c(repo, temp_dir)
         failures.extend(fails_c)
         fails_de, refused_de = run_plant_cases_de(repo, temp_dir)
@@ -740,7 +799,13 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         failures.extend(fails_decl)
 
         total_refused = (
-            refused_rep + refused_ab + refused_c + refused_de + refused_f + refused_decl
+            refused_rep
+            + refused_ab
+            + refused_sc
+            + refused_c
+            + refused_de
+            + refused_f
+            + refused_decl
         )
         total_accepted = accepted_rep + accepted_gh + accepted_decl
         return failures, total_refused, total_accepted

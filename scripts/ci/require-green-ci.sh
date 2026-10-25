@@ -14,6 +14,9 @@ set -euo pipefail
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 CI_WORKFLOW="${CI_WORKFLOW:-ci.yml}"
 
+# Check names carry +, & and # ("Test (race + coverage)"), so URI-encode the query value.
+CHECK_NAME_ENCODED=$(jq -rn --arg v "$CHECK_NAME" '$v|@uri')
+
 # HISS-02: scalar bounds on the wait. Main's CI is slow on cold runners (Lint
 # alone is allowed 65 min), hence the generous ceiling. Finite, though: a tag
 # that cannot show a green CI is not a release.
@@ -24,10 +27,11 @@ POLL_ATTEMPTS="${POLL_ATTEMPTS:-180}" # 180 x 30 s = 90 min
 MISSING_GRACE_ATTEMPTS="${MISSING_GRACE_ATTEMPTS:-20}" # 10 min
 
 check_state() {
-	# A re-run attaches a second check run with the same name, so take the latest.
+	# A re-run attaches a second check run with the same name; the newest has the
+	# highest id (a queued one has no started_at yet).
 	gh api \
-		"repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?check_name=${CHECK_NAME// /%20}&per_page=100" \
-		--jq '[.check_runs[]] | sort_by(.started_at) | last
+		"repos/${GITHUB_REPOSITORY}/commits/${SHA}/check-runs?check_name=${CHECK_NAME_ENCODED}&per_page=100" \
+		--jq '[.check_runs[]] | sort_by(.id) | last
 		      | if . == null then "missing none"
 		        else "\(.status) \(.conclusion // "none")" end'
 }
@@ -51,8 +55,16 @@ for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
 			echo "\"${CHECK_NAME}\" passed on ${SHA}."
 			exit 0
 		fi
-		echo "::error::\"${CHECK_NAME}\" concluded ${conclusion} on ${SHA} — refusing to publish."
-		exit 1
+		run=$(ci_run_status)
+		case "$run" in
+		queued|in_progress|waiting|pending|requested)
+			echo "attempt ${attempt}/${POLL_ATTEMPTS}: \"${CHECK_NAME}\" concluded ${conclusion} but ${CI_WORKFLOW} run is ${run} (re-run in progress); waiting ${POLL_INTERVAL_SECONDS}s"
+			;;
+		*)
+			echo "::error::\"${CHECK_NAME}\" concluded ${conclusion} on ${SHA} — refusing to publish."
+			exit 1
+			;;
+		esac
 		;;
 	missing)
 		run=$(ci_run_status)
