@@ -14,7 +14,7 @@ import (
 
 const (
 	// Postgres is the default PostgreSQL integration-test image.
-	Postgres = "postgres:18-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873"
+	Postgres = "postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5"
 	// PostGIS is the PostgreSQL 18 PostGIS integration-test image.
 	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:fd143c649af607c6872a1e59ccb3e43c299f207ab975a4c286fbb204b6e6f7b7"
 	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
