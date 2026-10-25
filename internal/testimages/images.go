@@ -24,7 +24,7 @@ const (
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
 	TimescaleApache = "timescale/timescaledb:2.30.2-pg17-oss@sha256:097e225077ef92e5c0e17e167d7ac71cb4e98762d31faa4ff0008c7955935889"
 	// Redis is the default Redis integration-test image.
-	Redis = "redis:8-alpine@sha256:3811787313eba226a2ef38658c6ccb91cd5e110edc89c37767de373120a0e5a0"
+	Redis = "redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0"
 	// NATS is the default NATS integration-test image.
 	NATS = "nats:2-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde"
 	// ClickHouse is the default ClickHouse integration-test image.
