@@ -27,7 +27,7 @@ func TestInitCmd_noArgs(t *testing.T) {
 	}
 }
 
-func TestInitCmd_createsFiles(t *testing.T) { //nolint:paralleltest // mutates global state
+func TestInitCmd_createsFiles(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 

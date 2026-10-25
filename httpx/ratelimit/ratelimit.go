@@ -77,9 +77,9 @@ func New(opts Options) (middleware.Middleware, error) {
 				http.Error(w, "rate limit error", http.StatusInternalServerError)
 				return
 			}
-			w.Header().Set("X-RateLimit-Limit", strconv.FormatInt(ctx.Limit, 10))
-			w.Header().Set("X-RateLimit-Remaining", strconv.FormatInt(ctx.Remaining, 10))
-			w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(ctx.Reset, 10))
+			w.Header().Set("X-Ratelimit-Limit", strconv.FormatInt(ctx.Limit, 10))
+			w.Header().Set("X-Ratelimit-Remaining", strconv.FormatInt(ctx.Remaining, 10))
+			w.Header().Set("X-Ratelimit-Reset", strconv.FormatInt(ctx.Reset, 10))
 			if ctx.Reached {
 				http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 				return

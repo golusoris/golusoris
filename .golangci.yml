@@ -142,6 +142,10 @@ linters:
         - errors.WithStack(
         - errors.WithMessage(
         - errors.WithMessagef(
+        # golusoris/core/errors constructors create typed domain errors; wrapping adds noise.
+        - github.com/golusoris/golusoris/core/errors.
+        # tusd error constructors create protocol errors for HTTP tus handler.
+        - github.com/tus/tusd/v2/pkg/handler.NewError(
         # stdlib leaf-error returns we forward verbatim — wrapping adds noise.
         - context.Canceled
         - context.DeadlineExceeded
