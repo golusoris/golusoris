@@ -9,7 +9,7 @@ require (
 	cloud.google.com/go/pubsub/v2 v2.7.0
 	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
-	github.com/99designs/gqlgen v0.17.95
+	github.com/99designs/gqlgen v0.17.97
 	github.com/CAFxX/httpcompression v0.0.9
 	github.com/ClickHouse/clickhouse-go/v2 v2.49.0
 	github.com/Khan/genqlient v0.8.1
@@ -303,7 +303,7 @@ require (
 	github.com/magiconair/properties v1.18.11 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/maruel/natural v1.3.0 // indirect
-	github.com/mattn/go-colorable v0.1.15 // indirect
+	github.com/mattn/go-colorable v0.1.16 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.30 // indirect
 	github.com/mdelapenya/tlscert v0.2.0 // indirect
@@ -393,7 +393,7 @@ require (
 	github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.15.0 // indirect
 	github.com/ulikunitz/xz v0.5.16 // indirect
-	github.com/vektah/gqlparser/v2 v2.5.37 // indirect
+	github.com/vektah/gqlparser/v2 v2.5.63 // indirect
 	github.com/vincent-petithory/dataurl v1.0.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect
