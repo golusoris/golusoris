@@ -8,7 +8,7 @@ package vaultdev
 // manager), and images_test.go keeps RyukImage equal to the root pin.
 const (
 	// VaultImage is the HashiCorp Vault dev server (BUSL-1.1, test use).
-	VaultImage = "hashicorp/vault:2.2.0@sha256:e0acd3c681bdf57f002d7214e5d050b876e1704678005c6b0406dd96a65be919"
+	VaultImage = "hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2"
 	// OpenBaoImage is the OpenBao dev server, a Vault fork with the same
 	// transit and auth API.
 	OpenBaoImage = "openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf"
