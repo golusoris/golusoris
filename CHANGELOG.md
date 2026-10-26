@@ -15,6 +15,38 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.20.1](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.20.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **ci:** cache cgo apt archives and bound stalled mirror fetches ([#1079](https://github.com/golusoris/golusoris/issues/1079)) ([41f7e76](https://github.com/golusoris/golusoris/commit/41f7e7623e8858bd94580dea3001e74edda1834d))
+* **ci:** keep require-green-ci waiting through a CI re-run ([#1073](https://github.com/golusoris/golusoris/issues/1073)) ([789b52a](https://github.com/golusoris/golusoris/commit/789b52ad920f7c8885b89203ba95f3069ffedd2f))
+* **ci:** let Renovate and the merge train update the Scalar bundle ([#1081](https://github.com/golusoris/golusoris/issues/1081)) ([bec0944](https://github.com/golusoris/golusoris/commit/bec09441c87e0d9d53cce36a3efaf0c9b6dfa950))
+* **ci:** wait for the CI run before failing the release gate ([#1068](https://github.com/golusoris/golusoris/issues/1068)) ([e3265a0](https://github.com/golusoris/golusoris/commit/e3265a0d5d7ec085639109e47aa262cd75eac859))
+* **deps:** move the tiny trainer lock cutoff past the filelock and setuptools fixes ([#1088](https://github.com/golusoris/golusoris/issues/1088)) ([b3f0469](https://github.com/golusoris/golusoris/commit/b3f04691bde4d8f06aecafffdb7b2793755340f1))
+* **deps:** update aws-sdk-go-v2 monorepo ([#1080](https://github.com/golusoris/golusoris/issues/1080)) ([ab27421](https://github.com/golusoris/golusoris/commit/ab274210e1e055f16b80ed03277bafc0e6b2924f))
+* **deps:** update module github.com/99designs/gqlgen to v0.17.97 ([#1097](https://github.com/golusoris/golusoris/issues/1097)) ([f64d840](https://github.com/golusoris/golusoris/commit/f64d840c40d11a5aab46b0ee6bb6e26e2182e972))
+* **deps:** update module github.com/99designs/gqlgen to v0.17.98 ([#1105](https://github.com/golusoris/golusoris/issues/1105)) ([6692184](https://github.com/golusoris/golusoris/commit/66921841a6576ec3495efd8d20ea95954eb9ded8))
+* **deps:** update module github.com/chromedp/cdproto to v0.158.3 ([#1028](https://github.com/golusoris/golusoris/issues/1028)) ([6278bf2](https://github.com/golusoris/golusoris/commit/6278bf22b3e70e95569b655dcf2c9bb0fdd159b1))
+* **deps:** update module github.com/containerd/nri to v0.12.4 ([#1107](https://github.com/golusoris/golusoris/issues/1107)) ([f4415e1](https://github.com/golusoris/golusoris/commit/f4415e1be1cc9f8c43625c63cb575037c1fc34ee))
+* **deps:** update module github.com/ethereum/go-ethereum to v1.17.9 ([#1100](https://github.com/golusoris/golusoris/issues/1100)) ([78ebacf](https://github.com/golusoris/golusoris/commit/78ebacfbcb39397ea4d8953ad1f24ebbd2680e9f))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.5.2 ([#1067](https://github.com/golusoris/golusoris/issues/1067)) ([d6e716c](https://github.com/golusoris/golusoris/commit/d6e716c7d9604fd39e8109932427aa6116421920))
+* **deps:** update module github.com/golusoris/goenvoy/arr/sonarr to v1.5.3 ([#1102](https://github.com/golusoris/golusoris/issues/1102)) ([dd92a86](https://github.com/golusoris/golusoris/commit/dd92a867e38cceaf5cfcde75223a434b8d05378a))
+* **deps:** update module github.com/golusoris/goenvoy/metadata to v1.4.1 ([#1072](https://github.com/golusoris/golusoris/issues/1072)) ([9fb50bc](https://github.com/golusoris/golusoris/commit/9fb50bc4d312d84258b8a16c4545bd727517dbf7))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/anime/anilist to v1.3.2 ([#1070](https://github.com/golusoris/golusoris/issues/1070)) ([47d239f](https://github.com/golusoris/golusoris/commit/47d239f79f6d700be0d9ec342b22e329b673be6d))
+* **deps:** update module github.com/golusoris/goenvoy/metadata/tracking/trakt to v1.3.3 ([#1071](https://github.com/golusoris/golusoris/issues/1071)) ([308de31](https://github.com/golusoris/golusoris/commit/308de31840fa3901d7ba2f0fcd7d614703305ac1))
+* **deps:** update module github.com/golusoris/golusoris to v0.18.0 ([#1075](https://github.com/golusoris/golusoris/issues/1075)) ([2f7a9b6](https://github.com/golusoris/golusoris/commit/2f7a9b68550933c3e2d5d193ce912a95dd860aff))
+* **deps:** update module github.com/golusoris/golusoris/core to v0.12.1 ([#1108](https://github.com/golusoris/golusoris/issues/1108)) ([f26444c](https://github.com/golusoris/golusoris/commit/f26444cd4b7ed1bc788e95a8a37f5fbd158e61ba))
+* **deps:** update module github.com/pdfcpu/pdfcpu to v0.16.3 ([#1109](https://github.com/golusoris/golusoris/issues/1109)) ([b6f26aa](https://github.com/golusoris/golusoris/commit/b6f26aaa28082a68efd4ff3971365d96b4f24212))
+* **deps:** update module github.com/pion/webrtc/v4 to v4.2.25 ([#1110](https://github.com/golusoris/golusoris/issues/1110)) ([61183fe](https://github.com/golusoris/golusoris/commit/61183fed80e6a9b82c1a4878217180e6af9c779a))
+* **deps:** update module github.com/prometheus/prometheus to v0.315.1 ([#1112](https://github.com/golusoris/golusoris/issues/1112)) ([c563437](https://github.com/golusoris/golusoris/commit/c5634374a7c5c852e575c164d05ec1515d85b1b7))
+
+
+### Code Refactoring
+
+* **ai:** share tiny trainer field validators and smoke flag ([#1064](https://github.com/golusoris/golusoris/issues/1064)) ([4829fd1](https://github.com/golusoris/golusoris/commit/4829fd1194bfb6673d253eb0513e448f6bf9bcac))
+
 ## [0.20.0](https://github.com/golusoris/golusoris/compare/v0.19.0...v0.20.0) (2026-10-22)
 
 
