@@ -4,7 +4,7 @@ go 1.27.3
 
 require (
 	github.com/containerd/nri v0.12.4
-	github.com/golusoris/golusoris/core v0.12.0
+	github.com/golusoris/golusoris/core v0.12.1
 	go.uber.org/fx v1.24.0
 )
 
