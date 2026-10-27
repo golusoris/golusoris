@@ -359,6 +359,33 @@ run_phase() {
 	fi
 }
 
+filter_scoped_modules() {
+	local scoped_output
+	if ! scoped_output="$(python3 "$SCRIPT_DIR/ci_scope.py" modules)"; then
+		return 1
+	fi
+	local -a scoped_modules=() filtered_modules=()
+	mapfile -t scoped_modules <<<"$scoped_output"
+	local mod scoped_mod matched
+	for mod in "${modules[@]}"; do
+		matched=false
+		for scoped_mod in "${scoped_modules[@]}"; do
+			if [[ -n "$scoped_mod" && "$mod" == "$scoped_mod" ]]; then
+				matched=true
+				break
+			fi
+		done
+		if [[ "$matched" == true ]]; then
+			filtered_modules+=("$mod")
+		fi
+	done
+	# The 70% gate merges root and core coverage, so primary runs both or neither.
+	if [[ "$MODULE_GROUP" == primary ]] && ((${#filtered_modules[@]} > 0)); then
+		return 0
+	fi
+	modules=("${filtered_modules[@]}")
+}
+
 main() {
 	local phase="${1:-}"
 	local modules_output
@@ -386,6 +413,16 @@ main() {
 		printf 'selector examined no modules (group=%s shard=%s/%s)\n' \
 			"$MODULE_GROUP" "$SHARD_INDEX" "$SHARD_COUNT" >&2
 		return 1
+	fi
+
+	if [[ -n "${CI_SCOPE_BASE:-}" ]]; then
+		if ! filter_scoped_modules; then
+			return 1
+		fi
+		if ((${#modules[@]} == 0)); then
+			printf 'ci-scope: no Go module changed; skipping %s\n' "$phase"
+			return 0
+		fi
 	fi
 
 	if [[ "$phase" == "list" ]]; then

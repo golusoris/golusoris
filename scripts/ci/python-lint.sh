@@ -27,8 +27,10 @@ resolve_root() {
 
 collect_files() {
 	local root="$1"
-	local path
-	while IFS= read -r -d '' path; do
+	local path listing
+	listing="$(python3 "$root/scripts/ci/ci_scope.py" --root "$root" files '*.py')" || return 1
+	while IFS= read -r path; do
+		[[ -z "$path" ]] && continue
 		case "$path" in
 			.config/hiss/testdata/* | vendor/* | third_party/*)
 				continue
@@ -45,7 +47,7 @@ collect_files() {
 				"${#files[@]}" "$max_python_files" >&2
 			return 1
 		fi
-	done < <(git -C "$root" ls-files -z --cached --others --exclude-standard -- '*.py')
+	done <<<"$listing"
 }
 
 check_noqa_explanations() {
@@ -93,6 +95,10 @@ main() {
 	local -a files=()
 	collect_files "$root"
 	if (( ${#files[@]} == 0 )); then
+		if [[ -n "${CI_SCOPE_BASE:-}" ]]; then
+			printf 'ci-scope: no Python files changed; skipping ruff\n'
+			return 0
+		fi
 		printf 'Ruff selected no repository Python files\n' >&2
 		return 1
 	fi

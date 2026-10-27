@@ -37,6 +37,8 @@ jobs:
     name: Python contracts
     runs-on: ubuntu-26.04
     timeout-minutes: 10
+    env:
+      CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
     steps:
       - name: Stop on a draft pull request
         if: github.event.pull_request.draft == true
@@ -51,6 +53,8 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -60,6 +64,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          rc=0
+          python3 scripts/ci/ci_scope.py any 'ai/tiny/*' || rc=$?
+          if ((rc == 1)); then
+            printf 'ci-scope: no ai/tiny files changed; skipping unittest\n'
+            exit 0
+          elif ((rc != 0)); then
+            exit "$rc"
+          fi
           PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ai/tiny \
             python -m unittest discover -s ai/tiny/trainers -p 'test_*.py' -v
 

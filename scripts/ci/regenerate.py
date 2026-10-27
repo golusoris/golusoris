@@ -84,6 +84,7 @@ def discover_modules(
         proc = subprocess.run(  # noqa: S603 - fixed bash command on a repository script.
             ["bash", str(script), "list"],  # noqa: S607 - bash executable on runner PATH.
             cwd=root,
+            env={**os.environ, "CI_SCOPE_BASE": ""},  # regeneration covers every module, never a diff scope
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -401,7 +402,7 @@ STALE_REFUSAL = "/b: go mod download rewrote go.mod or go.sum"
 
 
 def offline_env() -> dict[str, str]:
-    return {**os.environ, "GOPROXY": "off", "GOFLAGS": "-mod=mod"}
+    return {**os.environ, "GOPROXY": "off", "GOFLAGS": "-mod=mod", "CI_SCOPE_BASE": ""}
 
 
 def fixture_tidy(module_dir: Path) -> None:

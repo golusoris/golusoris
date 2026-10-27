@@ -87,6 +87,12 @@ def verify_quiet(root: Path, runner: FakeRunner) -> portability.Summary:
 
 
 class PortabilityDriverTest(TestCase):
+    def setUp(self) -> None:
+        # Fixture roots are not git repositories; a pull request job's base sha must not scope them.
+        patcher = mock.patch.dict(os.environ, {"CI_SCOPE_BASE": ""})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_process_output_bound_accepts_exact_and_rejects_overflow(self) -> None:
         runner = portability.ProcessRunner()
         with tempfile.TemporaryDirectory() as directory:

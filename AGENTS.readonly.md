@@ -32,7 +32,7 @@ Run read-only: file edits, state mutations, commits prohibited. Mutating steps d
 | **HISS-15** | 3D Testing | Rule 5 | Positive, negative, and boundary tests mandatory for public interfaces. | Race tests across 31 Go modules; 48 Python policy regressions; 70% primary aggregate; shape review-enforced |
 | **HISS-16** | Context Integrity | Fleet | Single canonical `AGENTS.md`; vendor files compiled, never hand-edited. | `praetorctl compile-context --verify` in lefthook and verification gate |
 | **HISS-17** | State Ledger Discipline | Fleet | `.workingdir/` remains private, ignored, current. | read-only run: step dropped |
-| **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only gates touched by diff. | Not wired for main CI; full matrix runs |
+| **HISS-18** | Diff-Aware CI Efficiency | Fleet | Run only gates touched by diff. | `scripts/ci/ci_scope.py` scopes PR runs; full matrix on push to main, tags, schedule, dispatch, merge queue |
 | **HISS-19** | Reuse Before Writing | Fleet | One behavior, one implementation. | `praetorctl dedupe scan .`; cadence recording post-commit |
 | **HISS-20** | Enforcement Coverage | Fleet | Every enforcement claim has positive, negative, and gap fixtures. | `praetorctl hiss coverage --verify` replays `.config/hiss/testdata/` |
 | **HISS-21** | Platform Neutrality | Fleet | Gates, hooks, and emitted templates run on Linux, macOS, and Windows, or skip with a stated reason; a gate that cannot run is not passing. | Required three-OS `Platform Neutrality` matrix after its first hosted green; local bounded all-module build/vet/short-test gate |

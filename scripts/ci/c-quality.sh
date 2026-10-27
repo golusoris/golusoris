@@ -43,8 +43,21 @@ parse_args() {
 }
 
 collect_files() {
-	local path
-	while IFS= read -r -d '' path; do
+	local path listing rc=0
+	if [[ -f "$root/scripts/ci/ci_scope.py" ]]; then
+		python3 "$root/scripts/ci/ci_scope.py" --root "$root" any '*.h' || rc=$?
+		case "$rc" in
+			# A changed header can affect any translation unit: check them all.
+			0) listing="$(env CI_SCOPE_BASE= python3 "$root/scripts/ci/ci_scope.py" --root "$root" files '*.c')" || return 1 ;;
+			1) listing="$(python3 "$root/scripts/ci/ci_scope.py" --root "$root" files '*.c')" || return 1 ;;
+			*) return 1 ;;
+		esac
+	else
+		listing="$(git -C "$root" ls-files --cached --others --exclude-standard -- '*.c')" || return 1
+	fi
+
+	while IFS= read -r path; do
+		[[ -z "$path" ]] && continue
 		case "$path" in
 			.config/hiss/testdata/* | vendor/* | third_party/*)
 				continue
@@ -61,7 +74,7 @@ collect_files() {
 				"${#files[@]}" "$max_c_files" >&2
 			return 1
 		fi
-	done < <(git -C "$root" ls-files -z --cached --others --exclude-standard -- '*.c')
+	done <<<"$listing"
 }
 
 resolve_headers() {
@@ -143,6 +156,10 @@ main() {
 	local -a files=()
 	collect_files
 	if (( ${#files[@]} == 0 )); then
+		if [[ -n "${CI_SCOPE_BASE:-}" ]]; then
+			printf 'ci-scope: no C files changed; skipping c-quality\n'
+			return 0
+		fi
 		printf 'Clang selected no repository C files\n' >&2
 		return 1
 	fi
