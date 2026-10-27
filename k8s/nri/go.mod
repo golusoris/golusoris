@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/k8s/nri
 go 1.27.3
 
 require (
-	github.com/containerd/nri v0.12.4
+	github.com/containerd/nri v0.12.5
 	github.com/golusoris/golusoris/core v0.12.1
 	go.uber.org/fx v1.24.0
 )
