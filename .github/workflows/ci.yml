@@ -736,7 +736,7 @@ jobs:
           install-only: true
       - name: Verify pinned GoReleaser
         shell: bash
-        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
       - name: Pin the snapshot base to the root release tag
         shell: bash
         run: |

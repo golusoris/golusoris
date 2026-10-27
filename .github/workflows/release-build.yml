@@ -82,7 +82,7 @@ jobs:
           for tool in cosign syft goreleaser gh; do command -v "$tool"; done
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
 
       - name: Compose the breaking-change notes header
         shell: bash
