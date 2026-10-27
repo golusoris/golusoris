@@ -33,6 +33,20 @@ GLOBAL_TRIGGERS: tuple[str, ...] = (
     ".standards.yaml",
 )
 
+# Paths no gated job reads: a PR touching only these skips test-race, fault scan, apidiff, module
+# sweep and portability. Allow-list: anything not listed runs.
+SKIP_SAFE: tuple[str, ...] = (
+    "docs/*",
+    "*.md",
+    "LICENSES/*",
+    ".claude/*",
+    ".agents/*",
+    ".cursor/*",
+    ".windsurfrules",
+    ".github/ISSUE_TEMPLATE/*",
+    "mkdocs.yml",
+)
+
 
 class ScopeError(RuntimeError):
     """Report a fail-closed scope resolution error."""
@@ -112,9 +126,10 @@ def resolve_scope(repo_root: Path | None = None) -> Scope:
         )
 
     # Base SHA is set: run git diff against HEAD (fail closed on invalid base)
-    raw_output = _run_git(["diff", "--name-only", "-z", f"{base_sha}...HEAD"], cwd=root)
+    # --no-renames lists both sides of a rename, so moving code under docs/ still selects it.
+    raw_output = _run_git(["diff", "--name-only", "--no-renames", "-z", f"{base_sha}...HEAD"], cwd=root)
     # Also include uncommitted working tree changes (for local worktree testing)
-    worktree_output = _run_git(["diff", "--name-only", "-z", "HEAD"], cwd=root)
+    worktree_output = _run_git(["diff", "--name-only", "--no-renames", "-z", "HEAD"], cwd=root)
 
     combined_raw = raw_output + b"\0" + worktree_output
     entries = []
@@ -322,6 +337,19 @@ def matches_any(globs: Sequence[str], repo_root: Path | None = None) -> bool:
     return False
 
 
+def evaluate_gate(repo_root: Path | None = None) -> tuple[str, str]:
+    """Return ("run" | "skip", reason) for the path-gated jobs."""
+    scope = resolve_scope(find_repo_root(repo_root))
+    if scope.mode == "full":
+        return "run", scope.reason
+    if not scope.changed_files:
+        return "run", "no changed files"
+    for path in scope.changed_files[:MAX_FILES]:
+        if not _matches_any_pattern(path, SKIP_SAFE):
+            return "run", f"gated input changed: {path}"
+    return "skip", f"all {len(scope.changed_files)} changed files are skip-safe"
+
+
 def _parse_cli_args(args: Sequence[str]) -> tuple[Path | None, list[str]]:
     """Extract optional --root argument and remaining subcommand arguments."""
     root: Path | None = None
@@ -339,6 +367,11 @@ def _parse_cli_args(args: Sequence[str]) -> tuple[Path | None, list[str]]:
 
 def _dispatch_command(command: str, sub_args: list[str], root: Path | None) -> int:
     """Dispatch CLI command to the appropriate handler."""
+    if command == "gate":
+        decision, reason = evaluate_gate(root)
+        sys.stderr.write(f"ci-scope: gate={decision} ({reason})\n")
+        sys.stdout.write(f"{decision}\n")
+        return 0
     if command == "modules":
         for mod in selected_modules(root):
             sys.stdout.write(f"{mod}\n")
@@ -369,7 +402,7 @@ def main(argv: list[str] | None = None) -> int:
         root, cleaned_args = _parse_cli_args(args)
         if not cleaned_args:
             sys.stderr.write(
-                "usage: ci_scope.py [--root PATH] <modules|files <glob>...|any <glob>...>\n"
+                "usage: ci_scope.py [--root PATH] <modules|files <glob>...|any <glob>...|gate>\n"
             )
             return 2
 
