@@ -275,10 +275,14 @@ check_release_tool_installs() {
 		fi
 	done
 	for name in ci release-tool-contract; do
-		# shellcheck disable=SC2016 # Match the literal runtime variable in workflow YAML.
-		if ! grep -Fq 'bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"' \
+		if ! grep -Eq 'uses:[[:space:]]+plurano/horistes/actions/install-gitleaks@[0-9a-f]{40}' \
 			"$workflows/$name.yml"; then
 			printf 'workflow bypasses the verified gitleaks installer: %s\n' \
+				"$workflows/$name.yml" >&2
+			return 1
+		fi
+		if grep -Eq 'scripts/ci/install-gitleaks\.sh' "$workflows/$name.yml"; then
+			printf 'workflow uses local gitleaks installer: %s\n' \
 				"$workflows/$name.yml" >&2
 			return 1
 		fi
@@ -322,7 +326,7 @@ expect_install_rejection prebaked rebuild-on-base.yml \
 expect_install_rejection gitleaks-literal ci.yml \
 	's/= "\$GITLEAKS_VERSION"/= "8.30.1"/'
 expect_install_rejection gitleaks-installer ci.yml \
-	's/install-gitleaks.sh/install-other.sh/'
+	's#plurano/horistes/actions/install-gitleaks@#example/install-gitleaks@#'
 
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
