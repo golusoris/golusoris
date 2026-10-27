@@ -19,6 +19,7 @@ new_repo() {
 	local root="$suite_root/$name"
 	mkdir -p "$root/scripts/ci" "$root/tools"
 	install -m 0755 "$repo_root/scripts/ci/c-quality.sh" "$root/scripts/ci/c-quality.sh"
+	install -m 0755 "$repo_root/scripts/ci/ci_scope.py" "$root/scripts/ci/ci_scope.py"
 	install -m 0644 "$repo_root/tools/tool-versions.env" "$root/tools/tool-versions.env"
 	install -m 0644 "$repo_root/.clang-tidy" "$root/.clang-tidy"
 	git -C "$root" init -q
