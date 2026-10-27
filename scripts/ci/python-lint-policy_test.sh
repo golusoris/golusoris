@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 set -euo pipefail
+# Fixture repositories lack the pull request base commit; run them unscoped.
+unset CI_SCOPE_BASE
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
