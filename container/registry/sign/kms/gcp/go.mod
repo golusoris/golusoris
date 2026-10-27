@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/container/registry/sign/kms/gcp
 go 1.27.3
 
 require (
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261015200537-b544145a689f
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261027151107-945a38685de2
 	golang.org/x/oauth2 v0.37.0
 )
 
