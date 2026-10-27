@@ -11,6 +11,7 @@ import re
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -18,22 +19,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIRS: tuple[str, ...] = (".github/workflows",)
 PR_EVENTS: tuple[str, ...] = ("pull_request", "pull_request_target")
 
-_ENGINE_REASON = (
-    "C: emitted by Praetor; the engine template gains the group "
-    "(order engine-emitted-workflow-concurrency-1936)"
-)
-
 # path -> (reason, expiry). An expired entry fails like a missing group.
-EXCEPTIONS: dict[str, tuple[str, str]] = {
-    ".github/workflows/praetor-api.yml": (
-        _ENGINE_REASON,
-        "2026-10-26",
-    ),
-    ".github/workflows/praetor-docs.yml": (
-        _ENGINE_REASON,
-        "2026-10-26",
-    ),
-}
+EXCEPTIONS: dict[str, tuple[str, str]] = {}
 
 _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?P<rest>.*)$")
 _CHILD_KEY = re.compile(r"^  (?P<key>[A-Za-z_-]+):(?P<rest>.*)$")
@@ -89,14 +76,21 @@ def _group_findings(name: str, group: str, events: set[str]) -> list[str]:
         findings.append(
             f"{name}: concurrency group has neither github.workflow nor a literal prefix",
         )
+    has_pr_number = (
+        "github.event.pull_request.number" in group or "github.event.number" in group
+    )
     if "pull_request_target" in events:
-        if "github.event.pull_request.number" not in group:
+        if not has_pr_number:
             findings.append(
                 f"{name}: pull_request_target runs share github.ref with the base "
-                "branch; key the group by github.event.pull_request.number",
+                "branch; key the group by github.event.pull_request.number or "
+                "github.event.number",
             )
-    elif "github.ref" not in group and "github.event.pull_request.number" not in group:
-        findings.append(f"{name}: concurrency group is not keyed by PR number or ref")
+    elif "github.ref" not in group and not has_pr_number:
+        findings.append(
+            f"{name}: concurrency group is not keyed by PR number "
+            "(github.event.pull_request.number or github.event.number) or ref",
+        )
     return findings
 
 
@@ -187,13 +181,33 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         )
 
     def test_exception_expires(self) -> None:
-        name = next(iter(EXCEPTIONS))
         text = "on:\n  pull_request:\n"
-        self.assertEqual(check(name, text, _TODAY), [])
-        late = datetime.date.fromisoformat(EXCEPTIONS[name][1]) + datetime.timedelta(
-            days=1
+        with unittest.mock.patch.dict(EXCEPTIONS, {"w.yml": ("C: test", "2026-10-20")}):
+            self.assertEqual(check("w.yml", text, datetime.date(2026, 10, 19)), [])
+            self.assertIn(
+                "exception expired",
+                " ".join(check("w.yml", text, datetime.date(2026, 10, 21))),
+            )
+
+    def test_engine_event_number_group_passes(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: ${{ github.workflow }}-${{ github.event.number || github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
         )
-        self.assertIn("exception expired", " ".join(check(name, text, late)))
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_run_id_only_group_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: ${{ github.workflow }}-${{ github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn("not keyed", " ".join(check("w.yml", text, _TODAY)))
 
     def test_group_needs_workflow_or_prefix(self) -> None:
         bare = _GOOD.replace("${{ github.workflow }}-", "")
