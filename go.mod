@@ -86,7 +86,7 @@ require (
 	github.com/pgvector/pgvector-go/pgx v0.4.1
 	github.com/pion/webrtc/v4 v4.2.25
 	github.com/pquerna/otp v1.5.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.1
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.72.1
