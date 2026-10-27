@@ -310,4 +310,4 @@ pre-commit:
 
 The framework's own [`lefthook.yml`](https://github.com/golusoris/golusoris/blob/main/lefthook.yml) + `scripts/hooks/` is a
 finer-grained template (staged-package lint, commit-msg Conventional Commits +
-DCO, pre-push build + `go test -short`) that apps can copy verbatim.
+DCO, pre-push build + `go test -short`) that applications can copy verbatim.
