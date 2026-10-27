@@ -4,7 +4,7 @@
 
 // Package clock exposes a mockable wall clock. All golusoris code that needs
 // "now" or sleep should depend on [Clock] (provided by fx) instead of the
-// stdlib time package directly. This makes time-sensitive logic testable.
+// stdlib time package directly. This makes time-sensitive logic testable. Planted gate probe.
 //
 //	fx.Invoke(func(c clock.Clock) {
 //	    if time.Since(c.Now()) > timeout { ... }
