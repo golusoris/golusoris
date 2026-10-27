@@ -54,3 +54,55 @@ func TestCheckSharedReady_ErrorSet(t *testing.T) {
 		t.Fatalf("expected wrapped sentinel error, got %v", err)
 	}
 }
+
+func TestExitStatus(t *testing.T) {
+	t.Parallel()
+	startErr := errors.New("boot failure")
+	tests := []struct {
+		name     string
+		code     int
+		startErr error
+		wantCode int
+		wantErr  bool
+	}{
+		{
+			name:     "positive: start error with passing tests returns 1 and logs cause",
+			code:     0,
+			startErr: startErr,
+			wantCode: 1,
+			wantErr:  true,
+		},
+		{
+			name:     "negative: nil error returns original code and logs nothing",
+			code:     0,
+			startErr: nil,
+			wantCode: 0,
+			wantErr:  false,
+		},
+		{
+			name:     "boundary: start error preserves failure exit code and logs cause",
+			code:     2,
+			startErr: startErr,
+			wantCode: 2,
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, out := exitStatus(tt.code, tt.startErr)
+			if got != tt.wantCode {
+				t.Errorf("exitStatus = %d, want %d", got, tt.wantCode)
+			}
+			if !tt.wantErr {
+				if out != "" {
+					t.Errorf("exitStatus output = %q, want empty", out)
+				}
+				return
+			}
+			if !strings.Contains(out, "start shared container") || !strings.Contains(out, startErr.Error()) {
+				t.Errorf("exitStatus output = %q, want container error", out)
+			}
+		})
+	}
+}
