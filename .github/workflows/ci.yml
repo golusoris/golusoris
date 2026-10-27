@@ -732,11 +732,11 @@ jobs:
       - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.18.3
+          version: v2.19.0
           install-only: true
       - name: Verify pinned GoReleaser
         shell: bash
-        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
       - name: Pin the snapshot base to the root release tag
         shell: bash
         run: |

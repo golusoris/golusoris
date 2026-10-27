@@ -263,7 +263,7 @@ def check_release_tool_pins(root: Path) -> list[str]:
 VALID_FIXTURE_ENV = """\
 COSIGN_VERSION=3.1.4
 SYFT_VERSION=1.54.1
-GORELEASER_VERSION=2.18.3
+GORELEASER_VERSION=2.19.0
 """
 
 VALID_FIXTURE_WORKFLOW = r"""\
@@ -278,7 +278,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
       - name: Install goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
-          version: v2.18.3
+          version: v2.19.0
       - name: Install buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
@@ -287,7 +287,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
         run: |
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.18\.3([[:space:]]|$)'
+          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
 """
 
