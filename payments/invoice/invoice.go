@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package invoice provides invoice modelling, sequential numbering,
+// Package invoice provides the invoice modelling, sequential numbering,
 // and HTML rendering for SaaS billing. PDF rendering stays decoupled: apps can
 // pipe the HTML through the shipped pdf/ submodule, store it directly, or use
 // a stand-alone HTML-to-PDF service.
