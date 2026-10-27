@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO
 
+import ci_scope
 import windows_job
 
 # Windows job objects that own each running child tree, keyed by its Popen.
@@ -543,6 +544,12 @@ def verify_repository(root: Path, runner: ProcessRunner | None = None) -> Summar
     process_runner = runner or ProcessRunner()
     environment = repository_environment()
     modules = discover_modules(resolved_root, process_runner)
+    if os.environ.get("CI_SCOPE_BASE", "").strip():
+        selected = set(ci_scope.selected_modules(resolved_root))
+        modules = tuple(m for m in modules if module_name(resolved_root, m) in selected)
+        if not modules:
+            print("ci-scope: no Go module changed; skipping portability", flush=True)
+            return Summary(modules=0, packages=0, phases=0)
     package_total = 0
     phase_total = 0
     for module in modules:

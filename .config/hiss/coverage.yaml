@@ -674,19 +674,21 @@ rules:
     title: CI Efficiency
     coverage:
       - language: go
-        state: unsupported
+        state: partial
+        runner: ci
         mechanism: >-
-          none for the Go pipeline. .github/workflows/ci.yml triggers on every pull_request and
-          every push to main with no `paths:` filter and no changed-files job selection, so all
-          22 jobs run for a README-only change. Only docs.yml carries a paths filter. The
-          efficiency measures that do exist -- concurrency with cancel-in-progress and the
-          setup-go build/module cache -- shorten a run without selecting jobs by diff. Only the
-          PR-title and DCO jobs exclude Renovate; that is event/actor applicability, not
-          diff-aware gate selection.
+          scripts/ci/ci_scope.py scopes pull_request workflow runs across Go modules, Python
+          lint/tests, C quality, and portability checks in .github/workflows/ci.yml,
+          portability.yml, and tiny-trainer-images.yml when CI_SCOPE_BASE is set to the PR base
+          SHA. Push to main, release tags, schedule, workflow_dispatch, and merge_group run the
+          full matrix.
         rationale: >-
-          No fixture is declared, because the rule is about which jobs a workflow runs and no
-          source file can exhibit that. The gap is the whole claim and it is stated above
-          rather than implied: the Go jobs are not diff-aware at all.
+          No fixture is declared, because the rule governs workflow job and step execution
+          driven by git diffs, which no single source file can exhibit. scripts/ci/ci_scope_test.py
+          replays positive, negative, and boundary unit cases for diff and full modes, module
+          resolution, and global trigger rules. Push to main and tag releases remain full by
+          design. partial because jobs that do not call these scripts still run their full
+          check on every pull request.
   - id: HISS-19
     title: Reuse Before Writing
     coverage:
@@ -723,7 +725,7 @@ rules:
           is satisfied exactly when the claims of the other twenty invariants survive their own fixtures, and a
           file demonstrating "an undeclared mechanism" would be a copy of this catalogue rather
           than a source file. partial, not enforced, for two measured reasons. First, of the 40
-          claims declared here only 16 are replayed by the verifier; the other 24 name a tool
+          claims declared here only 15 are replayed by the verifier; the other 25 name a tool
           it does not run, so for those it checks the attribution and the rationale carries the
           measurement instead. Second, four claims (HISS-11, HISS-12, HISS-16 and HISS-20
           itself) are backed by a named mechanism and a measured gap but by no positive

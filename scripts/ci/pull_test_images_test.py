@@ -40,7 +40,7 @@ class PullTestImagesTest(TestCase):
         )
         docker.chmod(0o755)
         self.environment = dict(os.environ, PATH=f"{self.root}{os.pathsep}{os.environ['PATH']}",
-                                DOCKER_LOG=str(self.log))
+                                DOCKER_LOG=str(self.log), CI_SCOPE_BASE="")  # fixture is no git repository
 
     def run_pulls(self, *images: str) -> subprocess.CompletedProcess[str]:
         return self.run_script("pull-test-images.sh", *images)

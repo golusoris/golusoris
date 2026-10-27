@@ -43,10 +43,24 @@ main() {
 		return 1
 	fi
 
+	if [[ -f "$root/scripts/ci/ci_scope.py" ]]; then
+		local rc=0
+		"$python_bin" "$root/scripts/ci/ci_scope.py" --root "$root" any '*.py' 'scripts/ci/*' '.config/lefthook/*' || rc=$?
+		case "$rc" in
+			0) ;;
+			1)
+				printf 'ci-scope: no Python test inputs changed; skipping python-tests\n'
+				return 0
+				;;
+			*) return 1 ;;
+		esac
+	fi
+
 	local -a tests=(
 		'.config/lefthook/scripts/test_checkpoint.py'
 		'scripts/ci/block_evasion_hook_test.py'
 		'scripts/ci/portability_test.py'
+		'scripts/ci/ci_scope_test.py'
 	)
 	local test_file
 	for test_file in "${tests[@]}"; do
