@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -206,6 +207,118 @@ class CiScopeTest(unittest.TestCase):
         lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
         self.assertIn(".", lines)
         self.assertNotIn("k8s/nri", lines)
+
+
+    def _write(self, rel: str, text: str = "x\n") -> None:
+        path = self.repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+    def _gate(self) -> tuple[str, str]:
+        proc = self._run_scope("gate", base=self.base_sha)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        return proc.stdout.strip(), proc.stderr
+
+    def test_positive_gate_docs_only_skips(self) -> None:
+        """A diff of only skip-safe paths skips the gated jobs."""
+        for rel in (
+            "docs/guide/page.md",
+            "README.md",
+            "core/AGENTS.md",
+            "LICENSES/MIT.txt",
+            ".claude/settings.json",
+            ".github/ISSUE_TEMPLATE/bug.yml",
+            "mkdocs.yml",
+        ):
+            self._write(rel)
+        self._git("add", ".")
+        self._git("commit", "-m", "docs only")
+        decision, stderr = self._gate()
+        self.assertEqual(decision, "skip")
+        self.assertIn("ci-scope: gate=skip", stderr)
+
+    def test_negative_gate_go_file_runs(self) -> None:
+        """One Go file next to docs runs the gated jobs."""
+        self._write("docs/guide.md")
+        self._write("core/core.go", "package core\n// change\n")
+        self._git("add", ".")
+        self._git("commit", "-m", "docs and code")
+        decision, stderr = self._gate()
+        self.assertEqual(decision, "run")
+        self.assertIn("gated input changed: core/core.go", stderr)
+
+    def test_negative_gate_unknown_path_runs(self) -> None:
+        """A path outside the allow-list runs the gated jobs."""
+        self._write("unknown.txt")
+        self._git("add", ".")
+        self._git("commit", "-m", "unknown")
+        self.assertEqual(self._gate()[0], "run")
+
+    def test_negative_gate_global_trigger_runs(self) -> None:
+        """A global trigger forces a full run."""
+        self._write("scripts/ci/check.sh", "#!/bin/sh\n")
+        self._git("add", ".")
+        self._git("commit", "-m", "ci script")
+        self.assertEqual(self._gate()[0], "run")
+
+    def test_negative_gate_rename_into_docs_runs(self) -> None:
+        """Moving code under docs/ still counts the removed source path."""
+        (self.repo / "docs").mkdir()
+        self._git("mv", "core/core.go", "docs/core.go.txt")
+        self._git("commit", "-m", "move")
+        decision, stderr = self._gate()
+        self.assertEqual(decision, "run")
+        self.assertIn("core/core.go", stderr)
+
+    def test_boundary_gate_empty_diff_runs(self) -> None:
+        """An empty diff fails closed."""
+        decision, stderr = self._gate()
+        self.assertEqual(decision, "run")
+        self.assertIn("no changed files", stderr)
+
+    def test_boundary_gate_full_mode_runs(self) -> None:
+        """Without a base the gate always runs."""
+        self._write("docs/guide.md")
+        self._git("add", ".")
+        self._git("commit", "-m", "docs")
+        proc = self._run_scope("gate", base=None)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(proc.stdout.strip(), "run")
+
+    def test_negative_gate_bad_base_is_error(self) -> None:
+        """A git error exits 3 and prints no decision."""
+        proc = self._run_scope("gate", base="deadbeefbadsha00000000000000000000000000")
+        self.assertEqual(proc.returncode, 3)
+        self.assertEqual(proc.stdout, "")
+
+
+class SkipSafeEmbedTest(unittest.TestCase):
+    """No file a Go package embeds may be skip-safe."""
+
+    def test_no_embedded_file_is_skip_safe(self) -> None:
+        sys.path.insert(0, str(CI_SCOPE_SCRIPT.parent))
+        import ci_scope
+
+        directive = re.compile(r"^//go:embed\s+(.+)$", re.MULTILINE)
+        listed = subprocess.run(  # noqa: S603 - fixed git command in this repository.
+            ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--", "*.go"],  # noqa: S607 - git on PATH.
+            capture_output=True,
+            check=True,
+            timeout=60,
+        ).stdout.decode()
+        embedded: list[str] = []
+        for rel in filter(None, listed.split("\0")):
+            if rel.endswith("_test.go"):
+                continue
+            text = (REPO_ROOT / rel).read_text(encoding="utf-8", errors="replace")
+            for match in directive.finditer(text):
+                for pattern in match.group(1).split():
+                    target = REPO_ROOT / Path(rel).parent / pattern
+                    files = [p for p in target.rglob("*") if p.is_file()] if target.is_dir() else [target]
+                    embedded += [p.relative_to(REPO_ROOT).as_posix() for p in files]
+        self.assertTrue(embedded, "expected //go:embed directives")
+        clashes = [f for f in embedded if ci_scope._matches_any_pattern(f, ci_scope.SKIP_SAFE)]
+        self.assertEqual(clashes, [])
 
 
 if __name__ == "__main__":
