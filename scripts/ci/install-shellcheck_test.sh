@@ -25,16 +25,36 @@ install -m 0755 "$repo_root/scripts/ci/install-shellcheck.sh" \
 
 stub_lib="$suite_root/verified-download-stub.sh"
 cat >"$stub_lib" <<'STUB'
+_valid_hex_pin() {
+	case "$1" in
+	*[!0-9a-f]*) return 1 ;;
+	*) ((${#1} == 64)) ;;
+	esac
+}
+
+_digest_of_file() {
+	local sum
+	sum="$(sha256sum "$1")" || return
+	printf '%s' "${sum%% *}"
+}
+
 fetch_verified() {
-	local url="$1" expected="$2" max_bytes="$3" timeout_seconds="$4" output="$5" actual
-	if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
-		printf 'invalid pinned archive digest: %s\n' "$expected" >&2
+	local target_url="$1"
+	local want_digest="$2"
+	local destination="$5"
+	local got_digest
+
+	if ! _valid_hex_pin "$want_digest"; then
+		printf 'invalid pinned archive digest: %s\n' "$want_digest" >&2
 		return 1
 	fi
-	curl --output "$output" "$url" || return
-	actual="$(sha256sum "$output" | awk '{ print $1 }')" || return
-	if [[ "$actual" != "$expected" ]]; then
-		printf 'archive digest mismatch for %s: expected %s, got %s\n' "$url" "$expected" "$actual" >&2
+
+	curl --output "$destination" "$target_url" || return
+
+	got_digest="$(_digest_of_file "$destination")" || return
+	if [[ "$got_digest" != "$want_digest" ]]; then
+		printf 'archive digest mismatch for %s: expected %s, got %s\n' \
+			"$target_url" "$want_digest" "$got_digest" >&2
 		return 1
 	fi
 }
