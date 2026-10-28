@@ -7,6 +7,14 @@
       ],
       "command": "praetorctl",
       "type": "stdio"
+    },
+    "golusoris-mcp": {
+      "args": [
+        "run",
+        "./cmd/golusoris-mcp"
+      ],
+      "command": "go",
+      "type": "stdio"
     }
   }
 }
