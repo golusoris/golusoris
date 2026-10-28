@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,14 +35,10 @@ type mockOIDCServer struct {
 	rsaKey         *rsa.PrivateKey
 	badKey         *rsa.PrivateKey
 	discoveryCount atomic.Int64
+	discoveryFails atomic.Bool
 }
 
 func startMockOIDCServer(t *testing.T) *mockOIDCServer {
-	t.Helper()
-	return startMockOIDCServerWithListener(t, nil)
-}
-
-func startMockOIDCServerWithListener(t *testing.T, listener net.Listener) *mockOIDCServer {
 	t.Helper()
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -61,6 +56,10 @@ func startMockOIDCServerWithListener(t *testing.T, listener net.Listener) *mockO
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
 			mockServer.discoveryCount.Add(1)
+			if mockServer.discoveryFails.Load() {
+				http.Error(w, "discovery unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"issuer":                                serverURL,
@@ -165,16 +164,7 @@ func startMockOIDCServerWithListener(t *testing.T, listener net.Listener) *mockO
 		}
 	})
 
-	var server *httptest.Server
-	if listener == nil {
-		server = httptest.NewServer(handler)
-	} else {
-		server = &httptest.Server{
-			Listener: listener,
-			Config:   &http.Server{Handler: handler},
-		}
-		server.Start()
-	}
+	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	serverURL = server.URL
 
@@ -389,16 +379,14 @@ func TestProvider_LazyDiscovery(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := l.Addr().String()
-	require.NoError(t, l.Close())
+	mock := startMockOIDCServer(t)
+	mock.discoveryFails.Store(true)
 
 	provider, err := oidc.NewProvider(ctx, oidc.Options{
-		IssuerURL:        "http://" + addr,
+		IssuerURL:        mock.server.URL,
 		ClientID:         "test-client",
 		RedirectURL:      "https://app.example.com/callback",
-		DiscoveryTimeout: 200 * time.Millisecond,
+		DiscoveryTimeout: 5 * time.Second,
 		LazyDiscovery:    true,
 	}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
@@ -412,11 +400,10 @@ func TestProvider_LazyDiscovery(t *testing.T) {
 	_, err = provider.Begin(ctx, "test-state")
 	elapsed := clock.Since(start)
 	require.Error(t, err)
+	require.ErrorContains(t, err, "auth/oidc: discover provider")
 	require.Less(t, elapsed, 2*time.Second)
 
-	newListener, err := net.Listen("tcp", addr)
-	require.NoError(t, err)
-	_ = startMockOIDCServerWithListener(t, newListener)
+	mock.discoveryFails.Store(false)
 
 	req, err := provider.Begin(ctx, "test-state")
 	require.NoError(t, err)
