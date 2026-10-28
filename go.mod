@@ -40,7 +40,7 @@ require (
 	github.com/fxamacker/cbor/v2 v2.9.6
 	github.com/getkin/kin-openapi v0.151.0
 	github.com/getsentry/sentry-go v0.50.0
-	github.com/gkampitakis/go-snaps v0.5.23
+	github.com/gkampitakis/go-snaps v0.5.24
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-logr/logr v1.4.4
 	github.com/go-playground/form/v4 v4.5.0
