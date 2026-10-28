@@ -6,7 +6,7 @@ require (
 	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
 	github.com/go-openapi/runtime v0.33.3
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261027114928-35b3ad285578
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261027203057-0e3083d7fe13
 	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/go-containerregistry v0.22.1
 	github.com/in-toto/attestation v1.2.0
@@ -31,7 +31,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/go-faster/errors v0.8.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-openapi/analysis v1.0.0 // indirect

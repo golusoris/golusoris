@@ -57,11 +57,27 @@ jobs:
         with:
           version: v0.38.1
 
-      - name: Install pinned gitleaks
+      - id: gitleaks-pin
+        name: Read pinned gitleaks version
+        shell: bash
         run: |
           set -euo pipefail
-          bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"
-          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+          . tools/tool-versions.env
+          echo "version=${GITLEAKS_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${GITLEAKS_LINUX_X64_SHA256}" >> "$GITHUB_OUTPUT"
+
+      - name: Install pinned gitleaks
+        uses: plurano/horistes/actions/install-gitleaks@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
+        with:
+          version: ${{ steps.gitleaks-pin.outputs.version }}
+          sha256: ${{ steps.gitleaks-pin.outputs.sha256 }}
+          install-dir: ${{ runner.temp }}/gitleaks-bin
+
+      - name: Add gitleaks to PATH
+        shell: bash
+        env:
+          GITLEAKS_DIR: ${{ runner.temp }}/gitleaks-bin
+        run: echo "$GITLEAKS_DIR" >> "$GITHUB_PATH"
 
       - name: Verify the release runtime contract
         shell: bash

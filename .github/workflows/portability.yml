@@ -57,27 +57,38 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.15'
+      - name: Decide the CI scope gate
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          gated="$(python -B scripts/ci/ci_scope.py gate)"
+          case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
+          echo "CI_GATED=$gated" >> "$GITHUB_ENV"
+          echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Setup Go
+        if: env.CI_GATED != 'skip'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
-      - name: Setup Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.15'
       - name: Verify portability driver policy
+        if: env.CI_GATED != 'skip'
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -B scripts/ci/portability_test.py
       - name: Install cgo system libraries on Linux
         # hw/udev links libudev; media/3d links OpenAL, Vorbis, GL and X11 (go-gl/glfw).
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_GATED != 'skip'
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       - name: Install verified Pact FFI on Unix
-        if: runner.os != 'Windows'
+        if: runner.os != 'Windows' && env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
@@ -86,7 +97,7 @@ jobs:
           # pact-go's cgo flags search only /tmp, /opt/pact/lib and /usr/local/lib.
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install verified Pact FFI on Windows
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.CI_GATED != 'skip'
         shell: pwsh
         run: |
           $pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'
@@ -96,12 +107,13 @@ jobs:
           "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PACT_GO_LIB_DOWNLOAD_PATH=$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Time SQLite open phases on Windows (#778)
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && env.CI_GATED != 'skip'
         shell: bash
         env:
           GOFLAGS: -mod=readonly
         run: go test -run '^TestOpenPhaseTimings$' -count=1 -v ./db/sqlite/
       - name: Build, vet, and short-test every Go module
+        if: env.CI_GATED != 'skip'
         env:
           GOFLAGS: -mod=readonly
           PYTHONDONTWRITEBYTECODE: '1'

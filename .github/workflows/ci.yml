@@ -260,19 +260,31 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+      - name: Decide the CI scope gate
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          gated="$(python3 -B scripts/ci/ci_scope.py gate)"
+          case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
+          echo "CI_GATED=$gated" >> "$GITHUB_ENV"
+          echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Pull Docker Hub images through mirror.gcr.io
+        if: env.CI_GATED != 'skip'
         shell: bash
         run: bash scripts/ci/docker-hub-mirror.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: env.CI_GATED != 'skip'
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
       - name: Run repository Python regression suites
+        if: env.CI_GATED != 'skip'
         run: bash scripts/ci/python-tests.sh
       # Hosted runners ship a native Docker daemon for testcontainers-backed packages.
       - name: Verify Docker is reachable
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_GATED != 'skip'
         run: docker info
       # Testcontainers images are immutable and identical from job to job, so
       # pulling them again every run is the actual defect -- the registry is
@@ -286,13 +298,13 @@ jobs:
       # The key is the immutable manifest hash. Renovate changes tag + digest,
       # which changes the key and repopulates the cache exactly once.
       - name: Cache testcontainers images
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_GATED != 'skip'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/testcontainers-images
           key: tc-images-${{ runner.os }}-${{ hashFiles('.github/testcontainers-images.txt') }}
       - name: Load or pull testcontainers images
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && env.CI_GATED != 'skip'
         # Ceiling for the cold-cache path; a warm restore is a `docker load` of
         # a local tarball and finishes in well under a minute (HISS-02).
         timeout-minutes: 30
@@ -336,6 +348,7 @@ jobs:
           echo "Wrote $(du -h "$ARCHIVE" | cut -f1) image archive for the cache"
           docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}'
       - name: Run primary-module tests with race detector and coverage
+        if: env.CI_GATED != 'skip'
         env:
           GO_MODULE_GROUP: primary
           GO_COVERAGE_DIR: .coverage/primary
@@ -359,7 +372,7 @@ jobs:
       # ADR-0011 keeps the real-clamd suite behind the integration tag so the
       # local gate stays cheap; this step is where it runs.
       - name: Run the ClamAV integration suite
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         timeout-minutes: 15
         env:
           RYUK_RECONNECTION_TIMEOUT: 30m
@@ -373,7 +386,7 @@ jobs:
             exit 1
           fi
       - name: Run the envtest suite
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         timeout-minutes: 15
         run: |
           set -euo pipefail
@@ -382,7 +395,7 @@ jobs:
           assets="$(setup-envtest use "${ENVTEST_K8S_VERSION}" --bin-dir "$RUNNER_TEMP/envtest" -p path)"
           export KUBEBUILDER_ASSETS="$assets"
           crd="$RUNNER_TEMP/cnpg-clusters.yaml"
-          curl -fsSL --retry 3 -o "$crd" "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/${CNPG_CRD_VERSION}/config/crd/bases/postgresql.cnpg.io_clusters.yaml"
+          curl -fsSL --retry 3 --max-time 120 -o "$crd" "https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/${CNPG_CRD_VERSION}/config/crd/bases/postgresql.cnpg.io_clusters.yaml"
           echo "${CNPG_CRD_SHA256}  $crd" | sha256sum -c -
           export CNPG_CRD_PATH="$crd"
           LOG="$RUNNER_TEMP/envtest.log"
@@ -396,7 +409,7 @@ jobs:
             exit 1
           fi
       - name: Run the stripe-mock integration suite
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         timeout-minutes: 10
         env:
           RYUK_RECONNECTION_TIMEOUT: 30m
@@ -410,7 +423,7 @@ jobs:
             exit 1
           fi
       - name: Run the Bugsink integration suite
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         timeout-minutes: 15
         env:
           RYUK_RECONNECTION_TIMEOUT: 30m
@@ -424,7 +437,7 @@ jobs:
             exit 1
           fi
       - name: Check coverage threshold (70%)
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         run: |
           if [[ -n "${CI_SCOPE_BASE}" && ! -f .coverage/primary/coverage.out ]]; then
             echo "ci-scope: no primary module changed; skipping the coverage threshold"
@@ -437,7 +450,7 @@ jobs:
             exit 1
           fi
       - name: Upload coverage artifact
-        if: matrix.primary
+        if: matrix.primary && env.CI_GATED != 'skip'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage
@@ -542,24 +555,38 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+      - name: Decide the CI scope gate
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          gated="$(python3 -B scripts/ci/ci_scope.py gate)"
+          case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
+          echo "CI_GATED=$gated" >> "$GITHUB_ENV"
+          echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Pull Docker Hub images through mirror.gcr.io
+        if: env.CI_GATED != 'skip'
         shell: bash
         run: bash scripts/ci/docker-hub-mirror.sh
       - name: Pre-pull shard testcontainers images
+        if: env.CI_GATED != 'skip'
         timeout-minutes: 30
         shell: bash
         run: bash scripts/ci/pull-split-test-images.sh
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: env.CI_GATED != 'skip'
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules in this sweep; hosted images lack their headers.
       - name: Install cgo system libraries
+        if: env.CI_GATED != 'skip'
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
       - name: Install verified Pact FFI
+        if: env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
@@ -567,6 +594,7 @@ jobs:
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install pinned analysis tools
+        if: env.CI_GATED != 'skip'
         run: |
           set -euo pipefail
           . tools/tool-versions.env
@@ -575,21 +603,27 @@ jobs:
           go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
       - name: Verify module graphs
+        if: env.CI_GATED != 'skip'
         run: |
           scripts/ci/go-modules.sh verify
           scripts/ci/go-modules.sh tidy
           scripts/ci/go-modules.sh fix
       - name: Lint
+        if: env.CI_GATED != 'skip'
         run: scripts/ci/go-modules.sh lint
       - name: Security and vulnerability gates
+        if: env.CI_GATED != 'skip'
         run: |
           scripts/ci/go-modules.sh gosec
           scripts/ci/go-modules.sh vuln
       - name: Build and vet
+        if: env.CI_GATED != 'skip'
         run: scripts/ci/go-modules.sh build
       - name: Test with race detector and coverage
+        if: env.CI_GATED != 'skip'
         run: scripts/ci/go-modules.sh test
       - name: Upload coverage artifact
+        if: env.CI_GATED != 'skip'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: coverage-modules-${{ matrix.shard }}
@@ -701,17 +735,31 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Decide the CI scope gate
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          gated="$(python3 -B scripts/ci/ci_scope.py gate)"
+          case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
+          echo "CI_GATED=$gated" >> "$GITHUB_ENV"
+          echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: env.CI_GATED != 'skip'
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules; hosted images lack their headers.
       - name: Install cgo system libraries
+        if: env.CI_GATED != 'skip'
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
       - name: Install verified Pact FFI
+        if: env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
@@ -719,6 +767,7 @@ jobs:
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Fail on any recovered nil-dereference fault
+        if: env.CI_GATED != 'skip'
         run: bash scripts/ci/fault-recovery.sh
 
   release-binaries:
@@ -863,7 +912,11 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -899,7 +952,11 @@ jobs:
         run: |
           . tools/tool-versions.env
           go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -938,7 +995,11 @@ jobs:
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -1008,8 +1069,12 @@ jobs:
       - name: Validate static and rendered Kubernetes resources
         run: bash scripts/ci/kubeconform.sh
       # Gap C14-02: a CNPG backup must bootstrap a recovery cluster with equal data.
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Run CNPG backup restore in kind
         timeout-minutes: 30
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           LOG="$RUNNER_TEMP/cnpg-restore.log"
@@ -1097,21 +1162,34 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0   # need full history for git describe
+      - name: Decide the CI scope gate
+        shell: bash
+        env:
+          CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+        run: |
+          gated="$(python3 -B scripts/ci/ci_scope.py gate)"
+          case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
+          echo "CI_GATED=$gated" >> "$GITHUB_ENV"
+          echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        if: env.CI_GATED != 'skip'
         with:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
       # apidiff type-checks every module, including the cgo ones.
       - name: Install cgo system libraries
+        if: env.CI_GATED != 'skip'
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       - name: Install apidiff
+        if: env.CI_GATED != 'skip'
         run: |
           set -euo pipefail
           . tools/tool-versions.env
           go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
       - name: Run apidiff vs previous tag (informational pre-1.0)
+        if: env.CI_GATED != 'skip'
         run: |
           set -euo pipefail
           PREV_TAG=''
@@ -1197,11 +1275,25 @@ jobs:
       # repos; the gitleaks binary itself is free (MIT). Run it directly with
       # the repo's .gitleaks.toml. Native secret-scanning + push-protection are
       # the first line; this adds a full-history custom-regex sweep.
-      - name: Install pinned gitleaks
+      - id: gitleaks-pin
+        name: Read pinned gitleaks version
+        shell: bash
         run: |
           set -euo pipefail
-          bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"
-          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+          . tools/tool-versions.env
+          echo "version=${GITLEAKS_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${GITLEAKS_LINUX_X64_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Install pinned gitleaks
+        uses: plurano/horistes/actions/install-gitleaks@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
+        with:
+          version: ${{ steps.gitleaks-pin.outputs.version }}
+          sha256: ${{ steps.gitleaks-pin.outputs.sha256 }}
+          install-dir: ${{ runner.temp }}/gitleaks-bin
+      - name: Add gitleaks to PATH
+        shell: bash
+        env:
+          GITLEAKS_DIR: ${{ runner.temp }}/gitleaks-bin
+        run: echo "$GITLEAKS_DIR" >> "$GITHUB_PATH"
       - name: gitleaks
         run: |
           set -euo pipefail
