@@ -450,10 +450,10 @@ github.com/golang/protobuf v1.5.1/go.mod h1:DopwsBzvsk0Fs44TXzsVbJyPhcCPeIwnvohx
 github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiuN0vRsmY=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
-github.com/golusoris/goenvoy/arr/sonarr v1.5.3 h1:PgVXZrfBX0texo6uEpr1EzvKL/9nOjpYmlUN40WdRuo=
-github.com/golusoris/goenvoy/arr/sonarr v1.5.3/go.mod h1:nEwV6SOfn6KhL31pDw8sOTaZj14MTijlBMqDnymE5/c=
-github.com/golusoris/goenvoy/arr/v2 v2.5.0 h1:Qn1ZMPWYhODhXtyoH2B2NfVGWhNO94vO+SJSU/llINE=
-github.com/golusoris/goenvoy/arr/v2 v2.5.0/go.mod h1:N8X0AruGwgFDK9ApxRrfrsQYURom/kodVN2rGFXVEm4=
+github.com/golusoris/goenvoy/arr/sonarr v1.5.6 h1:LZjXDXAuJ4IlGge2JbUsEKVUGWae3halFSzGbgrsBng=
+github.com/golusoris/goenvoy/arr/sonarr v1.5.6/go.mod h1:wz5V3D1RXPaBVIjnc+kcBGmpUW8p6uVZdRvL8odP+3A=
+github.com/golusoris/goenvoy/arr/v2 v2.6.2 h1:9NBhlRbQ1UsqYu1wRUNtCCXcG9dGXPcHuMsRZApuFc8=
+github.com/golusoris/goenvoy/arr/v2 v2.6.2/go.mod h1:S8R0zggkT/1yLt+RGuovLG9Bhyg/geiaQPMq3MW46k8=
 github.com/golusoris/goenvoy/metadata v1.4.1 h1:Qo2YxrT/KX3aGONTKl2I0uOK3TTN51AcTp+u+/Sf4oY=
 github.com/golusoris/goenvoy/metadata v1.4.1/go.mod h1:VEJ5vqTGsrZF8LQEhiTNpQUW8Ju897k+yKVcXD/GGTY=
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2 h1:uvkeQVFVUa56qHp7MaVPSuyEguSVj2ka7FSjmmsTSHU=
