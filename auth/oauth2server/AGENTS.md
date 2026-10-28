@@ -20,6 +20,7 @@ Not an OIDC issuer; no ID tokens, discovery, UserInfo, or nonce handling.
 
 ## Notes
 
+- Engine: hand-written by design, ADR-0023; supported: authorization_code + PKCE S256, client_secret_post; gaps #1195.
 - Only `authorization_code` grant is supported; PKCE `S256` is mandatory.
 - `/authorize` accepts GET only; `/token` accepts POST only.
 - PKCE challenges and verifiers must be 43-128 RFC 7636 unreserved characters.
