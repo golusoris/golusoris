@@ -216,7 +216,8 @@ func TestModule(t *testing.T) {
 	t.Parallel()
 	cfgPath := filepath.Join(t.TempDir(), "app.yaml")
 	dbPath := filepath.ToSlash(filepath.Join(t.TempDir(), "mod.db"))
-	if err := os.WriteFile(cfgPath, []byte("db:\n  sqlite:\n    path: "+dbPath+"\n"), 0o600); err != nil {
+	cfgContent := "db:\n  sqlite:\n    path: " + dbPath + "\n    busy_timeout: " + testBusyTimeout.String() + "\n"
+	if err := os.WriteFile(cfgPath, []byte(cfgContent), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.New(config.Options{Files: []string{cfgPath}})
@@ -228,6 +229,13 @@ func TestModule(t *testing.T) {
 	app.RequireStart()
 	if pingErr := db.PingContext(t.Context()); pingErr != nil {
 		t.Fatalf("ping via module: %v", pingErr)
+	}
+	var busyTimeout int
+	if queryErr := db.QueryRowContext(t.Context(), "PRAGMA busy_timeout").Scan(&busyTimeout); queryErr != nil {
+		t.Fatalf("query busy_timeout: %v", queryErr)
+	}
+	if busyTimeout != int(testBusyTimeout.Milliseconds()) {
+		t.Fatalf("busy_timeout = %d, want %d", busyTimeout, int(testBusyTimeout.Milliseconds()))
 	}
 	app.RequireStop()
 	if pingErr := db.PingContext(t.Context()); pingErr == nil {
