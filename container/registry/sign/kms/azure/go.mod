@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.5.0
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261027154911-c54bbb6cf550
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261027222021-ae79d983c7c4
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
@@ -42,7 +42,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/go-faster/errors v0.8.0 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.5 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.6 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -70,7 +70,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261027114928-35b3ad285578 // indirect
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261027203057-0e3083d7fe13 // indirect
 	github.com/golusoris/golusoris/core v0.12.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect

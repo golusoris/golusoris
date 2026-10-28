@@ -64,10 +64,23 @@ func Main(m *testing.M, migrate MigrateFunc, opts ...Options) int {
 	if stopErr := stop(); stopErr != nil {
 		fmt.Fprintf(os.Stderr, "testutil/pg: stop shared container: %v\n", stopErr)
 	}
-	if err != nil && code == 0 {
-		return 1
+	status, msg := exitStatus(code, err)
+	if msg != "" {
+		fmt.Fprint(os.Stderr, msg)
 	}
-	return code
+	return status
+}
+
+// exitStatus names the shared-container start error, so a red binary shows its cause.
+func exitStatus(code int, startErr error) (int, string) {
+	if startErr == nil {
+		return code, ""
+	}
+	msg := fmt.Sprintf("testutil/pg: start shared container: %v\n", startErr)
+	if code == 0 {
+		return 1, msg
+	}
+	return code, msg
 }
 
 // startShared boots the template container, applies migration, and establishes admin pool.

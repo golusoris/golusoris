@@ -912,7 +912,11 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -948,7 +952,11 @@ jobs:
         run: |
           . tools/tool-versions.env
           go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -987,7 +995,11 @@ jobs:
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           bash scripts/ci/install-shellcheck.sh "$RUNNER_TEMP/shellcheck-bin"
@@ -1057,8 +1069,12 @@ jobs:
       - name: Validate static and rendered Kubernetes resources
         run: bash scripts/ci/kubeconform.sh
       # Gap C14-02: a CNPG backup must bootstrap a recovery cluster with equal data.
+      - id: verified-download
+        uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Run CNPG backup restore in kind
         timeout-minutes: 30
+        env:
+          VERIFIED_DOWNLOAD_LIB: ${{ steps.verified-download.outputs.lib }}
         run: |
           set -euo pipefail
           LOG="$RUNNER_TEMP/cnpg-restore.log"
@@ -1259,11 +1275,25 @@ jobs:
       # repos; the gitleaks binary itself is free (MIT). Run it directly with
       # the repo's .gitleaks.toml. Native secret-scanning + push-protection are
       # the first line; this adds a full-history custom-regex sweep.
-      - name: Install pinned gitleaks
+      - id: gitleaks-pin
+        name: Read pinned gitleaks version
+        shell: bash
         run: |
           set -euo pipefail
-          bash scripts/ci/install-gitleaks.sh "$RUNNER_TEMP/gitleaks-bin"
-          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+          . tools/tool-versions.env
+          echo "version=${GITLEAKS_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "sha256=${GITLEAKS_LINUX_X64_SHA256}" >> "$GITHUB_OUTPUT"
+      - name: Install pinned gitleaks
+        uses: plurano/horistes/actions/install-gitleaks@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
+        with:
+          version: ${{ steps.gitleaks-pin.outputs.version }}
+          sha256: ${{ steps.gitleaks-pin.outputs.sha256 }}
+          install-dir: ${{ runner.temp }}/gitleaks-bin
+      - name: Add gitleaks to PATH
+        shell: bash
+        env:
+          GITLEAKS_DIR: ${{ runner.temp }}/gitleaks-bin
+        run: echo "$GITLEAKS_DIR" >> "$GITHUB_PATH"
       - name: gitleaks
         run: |
           set -euo pipefail

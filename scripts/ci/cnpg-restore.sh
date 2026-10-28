@@ -10,8 +10,12 @@ readonly repo_root
 
 # shellcheck source=/dev/null
 . "$repo_root/tools/tool-versions.env"
+if [[ -z "${VERIFIED_DOWNLOAD_LIB:-}" || ! -f "${VERIFIED_DOWNLOAD_LIB}" ]]; then
+	printf 'cnpg-restore: error: VERIFIED_DOWNLOAD_LIB is unset or missing (use plurano/horistes actions/verified-download to provide it): %s\n' "${VERIFIED_DOWNLOAD_LIB:-}" >&2
+	exit 1
+fi
 # shellcheck source=/dev/null
-. "$repo_root/scripts/ci/lib/verified-download.sh"
+. "$VERIFIED_DOWNLOAD_LIB"
 
 if [[ "${CI:-}" != "true" && "${ALLOW_HOST_KIND:-}" != "true" ]]; then
 	printf 'cnpg-restore: error: running Kubernetes clusters on the host is disallowed by fleet rules. Run in CI or with ALLOW_HOST_KIND=true in an isolated VM.\n' >&2
