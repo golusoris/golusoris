@@ -19,11 +19,26 @@ readonly asset="shellcheck-v${version}.linux.x86_64.tar.xz"
 readonly expected_url="https://github.com/koalaman/shellcheck/releases/download/v${version}/${asset}"
 
 fake_bin="$suite_root/bin"
-mkdir -p "$fake_bin" "$suite_root/repo/scripts/ci/lib" "$suite_root/repo/tools"
+mkdir -p "$fake_bin" "$suite_root/repo/scripts/ci" "$suite_root/repo/tools"
 install -m 0755 "$repo_root/scripts/ci/install-shellcheck.sh" \
 	"$suite_root/repo/scripts/ci/install-shellcheck.sh"
-install -m 0644 "$repo_root/scripts/ci/lib/verified-download.sh" \
-	"$suite_root/repo/scripts/ci/lib/verified-download.sh"
+
+stub_lib="$suite_root/verified-download-stub.sh"
+cat >"$stub_lib" <<'STUB'
+fetch_verified() {
+	local url="$1" expected="$2" max_bytes="$3" timeout_seconds="$4" output="$5" actual
+	if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+		printf 'invalid pinned archive digest: %s\n' "$expected" >&2
+		return 1
+	fi
+	curl --output "$output" "$url" || return
+	actual="$(sha256sum "$output" | awk '{ print $1 }')" || return
+	if [[ "$actual" != "$expected" ]]; then
+		printf 'archive digest mismatch for %s: expected %s, got %s\n' "$url" "$expected" "$actual" >&2
+		return 1
+	fi
+}
+STUB
 
 cat >"$fake_bin/curl" <<'FAKE'
 #!/usr/bin/env bash
@@ -93,6 +108,7 @@ run_installer() {
 	local archive="$1" target="$2"
 	env PATH="$fake_bin:$PATH" FIXTURE_ARCHIVE="$archive" \
 		CURL_LOG="$suite_root/curl.log" \
+		VERIFIED_DOWNLOAD_LIB="$stub_lib" \
 		bash "$suite_root/repo/scripts/ci/install-shellcheck.sh" "$target"
 }
 
@@ -160,5 +176,12 @@ unset FAKE_UNAME_S FAKE_UNAME_M
 write_pins '0.11' "$(digest_of "$good")"
 expect_failure 'invalid SHELLCHECK_VERSION' "$suite_root/install-semver" \
 	run_installer "$good" "$suite_root/install-semver"
+
+# Negative: VERIFIED_DOWNLOAD_LIB unset fails with the named error.
+write_pins "$version" "$(digest_of "$good")"
+expect_failure 'plurano/horistes actions/verified-download' "$suite_root/install-no-lib" \
+	env -u VERIFIED_DOWNLOAD_LIB PATH="$fake_bin:$PATH" FIXTURE_ARCHIVE="$good" \
+		CURL_LOG="$suite_root/curl.log" \
+		bash "$suite_root/repo/scripts/ci/install-shellcheck.sh" "$suite_root/install-no-lib"
 
 printf 'shellcheck installer policy tests passed\n'

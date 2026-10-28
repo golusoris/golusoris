@@ -30,9 +30,9 @@ public, so GitHub-hosted runners are available without capacity planning.
 All golusoris workflows run on the GitHub-hosted `ubuntu-24.04` label. Tools
 the ARC image provided are installed per job from pins in
 `tools/tool-versions.env`, through SHA-pinned official installer actions or
-checksum-verified release archives (`scripts/ci/install-gitleaks.sh`,
-`scripts/ci/install-shellcheck.sh`, both through
-`scripts/ci/lib/verified-download.sh`).
+checksum-verified release archives (`plurano/horistes` `actions/install-gitleaks`,
+`scripts/ci/install-shellcheck.sh` through
+`plurano/horistes` `actions/verified-download`).
 System libraries the cgo modules link are installed by
 `scripts/ci/install-cgo-libs.sh`. The reusable `ci-go.yml` and
 `release-go.yml` default to `ubuntu-24.04` and install declared system

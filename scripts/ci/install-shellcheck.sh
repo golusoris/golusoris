@@ -22,8 +22,13 @@ readonly install_dir
 
 # shellcheck source=/dev/null
 . "$repo_root/tools/tool-versions.env"
-# shellcheck source=scripts/ci/lib/verified-download.sh
-. "$repo_root/scripts/ci/lib/verified-download.sh"
+
+if [[ -z "${VERIFIED_DOWNLOAD_LIB:-}" || ! -f "${VERIFIED_DOWNLOAD_LIB}" ]]; then
+	printf 'install-shellcheck: error: VERIFIED_DOWNLOAD_LIB is unset or missing (use plurano/horistes actions/verified-download to provide it): %s\n' "${VERIFIED_DOWNLOAD_LIB:-}" >&2
+	exit 1
+fi
+# shellcheck source=/dev/null
+. "$VERIFIED_DOWNLOAD_LIB"
 
 if [[ ! "$SHELLCHECK_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
 	printf 'invalid SHELLCHECK_VERSION: %s\n' "$SHELLCHECK_VERSION" >&2
