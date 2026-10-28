@@ -77,6 +77,16 @@ jobs:
           go-version-file: go.mod
           cache: true
           cache-dependency-path: '**/go.sum'
+      - name: Temporary oidc lazy discovery stress, isolated x100 (do not merge)
+        if: always() && runner.os != 'macOS'
+        shell: bash
+        run: |
+          go test ./auth/oidc/ -run 'TestProvider_LazyDiscovery$' -count=100 -v -timeout 20m 2>&1 | grep -E -- '--- (PASS|FAIL): TestProvider_LazyDiscovery|deadline|^ok|^FAIL' | sed 's/ (.*//' | sort | uniq -c
+      - name: Temporary oidc lazy discovery stress, package x20 (do not merge)
+        if: always() && runner.os != 'macOS'
+        shell: bash
+        run: |
+          go test ./auth/oidc/ -short -count=20 -v -timeout 20m 2>&1 | grep -E -- '--- (PASS|FAIL): TestProvider_LazyDiscovery|--- FAIL|deadline|^ok|^FAIL' | sed 's/ (.*//' | sort | uniq -c
       - name: Verify portability driver policy
         if: env.CI_GATED != 'skip'
         env:
