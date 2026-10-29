@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/clock"
@@ -80,6 +81,16 @@ func (o Options) withDefaults() Options {
 		o.Delims = d.Delims
 	}
 	return o
+}
+
+// validate reports whether each glob pattern in Options is valid doublestar syntax.
+func (o Options) validate() error {
+	for _, pat := range o.Patterns {
+		if !doublestar.ValidatePattern(pat) {
+			return fmt.Errorf("htmltmpl: invalid pattern %q", pat)
+		}
+	}
+	return nil
 }
 
 // hotReload resolves the tri-state HotReload: explicit value wins; otherwise it
