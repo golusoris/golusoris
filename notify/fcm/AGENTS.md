@@ -11,7 +11,7 @@ Firebase Cloud Messaging (HTTP v1) sender for `notify.Sender`.
 ## Surface
 
 - `fcm.NewSender(Options)` → `*Sender`.
-- `Options{ServiceAccountJSON, ServiceAccount, Scope, Endpoint, HTTPClient,
+- `Options{ServiceAccountJSON, ServiceAccount, Scope, Endpoint, HTTPClient, Clock,
  MaxResponseBytes}`.
 - `fcm.ServiceAccount{Type, ProjectID, PrivateKey, ClientEmail, TokenURI}`.
 
@@ -19,9 +19,10 @@ Firebase Cloud Messaging (HTTP v1) sender for `notify.Sender`.
 
 - **Auth**: Google service-account JSON key → RS256-signed JWT
  assertion → OAuth2 token exchange → bearer access token. token
- is cached in memory until < 5 min before expiry; concurrent Send
- calls share single exchange via mutex.
-- Dep: `golang-jwt/jwt/v5` (already in go.mod) for JWT signing.
+ cached until <= 5 min before expiry, checked via injected `Clock`;
+ concurrent `Send` calls share exchange via mutex.
+- Token exchange: per-fetch client and limiter; caller `Send` context reaches token POST.
+- Dep: `golang.org/x/oauth2` for JWT signing and token exchange.
 - Injected clients are cloned; missing timeouts become 10s. OAuth token JSON
  defaults to 1 MiB maximum.
 - **Routing**: each entry in `msg.To` is one device registration
