@@ -45,6 +45,16 @@
     },
     {
       "customType": "regex",
+      "description": "Keep reusable ci-go.yml tool defaults on the same Go tool pins as the shell authority file.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci-go\\.yml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) versioning=(?<versioning>\\S+)\\n\\s+default: (?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "customType": "regex",
       "description": "Update the rebuild QEMU installer tag and immutable digest as one pair.",
       "managerFilePatterns": [
         "/^\\.github/workflows/rebuild-on-base\\.yml$/"

@@ -293,7 +293,72 @@ check_release_tool_installs() {
 	fi
 }
 
+# ci_go_input_default prints the default value of <input> declared in the
+# workflow_call inputs block of <workflow>, or MISSING when omitted or unset.
+ci_go_input_default() {
+	local workflow="$1" input="$2"
+	awk -v target="$input" '
+		/^    inputs:/ { in_inputs = 1; next }
+		in_inputs && (/^[^[:space:]]/ || (/^    [a-zA-Z0-9_-]+:/ && !/^    inputs:/)) {
+			in_inputs = 0
+			active = 0
+		}
+		in_inputs && /^      [a-zA-Z0-9_-]+:/ {
+			cur = $1
+			sub(/:$/, "", cur)
+			active = (cur == target)
+			next
+		}
+		in_inputs && active && /^[[:space:]]+default:/ {
+			val = $0
+			sub(/^[[:space:]]+default:[[:space:]]*/, "", val)
+			sub(/[[:space:]]+#.*$/, "", val)
+			sub(/^["'\''"]/, "", val)
+			sub(/["'\''"]$/, "", val)
+			found = 1
+			print (val == "" ? "MISSING" : val)
+			exit
+		}
+		END { if (!found) print "MISSING" }
+	' "$workflow"
+}
+
+# check_ci_go_defaults proves ci-go.yml workflow_call tool defaults match
+# their authority pins in tools/tool-versions.env.
+check_ci_go_defaults() {
+	local target="$1"
+	local workflow="$target"
+	if [[ -d "$target" ]]; then
+		workflow="$target/ci-go.yml"
+	fi
+	local -a mappings=(
+		"golangci-version:$GOLANGCI_LINT_VERSION"
+		"gofumpt-version:$GOFUMPT_VERSION"
+		"gosec-version:$GOSEC_VERSION"
+		"gosec-xtools-version:$GOSEC_XTOOLS_VERSION"
+		"govulncheck-version:$GOVULNCHECK_VERSION"
+		"apidiff-version:$GO_COMPAT_TOOL_VERSION"
+	)
+	local mapping input want got
+	for mapping in "${mappings[@]}"; do
+		input="${mapping%%:*}"
+		want="${mapping#*:}"
+		got="$(ci_go_input_default "$workflow" "$input")"
+		if [[ "$got" == "MISSING" ]]; then
+			printf 'reusable workflow %s default is missing: %s\n' \
+				"$input" "$workflow" >&2
+			return 1
+		fi
+		if [[ "$got" != "$want" ]]; then
+			printf 'reusable workflow %s default is %s, want %s: %s\n' \
+				"$input" "$got" "$want" "$workflow" >&2
+			return 1
+		fi
+	done
+}
+
 check_release_tool_installs "$repo_root/.github/workflows"
+check_ci_go_defaults "$repo_root/.github/workflows/ci-go.yml"
 install_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-tool-installs.XXXXXX")"
 trap 'rm -rf "$install_suite"' EXIT
 # expect_install_rejection <mutation-name> <file> <sed-expression>
@@ -327,6 +392,27 @@ expect_install_rejection gitleaks-literal ci.yml \
 	's/= "\$GITLEAKS_VERSION"/= "8.30.1"/'
 expect_install_rejection gitleaks-installer ci.yml \
 	's#plurano/horistes/actions/install-gitleaks@#example/install-gitleaks@#'
+
+# expect_ci_go_default_rejection <mutation-name> <sed-expression>
+expect_ci_go_default_rejection() {
+	local name="$1" expression="$2"
+	rm -rf "${install_suite:?}/${name:?}"
+	mkdir -p "$install_suite/$name"
+	cp "$repo_root/.github/workflows/ci-go.yml" "$install_suite/$name/ci-go.yml"
+	sed -i "$expression" "$install_suite/$name/ci-go.yml"
+	if cmp -s "$repo_root/.github/workflows/ci-go.yml" "$install_suite/$name/ci-go.yml"; then
+		printf 'negative control %s did not mutate ci-go.yml\n' "$name" >&2
+		exit 1
+	fi
+	if check_ci_go_defaults "$install_suite/$name/ci-go.yml" >/dev/null 2>&1; then
+		printf 'ci-go default check accepted negative control %s\n' "$name" >&2
+		exit 1
+	fi
+}
+expect_ci_go_default_rejection golangci-default-drift \
+	"s/default: $GOLANGCI_LINT_VERSION/default: v0.0.1/"
+expect_ci_go_default_rejection golangci-default-missing \
+	"/default: $GOLANGCI_LINT_VERSION/d"
 
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
@@ -570,7 +656,7 @@ if grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml" | grep -Fq "reno
 	exit 1
 fi
 
-for input in golangci-version gofumpt-version gosec-version govulncheck-version apidiff-version apidiff-base-ref; do
+for input in golangci-version gofumpt-version gosec-version gosec-xtools-version govulncheck-version apidiff-version apidiff-base-ref; do
 	if ! grep -Fq "inputs.${input}" "$repo_root/.github/workflows/ci-go.yml"; then
 		printf 'reusable CI input is not consumed: %s\n' "$input" >&2
 		exit 1
