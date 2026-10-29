@@ -13,6 +13,7 @@ UV_IMAGE="ghcr.io/astral-sh/uv:${UV_VERSION}@${UV_DIGEST}"
 PIP_AUDIT_VERSION=2.10.1
 MAX_LOCK_TARGETS=3
 MAX_LOCK_CONTEXTS=4
+MAX_DOCKERFILE_LINES=256
 AUDIT_PYTHON_VERSION=3.11.16
 # Resolve as of this upload cutoff so --check compares the lock with its inputs,
 # not with whatever PyPI published since; move it forward deliberately with --write.
@@ -26,8 +27,6 @@ cleanup_lock_tmp() {
 		find "$tiny_trainer_lock_tmp" -depth -delete
 	fi
 }
-
-trap cleanup_lock_tmp EXIT
 
 compile_lock() {
 	local source="$1"
@@ -109,13 +108,58 @@ audit_locks() {
 		'
 }
 
+extract_dockerfile_python_version() {
+	local path="$1"
+	local dockerfile="$path"
+	if [[ -d "$dockerfile" ]]; then
+		dockerfile="$dockerfile/Dockerfile"
+	fi
+	if [[ ! -f "$dockerfile" ]]; then
+		printf '%s: Dockerfile not found\n' "$dockerfile" >&2
+		return 1
+	fi
+	local line line_count=0
+	local -a matches=()
+	while IFS= read -r line || [[ -n "$line" ]]; do
+		((line_count += 1))
+		if ((line_count > MAX_DOCKERFILE_LINES)); then
+			printf '%s: exceeds line bound of %d lines\n' "$dockerfile" "$MAX_DOCKERFILE_LINES" >&2
+			return 1
+		fi
+		if [[ "$line" =~ ^[[:space:]]*ARG[[:space:]]+PYTHON_IMAGE= ]]; then
+			matches+=("$line")
+		fi
+	done <"$dockerfile"
+
+	if ((${#matches[@]} == 0)); then
+		printf '%s: missing ARG PYTHON_IMAGE= directive\n' "$dockerfile" >&2
+		return 1
+	fi
+	if ((${#matches[@]} > 1)); then
+		printf '%s: multiple ARG PYTHON_IMAGE= directives found (%d)\n' "$dockerfile" "${#matches[@]}" >&2
+		return 1
+	fi
+
+	local matched="${matches[0]}"
+	if [[ ! "$matched" =~ python:([^-]+)- ]]; then
+		printf '%s: cannot extract version from ARG PYTHON_IMAGE directive: %s\n' "$dockerfile" "$matched" >&2
+		return 1
+	fi
+	local version="${BASH_REMATCH[1]}"
+	if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+		printf '%s: invalid python version "%s"; must match ^[0-9]+\\.[0-9]+\\.[0-9]+$\n' "$dockerfile" "$version" >&2
+		return 1
+	fi
+	printf '%s\n' "$version"
+}
+
 main() {
 	local mode="${1:---check}"
 	if [[ "$mode" != --check && "$mode" != --write && "$mode" != --audit ]]; then
 		printf 'usage: %s [--check|--write|--audit]\n' "${0##*/}" >&2
 		return 2
 	fi
-	local root index target python_version cutoff work
+	local root index target python_version cutoff work version
 	root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 	tiny_trainer_lock_tmp="$(mktemp -d "${TMPDIR:-/tmp}/tiny-trainer-locks.XXXXXX")"
 	local -a targets=(
@@ -123,13 +167,17 @@ main() {
 		"ai/tiny/trainers/litert"
 		"ai/tiny/serve/tflite/sidecar"
 	)
-	local -a versions=(3.11.16 3.11.16 3.14)
+	local -a versions=()
+	for target in "${targets[@]}"; do
+		version="$(extract_dockerfile_python_version "$root/$target/Dockerfile")"
+		versions+=("$version")
+	done
 	local -a cutoffs=(
 		"$LOCK_EXCLUDE_NEWER"
 		"$LOCK_EXCLUDE_NEWER"
 		2026-10-17T00:00:00Z
 	)
-	if (( ${#targets[@]} != MAX_LOCK_TARGETS || ${#versions[@]} != MAX_LOCK_TARGETS || ${#cutoffs[@]} != MAX_LOCK_TARGETS )); then
+	if ((${#targets[@]} != MAX_LOCK_TARGETS || ${#versions[@]} != MAX_LOCK_TARGETS || ${#cutoffs[@]} != MAX_LOCK_TARGETS)); then
 		printf 'lock authority must contain exactly %d target entries\n' "$MAX_LOCK_TARGETS" >&2
 		return 1
 	fi
@@ -155,4 +203,7 @@ main() {
 	printf 'tiny trainer locks: %s (%d contexts)\n' "${mode#--}" "$MAX_LOCK_CONTEXTS"
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+	trap cleanup_lock_tmp EXIT
+	main "$@"
+fi
