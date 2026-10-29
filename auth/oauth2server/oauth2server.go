@@ -166,10 +166,6 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	if q.Get("response_type") != "code" {
-		http.Error(w, "only response_type=code supported", http.StatusBadRequest)
-		return
-	}
 	clientID := q.Get("client_id")
 	client, err := s.registeredClient(r.Context(), clientID)
 	if err != nil {
@@ -183,19 +179,24 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "redirect_uri not registered", http.StatusBadRequest)
 		return
 	}
+	if q.Get("response_type") != "code" {
+		s.redirectAuthorization(w, r, redirect, "error", "unsupported_response_type")
+		return
+	}
 	codeChallenge, method, pkceError := authorizePKCE(q)
 	if pkceError != "" {
-		http.Error(w, pkceError, http.StatusBadRequest)
+		s.redirectAuthorization(w, r, redirect, "error", "invalid_request")
 		return
 	}
 	scope, ok := authorizedScopes(q.Get("scope"), client.Scopes)
 	if !ok {
-		http.Error(w, "invalid_scope", http.StatusBadRequest)
+		s.redirectAuthorization(w, r, redirect, "error", "invalid_scope")
 		return
 	}
 
 	userID := s.opts.Authenticate(r)
 	if userID == "" {
+		// Not an OAuth error: the application owns the login prompt.
 		http.Error(w, "login required", http.StatusUnauthorized)
 		return
 	}
@@ -209,10 +210,10 @@ func (s *Server) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		CodeChallengeMethod: method,
 	})
 	if err != nil {
-		http.Error(w, "internal", http.StatusInternalServerError)
+		s.redirectAuthorization(w, r, redirect, "error", "server_error")
 		return
 	}
-	redirectWithCode(w, r, redirect, code, q.Get("state"))
+	s.redirectAuthorization(w, r, redirect, "code", code)
 }
 
 func authorizePKCE(query url.Values) (challenge, method, errorMessage string) {
@@ -246,17 +247,17 @@ func (s *Server) issueCode(ctx context.Context, req AuthRequest) (string, error)
 	return code, nil
 }
 
-// redirectWithCode sends the client back to the registered redirect URI
-// with the code (and state, when supplied) appended.
-func redirectWithCode(w http.ResponseWriter, r *http.Request, redirect, code, state string) {
+// redirectAuthorization includes issuer identification on every authorization response.
+func (s *Server) redirectAuthorization(w http.ResponseWriter, r *http.Request, redirect, parameter, value string) {
 	u, err := url.Parse(redirect)
 	if err != nil {
 		http.Error(w, "bad redirect_uri", http.StatusBadRequest)
 		return
 	}
 	v := u.Query()
-	v.Set("code", code)
-	if state != "" {
+	v.Set(parameter, value)
+	v.Set("iss", s.opts.Issuer)
+	if state := r.URL.Query().Get("state"); state != "" {
 		v.Set("state", state)
 	}
 	u.RawQuery = v.Encode()
@@ -288,7 +289,7 @@ func (s *Server) handleToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	code, terr := s.resolveCode(r)
+	code, terr := s.resolveCode(r, client.ID)
 	if terr != nil {
 		s.writeTokenErr(w, r, terr.status, terr.code, terr.desc)
 		return
@@ -324,9 +325,9 @@ type tokenErrInfo struct {
 
 // resolveCode looks up the authorization code named by the request's "code"
 // form value, and confirms it has not expired and was issued for the same
-// redirect_uri and client_id supplied on this request. The returned
+// redirect_uri and authenticated client ID. The returned
 // *tokenErrInfo, when non-nil, is the exact error the caller should write.
-func (s *Server) resolveCode(r *http.Request) (Code, *tokenErrInfo) {
+func (s *Server) resolveCode(r *http.Request, clientID string) (Code, *tokenErrInfo) {
 	code, err := s.opts.Codes.Take(r.Context(), r.PostForm.Get("code"))
 	if err != nil {
 		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "code not found"}
@@ -337,29 +338,54 @@ func (s *Server) resolveCode(r *http.Request) (Code, *tokenErrInfo) {
 	if r.PostForm.Get("redirect_uri") != code.Req.RedirectURI {
 		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_grant", desc: "redirect_uri mismatch"}
 	}
-	if r.PostForm.Get("client_id") != code.Req.ClientID {
+	if clientID != code.Req.ClientID {
 		return Code{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_client", desc: "client mismatch"}
 	}
 	return code, nil
 }
 
-// authenticateClient looks up the client named by the request's "client_id"
-// form value and, for confidential clients, verifies the client_secret. The
-// returned *tokenErrInfo, when non-nil, is the exact error the caller should
-// write.
+// authenticateClient verifies Basic or form credentials before consuming a code.
 func (s *Server) authenticateClient(r *http.Request) (Client, *tokenErrInfo) {
-	clientID := r.PostForm.Get("client_id")
+	clientID, secret, terr := clientCredentials(r)
+	if terr != nil {
+		return Client{}, terr
+	}
 	client, err := s.registeredClient(r.Context(), clientID)
 	if err != nil {
 		return Client{}, &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_client", desc: "unknown client"}
 	}
 	if !client.PublicClient {
-		secret := r.PostForm.Get("client_secret")
 		if subtle.ConstantTimeCompare([]byte(secret), []byte(client.Secret)) != 1 {
 			return Client{}, &tokenErrInfo{status: http.StatusUnauthorized, code: "invalid_client", desc: "bad secret"}
 		}
 	}
 	return client, nil
+}
+
+func clientCredentials(r *http.Request) (string, string, *tokenErrInfo) {
+	if r.Header.Get("Authorization") == "" {
+		return r.PostForm.Get("client_id"), r.PostForm.Get("client_secret"), nil
+	}
+	if r.PostForm.Has("client_id") || r.PostForm.Has("client_secret") {
+		return "", "", &tokenErrInfo{status: http.StatusBadRequest, code: "invalid_request", desc: "multiple client authentication methods"}
+	}
+	clientID, secret, ok := r.BasicAuth()
+	if !ok {
+		return "", "", invalidBasicCredentials()
+	}
+	clientID, err := url.QueryUnescape(clientID)
+	if err != nil {
+		return "", "", invalidBasicCredentials()
+	}
+	secret, err = url.QueryUnescape(secret)
+	if err != nil {
+		return "", "", invalidBasicCredentials()
+	}
+	return clientID, secret, nil
+}
+
+func invalidBasicCredentials() *tokenErrInfo {
+	return &tokenErrInfo{status: http.StatusUnauthorized, code: "invalid_client", desc: "malformed Basic credentials"}
 }
 
 func (s *Server) registeredClient(ctx context.Context, id string) (Client, error) {
@@ -422,6 +448,10 @@ type tokenErr struct {
 }
 
 func (s *Server) writeTokenErr(w http.ResponseWriter, r *http.Request, status int, code, desc string) {
+	if code == "invalid_client" && r.Header.Get("Authorization") != "" {
+		status = http.StatusUnauthorized
+		w.Header().Set("WWW-Authenticate", "Basic")
+	}
 	setTokenCacheHeaders(w)
 	s.writeJSON(w, r, status, tokenErr{Error: code, ErrorDescription: desc})
 }
