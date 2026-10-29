@@ -14,6 +14,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"net/http"
@@ -144,46 +145,102 @@ func createKey(t *testing.T, client *azkeys.Client, name string, params azkeys.C
 	return resp.Key.KID.Version()
 }
 
-func parseECCurve(t *testing.T, name azkeys.CurveName) elliptic.Curve {
-	t.Helper()
+func parseECCurve(name azkeys.CurveName) (elliptic.Curve, error) {
 	switch name {
 	case azkeys.CurveNameP256:
-		return elliptic.P256()
+		return elliptic.P256(), nil
 	case azkeys.CurveNameP384:
-		return elliptic.P384()
+		return elliptic.P384(), nil
 	case azkeys.CurveNameP521:
-		return elliptic.P521()
+		return elliptic.P521(), nil
 	case azkeys.CurveNameP256K:
-		t.Fatalf("unsupported curve: %s", name)
-		return nil
+		return nil, fmt.Errorf("unsupported curve: %s", name)
 	default:
-		t.Fatalf("unknown curve: %s", name)
-		return nil
+		return nil, fmt.Errorf("unknown curve: %s", name)
+	}
+}
+
+func parseWebKeyEC(k *azkeys.JSONWebKey) (crypto.PublicKey, error) {
+	if k.Crv == nil {
+		return nil, errors.New("nil curve")
+	}
+	crv, err := parseECCurve(*k.Crv)
+	if err != nil {
+		return nil, err
+	}
+	size := (crv.Params().BitSize + 7) / 8
+	if len(k.X) == 0 || len(k.Y) == 0 {
+		return nil, errors.New("empty ec coordinates")
+	}
+	if len(k.X) > size || len(k.Y) > size {
+		return nil, fmt.Errorf("curve %s: coordinate longer than curve size %d: x=%d y=%d", *k.Crv, size, len(k.X), len(k.Y))
+	}
+	// Left-pad coordinates to the curve byte size required by uncompressed points.
+	pt := make([]byte, 1+2*size)
+	pt[0] = 4
+	copy(pt[1+size-len(k.X):1+size], k.X)
+	copy(pt[1+2*size-len(k.Y):], k.Y)
+	pub, err := ecdsa.ParseUncompressedPublicKey(crv, pt)
+	if err != nil {
+		return nil, fmt.Errorf("parse ec pub: %w", err)
+	}
+	return pub, nil
+}
+
+func parseWebKeyPublic(k *azkeys.JSONWebKey) (crypto.PublicKey, error) {
+	if k == nil || k.Kty == nil {
+		return nil, errors.New("nil web key or kty")
+	}
+	switch *k.Kty {
+	case azkeys.KeyTypeEC, azkeys.KeyTypeECHSM:
+		return parseWebKeyEC(k)
+	case azkeys.KeyTypeRSA, azkeys.KeyTypeRSAHSM:
+		return &rsa.PublicKey{N: new(big.Int).SetBytes(k.N), E: int(new(big.Int).SetBytes(k.E).Int64())}, nil
+	case azkeys.KeyTypeOct, azkeys.KeyTypeOctHSM:
+		return nil, fmt.Errorf("unsupported symmetric key type: %s", *k.Kty)
+	default:
+		return nil, fmt.Errorf("unknown kty: %s", *k.Kty)
 	}
 }
 
 func webKeyPublic(t *testing.T, k *azkeys.JSONWebKey) crypto.PublicKey {
 	t.Helper()
-	if k == nil || k.Kty == nil {
-		t.Fatal("nil web key or kty")
+	pub, err := parseWebKeyPublic(k)
+	if err != nil {
+		t.Fatalf("webKeyPublic: %v", err)
 	}
-	switch *k.Kty {
-	case azkeys.KeyTypeEC, azkeys.KeyTypeECHSM:
-		crv := parseECCurve(t, *k.Crv)
-		pt := append(append([]byte{4}, k.X...), k.Y...)
-		pub, err := ecdsa.ParseUncompressedPublicKey(crv, pt)
-		if err != nil {
-			t.Fatalf("parse ec pub: %v", err)
-		}
-		return pub
-	case azkeys.KeyTypeRSA, azkeys.KeyTypeRSAHSM:
-		return &rsa.PublicKey{N: new(big.Int).SetBytes(k.N), E: int(new(big.Int).SetBytes(k.E).Int64())}
-	case azkeys.KeyTypeOct, azkeys.KeyTypeOctHSM:
-		t.Fatalf("unsupported symmetric key type: %s", *k.Kty)
-		return nil
-	default:
-		t.Fatalf("unknown kty: %s", *k.Kty)
-		return nil
+	return pub
+}
+
+func TestWebKeyPublic_ShortXPadding(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"P-256", "P-384"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			priv := keyWithShortX(t, kind)
+			point, err := priv.PublicKey.Bytes()
+			if err != nil {
+				t.Fatalf("public key bytes: %v", err)
+			}
+			size := (len(point) - 1) / 2
+			jwk := &azkeys.JSONWebKey{
+				Kty: new(azkeys.KeyTypeEC),
+				Crv: new(azkeys.CurveName(kind)),
+				X:   point[2 : 1+size],
+				Y:   point[1+size:],
+			}
+			assertPublicEqual(t, &priv.PublicKey, webKeyPublic(t, jwk))
+
+			oversized := &azkeys.JSONWebKey{
+				Kty: new(azkeys.KeyTypeEC),
+				Crv: new(azkeys.CurveName(kind)),
+				X:   make([]byte, size+1),
+				Y:   point[1+size:],
+			}
+			if _, err := parseWebKeyPublic(oversized); err == nil {
+				t.Fatal("parseWebKeyPublic succeeded for oversized X coordinate, want error")
+			}
+		})
 	}
 }
 
