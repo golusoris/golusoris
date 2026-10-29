@@ -38,6 +38,10 @@ lint-all: ## golangci-lint every Go module
 fmt-check-all: ## gofumpt every tracked Go file with the repository pin
 	@bash scripts/ci/check-gofumpt.sh
 
+.PHONY: gci-hook-test
+gci-hook-test: ## verify the config-driven, check-only gci hook
+	@bash scripts/ci/gci-hook_test.sh
+
 .PHONY: vuln-all
 vuln-all: ## govulncheck every Go module
 	@$(GO_MODULES) vuln
@@ -90,7 +94,6 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	$(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
 	$(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
-	$(GO) install github.com/daixiang0/gci@$(GCI_VERSION)
 	$(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
 	$(GO) install github.com/air-verse/air@$(AIR_VERSION)
 	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
@@ -309,7 +312,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate
