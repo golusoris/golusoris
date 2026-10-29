@@ -6,6 +6,7 @@ package money_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 
 	"github.com/golusoris/golusoris/money"
@@ -22,8 +23,15 @@ func TestNew_string(t *testing.T) {
 		{100, "EUR", "1.00 EUR"},
 		{0, "GBP", "0.00 GBP"},
 		{150, "JPY", "150 JPY"}, // zero-decimal
+		{-5, "JPY", "-5 JPY"},
 		{-500, "USD", "-5.00 USD"},
+		{-100, "USD", "-1.00 USD"},
+		{-99, "USD", "-0.99 USD"},
+		{-1, "USD", "-0.01 USD"},
 		{1234, "KWD", "1.234 KWD"},
+		{-1, "KWD", "-0.001 KWD"},
+		{math.MinInt64, "USD", "-92233720368547758.08 USD"},
+		{math.MinInt64, "JPY", "-9223372036854775808 JPY"},
 		{1234, "BHD", "1.234 BHD"},
 		{1234, "JOD", "1.234 JOD"},
 		{1234, "OMR", "1.234 OMR"},
