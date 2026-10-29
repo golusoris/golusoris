@@ -75,6 +75,7 @@ error events also arrive as terminal errors; partial content is never success.
 
 - `ai/llm/anthropic/` — Anthropic Messages API.
 - `ai/llm/ollama/` — Ollama native API.
+- Provider clients: hand-written, ADR-0026; provider SDKs declined.
 
 ## Guardrails
 
