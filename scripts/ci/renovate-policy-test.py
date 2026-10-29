@@ -19,6 +19,7 @@ INPUTS = (
     ".gitea/workflows/ci.yml",
     ".gitea/workflows/publish-github.yml",
     ".gitea/workflows/security-scan.yml",
+    ".github/workflows/ci-go.yml",
     ".github/workflows/rebuild-on-base.yml",
     ".github/testcontainers-images.txt",
     ".github/testcontainers-split-images.txt",
@@ -42,6 +43,12 @@ PRIVATE_JOB_WORKFLOWS = (
 
 EXPECTED = {
     (".github/workflows/rebuild-on-base.yml", "tonistiigi/binfmt", "docker"),
+    (".github/workflows/ci-go.yml", "mvdan.cc/gofumpt", "go"),
+    (".github/workflows/ci-go.yml", "github.com/golangci/golangci-lint/v2", "go"),
+    (".github/workflows/ci-go.yml", "github.com/securego/gosec/v2", "go"),
+    (".github/workflows/ci-go.yml", "golang.org/x/tools", "go"),
+    (".github/workflows/ci-go.yml", "golang.org/x/vuln", "go"),
+    (".github/workflows/ci-go.yml", "github.com/joelanford/go-apidiff", "go"),
     ("tools/tool-versions.env", "mvdan.cc/gofumpt", "go"),
     ("tools/tool-versions.env", "github.com/golangci/golangci-lint/v2", "go"),
     ("tools/tool-versions.env", "github.com/securego/gosec/v2", "go"),
