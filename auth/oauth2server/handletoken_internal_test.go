@@ -47,7 +47,7 @@ func TestResolveCode_Success(t *testing.T) {
 		"client_id":    {"c1"},
 	})
 
-	code, terr := s.resolveCode(r)
+	code, terr := s.resolveCode(r, r.PostForm.Get("client_id"))
 	if terr != nil {
 		t.Fatalf("expected success, got tokenErrInfo %+v", terr)
 	}
@@ -62,7 +62,7 @@ func TestResolveCode_NotFound(t *testing.T) {
 	s := &Server{opts: Options{Codes: NewMemoryCodeStore(), Clock: clockwork.NewFakeClock()}}
 	r := postFormRequest(t, url.Values{"code": {"missing"}})
 
-	_, terr := s.resolveCode(r)
+	_, terr := s.resolveCode(r, r.PostForm.Get("client_id"))
 	if terr == nil {
 		t.Fatal("expected error for unknown code")
 	}
@@ -85,7 +85,7 @@ func TestResolveCode_Expired(t *testing.T) {
 	s := &Server{opts: Options{Codes: codes, Clock: clk}}
 	r := postFormRequest(t, url.Values{"code": {"code-1"}})
 
-	_, terr := s.resolveCode(r)
+	_, terr := s.resolveCode(r, r.PostForm.Get("client_id"))
 	if terr == nil || terr.desc != "code expired" {
 		t.Errorf("expected 'code expired', got %+v", terr)
 	}
@@ -103,7 +103,7 @@ func TestResolveCode_ExpiresAtBoundary(t *testing.T) {
 	}
 	s := &Server{opts: Options{Codes: codes, Clock: clk}}
 	r := postFormRequest(t, url.Values{"code": {"code-boundary"}})
-	if _, terr := s.resolveCode(r); terr == nil || terr.desc != "code expired" {
+	if _, terr := s.resolveCode(r, r.PostForm.Get("client_id")); terr == nil || terr.desc != "code expired" {
 		t.Fatalf("resolveCode() error = %+v, want exact-boundary expiry", terr)
 	}
 }
@@ -158,7 +158,7 @@ func TestResolveCode_RedirectMismatch(t *testing.T) {
 	s := &Server{opts: Options{Codes: codes, Clock: clk}}
 	r := postFormRequest(t, url.Values{"code": {"code-1"}, "redirect_uri": {"http://other/cb"}})
 
-	_, terr := s.resolveCode(r)
+	_, terr := s.resolveCode(r, r.PostForm.Get("client_id"))
 	if terr == nil || terr.desc != "redirect_uri mismatch" {
 		t.Errorf("expected 'redirect_uri mismatch', got %+v", terr)
 	}
@@ -182,7 +182,7 @@ func TestResolveCode_ClientMismatch(t *testing.T) {
 		"client_id":    {"someone-else"},
 	})
 
-	_, terr := s.resolveCode(r)
+	_, terr := s.resolveCode(r, r.PostForm.Get("client_id"))
 	if terr == nil || terr.desc != "client mismatch" {
 		t.Errorf("expected 'client mismatch', got %+v", terr)
 	}
