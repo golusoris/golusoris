@@ -14,6 +14,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import gomod
+
 MAX_FILES = 100_000
 MAX_MODULES = 64
 MAX_REPLACES_PER_MODULE = 128
@@ -223,23 +225,15 @@ def parse_module_replaces(repo_root: Path, known_modules: Sequence[str]) -> dict
         mod_file = mod_dir / "go.mod"
         if not mod_file.is_file():
             continue
-        try:
-            content = mod_file.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
+        mod_data = gomod.read_go_mod(mod_file)
 
         replace_count = 0
-        for line in content.splitlines():
-            line = line.split("//")[0].strip()
-            if "=>" not in line:
-                continue
+        for target in mod_data.replace_targets:
             replace_count += 1
             if replace_count > MAX_REPLACES_PER_MODULE:
                 break
-            parts = line.split("=>")
-            target = parts[1].strip()
             # Local replace path must start with . or ..
-            if target.startswith("./") or target.startswith("../") or target in (".", ".."):
+            if target.startswith(("./", "../")) or target in (".", ".."):
                 try:
                     resolved_target = (mod_dir / target).resolve()
                     dep_mod = os.path.relpath(resolved_target, repo_root).replace("\\", "/")
@@ -276,7 +270,11 @@ def selected_modules(repo_root: Path | None = None) -> tuple[str, ...]:
 
     # Order modules by descending length of directory prefix for longest-prefix match
     descending_mods = sorted(all_mods, key=lambda m: (len(m) if m != "." else 0), reverse=True)
-    dependents = parse_module_replaces(root, all_mods)
+    try:
+        dependents = parse_module_replaces(root, all_mods)
+    except gomod.GoModError as error:
+        sys.stderr.write(f"ci-scope: full (invalid module metadata: {error})\n")
+        return all_mods
 
     selected: set[str] = set()
     for changed in scope.changed_files[:MAX_FILES]:

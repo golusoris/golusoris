@@ -14,6 +14,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import ci_scope
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_SCOPE_SCRIPT = REPO_ROOT / "scripts" / "ci" / "ci_scope.py"
@@ -236,6 +239,37 @@ class CiScopeTest(unittest.TestCase):
         decision, stderr = self._gate()
         self.assertEqual(decision, "skip")
         self.assertIn("ci-scope: gate=skip", stderr)
+
+    def test_negative_gate_unaffected_by_malformed_go_mod(self) -> None:
+        """The gate decides from paths without invoking Go or parsing modules."""
+        self._write("go.mod", "module example.com/root\nreplace example.com/core =>\n")
+        self._git("commit", "-am", "malformed module fixture")
+        self.base_sha = self._git("rev-parse", "HEAD").strip()
+        self._write("docs/guide.md")
+        self._git("add", ".")
+        self._git("commit", "-m", "docs")
+        with mock.patch.dict(os.environ, {"CI_SCOPE_BASE": self.base_sha}), mock.patch.object(
+            ci_scope.gomod, "read_go_mod", side_effect=AssertionError("gate must not invoke Go")
+        ):
+            decision, reason = ci_scope.evaluate_gate(self.repo)
+        self.assertEqual(decision, "skip")
+        self.assertIn("skip-safe", reason)
+
+    def test_negative_malformed_go_mod_selects_all_modules(self) -> None:
+        """A broken replace cannot silently remove reverse dependency edges."""
+        self._write("go.mod", "module example.com/root\nreplace example.com/core =>\n")
+        self._git("commit", "-am", "malformed module fixture")
+        self.base_sha = self._git("rev-parse", "HEAD").strip()
+        self._write("core/core.go", "package core\n// change\n")
+        self._git("commit", "-am", "core change")
+        proc = self._run_scope("modules", base=self.base_sha)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(
+            proc.stdout.splitlines(),
+            [".", "container/registry", "container/registry/sign", "core", "k8s/nri"],
+        )
+        self.assertIn("ci-scope: full", proc.stderr)
+        self.assertIn("go.mod", proc.stderr)
 
     def test_negative_gate_go_file_runs(self) -> None:
         """One Go file next to docs runs the gated jobs."""

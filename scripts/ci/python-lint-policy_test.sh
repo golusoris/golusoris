@@ -19,6 +19,7 @@ new_repo() {
 	mkdir -p "$root/scripts/ci" "$root/tools"
 	install -m 0755 "$repo_root/scripts/ci/python-lint.sh" "$root/scripts/ci/python-lint.sh"
 	install -m 0755 "$repo_root/scripts/ci/ci_scope.py" "$root/scripts/ci/ci_scope.py"
+	install -m 0644 "$repo_root/scripts/ci/gomod.py" "$root/scripts/ci/gomod.py"
 	install -m 0644 "$repo_root/tools/tool-versions.env" "$root/tools/tool-versions.env"
 	git -C "$root" init -q
 	printf '%s\n' '.workingdir/' >"$root/.gitignore"
