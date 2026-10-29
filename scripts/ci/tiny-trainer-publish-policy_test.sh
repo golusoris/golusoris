@@ -82,6 +82,10 @@ check_workflow() {
 		printf '%s uses deprecated Cosign SBOM attachments\n' "$path" >&2
 		return 1
 	fi
+	if grep -Fq 'ghcr.io/golusoris/' "$path"; then
+		printf '%s must derive repository dynamically instead of hardcoding namespace\n' "$path" >&2
+		return 1
+	fi
 }
 
 check_audit_toolchain() {
@@ -238,5 +242,10 @@ skipped_resume="$suite_root/skipped-resume.yml"
 sed '/- name: Sign image digest/a\        if: steps.existing.outputs.exists != '\''true'\''' \
 	"$workflow" >"$skipped_resume"
 expect_failure check_workflow "$skipped_resume"
+
+with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
+sed 's/image: tiny-gemma-trainer/image: ghcr.io\/golusoris\/tiny-gemma-trainer/' \
+	"$workflow" >"$with_hardcoded_repo"
+expect_failure check_workflow "$with_hardcoded_repo"
 
 printf 'tiny trainer publication policy tests passed\n'
