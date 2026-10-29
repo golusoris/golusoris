@@ -212,6 +212,7 @@ sed '/name: Smoke exact publish candidate/,+4d' "$workflow" >"$without_smoke"
 expect_failure check_workflow "$without_smoke"
 
 with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
+# shellcheck disable=SC2016 # The planted line keeps $GITHUB_ENV literal.
 sed 's/echo "IMAGE_REPO=.*/echo "IMAGE_REPO=ghcr.io\/golusoris\/tiny-litert-sidecar" >> "$GITHUB_ENV"/' \
 	"$workflow" >"$with_hardcoded_repo"
 expect_failure check_workflow "$with_hardcoded_repo"
