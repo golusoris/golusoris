@@ -9,6 +9,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 Server-side session management. Session ID in cookie; data in pluggable Store.
 Ships `MemoryStore` for tests and `Store` interface for production
 implementations (Postgres, Redis).
+Engine: hand-written by design, ADR-0025; declined alexedwards/scs/v2.
 
 ## Usage
 
