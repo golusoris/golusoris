@@ -37,8 +37,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/jonboulle/clockwork"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/jwt"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	"github.com/golusoris/golusoris/core/validate"
@@ -91,15 +92,15 @@ type Options struct {
 // Sender posts notify.Messages to FCM.
 type Sender struct {
 	sa               ServiceAccount
-	scope            string
 	endpoint         string
 	hc               *http.Client
-	clock            clockwork.Clock
 	maxResponseBytes int64
+	clock            clockwork.Clock
+	conf             *jwt.Config
 
-	mu         sync.Mutex
-	token      string
-	tokenExpAt time.Time
+	mu     sync.Mutex
+	tok    *oauth2.Token
+	tokExp time.Time
 }
 
 // NewSender returns an FCM sender.
@@ -124,13 +125,24 @@ func NewSender(opts Options) (*Sender, error) {
 		maxResponseBytes = defaultMaxResponseBytes
 	}
 	hc := httpclient.CloneBounded(opts.HTTPClient, notify.DefaultRequestTimeout)
+
 	clk := opts.Clock
 	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()
 	}
+
 	return &Sender{
-		sa: sa, scope: scope, endpoint: endpoint, hc: hc, clock: clk,
+		sa:               sa,
+		endpoint:         endpoint,
+		hc:               hc,
 		maxResponseBytes: maxResponseBytes,
+		clock:            clk,
+		conf: &jwt.Config{
+			Email:      sa.ClientEmail,
+			PrivateKey: []byte(sa.PrivateKey),
+			Scopes:     []string{scope},
+			TokenURL:   sa.TokenURI,
+		},
 	}, nil
 }
 
@@ -193,7 +205,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 		return errors.New("notify/fcm: subject or body required")
 	}
 
-	token, err := s.accessToken(ctx)
+	tok, err := s.accessToken(ctx)
 	if err != nil {
 		return err
 	}
@@ -211,7 +223,7 @@ func (s *Sender) Send(ctx context.Context, msg notify.Message) error {
 				Data: msg.Metadata,
 			},
 		}
-		if err := s.sendOne(ctx, target, token, device, payload); err != nil {
+		if err := s.sendOne(ctx, target, tok.AccessToken, device, payload); err != nil {
 			return err
 		}
 	}
@@ -243,87 +255,122 @@ func (s *Sender) sendOne(ctx context.Context, target, token, device string, payl
 	return nil
 }
 
-// accessToken returns a cached OAuth2 bearer token, refreshing when
-// < 5 min remaining.
-func (s *Sender) accessToken(ctx context.Context) (token string, err error) {
+func (s *Sender) accessToken(ctx context.Context) (*oauth2.Token, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.tok != nil && s.tokExp.Sub(s.clock.Now()) > 5*time.Minute {
+		return s.tok, nil
+	}
 	now := s.clock.Now()
-	if s.token != "" && s.tokenExpAt.Sub(now) > 5*time.Minute {
-		return s.token, nil
-	}
-
-	assertion, err := s.signedAssertion(now)
+	tok, err := s.fetchToken(ctx)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	out, err := s.exchangeToken(ctx, assertion)
-	if err != nil {
-		return "", err
-	}
-	s.token = out.AccessToken
-	s.tokenExpAt = s.clock.Now().Add(time.Duration(out.ExpiresIn) * time.Second)
-	return s.token, nil
+	s.tok = tok
+	s.tokExp = tokenExpiry(now, tok)
+	return tok, nil
 }
 
-func (s *Sender) signedAssertion(now time.Time) (string, error) {
-	key, err := jwt.ParseRSAPrivateKeyFromPEM([]byte(s.sa.PrivateKey))
-	if err != nil {
-		return "", fmt.Errorf("notify/fcm: parse private key: %w", err)
+func tokenExpiry(now time.Time, tok *oauth2.Token) time.Time {
+	if tok == nil {
+		return time.Time{}
 	}
-	claims := jwt.MapClaims{
-		"iss":   s.sa.ClientEmail,
-		"scope": s.scope,
-		"aud":   s.sa.TokenURI,
-		"iat":   now.Unix(),
-		"exp":   now.Add(time.Hour).Unix(),
+	// x/oauth2/jwt keeps the raw JSON body as Extra, so numbers decode as float64.
+	if v, ok := tok.Extra("expires_in").(float64); ok && v > 0 {
+		return now.Add(time.Duration(v) * time.Second)
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	assertion, err := tok.SignedString(key)
-	if err != nil {
-		return "", fmt.Errorf("notify/fcm: sign jwt: %w", err)
-	}
-	return assertion, nil
+	return time.Time{}
 }
 
-func (s *Sender) exchangeToken(ctx context.Context, assertion string) (out tokenResponse, err error) {
-	form := url.Values{}
-	form.Set("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer")
-	form.Set("assertion", assertion)
+func (s *Sender) fetchToken(ctx context.Context) (*oauth2.Token, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.hc.Timeout)
+	defer cancel()
+	limiter := &tokenLimiterTransport{
+		base:     s.hc.Transport,
+		maxBytes: s.maxResponseBytes,
+	}
+	tokenHC := *s.hc
+	tokenHC.Transport = limiter
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.sa.TokenURI, bytes.NewBufferString(form.Encode()))
+	ctx2 := context.WithValue(ctx, oauth2.HTTPClient, &tokenHC)
+	// x/oauth2/jwt v0.37.0 uses PostForm without attaching its token-source context.
+	limiter.withContext = func(req *http.Request) *http.Request { return req.Clone(ctx2) }
+	tok, err := s.conf.TokenSource(ctx2).Token()
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("notify/fcm: token req: %w", err)
+		if limiter.bodyTooLarge {
+			err = httpclient.ErrBodyTooLarge
+		} else if ctxErr := ctx2.Err(); ctxErr != nil {
+			err = ctxErr
+		}
+		return nil, fmt.Errorf("notify/fcm: token: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := s.hc.Do(req) //nolint:bodyclose // closed via gerr.CloseInto on the deferred line below
-	if err != nil {
-		return tokenResponse{}, fmt.Errorf("notify/fcm: token post: %w", err)
+	if tok == nil || tok.AccessToken == "" {
+		return nil, errors.New("notify/fcm: token response missing access_token")
 	}
-	defer gerr.CloseInto(resp.Body, &err, "notify/fcm: close token response body")
-
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<10))
-		return tokenResponse{}, fmt.Errorf("notify/fcm: token status %d: %s", resp.StatusCode, raw)
-	}
-	raw, err := httpclient.ReadAllBounded(resp.Body, s.maxResponseBytes)
-	if err != nil {
-		return tokenResponse{}, fmt.Errorf("notify/fcm: read token response: %w", err)
-	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return tokenResponse{}, fmt.Errorf("notify/fcm: token decode: %w", err)
-	}
-	if out.AccessToken == "" {
-		return tokenResponse{}, errors.New("notify/fcm: token response missing access_token")
-	}
-	return out, nil
+	return tok, nil
 }
 
-type tokenResponse struct {
-	AccessToken string `json:"access_token"`
-	ExpiresIn   int    `json:"expires_in"`
-	TokenType   string `json:"token_type"`
+// tokenLimiterTransport enforces maxResponseBytes on successful token responses.
+type tokenLimiterTransport struct {
+	base         http.RoundTripper
+	withContext  func(*http.Request) *http.Request
+	maxBytes     int64
+	bodyTooLarge bool
+}
+
+func (t *tokenLimiterTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	resp, err := t.base.RoundTrip(t.withContext(req))
+	if err != nil {
+		return nil, fmt.Errorf("notify/fcm: round trip: %w", err)
+	}
+	if resp != nil && resp.Body != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		resp.Body = &limitReadCloser{
+			rc:       resp.Body,
+			maxBytes: t.maxBytes,
+			onLimit: func() {
+				t.bodyTooLarge = true
+			},
+		}
+	}
+	return resp, nil
+}
+
+// CloseIdleConnections forwards idle pool cleanup when the base transport supports it.
+func (t *tokenLimiterTransport) CloseIdleConnections() {
+	if closer, ok := t.base.(interface{ CloseIdleConnections() }); ok {
+		closer.CloseIdleConnections()
+	}
+}
+
+// limitReadCloser tracks body bytes and fails when exceeding maxBytes.
+type limitReadCloser struct {
+	rc       io.ReadCloser
+	maxBytes int64
+	read     int64
+	onLimit  func()
+}
+
+func (l *limitReadCloser) Read(p []byte) (int, error) {
+	n, err := l.rc.Read(p)
+	l.read += int64(n)
+	if l.read > l.maxBytes {
+		if l.onLimit != nil {
+			l.onLimit()
+		}
+		return n, fmt.Errorf("notify/fcm: read token body: %w: limit %d", httpclient.ErrBodyTooLarge, l.maxBytes)
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("notify/fcm: read token body: %w", err)
+	}
+	return n, err //nolint:wrapcheck // io.EOF must propagate verbatim to readers
+}
+
+func (l *limitReadCloser) Close() error {
+	if err := l.rc.Close(); err != nil {
+		return fmt.Errorf("notify/fcm: close token body: %w", err)
+	}
+	return nil
 }
 
 type fcmSendRequest struct {

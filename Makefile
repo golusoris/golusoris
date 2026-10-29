@@ -103,7 +103,7 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
-ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
+ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
@@ -126,6 +126,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/gosec-scan_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
+	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
 	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
@@ -174,12 +175,16 @@ tiny-trainer-vuln: ## audit tiny trainer hash locks for known Python vulnerabili
 	@bash scripts/ci/tiny-trainer-locks.sh --audit
 
 .PHONY: tiny-trainer-test
-tiny-trainer-test: tiny-trainer-locks-check tiny-trainer-vuln tiny-trainer-publish-policy-test ## execute tiny trainer contracts and vulnerability audit
+tiny-trainer-test: tiny-trainer-locks-check tiny-trainer-vuln tiny-trainer-publish-policy-test tiny-trainer-locks-policy-test ## execute tiny trainer contracts and vulnerability audit
 	@PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=ai/tiny python3 -B -m unittest discover -s ai/tiny/trainers -p 'test_*.py' -v
 
 .PHONY: tiny-trainer-publish-policy-test
 tiny-trainer-publish-policy-test: ## verify fail-closed trainer publication and supply-chain identity
 	@bash scripts/ci/tiny-trainer-publish-policy_test.sh
+
+.PHONY: tiny-trainer-locks-policy-test
+tiny-trainer-locks-policy-test: ## verify fail-closed trainer python version authority extraction
+	@bash scripts/ci/tiny-trainer-locks-policy_test.sh
 
 .PHONY: tiny-litert-sidecar-test
 tiny-litert-sidecar-test: tiny-litert-sidecar-publish-policy-test ## execute tiny litert sidecar contracts and test suite
