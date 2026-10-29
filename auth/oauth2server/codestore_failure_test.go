@@ -67,6 +67,10 @@ func TestServer_AuthorizeCodeStoreFailure(t *testing.T) {
 	}
 	resp, err := noFollow.Get(ts.URL + "/authorize?" + q.Encode())
 	require.NoError(t, err)
-	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.Equal(t, http.StatusFound, resp.StatusCode)
+	location, err := url.Parse(resp.Header.Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "server_error", location.Query().Get("error"))
+	require.Equal(t, "iss", location.Query().Get("iss"))
 	require.NoError(t, resp.Body.Close())
 }
