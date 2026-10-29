@@ -44,13 +44,14 @@ prefix (`dir`, `patterns`, `layouts`, `partials`, `default_layout`, `delims`,
 
 ## Notes
 
-- **Stdlib-only core by design.** curated default funcs deliberately omit
- env/os/exec/network helpers (sprig-class SSTI surface). go-sprout helper
+- **No helper library in core by design** (only doublestar for globs).
+ Curated default funcs deliberately omit env/os/exec/network helpers (sprig-class SSTI surface). go-sprout helper
  set is opt-in via `FuncProvider`; app funcs win on name clash.
 - `hot_reload` is tri-state: explicit wins; nil derives from `APP_ENV`
  (`dev`/`development`/`local` => true, else false). Hot-reload re-parses on
  every render — dev only.
-- `**` in patterns spans path segments (stdlib `path.Match` lacks it); walk
- is bounded to 100k entries (Power-of-10 rule 2).
+- Patterns use `doublestar.Match` (`**` spans path segments, any number of
+ `**` per pattern); invalid patterns fail `New`. Walk is bounded to 100k
+ entries (Power-of-10 rule 2).
 - `safeURL` allowlists http/https/mailto/tel/ftp and neutralizes everything else
  (javascript:/data:/vbscript:) to `about:blank`.
