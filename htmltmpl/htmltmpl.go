@@ -8,10 +8,10 @@
 // layouts, and renders them with html/template's context-aware auto-escaping
 // fully intact.
 //
-// The core package is stdlib-only by design. Extra template helpers (including
-// the go-sprout helper set) are supplied at the seam via [FuncProvider] so apps
-// opt into them explicitly and the framework never inherits a sprig-class SSTI
-// surface (env/os/exec funcs) by default.
+// The core package adds only doublestar for ** glob matching. Extra template
+// helpers (including the go-sprout helper set) are supplied at the seam via
+// [FuncProvider] so apps opt into them explicitly and the framework never
+// inherits a sprig-class SSTI surface (env/os/exec funcs) by default.
 //
 //	r, err := htmltmpl.New(htmltmpl.Options{DefaultLayout: "base"}, logger, clk, embedFS, nil)
 //	if err != nil { /* a template failed to parse at startup */ }
@@ -32,9 +32,10 @@ import (
 	"log/slog"
 	"maps"
 	"net/http"
-	"path"
 	"strings"
 	"sync"
+
+	"github.com/bmatcuk/doublestar/v4"
 
 	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/validate"
@@ -117,6 +118,9 @@ func New(
 		clk:    clk,
 		fsys:   fsys,
 	}
+	if err := r.opts.validate(); err != nil {
+		return nil, err
+	}
 	r.funcs = r.defaultFuncs()
 	if provider != nil {
 		// app funcs win on name clash — documented seam
@@ -138,7 +142,7 @@ func New(
 	return r, nil
 }
 
-// parse walks fsys (stdlib Glob has no ** support), builds a shared base of
+// parse walks fsys (fs.Glob has no ** support), builds a shared base of
 // layouts+partials, then derives one isolated template set per page so a page's
 // {{define}} overrides never collide on the global block name.
 func (r *Renderer) parse() (parsed, error) {
@@ -261,37 +265,15 @@ func (r *Renderer) matches() ([]string, error) {
 	return out, nil
 }
 
-// matchAny reports whether p matches any glob pattern, supporting a leading or
-// embedded ** as "any number of path segments" (stdlib path.Match lacks **).
+// matchAny reports whether p matches any glob pattern via doublestar.
 func matchAny(patterns []string, p string) bool {
 	for _, pat := range patterns {
-		if matchDoubleStar(pat, p) {
+		matched, err := doublestar.Match(pat, p)
+		if err == nil && matched {
 			return true
 		}
 	}
 	return false
-}
-
-// matchDoubleStar matches pat against p with ** spanning path segments. It is a
-// bounded, allocation-light matcher over the path's basename + suffix patterns.
-func matchDoubleStar(pat, p string) bool {
-	if !strings.Contains(pat, "**") {
-		ok, err := path.Match(pat, p)
-		return err == nil && ok
-	}
-	// Split on the first ** and require prefix/suffix to match around it.
-	before, after, _ := strings.Cut(pat, "**")
-	prefix := strings.TrimSuffix(before, "/")
-	suffix := strings.TrimPrefix(after, "/")
-	if prefix != "" && !strings.HasPrefix(p, prefix) {
-		return false
-	}
-	if suffix == "" {
-		return true
-	}
-	// Suffix may itself be a glob (e.g. "*.gohtml") matched against the basename.
-	ok, err := path.Match(suffix, path.Base(p))
-	return err == nil && ok
 }
 
 // reloadIfNeeded re-parses all sets when hot-reload is on. v1 re-parses on every
