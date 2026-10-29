@@ -34,13 +34,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+        uses: ./.github/actions/docker-hub-mirror
+      - uses: ./.github/actions/setup-go
       - name: Verify Docker daemon is reachable
         run: docker info
       - name: Initialize summary table

@@ -188,6 +188,19 @@ class CiScopeTest(unittest.TestCase):
         self.assertIn("container/registry", lines)
         self.assertIn("container/registry/sign", lines)
 
+    def test_negative_composite_action_change_forces_full_mode(self) -> None:
+        """Shared action changes must select every module's gates."""
+        action = self.repo / ".github/actions/setup-go/action.yml"
+        action.parent.mkdir(parents=True)
+        action.write_text("name: changed action\n", encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "-m", "change shared action")
+
+        proc = self._run_scope("modules", base=self.base_sha)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("global trigger: .github/actions/setup-go/action.yml", proc.stderr)
+        self.assertIn("k8s/nri", proc.stdout.splitlines())
+
     def test_boundary_empty_diff_returns_empty_and_count_zero(self) -> None:
         """Zero changed files yields count 0 and empty module list."""
         proc = self._run_scope("modules", base=self.base_sha)
