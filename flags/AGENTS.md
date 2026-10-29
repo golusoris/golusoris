@@ -42,3 +42,7 @@ ver := client.String(ctx, "api-version", "v1")
 - Don't cache flag values across requests — evaluation should be cheap but fresh.
 - Don't use `MemoryProvider` in production without persistence backend.
 - Don't gate on flags in DB migrations — flag evaluation requires DB to be up.
+
+## Notes
+
+- Contract: in-tree mirror kept, ADR-0024; OpenFeature SDK deferred; revisit on external backend need or upstream init/logging cleanup.
