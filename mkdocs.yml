@@ -83,6 +83,7 @@ nav:
       - "ADR-0023: keep hand-written OAuth2 server": adr/0023-keep-handwritten-oauth2-server.md
       - "ADR-0024: keep flags provider contract": adr/0024-keep-flags-provider-contract.md
       - "ADR-0026: keep hand-written LLM clients": adr/0026-keep-handwritten-llm-clients.md
+      - "ADR-0027: keep hand-written man renderer": adr/0027-keep-handwritten-man-renderer.md
       - Template: adr/0000-template.md
   - Architecture: architecture/README.md
   - Migration Guides:

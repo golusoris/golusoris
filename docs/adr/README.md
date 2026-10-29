@@ -49,6 +49,7 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0023](0023-keep-handwritten-oauth2-server.md) | Keep hand-written OAuth2 authorization server | Accepted | auth, security, dependencies |
 | [ADR-0024](0024-keep-flags-provider-contract.md) | Keep flags provider contract | Accepted | flags, dependencies |
 | [ADR-0026](0026-keep-handwritten-llm-clients.md) | Keep hand-written LLM provider clients | Accepted | ai, llm, dependencies |
+| [ADR-0027](0027-keep-handwritten-man-renderer.md) | Keep the hand-written man page renderer | Accepted | clikit, cli, dependencies |
 
 ## Numbering policy
 
