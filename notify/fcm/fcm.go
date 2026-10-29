@@ -99,7 +99,7 @@ type Sender struct {
 	hc               *http.Client
 	maxResponseBytes int64
 	clock            clockwork.Clock
-	conf             jwt.Config
+	conf             *jwt.Config
 
 	mu     sync.Mutex
 	tok    *oauth2.Token
@@ -140,7 +140,7 @@ func NewSender(opts Options) (*Sender, error) {
 		hc:               hc,
 		maxResponseBytes: maxResponseBytes,
 		clock:            clk,
-		conf: jwt.Config{
+		conf: &jwt.Config{
 			Email:      sa.ClientEmail,
 			PrivateKey: []byte(sa.PrivateKey),
 			Scopes:     []string{scope},
