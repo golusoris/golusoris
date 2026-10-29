@@ -36,6 +36,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/stripe/stripe-go/v87"
+
 	"github.com/golusoris/golusoris/core/validate"
 )
 
@@ -94,62 +96,33 @@ func Stripe(secret string) (func(http.Handler) http.Handler, error) {
 }
 
 func verifyStripe(body []byte, header, secret string) error {
-	ts, sigs := parseStripeSignatureHeader(header)
-	if ts == "" || len(sigs) == 0 {
-		return ErrInvalidSignature
+	// Delegate payload validation and past-timestamp check to official Stripe SDK.
+	if err := stripe.ValidatePayload(body, header, secret, stripe.WithTolerance(5*time.Minute)); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidSignature, err)
 	}
-	if err := checkStripeTimestamp(ts); err != nil {
-		return err
-	}
-	payload := ts + "." + string(body)
-	mac := hmacSHA256([]byte(secret), []byte(payload))
-	if anyHMACMatches(mac, sigs) {
-		return nil
-	}
-	return ErrInvalidSignature
+	return checkStripeFuture(header)
 }
 
-// parseStripeSignatureHeader parses a Stripe-Signature header of the form
-// "t=<timestamp>,v1=<hmac1>[,v1=<hmac2>]", ignoring unrecognized keys and
-// malformed (non "k=v") segments.
-func parseStripeSignatureHeader(header string) (ts string, sigs []string) {
+// checkStripeFuture rejects timestamps more than 5 minutes in the future.
+func checkStripeFuture(header string) error {
+	var ts string
 	for part := range strings.SplitSeq(header, ",") {
 		k, v, ok := strings.Cut(part, "=")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "t":
+		if ok && k == "t" {
 			ts = v
-		case "v1":
-			sigs = append(sigs, v)
 		}
 	}
-	return ts, sigs
-}
-
-// checkStripeTimestamp rejects a missing/unparseable timestamp or one older
-// than 5 minutes, guarding against replay of a captured signature.
-func checkStripeTimestamp(ts string) error {
+	if ts == "" {
+		return ErrInvalidSignature
+	}
 	t, err := parseUnix(ts)
 	if err != nil {
 		return fmt.Errorf("%w: timestamp invalid", ErrInvalidSignature)
 	}
-	age := time.Since(t)
-	if age < -5*time.Minute || age > 5*time.Minute {
+	if time.Since(t) < -5*time.Minute {
 		return fmt.Errorf("%w: timestamp outside replay window", ErrInvalidSignature)
 	}
 	return nil
-}
-
-// anyHMACMatches reports whether mac constant-time-matches any of sigs.
-func anyHMACMatches(mac string, sigs []string) bool {
-	for _, sig := range sigs {
-		if hmac.Equal([]byte(mac), []byte(sig)) {
-			return true
-		}
-	}
-	return false
 }
 
 // GitHub returns middleware that verifies the X-Hub-Signature-256
