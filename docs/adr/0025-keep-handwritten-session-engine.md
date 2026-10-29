@@ -43,6 +43,7 @@ Wrapping `scs.SessionManager` or bridging `scs.Store` / `scs.CtxStore` behind th
 ### Option c: Keep hand-written engine (chosen)
 
 Retain the native implementation in `auth/session`. At 336 LOC, the package is minimal, fully understood, and tailored to golusoris architecture:
+
 - Directly accepts `clockwork.Clock` in `NewMemoryStoreWithClock` for deterministic testing.
 - Defaults cookies to `Secure: true`, `HttpOnly: true`, and `SameSite: Lax`.
 - Renews tokens save-before-delete: the old token stays valid until the new one is persisted and the cookie is set.
@@ -67,4 +68,4 @@ Keep the hand-written session engine in `auth/session` and decline the adoption 
 - ADR-0023: Keep hand-written OAuth2 authorization server.
 - [`auth/session/session.go`](https://github.com/golusoris/golusoris/blob/main/auth/session/session.go) (hand-written engine implementation).
 - [`auth/session/session_test.go`](https://github.com/golusoris/golusoris/blob/main/auth/session/session_test.go) (clockwork deterministic expiry tests).
-- Upstream `alexedwards/scs`: https://github.com/alexedwards/scs.
+- Upstream [`alexedwards/scs`](https://github.com/alexedwards/scs).
