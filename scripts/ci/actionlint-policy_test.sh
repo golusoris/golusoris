@@ -171,7 +171,8 @@ PY
 
 check_go_cache_writer_contract() {
 	local workflow="$1"
-	python3 - "$workflow" <<'PY'
+	local action="${2:-$repo_root/.github/actions/setup-go/action.yml}"
+	python3 - "$workflow" "$action" <<'PY'
 import pathlib
 import re
 import sys
@@ -185,20 +186,27 @@ for position, start in enumerate(starts):
     end = starts[position + 1] if position + 1 < len(starts) else len(lines)
     jobs[job_pattern.match(lines[start]).group(1)] = lines[start:end]
 
+action = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+if "        cache-dependency-path: '**/go.sum'" not in action.splitlines():
+    raise SystemExit("setup-go composite does not use the all-module key")
+if "        cache: ${{ inputs.cache }}" not in action.splitlines():
+    raise SystemExit("setup-go composite does not forward the cache input")
+default = re.search(r"(?m)^    default: '(true|false)'$", action)
+if default is None:
+    raise SystemExit("setup-go composite lacks a cache default")
+
 cache_jobs = []
 for name, block in jobs.items():
     for index, line in enumerate(block):
-        if "uses: actions/setup-go@" not in line:
+        if "uses: ./.github/actions/setup-go" not in line:
             continue
         end = index + 1
         while end < len(block) and not block[end].startswith("      - "):
             end += 1
         step = block[index:end]
-        if "          cache: true" not in step:
+        if "          cache: false" in step or default.group(1) != "true":
             continue
         cache_jobs.append(name)
-        if "          cache-dependency-path: '**/go.sum'" not in step:
-            raise SystemExit(f"setup-go cache user {name} does not use the all-module key")
 
 if cache_jobs.count("build") != 1:
     raise SystemExit("build must be the sole setup-go cache writer")
@@ -209,14 +217,8 @@ for name in cache_jobs:
         raise SystemExit(f"cache reader {name} does not depend on build")
 
 build = jobs["build"]
-timeout = next(
-    (
-        int(match.group(1))
-        for line in build
-        if (match := re.match(r"^    timeout-minutes: ([1-9][0-9]*)$", line))
-    ),
-    0,
-)
+timeout_re = re.compile(r"^    timeout-minutes: ([1-9][0-9]*)$")
+timeout = max((int(m.group(1)) for line in build if (m := timeout_re.match(line))), default=0)
 if timeout < 60:
     raise SystemExit("cache writer build timeout must cover the measured upload bound")
 if "        run: scripts/ci/go-modules.sh verify" not in build:
@@ -557,22 +559,26 @@ PY
 expect_failure 'cache reader lint does not depend on build' \
 	check_go_cache_writer_contract "$cache_reader_negative"
 
-cache_key_negative="$suite_root/ci-cache-key-drift.yml"
-python3 - "$repo_root/.github/workflows/ci.yml" "$cache_key_negative" <<'PY'
-import pathlib
-import sys
+cache_action="$repo_root/.github/actions/setup-go/action.yml"
+cache_key_negative="$suite_root/setup-go-cache-key-drift.yml"
+sed '/cache-dependency-path:/d' "$cache_action" >"$cache_key_negative"
+expect_failure 'setup-go composite does not use the all-module key' \
+	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_key_negative"
 
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "          cache-dependency-path: '**/go.sum'"
-index = source.rfind(marker)
-if index < 0:
-    raise SystemExit("apidiff cache-key mutation failed")
-pathlib.Path(sys.argv[2]).write_text(
-    source[:index] + source[index + len(marker) :], encoding="utf-8"
-)
-PY
-expect_failure 'setup-go cache user apidiff does not use the all-module key' \
-	check_go_cache_writer_contract "$cache_key_negative"
+cache_input_negative="$suite_root/setup-go-cache-input-drift.yml"
+sed 's/cache: ${{ inputs.cache }}/cache: true/' "$cache_action" >"$cache_input_negative"
+expect_failure 'setup-go composite does not forward the cache input' \
+	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_input_negative"
+
+cache_default_negative="$suite_root/setup-go-cache-default-drift.yml"
+sed "s/default: 'true'/default: 'false'/" "$cache_action" >"$cache_default_negative"
+expect_failure 'build must be the sole setup-go cache writer' \
+	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_default_negative"
+
+cache_missing_default="$suite_root/setup-go-cache-default-missing.yml"
+sed '/default:/d' "$cache_action" >"$cache_missing_default"
+expect_failure 'setup-go composite lacks a cache default' \
+	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_missing_default"
 
 cache_warm_negative="$suite_root/ci-cache-without-module-warm.yml"
 sed '/run: scripts\/ci\/go-modules.sh verify/d' \

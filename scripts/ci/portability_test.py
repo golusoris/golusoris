@@ -273,7 +273,7 @@ class PortabilityDriverTest(TestCase):
             "runner: macos-26",
             "runner: windows-2025",
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
-            "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+            "uses: ./.github/actions/setup-go",
             "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
             'pact_dir="${RUNNER_TEMP}/pact-ffi"',
             'install -d -m 0700 "$pact_dir"',
