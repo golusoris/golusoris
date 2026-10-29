@@ -20,7 +20,13 @@ Not an OIDC issuer; no ID tokens, discovery, UserInfo, or nonce handling.
 
 ## Notes
 
-- Engine: hand-written by design, ADR-0023; supported: authorization_code + PKCE S256, client_secret_post; gaps #1195.
+- Engine: hand-written; ADR-0023. Grant: authorization_code + PKCE S256.
+- Client authentication: client_secret_basic, client_secret_post; public clients: none.
+- Basic credentials: RFC 6749 §2.3.1 / Appendix B form decoding; constant-time secret comparison.
+- Mixed Basic + form credentials -> invalid_request; failed Basic -> 401 invalid_client + WWW-Authenticate: Basic.
+- Authorization success/error redirects: RFC 9207 iss = Options.Issuer; url.Values encoding; state preserved.
+- Unauthenticated user (Authenticate returns empty) -> 401 login required; no redirect.
+- Invalid client/redirect URI: direct error; no redirect. Evidence: issuer_basic_test.go.
 - Only `authorization_code` grant is supported; PKCE `S256` is mandatory.
 - `/authorize` accepts GET only; `/token` accepts POST only.
 - PKCE challenges and verifiers must be 43-128 RFC 7636 unreserved characters.
@@ -36,4 +42,4 @@ Not an OIDC issuer; no ID tokens, discovery, UserInfo, or nonce handling.
 - Public native clients accept RFC 8252 reverse-domain private schemes,
   claimed HTTPS redirects, and loopback IP redirects with runtime ports.
 - Codes are single-use and TTL-bounded (default 60s).
-- Mount under your trusted issuer URL — there is no rate limiting; combine with `httpx/ratelimit/`.
+- Mount under trusted issuer URL; no rate limiting; combine with `httpx/ratelimit/`.
