@@ -5,8 +5,8 @@
 // Package money provides a currency-aware money type stored as integer
 // minor units (cents, pence, …) to avoid floating-point rounding errors.
 //
-// Currency codes follow ISO 4217. Common zero-decimal currencies (JPY, KRW,
-// …) are listed in [ZeroDecimalCurrencies].
+// Currency amounts use ISO 4217 minor units via github.com/bojanz/currency.
+// Unknown or invalid codes use two decimals.
 //
 // Usage:
 //
@@ -20,8 +20,9 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 	"strings"
+
+	"github.com/bojanz/currency"
 )
 
 // Money is an immutable currency-aware value. Amount is in minor units
@@ -95,18 +96,19 @@ func (m Money) SameCurrency(other Money) bool {
 	return m.Currency == other.Currency
 }
 
-// String returns "12.34 USD" for non-zero-decimal currencies, "1234 JPY" for zero-decimal.
+// String formats the amount with the currency's minor-unit decimal places,
+// e.g. "12.34 USD", "1.234 KWD", or "1234 JPY".
 func (m Money) String() string {
-	divisor := minorUnitDivisor(m.Currency)
-	if divisor == 1 {
+	decimals := minorUnitScale(m.Currency)
+	if decimals == 0 {
 		return fmt.Sprintf("%d %s", m.Amount, m.Currency)
 	}
-	major := m.Amount / int64(divisor)
-	minor := m.Amount % int64(divisor)
+	divisor := int64(math.Pow10(decimals))
+	major := m.Amount / divisor
+	minor := m.Amount % divisor
 	if minor < 0 {
 		minor = -minor
 	}
-	decimals := len(strconv.Itoa(divisor)) - 1
 	return fmt.Sprintf("%d.%0*d %s", major, decimals, minor, m.Currency)
 }
 
@@ -118,16 +120,22 @@ func (m Money) checkSameCurrency(other Money) error {
 }
 
 // minorUnitDivisor returns the number of minor units per major unit.
-// 100 for most currencies (USD, EUR, GBP…); 1 for zero-decimal currencies.
-func minorUnitDivisor(currency string) int {
-	if _, ok := ZeroDecimalCurrencies[currency]; ok {
-		return 1
+func minorUnitDivisor(code string) int {
+	return int(math.Pow10(minorUnitScale(code)))
+}
+
+func minorUnitScale(code string) int {
+	digits, ok := currency.GetDigits(strings.ToUpper(code))
+	if !ok {
+		return 2
 	}
-	return 100
+	return int(digits)
 }
 
 // ZeroDecimalCurrencies lists ISO 4217 currencies with no minor unit.
 // Source: Stripe zero-decimal currency list.
+//
+// Deprecated: amounts use ISO 4217 minor units via github.com/bojanz/currency; this list is no longer consulted.
 var ZeroDecimalCurrencies = map[string]struct{}{
 	"BIF": {}, "CLP": {}, "DJF": {}, "GNF": {}, "ISK": {},
 	"JPY": {}, "KMF": {}, "KRW": {}, "MGA": {}, "PYG": {},
