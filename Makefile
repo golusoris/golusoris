@@ -307,9 +307,9 @@ hiss-coverage: ## praetor HISS-20 enforcement-coverage catalogue (.config/hiss/c
 docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see docs/upstream/README.md)
 	@echo "docs/upstream refresh recipe (one dependency at a time):"
 	@echo "  1. resolve the new pin: go list -m -f '{{.Version}}' <module>   (run in the module that requires it: . or core/)"
-	@echo "  2. re-fetch the upstream README / API docs at that tag into docs/upstream/<name>/"
-	@echo "  3. update the pin and authority in docs/upstream/README.md"
-	@echo "  4. run make docs-upstream-verify, then commit snapshot + dependency bump together"
+	@echo "  2. the merge train regenerates module pin strings in the catalogue and snapshots"
+	@echo "  3. review the tagged upstream docs and edit curated Changes since prose by hand"
+	@echo "  4. run make docs-upstream-verify after regeneration"
 	@echo "Current pins:"
 	@for m in $(UPSTREAM_ROOT_MODULES); do printf '  %-45s %s\n' "$$m" "$$($(GO) list -m -f '{{.Version}}' $$m)"; done
 	@for m in $(UPSTREAM_CORE_MODULES); do printf '  %-45s %s (core/)\n' "$$m" "$$(cd core && $(GO) list -m -f '{{.Version}}' $$m)"; done

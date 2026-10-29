@@ -8,6 +8,7 @@ When dependencies are bumped on renovate branches, modules that replace a bumped
 local module must be tidied so go.mod and go.sum match the updated graph, and
 embedded assets such as the Scalar API reference browser bundle are rebuilt.
 This tool executes go mod tidy across all modules, rebuilds the Scalar bundle,
+regenerates module-backed upstream documentation pins,
 verifies that no unexpected files were modified or deleted, and writes a directory
 containing the regenerated files and a manifest describing them.
 
@@ -29,6 +30,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,13 +50,29 @@ MAX_STATUS_ENTRIES = 2048
 MAX_MODULES = 64
 MAX_CHANGED_FILES = 256
 MAX_DECLARED_LINES = 1024
+MAX_UPSTREAM_ROWS = 64
+MAX_GRAPH_LINES = 8192
+UPSTREAM_CATALOGUE = "docs/upstream/README.md"
+MODULE_AUTHORITIES = {
+    "root": ("root",),
+    "core": ("core",),
+    "root + core": ("root", "core"),
+}
+SKIPPED_AUTHORITIES = {
+    "repository tool pin": "repository tool version, not a module graph pin",
+    "embedded asset": "embedded asset pin handled by scalar-bundle-update.sh",
+    "root + core + toolchain": "requires agreement with the installed Go toolchain",
+}
+UPSTREAM_VERSION = r"v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+UPSTREAM_ROW = (
+    r"\| `(?P<package>[^`|\s]+)` \| `(?P<version>[^`|\s]+)` \| "
+    r"(?P<authority>[^|]+) \| \[[^\]\n]+\]\((?P<directory>[a-z0-9][a-z0-9-]*)/README\.md\) \|"
+)
 # A replace chain settles one link per pass; the deepest chain here is four modules.
 MAX_TIDY_PASSES = 6
 SCALAR_PATHS = [
     "apidocs/embed/SCALAR_RELEASED",
     "apidocs/embed/scalar.js",
-    "docs/upstream/README.md",
-    "docs/upstream/scalar/README.md",
 ]
 
 
@@ -84,7 +102,10 @@ def discover_modules(
         proc = subprocess.run(  # noqa: S603 - fixed bash command on a repository script.
             ["bash", str(script), "list"],  # noqa: S607 - bash executable on runner PATH.
             cwd=root,
-            env={**os.environ, "CI_SCOPE_BASE": ""},  # regeneration covers every module, never a diff scope
+            env={
+                **os.environ,
+                "CI_SCOPE_BASE": "",
+            },  # regeneration covers every module, never a diff scope
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -101,6 +122,13 @@ def discover_modules(
     return lines
 
 
+def upstream_paths(root: Path) -> list[str]:
+    paths = sorted(root.glob("docs/upstream/*/README.md"))
+    if not paths or len(paths) > MAX_UPSTREAM_ROWS:
+        raise CheckError(f"upstream pins: unexpected snapshot count: {len(paths)}")
+    return [UPSTREAM_CATALOGUE, *[p.relative_to(root).as_posix() for p in paths]]
+
+
 def get_generated_files(root: Path) -> list[str]:
     modules = discover_modules(root)
     paths: list[str] = []
@@ -112,6 +140,7 @@ def get_generated_files(root: Path) -> list[str]:
         else:
             paths.extend([f"{m}/go.mod", f"{m}/go.sum"])
     paths.extend(SCALAR_PATHS)
+    paths.extend(upstream_paths(root))
     return sorted(paths)
 
 
@@ -228,7 +257,7 @@ def run_update_command(
     cwd: Path,
     timeout: int,
     env: dict[str, str] | None = None,
-) -> None:
+) -> str:
     try:
         proc = subprocess.run(  # noqa: S603 - go command lines built in this file.
             cmd,
@@ -246,6 +275,151 @@ def run_update_command(
     if proc.returncode != 0:
         err = proc.stderr.strip() or proc.stdout.strip()
         raise CheckError(f"{' '.join(cmd)} exited {proc.returncode}:\n{err}")
+    return proc.stdout
+
+
+def upstream_rows(text: str) -> list[re.Match[str]]:
+    lines = re.findall(r"^\| `.*$", text, re.MULTILINE)
+    if not lines or len(lines) > MAX_UPSTREAM_ROWS:
+        raise CheckError(f"upstream pins: unexpected catalogue row count: {len(lines)}")
+    rows: list[re.Match[str]] = []
+    packages: set[str] = set()
+    directories: set[str] = set()
+    for i in range(min(len(lines), MAX_UPSTREAM_ROWS)):
+        row = re.fullmatch(UPSTREAM_ROW, lines[i])
+        if row is None:
+            raise CheckError(f"upstream pins: malformed catalogue row: {lines[i]}")
+        package, directory = row["package"], row["directory"]
+        if package in packages or directory in directories:
+            raise CheckError(f"upstream pins: duplicate catalogue mapping: {package}")
+        packages.add(package)
+        directories.add(directory)
+        rows.append(row)
+    return rows
+
+
+def upstream_graphs(root: Path) -> tuple[dict[str, dict[str, str]], list[list[str]]]:
+    graphs: dict[str, dict[str, str]] = {}
+    commands: list[list[str]] = []
+    for authority, directory in (("root", "."), ("core", "core")):
+        cmd = [
+            "go",
+            "-C",
+            directory,
+            "list",
+            "-mod=readonly",
+            "-m",
+            "-f",
+            "{{.Path}}\t{{.Version}}",
+            "all",
+        ]
+        lines = run_update_command(cmd, root, DEFAULT_TIMEOUT_SECONDS).splitlines()
+        if len(lines) > MAX_GRAPH_LINES:
+            raise CheckError(
+                f"upstream pins: {authority} graph exceeds {MAX_GRAPH_LINES} lines"
+            )
+        graph: dict[str, str] = {}
+        for i in range(min(len(lines), MAX_GRAPH_LINES)):
+            fields = lines[i].split("\t")
+            if len(fields) != 2 or fields[0] in graph:
+                raise CheckError(
+                    f"upstream pins: malformed {authority} graph line: {lines[i]}"
+                )
+            graph[fields[0]] = fields[1]
+        graphs[authority] = graph
+        commands.append(cmd)
+    return graphs, commands
+
+
+def upstream_version(
+    package: str, authorities: tuple[str, ...], graphs: dict[str, dict[str, str]]
+) -> str:
+    versions = {graphs[a].get(package, "") for a in authorities}
+    if len(versions) != 1 or "" in versions:
+        raise CheckError(
+            f"upstream pins: {package}: missing or disagreeing module authorities {authorities}"
+        )
+    version = versions.pop()
+    if re.fullmatch(UPSTREAM_VERSION, version) is None:
+        raise CheckError(
+            f"upstream pins: {package}: unsupported module version {version!r}"
+        )
+    return version
+
+
+def replace_upstream_token(
+    text: str, prefix: str, pattern: str, version: str, label: str
+) -> str:
+    matches = list(re.finditer(rf"^{prefix}[^\r\n]*$", text, re.MULTILINE))
+    if prefix == "# ":
+        matches = matches[:1]
+    if len(matches) != 1:
+        raise CheckError(f"upstream pins: {label} shape (expected exactly one pin)")
+    line = matches[0]
+    match = re.fullmatch(pattern, line[0])
+    if match is None:
+        raise CheckError(f"upstream pins: {label} shape (unsupported pin line)")
+    start, end = match.span("version")
+    return text[: line.start() + start] + version + text[line.start() + end :]
+
+
+def upstream_snapshot(text: str, version: str, path: str) -> str:
+    token = rf"(?P<version>{UPSTREAM_VERSION})"
+    patterns = (
+        ("heading", "# ", rf"# [^\r\n]+ — {token} snapshot"),
+        ("Pinned", "Pinned: ", rf"Pinned: \*\*{token}\*\*[^\r\n]*"),
+        (
+            "Source",
+            "Source: ",
+            rf"Source: \[tagged source\]\(https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/tree/{token}\)",
+        ),
+    )
+    for label, prefix, pattern in patterns:
+        text = replace_upstream_token(
+            text, prefix, pattern, version, f"{path}: unexpected {label}"
+        )
+    return text
+
+
+def read_upstream_file(root: Path, path: str) -> str:
+    try:
+        return (root / path).read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise CheckError(f"upstream pins: {path}: could not read: {error}") from error
+
+
+def regenerate_upstream_pins(root: Path) -> list[list[str]]:
+    catalogue = root / UPSTREAM_CATALOGUE
+    original = read_upstream_file(root, UPSTREAM_CATALOGUE)
+    text = original
+    rows = upstream_rows(text)
+    graphs, commands = upstream_graphs(root)
+    pending: dict[Path, str] = {}
+    for i in range(min(len(rows), MAX_UPSTREAM_ROWS)):
+        row = rows[i]
+        package, authority = row["package"], row["authority"]
+        if authority in SKIPPED_AUTHORITIES:
+            print(f"upstream pins: skip {package}: {SKIPPED_AUTHORITIES[authority]}")
+            continue
+        if authority not in MODULE_AUTHORITIES:
+            raise CheckError(
+                f"upstream pins: {package}: unknown authority {authority!r}"
+            )
+        version = upstream_version(package, MODULE_AUTHORITIES[authority], graphs)
+        path = f"docs/upstream/{row['directory']}/README.md"
+        snapshot_file = root / path
+        snapshot_text = read_upstream_file(root, path)
+        updated = upstream_snapshot(snapshot_text, version, path)
+        if updated != snapshot_text:
+            pending[snapshot_file] = updated
+        start, end = row.span("version")
+        updated_row = row[0][:start] + version + row[0][end:]
+        text = text.replace(row[0], updated_row, 1)
+    if text != original:
+        pending[catalogue] = text
+    for path, updated in list(pending.items())[: MAX_UPSTREAM_ROWS + 1]:
+        path.write_text(updated, encoding="utf-8")
+    return commands
 
 
 def format_command(cmd: list[str]) -> list[str]:
@@ -341,6 +515,7 @@ def write_regenerated(
             scalar_cmd = ["bash", "scripts/ci/scalar-bundle-update.sh", "regenerate"]
             run_update_command(scalar_cmd, root, SCALAR_TIMEOUT_SECONDS)
             executed.append(scalar_cmd)
+        executed.extend(regenerate_upstream_pins(root))
 
     raw_status = git_status_bytes(root)
     if not raw_status:
@@ -367,6 +542,10 @@ FIXTURE_GENERATED = sorted(
         "b/go.sum",
         "c/go.mod",
         "c/go.sum",
+        "core/go.mod",
+        "core/go.sum",
+        "docs/upstream/c/README.md",
+        UPSTREAM_CATALOGUE,
         "go.mod",
         "go.sum",
         *SCALAR_PATHS,
@@ -375,8 +554,27 @@ FIXTURE_GENERATED = sorted(
 
 # c has no dependencies; a needs c and b needs a, each joined by a local replace.
 FIXTURE_FILES = {
-    "go.mod": "module example.com/fixture\n\ngo 1.24\n",
-    "fixture.go": "package fixture\n",
+    "go.mod": (
+        "module example.com/fixture\n\ngo 1.24\n\n"
+        "require example.com/c v0.0.0\nreplace example.com/c => ./c\n"
+    ),
+    "fixture.go": 'package fixture\n\nimport "example.com/c"\n\nconst V = c.V\n',
+    "core/go.mod": (
+        "module example.com/core\n\ngo 1.24\n\n"
+        "require example.com/c v0.0.0\nreplace example.com/c => ../c\n"
+    ),
+    "core/core.go": 'package core\n\nimport "example.com/c"\n\nconst V = c.V\n',
+    "docs/upstream/README.md": (
+        "| Package | Pinned version | Authority | Snapshot |\n"
+        "| --- | --- | --- | --- |\n"
+        "| `example.com/c` | `v0.0.0` | root + core | [c/](c/README.md) |\n"
+    ),
+    "docs/upstream/c/README.md": (
+        "# example.com/c — v0.0.0 snapshot\n\n"
+        "Pinned: **v0.0.0** (semconv API: **v0.0.1**)\n"
+        "Source: [tagged source](https://github.com/example/c/tree/v0.0.0)\n\n"
+        "## Changes since v0.0.1\n\nCurated v0.0.1 prose.\n"
+    ),
     "c/go.mod": "module example.com/c\n\ngo 1.24\n",
     "c/c.go": "package c\n\nconst V = 1\n",
     "a/go.mod": (
@@ -440,7 +638,7 @@ def setup_fixture_repo(repo: Path, source_root: Path) -> str:
     for rel, text in FIXTURE_FILES.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text, encoding="utf-8")
-    for rel in (".", "c", "a", "b"):
+    for rel in (".", "c", "a", "b", "core"):
         fixture_tidy(repo / rel)
     (repo / ".github").mkdir()
     (repo / DECLARED).write_text("\n".join(FIXTURE_GENERATED) + "\n", encoding="utf-8")
@@ -594,6 +792,125 @@ def run_plant_case_scalar_unlisted(repo: Path, temp_dir: Path) -> tuple[list[str
 
     run_git(["reset", "--hard", "HEAD~1"], repo)
     reset_fixture_repo(repo)
+    return failures, refused
+
+
+def run_upstream_repair_case(repo: Path, temp_dir: Path) -> list[str]:
+    reset_fixture_repo(repo)
+    original_head = run_git(["rev-parse", "HEAD"], repo).strip()
+    paths = ("docs/upstream/README.md", "docs/upstream/c/README.md")
+    for path in paths:
+        original = FIXTURE_FILES[path]
+        # Pin tokens alone move; the semconv pin and curated prose must survive.
+        stale = original.replace("v0.0.0", "v0.0.1")
+        (repo / path).write_text(stale, encoding="utf-8")
+    run_git(["commit", "-am", "plant stale upstream pins"], repo)
+    out = temp_dir / "out-upstream"
+    fails, _ = write_regenerated(out, repo)
+    failures = [f"upstream repair unexpectedly failed: {f}" for f in fails]
+    for path in paths:
+        copied = out / "files" / path
+        if (
+            not copied.is_file()
+            or copied.read_text(encoding="utf-8") != FIXTURE_FILES[path]
+        ):
+            failures.append(f"upstream repair did not restore exact contents: {path}")
+    proc = subprocess.run(
+        ["bash", "scripts/verify-upstream-pins.sh"],  # noqa: S607 - bash executable on runner PATH.
+        cwd=repo,
+        env=offline_env(),
+        capture_output=True,
+        text=True,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+        check=False,
+    )
+    if proc.returncode != 0:
+        failures.append(f"upstream repair verify failed: {proc.stderr.strip()}")
+    if not failures:
+        run_git(["commit", "-am", "accept regenerated upstream fixture"], repo)
+        fails, message = write_regenerated(temp_dir / "out-upstream-current", repo)
+        if fails or message != "nothing to regenerate":
+            failures.append(f"upstream repair not idempotent: {fails}, {message}")
+    run_git(["reset", "--hard", original_head], repo)
+    reset_fixture_repo(repo)
+    return failures
+
+
+def run_upstream_source_plant(repo: Path, temp_dir: Path) -> list[str]:
+    reset_fixture_repo(repo)
+    path = "docs/upstream/c/README.md"
+    text = FIXTURE_FILES[path].replace("[tagged source]", "[unexpected source]")
+    (repo / path).write_text(text, encoding="utf-8")
+    run_git(["commit", "-am", "plant unexpected upstream Source"], repo)
+    out = temp_dir / "out-upstream-source"
+    failures: list[str] = []
+    try:
+        write_regenerated(out, repo)
+    except CheckError as error:
+        if f"{path}: unexpected Source shape" not in str(error):
+            failures.append(f"upstream Source plant wrong refusal: {error}")
+    else:
+        failures.append("upstream Source plant was not refused")
+    if (out / "manifest.json").exists():
+        failures.append("upstream Source plant wrote manifest.json")
+    run_git(["reset", "--hard", "HEAD~1"], repo)
+    reset_fixture_repo(repo)
+    return failures
+
+
+def run_upstream_validation_cases() -> tuple[list[str], int]:
+    source = FIXTURE_FILES["docs/upstream/c/README.md"]
+    row = FIXTURE_FILES[UPSTREAM_CATALOGUE].splitlines()[-1] + "\n"
+    graphs = {"root": {"example.com/c": "v0.0.0"}, "core": {"example.com/c": "v0.0.1"}}
+    cases: tuple[tuple[Callable[[], Any], str], ...] = (
+        (lambda: upstream_rows(""), "catalogue row count"),
+        (lambda: upstream_rows(row * (MAX_UPSTREAM_ROWS + 1)), "catalogue row count"),
+        (lambda: upstream_rows(row + row), "duplicate catalogue mapping"),
+        (
+            lambda: upstream_rows(row.replace("c/README.md", "../README.md")),
+            "malformed catalogue row",
+        ),
+        (
+            lambda: upstream_snapshot("# unexpected\n" + source, "v0.0.0", "c"),
+            "unexpected heading shape",
+        ),
+        (
+            lambda: upstream_snapshot(source.replace("Pinned:", "Pin:"), "v0.0.0", "c"),
+            "unexpected Pinned shape",
+        ),
+        (
+            lambda: upstream_snapshot(source + "\nSource: unexpected\n", "v0.0.0", "c"),
+            "unexpected Source shape",
+        ),
+        (
+            lambda: upstream_version("example.com/c", ("root", "core"), graphs),
+            "disagreeing module authorities",
+        ),
+        (
+            lambda: upstream_version("example.com/missing", ("root",), graphs),
+            "missing or disagreeing",
+        ),
+        (
+            lambda: upstream_version("c", ("root",), {"root": {"c": "branch/main"}}),
+            "unsupported module version",
+        ),
+    )
+    failures: list[str] = []
+    refused = 0
+    for i in range(min(len(cases), MAX_UPSTREAM_ROWS)):
+        action, expected = cases[i]
+        try:
+            action()
+        except CheckError as error:
+            if expected in str(error):
+                refused += 1
+            else:
+                failures.append(f"upstream validation wrong refusal: {error}")
+        else:
+            failures.append(f"upstream validation not refused: {expected}")
+    for authority, version in (("root", "v0.0.0"), ("core", "v0.0.1")):
+        if upstream_version("example.com/c", (authority,), graphs) != version:
+            failures.append(f"upstream selected wrong {authority} version")
     return failures, refused
 
 
@@ -784,6 +1101,19 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         generated = list(FIXTURE_GENERATED)
 
         failures, refused_rep, accepted_rep = run_repair_cases(repo, temp_dir)
+        verifier = repo / "scripts/verify-upstream-pins.sh"
+        shutil.copy2(root / "scripts/verify-upstream-pins.sh", verifier)
+        (repo / "tools").mkdir()
+        shutil.copy2(root / "tools/tool-versions.env", repo / "tools/tool-versions.env")
+        run_git(
+            ["add", "scripts/verify-upstream-pins.sh", "tools/tool-versions.env"], repo
+        )
+        run_git(["commit", "-m", "add upstream fixture verifier"], repo)
+        upstream_repair = run_upstream_repair_case(repo, temp_dir)
+        upstream_source = run_upstream_source_plant(repo, temp_dir)
+        failures.extend(upstream_repair + upstream_source)
+        upstream_validation, refused_upstream = run_upstream_validation_cases()
+        failures.extend(upstream_validation)
         fails_ab, refused_ab = run_plant_cases_ab(repo, temp_dir)
         failures.extend(fails_ab)
         fails_sc, refused_sc = run_plant_case_scalar_unlisted(repo, temp_dir)
@@ -807,8 +1137,12 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
             + refused_de
             + refused_f
             + refused_decl
+            + int(not upstream_source)
+            + refused_upstream
         )
-        total_accepted = accepted_rep + accepted_gh + accepted_decl
+        total_accepted = (
+            accepted_rep + accepted_gh + accepted_decl + int(not upstream_repair)
+        )
         return failures, total_refused, total_accepted
 
 

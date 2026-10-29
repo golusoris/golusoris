@@ -12,10 +12,15 @@ Cursor, Aider, Codex, and Continue.
 **Why this exists:** Public docs may be ahead of or behind the version the
 framework pins. These snapshots keep generated suggestions on the selected API.
 
-**How to update:** When bumping a dependency, run `make docs-upstream` for the
-refresh recipe. Update the table and matching snapshot from the exact selected
-tag, then run `scripts/verify-upstream-pins.sh`. The table is the verifier's
-mapping authority; its authority column says where each pin is resolved.
+**How to update:** The merge train runs `scripts/ci/regenerate.py write` to
+regenerate module pin strings in the table and matching snapshot headings,
+`Pinned` lines, and `Source` tags. Review the exact selected upstream tag and
+edit curated “Changes since” prose by hand; regeneration leaves it untouched.
+Run `make docs-upstream` for the recipe, then `make docs-upstream-verify` after
+regeneration. The table is the verifier's mapping authority; its authority column
+says where each pin is resolved. Scalar pins use `scalar-bundle-update.sh`;
+repository tool and Go toolchain rows are reported as skipped by the module pin
+regenerator.
 
 ## Index
 
