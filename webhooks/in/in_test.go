@@ -242,7 +242,7 @@ func TestStripe_oldTimestamp(t *testing.T) {
 	t.Parallel()
 	const secret = "whsec_test"
 	body := `{}`
-	ts := time.Now().Add(-10 * time.Minute).Unix()
+	ts := time.Now().Add(-6 * time.Minute).Unix()
 	handler := requireStripe(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
@@ -259,7 +259,7 @@ func TestStripe_futureTimestamp(t *testing.T) {
 	t.Parallel()
 	const secret = "whsec_test"
 	body := `{}`
-	ts := time.Now().Add(10 * time.Minute).Unix()
+	ts := time.Now().Add(6 * time.Minute).Unix()
 	handler := requireStripe(t, secret)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
@@ -272,9 +272,40 @@ func TestStripe_futureTimestamp(t *testing.T) {
 	}
 }
 
-// TestStripe_malformedHeader covers the parseStripeSignatureHeader boundary
-// where required keys ("t", "v1") are absent from an otherwise well-formed
-// header.
+// TestStripe_missingHeader covers requests lacking the Stripe-Signature header.
+func TestStripe_missingHeader(t *testing.T) {
+	t.Parallel()
+	handler := requireStripe(t, "whsec_test")(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(`{"type":"charge.succeeded"}`))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+// TestStripe_wrongSecret covers requests signed with a different secret than expected.
+func TestStripe_wrongSecret(t *testing.T) {
+	t.Parallel()
+	const signingSecret = "whsec_signer"
+	const handlerSecret = "whsec_receiver"
+	body := `{"type":"charge.succeeded"}`
+	ts := time.Now().Unix()
+	handler := requireStripe(t, handlerSecret)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+	req.Header.Set("Stripe-Signature", stripeSig(signingSecret, body, ts))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+
+	if rw.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rw.Code)
+	}
+}
+
+// TestStripe_malformedHeader covers headers lacking required "t" or "v1" fields.
 func TestStripe_malformedHeader(t *testing.T) {
 	t.Parallel()
 	handler := requireStripe(t, "whsec_test")(okHandler())
@@ -289,8 +320,7 @@ func TestStripe_malformedHeader(t *testing.T) {
 	}
 }
 
-// TestStripe_wrongSignature is the negative case for anyHMACMatches: a
-// well-formed, fresh header whose v1 digest simply does not match.
+// TestStripe_wrongSignature covers well-formed headers with non-matching signatures.
 func TestStripe_wrongSignature(t *testing.T) {
 	t.Parallel()
 	const secret = "whsec_test"
@@ -308,9 +338,7 @@ func TestStripe_wrongSignature(t *testing.T) {
 	}
 }
 
-// TestStripe_secondSignatureMatches covers anyHMACMatches scanning past a
-// non-matching v1 entry (e.g. during a Stripe signing-secret rotation, which
-// sends multiple v1 values) to find one that does.
+// TestStripe_secondSignatureMatches covers secret rotation where one of multiple v1 signatures matches.
 func TestStripe_secondSignatureMatches(t *testing.T) {
 	t.Parallel()
 	const secret = "whsec_rotation"
@@ -328,6 +356,18 @@ func TestStripe_secondSignatureMatches(t *testing.T) {
 
 	if rw.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rw.Code)
+	}
+}
+
+// TestStripe_oversizedBodyReturnsRequestEntityTooLarge covers bodies exceeding the 1 MiB limit.
+func TestStripe_oversizedBodyReturnsRequestEntityTooLarge(t *testing.T) {
+	t.Parallel()
+	handler := requireStripe(t, "whsec_test")(okHandler())
+	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("a", in.MaxBodyBytes+1)))
+	rw := httptest.NewRecorder()
+	handler.ServeHTTP(rw, req)
+	if rw.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected 413, got %d", rw.Code)
 	}
 }
 
