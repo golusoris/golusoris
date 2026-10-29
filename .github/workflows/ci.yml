@@ -100,11 +100,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: Install pinned formatting and lint tools
         run: |
           set -euo pipefail
@@ -154,11 +150,7 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: gosec
         env:
           GO_MODULE_GROUP: primary
@@ -198,11 +190,7 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: govulncheck
         env:
           GO_MODULE_GROUP: primary
@@ -271,14 +259,9 @@ jobs:
           echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Pull Docker Hub images through mirror.gcr.io
         if: env.CI_GATED != 'skip'
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: ./.github/actions/docker-hub-mirror
+      - uses: ./.github/actions/setup-go
         if: env.CI_GATED != 'skip'
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
       - name: Run repository Python regression suites
         if: env.CI_GATED != 'skip'
         run: bash scripts/ci/python-tests.sh
@@ -487,13 +470,8 @@ jobs:
         with:
           fetch-depth: 0
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+        uses: ./.github/actions/docker-hub-mirror
+      - uses: ./.github/actions/setup-go
       - name: Compile and analyze repository C sources
         run: |
           docker info
@@ -566,19 +544,14 @@ jobs:
           echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Pull Docker Hub images through mirror.gcr.io
         if: env.CI_GATED != 'skip'
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Pre-pull shard testcontainers images
         if: env.CI_GATED != 'skip'
         timeout-minutes: 30
         shell: bash
         run: bash scripts/ci/pull-split-test-images.sh
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         if: env.CI_GATED != 'skip'
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules in this sweep; hosted images lack their headers.
       - name: Install cgo system libraries
         if: env.CI_GATED != 'skip'
@@ -651,8 +624,7 @@ jobs:
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
         run: docker info
       - name: Build documentation strictly from immutable tooling
@@ -677,11 +649,7 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: Enforce measured hot-path allocation budgets
         run: bash scripts/ci/allocation-budget.sh
 
@@ -706,11 +674,7 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: Build and test the root against the required core version
         run: bash scripts/ci/core-skew.sh
 
@@ -746,12 +710,8 @@ jobs:
           case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
           echo "CI_GATED=$gated" >> "$GITHUB_ENV"
           echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         if: env.CI_GATED != 'skip'
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
       # hw/udev and media/3d are cgo modules; hosted images lack their headers.
       - name: Install cgo system libraries
         if: env.CI_GATED != 'skip'
@@ -794,11 +754,7 @@ jobs:
         with:
           # GoReleaser derives the snapshot version from the latest tag.
           fetch-depth: 0
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+      - uses: ./.github/actions/setup-go
       - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
@@ -944,9 +900,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0   # template pins name release commits and tags
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: go.mod
           cache: false
       - name: Install pinned actionlint
         run: |
@@ -984,9 +939,8 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: go.mod
           cache: false
       - name: Install pinned actionlint, Helm and buf
         run: |
@@ -1028,8 +982,7 @@ jobs:
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
         run: docker info
       - name: Format, initialize from locks, and validate modules
@@ -1053,17 +1006,15 @@ jobs:
           echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: go.mod
           cache: false
       - name: Install pinned Helm renderer
         run: |
           . tools/tool-versions.env
           go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
         run: docker info
       - name: Validate static and rendered Kubernetes resources
@@ -1118,9 +1069,8 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: go.mod
           cache: false
       - name: Install vacuum (module sum pinned)
         run: |
@@ -1171,12 +1121,8 @@ jobs:
           case "$gated" in run | skip) ;; *) echo "::error::ci-scope gate printed: $gated"; exit 1 ;; esac
           echo "CI_GATED=$gated" >> "$GITHUB_ENV"
           echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      - uses: ./.github/actions/setup-go
         if: env.CI_GATED != 'skip'
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
       # apidiff type-checks every module, including the cgo ones.
       - name: Install cgo system libraries
         if: env.CI_GATED != 'skip'
@@ -1324,8 +1270,7 @@ jobs:
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
         run: docker info
       - name: Run full-tree custom Semgrep gate
@@ -1420,8 +1365,7 @@ jobs:
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
+        uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
         run: docker info
       - name: REUSE lint from immutable tooling
@@ -1457,11 +1401,9 @@ jobs:
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Pull Docker Hub images through mirror.gcr.io
-        shell: bash
-        run: bash scripts/ci/docker-hub-mirror.sh
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: ./.github/actions/docker-hub-mirror
+      - uses: ./.github/actions/setup-go
         with:
-          go-version-file: go.mod
           cache: false
       - name: Verify Docker daemon
         run: docker info

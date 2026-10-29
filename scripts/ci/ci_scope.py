@@ -29,6 +29,7 @@ GLOBAL_TRIGGERS: tuple[str, ...] = (
     "tools/tool-versions.env",
     "scripts/ci/**",
     ".github/workflows/**",
+    ".github/actions/**",
     "Makefile",
     ".standards.yaml",
 )

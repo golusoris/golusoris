@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Configure Docker Hub mirror
+description: Pull Docker Hub images through mirror.gcr.io
+
+runs:
+  using: composite
+  steps:
+    - name: Configure Docker daemon mirror
+      shell: bash
+      run: bash scripts/ci/docker-hub-mirror.sh
