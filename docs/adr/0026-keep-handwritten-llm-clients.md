@@ -16,12 +16,14 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 The packages `ai/llm`, `ai/llm/anthropic`, and `ai/llm/ollama` provide minimal, resilient HTTP clients for OpenAI-compatible endpoints, Anthropic Messages, and Ollama APIs. The public interface defines a text-only contract centered on `Client` with `Chat`, `Stream`, and `Embed` methods ([`ai/llm/llm.go:263`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L263)). The underlying types strictly exchange text: `Message` ([`ai/llm/llm.go:59`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L59)), `Response` ([`ai/llm/llm.go:65`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L65)), and `Chunk` ([`ai/llm/llm.go:73`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L73)).
 
 The current in-tree provider wire and mapping slices comprise 642 physical lines of Go across three packages:
+
 - OpenAI wire client and mapping: 250 lines ([`ai/llm/llm.go:321-570`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L321-L570)).
 - Anthropic wire client and mapping: 198 lines ([`ai/llm/anthropic/anthropic.go:115-312`](https://github.com/golusoris/golusoris/blob/main/ai/llm/anthropic/anthropic.go#L115-L312)).
 - Ollama wire client and mapping: 194 lines ([`ai/llm/ollama/ollama.go:101-294`](https://github.com/golusoris/golusoris/blob/main/ai/llm/ollama/ollama.go#L101-L294)).
 - Shared SSE line scanner: 29 lines ([`ai/llm/llm.go:188-216`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L188-L216)).
 
 Key operational invariants enforced by the hand-written clients:
+
 - **Strict byte and timeout bounds**: `HTTPBounds` ([`ai/llm/llm.go:106`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L106)) default to 120s timeout, 4 MiB response limit, 64 KiB error body limit, and 1 MiB stream frame limit, rejecting unbounded configurations and sentinel overflow with `httpx/client.ReadAllBounded`.
 - **Strict stream termination**: Streams must terminate cleanly with provider sentinels (`[DONE]` for OpenAI, `message_stop` for Anthropic, `done: true` for Ollama). Truncated connections or premature EOF before the sentinel produce explicit `ErrStreamTruncated` errors rather than silent partial success, validated by regression suites ([`ai/llm/http_boundary_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/http_boundary_test.go), [`ai/llm/runstream_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/runstream_test.go)).
 - **Close-error preservation**: Body closure errors are captured via `core/errors.CloseInto` and returned to callers.
@@ -69,6 +71,7 @@ Issue #1182 evaluates whether to replace these hand-written provider clients wit
 ### Adapter estimation and contract impedance
 
 Delegating to provider SDKs would not eliminate local wrapper code:
+
 - Engineering estimates indicate adapter shims would require:
   - OpenAI adapter: 120–180 LOC (engineering estimate).
   - Anthropic adapter: 110–170 LOC (engineering estimate).
