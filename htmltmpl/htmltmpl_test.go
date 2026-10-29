@@ -376,6 +376,51 @@ func TestDoubleStarGlob(t *testing.T) {
 	}
 }
 
+// TestTwoDoubleStarGlob asserts patterns with multiple ** match nested segments.
+func TestTwoDoubleStarGlob(t *testing.T) {
+	t.Parallel()
+	files := fstest.MapFS{
+		"a/x/b/y/z.gohtml": {Data: []byte(`Z`)},
+		"a/x/c/y/z.gohtml": {Data: []byte(`C`)},
+		"a/b/z.gohtml":     {Data: []byte(`B`)},
+	}
+	opts := htmltmpl.Options{
+		Patterns: []string{"a/**/b/**/*.gohtml"},
+	}
+	r := mustNew(t, files, opts, nil)
+
+	// Positive: nested segments between both ** wildcards.
+	if got := render(t, r, "a/x/b/y/z.gohtml", nil); got != "Z" {
+		t.Fatalf("positive match failed: got %q, want Z", got)
+	}
+
+	// Boundary: zero segments between both ** wildcards.
+	if got := render(t, r, "a/b/z.gohtml", nil); got != "B" {
+		t.Fatalf("boundary zero-segment match failed: got %q, want B", got)
+	}
+
+	// Negative: non-matching segment where b is missing.
+	var buf bytes.Buffer
+	if err := r.Render(context.Background(), &buf, "a/x/c/y/z.gohtml", nil); err == nil {
+		t.Fatal("negative match should not have been loaded or rendered")
+	}
+}
+
+// TestInvalidPattern asserts malformed patterns fail New with an informative error.
+func TestInvalidPattern(t *testing.T) {
+	t.Parallel()
+	files := fstest.MapFS{"p.gohtml": {Data: []byte("x")}}
+	opts := htmltmpl.Options{Patterns: []string{"[a-"}}
+	_, err := htmltmpl.New(opts, testLogger(), clock.NewFake(), files, nil)
+	if err == nil {
+		t.Fatal("expected error for invalid pattern")
+	}
+	want := `htmltmpl: invalid pattern "[a-"`
+	if err.Error() != want {
+		t.Fatalf("err = %q, want %q", err.Error(), want)
+	}
+}
+
 // TestCustomDelims asserts the Delims override.
 func TestCustomDelims(t *testing.T) {
 	t.Parallel()
