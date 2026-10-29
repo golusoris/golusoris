@@ -26,6 +26,7 @@ require (
 	github.com/aws/smithy-go v1.28.6
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/benbjohnson/hashfs v0.2.2
+	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/bmaupin/go-epub v1.1.0
 	github.com/bojanz/currency v1.5.0
 	github.com/brianvoe/gofakeit/v7 v7.18.0
@@ -190,7 +191,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.5 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.10.0 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect
 	github.com/bodgit/sevenzip v1.6.5 // indirect
 	github.com/bodgit/windows v1.0.1 // indirect
