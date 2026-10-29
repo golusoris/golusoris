@@ -128,6 +128,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
+	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
 	@bash scripts/ci/allocation-budget-policy_test.sh
@@ -241,6 +242,10 @@ actionlint: ## lint GitHub and Gitea workflow YAML with the pinned actionlint
 .PHONY: template-workflows
 template-workflows: ## check template workflows against their pinned reusable workflows
 	@bash scripts/ci/template-workflows.sh
+
+.PHONY: stop-on-draft-policy-test
+stop-on-draft-policy-test: ## verify stop-on-draft composite action policy contracts
+	@bash scripts/ci/stop-on-draft-policy_test.sh
 
 .PHONY: terraform-validate
 terraform-validate: ## format and validate every Terraform module with locked providers
