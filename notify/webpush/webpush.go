@@ -38,7 +38,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	wp "github.com/SherClockHolmes/webpush-go"
 
@@ -67,7 +66,7 @@ type Options struct {
 	Urgency string `koanf:"urgency"`
 	// Topic collapses older messages with the same topic. Optional.
 	Topic string `koanf:"topic"`
-	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes [notify.DefaultRequestTimeout].
 	HTTPClient *http.Client
 }
 
@@ -85,7 +84,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if opts.VAPIDPrivateKey == "" {
 		return nil, errors.New("notify/webpush: vapid_private_key is required")
 	}
-	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
+	hc := httpclient.CloneBounded(opts.HTTPClient, notify.DefaultRequestTimeout)
 	return &Sender{opts: opts, hc: hc}, nil
 }
 

@@ -46,10 +46,7 @@ import (
 	"github.com/golusoris/golusoris/notify"
 )
 
-const (
-	defaultRequestTimeout   = 10 * time.Second
-	defaultMaxResponseBytes = 1 << 20
-)
+const defaultMaxResponseBytes = 1 << 20
 
 // DefaultTokenURI is Google's OAuth2 token endpoint.
 const DefaultTokenURI = "https://oauth2.googleapis.com/token" // #nosec G101 -- public OAuth2 endpoint URL, not a credential
@@ -81,7 +78,7 @@ type Options struct {
 	Scope string `koanf:"scope"`
 	// Endpoint overrides the FCM send URL root (tests).
 	Endpoint string `koanf:"endpoint"`
-	// HTTPClient is optional; defaults to a 10s-timeout client.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes [notify.DefaultRequestTimeout].
 	HTTPClient *http.Client
 	// MaxResponseBytes caps decoded OAuth token responses. Zero defaults to 1 MiB;
 	// negative and unbounded values are rejected.
@@ -126,7 +123,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if maxResponseBytes == 0 {
 		maxResponseBytes = defaultMaxResponseBytes
 	}
-	hc := httpclient.CloneBounded(opts.HTTPClient, defaultRequestTimeout)
+	hc := httpclient.CloneBounded(opts.HTTPClient, notify.DefaultRequestTimeout)
 	clk := opts.Clock
 	if validate.IsNil(clk) {
 		clk = clockwork.NewRealClock()

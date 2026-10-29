@@ -26,7 +26,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	httpclient "github.com/golusoris/golusoris/httpx/client"
@@ -41,7 +40,7 @@ type Options struct {
 	AppToken string `koanf:"app_token"`
 	// Priority is the default message priority (0–10; higher is louder).
 	Priority int `koanf:"priority"`
-	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes [notify.DefaultRequestTimeout].
 	HTTPClient *http.Client
 }
 
@@ -59,7 +58,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if opts.AppToken == "" {
 		return nil, errors.New("notify/gotify: app_token is required")
 	}
-	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
+	hc := httpclient.CloneBounded(opts.HTTPClient, notify.DefaultRequestTimeout)
 	return &Sender{opts: opts, hc: hc}, nil
 }
 
