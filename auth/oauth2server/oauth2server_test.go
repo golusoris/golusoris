@@ -483,6 +483,7 @@ func TestServer_AuthorizeRedirectAllowList(t *testing.T) {
 			require.Equal(t, tc.state, got.Query().Get("state"))
 			query := got.Query()
 			query.Del("code")
+			query.Del("iss")
 			query.Del("state")
 			got.RawQuery = query.Encode()
 			require.Equal(t, tc.wantRedirect, got.String())
