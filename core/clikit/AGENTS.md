@@ -64,6 +64,7 @@ clikit.Command("migrate", "Run DB migrations",
 - Tree walk iterative, bounded by `MaxCommands`; `CheckDrift` walk bounded by `MaxGeneratedFiles`.
 - `ManPages`/`Generate` add cobra default `completion` command + help flags, same as `Execute` does.
 - Shell harness test runs real bash, zsh, fish when installed; PowerShell covered via `__complete` protocol test only.
+- Man renderer hand-written by design, ADR-0027: `cobra/doc.GenMan` drops `\-` escapes, adds `[=false]`; revisit when it emits escaped roff.
 
 ## Sub-package
 
