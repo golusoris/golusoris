@@ -13,9 +13,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-The package `auth/oauth2server` provides a minimal OAuth 2.0 authorization server implementing the authorization code grant with mandatory PKCE for first-party applications ([`auth/oauth2server/oauth2server.go:5-16`](../../auth/oauth2server/oauth2server.go#L5-L16)). It intentionally omits OpenID Connect (OIDC), ID tokens, discovery, UserInfo, and refresh tokens. The implementation comprises 730 lines of Go backed by 1153 lines of unit tests across [`auth/oauth2server/*_test.go`](../../auth/oauth2server/).
+The package `auth/oauth2server` provides a minimal OAuth 2.0 authorization server implementing the authorization code grant with mandatory PKCE for first-party applications ([`auth/oauth2server/oauth2server.go:5-16`](https://github.com/golusoris/golusoris/blob/main/auth/oauth2server/oauth2server.go#L5-L16)). It intentionally omits OpenID Connect (OIDC), ID tokens, discovery, UserInfo, and refresh tokens. The implementation comprises 730 lines of Go backed by 1153 lines of unit tests across [`auth/oauth2server/*_test.go`](https://github.com/golusoris/golusoris/tree/main/auth/oauth2server).
 
-Key surface and invariants re-verified against [`auth/oauth2server/oauth2server.go`](../../auth/oauth2server/oauth2server.go):
+Key surface and invariants re-verified against [`auth/oauth2server/oauth2server.go`](https://github.com/golusoris/golusoris/blob/main/auth/oauth2server/oauth2server.go):
 
 - **Core types and stores**: `Client` (:56), `AuthRequest` (:67), `Code` (:79), atomic delete-on-read `CodeStore` (:85), `ClientStore` (:91), `Options` (:96), and `Server` (:112). Single-replica in-memory implementations: `MemoryClientStore` (:564) and `MemoryCodeStore` (:704).
 - **Constructors and routing**: `New` (:115) and `Server.Routes` (:155) exposing GET `/authorize` (:162) and POST `/token` (:268).
@@ -55,7 +55,7 @@ The existing 730 LOC implementation fulfills all first-party application require
 - **Positive**: Avoids the suffix-matching redirect check and split code redemption found in `go-oauth2/oauth2/v4`.
 - **Positive**: Preserves native integration with `auth/jwt.Signer` without adapter boilerplate.
 - **Negative**: Maintainers own ongoing security fixes, RFC updates, and vulnerability monitoring for the authorization server implementation.
-- **Known gaps**: Follow-up issue #1195 tracks RFC 9207 `iss` parameter support on authorization response redirects ([`auth/oauth2server/oauth2server.go:251-266`](../../auth/oauth2server/oauth2server.go#L251-L266)) and RFC 6749 §2.3.1 / RFC 9700 §4.3.2 `client_secret_basic` HTTP Authorization header support.
+- **Known gaps**: Follow-up issue #1195 tracks RFC 9207 `iss` parameter support on authorization response redirects ([`auth/oauth2server/oauth2server.go:251-266`](https://github.com/golusoris/golusoris/blob/main/auth/oauth2server/oauth2server.go#L251-L266)) and RFC 6749 §2.3.1 / RFC 9700 §4.3.2 `client_secret_basic` HTTP Authorization header support.
 - **Revisit trigger**: If requirements expand to require refresh token rotation, token revocation (RFC 7009), token introspection (RFC 7662), or a full OpenID Connect provider suite (discovery, JWKS, UserInfo, ID tokens), re-evaluate `github.com/zitadel/oidc/v3/pkg/op`.
 
 ## References
