@@ -34,8 +34,11 @@ m := money.FromMajor(9.99, "USD")  // float64 major → minor units
 
 ## Zero-decimal currencies
 
-`ZeroDecimalCurrencies` lists ISO 4217 currencies with no minor unit (JPY,
-KRW, VND, …). `New(150, "JPY").String()` returns `"150 JPY"`.
+ISO 4217 minor units via github.com/bojanz/currency.
+Zero-decimal example: `New(150, "JPY").String()` -> `"150 JPY"`.
+Three-decimal example: `New(1234, "KWD").String()` -> `"1.234 KWD"`.
+Unknown/invalid code -> two decimals. `ZeroDecimalCurrencies` deprecated;
+contents retained, no longer consulted.
 
 ## Don't
 
