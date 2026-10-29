@@ -23,6 +23,24 @@ func TestNew_string(t *testing.T) {
 		{0, "GBP", "0.00 GBP"},
 		{150, "JPY", "150 JPY"}, // zero-decimal
 		{-500, "USD", "-5.00 USD"},
+		{1234, "KWD", "1.234 KWD"},
+		{1234, "BHD", "1.234 BHD"},
+		{1234, "JOD", "1.234 JOD"},
+		{1234, "OMR", "1.234 OMR"},
+		{1234, "TND", "1.234 TND"},
+		{1234, "LYD", "1.234 LYD"},
+		{1234, "IQD", "1.234 IQD"},
+		{1234, "IDR", "12.34 IDR"},
+		{1234, "COP", "12.34 COP"},
+		{-1234, "KWD", "-1.234 KWD"},
+		{0, "KWD", "0.000 KWD"},
+		{5, "KWD", "0.005 KWD"},
+		{1234, "kwd", "1.234 KWD"},
+		{12345, "CLF", "1.2345 CLF"},
+		{1234, "ZZZ", "12.34 ZZZ"},
+		{1234, "US", "12.34 US"},
+		{1234, "USDD", "12.34 USDD"},
+		{1234, "", "12.34 "},
 	}
 	for _, c := range cases {
 		m := money.New(c.amount, c.currency)
@@ -34,9 +52,37 @@ func TestNew_string(t *testing.T) {
 
 func TestFromMajor(t *testing.T) {
 	t.Parallel()
-	m := money.FromMajor(9.99, "USD")
-	if m.Amount != 999 {
-		t.Fatalf("expected 999, got %d", m.Amount)
+	cases := []struct {
+		major    float64
+		currency string
+		want     int64
+	}{
+		{9.99, "USD", 999},
+		{150, "JPY", 150},
+		{1.2345, "KWD", 1235},
+		{-1.2345, "KWD", -1235},
+		{0, "KWD", 0},
+		{0.0005, "KWD", 1},
+		{1.2345, "BHD", 1235},
+		{1.2345, "JOD", 1235},
+		{1.2345, "OMR", 1235},
+		{1.2345, "TND", 1235},
+		{1.2345, "LYD", 1235},
+		{1.2345, "IQD", 1235},
+		{12.34, "IDR", 1234},
+		{12.34, "COP", 1234},
+		{1.2345, "kwd", 1235},
+		{1.2345, "CLF", 12345},
+		{12.34, "ZZZ", 1234},
+		{12.34, "US", 1234},
+		{12.34, "USDD", 1234},
+		{12.34, "", 1234},
+	}
+	for _, c := range cases {
+		m := money.FromMajor(c.major, c.currency)
+		if m.Amount != c.want {
+			t.Errorf("FromMajor(%g,%s).Amount = %d, want %d", c.major, c.currency, m.Amount, c.want)
+		}
 	}
 }
 
@@ -86,9 +132,37 @@ func TestNeg_Abs(t *testing.T) {
 
 func TestMajorUnits(t *testing.T) {
 	t.Parallel()
-	m := money.New(1234, "USD")
-	if m.MajorUnits() != 12.34 {
-		t.Fatalf("expected 12.34, got %f", m.MajorUnits())
+	cases := []struct {
+		amount   int64
+		currency string
+		want     float64
+	}{
+		{1234, "USD", 12.34},
+		{150, "JPY", 150},
+		{1234, "KWD", 1.234},
+		{-1234, "KWD", -1.234},
+		{0, "KWD", 0},
+		{5, "KWD", 0.005},
+		{1234, "BHD", 1.234},
+		{1234, "JOD", 1.234},
+		{1234, "OMR", 1.234},
+		{1234, "TND", 1.234},
+		{1234, "LYD", 1.234},
+		{1234, "IQD", 1.234},
+		{1234, "IDR", 12.34},
+		{1234, "COP", 12.34},
+		{1234, "kwd", 1.234},
+		{12345, "CLF", 1.2345},
+		{1234, "ZZZ", 12.34},
+		{1234, "US", 12.34},
+		{1234, "USDD", 12.34},
+		{1234, "", 12.34},
+	}
+	for _, c := range cases {
+		m := money.New(c.amount, c.currency)
+		if got := m.MajorUnits(); got != c.want {
+			t.Errorf("New(%d,%s).MajorUnits() = %g, want %g", c.amount, c.currency, got, c.want)
+		}
 	}
 }
 

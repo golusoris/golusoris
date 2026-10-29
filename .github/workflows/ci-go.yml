@@ -38,26 +38,32 @@ on:
       golangci-version:
         description: golangci-lint version
         type: string
-        default: v2.14.0
+        # renovate: datasource=go depName=github.com/golangci/golangci-lint/v2 versioning=semver
+        default: v2.15.0
       gofumpt-version:
         description: Exact standalone gofumpt version used for formatting
         type: string
+        # renovate: datasource=go depName=mvdan.cc/gofumpt versioning=semver
         default: v0.12.0
       gosec-version:
         description: Exact gosec version
         type: string
+        # renovate: datasource=go depName=github.com/securego/gosec/v2 versioning=semver
         default: v2.29.0
       gosec-xtools-version:
         description: golang.org/x/tools version gosec is built against (Go 1.27.2 export data needs >= v0.51.0)
         type: string
-        default: v0.51.0
+        # renovate: datasource=go depName=golang.org/x/tools versioning=semver
+        default: v0.52.0
       govulncheck-version:
         description: Exact govulncheck version
         type: string
-        default: v1.8.0
+        # renovate: datasource=go depName=golang.org/x/vuln versioning=semver
+        default: v1.9.0
       apidiff-version:
         description: Exact go-apidiff version
         type: string
+        # renovate: datasource=go depName=github.com/joelanford/go-apidiff versioning=semver
         default: v0.8.4-0.20260910211158-c3e0953fa2fd
       golangci-config:
         description: "Path to a golangci-lint config, relative to `working-directory` (golangci-lint-action's own `working-directory` input is wired below, so this — like its config auto-discovery — resolves against the module directory, not the repo root). Empty = golangci-lint auto-discovers the caller's .golangci.yml in that same directory."
