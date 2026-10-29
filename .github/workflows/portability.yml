@@ -72,11 +72,7 @@ jobs:
           echo "ci-scope: gate=$gated" >> "$GITHUB_STEP_SUMMARY"
       - name: Setup Go
         if: env.CI_GATED != 'skip'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: true
-          cache-dependency-path: '**/go.sum'
+        uses: ./.github/actions/setup-go
       - name: Verify portability driver policy
         if: env.CI_GATED != 'skip'
         env:
