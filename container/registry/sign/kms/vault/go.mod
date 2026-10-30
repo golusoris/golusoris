@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/container/registry/sign/kms/vault
 go 1.27.3
 
 require (
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029233931-c313814ff0d2
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261030025420-bd1082960d09
 	github.com/moby/moby/api v1.56.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
