@@ -464,8 +464,8 @@ github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2 h1:uvkeQVFVUa56qHp7Ma
 github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2/go.mod h1:PPptW5Q4wL0H4/bIMDZ01z53AhnpzeItcAowbEc+uJQ=
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.6 h1:63/jliH0q9XssBBzCG2IsUiaGvdLv6G/8b0RmDTTqiI=
 github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.6/go.mod h1:09W76jYkQVw//TZDHway2+OlfzSknoZ2NkgkeSLHmYk=
-github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2 h1:ZJxxPT/pIHfrDeCrQN5j50IwCy8ucBrPEyr622urTP8=
-github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2/go.mod h1:f1MTJHgvshNpXJGtGAt7044ez6flyFDhtZLbv3IxXMQ=
+github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.5 h1:ilO+MjrrLbDrQDVGnpz6+jvXdmM2ZUze4wx3jIlao4A=
+github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.5/go.mod h1:A1j8L7ODvg2JgtcBTaxyVayDxfZJBYcVkYOAfkpdn0c=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f h1:jopqB+UTSdJGEJT8tEqYyE29zN91fi2827oLET8tl7k=
 github.com/google/brotli/go/cbrotli v0.0.0-20230829110029-ed738e842d2f/go.mod h1:nOPhAkwVliJdNTkj3gXpljmWhjc4wCaVqbMJcPKWP4s=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
