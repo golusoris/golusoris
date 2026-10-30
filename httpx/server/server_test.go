@@ -7,6 +7,7 @@ package server_test
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -134,29 +135,28 @@ func TestLoadOptionsFromConfig(t *testing.T) {
 func TestModule_StartsAndStops(t *testing.T) {
 	// Boot the full server.Module to exercise loadOptions + New via fx.
 	// t.Setenv cannot be combined with t.Parallel.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("get free port: %v", err)
-	}
-	addr := ln.Addr().String()
-	_ = ln.Close()
-
-	t.Setenv("APP_HTTP_ADDR", addr)
+	t.Setenv("APP_HTTP_ADDR", "127.0.0.1:0")
 	cfg, cfgErr := config.New(config.Options{EnvPrefix: "APP_"})
 	if cfgErr != nil {
 		t.Fatalf("config.New: %v", cfgErr)
 	}
 
+	handler := &startAddrHandler{}
 	app := fxtest.New(
 		t,
 		fx.Provide(func() *config.Config { return cfg }),
+		fx.Provide(func() *slog.Logger { return slog.New(handler) }),
 		fx.Provide(func() http.Handler { return http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}) }),
 		server.Module,
+		fx.Invoke(func(*http.Server) {}),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := app.Start(ctx); err != nil {
 		t.Fatalf("Start: %v", err)
+	}
+	if addr := handler.boundAddr(t); strings.HasSuffix(addr, ":0") {
+		t.Fatalf("bound addr = %q, want a kernel-assigned port", addr)
 	}
 	if err := app.Stop(ctx); err != nil {
 		t.Fatalf("Stop: %v", err)
