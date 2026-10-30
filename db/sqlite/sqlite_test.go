@@ -37,28 +37,38 @@ func TestOpenFileWALRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
+	assertSQLitePragmas(t, t.Context(), db)
+	assertSQLiteTableRoundTrip(t, t.Context(), db, path)
+}
+
+func assertSQLitePragmas(t *testing.T, ctx context.Context, db *sql.DB) {
+	t.Helper()
 	var mode string
-	if err := db.QueryRowContext(t.Context(), "PRAGMA journal_mode").Scan(&mode); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&mode); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.EqualFold(mode, "wal") {
 		t.Fatalf("journal_mode = %q, want wal", mode)
 	}
 	var fk int
-	if err := db.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&fk); err != nil {
+	if err := db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&fk); err != nil {
 		t.Fatal(err)
 	}
 	if fk != 1 {
 		t.Fatalf("foreign_keys = %d, want 1", fk)
 	}
-	if _, err := db.ExecContext(t.Context(), "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"); err != nil {
+}
+
+func assertSQLiteTableRoundTrip(t *testing.T, ctx context.Context, db *sql.DB, path string) {
+	t.Helper()
+	if _, err := db.ExecContext(ctx, "CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.ExecContext(t.Context(), "INSERT INTO t (name) VALUES (?), (?)", "a", "b"); err != nil {
+	if _, err := db.ExecContext(ctx, "INSERT INTO t (name) VALUES (?), (?)", "a", "b"); err != nil {
 		t.Fatal(err)
 	}
 	var n int
-	if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM t").Scan(&n); err != nil {
+	if err := db.QueryRowContext(ctx, "SELECT count(*) FROM t").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 2 {

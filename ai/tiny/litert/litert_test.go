@@ -58,47 +58,7 @@ func TestTrainer_Train_happyPath(t *testing.T) {
 	require.NoError(t, err)
 	job, datasetRoot := validJob(t)
 
-	runner := &tiny.StubRunner{Fn: func(_ context.Context, spec tiny.RunSpec) error {
-		cfgBytes, readErr := os.ReadFile(filepath.Join(spec.InputDir, "config.json"))
-		if readErr != nil {
-			return readErr
-		}
-		var cfg map[string]any
-		if jerr := json.Unmarshal(cfgBytes, &cfg); jerr != nil {
-			return jerr
-		}
-		if cfg["modality"] != "image" {
-			t.Errorf("expected modality image, got %v", cfg["modality"])
-		}
-		if cfg["task_kind"] != "classify" {
-			t.Errorf("expected task_kind classify, got %v", cfg["task_kind"])
-		}
-		if spec.Env["TINY_MODALITY"] != "image" {
-			t.Errorf("expected TINY_MODALITY=image, got %q", spec.Env["TINY_MODALITY"])
-		}
-		if !spec.NetworkDisabled {
-			t.Error("LiteRT runner did not disable network access")
-		}
-		if spec.MaxOutputFileBytes != litert.DefaultMaxArtifactBytes {
-			t.Errorf("output file cap = %d; want %d", spec.MaxOutputFileBytes, litert.DefaultMaxArtifactBytes)
-		}
-		const wantTmpfsBytes = int64(11 << 30)
-		if spec.TmpfsBytes != wantTmpfsBytes {
-			t.Errorf("tmpfs budget = %d; want %d", spec.TmpfsBytes, wantTmpfsBytes)
-		}
-		if werr := os.WriteFile(filepath.Join(spec.OutputDir, litert.ArtifactName), []byte("fake-tflite"), 0o600); werr != nil {
-			return werr
-		}
-		sidecar := struct {
-			Metrics map[string]float64 `json:"metrics"`
-			Labels  []string           `json:"labels"`
-		}{
-			Metrics: map[string]float64{"accuracy": 0.93, "loss": 0.18},
-			Labels:  []string{"cats", "dogs"},
-		}
-		b, _ := json.Marshal(sidecar)
-		return os.WriteFile(filepath.Join(spec.OutputDir, litert.MetricsName), b, 0o600)
-	}}
+	runner := newLiteRTHappyPathRunner(t)
 
 	tr, err := litert.NewTrainer(litert.Options{
 		Runner: runner, Bucket: bucket, DatasetRoot: datasetRoot, Image: testPinnedImage,
@@ -108,6 +68,73 @@ func TestTrainer_Train_happyPath(t *testing.T) {
 	job.Tags = map[string]string{"env": "dev"}
 	got, err := tr.Train(t.Context(), job)
 	require.NoError(t, err)
+	assertLiteRTTrainResult(t, bucket, got)
+}
+
+func newLiteRTHappyPathRunner(t *testing.T) *tiny.StubRunner {
+	t.Helper()
+	return &tiny.StubRunner{Fn: func(_ context.Context, spec tiny.RunSpec) error {
+		if err := validateLiteRTConfig(t, spec.InputDir); err != nil {
+			return err
+		}
+		validateLiteRTSpec(t, spec)
+		return writeLiteRTOutputs(spec.OutputDir)
+	}}
+}
+
+func validateLiteRTConfig(t *testing.T, inputDir string) error {
+	t.Helper()
+	cfgBytes, readErr := os.ReadFile(filepath.Join(inputDir, "config.json"))
+	if readErr != nil {
+		return readErr
+	}
+	var cfg map[string]any
+	if jerr := json.Unmarshal(cfgBytes, &cfg); jerr != nil {
+		return jerr
+	}
+	if cfg["modality"] != "image" {
+		t.Errorf("expected modality image, got %v", cfg["modality"])
+	}
+	if cfg["task_kind"] != "classify" {
+		t.Errorf("expected task_kind classify, got %v", cfg["task_kind"])
+	}
+	return nil
+}
+
+func validateLiteRTSpec(t *testing.T, spec tiny.RunSpec) {
+	t.Helper()
+	if spec.Env["TINY_MODALITY"] != "image" {
+		t.Errorf("expected TINY_MODALITY=image, got %q", spec.Env["TINY_MODALITY"])
+	}
+	if !spec.NetworkDisabled {
+		t.Error("LiteRT runner did not disable network access")
+	}
+	if spec.MaxOutputFileBytes != litert.DefaultMaxArtifactBytes {
+		t.Errorf("output file cap = %d; want %d", spec.MaxOutputFileBytes, litert.DefaultMaxArtifactBytes)
+	}
+	const wantTmpfsBytes = int64(11 << 30)
+	if spec.TmpfsBytes != wantTmpfsBytes {
+		t.Errorf("tmpfs budget = %d; want %d", spec.TmpfsBytes, wantTmpfsBytes)
+	}
+}
+
+func writeLiteRTOutputs(outputDir string) error {
+	if werr := os.WriteFile(filepath.Join(outputDir, litert.ArtifactName), []byte("fake-tflite"), 0o600); werr != nil {
+		return werr
+	}
+	sidecar := struct {
+		Metrics map[string]float64 `json:"metrics"`
+		Labels  []string           `json:"labels"`
+	}{
+		Metrics: map[string]float64{"accuracy": 0.93, "loss": 0.18},
+		Labels:  []string{"cats", "dogs"},
+	}
+	b, _ := json.Marshal(sidecar)
+	return os.WriteFile(filepath.Join(outputDir, litert.MetricsName), b, 0o600)
+}
+
+func assertLiteRTTrainResult(t *testing.T, bucket storage.Bucket, got tiny.Model) {
+	t.Helper()
 	require.Equal(t, tiny.FormatTFLite, got.Format)
 	require.Equal(t, tiny.ModalityImage, got.Modality)
 	require.Equal(t, tiny.TaskClassify, got.TaskKind)

@@ -16,45 +16,56 @@ import (
 func TestParseSSELine(t *testing.T) {
 	t.Parallel()
 
-	t.Run("positive: a data line with content decodes", func(t *testing.T) {
-		t.Parallel()
-		content, done, ok, err := parseSSELine(`data: {"choices":[{"delta":{"content":"hi"}}]}`)
-		if err != nil || !ok || done || content != "hi" {
-			t.Fatalf("got content=%q done=%v ok=%v, want content=hi done=false ok=true", content, done, ok)
-		}
-	})
+	t.Run("positive: a data line with content decodes", testParseSSELineDataWithContent)
+	t.Run("negative: a non-data line is skipped", testParseSSELineNonDataSkipped)
+	t.Run("negative: an unparseable JSON payload fails", testParseSSELineUnparseableJSON)
+	t.Run("boundary: the [DONE] sentinel reports done", testParseSSELineDoneSentinel)
+	t.Run("boundary: an empty choices array is ok with empty content", testParseSSELineEmptyChoices)
+}
 
-	t.Run("negative: a non-data line is skipped", func(t *testing.T) {
-		t.Parallel()
-		content, done, ok, err := parseSSELine(": comment")
-		if err != nil || ok || done || content != "" {
-			t.Fatalf("got content=%q done=%v ok=%v, want ok=false", content, done, ok)
-		}
-	})
+func testParseSSELineDataWithContent(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	content, done, ok, err := parseSSELine(`data: {"choices":[{"delta":{"content":"hi"}}]}`)
+	if err != nil || !ok || done || content != "hi" {
+		t.Fatalf("got content=%q done=%v ok=%v, want content=hi done=false ok=true", content, done, ok)
+	}
+}
 
-	t.Run("negative: an unparseable JSON payload fails", func(t *testing.T) {
-		t.Parallel()
-		content, done, ok, err := parseSSELine("data: {not json")
-		if err == nil || ok || done || content != "" {
-			t.Fatalf("got content=%q done=%v ok=%v err=%v, want parse error", content, done, ok, err)
-		}
-	})
+func testParseSSELineNonDataSkipped(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	content, done, ok, err := parseSSELine(": comment")
+	if err != nil || ok || done || content != "" {
+		t.Fatalf("got content=%q done=%v ok=%v, want ok=false", content, done, ok)
+	}
+}
 
-	t.Run("boundary: the [DONE] sentinel reports done", func(t *testing.T) {
-		t.Parallel()
-		content, done, ok, err := parseSSELine("data: [DONE]")
-		if err != nil || ok || !done || content != "" {
-			t.Fatalf("got content=%q done=%v ok=%v, want done=true ok=false", content, done, ok)
-		}
-	})
+func testParseSSELineUnparseableJSON(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	content, done, ok, err := parseSSELine("data: {not json")
+	if err == nil || ok || done || content != "" {
+		t.Fatalf("got content=%q done=%v ok=%v err=%v, want parse error", content, done, ok, err)
+	}
+}
 
-	t.Run("boundary: an empty choices array is ok with empty content", func(t *testing.T) {
-		t.Parallel()
-		content, done, ok, err := parseSSELine(`data: {"choices":[]}`)
-		if err != nil || !ok || done || content != "" {
-			t.Fatalf("got content=%q done=%v ok=%v, want content=\"\" done=false ok=true", content, done, ok)
-		}
-	})
+func testParseSSELineDoneSentinel(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	content, done, ok, err := parseSSELine("data: [DONE]")
+	if err != nil || ok || !done || content != "" {
+		t.Fatalf("got content=%q done=%v ok=%v, want done=true ok=false", content, done, ok)
+	}
+}
+
+func testParseSSELineEmptyChoices(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	content, done, ok, err := parseSSELine(`data: {"choices":[]}`)
+	if err != nil || !ok || done || content != "" {
+		t.Fatalf("got content=%q done=%v ok=%v, want content=\"\" done=false ok=true", content, done, ok)
+	}
 }
 
 // TestEmitSSEChunks_stopsAtDoneAndSkipsBadLines exercises the loop that
