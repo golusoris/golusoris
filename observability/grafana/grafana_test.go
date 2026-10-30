@@ -154,6 +154,25 @@ func checkAll(t *testing.T, errs ...error) {
 
 func TestRenderDashboardFromDefs(t *testing.T) {
 	t.Parallel()
+	raw := renderTestDashboard(t)
+
+	var d renderedDashboard
+	if err := json.Unmarshal(raw, &d); err != nil {
+		t.Fatalf("rendered JSON: %v", err)
+	}
+	if d.UID != "app-overview" || len(d.Panels) != 7 {
+		t.Fatalf("uid %q, %d panels", d.UID, len(d.Panels))
+	}
+	if len(d.Templating.List) != 2 || d.Templating.List[0].Name != "datasource" || d.Templating.List[1].Query != "label_values(app_job_duration_seconds_bucket, tenant)" {
+		t.Errorf("templating = %+v", d.Templating.List)
+	}
+	assertLatencyFieldConfig(t, d)
+	assertLatencyOptionsAndLinks(t, d)
+	assertRenderedDashboardPanelsAndAnnotations(t, raw, d)
+}
+
+func renderTestDashboard(t *testing.T) []byte {
+	t.Helper()
 	q := grafana.Query{Def: lat, By: []string{"backend"}, Filters: []string{"tenant"}}
 	tenantVar, errVar := grafana.LabelVariable(lat, "tenant")
 	quantiles, errQ := grafana.QuantilePanel(q, grafana.PanelOptions{
@@ -187,22 +206,14 @@ func TestRenderDashboardFromDefs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	var d renderedDashboard
-	if err := json.Unmarshal(raw, &d); err != nil {
-		t.Fatalf("rendered JSON: %v", err)
-	}
-	if d.UID != "app-overview" || len(d.Panels) != 7 {
-		t.Fatalf("uid %q, %d panels", d.UID, len(d.Panels))
-	}
-	if len(d.Templating.List) != 2 || d.Templating.List[0].Name != "datasource" || d.Templating.List[1].Query != "label_values(app_job_duration_seconds_bucket, tenant)" {
-		t.Errorf("templating = %+v", d.Templating.List)
-	}
+	return raw
+}
+
+func assertLatencyFieldConfig(t *testing.T, d renderedDashboard) {
+	t.Helper()
 	latency := d.Panels[0]
 	if latency.Type != "timeseries" || latency.FieldConfig.Defaults.Unit != "s" || len(latency.Targets) != 2 || !latency.Targets[1].Exemplar {
 		t.Errorf("latency panel = %+v", latency)
-	}
-	if !latency.Options.Legend.ShowLegend || latency.Options.Tooltip.Mode != "multi" {
-		t.Errorf("latency legend/tooltip = %+v", latency.Options)
 	}
 	if latency.Targets[0].Datasource.UID != "${datasource}" || !strings.HasPrefix(latency.Targets[1].Expr, "histogram_quantile(0.99, ") {
 		t.Errorf("latency targets = %+v", latency.Targets)
@@ -210,9 +221,21 @@ func TestRenderDashboardFromDefs(t *testing.T) {
 	if steps := latency.FieldConfig.Defaults.Thresholds.Steps; len(steps) != 2 || steps[0].Value != nil || *steps[1].Value != 1 {
 		t.Errorf("thresholds = %+v", steps)
 	}
+}
+
+func assertLatencyOptionsAndLinks(t *testing.T, d renderedDashboard) {
+	t.Helper()
+	latency := d.Panels[0]
+	if !latency.Options.Legend.ShowLegend || latency.Options.Tooltip.Mode != "multi" {
+		t.Errorf("latency legend/tooltip = %+v", latency.Options)
+	}
 	if len(latency.Links) != 1 || latency.Links[0].URL != "/explore" {
 		t.Errorf("links = %+v", latency.Links)
 	}
+}
+
+func assertRenderedDashboardPanelsAndAnnotations(t *testing.T, raw []byte, d renderedDashboard) {
+	t.Helper()
 	if d.Panels[3].FieldConfig.Defaults.Unit != "bytes" || d.Panels[4].FieldConfig.Defaults.Unit != "percentunit" || d.Panels[5].Type != "stat" {
 		t.Errorf("unit/type mapping wrong: %+v", d.Panels[3:6])
 	}
