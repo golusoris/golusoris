@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.5.0
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029154245-7aa9db9cdd8c
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029233931-c313814ff0d2
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
