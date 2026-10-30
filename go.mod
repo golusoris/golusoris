@@ -67,7 +67,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20261003132456-662581bb6bb6
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/jszwec/csvutil v1.10.0
+	github.com/jszwec/csvutil v1.10.1
 	github.com/leanovate/gopter v0.2.11
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
