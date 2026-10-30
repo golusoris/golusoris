@@ -158,28 +158,33 @@ func TestSign_Algorithms(t *testing.T) {
 	for _, tc := range signCases() {
 		t.Run(tc.alg, func(t *testing.T) {
 			t.Parallel()
-			f, addr := newFake(t)
-			v := f.addKey("k", tc.alg)
-			s := newSigner(t, fakeConfig(addr, "k"))
-			digest := digestOf(tc.opts.HashFunc(), "payload")
-			sig, err := s.Sign(rand.Reader, digest, tc.opts)
-			if err != nil {
-				t.Fatalf("Sign: %v", err)
-			}
-			if !verifies(v.priv.Public(), digest, sig, tc.opts) {
-				t.Fatal("signature does not verify under the key's public half")
-			}
-			body := f.get().signBody
-			if tc.field == "data" {
-				if body["data"] != b64(digest) || body["dataCrc32c"] != crc(digest) {
-					t.Fatalf("request = %v, want data with its CRC32C", body)
-				}
-				return
-			}
-			if body["digest"].(map[string]any)[tc.field] != b64(digest) || body["digestCrc32c"] != crc(digest) {
-				t.Fatalf("request = %v, want digest.%s with its CRC32C", body, tc.field)
-			}
+			runSignAlgorithmCase(t, tc)
 		})
+	}
+}
+
+func runSignAlgorithmCase(t *testing.T, tc signCase) {
+	t.Helper()
+	f, addr := newFake(t)
+	v := f.addKey("k", tc.alg)
+	s := newSigner(t, fakeConfig(addr, "k"))
+	digest := digestOf(tc.opts.HashFunc(), "payload")
+	sig, err := s.Sign(rand.Reader, digest, tc.opts)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if !verifies(v.priv.Public(), digest, sig, tc.opts) {
+		t.Fatal("signature does not verify under the key's public half")
+	}
+	body := f.get().signBody
+	if tc.field == "data" {
+		if body["data"] != b64(digest) || body["dataCrc32c"] != crc(digest) {
+			t.Fatalf("request = %v, want data with its CRC32C", body)
+		}
+		return
+	}
+	if body["digest"].(map[string]any)[tc.field] != b64(digest) || body["digestCrc32c"] != crc(digest) {
+		t.Fatalf("request = %v, want digest.%s with its CRC32C", body, tc.field)
 	}
 }
 
