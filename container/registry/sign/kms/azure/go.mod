@@ -6,7 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.3
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.15.0
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys v1.5.0
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029123510-e7b7b8e00cfb
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029233931-c313814ff0d2
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
@@ -70,7 +70,7 @@ require (
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261027203057-0e3083d7fe13 // indirect
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261029154245-7aa9db9cdd8c // indirect
 	github.com/golusoris/golusoris/core v0.12.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect

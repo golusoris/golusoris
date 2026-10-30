@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/container/registry/sign/kms/gcp
 go 1.27.3
 
 require (
-	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029123510-e7b7b8e00cfb
+	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261029233931-c313814ff0d2
 	golang.org/x/oauth2 v0.37.0
 )
 
@@ -49,7 +49,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-playground/validator/v10 v10.30.5 // indirect
 	github.com/go-viper/mapstructure/v2 v2.5.0 // indirect
-	github.com/golusoris/golusoris/container/registry v0.0.0-20261027203057-0e3083d7fe13 // indirect
+	github.com/golusoris/golusoris/container/registry v0.0.0-20261029154245-7aa9db9cdd8c // indirect
 	github.com/golusoris/golusoris/core v0.12.1 // indirect
 	github.com/google/certificate-transparency-go v1.3.3 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
