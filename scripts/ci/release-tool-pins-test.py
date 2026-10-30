@@ -190,6 +190,7 @@ def parse_env_file(
     if not path.is_file():
         return {}, [f"{rel_path}:1: env: file does not exist"]
     env_vars: dict[str, tuple[int, str]] = {}
+    problems: list[str] = []
     lines = read_bounded_lines(path)
     for idx, raw_line in enumerate(lines):
         line = raw_line.strip()
@@ -198,8 +199,14 @@ def parse_env_file(
         m = ENV_LINE_RE.match(line)
         if m:
             name, val = m.group(1), m.group(2).strip().strip("'\"")
+            if name in env_vars:
+                prev_line = env_vars[name][0]
+                problems.append(
+                    f"{rel_path}:{idx + 1}: {name}: duplicate assignment (first at line {prev_line})"
+                )
+                continue
             env_vars[name] = (idx + 1, val)
-    return env_vars, []
+    return env_vars, problems
 
 
 def check_env_pins(root: Path, all_pins: list[Pin]) -> list[str]:
@@ -354,6 +361,19 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "cosign: env 3.1.2 != workflow pin 3.1.4")
+
+    def test_planted_duplicate_env_key(self) -> None:
+        # Tests refusal of duplicate key assignment in tools/tool-versions.env.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / "tools/tool-versions.env"
+            path.write_text(
+                path.read_text(encoding="utf-8") + "\nCOSIGN_VERSION=3.1.4\n",
+                encoding="utf-8",
+            )
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "duplicate assignment")
 
     def test_planted_action_without_version_key(self) -> None:
         # Tests detection of installer action lacking required version key.
