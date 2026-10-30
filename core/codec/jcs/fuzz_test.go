@@ -16,11 +16,13 @@ import (
 	"github.com/golusoris/golusoris/core/codec/jcs"
 )
 
-// FuzzCanonicalize checks, for any input: invalid JSON is never accepted,
-// valid JSON is refused only for an I-JSON reason, and accepted input yields
-// valid JSON that is a fixed point (canon(canon(x)) == canon(x)) and decodes
-// to the same value as the input.
-func FuzzCanonicalize(f *testing.F) {
+var fuzzSeedStrings = []string{
+	`{"a":1,"a":2}`, `"\ud800"`, `[1e400]`, `[-0, 1E2, 0.000001, 1e-7, 123456789012345678901]`,
+	`{"\u00e9":1,"e":2,"\ud83d\ude00":3}`, ` [ ] `, `{"":{"":[]}}`, "\"\xff\"",
+}
+
+func addFuzzSeeds(f *testing.F) {
+	f.Helper()
 	seeds, _ := filepath.Glob(filepath.Join(vectors, "input", "*.json"))
 	for _, path := range seeds {
 		data, err := os.ReadFile(path)
@@ -29,31 +31,46 @@ func FuzzCanonicalize(f *testing.F) {
 		}
 		f.Add(data)
 	}
-	for _, s := range []string{
-		`{"a":1,"a":2}`, `"\ud800"`, `[1e400]`, `[-0, 1E2, 0.000001, 1e-7, 123456789012345678901]`,
-		`{"\u00e9":1,"e":2,"\ud83d\ude00":3}`, ` [ ] `, `{"":{"":[]}}`, "\"\xff\"",
-	} {
+	for _, s := range fuzzSeedStrings {
 		f.Add([]byte(s))
 	}
+}
+
+func checkCanonicalizeError(t *testing.T, in []byte, err error, valid bool) {
+	t.Helper()
+	if valid && errors.Is(err, jcs.ErrSyntax) {
+		t.Fatalf("valid JSON %q refused as syntax error: %v", in, err)
+	}
+}
+
+func checkCanonicalizeSuccess(t *testing.T, in, out []byte, valid bool) {
+	t.Helper()
+	if !valid {
+		t.Fatalf("invalid JSON %q accepted as %q", in, out)
+	}
+	again, err := jcs.Canonicalize(out)
+	if err != nil || !bytes.Equal(again, out) {
+		t.Fatalf("not a fixed point: %q -> %q -> %q (%v)", in, out, again, err)
+	}
+	var a, b any
+	if json.Unmarshal(in, &a) != nil || json.Unmarshal(out, &b) != nil || !reflect.DeepEqual(a, b) {
+		t.Fatalf("value changed: %q -> %q", in, out)
+	}
+}
+
+// FuzzCanonicalize checks, for any input: invalid JSON is never accepted,
+// valid JSON is refused only for an I-JSON reason, and accepted input yields
+// valid JSON that is a fixed point (canon(canon(x)) == canon(x)) and decodes
+// to the same value as the input.
+func FuzzCanonicalize(f *testing.F) {
+	addFuzzSeeds(f)
 	f.Fuzz(func(t *testing.T, in []byte) {
 		out, err := jcs.Canonicalize(in)
 		valid := json.Valid(in)
 		if err != nil {
-			if valid && errors.Is(err, jcs.ErrSyntax) {
-				t.Fatalf("valid JSON %q refused as syntax error: %v", in, err)
-			}
+			checkCanonicalizeError(t, in, err, valid)
 			return
 		}
-		if !valid {
-			t.Fatalf("invalid JSON %q accepted as %q", in, out)
-		}
-		again, err := jcs.Canonicalize(out)
-		if err != nil || !bytes.Equal(again, out) {
-			t.Fatalf("not a fixed point: %q -> %q -> %q (%v)", in, out, again, err)
-		}
-		var a, b any
-		if json.Unmarshal(in, &a) != nil || json.Unmarshal(out, &b) != nil || !reflect.DeepEqual(a, b) {
-			t.Fatalf("value changed: %q -> %q", in, out)
-		}
+		checkCanonicalizeSuccess(t, in, out, valid)
 	})
 }

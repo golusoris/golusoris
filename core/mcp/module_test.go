@@ -127,6 +127,11 @@ func TestModule_HTTPTransport(t *testing.T) {
 	}
 	defer func() { _ = session.Close() }()
 
+	verifyPingToolCalls(ctx, t, session)
+}
+
+func verifyPingToolCalls(ctx context.Context, t *testing.T, session *sdkmcp.ClientSession) {
+	t.Helper()
 	tools, err := session.ListTools(ctx, &sdkmcp.ListToolsParams{})
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
