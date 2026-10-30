@@ -1,43 +1,43 @@
+---
 version: 1
 repository:
-    owner: golusoris
-    name: golusoris
-    visibility: public
-    description: "Composable Go framework — opt-in fx modules for everything a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s, ...)."
-    homepage: "https://golusoris.github.io/golusoris/"
-    topics:
-        - backend
-        - framework
-        - fx
-        - go
-        - golang
-        - koanf
-        - kubernetes
-        - ogen
-        - opentelemetry
-        - pgx
-        - postgres
-        - river
-        - sqlc
-        - uber-fx
-profiles:
+  owner: golusoris
+  name: golusoris
+  visibility: public
+  description: "Composable Go framework — opt-in fx modules for everything a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s, ...)."
+  homepage: "https://golusoris.github.io/golusoris/"
+  topics:
+    - backend
     - framework
+    - fx
+    - go
+    - golang
+    - koanf
+    - kubernetes
+    - ogen
+    - opentelemetry
+    - pgx
+    - postgres
+    - river
+    - sqlc
+    - uber-fx
+profiles:
+  - framework
 facets:
-    - security:high
-    - api:public-contract
-    - docs:seo-portal
-    - agent:sandboxed
+  - security:high
+  - api:public-contract
+  - docs:seo-portal
+  - agent:sandboxed
 # Clients and editors installed on the maintainer workstation; the engine neither
 # generates nor verifies the others.
 agent_clients:
-    - claude
-    - codex
-    - gemini
+  - claude
+  - codex
+  - gemini
 editors:
-    - universal
-    - vscode
-    - antigravity
-
+  - universal
+  - vscode
+  - antigravity
 # praetor#36 (BUG-371): the flavor detector classifies this framework library as a
 # go-service and scaffolds a service Dockerfile and security workflow it does not ship.
 # The Go API compatibility workflow installs these before building: hw/udev
@@ -55,67 +55,67 @@ api:
     - libxcursor-dev
     - libxinerama-dev
 adoption:
-    decline:
-        - working-dir-and-flavor
-
+  decline:
+    - working-dir-and-flavor
 # Declared gaps, one rule and one file each; an expired entry fails its gate again.
 exceptions:
-    - rule: HISS-18
-      path: .github/workflows/ci.yml
-      reason: "Category A, 90 days from 2026-10-18, renewed after re-review: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always(). The pinned engine reads no always() (without this entry it reports each of those jobs as skippable on a draft, measured 2026-10-18). Closed by cordanaLLM/praetor#1368."
-      expires: "2027-01-16"
-
+  - rule: HISS-18
+    path: .github/workflows/ci.yml
+    reason: "Category A, 90 days from 2026-10-18, renewed after re-review: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always(). The pinned engine reads no always() (without this entry it reports each of those jobs as skippable on a draft, measured 2026-10-18). Closed by cordanaLLM/praetor#1368."
+    expires: "2027-01-16"
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
 documentation:
-    style_exclude:
-        # Pinned upstream snapshots; make docs-upstream-verify checks them byte for byte.
-        - "docs/upstream/**"
-        # HISS-20 fixtures carry deliberate violations; the README beside them stays styled.
-        - ".config/hiss/testdata/HISS-*/**"
-        # release-please generates it, as the built-in exclusion covers the root CHANGELOG.md.
-        - "core/CHANGELOG.md"
-        # Accepted ADR bodies are frozen (docs/adr/README.md), so the style gate must not edit them.
-        - "docs/adr/00{01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19}-*.md"
-
+  style_exclude:
+    # Pinned upstream snapshots; make docs-upstream-verify checks them byte for byte.
+    - "docs/upstream/**"
+    # HISS-20 fixtures carry deliberate violations; the README beside them stays styled.
+    - ".config/hiss/testdata/HISS-*/**"
+    # release-please generates it, as the built-in exclusion covers the root CHANGELOG.md.
+    - "core/CHANGELOG.md"
+    # Accepted ADR bodies are frozen (docs/adr/README.md), so the style gate must not edit them.
+    - "docs/adr/00{01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19}-*.md"
 # Framework archetype bounds (strictness can only be increased, never reduced).
 overrides:
-    complexity:
-        max_cyclomatic: 10
-        max_cognitive: 15
-        max_func_loc: 60
-        max_statements: 50
-    branch_protection:
-        enforce_linear_history: true
-        require_signed_commits: true
-        required_approving_reviewers: 1
-        # Single maintainer today: praetor renders 0 required approvals and no
-        # code-owner review, exactly as cordanaLLM/praetor declares for itself.
-        # Switch back to independent once a second maintainer or a review bot
-        # can approve; the required count stays so the switch restores it.
-        review_mode: single_maintainer
-        dismiss_stale_reviews: true
-        # Live ruleset praetor-main-protection already requires it; declared so the audit keeps the stricter value.
-        require_extra_approval_for_unattributed_changes: true
-        # main merges without a merge queue since 2026-10-20: queue squashes added bot co-authors (golusoris-queue-bot-coauthor).
-        merge_queue: false
-    supply_chain:
-        slsa_level: 3
-        enforce_cosign: true
-        require_sbom: true
+  complexity:
+    max_cyclomatic: 10
+    max_cognitive: 15
+    max_func_loc: 60
+    max_statements: 50
+  branch_protection:
+    enforce_linear_history: true
+    require_signed_commits: true
+    required_approving_reviewers: 1
+    # Single maintainer today: praetor renders 0 required approvals and no
+    # code-owner review, exactly as cordanaLLM/praetor declares for itself.
+    # Switch back to independent once a second maintainer or a review bot
+    # can approve; the required count stays so the switch restores it.
+    review_mode: single_maintainer
+    dismiss_stale_reviews: true
+    # Live ruleset praetor-main-protection already requires it; declared so the audit keeps the stricter value.
+    require_extra_approval_for_unattributed_changes: true
+    # main merges without a merge queue since 2026-10-20: queue squashes added bot co-authors (golusoris-queue-bot-coauthor).
+    merge_queue: false
+  supply_chain:
+    slsa_level: 3
+    enforce_cosign: true
+    require_sbom: true
 register:
-    sources:
-        expected: 13
-        sha256:
-            sha256:5409e0da4e037f7eae70f639c8dada48111c261e1b005b9b2f93904b6f82b8e8
-        inputs:
-            - path: .paperclip/harness.json
-              surface: prompts
-              kind: message
-              format: json
-              selector: operating_contract.*
-            - path: .paperclip/harness.json
-              surface: prompts
-              kind: message
-              format: json
-              selector: invariants.*
+  sources:
+    expected: 13
+    sha256:
+      sha256:5409e0da4e037f7eae70f639c8dada48111c261e1b005b9b2f93904b6f82b8e8
+    inputs:
+      - path: .paperclip/harness.json
+        surface: prompts
+        kind: message
+        format: json
+        selector: operating_contract.*
+      - path: .paperclip/harness.json
+        surface: prompts
+        kind: message
+        format: json
+        selector: invariants.*
+release:
+  e2e:
+    since: 23d3514689ed2bc2db1dc521265d16612fd22cd2

@@ -665,9 +665,6 @@
         "tools/figures/third_party/interfig/upstream/src/svg.ts",
         "tools/figures/third_party/interfig/upstream/src/geometry.ts",
         "tools/figures/third_party/interfig/upstream/src/model.ts",
-        "tools/figures/player/loader.js",
-        "tools/figures/player/player.js",
-        "tools/figures/player/THIRD-PARTY-LICENSES.txt",
         "tools/figures/figures.css",
         "tools/figures/mkdocs_hook.py",
         "tools/figures/astro.mjs",
@@ -690,6 +687,17 @@
         "github.com/cordanaLLM/praetor/cmd/standardsctl",
         "cordanaLLM/praetor",
         "cordanaLLM/praetor/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "In-repo modules are replaced by local paths; pseudo-version bumps only feed a self-digest loop.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "github.com/golusoris/golusoris",
+        "github.com/golusoris/golusoris/**"
       ],
       "enabled": false
     }
