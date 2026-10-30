@@ -5,8 +5,10 @@
 package vector_test
 
 import (
+	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
 
@@ -78,11 +80,27 @@ func TestPostgres(t *testing.T) {
 	ctx := t.Context()
 
 	t.Run("negative register without extension", func(t *testing.T) {
-		require.ErrorContains(t, vector.RegisterTypes(ctx, pool), "vector: register types")
-		app := fx.New(fx.NopLogger, fx.Supply(pool), vector.Module)
-		require.ErrorContains(t, app.Start(ctx), "ai/vector: register types")
+		testPostgresUnregistered(t, ctx, pool)
 	})
 
+	seedVectorItems(t, ctx, pool)
+
+	t.Run("positive register and module start", func(t *testing.T) {
+		testPostgresRegisterModule(t, ctx, pool)
+	})
+
+	testPostgresSearches(t, ctx, pool)
+}
+
+func testPostgresUnregistered(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	require.ErrorContains(t, vector.RegisterTypes(ctx, pool), "vector: register types")
+	app := fx.New(fx.NopLogger, fx.Supply(pool), vector.Module)
+	require.ErrorContains(t, app.Start(ctx), "ai/vector: register types")
+}
+
+func seedVectorItems(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	_, err := pool.Exec(ctx, `CREATE EXTENSION vector;
 		CREATE TABLE items (id text PRIMARY KEY, tenant int NOT NULL, embedding vector(2) NOT NULL)`)
 	require.NoError(t, err)
@@ -94,14 +112,18 @@ func TestPostgres(t *testing.T) {
 		_, err = pool.Exec(ctx, "INSERT INTO items VALUES ($1, $2, $3)", row.id, row.tenant, vector.From(row.vec))
 		require.NoError(t, err)
 	}
+}
 
-	t.Run("positive register and module start", func(t *testing.T) {
-		require.NoError(t, vector.RegisterTypes(ctx, pool))
-		app := fx.New(fx.NopLogger, fx.Supply(pool), vector.Module)
-		require.NoError(t, app.Start(ctx))
-		require.NoError(t, app.Stop(ctx))
-	})
+func testPostgresRegisterModule(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	require.NoError(t, vector.RegisterTypes(ctx, pool))
+	app := fx.New(fx.NopLogger, fx.Supply(pool), vector.Module)
+	require.NoError(t, app.Start(ctx))
+	require.NoError(t, app.Stop(ctx))
+}
 
+func testPostgresSearches(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	// Query [1, 0.9]: cosine ranks c first, L2 ranks a first, inner product ranks c first.
 	query := []float32{1, 0.9}
 	search := func(t *testing.T, q vector.SearchQuery) []string {

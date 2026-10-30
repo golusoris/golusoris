@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	dbsqlc "github.com/golusoris/golusoris/db/sqlc"
@@ -34,6 +35,13 @@ func TestWithTx_RealPg(t *testing.T) {
 		t.Fatalf("create table: %v", err)
 	}
 
+	testWithTxCommit(t, ctx, pool)
+	testWithTxRollback(t, ctx, pool)
+	testWithTxPanic(t, ctx, pool)
+}
+
+func testWithTxCommit(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	err := dbsqlc.WithTx(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
 		_, execErr := tx.Exec(ctx, "INSERT INTO test_tx (id, val) VALUES ($1, $2)", 1, "alpha")
 		return execErr
@@ -45,9 +53,12 @@ func TestWithTx_RealPg(t *testing.T) {
 	if scanErr := pool.QueryRow(ctx, "SELECT val FROM test_tx WHERE id = $1", 1).Scan(&val); scanErr != nil || val != "alpha" {
 		t.Fatalf("row not visible after commit: val=%q, err=%v", val, scanErr)
 	}
+}
 
+func testWithTxRollback(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	fnErr := errors.New("aborted")
-	err = dbsqlc.WithTx(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
+	err := dbsqlc.WithTx(ctx, pool, func(ctx context.Context, tx pgx.Tx) error {
 		if _, execErr := tx.Exec(ctx, "INSERT INTO test_tx (id, val) VALUES ($1, $2)", 2, "beta"); execErr != nil {
 			return execErr
 		}
@@ -60,7 +71,10 @@ func TestWithTx_RealPg(t *testing.T) {
 	if countErr := pool.QueryRow(ctx, "SELECT count(*) FROM test_tx WHERE id = $1", 2).Scan(&count); countErr != nil || count != 0 {
 		t.Fatalf("row visible after rollback: count=%d, err=%v", count, countErr)
 	}
+}
 
+func testWithTxPanic(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	func() {
 		defer func() {
 			_ = recover()
@@ -72,6 +86,7 @@ func TestWithTx_RealPg(t *testing.T) {
 			panic("something went wrong")
 		})
 	}()
+	var count int
 	if panicErr := pool.QueryRow(ctx, "SELECT count(*) FROM test_tx WHERE id = $1", 3).Scan(&count); panicErr != nil || count != 0 {
 		t.Fatalf("row visible after panic: count=%d, err=%v", count, panicErr)
 	}
@@ -85,6 +100,13 @@ func TestMapError_RealPg(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
+	createMapErrorTables(t, ctx, pool)
+	assertIntegrityViolations(t, ctx, pool)
+	assertNonIntegrityErrors(t, ctx, pool)
+}
+
+func createMapErrorTables(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	if _, err := pool.Exec(ctx, `
 		CREATE TABLE test_parent (
 			id int PRIMARY KEY
@@ -102,12 +124,16 @@ func TestMapError_RealPg(t *testing.T) {
 	if _, err := pool.Exec(ctx, "INSERT INTO test_parent (id) VALUES (1)"); err != nil {
 		t.Fatalf("insert parent: %v", err)
 	}
+}
+
+func assertIntegrityViolations(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	var ge *gerr.Error
 	_, dupErr := pool.Exec(ctx, "INSERT INTO test_parent (id) VALUES (1)")
 	if dupErr == nil {
 		t.Fatal("expected unique violation error, got nil")
 	}
 	mappedDup := dbsqlc.MapError(dupErr)
-	var ge *gerr.Error
 	if !errors.As(mappedDup, &ge) || ge.Code != gerr.CodeConflict {
 		t.Fatalf("unique violation mapped to %v, want CodeConflict", mappedDup)
 	}
@@ -129,7 +155,11 @@ func TestMapError_RealPg(t *testing.T) {
 	if !errors.As(mappedNN, &ge) || ge.Code != gerr.CodeBadRequest {
 		t.Fatalf("not null violation mapped to %v, want CodeBadRequest", mappedNN)
 	}
+}
 
+func assertNonIntegrityErrors(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	var ge *gerr.Error
 	_, chkErr := pool.Exec(ctx, "INSERT INTO test_err (id, parent_id, required, checked) VALUES (3, 1, 'req', -1)")
 	if chkErr == nil {
 		t.Fatal("expected check violation error, got nil")
