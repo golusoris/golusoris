@@ -61,70 +61,81 @@ func uniqueTopic(t *testing.T) string {
 	return "t-" + name
 }
 
+type produceAndPollTestCase struct {
+	name    string
+	records []*kafka.Record
+}
+
+var produceAndPollTests = []produceAndPollTestCase{
+	{
+		name: "single record",
+		records: []*kafka.Record{
+			kafka.NewRecord("orders", []byte("k1"), []byte("v1")),
+		},
+	},
+	{
+		name: "multiple records",
+		records: []*kafka.Record{
+			kafka.NewRecord("payments", []byte("k1"), []byte("p1")),
+			kafka.NewRecord("payments", []byte("k2"), []byte("p2")),
+			kafka.NewRecord("payments", []byte("k3"), []byte("p3")),
+		},
+	},
+}
+
+// pollRecordsUntilTarget polls the consumer in batches until the expected number of records is collected.
+func pollRecordsUntilTarget(t *testing.T, ctx context.Context, consumer *kafka.Client, target int) []*kafka.Record {
+	t.Helper()
+	got := make([]*kafka.Record, 0, target)
+	for len(got) < target {
+		batch, err := consumer.Poll(ctx, target)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("Poll timed out after %d/%d records", len(got), target)
+			}
+			t.Fatalf("Poll: %v", err)
+		}
+		got = append(got, batch...)
+	}
+	return got
+}
+
+// runProduceAndPollSubtest produces records to a topic and polls them back.
+func runProduceAndPollSubtest(t *testing.T, addr string, tc produceAndPollTestCase) {
+	t.Helper()
+	topic := uniqueTopic(t)
+	for _, r := range tc.records {
+		r.Topic = topic
+	}
+
+	producer := newTestClient(t, addr, "")
+	consumer := newTestClient(t, addr, "group-"+topic)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := producer.Produce(ctx, tc.records...); err != nil {
+		t.Fatalf("Produce: %v", err)
+	}
+
+	consumer.Subscribe(topic)
+	got := pollRecordsUntilTarget(t, ctx, consumer, len(tc.records))
+	if len(got) != len(tc.records) {
+		t.Fatalf("record count: got %d, want %d", len(got), len(tc.records))
+	}
+	if err := consumer.CommitOffsets(ctx); err != nil {
+		t.Fatalf("CommitOffsets: %v", err)
+	}
+}
+
 func TestIntegration_ProduceAndPoll(t *testing.T) {
 	t.Parallel()
 	addr := kafkatest.Addr(t)
 
-	tests := []struct {
-		name    string
-		records []*kafka.Record
-	}{
-		{
-			name: "single record",
-			records: []*kafka.Record{
-				kafka.NewRecord("orders", []byte("k1"), []byte("v1")),
-			},
-		},
-		{
-			name: "multiple records",
-			records: []*kafka.Record{
-				kafka.NewRecord("payments", []byte("k1"), []byte("p1")),
-				kafka.NewRecord("payments", []byte("k2"), []byte("p2")),
-				kafka.NewRecord("payments", []byte("k3"), []byte("p3")),
-			},
-		},
-	}
-
-	for _, tc := range tests {
+	for _, tc := range produceAndPollTests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			topic := uniqueTopic(t)
-			for _, r := range tc.records {
-				r.Topic = topic
-			}
-
-			producer := newTestClient(t, addr, "")
-			consumer := newTestClient(t, addr, "group-"+topic)
-
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			if err := producer.Produce(ctx, tc.records...); err != nil {
-				t.Fatalf("Produce: %v", err)
-			}
-
-			consumer.Subscribe(topic)
-
-			got := make([]*kafka.Record, 0, len(tc.records))
-			for len(got) < len(tc.records) {
-				batch, err := consumer.Poll(ctx, len(tc.records))
-				if err != nil {
-					if errors.Is(err, context.DeadlineExceeded) {
-						t.Fatalf("Poll timed out after %d/%d records", len(got), len(tc.records))
-					}
-					t.Fatalf("Poll: %v", err)
-				}
-				got = append(got, batch...)
-			}
-
-			if len(got) != len(tc.records) {
-				t.Fatalf("record count: got %d, want %d", len(got), len(tc.records))
-			}
-
-			if err := consumer.CommitOffsets(ctx); err != nil {
-				t.Fatalf("CommitOffsets: %v", err)
-			}
+			runProduceAndPollSubtest(t, addr, tc)
 		})
 	}
 }

@@ -209,62 +209,72 @@ func (f *fakePacketConn) SetDeadline(time.Time) error            { return nil }
 func (f *fakePacketConn) SetReadDeadline(time.Time) error        { return nil }
 func (f *fakePacketConn) SetWriteDeadline(time.Time) error       { return nil }
 
-func TestPickTCPHeldUDPFree_WindowsRange(t *testing.T) {
-	t.Parallel()
-	var (
-		tcpListeners []*fakeListener
-		udpConns     []*fakePacketConn
-		udpEphemeral int
-	)
-	listenTCP := func(addr string) (net.Listener, error) {
-		if addr == "127.0.0.1:0" {
-			addr = "127.0.0.1:10001"
-		}
-		ln := &fakeListener{addr: addr}
-		tcpListeners = append(tcpListeners, ln)
-		return ln, nil
+type windowsRangePickSpies struct {
+	tcpListeners []*fakeListener
+	udpConns     []*fakePacketConn
+	udpEphemeral int
+}
+
+func (s *windowsRangePickSpies) listenTCP(addr string) (net.Listener, error) {
+	if addr == "127.0.0.1:0" {
+		addr = "127.0.0.1:10001"
 	}
-	listenUDP := func(addr string) (net.PacketConn, error) {
-		if addr == "127.0.0.1:0" {
-			udpEphemeral++
-			conn := &fakePacketConn{addr: "127.0.0.1:20002"}
-			udpConns = append(udpConns, conn)
-			return conn, nil
-		}
-		if addr == "127.0.0.1:10001" {
-			return nil, errors.New("access permissions (UDP excluded range)")
-		}
-		conn := &fakePacketConn{addr: addr}
-		udpConns = append(udpConns, conn)
+	ln := &fakeListener{addr: addr}
+	s.tcpListeners = append(s.tcpListeners, ln)
+	return ln, nil
+}
+
+func (s *windowsRangePickSpies) listenUDP(addr string) (net.PacketConn, error) {
+	if addr == "127.0.0.1:0" {
+		s.udpEphemeral++
+		conn := &fakePacketConn{addr: "127.0.0.1:20002"}
+		s.udpConns = append(s.udpConns, conn)
 		return conn, nil
 	}
+	if addr == "127.0.0.1:10001" {
+		return nil, errors.New("access permissions (UDP excluded range)")
+	}
+	conn := &fakePacketConn{addr: addr}
+	s.udpConns = append(s.udpConns, conn)
+	return conn, nil
+}
 
-	ln, addr, err := pickTCPHeldUDPFree(2, listenTCP, listenUDP)
+// assertListeners verifies listener states and leak checks for windows range test.
+func (s *windowsRangePickSpies) assertListeners(t *testing.T, addr string) {
+	t.Helper()
+	if addr != "127.0.0.1:20002" {
+		t.Fatalf("addr = %q, want %q", addr, "127.0.0.1:20002")
+	}
+	if s.udpEphemeral != 1 {
+		t.Errorf("udpEphemeral = %d, want 1", s.udpEphemeral)
+	}
+	if len(s.tcpListeners) != 2 {
+		t.Fatalf("len(tcpListeners) = %d, want 2", len(s.tcpListeners))
+	}
+	if !s.tcpListeners[0].closed {
+		t.Error("attempt 1 TCP listener leaked")
+	}
+	if s.tcpListeners[1].closed {
+		t.Error("successful listener was closed prematurely")
+	}
+	for i, conn := range s.udpConns {
+		if !conn.closed {
+			t.Errorf("UDP conn %d leaked", i)
+		}
+	}
+}
+
+func TestPickTCPHeldUDPFree_WindowsRange(t *testing.T) {
+	t.Parallel()
+	spies := &windowsRangePickSpies{}
+
+	ln, addr, err := pickTCPHeldUDPFree(2, spies.listenTCP, spies.listenUDP)
 	if err != nil {
 		t.Fatalf("pickTCPHeldUDPFree failed: %v", err)
 	}
 	defer func() { _ = ln.Close() }()
 
-	if addr != "127.0.0.1:20002" {
-		t.Fatalf("addr = %q, want %q", addr, "127.0.0.1:20002")
-	}
-	if udpEphemeral != 1 {
-		t.Errorf("udpEphemeral = %d, want 1", udpEphemeral)
-	}
-	if len(tcpListeners) != 2 {
-		t.Fatalf("len(tcpListeners) = %d, want 2", len(tcpListeners))
-	}
-	if !tcpListeners[0].closed {
-		t.Error("attempt 1 TCP listener leaked")
-	}
-	if tcpListeners[1].closed {
-		t.Error("successful listener was closed prematurely")
-	}
-	for i, conn := range udpConns {
-		if !conn.closed {
-			t.Errorf("UDP conn %d leaked", i)
-		}
-	}
+	spies.assertListeners(t, addr)
 }
 
 func TestPickTCPHeldUDPFree_Normal(t *testing.T) {

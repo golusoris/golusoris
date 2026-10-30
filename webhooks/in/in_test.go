@@ -84,18 +84,25 @@ func githubSig(secret, body string) string {
 	return "sha256=" + hex.EncodeToString(h.Sum(nil))
 }
 
-func TestMiddlewaresRejectNilDownstream(t *testing.T) {
-	t.Parallel()
-	const (
-		secret = "shared-secret"
-		body   = `{"event":"test"}`
-	)
-	timestamp := time.Now().Unix()
-	tests := []struct {
-		name       string
-		middleware func(http.Handler) http.Handler
-		request    func() *http.Request
-	}{
+type middlewareNilTestCase struct {
+	name       string
+	middleware func(http.Handler) http.Handler
+	request    func() *http.Request
+}
+
+type downstreamCase struct {
+	name    string
+	handler http.Handler
+}
+
+var nilDownstreams = []downstreamCase{
+	{name: "nil", handler: nil},
+	{name: "typed nil", handler: (*statusHandler)(nil)},
+}
+
+func buildMiddlewareNilCases(t *testing.T, secret, body string, timestamp int64) []middlewareNilTestCase {
+	t.Helper()
+	return []middlewareNilTestCase{
 		{
 			name:       "Stripe",
 			middleware: requireStripe(t, secret),
@@ -143,27 +150,34 @@ func TestMiddlewaresRejectNilDownstream(t *testing.T) {
 			},
 		},
 	}
-	var typedNil *statusHandler
-	downstreams := []struct {
-		name    string
-		handler http.Handler
-	}{
-		{name: "nil", handler: nil},
-		{name: "typed nil", handler: typedNil},
+}
+
+// runNilDownstreamSubtest verifies that the middleware rejects nil and typed nil downstreams with 500.
+func runNilDownstreamSubtest(t *testing.T, test middlewareNilTestCase, downstream downstreamCase) {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	test.middleware(downstream.handler).ServeHTTP(rec, test.request())
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
+}
+
+func TestMiddlewaresRejectNilDownstream(t *testing.T) {
+	t.Parallel()
+	const (
+		secret = "shared-secret"
+		body   = `{"event":"test"}`
+	)
+	timestamp := time.Now().Unix()
+	tests := buildMiddlewareNilCases(t, secret, body, timestamp)
+
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			for _, downstream := range downstreams {
+			for _, downstream := range nilDownstreams {
 				t.Run(downstream.name, func(t *testing.T) {
 					t.Parallel()
-					rec := httptest.NewRecorder()
-
-					test.middleware(downstream.handler).ServeHTTP(rec, test.request())
-
-					if rec.Code != http.StatusInternalServerError {
-						t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
-					}
+					runNilDownstreamSubtest(t, test, downstream)
 				})
 			}
 		})

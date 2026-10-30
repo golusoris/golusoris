@@ -244,10 +244,9 @@ func TestReadyListener_Accept(t *testing.T) {
 	}
 }
 
-func TestHandlerSession_Methods(t *testing.T) {
-	t.Parallel()
-	sess := &handlerSession{handler: func(Envelope) error { return nil }}
-
+// assertSessionMailAndRcpt verifies Mail and multiple Rcpt calls populate envelope fields.
+func assertSessionMailAndRcpt(t *testing.T, sess *handlerSession) {
+	t.Helper()
 	if err := sess.Mail("sender@example.com", nil); err != nil {
 		t.Fatalf("Mail: %v", err)
 	}
@@ -264,7 +263,11 @@ func TestHandlerSession_Methods(t *testing.T) {
 	if len(sess.env.To) != 2 || sess.env.To[0] != "rcpt1@example.com" || sess.env.To[1] != "rcpt2@example.com" {
 		t.Errorf("env.To = %v", sess.env.To)
 	}
+}
 
+// assertSessionLogoutAndReset verifies Logout and Reset behavior on envelope state.
+func assertSessionLogoutAndReset(t *testing.T, sess *handlerSession) {
+	t.Helper()
 	if err := sess.Logout(); err != nil {
 		t.Errorf("Logout: %v", err)
 	}
@@ -275,9 +278,16 @@ func TestHandlerSession_Methods(t *testing.T) {
 	}
 }
 
-func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
+func TestHandlerSession_Methods(t *testing.T) {
 	t.Parallel()
+	sess := &handlerSession{handler: func(Envelope) error { return nil }}
+	assertSessionMailAndRcpt(t, sess)
+	assertSessionLogoutAndReset(t, sess)
+}
 
+// startTestSMTPServer starts an in-process SMTP server with bounded message bytes and recipients.
+func startTestSMTPServer(t *testing.T) (string, <-chan Envelope) {
+	t.Helper()
 	delivered := make(chan Envelope, 1)
 	backend := NewHandlerBackend(func(env Envelope) error {
 		delivered <- env
@@ -304,10 +314,12 @@ func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
 	go func() {
 		_ = srv.Serve(ln)
 	}()
+	return ln.Addr().String(), delivered
+}
 
-	addr := ln.Addr().String()
-
-	// 1. Positive: full SMTP ceremony (EHLO, MAIL, RCPT, DATA, QUIT)
+// sendTestSMTPMessage performs the full SMTP ceremony to send a test message.
+func sendTestSMTPMessage(t *testing.T, addr string) {
+	t.Helper()
 	client, dialErr := smtp.Dial(addr)
 	if dialErr != nil {
 		t.Fatalf("dial: %v", dialErr)
@@ -332,7 +344,11 @@ func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
 	if quitErr := client.Quit(); quitErr != nil {
 		t.Fatalf("Quit: %v", quitErr)
 	}
+}
 
+// assertSMTPDelivery verifies that the expected envelope was received by the backend.
+func assertSMTPDelivery(t *testing.T, delivered <-chan Envelope) {
+	t.Helper()
 	select {
 	case env := <-delivered:
 		if env.From != "alice@example.com" {
@@ -347,36 +363,42 @@ func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for message delivery")
 	}
+}
 
-	// 2. Negative: recipient limit policy exceeded (MaxRecipients = 1)
-	client2, dial2Err := smtp.Dial(addr)
-	if dial2Err != nil {
-		t.Fatalf("dial: %v", dial2Err)
-	}
-	defer client2.Close()
-	if mailErr := client2.Mail("alice@example.com"); mailErr != nil {
+// testSMTPFullCeremony tests positive full SMTP ceremony and delivery verification.
+func testSMTPFullCeremony(t *testing.T, addr string, delivered <-chan Envelope) {
+	t.Helper()
+	sendTestSMTPMessage(t, addr)
+	assertSMTPDelivery(t, delivered)
+}
+
+// testSMTPRecipientLimitAndReset tests recipient limit rejection and reset recovery.
+func testSMTPRecipientLimitAndReset(t *testing.T, client *smtp.Client) {
+	t.Helper()
+	if mailErr := client.Mail("alice@example.com"); mailErr != nil {
 		t.Fatalf("Mail: %v", mailErr)
 	}
-	if rcpt1Err := client2.Rcpt("rcpt1@example.com"); rcpt1Err != nil {
+	if rcpt1Err := client.Rcpt("rcpt1@example.com"); rcpt1Err != nil {
 		t.Fatalf("Rcpt 1: %v", rcpt1Err)
 	}
-	if rcpt2Err := client2.Rcpt("rcpt2@example.com"); rcpt2Err == nil {
+	if rcpt2Err := client.Rcpt("rcpt2@example.com"); rcpt2Err == nil {
 		t.Fatal("expected error on exceeding MaxRecipients, got nil")
 	}
-
-	// 3. Reset clears state
-	if resetErr := client2.Reset(); resetErr != nil {
+	if resetErr := client.Reset(); resetErr != nil {
 		t.Fatalf("Reset: %v", resetErr)
 	}
+}
 
-	// 4. Negative: size limit boundary exceeded (MaxMessageBytes = 50)
-	if mailAfterResetErr := client2.Mail("alice@example.com"); mailAfterResetErr != nil {
+// testSMTPOversizedMessage tests message size boundary rejection.
+func testSMTPOversizedMessage(t *testing.T, client *smtp.Client) {
+	t.Helper()
+	if mailAfterResetErr := client.Mail("alice@example.com"); mailAfterResetErr != nil {
 		t.Fatalf("Mail after reset: %v", mailAfterResetErr)
 	}
-	if rcptAfterResetErr := client2.Rcpt("rcpt1@example.com"); rcptAfterResetErr != nil {
+	if rcptAfterResetErr := client.Rcpt("rcpt1@example.com"); rcptAfterResetErr != nil {
 		t.Fatalf("Rcpt after reset: %v", rcptAfterResetErr)
 	}
-	wc2, data2Err := client2.Data()
+	wc2, data2Err := client.Data()
 	if data2Err != nil {
 		t.Fatalf("Data: %v", data2Err)
 	}
@@ -386,4 +408,19 @@ func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
 	if writeErr == nil && closeErr == nil {
 		t.Fatal("expected error for oversized message, got nil")
 	}
+}
+
+func TestSMTPServer_ClientCeremonyAndBoundaries(t *testing.T) {
+	t.Parallel()
+	addr, delivered := startTestSMTPServer(t)
+	testSMTPFullCeremony(t, addr, delivered)
+
+	client2, dial2Err := smtp.Dial(addr)
+	if dial2Err != nil {
+		t.Fatalf("dial: %v", dial2Err)
+	}
+	defer client2.Close()
+
+	testSMTPRecipientLimitAndReset(t, client2)
+	testSMTPOversizedMessage(t, client2)
 }
