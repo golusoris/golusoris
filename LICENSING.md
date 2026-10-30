@@ -16,11 +16,31 @@ licence of any file is machine-readable from its SPDX header or from
 | Material | Licence | SPDX id |
 | --- | --- | --- |
 | Go source, tests, generated code, Makefiles, CI workflows, deploy manifests, tooling configs | [European Union Public Licence 1.2](LICENSES/EUPL-1.2.txt) | `EUPL-1.2` |
+| Code the Linux kernel loads (eBPF programs, sched_ext schedulers) | [EUPL-1.2](LICENSES/EUPL-1.2.txt) OR [GPL-2.0-only](LICENSES/GPL-2.0-only.txt) | `EUPL-1.2 OR GPL-2.0-only` |
 | Prose: `README.md`, `docs/**`, every `AGENTS.md`, `CLAUDE.md`, changelogs, governance texts | [Creative Commons Attribution-ShareAlike 4.0](LICENSES/CC-BY-SA-4.0.txt) | `CC-BY-SA-4.0` |
 | `CODE_OF_CONDUCT.md` (adapted Contributor Covenant v2.1) | [CC BY 4.0](LICENSES/CC-BY-4.0.txt) | `CC-BY-4.0` |
 | Vendored agent skills under `.claude/skills/superpowers/` and `.claude/skills/community/` | upstream MIT / Apache-2.0 — see each directory's `README.md` | `MIT`, `Apache-2.0` |
 
 `LICENSE` at the repository root is the EUPL-1.2 text; it governs the code.
+
+### Exception: code the Linux kernel loads
+
+Source code that the Linux kernel loads is dual-licensed under
+`EUPL-1.2 OR GPL-2.0-only`; recipients may take it under either licence. This is
+the sole exception to the table above.
+
+Covered material includes eBPF programs and sched_ext schedulers, today
+consisting of `pkg/sockmap/bpf/sockmap.bpf.c` and its checked-in object
+`sockmap.bpf.o`. Everything else is not covered; specifically, the user-space
+loader in `pkg/sockmap/*.go` remains under `EUPL-1.2`.
+
+The reason for this exception is that the compiled object hands the kernel the
+string `"GPL"`. The kernel compares this string with the fixed list in
+[`include/linux/license.h`](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/linux/license.h)
+and only then allows access to GPL-only BPF helpers. The kernel's licensing
+rules leave the exact licence to the file's SPDX identifier
+([kernel license rules](https://docs.kernel.org/process/license-rules.html)).
+The full GPL text lives in [`LICENSES/GPL-2.0-only.txt`](LICENSES/GPL-2.0-only.txt).
 
 ## Why the EUPL
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-2.0-only
+// SPDX-License-Identifier: EUPL-1.2 OR GPL-2.0-only
 //
 // CO-RE eBPF program pair for golusoris's colocated-IPC sockmap redirect.
 //
