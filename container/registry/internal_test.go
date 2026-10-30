@@ -177,6 +177,35 @@ func TestVerifier(t *testing.T) {
 	}
 }
 
+func readVerifierChunks(ctx context.Context, b []byte, d v1.Descriptor, chunk int) (int, error) {
+	v := newVerifier(ctx, io.NopCloser(bytes.NewReader(b)), d)
+	buf := make([]byte, d.Size)
+	total := 0
+	for total < len(buf) {
+		n, rerr := v.Read(buf[total:min(total+chunk, len(buf))])
+		total += n
+		if rerr != nil {
+			return total, rerr
+		}
+	}
+	return total, nil
+}
+
+func checkVerifierChunks(t *testing.T, d v1.Descriptor, body []byte) {
+	t.Helper()
+	for _, chunk := range []int{int(d.Size), 512, 1} {
+		if n, rerr := readVerifierChunks(t.Context(), body, d, chunk); rerr != nil || int64(n) != d.Size {
+			t.Fatalf("chunk %d: intact = %d bytes, %v", chunk, n, rerr)
+		}
+		corrupt := bytes.Clone(body)
+		corrupt[len(corrupt)-1] ^= 1
+		n, rerr := readVerifierChunks(t.Context(), corrupt, d, chunk)
+		if !errors.Is(rerr, ErrDigestMismatch) || int64(n) >= d.Size {
+			t.Fatalf("chunk %d: corrupt = %d of %d bytes, %v; want the tail withheld and ErrDigestMismatch", chunk, n, d.Size, rerr)
+		}
+	}
+}
+
 // TestVerifier_WithholdsTamperedTail reads exactly the descriptor size, as an
 // upload with a known Content-Length does, and never reads EOF: a corrupt or
 // overlong stream must still fail before its last bytes are handed out.
@@ -188,33 +217,42 @@ func TestVerifier_WithholdsTamperedTail(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := v1.Descriptor{Digest: h, Size: size}
-	readSize := func(b []byte, chunk int) (int, error) {
-		v := newVerifier(t.Context(), io.NopCloser(bytes.NewReader(b)), d)
-		buf := make([]byte, size)
-		total := 0
-		for total < len(buf) {
-			n, rerr := v.Read(buf[total:min(total+chunk, len(buf))])
-			total += n
-			if rerr != nil {
-				return total, rerr
-			}
-		}
-		return total, nil
-	}
-	for _, chunk := range []int{int(size), 512, 1} {
-		if n, rerr := readSize(body, chunk); rerr != nil || int64(n) != size {
-			t.Fatalf("chunk %d: intact = %d bytes, %v", chunk, n, rerr)
-		}
-		corrupt := bytes.Clone(body)
-		corrupt[len(corrupt)-1] ^= 1
-		n, rerr := readSize(corrupt, chunk)
-		if !errors.Is(rerr, ErrDigestMismatch) || int64(n) >= size {
-			t.Fatalf("chunk %d: corrupt = %d of %d bytes, %v; want the tail withheld and ErrDigestMismatch", chunk, n, size, rerr)
-		}
-	}
+	checkVerifierChunks(t, d, body)
 	v := newVerifier(t.Context(), io.NopCloser(bytes.NewReader(append(bytes.Clone(body), 'x'))), d)
 	if n, rerr := io.Copy(io.Discard, v); !errors.Is(rerr, ErrDigestMismatch) || n > size {
 		t.Fatalf("long stream = %d bytes, %v; want at most %d bytes and ErrDigestMismatch", n, rerr, size)
+	}
+}
+
+func checkReachableBudget(t *testing.T, l *Layout, idx v1.Descriptor) {
+	t.Helper()
+	if _, err := l.reachable(t.Context(), []v1.Descriptor{idx}, 2); err != nil {
+		t.Fatalf("two manifests at budget 2: %v", err)
+	}
+	if _, err := l.reachable(t.Context(), []v1.Descriptor{idx}, 1); !errors.Is(err, ErrTooLarge) {
+		t.Fatalf("two manifests at budget 1 err = %v, want ErrTooLarge", err)
+	}
+}
+
+func checkCanceledSweep(t *testing.T, l *Layout) {
+	t.Helper()
+	blobs, ok, err := l.openBlobDir()
+	if err != nil || !ok {
+		t.Fatalf("openBlobDir = %v, %v", ok, err)
+	}
+	defer func() { _ = blobs.Close() }()
+	files, err := blobFiles(blobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	rep, err := sweep(canceled, blobs, files, nil, false)
+	if !errors.Is(err, context.Canceled) || errors.Is(err, ErrPartialDelete) || len(rep.Removed) != 0 {
+		t.Fatalf("canceled sweep = %+v, %v", rep, err)
+	}
+	if after, _ := blobFiles(blobs); len(after) != len(files) {
+		t.Fatalf("canceled sweep removed %d files", len(files)-len(after))
 	}
 }
 
@@ -240,30 +278,8 @@ func TestLayoutWalkBounds(t *testing.T) {
 	if err = l.writeBlob(idx, bytes.NewReader(raw)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = l.reachable(t.Context(), []v1.Descriptor{idx}, 2); err != nil {
-		t.Fatalf("two manifests at budget 2: %v", err)
-	}
-	if _, err = l.reachable(t.Context(), []v1.Descriptor{idx}, 1); !errors.Is(err, ErrTooLarge) {
-		t.Fatalf("two manifests at budget 1 err = %v, want ErrTooLarge", err)
-	}
-	blobs, ok, err := l.openBlobDir()
-	if err != nil || !ok {
-		t.Fatalf("openBlobDir = %v, %v", ok, err)
-	}
-	defer func() { _ = blobs.Close() }()
-	files, err := blobFiles(blobs)
-	if err != nil {
-		t.Fatal(err)
-	}
-	canceled, cancel := context.WithCancel(t.Context())
-	cancel()
-	rep, err := sweep(canceled, blobs, files, nil, false)
-	if !errors.Is(err, context.Canceled) || errors.Is(err, ErrPartialDelete) || len(rep.Removed) != 0 {
-		t.Fatalf("canceled sweep = %+v, %v", rep, err)
-	}
-	if after, _ := blobFiles(blobs); len(after) != len(files) {
-		t.Fatalf("canceled sweep removed %d files", len(files)-len(after))
-	}
+	checkReachableBudget(t, l, idx)
+	checkCanceledSweep(t, l)
 }
 
 // probeReader and probeTransport call probe on every read or request.

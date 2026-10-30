@@ -6,6 +6,7 @@ package registry_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -72,6 +73,82 @@ func blobFiles(t *testing.T, dir string) []string {
 	return out
 }
 
+func checkDeletePhase(t *testing.T, l *registry.Layout, dir string, model, sig, keep v1.Descriptor) {
+	t.Helper()
+	ctx := testCtx(t)
+	before := snapshot(t, dir)
+	want := registry.DeleteReport{Removed: []v1.Hash{sig.Digest, model.Digest}}
+	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{DryRun: true}); derr != nil || !equalReports(got, want) {
+		t.Fatalf("dry Delete = %+v, %v; want %+v", got, derr, want)
+	}
+	if snapshot(t, dir) != before {
+		t.Fatal("dry Delete changed the layout")
+	}
+	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{}); derr != nil || !equalReports(got, want) {
+		t.Fatalf("Delete = %+v, %v; want %+v", got, derr, want)
+	}
+	if entries := indexEntries(t, dir); len(entries) != 1 || entries[0].Digest != keep.Digest {
+		t.Fatalf("index.json after Delete = %+v", entries)
+	}
+	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{}); derr != nil || !equalReports(got, registry.DeleteReport{Absent: []v1.Hash{model.Digest}}) {
+		t.Fatalf("second Delete = %+v, %v", got, derr)
+	}
+}
+
+func garbageSize(t *testing.T, dir string, garbage []v1.Hash) int64 {
+	t.Helper()
+	var size int64
+	for _, h := range garbage {
+		info, serr := os.Stat(blobPath(dir, h))
+		if serr != nil {
+			t.Fatal(serr)
+		}
+		size += info.Size()
+	}
+	return size
+}
+
+func checkGCDryRun(t *testing.T, l *registry.Layout, dir string, garbage []v1.Hash, size int64) {
+	t.Helper()
+	ctx := testCtx(t)
+	before := snapshot(t, dir)
+	dry, err := l.GC(ctx, registry.GCOptions{DryRun: true})
+	if err != nil || !slices.Equal(sortedHashes(dry.Removed), garbage) || dry.Bytes != size {
+		t.Fatalf("dry GC = %+v, %v; want %v (%d bytes)", dry, err, garbage, size)
+	}
+	if snapshot(t, dir) != before {
+		t.Fatal("dry GC changed the layout")
+	}
+}
+
+func checkSecondGC(t *testing.T, l *registry.Layout) {
+	t.Helper()
+	ctx := testCtx(t)
+	again, err := l.GC(ctx, registry.GCOptions{})
+	if err != nil || len(again.Removed) != 0 || again.Bytes != 0 {
+		t.Fatalf("second GC = %+v, %v", again, err)
+	}
+}
+
+func checkGCLive(t *testing.T, l *registry.Layout, dir, junk string, garbage []v1.Hash, size int64, keep v1.Hash) {
+	t.Helper()
+	ctx := testCtx(t)
+	got, err := l.GC(ctx, registry.GCOptions{})
+	if err != nil || !slices.Equal(sortedHashes(got.Removed), garbage) || got.Bytes != size {
+		t.Fatalf("GC = %+v, %v; want %v (%d bytes)", got, err, garbage, size)
+	}
+	for _, h := range garbage {
+		if _, serr := os.Stat(blobPath(dir, h)); !errors.Is(serr, fs.ErrNotExist) {
+			t.Fatalf("garbage blob %s survived: %v", h, serr)
+		}
+	}
+	if _, err = os.Stat(junk); err != nil {
+		t.Fatalf("GC removed a file not named by a digest: %v", err)
+	}
+	requireArtifact(t, l, keep)
+	checkSecondGC(t, l)
+}
+
 func TestLayout_DeleteThenGC(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx(t)
@@ -93,57 +170,11 @@ func TestLayout_DeleteThenGC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	before := snapshot(t, dir)
-	want := registry.DeleteReport{Removed: []v1.Hash{sig.Digest, model.Digest}}
-	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{DryRun: true}); derr != nil || !equalReports(got, want) {
-		t.Fatalf("dry Delete = %+v, %v; want %+v", got, derr, want)
-	}
-	if snapshot(t, dir) != before {
-		t.Fatal("dry Delete changed the layout")
-	}
-	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{}); derr != nil || !equalReports(got, want) {
-		t.Fatalf("Delete = %+v, %v; want %+v", got, derr, want)
-	}
-	if entries := indexEntries(t, dir); len(entries) != 1 || entries[0].Digest != keep.Digest {
-		t.Fatalf("index.json after Delete = %+v", entries)
-	}
-	if got, derr := l.Delete(ctx, model.Digest, registry.DeleteOptions{}); derr != nil || !equalReports(got, registry.DeleteReport{Absent: []v1.Hash{model.Digest}}) {
-		t.Fatalf("second Delete = %+v, %v", got, derr)
-	}
-
+	checkDeletePhase(t, l, dir, model, sig, keep)
 	garbage := sortedHashes([]v1.Hash{model.Digest, sig.Digest, sigMan.Layers[0].Digest})
-	var size int64
-	for _, h := range garbage {
-		info, serr := os.Stat(blobPath(dir, h))
-		if serr != nil {
-			t.Fatal(serr)
-		}
-		size += info.Size()
-	}
-	before = snapshot(t, dir)
-	dry, err := l.GC(ctx, registry.GCOptions{DryRun: true})
-	if err != nil || !slices.Equal(sortedHashes(dry.Removed), garbage) || dry.Bytes != size {
-		t.Fatalf("dry GC = %+v, %v; want %v (%d bytes)", dry, err, garbage, size)
-	}
-	if snapshot(t, dir) != before {
-		t.Fatal("dry GC changed the layout")
-	}
-	got, err := l.GC(ctx, registry.GCOptions{})
-	if err != nil || !slices.Equal(sortedHashes(got.Removed), garbage) || got.Bytes != size {
-		t.Fatalf("GC = %+v, %v; want %v (%d bytes)", got, err, garbage, size)
-	}
-	for _, h := range garbage {
-		if _, serr := os.Stat(blobPath(dir, h)); !errors.Is(serr, fs.ErrNotExist) {
-			t.Fatalf("garbage blob %s survived: %v", h, serr)
-		}
-	}
-	if _, err = os.Stat(junk); err != nil {
-		t.Fatalf("GC removed a file not named by a digest: %v", err)
-	}
-	requireArtifact(t, l, keep.Digest)
-	if again, gerr := l.GC(ctx, registry.GCOptions{}); gerr != nil || len(again.Removed) != 0 || again.Bytes != 0 {
-		t.Fatalf("second GC = %+v, %v", again, gerr)
-	}
+	size := garbageSize(t, dir, garbage)
+	checkGCDryRun(t, l, dir, garbage, size)
+	checkGCLive(t, l, dir, junk, garbage, size, keep.Digest)
 }
 
 // requireArtifact reads artifact h and every blob it references from l.
@@ -163,59 +194,146 @@ func requireArtifact(t *testing.T, l *registry.Layout, h v1.Hash) {
 
 // TestLayout_DeleteIndex deletes a copied, signed index: the referrers of
 // its child go along unless another index.json entry keeps the child.
+func checkKeptChild(t *testing.T, ctx context.Context, l *registry.Layout, child v1.Descriptor, ref v1.Hash) {
+	t.Helper()
+	m, err := l.Manifest(ctx, child.Digest)
+	if err != nil {
+		t.Fatalf("kept child: %v", err)
+	}
+	img, err := v1.ParseManifest(bytes.NewReader(m.Raw))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range append([]v1.Descriptor{img.Config}, img.Layers...) {
+		if _, err = l.FetchBlob(ctx, d, d.Size); err != nil {
+			t.Fatalf("kept child blob %s: %v", d.Digest, err)
+		}
+	}
+	if sigs, rerr := l.Referrers(ctx, child.Digest, ""); rerr != nil || len(sigs) != 1 || sigs[0].Digest != ref {
+		t.Fatalf("kept child referrers = %v, %v", sigs, rerr)
+	}
+}
+
+func runDeleteIndex(t *testing.T, keepChild bool) {
+	t.Helper()
+	ctx := testCtx(t)
+	c := artifactClient(t, registry.Options{}, nil)
+	src := newArtifactRegistry(t, nil)
+	root, child, refs := seedSigned(t, c, src, false)
+	l, dir := newLayout(t)
+	if _, err := c.CopyToLayout(ctx, src+"/app:v1", l); err != nil {
+		t.Fatal(err)
+	}
+	want := registry.DeleteReport{Removed: []v1.Hash{refs[0], root.Digest, refs[1]}}
+	if keepChild {
+		if _, err := c.CopyToLayout(ctx, src+"/app@"+child.Digest.String(), l); err != nil {
+			t.Fatal(err)
+		}
+		want.Removed = want.Removed[:2]
+	}
+	got, err := l.Delete(ctx, root.Digest, registry.DeleteOptions{})
+	if err != nil || !equalReports(got, want) {
+		t.Fatalf("Delete = %+v, %v; want %+v", got, err, want)
+	}
+	if _, err = l.GC(ctx, registry.GCOptions{}); err != nil {
+		t.Fatalf("GC: %v", err)
+	}
+	if _, err = os.Stat(blobPath(dir, root.Digest)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("index blob survived GC: %v", err)
+	}
+	if !keepChild {
+		if left := blobFiles(t, dir); len(left) != 0 {
+			t.Fatalf("blobs left after deleting everything: %v", left)
+		}
+		return
+	}
+	checkKeptChild(t, ctx, l, child, refs[1])
+}
+
 func TestLayout_DeleteIndex(t *testing.T) {
 	t.Parallel()
 	for _, keepChild := range []bool{false, true} {
 		t.Run(fmt.Sprintf("child listed %v", keepChild), func(t *testing.T) {
 			t.Parallel()
-			ctx := testCtx(t)
-			c := artifactClient(t, registry.Options{}, nil)
-			src := newArtifactRegistry(t, nil)
-			root, child, refs := seedSigned(t, c, src, false)
-			l, dir := newLayout(t)
-			if _, err := c.CopyToLayout(ctx, src+"/app:v1", l); err != nil {
-				t.Fatal(err)
-			}
-			want := registry.DeleteReport{Removed: []v1.Hash{refs[0], root.Digest, refs[1]}}
-			if keepChild {
-				if _, err := c.CopyToLayout(ctx, src+"/app@"+child.Digest.String(), l); err != nil {
-					t.Fatal(err)
-				}
-				want.Removed = want.Removed[:2]
-			}
-			got, err := l.Delete(ctx, root.Digest, registry.DeleteOptions{})
-			if err != nil || !equalReports(got, want) {
-				t.Fatalf("Delete = %+v, %v; want %+v", got, err, want)
-			}
-			if _, err = l.GC(ctx, registry.GCOptions{}); err != nil {
-				t.Fatalf("GC: %v", err)
-			}
-			if _, err = os.Stat(blobPath(dir, root.Digest)); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatalf("index blob survived GC: %v", err)
-			}
-			if !keepChild {
-				if left := blobFiles(t, dir); len(left) != 0 {
-					t.Fatalf("blobs left after deleting everything: %v", left)
-				}
-				return
-			}
-			m, err := l.Manifest(ctx, child.Digest)
-			if err != nil {
-				t.Fatalf("kept child: %v", err)
-			}
-			img, err := v1.ParseManifest(bytes.NewReader(m.Raw))
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, d := range append([]v1.Descriptor{img.Config}, img.Layers...) {
-				if _, err = l.FetchBlob(ctx, d, d.Size); err != nil {
-					t.Fatalf("kept child blob %s: %v", d.Digest, err)
-				}
-			}
-			if sigs, rerr := l.Referrers(ctx, child.Digest, ""); rerr != nil || len(sigs) != 1 || sigs[0].Digest != refs[1] {
-				t.Fatalf("kept child referrers = %v, %v", sigs, rerr)
-			}
+			runDeleteIndex(t, keepChild)
 		})
+	}
+}
+
+type gcFailsClosedCase struct {
+	tamper func(t *testing.T, dir string, model, sig v1.Descriptor)
+	want   error
+}
+
+var gcFailsClosedCases = map[string]gcFailsClosedCase{
+	"garbage index.json": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, "index.json"), []byte("{garbage"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}},
+	"flipped manifest": {want: registry.ErrDigestMismatch, tamper: func(t *testing.T, dir string, model, _ v1.Descriptor) {
+		t.Helper()
+		flip(t, blobPath(dir, model.Digest))
+	}},
+	"missing manifest": {want: fs.ErrNotExist, tamper: func(t *testing.T, dir string, _, sig v1.Descriptor) {
+		t.Helper()
+		if err := os.Remove(blobPath(dir, sig.Digest)); err != nil {
+			t.Fatal(err)
+		}
+	}},
+	"missing child manifest": {want: fs.ErrNotExist, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
+		t.Helper()
+		missing := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 10, Digest: v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("d", 64)}}
+		appendIndex(t, dir, missing)
+	}},
+	"listed non-manifest": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
+		t.Helper()
+		raw := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.example.notes+json","layers":[]}`)
+		h, size, _ := v1.SHA256(bytes.NewReader(raw))
+		p := layout.Path(dir)
+		if err := p.WriteBlob(h, nopCloser{bytes.NewReader(raw)}); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.AppendDescriptor(v1.Descriptor{MediaType: types.OCIManifestSchema1, Digest: h, Size: size}); err != nil {
+			t.Fatal(err)
+		}
+	}},
+	"symlinked blob": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
+		t.Helper()
+		target := tempFile(t, "elsewhere", []byte("x"))
+		if err := os.Symlink(target, filepath.Join(dir, "blobs", "sha256", strings.Repeat("e", 64))); err != nil {
+			t.Skipf("symlink: %v", err)
+		}
+	}},
+	"symlinked blobs dir": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
+		t.Helper()
+		moved := filepath.Join(t.TempDir(), "blobs")
+		if err := os.Rename(filepath.Join(dir, "blobs"), moved); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(moved, filepath.Join(dir, "blobs")); err != nil {
+			t.Skipf("symlink: %v", err)
+		}
+	}},
+}
+
+func runGCFailsClosed(t *testing.T, tc gcFailsClosedCase) {
+	t.Helper()
+	ctx := testCtx(t)
+	l, dir := newLayout(t)
+	model, sig := pushModel(t, l)
+	garbage := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("f", 64)}
+	if err := os.WriteFile(blobPath(dir, garbage), []byte("unreferenced"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tc.tamper(t, dir, model, sig)
+	before := snapshot(t, dir)
+	if _, err := l.GC(ctx, registry.GCOptions{}); !errors.Is(err, tc.want) {
+		t.Fatalf("GC err = %v, want %v", err, tc.want)
+	}
+	if snapshot(t, dir) != before {
+		t.Fatal("failed GC changed the layout")
 	}
 }
 
@@ -223,79 +341,10 @@ func TestLayout_DeleteIndex(t *testing.T) {
 // layout holds garbage.
 func TestLayout_GCFailsClosed(t *testing.T) {
 	t.Parallel()
-	cases := map[string]struct {
-		tamper func(t *testing.T, dir string, model, sig v1.Descriptor)
-		want   error
-	}{
-		"garbage index.json": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
-			t.Helper()
-			if err := os.WriteFile(filepath.Join(dir, "index.json"), []byte("{garbage"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		"flipped manifest": {want: registry.ErrDigestMismatch, tamper: func(t *testing.T, dir string, model, _ v1.Descriptor) {
-			t.Helper()
-			flip(t, blobPath(dir, model.Digest))
-		}},
-		"missing manifest": {want: fs.ErrNotExist, tamper: func(t *testing.T, dir string, _, sig v1.Descriptor) {
-			t.Helper()
-			if err := os.Remove(blobPath(dir, sig.Digest)); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		"missing child manifest": {want: fs.ErrNotExist, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
-			t.Helper()
-			missing := v1.Descriptor{MediaType: types.OCIManifestSchema1, Size: 10, Digest: v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("d", 64)}}
-			appendIndex(t, dir, missing)
-		}},
-		"listed non-manifest": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
-			t.Helper()
-			raw := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.example.notes+json","layers":[]}`)
-			h, size, _ := v1.SHA256(bytes.NewReader(raw))
-			p := layout.Path(dir)
-			if err := p.WriteBlob(h, nopCloser{bytes.NewReader(raw)}); err != nil {
-				t.Fatal(err)
-			}
-			if err := p.AppendDescriptor(v1.Descriptor{MediaType: types.OCIManifestSchema1, Digest: h, Size: size}); err != nil {
-				t.Fatal(err)
-			}
-		}},
-		"symlinked blob": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
-			t.Helper()
-			target := tempFile(t, "elsewhere", []byte("x"))
-			if err := os.Symlink(target, filepath.Join(dir, "blobs", "sha256", strings.Repeat("e", 64))); err != nil {
-				t.Skipf("symlink: %v", err)
-			}
-		}},
-		"symlinked blobs dir": {want: registry.ErrInvalidArtifact, tamper: func(t *testing.T, dir string, _, _ v1.Descriptor) {
-			t.Helper()
-			moved := filepath.Join(t.TempDir(), "blobs")
-			if err := os.Rename(filepath.Join(dir, "blobs"), moved); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(moved, filepath.Join(dir, "blobs")); err != nil {
-				t.Skipf("symlink: %v", err)
-			}
-		}},
-	}
-	for name, tc := range cases {
+	for name, tc := range gcFailsClosedCases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			ctx := testCtx(t)
-			l, dir := newLayout(t)
-			model, sig := pushModel(t, l)
-			garbage := v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("f", 64)}
-			if err := os.WriteFile(blobPath(dir, garbage), []byte("unreferenced"), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			tc.tamper(t, dir, model, sig)
-			before := snapshot(t, dir)
-			if _, err := l.GC(ctx, registry.GCOptions{}); !errors.Is(err, tc.want) {
-				t.Fatalf("GC err = %v, want %v", err, tc.want)
-			}
-			if snapshot(t, dir) != before {
-				t.Fatal("failed GC changed the layout")
-			}
+			runGCFailsClosed(t, tc)
 		})
 	}
 }
@@ -368,6 +417,53 @@ func TestLayout_DeleteReferrersCap(t *testing.T) {
 	}
 }
 
+func runPusherWorker(ctx context.Context, l *registry.Layout, w, perWorker int, pushed *[]v1.Descriptor, errs chan<- error, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for i := range perWorker {
+		d, err := l.PushArtifact(ctx, registry.Artifact{ArtifactType: scoreType, Blobs: []registry.Blob{
+			{Name: "r.json", Reader: strings.NewReader(fmt.Sprintf(`{"w":%d,"i":%d}`, w, i))},
+		}})
+		if err != nil {
+			errs <- err
+			return
+		}
+		*pushed = append(*pushed, d)
+	}
+}
+
+func runDeleterWorker(ctx context.Context, l *registry.Layout, doomed v1.Hash, errs chan<- error, wg *sync.WaitGroup) {
+	defer wg.Done()
+	if _, err := l.Delete(ctx, doomed, registry.DeleteOptions{}); err != nil {
+		errs <- err
+		return
+	}
+	for range 5 {
+		if _, err := l.GC(ctx, registry.GCOptions{}); err != nil {
+			errs <- err
+			return
+		}
+	}
+}
+
+func verifyConcurrentLayout(t *testing.T, l *registry.Layout, dir string, doomed v1.Hash, pushed [][]v1.Descriptor, total int) {
+	t.Helper()
+	listed := map[v1.Hash]bool{}
+	for _, e := range indexEntries(t, dir) {
+		listed[e.Digest] = true
+	}
+	if listed[doomed] || len(listed) != total {
+		t.Fatalf("index.json lists %d entries (doomed %v), want %d", len(listed), listed[doomed], total)
+	}
+	for _, ds := range pushed {
+		for _, d := range ds {
+			if !listed[d.Digest] {
+				t.Fatalf("pushed %s not listed", d.Digest)
+			}
+			requireArtifact(t, l, d.Digest)
+		}
+	}
+}
+
 // TestLayout_ConcurrentWritersAndGC runs pushes, a delete and repeated GC on
 // one *Layout: every pushed artifact stays whole and listed.
 func TestLayout_ConcurrentWritersAndGC(t *testing.T) {
@@ -382,33 +478,9 @@ func TestLayout_ConcurrentWritersAndGC(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(workers + 1)
 	for w := range workers {
-		go func() {
-			defer wg.Done()
-			for i := range perWorker {
-				d, err := l.PushArtifact(ctx, registry.Artifact{ArtifactType: scoreType, Blobs: []registry.Blob{
-					{Name: "r.json", Reader: strings.NewReader(fmt.Sprintf(`{"w":%d,"i":%d}`, w, i))},
-				}})
-				if err != nil {
-					errs <- err
-					return
-				}
-				pushed[w] = append(pushed[w], d)
-			}
-		}()
+		go runPusherWorker(ctx, l, w, perWorker, &pushed[w], errs, &wg)
 	}
-	go func() {
-		defer wg.Done()
-		if _, err := l.Delete(ctx, doomed.Digest, registry.DeleteOptions{}); err != nil {
-			errs <- err
-			return
-		}
-		for range 5 {
-			if _, err := l.GC(ctx, registry.GCOptions{}); err != nil {
-				errs <- err
-				return
-			}
-		}
-	}()
+	go runDeleterWorker(ctx, l, doomed.Digest, errs, &wg)
 	wg.Wait()
 	close(errs)
 	for err := range errs {
@@ -417,21 +489,7 @@ func TestLayout_ConcurrentWritersAndGC(t *testing.T) {
 	if _, err := l.GC(ctx, registry.GCOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	listed := map[v1.Hash]bool{}
-	for _, e := range indexEntries(t, dir) {
-		listed[e.Digest] = true
-	}
-	if listed[doomed.Digest] || len(listed) != workers*perWorker {
-		t.Fatalf("index.json lists %d entries (doomed %v), want %d", len(listed), listed[doomed.Digest], workers*perWorker)
-	}
-	for _, ds := range pushed {
-		for _, d := range ds {
-			if !listed[d.Digest] {
-				t.Fatalf("pushed %s not listed", d.Digest)
-			}
-			requireArtifact(t, l, d.Digest)
-		}
-	}
+	verifyConcurrentLayout(t, l, dir, doomed.Digest, pushed, workers*perWorker)
 }
 
 // TestLayout_GCManifestWithoutMediaType keeps the blobs of a listed manifest

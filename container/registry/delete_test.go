@@ -81,61 +81,86 @@ func hashes(ds ...v1.Descriptor) []v1.Hash {
 
 func tagOf(h v1.Hash) string { return "sha256-" + h.Hex }
 
+func verifyDryRun(t *testing.T, c *registry.Client, host, ref string, want registry.DeleteReport, tree []v1.Descriptor) {
+	t.Helper()
+	ctx := testCtx(t)
+	dry, err := c.Delete(ctx, ref, registry.DeleteOptions{DryRun: true})
+	if err != nil || !equalReports(dry, want) {
+		t.Fatalf("dry run = %+v, %v; want %+v", dry, err, want)
+	}
+	for _, d := range tree {
+		if !present(t, c, host+"/r", d.Digest) {
+			t.Fatalf("dry run deleted %s", d.Digest)
+		}
+	}
+}
+
+func verifyDeleteResults(t *testing.T, c *registry.Client, host, ref string, want registry.DeleteReport, tree []v1.Descriptor, tags []v1.Hash) {
+	t.Helper()
+	ctx := testCtx(t)
+	got, err := c.Delete(ctx, ref, registry.DeleteOptions{})
+	if err != nil || !equalReports(got, want) {
+		t.Fatalf("Delete = %+v, %v; want %+v", got, err, want)
+	}
+	for _, d := range tree {
+		if present(t, c, host+"/r", d.Digest) {
+			t.Fatalf("%s survived", d.Digest)
+		}
+	}
+	for _, h := range tags {
+		if tagPresent(t, c, host+"/r", tagOf(h)) {
+			t.Fatalf("referrers tag of %s survived", h)
+		}
+	}
+}
+
+func verifyUnrelatedAndRepeatDelete(t *testing.T, c *registry.Client, host, ref string, other, otherSig v1.Descriptor, modelDigest v1.Hash) {
+	t.Helper()
+	ctx := testCtx(t)
+	if !present(t, c, host+"/r", other.Digest) || !present(t, c, host+"/r", otherSig.Digest) {
+		t.Fatal("unrelated artifact deleted")
+	}
+	if refs, rerr := c.Referrers(ctx, host+"/r@"+other.Digest.String(), ""); rerr != nil || len(refs) != 1 {
+		t.Fatalf("unrelated referrers = %v, %v", refs, rerr)
+	}
+	again, err := c.Delete(ctx, ref, registry.DeleteOptions{})
+	if err != nil || !equalReports(again, registry.DeleteReport{Absent: []v1.Hash{modelDigest}}) {
+		t.Fatalf("second Delete = %+v, %v", again, err)
+	}
+}
+
+func runDeleteReferrerTree(t *testing.T, api bool) {
+	t.Helper()
+	ctx := testCtx(t)
+	host := newArtifactRegistry(t, nil, regsrv.WithReferrersSupport(api))
+	c := artifactClient(t, registry.Options{}, nil)
+	model, bundle, report := signedTree(t, c, host)
+	other, err := c.PushArtifact(ctx, host+"/r:other", registry.Artifact{ArtifactType: modelType, Annotations: map[string]string{"k": "other"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherSig, err := c.PushArtifact(ctx, host+"/r", registry.Artifact{ArtifactType: sigType, Subject: &other})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := registry.DeleteReport{Removed: hashes(report, bundle, model)}
+	if !api {
+		want.Tags = []string{tagOf(bundle.Digest), tagOf(model.Digest)}
+	}
+	ref := host + "/r@" + model.Digest.String()
+	tree := []v1.Descriptor{model, bundle, report}
+	verifyDryRun(t, c, host, ref, want, tree)
+	verifyDeleteResults(t, c, host, ref, want, tree, []v1.Hash{model.Digest, bundle.Digest})
+	verifyUnrelatedAndRepeatDelete(t, c, host, ref, other, otherSig, model.Digest)
+}
+
 func TestDelete_ReferrerTree(t *testing.T) {
 	t.Parallel()
 	for _, api := range []bool{false, true} {
-		t.Run(map[bool]string{false: "tag schema", true: "referrers api"}[api], func(t *testing.T) {
+		name := map[bool]string{false: "tag schema", true: "referrers api"}[api]
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			ctx := testCtx(t)
-			host := newArtifactRegistry(t, nil, regsrv.WithReferrersSupport(api))
-			c := artifactClient(t, registry.Options{}, nil)
-			model, bundle, report := signedTree(t, c, host)
-			other, err := c.PushArtifact(ctx, host+"/r:other", registry.Artifact{ArtifactType: modelType, Annotations: map[string]string{"k": "other"}})
-			if err != nil {
-				t.Fatal(err)
-			}
-			otherSig, err := c.PushArtifact(ctx, host+"/r", registry.Artifact{ArtifactType: sigType, Subject: &other})
-			if err != nil {
-				t.Fatal(err)
-			}
-			want := registry.DeleteReport{Removed: hashes(report, bundle, model)}
-			if !api {
-				want.Tags = []string{tagOf(bundle.Digest), tagOf(model.Digest)}
-			}
-			ref := host + "/r@" + model.Digest.String()
-			dry, err := c.Delete(ctx, ref, registry.DeleteOptions{DryRun: true})
-			if err != nil || !equalReports(dry, want) {
-				t.Fatalf("dry run = %+v, %v; want %+v", dry, err, want)
-			}
-			for _, d := range []v1.Descriptor{model, bundle, report} {
-				if !present(t, c, host+"/r", d.Digest) {
-					t.Fatalf("dry run deleted %s", d.Digest)
-				}
-			}
-			got, err := c.Delete(ctx, ref, registry.DeleteOptions{})
-			if err != nil || !equalReports(got, want) {
-				t.Fatalf("Delete = %+v, %v; want %+v", got, err, want)
-			}
-			for _, d := range []v1.Descriptor{model, bundle, report} {
-				if present(t, c, host+"/r", d.Digest) {
-					t.Fatalf("%s survived", d.Digest)
-				}
-			}
-			for _, h := range []v1.Hash{model.Digest, bundle.Digest} {
-				if tagPresent(t, c, host+"/r", tagOf(h)) {
-					t.Fatalf("referrers tag of %s survived", h)
-				}
-			}
-			if !present(t, c, host+"/r", other.Digest) || !present(t, c, host+"/r", otherSig.Digest) {
-				t.Fatal("unrelated artifact deleted")
-			}
-			if refs, rerr := c.Referrers(ctx, host+"/r@"+other.Digest.String(), ""); rerr != nil || len(refs) != 1 {
-				t.Fatalf("unrelated referrers = %v, %v", refs, rerr)
-			}
-			again, err := c.Delete(ctx, ref, registry.DeleteOptions{})
-			if err != nil || !equalReports(again, registry.DeleteReport{Absent: []v1.Hash{model.Digest}}) {
-				t.Fatalf("second Delete = %+v, %v", again, err)
-			}
+			runDeleteReferrerTree(t, api)
 		})
 	}
 }

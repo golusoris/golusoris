@@ -153,29 +153,21 @@ func TestLayout_OpenRejects(t *testing.T) {
 	}
 }
 
-func TestLayout_ArtifactAndReferrers(t *testing.T) {
-	t.Parallel()
-	l, dir := newLayout(t)
-	ctx := testCtx(t)
-	model, sig := pushModel(t, l)
-
-	host := newArtifactRegistry(t, nil)
-	remote, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/m", registry.Artifact{
-		ArtifactType: modelType,
-		Blobs:        []registry.Blob{{Name: "model.onnx", Reader: strings.NewReader("weights")}},
-	})
-	if err != nil || remote.Digest != model.Digest {
-		t.Fatalf("registry push = %v, %v; layout pushed %s", remote.Digest, err, model.Digest)
+func verifyReferrerDesc(t *testing.T, r, sig v1.Descriptor) {
+	t.Helper()
+	if r.Digest != sig.Digest || r.ArtifactType != sigType || r.MediaType != types.OCIManifestSchema1 ||
+		r.Annotations["dev.sigstore.bundle.content"] != "dsse-envelope" || r.Size != sig.Size {
+		t.Fatalf("referrer = %+v", r)
 	}
+}
 
+func checkLayoutReferrersFiltering(t *testing.T, ctx context.Context, l *registry.Layout, model, sig v1.Descriptor) {
+	t.Helper()
 	refs, err := l.Referrers(ctx, model.Digest, "")
 	if err != nil || len(refs) != 1 {
 		t.Fatalf("Referrers = %+v, %v", refs, err)
 	}
-	if r := refs[0]; r.Digest != sig.Digest || r.ArtifactType != sigType || r.MediaType != types.OCIManifestSchema1 ||
-		r.Annotations["dev.sigstore.bundle.content"] != "dsse-envelope" || r.Size != sig.Size {
-		t.Fatalf("referrer = %+v", r)
-	}
+	verifyReferrerDesc(t, refs[0], sig)
 	if got, _ := l.Referrers(ctx, model.Digest, sigType); len(got) != 1 {
 		t.Fatalf("filtered referrers = %v", got)
 	}
@@ -185,11 +177,18 @@ func TestLayout_ArtifactAndReferrers(t *testing.T) {
 	if got, _ := l.Referrers(ctx, sig.Digest, ""); len(got) != 0 {
 		t.Fatalf("referrer has referrers: %v", got)
 	}
+}
 
+func checkLayoutModelManifest(t *testing.T, ctx context.Context, l *registry.Layout, model v1.Descriptor) {
+	t.Helper()
 	m, err := l.Manifest(ctx, model.Digest)
 	if err != nil || m.MediaType != types.OCIManifestSchema1 || m.Digest != model.Digest || m.Size != int64(len(m.Raw)) {
 		t.Fatalf("Manifest = %+v, %v", m, err)
 	}
+}
+
+func checkLayoutSigManifestAndBlob(t *testing.T, ctx context.Context, l *registry.Layout, model, sig v1.Descriptor) {
+	t.Helper()
 	desc, man, err := l.ArtifactManifest(ctx, sig.Digest)
 	if err != nil || desc.ArtifactType != sigType || man.Subject == nil || man.Subject.Digest != model.Digest || len(man.Layers) != 1 {
 		t.Fatalf("ArtifactManifest = %+v, %+v, %v", desc, man, err)
@@ -201,8 +200,17 @@ func TestLayout_ArtifactAndReferrers(t *testing.T) {
 	if _, err = l.FetchBlob(ctx, layer, layer.Size-1); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("FetchBlob over maxBytes err = %v", err)
 	}
+}
 
-	if _, err = l.PushArtifact(ctx, registry.Artifact{
+func checkLayoutManifestsAndBlobs(t *testing.T, ctx context.Context, l *registry.Layout, model, sig v1.Descriptor) {
+	t.Helper()
+	checkLayoutModelManifest(t, ctx, l, model)
+	checkLayoutSigManifestAndBlob(t, ctx, l, model, sig)
+}
+
+func checkLayoutRePushAndLegacy(t *testing.T, ctx context.Context, l *registry.Layout, dir string, model, sig v1.Descriptor) {
+	t.Helper()
+	if _, err := l.PushArtifact(ctx, registry.Artifact{
 		ArtifactType: sigType, Annotations: map[string]string{"dev.sigstore.bundle.content": "dsse-envelope"},
 		Blobs: []registry.Blob{{MediaType: sigType, Reader: strings.NewReader(`{"mediaType":"bundle"}`)}}, Subject: &model,
 	}); err != nil {
@@ -213,7 +221,7 @@ func TestLayout_ArtifactAndReferrers(t *testing.T) {
 	}
 	// Another tool lists the referrer twice and adds one typed by its config.
 	p := layout.Path(dir)
-	if err = p.AppendDescriptor(v1.Descriptor{MediaType: types.OCIManifestSchema1, Digest: sig.Digest, Size: sig.Size}); err != nil {
+	if err := p.AppendDescriptor(v1.Descriptor{MediaType: types.OCIManifestSchema1, Digest: sig.Digest, Size: sig.Size}); err != nil {
 		t.Fatal(err)
 	}
 	legacy, ok := mutate.Subject(mutate.ConfigMediaType(empty.Image, scoreType), model).(v1.Image)
@@ -229,6 +237,26 @@ func TestLayout_ArtifactAndReferrers(t *testing.T) {
 	if got, rerr := l.Referrers(ctx, model.Digest, scoreType); rerr != nil || len(got) != 1 {
 		t.Fatalf("referrer typed by config media type = %+v, %v", got, rerr)
 	}
+}
+
+func TestLayout_ArtifactAndReferrers(t *testing.T) {
+	t.Parallel()
+	l, dir := newLayout(t)
+	ctx := testCtx(t)
+	model, sig := pushModel(t, l)
+
+	host := newArtifactRegistry(t, nil)
+	remote, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/m", registry.Artifact{
+		ArtifactType: modelType,
+		Blobs:        []registry.Blob{{Name: "model.onnx", Reader: strings.NewReader("weights")}},
+	})
+	if err != nil || remote.Digest != model.Digest {
+		t.Fatalf("registry push = %v, %v; layout pushed %s", remote.Digest, err, model.Digest)
+	}
+
+	checkLayoutReferrersFiltering(t, ctx, l, model, sig)
+	checkLayoutManifestsAndBlobs(t, ctx, l, model, sig)
+	checkLayoutRePushAndLegacy(t, ctx, l, dir, model, sig)
 }
 
 func TestLayout_ReferrersCap(t *testing.T) {
@@ -254,90 +282,121 @@ func TestLayout_ReferrersCap(t *testing.T) {
 	}
 }
 
+func checkTamperBlobFlipped(t *testing.T, ctx context.Context, l *registry.Layout, dir string, sig v1.Descriptor) {
+	t.Helper()
+	_, man, err := l.ArtifactManifest(ctx, sig.Digest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flip(t, blobPath(dir, man.Layers[0].Digest))
+	if _, err = l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("FetchBlob err = %v", err)
+	}
+}
+
+func checkTamperBlobTruncated(t *testing.T, ctx context.Context, l *registry.Layout, dir string, sig v1.Descriptor) {
+	t.Helper()
+	_, man, _ := l.ArtifactManifest(ctx, sig.Digest)
+	p := blobPath(dir, man.Layers[0].Digest)
+	if err := os.WriteFile(p, mustRead(t, p)[1:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("FetchBlob err = %v", err)
+	}
+}
+
+func checkTamperBlobExtended(t *testing.T, ctx context.Context, l *registry.Layout, dir string, sig v1.Descriptor) {
+	t.Helper()
+	_, man, _ := l.ArtifactManifest(ctx, sig.Digest)
+	p := blobPath(dir, man.Layers[0].Digest)
+	if err := os.WriteFile(p, append(mustRead(t, p), '\n'), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("FetchBlob err = %v", err)
+	}
+}
+
+func checkTamperSubjectManifest(t *testing.T, ctx context.Context, l *registry.Layout, dir string, model v1.Descriptor) {
+	t.Helper()
+	flip(t, blobPath(dir, model.Digest))
+	if _, err := l.Manifest(ctx, model.Digest); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("Manifest err = %v", err)
+	}
+	if _, _, err := l.ArtifactManifest(ctx, model.Digest); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("ArtifactManifest err = %v", err)
+	}
+}
+
+func checkTamperReferrerManifest(t *testing.T, ctx context.Context, l *registry.Layout, dir string, model, sig v1.Descriptor) {
+	t.Helper()
+	flip(t, blobPath(dir, sig.Digest))
+	if _, err := l.Referrers(ctx, model.Digest, ""); !errors.Is(err, registry.ErrDigestMismatch) {
+		t.Fatalf("Referrers err = %v", err)
+	}
+}
+
+func checkTamperBlobMissing(t *testing.T, ctx context.Context, l *registry.Layout, dir string, model v1.Descriptor) {
+	t.Helper()
+	if err := os.Remove(blobPath(dir, model.Digest)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Manifest(ctx, model.Digest); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("Manifest err = %v", err)
+	}
+}
+
+func checkTamperBlobSymlinked(t *testing.T, ctx context.Context, l *registry.Layout, dir string, model v1.Descriptor) {
+	t.Helper()
+	p := blobPath(dir, model.Digest)
+	target := tempFile(t, "elsewhere", mustRead(t, p))
+	if err := os.Remove(p); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, p); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	if _, err := l.Manifest(ctx, model.Digest); err == nil {
+		t.Fatal("Manifest followed a symlinked blob")
+	}
+}
+
+func runTamperedContentCase(t *testing.T, name string) {
+	t.Helper()
+	l, dir := newLayout(t)
+	model, sig := pushModel(t, l)
+	ctx := testCtx(t)
+	switch name {
+	case "blob flipped":
+		checkTamperBlobFlipped(t, ctx, l, dir, sig)
+	case "blob truncated":
+		checkTamperBlobTruncated(t, ctx, l, dir, sig)
+	case "blob extended":
+		checkTamperBlobExtended(t, ctx, l, dir, sig)
+	case "subject manifest":
+		checkTamperSubjectManifest(t, ctx, l, dir, model)
+	case "referrer manifest":
+		checkTamperReferrerManifest(t, ctx, l, dir, model, sig)
+	case "blob missing":
+		checkTamperBlobMissing(t, ctx, l, dir, model)
+	case "blob symlinked":
+		checkTamperBlobSymlinked(t, ctx, l, dir, model)
+	}
+}
+
+var tamperedNames = []string{
+	"blob flipped", "blob truncated", "blob extended",
+	"subject manifest", "referrer manifest",
+	"blob missing", "blob symlinked",
+}
+
 func TestLayout_RejectsTamperedContent(t *testing.T) {
 	t.Parallel()
-	ctx := testCtx(t)
-	cases := map[string]func(t *testing.T, l *registry.Layout, dir string, model, sig v1.Descriptor){
-		"blob flipped": func(t *testing.T, l *registry.Layout, dir string, _, sig v1.Descriptor) {
-			t.Helper()
-			_, man, err := l.ArtifactManifest(ctx, sig.Digest)
-			if err != nil {
-				t.Fatal(err)
-			}
-			flip(t, blobPath(dir, man.Layers[0].Digest))
-			if _, err = l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("FetchBlob err = %v", err)
-			}
-		},
-		"blob truncated": func(t *testing.T, l *registry.Layout, dir string, _, sig v1.Descriptor) {
-			t.Helper()
-			_, man, _ := l.ArtifactManifest(ctx, sig.Digest)
-			p := blobPath(dir, man.Layers[0].Digest)
-			if err := os.WriteFile(p, mustRead(t, p)[1:], 0o600); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("FetchBlob err = %v", err)
-			}
-		},
-		"blob extended": func(t *testing.T, l *registry.Layout, dir string, _, sig v1.Descriptor) {
-			t.Helper()
-			_, man, _ := l.ArtifactManifest(ctx, sig.Digest)
-			p := blobPath(dir, man.Layers[0].Digest)
-			if err := os.WriteFile(p, append(mustRead(t, p), '\n'), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := l.FetchBlob(ctx, man.Layers[0], 1<<20); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("FetchBlob err = %v", err)
-			}
-		},
-		"subject manifest": func(t *testing.T, l *registry.Layout, dir string, model, _ v1.Descriptor) {
-			t.Helper()
-			flip(t, blobPath(dir, model.Digest))
-			if _, err := l.Manifest(ctx, model.Digest); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("Manifest err = %v", err)
-			}
-			if _, _, err := l.ArtifactManifest(ctx, model.Digest); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("ArtifactManifest err = %v", err)
-			}
-		},
-		"referrer manifest": func(t *testing.T, l *registry.Layout, dir string, model, sig v1.Descriptor) {
-			t.Helper()
-			flip(t, blobPath(dir, sig.Digest))
-			if _, err := l.Referrers(ctx, model.Digest, ""); !errors.Is(err, registry.ErrDigestMismatch) {
-				t.Fatalf("Referrers err = %v", err)
-			}
-		},
-		"blob missing": func(t *testing.T, l *registry.Layout, dir string, model, _ v1.Descriptor) {
-			t.Helper()
-			if err := os.Remove(blobPath(dir, model.Digest)); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := l.Manifest(ctx, model.Digest); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatalf("Manifest err = %v", err)
-			}
-		},
-		"blob symlinked": func(t *testing.T, l *registry.Layout, dir string, model, _ v1.Descriptor) {
-			t.Helper()
-			p := blobPath(dir, model.Digest)
-			target := tempFile(t, "elsewhere", mustRead(t, p))
-			if err := os.Remove(p); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(target, p); err != nil {
-				t.Skipf("symlink: %v", err)
-			}
-			if _, err := l.Manifest(ctx, model.Digest); err == nil {
-				t.Fatal("Manifest followed a symlinked blob")
-			}
-		},
-	}
-	for name, tc := range cases {
+	for _, name := range tamperedNames {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			l, dir := newLayout(t)
-			model, sig := pushModel(t, l)
-			tc(t, l, dir, model, sig)
+			runTamperedContentCase(t, name)
 		})
 	}
 }
@@ -557,11 +616,8 @@ func TestCopyLayout_RoundTrip(t *testing.T) {
 	}
 }
 
-// checkLayout proves the layout holds the whole index (go-containerregistry
-// validates every digest) and both referrers, listed in index.json.
-func checkLayout(t *testing.T, l *registry.Layout, dir string, root, child v1.Descriptor, refs []v1.Hash) {
+func checkLayoutIndexEntries(t *testing.T, dir string, root v1.Descriptor, refs []v1.Hash) {
 	t.Helper()
-	ctx := testCtx(t)
 	entries := indexEntries(t, dir)
 	listed := map[v1.Hash]v1.Descriptor{}
 	for _, e := range entries {
@@ -570,6 +626,24 @@ func checkLayout(t *testing.T, l *registry.Layout, dir string, root, child v1.De
 	if len(entries) != 3 || listed[root.Digest].Digest != root.Digest || listed[refs[0]].ArtifactType != sigType || listed[refs[1]].ArtifactType != sigType {
 		t.Fatalf("index.json = %+v", entries)
 	}
+}
+
+func checkLayoutReferrers(t *testing.T, ctx context.Context, l *registry.Layout, subjects []v1.Hash, refs []v1.Hash) {
+	t.Helper()
+	for i, subject := range subjects {
+		got, err := l.Referrers(ctx, subject, sigType)
+		if err != nil || len(got) != 1 || got[0].Digest != refs[i] {
+			t.Fatalf("layout referrers of %s = %+v, %v", subject, got, err)
+		}
+	}
+}
+
+// checkLayout proves the layout holds the whole index (go-containerregistry
+// validates every digest) and both referrers, listed in index.json.
+func checkLayout(t *testing.T, l *registry.Layout, dir string, root, child v1.Descriptor, refs []v1.Hash) {
+	t.Helper()
+	ctx := testCtx(t)
+	checkLayoutIndexEntries(t, dir, root, refs)
 	ii, err := layout.Path(dir).ImageIndex()
 	if err != nil {
 		t.Fatal(err)
@@ -581,12 +655,7 @@ func checkLayout(t *testing.T, l *registry.Layout, dir string, root, child v1.De
 	if err = validateIndex(idx); err != nil {
 		t.Fatalf("layout content: %v", err)
 	}
-	for i, subject := range []v1.Hash{root.Digest, child.Digest} {
-		got, err := l.Referrers(ctx, subject, sigType)
-		if err != nil || len(got) != 1 || got[0].Digest != refs[i] {
-			t.Fatalf("layout referrers of %s = %+v, %v", subject, got, err)
-		}
-	}
+	checkLayoutReferrers(t, ctx, l, []v1.Hash{root.Digest, child.Digest}, refs)
 }
 
 func checkRemote(t *testing.T, c *registry.Client, repo string, root, child v1.Descriptor, refs []v1.Hash) {
@@ -692,6 +761,38 @@ func TestCopyToLayout_RejectsCorruptBlob(t *testing.T) {
 	}
 }
 
+type copyCapCase struct {
+	name     string
+	ok, over registry.Options
+}
+
+func calcCopyLimits(raw []byte, m *v1.Manifest, refs []v1.Descriptor) (maxManifest, maxBlob, total int64) {
+	maxManifest, maxBlob, total = int64(len(raw)), max(m.Config.Size, 2), int64(len(raw))+m.Config.Size+2
+	for _, l := range m.Layers {
+		maxBlob = max(maxBlob, l.Size)
+		total += l.Size
+	}
+	for _, r := range refs {
+		maxManifest = max(maxManifest, r.Size)
+		total += r.Size
+	}
+	return maxManifest, maxBlob, total
+}
+
+func runCopyLayoutCaps(t *testing.T, ctx context.Context, src string, cases []copyCapCase) {
+	t.Helper()
+	for _, tc := range cases {
+		l, _ := newLayout(t)
+		if _, err := artifactClient(t, tc.ok, nil).CopyToLayout(ctx, src+"/img:v1", l); err != nil {
+			t.Errorf("%s at cap: %v", tc.name, err)
+		}
+		l, _ = newLayout(t)
+		if _, err := artifactClient(t, tc.over, nil).CopyToLayout(ctx, src+"/img:v1", l); !errors.Is(err, registry.ErrTooLarge) {
+			t.Errorf("%s over cap: err = %v, want ErrTooLarge", tc.name, err)
+		}
+	}
+}
+
 func TestCopyLayout_Caps(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx(t)
@@ -715,46 +816,19 @@ func TestCopyLayout_Caps(t *testing.T) {
 	if err != nil || len(refs) != 2 {
 		t.Fatalf("referrers = %v, %v", refs, err)
 	}
-	// Content of one copy: image manifest, config, layers, two referrer
-	// manifests and the 2-byte empty blob they share as config and layer.
-	maxManifest, maxBlob, total := int64(len(raw)), max(m.Config.Size, 2), int64(len(raw))+m.Config.Size+2
-	for _, l := range m.Layers {
-		maxBlob = max(maxBlob, l.Size)
-		total += l.Size
-	}
-	for _, r := range refs {
-		maxManifest = max(maxManifest, r.Size)
-		total += r.Size
-	}
-	cases := []struct {
-		name     string
-		ok, over registry.Options
-	}{
+	maxManifest, maxBlob, total := calcCopyLimits(raw, m, refs)
+	cases := []copyCapCase{
 		{name: "layers", ok: registry.Options{MaxBlobs: 2}, over: registry.Options{MaxBlobs: 1}},
 		{name: "blob bytes", ok: registry.Options{MaxBlobBytes: maxBlob}, over: registry.Options{MaxBlobBytes: maxBlob - 1}},
 		{name: "manifest bytes", ok: registry.Options{MaxManifestBytes: maxManifest}, over: registry.Options{MaxManifestBytes: maxManifest - 1}},
 		{name: "total bytes", ok: registry.Options{MaxTotalBytes: total}, over: registry.Options{MaxTotalBytes: total - 1}},
 		{name: "referrers", ok: registry.Options{MaxReferrers: 2}, over: registry.Options{MaxReferrers: 1}},
 	}
-	for _, tc := range cases {
-		l, _ := newLayout(t)
-		if _, err = artifactClient(t, tc.ok, nil).CopyToLayout(ctx, src+"/img:v1", l); err != nil {
-			t.Errorf("%s at cap: %v", tc.name, err)
-		}
-		l, _ = newLayout(t)
-		if _, err = artifactClient(t, tc.over, nil).CopyToLayout(ctx, src+"/img:v1", l); !errors.Is(err, registry.ErrTooLarge) {
-			t.Errorf("%s over cap: err = %v, want ErrTooLarge", tc.name, err)
-		}
-	}
+	runCopyLayoutCaps(t, ctx, src, cases)
 }
 
-func TestCopyLayout_InvalidInputs(t *testing.T) {
-	t.Parallel()
-	ctx := testCtx(t)
-	c := artifactClient(t, registry.Options{}, nil)
-	l, dir := newLayout(t)
-	model, _ := pushModel(t, l)
-	host := newArtifactRegistry(t, nil)
+func checkInvalidCopyLayoutCalls(t *testing.T, ctx context.Context, c *registry.Client, host string, l *registry.Layout, model v1.Descriptor) {
+	t.Helper()
 	invalid := map[string]func() error{
 		"to nil layout":   func() error { _, err := c.CopyToLayout(ctx, host+"/a:v1", nil); return err },
 		"from nil layout": func() error { _, err := c.CopyFromLayout(ctx, nil, model.Digest, host+"/a"); return err },
@@ -772,6 +846,10 @@ func TestCopyLayout_InvalidInputs(t *testing.T) {
 			t.Errorf("%s: err = %v, want ErrInvalidArtifact", name, err)
 		}
 	}
+}
+
+func checkInvalidCopyLayoutReferences(t *testing.T, ctx context.Context, c *registry.Client, host string, l *registry.Layout, dir string) {
+	t.Helper()
 	odd := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.example.notes+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","size":2},"layers":[]}`)
 	oh, _, _ := v1.SHA256(bytes.NewReader(odd))
 	if err := layout.Path(dir).WriteBlob(oh, nopCloser{bytes.NewReader(odd)}); err != nil {
@@ -790,6 +868,17 @@ func TestCopyLayout_InvalidInputs(t *testing.T) {
 	if _, err := c.CopyFromLayout(ctx, l, absent, host+"/a"); !errors.Is(err, fs.ErrNotExist) {
 		t.Errorf("CopyFromLayout of a missing digest err = %v", err)
 	}
+}
+
+func TestCopyLayout_InvalidInputs(t *testing.T) {
+	t.Parallel()
+	ctx := testCtx(t)
+	c := artifactClient(t, registry.Options{}, nil)
+	l, dir := newLayout(t)
+	model, _ := pushModel(t, l)
+	host := newArtifactRegistry(t, nil)
+	checkInvalidCopyLayoutCalls(t, ctx, c, host, l, model)
+	checkInvalidCopyLayoutReferences(t, ctx, c, host, l, dir)
 	pushed, err := c.CopyFromLayout(ctx, l, model.Digest, host+"/models")
 	if err != nil || pushed.Digest != model.Digest {
 		t.Fatalf("untagged CopyFromLayout = %+v, %v", pushed, err)
