@@ -198,29 +198,35 @@ func TestImage_KeySignatureVerifies(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			host := newRegistry(t, nil, regsrv.WithReferrersSupport(tc.api))
-			ref, digest := seed(t, host, tc.index)
-			at := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
-			sig, err := sign.Image(testCtx(t), newClient(t), ref, sign.Signer{Key: tc.key},
-				sign.Options{Clock: clockwork.NewFakeClockAt(at)})
-			if err != nil {
-				t.Fatalf("Image: %v", err)
-			}
-			if sig.Subject.Digest != digest || sig.Descriptor.ArtifactType != sign.BundleMediaType {
-				t.Fatalf("signature = %+v", sig)
-			}
-			checkReferrer(t, host, ref, sig, at)
-			res, err := verifyWithKey(t, sig.Bundle, tc.key.Public(), digest)
-			if err != nil {
-				t.Fatalf("verify: %v", err)
-			}
-			if res.Statement.GetPredicateType() != sign.PredicateType {
-				t.Fatalf("predicate type = %q", res.Statement.GetPredicateType())
-			}
-			if _, err = verifyWithKey(t, sig.Bundle, ecKey(t).Public(), digest); err == nil {
-				t.Fatal("bundle verified with a foreign key")
-			}
+			runKeySignatureVerifiesCase(t, tc.key, tc.index, tc.api)
 		})
+	}
+}
+
+// runKeySignatureVerifiesCase verifies an image signature across key types and registry modes.
+func runKeySignatureVerifiesCase(t *testing.T, key crypto.Signer, index, api bool) {
+	t.Helper()
+	host := newRegistry(t, nil, regsrv.WithReferrersSupport(api))
+	ref, digest := seed(t, host, index)
+	at := time.Date(2026, 10, 9, 8, 0, 0, 0, time.UTC)
+	sig, err := sign.Image(testCtx(t), newClient(t), ref, sign.Signer{Key: key},
+		sign.Options{Clock: clockwork.NewFakeClockAt(at)})
+	if err != nil {
+		t.Fatalf("Image: %v", err)
+	}
+	if sig.Subject.Digest != digest || sig.Descriptor.ArtifactType != sign.BundleMediaType {
+		t.Fatalf("signature = %+v", sig)
+	}
+	checkReferrer(t, host, ref, sig, at)
+	res, err := verifyWithKey(t, sig.Bundle, key.Public(), digest)
+	if err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if res.Statement.GetPredicateType() != sign.PredicateType {
+		t.Fatalf("predicate type = %q", res.Statement.GetPredicateType())
+	}
+	if _, err = verifyWithKey(t, sig.Bundle, ecKey(t).Public(), digest); err == nil {
+		t.Fatal("bundle verified with a foreign key")
 	}
 }
 
@@ -240,10 +246,16 @@ func checkReferrer(t *testing.T, host, ref string, sig sign.Signature, at time.T
 	if err != nil {
 		t.Fatalf("referrer manifest: %v", err)
 	}
-	if len(man.Layers) != 1 || man.Layers[0].MediaType != sign.BundleMediaType || man.Subject == nil ||
-		man.Subject.Digest != sig.Subject.Digest || man.Subject.MediaType != sig.Subject.MediaType {
-		t.Fatalf("referrer manifest = %+v", man)
+	checkRemoteReferrerSubject(t, man, sig)
+	checkRemoteReferrerAnnotations(t, man, at)
+	blob, err := c.FetchBlob(ctx, host+"/app", man.Layers[0], 1<<20)
+	if err != nil || string(blob) != string(sig.Bundle) {
+		t.Fatalf("bundle layer = %q, %v", blob, err)
 	}
+}
+
+func checkRemoteReferrerAnnotations(t *testing.T, man *v1.Manifest, at time.Time) {
+	t.Helper()
 	want := map[string]string{
 		sign.AnnotationCreated:       at.Format(time.RFC3339),
 		sign.AnnotationBundleContent: "dsse-envelope",
@@ -254,9 +266,13 @@ func checkReferrer(t *testing.T, host, ref string, sig sign.Signature, at time.T
 			t.Fatalf("annotation %s = %q, want %q", k, man.Annotations[k], v)
 		}
 	}
-	blob, err := c.FetchBlob(ctx, host+"/app", man.Layers[0], 1<<20)
-	if err != nil || string(blob) != string(sig.Bundle) {
-		t.Fatalf("bundle layer = %q, %v", blob, err)
+}
+
+func checkRemoteReferrerSubject(t *testing.T, man *v1.Manifest, sig sign.Signature) {
+	t.Helper()
+	if len(man.Layers) != 1 || man.Layers[0].MediaType != sign.BundleMediaType || man.Subject == nil ||
+		man.Subject.Digest != sig.Subject.Digest || man.Subject.MediaType != sig.Subject.MediaType {
+		t.Fatalf("referrer manifest = %+v", man)
 	}
 }
 
@@ -272,6 +288,15 @@ func TestImage_StatementMatchesCosign(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Image: %v", err)
 	}
+	checkCosignStatementPayload(t, sig, digest)
+	if _, err = verifyWithKey(t, sig.Bundle, key.Public(), v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0", 64)}); err == nil {
+		t.Fatal("bundle verified against another digest")
+	}
+}
+
+// checkCosignStatementPayload validates the deserialized in-toto DSSE envelope.
+func checkCosignStatementPayload(t *testing.T, sig sign.Signature, digest v1.Hash) {
+	t.Helper()
 	env := loadBundle(t, sig.Bundle).GetDsseEnvelope()
 	if env.GetPayloadType() != "application/vnd.in-toto+json" || len(env.GetSignatures()) != 1 {
 		t.Fatalf("envelope = %+v", env)
@@ -285,16 +310,13 @@ func TestImage_StatementMatchesCosign(t *testing.T) {
 		PredicateType string
 		Predicate     map[string]any
 	}
-	if err = json.Unmarshal(env.GetPayload(), &st); err != nil {
+	if err := json.Unmarshal(env.GetPayload(), &st); err != nil {
 		t.Fatalf("decode statement: %v", err)
 	}
 	if st.Type != "https://in-toto.io/Statement/v1" || st.PredicateType != sign.PredicateType ||
 		len(st.Subject) != 1 || st.Subject[0].Digest["sha256"] != digest.Hex ||
 		st.Subject[0].Annotations["build"] != "rc4" || st.Predicate == nil {
 		t.Fatalf("statement = %+v", st)
-	}
-	if _, err = verifyWithKey(t, sig.Bundle, key.Public(), v1.Hash{Algorithm: "sha256", Hex: strings.Repeat("0", 64)}); err == nil {
-		t.Fatal("bundle verified against another digest")
 	}
 }
 
