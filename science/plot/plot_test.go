@@ -137,64 +137,82 @@ func TestAddScatter(t *testing.T) {
 	})
 }
 
+// testWritePNGBuffer verifies rendering a chart directly to an in-memory PNG buffer.
+func testWritePNGBuffer(t *testing.T, pngMagic []byte) {
+	t.Helper()
+	c, err := plot.New("Render Chart", "X", "Y")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	err = c.AddLine("line", []float64{0, 1}, []float64{0, 1})
+	if err != nil {
+		t.Fatalf("AddLine() error = %v", err)
+	}
+	var buf bytes.Buffer
+	err = c.WritePNG(&buf, 200, 150)
+	if err != nil {
+		t.Fatalf("WritePNG() error = %v", err)
+	}
+	if !bytes.HasPrefix(buf.Bytes(), pngMagic) {
+		t.Fatal("expected PNG magic bytes prefix")
+	}
+}
+
+// testSavePNGFile verifies rendering and writing a chart to disk as a PNG file.
+func testSavePNGFile(t *testing.T, pngMagic []byte) {
+	t.Helper()
+	c, err := plot.New("Render Chart", "X", "Y")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	err = c.AddLine("line", []float64{0, 1}, []float64{0, 1})
+	if err != nil {
+		t.Fatalf("AddLine() error = %v", err)
+	}
+	outPath := filepath.Join(t.TempDir(), "chart.png")
+	err = c.SavePNG(outPath, 200, 150)
+	if err != nil {
+		t.Fatalf("SavePNG() error = %v", err)
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("reading saved file: %v", err)
+	}
+	if !bytes.HasPrefix(data, pngMagic) {
+		t.Fatal("expected PNG magic bytes prefix in saved file")
+	}
+}
+
+// testSavePNGInvalidPath verifies error return when saving to a non-existent directory path.
+func testSavePNGInvalidPath(t *testing.T) {
+	t.Helper()
+	c, err := plot.New("Render Chart", "X", "Y")
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	badPath := filepath.Join(t.TempDir(), "missing_dir", "sub", "chart.png")
+	err = c.SavePNG(badPath, 200, 150)
+	if err == nil {
+		t.Fatal("expected error saving to non-existent directory")
+	}
+}
+
 func TestWritePNGAndSavePNG(t *testing.T) {
 	t.Parallel()
 	pngMagic := []byte{0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a}
 
 	t.Run("positive write png buffer", func(t *testing.T) {
 		t.Parallel()
-		c, err := plot.New("Render Chart", "X", "Y")
-		if err != nil {
-			t.Fatalf("New() error = %v", err)
-		}
-		err = c.AddLine("line", []float64{0, 1}, []float64{0, 1})
-		if err != nil {
-			t.Fatalf("AddLine() error = %v", err)
-		}
-		var buf bytes.Buffer
-		err = c.WritePNG(&buf, 200, 150)
-		if err != nil {
-			t.Fatalf("WritePNG() error = %v", err)
-		}
-		if !bytes.HasPrefix(buf.Bytes(), pngMagic) {
-			t.Fatal("expected PNG magic bytes prefix")
-		}
+		testWritePNGBuffer(t, pngMagic)
 	})
 
 	t.Run("positive save png file", func(t *testing.T) {
 		t.Parallel()
-		c, err := plot.New("Render Chart", "X", "Y")
-		if err != nil {
-			t.Fatalf("New() error = %v", err)
-		}
-		err = c.AddLine("line", []float64{0, 1}, []float64{0, 1})
-		if err != nil {
-			t.Fatalf("AddLine() error = %v", err)
-		}
-		outPath := filepath.Join(t.TempDir(), "chart.png")
-		err = c.SavePNG(outPath, 200, 150)
-		if err != nil {
-			t.Fatalf("SavePNG() error = %v", err)
-		}
-		data, err := os.ReadFile(outPath)
-		if err != nil {
-			t.Fatalf("reading saved file: %v", err)
-		}
-		if !bytes.HasPrefix(data, pngMagic) {
-			t.Fatal("expected PNG magic bytes prefix in saved file")
-		}
+		testSavePNGFile(t, pngMagic)
 	})
 
 	t.Run("negative save to invalid path", func(t *testing.T) {
 		t.Parallel()
-		c, err := plot.New("Render Chart", "X", "Y")
-		if err != nil {
-			t.Fatalf("New() error = %v", err)
-		}
-		badPath := filepath.Join(t.TempDir(), "missing_dir", "sub", "chart.png")
-		err = c.SavePNG(badPath, 200, 150)
-		if err == nil {
-			t.Fatal("expected error saving to non-existent directory")
-		}
+		testSavePNGInvalidPath(t)
 	})
 }

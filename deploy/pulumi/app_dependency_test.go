@@ -126,67 +126,83 @@ func TestTaskDefinitionDependsOnSecretValues(t *testing.T) {
 	}
 }
 
+// newTestServiceDependencyNetwork builds a test VPC with one public and one private subnet.
+func newTestServiceDependencyNetwork(ctx *pulumi.Context) (*network, error) {
+	vpc, err := ec2.NewVpc(ctx, "test-vpc", &ec2.VpcArgs{
+		CidrBlock: pulumi.String("10.0.0.0/16"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	publicSubnet, err := ec2.NewSubnet(ctx, "test-public", &ec2.SubnetArgs{
+		VpcId:     vpc.ID(),
+		CidrBlock: pulumi.String("10.0.0.0/24"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	privateSubnet, err := ec2.NewSubnet(ctx, "test-private", &ec2.SubnetArgs{
+		VpcId:     vpc.ID(),
+		CidrBlock: pulumi.String("10.0.10.0/24"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &network{
+		VPC:            vpc,
+		PublicSubnets:  []*ec2.Subnet{publicSubnet},
+		PrivateSubnets: []*ec2.Subnet{privateSubnet},
+	}, nil
+}
+
+// newTestServiceDependencyTaskDef creates a minimal Fargate task definition for service testing.
+func newTestServiceDependencyTaskDef(ctx *pulumi.Context) (*ecs.TaskDefinition, error) {
+	return ecs.NewTaskDefinition(ctx, "test-task", &ecs.TaskDefinitionArgs{
+		Family:                  pulumi.String("test"),
+		Cpu:                     pulumi.String("256"),
+		Memory:                  pulumi.String("512"),
+		NetworkMode:             pulumi.String("awsvpc"),
+		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
+		ContainerDefinitions:    pulumi.String(`[{"name":"test","image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`),
+	})
+}
+
+// runTestServiceWithLoadBalancer creates the network, ALB, task definition, and service under test.
+func runTestServiceWithLoadBalancer(ctx *pulumi.Context) error {
+	net, err := newTestServiceDependencyNetwork(ctx)
+	if err != nil {
+		return err
+	}
+	albSG, taskSG, err := newAppSecurityGroups(ctx, "test", net, 8080)
+	if err != nil {
+		return err
+	}
+	front, err := newLoadBalancer(
+		ctx,
+		"test",
+		net,
+		albSG,
+		8080,
+		"arn:aws:acm:us-east-1:123456789012:certificate/test",
+	)
+	if err != nil {
+		return err
+	}
+	taskDef, err := newTestServiceDependencyTaskDef(ctx)
+	if err != nil {
+		return err
+	}
+	_, err = newService(ctx, "test", net, taskSG, taskDef, front, appConfig{
+		Replicas: 1,
+		Port:     8080,
+	})
+	return err
+}
+
 func TestServiceDependsOnLoadBalancerListener(t *testing.T) {
 	t.Parallel()
 	mocks := &dependencyMocks{}
-	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		vpc, err := ec2.NewVpc(ctx, "test-vpc", &ec2.VpcArgs{
-			CidrBlock: pulumi.String("10.0.0.0/16"),
-		})
-		if err != nil {
-			return err
-		}
-		publicSubnet, err := ec2.NewSubnet(ctx, "test-public", &ec2.SubnetArgs{
-			VpcId:     vpc.ID(),
-			CidrBlock: pulumi.String("10.0.0.0/24"),
-		})
-		if err != nil {
-			return err
-		}
-		privateSubnet, err := ec2.NewSubnet(ctx, "test-private", &ec2.SubnetArgs{
-			VpcId:     vpc.ID(),
-			CidrBlock: pulumi.String("10.0.10.0/24"),
-		})
-		if err != nil {
-			return err
-		}
-		network := &network{
-			VPC:            vpc,
-			PublicSubnets:  []*ec2.Subnet{publicSubnet},
-			PrivateSubnets: []*ec2.Subnet{privateSubnet},
-		}
-		albSG, taskSG, err := newAppSecurityGroups(ctx, "test", network, 8080)
-		if err != nil {
-			return err
-		}
-		front, err := newLoadBalancer(
-			ctx,
-			"test",
-			network,
-			albSG,
-			8080,
-			"arn:aws:acm:us-east-1:123456789012:certificate/test",
-		)
-		if err != nil {
-			return err
-		}
-		taskDef, err := ecs.NewTaskDefinition(ctx, "test-task", &ecs.TaskDefinitionArgs{
-			Family:                  pulumi.String("test"),
-			Cpu:                     pulumi.String("256"),
-			Memory:                  pulumi.String("512"),
-			NetworkMode:             pulumi.String("awsvpc"),
-			RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-			ContainerDefinitions:    pulumi.String(`[{"name":"test","image":"example.invalid/app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]`),
-		})
-		if err != nil {
-			return err
-		}
-		_, err = newService(ctx, "test", network, taskSG, taskDef, front, appConfig{
-			Replicas: 1,
-			Port:     8080,
-		})
-		return err
-	}, pulumi.WithMocks("golusoris-pulumi-test", "test", mocks))
+	err := pulumi.RunErr(runTestServiceWithLoadBalancer, pulumi.WithMocks("golusoris-pulumi-test", "test", mocks))
 	if err != nil {
 		t.Fatalf("newService() error = %v", err)
 	}

@@ -79,19 +79,9 @@ func TestNewDrainerHandlesMissingDispatcherAndTypedNilClock(t *testing.T) {
 	})
 }
 
-func TestConcurrentDrainersInsertOneRiverJob(t *testing.T) {
-	t.Parallel()
-	rv := rivertest.Start(t, rivertest.Options{
-		Register: func(workers *jobs.Workers) {
-			if err := jobs.Register(workers, &atomicOrderWorker{}); err != nil {
-				t.Fatalf("Register: %v", err)
-			}
-		},
-	})
-	applyInternalOutboxMigration(t, rv.Pool.Config().ConnConfig.ConnString())
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+// seedConcurrentOrderEvent inserts an initial order.created outbox event.
+func seedConcurrentOrderEvent(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	tx, beginErr := rv.Pool.Begin(ctx)
 	if beginErr != nil {
 		t.Fatalf("begin: %v", beginErr)
@@ -102,7 +92,11 @@ func TestConcurrentDrainersInsertOneRiverJob(t *testing.T) {
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
+}
 
+// runConcurrentDrainers runs two drainers concurrently over the test context.
+func runConcurrentDrainers(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	dispatcher := func(_ context.Context, ev Event) (river.JobArgs, *river.InsertOpts, error) {
 		var args atomicOrderArgs
 		if err := Unmarshal(ev, &args); err != nil {
@@ -133,7 +127,11 @@ func TestConcurrentDrainersInsertOneRiverJob(t *testing.T) {
 			t.Fatalf("drain: %v", err)
 		}
 	}
+}
 
+// assertConcurrentJobInserted verifies that exactly one river job was inserted.
+func assertConcurrentJobInserted(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	var jobsCount int
 	if err := rv.Pool.QueryRow(
 		ctx,
@@ -169,13 +167,28 @@ func TestConcurrentDrainersInsertOneRiverJob(t *testing.T) {
 	}
 }
 
-func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
+func TestConcurrentDrainersInsertOneRiverJob(t *testing.T) {
 	t.Parallel()
-	rv := rivertest.Start(t, rivertest.Options{})
+	rv := rivertest.Start(t, rivertest.Options{
+		Register: func(workers *jobs.Workers) {
+			if err := jobs.Register(workers, &atomicOrderWorker{}); err != nil {
+				t.Fatalf("Register: %v", err)
+			}
+		},
+	})
 	applyInternalOutboxMigration(t, rv.Pool.Config().ConnConfig.ConnString())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	seedConcurrentOrderEvent(t, ctx, rv)
+	runConcurrentDrainers(t, ctx, rv)
+	assertConcurrentJobInserted(t, ctx, rv)
+}
+
+// seedPoisonAndValidEvents writes one failing and one succeeding event to the outbox.
+func seedPoisonAndValidEvents(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	tx, err := rv.Pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin: %v", err)
@@ -189,7 +202,11 @@ func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
 	if err = tx.Commit(ctx); err != nil {
 		t.Fatalf("commit: %v", err)
 	}
+}
 
+// runPoisonDrain drains twice with a batch size of 1.
+func runPoisonDrain(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	dispatcher := func(_ context.Context, event Event) (river.JobArgs, *river.InsertOpts, error) {
 		if event.Kind == "poison" {
 			return nil, nil, errors.New("invalid payload")
@@ -201,17 +218,21 @@ func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
 		slog.New(slog.DiscardHandler), clockwork.NewRealClock(),
 		DrainerOptions{Interval: time.Hour, Batch: 1},
 	)
-	if err = drainer.drain(ctx); err != nil {
+	if err := drainer.drain(ctx); err != nil {
 		t.Fatalf("first drain: %v", err)
 	}
-	if err = drainer.drain(ctx); err != nil {
+	if err := drainer.drain(ctx); err != nil {
 		t.Fatalf("second drain: %v", err)
 	}
+}
 
+// assertPoisonEventDelayed verifies the poison event was marked failed and scheduled for later.
+func assertPoisonEventDelayed(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	var attempts int
 	var stillPending bool
 	var delayed bool
-	if err = rv.Pool.QueryRow(ctx, `
+	if err := rv.Pool.QueryRow(ctx, `
 		SELECT attempts, dispatched_at IS NULL, next_attempt_at > now()
 		FROM golusoris_outbox
 		WHERE kind = 'poison'
@@ -227,7 +248,7 @@ func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
 		)
 	}
 	var validDispatched bool
-	if err = rv.Pool.QueryRow(ctx, `
+	if err := rv.Pool.QueryRow(ctx, `
 		SELECT dispatched_at IS NOT NULL FROM golusoris_outbox WHERE kind = 'valid'
 	`).Scan(&validDispatched); err != nil {
 		t.Fatalf("read valid event: %v", err)
@@ -237,13 +258,22 @@ func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
 	}
 }
 
-func TestRetryScheduleExcludesFutureAndPrioritizesDueFailure(t *testing.T) {
+func TestPoisonEventDoesNotStarveLaterEvent(t *testing.T) {
 	t.Parallel()
 	rv := rivertest.Start(t, rivertest.Options{})
 	applyInternalOutboxMigration(t, rv.Pool.Config().ConnConfig.ConnString())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
+	seedPoisonAndValidEvents(t, ctx, rv)
+	runPoisonDrain(t, ctx, rv)
+	assertPoisonEventDelayed(t, ctx, rv)
+}
+
+// seedScheduledRetryEvent inserts an event and marks it failed with a 1-hour delay.
+func seedScheduledRetryEvent(t *testing.T, ctx context.Context, rv *rivertest.Harness) int64 {
+	t.Helper()
 	var retryID int64
 	if err := rv.Pool.QueryRow(ctx, `
 		INSERT INTO golusoris_outbox (kind, payload)
@@ -255,7 +285,12 @@ func TestRetryScheduleExcludesFutureAndPrioritizesDueFailure(t *testing.T) {
 	if err := markFailed(ctx, rv.Pool, retryID, errors.New("temporary"), time.Hour); err != nil {
 		t.Fatalf("schedule retry: %v", err)
 	}
+	return retryID
+}
 
+// assertFutureRetryExcluded verifies that future retry attempts are skipped while fresh events are processed.
+func assertFutureRetryExcluded(t *testing.T, ctx context.Context, rv *rivertest.Harness) {
+	t.Helper()
 	var freshID int64
 	if err := rv.Pool.QueryRow(ctx, `
 		INSERT INTO golusoris_outbox (kind, payload)
@@ -274,27 +309,44 @@ func TestRetryScheduleExcludesFutureAndPrioritizesDueFailure(t *testing.T) {
 	if err = MarkDispatched(ctx, rv.Pool, freshID); err != nil {
 		t.Fatalf("mark fresh dispatched: %v", err)
 	}
+}
 
-	if _, err = rv.Pool.Exec(
+// assertDueRetryPrioritized asserts that once a retry becomes due, it is prioritized over subsequent fresh events.
+func assertDueRetryPrioritized(t *testing.T, ctx context.Context, rv *rivertest.Harness, retryID int64) {
+	t.Helper()
+	if _, err := rv.Pool.Exec(
 		ctx, `UPDATE golusoris_outbox SET next_attempt_at = now() WHERE id = $1`, retryID,
 	); err != nil {
 		t.Fatalf("make retry due: %v", err)
 	}
 	for range 5 {
-		if _, err = rv.Pool.Exec(ctx, `
+		if _, err := rv.Pool.Exec(ctx, `
 			INSERT INTO golusoris_outbox (kind, payload)
 			VALUES ('continuous-fresh', '{}'::jsonb)
 		`); err != nil {
 			t.Fatalf("insert continuous fresh event: %v", err)
 		}
 	}
-	events, err = Pending(ctx, rv.Pool, 1)
+	events, err := Pending(ctx, rv.Pool, 1)
 	if err != nil {
 		t.Fatalf("Pending at due boundary: %v", err)
 	}
 	if len(events) != 1 || events[0].ID != retryID || events[0].Attempts != 1 {
 		t.Fatalf("first due event = %+v, want retry %d with one attempt", events, retryID)
 	}
+}
+
+func TestRetryScheduleExcludesFutureAndPrioritizesDueFailure(t *testing.T) {
+	t.Parallel()
+	rv := rivertest.Start(t, rivertest.Options{})
+	applyInternalOutboxMigration(t, rv.Pool.Config().ConnConfig.ConnString())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	retryID := seedScheduledRetryEvent(t, ctx, rv)
+	assertFutureRetryExcluded(t, ctx, rv)
+	assertDueRetryPrioritized(t, ctx, rv, retryID)
 }
 
 func TestRiverInsertFailureRecordsAttemptAfterSavepointRollback(t *testing.T) {
