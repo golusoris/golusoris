@@ -76,6 +76,37 @@ func TestScratchCompletionReadBoundary(t *testing.T) {
 	}
 }
 
+func setupNonRegularEntry(t *testing.T, path, id, state, kind string) {
+	t.Helper()
+	switch kind {
+	case "symlink":
+		target := filepath.Join(t.TempDir(), "state.json")
+		require.NoError(t, os.WriteFile(target, validScratchState(t, id, state), scratchFilePerm))
+		if err := os.Symlink(target, path); err != nil {
+			t.Skipf("symlink unsupported: %v", err)
+		}
+	case "directory":
+		require.NoError(t, os.Mkdir(path, scratchDirPerm))
+	}
+}
+
+func testScratchStateNonRegularCase(t *testing.T, state, kind string) {
+	t.Helper()
+	scratch := newScratchSecurityFixture(t)
+	const id = "nonregular"
+	path := scratchStatePath(t, scratch, id, state)
+	if state == "info" {
+		binPath, err := scratch.binPath(id)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(binPath, nil, scratchFilePerm))
+	}
+	setupNonRegularEntry(t, path, id, state, kind)
+
+	err := readScratchState(t, scratch, id, state)
+
+	require.ErrorContains(t, err, "regular file")
+}
+
 func TestScratchStateRejectsSymlinksAndNonRegularFiles(t *testing.T) {
 	t.Parallel()
 	for _, state := range []string{"info", "completion"} {
@@ -84,28 +115,7 @@ func TestScratchStateRejectsSymlinksAndNonRegularFiles(t *testing.T) {
 			for _, kind := range []string{"symlink", "directory"} {
 				t.Run(kind, func(t *testing.T) {
 					t.Parallel()
-					scratch := newScratchSecurityFixture(t)
-					const id = "nonregular"
-					path := scratchStatePath(t, scratch, id, state)
-					if state == "info" {
-						binPath, err := scratch.binPath(id)
-						require.NoError(t, err)
-						require.NoError(t, os.WriteFile(binPath, nil, scratchFilePerm))
-					}
-					switch kind {
-					case "symlink":
-						target := filepath.Join(t.TempDir(), "state.json")
-						require.NoError(t, os.WriteFile(target, validScratchState(t, id, state), scratchFilePerm))
-						if err := os.Symlink(target, path); err != nil {
-							t.Skipf("symlink unsupported: %v", err)
-						}
-					case "directory":
-						require.NoError(t, os.Mkdir(path, scratchDirPerm))
-					}
-
-					err := readScratchState(t, scratch, id, state)
-
-					require.ErrorContains(t, err, "regular file")
+					testScratchStateNonRegularCase(t, state, kind)
 				})
 			}
 		})

@@ -43,6 +43,52 @@ func newTestStore(t *testing.T) (*bucketStore, storage.Bucket, *localScratch) {
 	return store, bucket, scratch
 }
 
+func writeSequentialChunks(t *testing.T, ctx context.Context, up tusd.Upload) tusd.FileInfo {
+	t.Helper()
+	// Two sequential chunks accumulate at the running offset.
+	if _, err := up.WriteChunk(ctx, 0, strings.NewReader("hello ")); err != nil {
+		t.Fatalf("WriteChunk 1: %v", err)
+	}
+	if _, err := up.WriteChunk(ctx, 6, strings.NewReader("world")); err != nil {
+		t.Fatalf("WriteChunk 2: %v", err)
+	}
+	info, err := up.GetInfo(ctx)
+	if err != nil || info.Offset != 11 {
+		t.Fatalf("after writes: offset=%d err=%v", info.Offset, err)
+	}
+	return info
+}
+
+func verifyBucketUploadedObject(t *testing.T, bucket storage.Bucket, ctx context.Context, key, want string, wantSize int64) {
+	t.Helper()
+	// Bytes + size land in the bucket under uploads/<id>.
+	rc, obj, err := bucket.Get(ctx, key)
+	if err != nil {
+		t.Fatalf("bucket.Get %q: %v", key, err)
+	}
+	defer rc.Close()
+	body, _ := io.ReadAll(rc)
+	if string(body) != want {
+		t.Fatalf("bucket body = %q", body)
+	}
+	if obj.Size != wantSize {
+		t.Fatalf("bucket size = %d", obj.Size)
+	}
+}
+
+func verifyCompletionRecord(t *testing.T, scratch *localScratch, ctx context.Context, id, key, filename string, size int64) {
+	t.Helper()
+	// Completion is durable with the right key/size/metadata until delivery.
+	record, err := scratch.Completion(ctx, id)
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	ev := record.Upload.completed()
+	if ev.Key != key || ev.Size != size || ev.MetaData["filename"] != filename {
+		t.Fatalf("completion mismatch: %+v", ev)
+	}
+}
+
 func TestBucketStore_NewUploadWriteFinish(t *testing.T) {
 	t.Parallel()
 	store, bucket, scratch := newTestStore(t)
@@ -57,45 +103,15 @@ func TestBucketStore_NewUploadWriteFinish(t *testing.T) {
 		t.Fatalf("fresh upload: offset=%d err=%v", info.Offset, err)
 	}
 
-	// Two sequential chunks accumulate at the running offset.
-	if _, err = up.WriteChunk(ctx, 0, strings.NewReader("hello ")); err != nil {
-		t.Fatalf("WriteChunk 1: %v", err)
-	}
-	if _, err = up.WriteChunk(ctx, 6, strings.NewReader("world")); err != nil {
-		t.Fatalf("WriteChunk 2: %v", err)
-	}
-	if info, err = up.GetInfo(ctx); err != nil || info.Offset != 11 {
-		t.Fatalf("after writes: offset=%d err=%v", info.Offset, err)
-	}
+	info = writeSequentialChunks(t, ctx, up)
 
 	if err = up.FinishUpload(ctx); err != nil {
 		t.Fatalf("FinishUpload: %v", err)
 	}
 
-	// Bytes + size land in the bucket under uploads/<id>.
 	key := "uploads/" + info.ID
-	rc, obj, err := bucket.Get(ctx, key)
-	if err != nil {
-		t.Fatalf("bucket.Get %q: %v", key, err)
-	}
-	defer rc.Close()
-	body, _ := io.ReadAll(rc)
-	if string(body) != "hello world" {
-		t.Fatalf("bucket body = %q", body)
-	}
-	if obj.Size != 11 {
-		t.Fatalf("bucket size = %d", obj.Size)
-	}
-
-	// Completion is durable with the right key/size/metadata until delivery.
-	record, err := scratch.Completion(ctx, info.ID)
-	if err != nil {
-		t.Fatalf("Completion: %v", err)
-	}
-	ev := record.Upload.completed()
-	if ev.Key != key || ev.Size != 11 || ev.MetaData["filename"] != "a.txt" {
-		t.Fatalf("completion mismatch: %+v", ev)
-	}
+	verifyBucketUploadedObject(t, bucket, ctx, key, "hello world", 11)
+	verifyCompletionRecord(t, scratch, ctx, info.ID, key, "a.txt", 11)
 }
 
 func TestBucketStore_ResumeAfterInterrupt(t *testing.T) {
@@ -429,51 +445,78 @@ func (r *observedReadCloser) Close() error {
 	return nil
 }
 
+type hashAndCloseTestCase struct {
+	name     string
+	body     string
+	expected int64
+	cancel   bool
+	wantErr  bool
+}
+
+var hashAndCloseTests = []hashAndCloseTestCase{
+	{name: "exact", body: "data", expected: 4},
+	{name: "short", body: "dat", expected: 4, wantErr: true},
+	{name: "long", body: "data!", expected: 4, wantErr: true},
+	{name: "canceled", body: "data", expected: 4, cancel: true, wantErr: true},
+}
+
+func verifyHashAndCloseError(t *testing.T, wantErr bool, err error) {
+	t.Helper()
+	if !wantErr && err != nil {
+		t.Fatalf("hashAndClose: %v", err)
+	}
+	if wantErr && err == nil {
+		t.Fatal("hashAndClose error = nil")
+	}
+}
+
+func verifyHashAndCloseCancellation(t *testing.T, canceled bool, r *observedReadCloser, err error) {
+	t.Helper()
+	if !canceled {
+		return
+	}
+	if r.reads != 0 {
+		t.Fatalf("canceled hash performed %d reads", r.reads)
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled hash error = %v", err)
+	}
+}
+
+func verifyHashAndCloseSuccess(t *testing.T, tt hashAndCloseTestCase, sum [32]byte, size int64) {
+	t.Helper()
+	if tt.wantErr {
+		return
+	}
+	if size != tt.expected || sum != sha256.Sum256([]byte(tt.body)) {
+		t.Fatalf("hash result size=%d sum=%x", size, sum)
+	}
+}
+
+func testHashAndCloseCase(t *testing.T, tt hashAndCloseTestCase) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	if tt.cancel {
+		cancel()
+	} else {
+		defer cancel()
+	}
+	r := &observedReadCloser{r: strings.NewReader(tt.body)}
+	sum, size, err := hashAndClose(ctx, r, tt.expected)
+	verifyHashAndCloseError(t, tt.wantErr, err)
+	if !r.closed {
+		t.Fatal("reader was not closed")
+	}
+	verifyHashAndCloseCancellation(t, tt.cancel, r, err)
+	verifyHashAndCloseSuccess(t, tt, sum, size)
+}
+
 func TestHashAndClose_BoundedAndCancelable(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name     string
-		body     string
-		expected int64
-		cancel   bool
-		wantErr  bool
-	}{
-		{name: "exact", body: "data", expected: 4},
-		{name: "short", body: "dat", expected: 4, wantErr: true},
-		{name: "long", body: "data!", expected: 4, wantErr: true},
-		{name: "canceled", body: "data", expected: 4, cancel: true, wantErr: true},
-	}
-	for _, tt := range tests {
+	for _, tt := range hashAndCloseTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithCancel(context.Background())
-			if tt.cancel {
-				cancel()
-			} else {
-				defer cancel()
-			}
-			r := &observedReadCloser{r: strings.NewReader(tt.body)}
-			sum, size, err := hashAndClose(ctx, r, tt.expected)
-			if !tt.wantErr && err != nil {
-				t.Fatalf("hashAndClose: %v", err)
-			}
-			if tt.wantErr && err == nil {
-				t.Fatal("hashAndClose error = nil")
-			}
-			if !r.closed {
-				t.Fatal("reader was not closed")
-			}
-			if tt.cancel && r.reads != 0 {
-				t.Fatalf("canceled hash performed %d reads", r.reads)
-			}
-			if tt.cancel && !errors.Is(err, context.Canceled) {
-				t.Fatalf("canceled hash error = %v", err)
-			}
-			if !tt.wantErr {
-				if size != tt.expected || sum != sha256.Sum256([]byte(tt.body)) {
-					t.Fatalf("hash result size=%d sum=%x", size, sum)
-				}
-			}
+			testHashAndCloseCase(t, tt)
 		})
 	}
 }
@@ -666,27 +709,8 @@ func TestLocalEntry_WriteChunkHonorsCancellationDuringRead(t *testing.T) {
 	}
 }
 
-func TestLocalScratch_PreCanceledOperationsPreserveRecoveryState(t *testing.T) {
-	t.Parallel()
-	scratch, err := newLocalScratch(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	background := context.Background()
-	entry, err := scratch.Create(background, tusd.FileInfo{ID: "preserve"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = entry.WriteChunk(background, 0, strings.NewReader("data")); err != nil {
-		t.Fatal(err)
-	}
-	original := newCompletionRecord(CompletedUpload{ID: "preserve", Key: "objects/original", Size: 4})
-	if err = scratch.SaveCompletion(background, original); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(background)
-	cancel()
-
+func testPreCanceledOperationsFail(t *testing.T, scratch *localScratch, entry scratchEntry, ctx context.Context) {
+	t.Helper()
 	if _, getErr := scratch.Get(ctx, "preserve"); !errors.Is(getErr, context.Canceled) {
 		t.Fatalf("Get error = %v; want context.Canceled", getErr)
 	}
@@ -709,13 +733,16 @@ func TestLocalScratch_PreCanceledOperationsPreserveRecoveryState(t *testing.T) {
 	if removeErr := scratch.RemoveUpload(ctx, "preserve"); !errors.Is(removeErr, context.Canceled) {
 		t.Fatalf("RemoveUpload error = %v; want context.Canceled", removeErr)
 	}
+}
 
+func verifyPreservedRecoveryState(t *testing.T, scratch *localScratch, background context.Context, wantKey string) {
+	t.Helper()
 	preserved, err := scratch.Completion(background, "preserve")
 	if err != nil {
 		t.Fatalf("preserved Completion: %v", err)
 	}
-	if preserved.Upload.Key != original.Upload.Key {
-		t.Fatalf("completion key = %q; want %q", preserved.Upload.Key, original.Upload.Key)
+	if preserved.Upload.Key != wantKey {
+		t.Fatalf("completion key = %q; want %q", preserved.Upload.Key, wantKey)
 	}
 	preservedEntry, err := scratch.Get(background, "preserve")
 	if err != nil {
@@ -725,6 +752,31 @@ func TestLocalScratch_PreCanceledOperationsPreserveRecoveryState(t *testing.T) {
 	if err != nil || info.Offset != 4 {
 		t.Fatalf("preserved offset = %d, err = %v; want 4", info.Offset, err)
 	}
+}
+
+func TestLocalScratch_PreCanceledOperationsPreserveRecoveryState(t *testing.T) {
+	t.Parallel()
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	background := context.Background()
+	entry, err := scratch.Create(background, tusd.FileInfo{ID: "preserve"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = entry.WriteChunk(background, 0, strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	original := newCompletionRecord(CompletedUpload{ID: "preserve", Key: "objects/original", Size: 4})
+	if err = scratch.SaveCompletion(background, original); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(background)
+	cancel()
+
+	testPreCanceledOperationsFail(t, scratch, entry, ctx)
+	verifyPreservedRecoveryState(t, scratch, background, original.Upload.Key)
 }
 
 func TestLocalScratch_DeleteCompletionSyncFailureIsIndeterminate(t *testing.T) {
