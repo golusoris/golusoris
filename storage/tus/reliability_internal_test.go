@@ -417,17 +417,8 @@ func assertPrePutCheckpointFailure(t *testing.T, failAt int32) {
 	}
 }
 
-func TestCompletionCheckpointFailureReconcilesWithoutDuplicatePut(t *testing.T) {
-	t.Parallel()
-	local, err := storage.NewLocalBucket(t.TempDir())
-	if err != nil {
-		t.Fatalf("NewLocalBucket: %v", err)
-	}
-	bucket := &putCountingBucket{Bucket: local}
-	scratch, err := newLocalScratch(t.TempDir())
-	if err != nil {
-		t.Fatalf("newLocalScratch: %v", err)
-	}
+func setupFailingCheckpointUpload(t *testing.T, scratch *localScratch, bucket *putCountingBucket) (*failCompletionSaveScratch, tusd.FileInfo) {
+	t.Helper()
 	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: 3}
 	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
 	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
@@ -444,6 +435,58 @@ func TestCompletionCheckpointFailureReconcilesWithoutDuplicatePut(t *testing.T) 
 	if err = upload.FinishUpload(context.Background()); err == nil {
 		t.Fatal("FinishUpload should surface persisted-stage checkpoint failure")
 	}
+	return failing, info
+}
+
+func setupFailingCheckpointRetryUpload(t *testing.T, scratch *localScratch, bucket *putCountingBucket) (*failCompletionSaveScratch, tusd.FileInfo) {
+	t.Helper()
+	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: 3}
+	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
+	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
+	if err != nil {
+		t.Fatalf("NewUpload: %v", err)
+	}
+	if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
+		t.Fatalf("WriteChunk: %v", err)
+	}
+	info, err := upload.GetInfo(context.Background())
+	if err != nil {
+		t.Fatalf("GetInfo: %v", err)
+	}
+	if err = upload.FinishUpload(context.Background()); err == nil {
+		t.Fatal("FinishUpload should surface persisted-stage checkpoint failure")
+	}
+	return failing, info
+}
+
+func verifyPersistedUploadBody(t *testing.T, local *storage.LocalBucket, key, want string) {
+	t.Helper()
+	rc, _, err := local.Get(context.Background(), key)
+	if err != nil {
+		t.Fatalf("Get persisted object: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	body, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read persisted object: %v", err)
+	}
+	if string(body) != want {
+		t.Fatalf("persisted object = %q; want %q", body, want)
+	}
+}
+
+func TestCompletionCheckpointFailureReconcilesWithoutDuplicatePut(t *testing.T) {
+	t.Parallel()
+	local, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewLocalBucket: %v", err)
+	}
+	bucket := &putCountingBucket{Bucket: local}
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalScratch: %v", err)
+	}
+	failing, info := setupFailingCheckpointUpload(t, scratch, bucket)
 	record, err := scratch.Completion(context.Background(), info.ID)
 	if err != nil || record.normalizedStage() != completionStagePutting {
 		t.Fatalf("putting receipt = %+v, err=%v", record, err)
@@ -468,22 +511,7 @@ func TestCompletionRetryRejectsChangedScratch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newLocalScratch: %v", err)
 	}
-	failing := &failCompletionSaveScratch{scratchStore: scratch, failAt: 3}
-	store := newBucketStore(failing, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
-	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
-	if err != nil {
-		t.Fatalf("NewUpload: %v", err)
-	}
-	if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
-		t.Fatalf("WriteChunk: %v", err)
-	}
-	info, err := upload.GetInfo(context.Background())
-	if err != nil {
-		t.Fatalf("GetInfo: %v", err)
-	}
-	if err = upload.FinishUpload(context.Background()); err == nil {
-		t.Fatal("FinishUpload should surface persisted-stage checkpoint failure")
-	}
+	failing, info := setupFailingCheckpointRetryUpload(t, scratch, bucket)
 	binPath, err := scratch.binPath(info.ID)
 	if err != nil {
 		t.Fatalf("binPath: %v", err)
@@ -498,18 +526,7 @@ func TestCompletionRetryRejectsChangedScratch(t *testing.T) {
 	if bucket.puts.Load() != 1 {
 		t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
 	}
-	rc, _, err := local.Get(context.Background(), "uploads/"+info.ID)
-	if err != nil {
-		t.Fatalf("Get persisted object: %v", err)
-	}
-	defer func() { _ = rc.Close() }()
-	body, err := io.ReadAll(rc)
-	if err != nil {
-		t.Fatalf("read persisted object: %v", err)
-	}
-	if string(body) != "data" {
-		t.Fatalf("persisted object = %q; want checkpointed bytes", body)
-	}
+	verifyPersistedUploadBody(t, local, "uploads/"+info.ID, "data")
 }
 
 func TestAmbiguousPutResultReconcilesWithoutDuplicatePut(t *testing.T) {
@@ -574,95 +591,115 @@ func TestPreparedCompletionCannotRunCallbacks(t *testing.T) {
 	}
 }
 
+func testDestinationMismatchCase(t *testing.T, prior string) {
+	t.Helper()
+	local, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatalf("NewLocalBucket: %v", err)
+	}
+	bucket := &putCountingBucket{Bucket: local}
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatalf("newLocalScratch: %v", err)
+	}
+	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
+	upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
+	if err != nil {
+		t.Fatalf("NewUpload: %v", err)
+	}
+	if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
+		t.Fatalf("WriteChunk: %v", err)
+	}
+	info, infoErr := upload.GetInfo(context.Background())
+	if infoErr != nil {
+		t.Fatalf("GetInfo: %v", infoErr)
+	}
+	if _, err = local.Put(context.Background(), "uploads/"+info.ID, strings.NewReader(prior), storage.PutOptions{}); err != nil {
+		t.Fatalf("seed destination: %v", err)
+	}
+	if err = upload.FinishUpload(context.Background()); err != nil {
+		t.Fatalf("FinishUpload: %v", err)
+	}
+	if bucket.puts.Load() != 1 {
+		t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
+	}
+}
+
 func TestDestinationMismatchIsOverwritten(t *testing.T) {
 	t.Parallel()
 	for _, prior := range []string{"x", "xxxx"} {
 		t.Run(strconv.Itoa(len(prior)), func(t *testing.T) {
 			t.Parallel()
-			local, err := storage.NewLocalBucket(t.TempDir())
-			if err != nil {
-				t.Fatalf("NewLocalBucket: %v", err)
-			}
-			bucket := &putCountingBucket{Bucket: local}
-			scratch, err := newLocalScratch(t.TempDir())
-			if err != nil {
-				t.Fatalf("newLocalScratch: %v", err)
-			}
-			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
-			upload, err := store.NewUpload(context.Background(), tusd.FileInfo{Size: 4})
-			if err != nil {
-				t.Fatalf("NewUpload: %v", err)
-			}
-			if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
-				t.Fatalf("WriteChunk: %v", err)
-			}
-			info, infoErr := upload.GetInfo(context.Background())
-			if infoErr != nil {
-				t.Fatalf("GetInfo: %v", infoErr)
-			}
-			if _, err = local.Put(context.Background(), "uploads/"+info.ID, strings.NewReader(prior), storage.PutOptions{}); err != nil {
-				t.Fatalf("seed destination: %v", err)
-			}
-			if err = upload.FinishUpload(context.Background()); err != nil {
-				t.Fatalf("FinishUpload: %v", err)
-			}
-			if bucket.puts.Load() != 1 {
-				t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
-			}
+			testDestinationMismatchCase(t, prior)
 		})
+	}
+}
+
+type destAttrTestCase struct {
+	name string
+	opts storage.PutOptions
+}
+
+var destAttrTestCases = []destAttrTestCase{
+	{name: "content type", opts: storage.PutOptions{ContentType: "text/stale", Metadata: map[string]string{"filetype": "text/plain", "owner": "alice"}}},
+	{name: "metadata", opts: storage.PutOptions{ContentType: "text/plain", Metadata: map[string]string{"filetype": "text/plain", "owner": "stale"}}},
+}
+
+func createUploadedDataChunk(t *testing.T, store *bucketStore, info tusd.FileInfo) (tusd.Upload, tusd.FileInfo) {
+	t.Helper()
+	upload, err := store.NewUpload(context.Background(), info)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
+		t.Fatal(err)
+	}
+	storedInfo, err := upload.GetInfo(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return upload, storedInfo
+}
+
+func testDestinationAttributeMismatchCase(t *testing.T, opts storage.PutOptions) {
+	t.Helper()
+	local, err := storage.NewLocalBucket(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bucket := &putCountingBucket{Bucket: local}
+	scratch, err := newLocalScratch(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
+	info := tusd.FileInfo{Size: 4, MetaData: tusd.MetaData{"filetype": "text/plain", "owner": "alice"}}
+	upload, storedInfo := createUploadedDataChunk(t, store, info)
+	key := "uploads/" + storedInfo.ID
+	if _, err = local.Put(context.Background(), key, strings.NewReader("data"), opts); err != nil {
+		t.Fatal(err)
+	}
+	if err = upload.FinishUpload(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if bucket.puts.Load() != 1 {
+		t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
+	}
+	obj, err := local.Stat(context.Background(), key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if obj.ContentType != "text/plain" || obj.Metadata["owner"] != "alice" {
+		t.Fatalf("reconciled object = %+v", obj)
 	}
 }
 
 func TestDestinationAttributeMismatchIsOverwritten(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name string
-		opts storage.PutOptions
-	}{
-		{name: "content type", opts: storage.PutOptions{ContentType: "text/stale", Metadata: map[string]string{"filetype": "text/plain", "owner": "alice"}}},
-		{name: "metadata", opts: storage.PutOptions{ContentType: "text/plain", Metadata: map[string]string{"filetype": "text/plain", "owner": "stale"}}},
-	} {
+	for _, tc := range destAttrTestCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			local, err := storage.NewLocalBucket(t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
-			bucket := &putCountingBucket{Bucket: local}
-			scratch, err := newLocalScratch(t.TempDir())
-			if err != nil {
-				t.Fatal(err)
-			}
-			store := newBucketStore(scratch, bucket, defaultKeyFunc("uploads/"), slog.New(slog.DiscardHandler), nil, "test-replica")
-			info := tusd.FileInfo{Size: 4, MetaData: tusd.MetaData{"filetype": "text/plain", "owner": "alice"}}
-			upload, err := store.NewUpload(context.Background(), info)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = upload.WriteChunk(context.Background(), 0, strings.NewReader("data")); err != nil {
-				t.Fatal(err)
-			}
-			storedInfo, err := upload.GetInfo(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			key := "uploads/" + storedInfo.ID
-			if _, err = local.Put(context.Background(), key, strings.NewReader("data"), tc.opts); err != nil {
-				t.Fatal(err)
-			}
-			if err = upload.FinishUpload(context.Background()); err != nil {
-				t.Fatal(err)
-			}
-			if bucket.puts.Load() != 1 {
-				t.Fatalf("Bucket Put count = %d, want 1", bucket.puts.Load())
-			}
-			obj, err := local.Stat(context.Background(), key)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if obj.ContentType != "text/plain" || obj.Metadata["owner"] != "alice" {
-				t.Fatalf("reconciled object = %+v", obj)
-			}
+			testDestinationAttributeMismatchCase(t, tc.opts)
 		})
 	}
 }
@@ -695,9 +732,9 @@ func TestDestinationProbeFailureDoesNotRiskPut(t *testing.T) {
 	}
 }
 
-func TestS3CompletionReceiptRecordsUploadedSize(t *testing.T) {
-	t.Parallel()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newS3MockServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/xml")
@@ -717,6 +754,11 @@ func TestS3CompletionReceiptRecordsUploadedSize(t *testing.T) {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	}))
+}
+
+func TestS3CompletionReceiptRecordsUploadedSize(t *testing.T) {
+	t.Parallel()
+	srv := newS3MockServer(t)
 	t.Cleanup(srv.Close)
 	bucket, err := storage.NewS3Bucket(context.Background(), storage.S3Options{
 		Bucket: "uploads", Region: "us-east-1", Endpoint: srv.URL,

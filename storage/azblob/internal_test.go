@@ -214,6 +214,12 @@ func TestPresignPut_UserDelegationSAS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	verifyPresignPutSASURL(t, req, u)
+	verifyUserDelegationRecorder(t, rec, req.Expires)
+}
+
+func verifyPresignPutSASURL(t *testing.T, req storage.PresignedRequest, u *url.URL) {
+	t.Helper()
 	q := u.Query()
 	if u.Path != "/acct/media/in/clip.mp4" || q.Get("sp") != "cw" || q.Get("skoid") != "oid-1" || q.Get("sig") == "" {
 		t.Fatalf("SAS URL = %s", req.URL)
@@ -221,12 +227,16 @@ func TestPresignPut_UserDelegationSAS(t *testing.T) {
 	if se := q.Get("se"); se != req.Expires.Format(sas.TimeFormat) {
 		t.Fatalf("se = %s, Expires = %s", se, req.Expires)
 	}
+}
+
+func verifyUserDelegationRecorder(t *testing.T, rec *delegationRecorder, expires time.Time) {
+	t.Helper()
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	if rec.query.Get("comp") != "userdelegationkey" || rec.authz != "Bearer entra-token" {
 		t.Fatalf("delegation request query=%v authz=%q", rec.query, rec.authz)
 	}
-	if !strings.Contains(rec.body, "<Expiry>"+req.Expires.Format(sas.TimeFormat)+"</Expiry>") {
+	if !strings.Contains(rec.body, "<Expiry>"+expires.Format(sas.TimeFormat)+"</Expiry>") {
 		t.Fatalf("delegation key expiry not bound to SAS expiry: %s", rec.body)
 	}
 }
