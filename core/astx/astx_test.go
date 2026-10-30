@@ -100,13 +100,8 @@ func TestImportsAndThirdParty(t *testing.T) {
 	}
 }
 
-func TestResolveAndRewriteImports(t *testing.T) {
-	t.Parallel()
-	mapping := map[string]string{
-		"github.com/golusoris/golusoris/config": "github.com/golusoris/golusoris/core/config",
-		"github.com/golusoris/golusoris/clikit": "github.com/golusoris/golusoris/core/clikit",
-		"gopkg.in/yaml.v3":                      "github.com/golusoris/golusoris/core/codec/yaml",
-	}
+func testResolveMapping(t *testing.T, mapping map[string]string) {
+	t.Helper()
 	tests := []struct {
 		in, want string
 		ok       bool
@@ -121,7 +116,21 @@ func TestResolveAndRewriteImports(t *testing.T) {
 			t.Errorf("Resolve(%q) = %q %v, want %q %v", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
+}
 
+func testRewriteImportsEdgeCases(t *testing.T, mapping map[string]string) {
+	t.Helper()
+	same, changed, err := astx.RewriteImports([]byte("package p\n"), mapping)
+	if err != nil || changed || string(same) != "package p\n" {
+		t.Fatalf("no-op rewrite altered source: %q %v %v", same, changed, err)
+	}
+	if _, _, err := astx.RewriteImports([]byte("package {"), mapping); err == nil {
+		t.Fatal("expected parse error")
+	}
+}
+
+func testRewriteImportsContent(t *testing.T, mapping map[string]string) {
+	t.Helper()
 	src := []byte("// Package main does things.\npackage main\n\nimport (\n\t\"fmt\"\n\n\tcfg \"github.com/golusoris/golusoris/config\" // keep alias\n\t\"gopkg.in/yaml.v3\"\n)\n\nfunc main() { fmt.Println(cfg.Module, yaml.Marshal) }\n")
 	out, changed, err := astx.RewriteImports(src, mapping)
 	if err != nil || !changed {
@@ -136,13 +145,18 @@ func TestResolveAndRewriteImports(t *testing.T) {
 	if strings.Contains(s, "gopkg.in") {
 		t.Errorf("old import survived:\n%s", s)
 	}
-	same, changed, err := astx.RewriteImports([]byte("package p\n"), mapping)
-	if err != nil || changed || string(same) != "package p\n" {
-		t.Fatalf("no-op rewrite altered source: %q %v %v", same, changed, err)
+}
+
+func TestResolveAndRewriteImports(t *testing.T) {
+	t.Parallel()
+	mapping := map[string]string{
+		"github.com/golusoris/golusoris/config": "github.com/golusoris/golusoris/core/config",
+		"github.com/golusoris/golusoris/clikit": "github.com/golusoris/golusoris/core/clikit",
+		"gopkg.in/yaml.v3":                      "github.com/golusoris/golusoris/core/codec/yaml",
 	}
-	if _, _, err := astx.RewriteImports([]byte("package {"), mapping); err == nil {
-		t.Fatal("expected parse error")
-	}
+	testResolveMapping(t, mapping)
+	testRewriteImportsContent(t, mapping)
+	testRewriteImportsEdgeCases(t, mapping)
 }
 
 func TestRewriteImportsFile(t *testing.T) {
@@ -164,6 +178,27 @@ func TestRewriteImportsFile(t *testing.T) {
 	changed, err = astx.RewriteImportsFile(p, mapping)
 	if err != nil || changed {
 		t.Fatalf("second pass must be a no-op: changed=%v err=%v", changed, err)
+	}
+}
+
+func checkMethodMetrics(t *testing.T, m astx.FuncMetric) {
+	t.Helper()
+	if m.Name != "T.M" || m.Params != 2 || m.Line != 5 || m.Lines != 16 {
+		t.Errorf("shape: %+v", m)
+	}
+	// 1 + if + && + for + case 1 + case 2,3 = 6 (default adds nothing).
+	if m.Cyclomatic != 6 {
+		t.Errorf("cyclomatic = %d, want 6", m.Cyclomatic)
+	}
+	if m.Statements < 8 {
+		t.Errorf("statements = %d, want >= 8", m.Statements)
+	}
+}
+
+func checkPlainMetrics(t *testing.T, m astx.FuncMetric) {
+	t.Helper()
+	if m.Name != "plain" || m.Cyclomatic != 1 || m.Lines != 1 {
+		t.Errorf("plain: %+v", m)
 	}
 }
 
@@ -202,20 +237,8 @@ func decl()
 	if len(ms) != 2 {
 		t.Fatalf("expected 2 bodies, got %d: %+v", len(ms), ms)
 	}
-	m := ms[0]
-	if m.Name != "T.M" || m.Params != 2 || m.Line != 5 || m.Lines != 16 {
-		t.Errorf("shape: %+v", m)
-	}
-	// 1 + if + && + for + case 1 + case 2,3 = 6 (default adds nothing).
-	if m.Cyclomatic != 6 {
-		t.Errorf("cyclomatic = %d, want 6", m.Cyclomatic)
-	}
-	if m.Statements < 8 {
-		t.Errorf("statements = %d, want >= 8", m.Statements)
-	}
-	if ms[1].Name != "plain" || ms[1].Cyclomatic != 1 || ms[1].Lines != 1 {
-		t.Errorf("plain: %+v", ms[1])
-	}
+	checkMethodMetrics(t, ms[0])
+	checkPlainMetrics(t, ms[1])
 }
 
 func TestParseGoMod(t *testing.T) {

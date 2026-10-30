@@ -34,12 +34,8 @@ packages:
     replaces: [github.com/jackc/pgx, github.com/lib/pq, github.com/spf13/viper]
 `
 
-func TestParseValid(t *testing.T) {
-	t.Parallel()
-	idx, err := capabilities.Parse([]byte(valid))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
+func checkCapabilitiesAndKeys(t *testing.T, idx *capabilities.Index) {
+	t.Helper()
 	if !idx.Covers("db.postgres") || idx.Covers("db.orm") {
 		t.Fatal("Covers mismatch")
 	}
@@ -50,6 +46,10 @@ func TestParseValid(t *testing.T) {
 	if got := strings.Join(idx.Keys(), ","); got != "config.env,config.loader,db.postgres" {
 		t.Fatalf("Keys: %s", got)
 	}
+}
+
+func checkReplacements(t *testing.T, idx *capabilities.Index) {
+	t.Helper()
 	legacyReplacements := requireLegacyReplacements(idx.Replacements)
 	legacy := legacyReplacements()
 	if got := legacy["github.com/spf13/viper"]; got != "github.com/golusoris/golusoris/db/pgx" {
@@ -65,6 +65,10 @@ func TestParseValid(t *testing.T) {
 	if len(rep) != 3 {
 		t.Fatalf("Replacements keys: %v", rep)
 	}
+}
+
+func checkLookupsAndKits(t *testing.T, idx *capabilities.Index) {
+	t.Helper()
 	if p, ok := idx.Lookup("github.com/golusoris/golusoris/db/pgx"); !ok || p.Domain != "db" {
 		t.Fatalf("Lookup: %+v %v", p, ok)
 	}
@@ -74,6 +78,17 @@ func TestParseValid(t *testing.T) {
 	if got := strings.Join(idx.BuilderKits, ","); got != "golusoris/golusoris,golusoris/goenvoy" {
 		t.Fatalf("BuilderKits: %s", got)
 	}
+}
+
+func TestParseValid(t *testing.T) {
+	t.Parallel()
+	idx, err := capabilities.Parse([]byte(valid))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	checkCapabilitiesAndKeys(t, idx)
+	checkReplacements(t, idx)
+	checkLookupsAndKits(t, idx)
 }
 
 func TestParseBuilderKitBounds(t *testing.T) {
