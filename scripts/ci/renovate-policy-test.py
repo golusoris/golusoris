@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import re
 import sys
@@ -475,6 +476,166 @@ def test_localstack_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def own_module_names_covered(names: object) -> bool:
+    """Ensure matchPackageNames covers the root module and submodules without matching external packages."""
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names):
+        return False
+    targets = (
+        "github.com/golusoris/golusoris",
+        "github.com/golusoris/golusoris/core",
+        "github.com/golusoris/golusoris/container/registry/sign",
+    )
+    for target in targets:
+        if not any(target == pat or fnmatch.fnmatch(target, pat) for pat in names):
+            return False
+    externals = (
+        "golang.org/x/mod",
+        "github.com/google/uuid",
+        "github.com/golusoris/otherrepo",
+    )
+    for ext in externals:
+        if any(ext == pat or fnmatch.fnmatch(ext, pat) for pat in names):
+            return False
+    return True
+
+
+def own_module_rule_valid(config: dict[str, object]) -> bool:
+    """Require exactly one packageRule disabling gomod updates for own modules as the last entry."""
+    rules = config.get("packageRules")
+    if not isinstance(rules, list) or not rules:
+        return False
+    matching = [
+        rule
+        for rule in rules
+        if isinstance(rule, dict)
+        and rule.get("matchManagers") == ["gomod"]
+        and rule.get("enabled") is False
+        and own_module_names_covered(rule.get("matchPackageNames"))
+    ]
+    # In-repo modules are replaced by local paths; rule must be the last packageRules entry.
+    return len(matching) == 1 and rules[-1] is matching[0]
+
+
+def parse_go_mod_own_requires(content: str) -> set[str]:
+    """Extract required in-repo module paths from go.mod text."""
+    requires: set[str] = set()
+    in_block = False
+    for raw in content.splitlines():
+        line = raw.split("//")[0].strip()
+        if line == "require (":
+            in_block = True
+        elif in_block and line == ")":
+            in_block = False
+        elif (
+            in_block or line.startswith("require ")
+        ) and "github.com/golusoris/golusoris" in line:
+            tokens = line.removeprefix("require ").strip().split()
+            if tokens and (
+                tokens[0] == "github.com/golusoris/golusoris"
+                or tokens[0].startswith("github.com/golusoris/golusoris/")
+            ):
+                requires.add(tokens[0])
+    return requires
+
+
+def parse_go_mod_own_replaces(content: str) -> dict[str, str]:
+    """Extract in-repo module replace targets from go.mod text."""
+    replaces: dict[str, str] = {}
+    for raw in content.splitlines():
+        line = raw.split("//")[0].strip()
+        if "=>" not in line or "github.com/golusoris/golusoris" not in line:
+            continue
+        left, right = line.removeprefix("replace ").strip().split("=>", 1)
+        tokens = left.strip().split()
+        if tokens and (
+            tokens[0] == "github.com/golusoris/golusoris"
+            or tokens[0].startswith("github.com/golusoris/golusoris/")
+        ):
+            replaces[tokens[0]] = right.strip()
+    return replaces
+
+
+def go_mod_own_requires_replaced(content: str) -> bool:
+    """Verify that all golusoris module requirements in go.mod text have local replacements."""
+    requires = parse_go_mod_own_requires(content)
+    replaces = parse_go_mod_own_replaces(content)
+    # Rule must not freeze a real pinned dependency: every in-repo require needs a local dir replace.
+    for req in requires:
+        target = replaces.get(req)
+        if not target or not target.startswith(("./", "../")):
+            return False
+    return True
+
+
+def own_module_replaced_valid(root: Path = ROOT) -> bool:
+    """Require every repository go.mod requiring in-repo modules to replace them locally."""
+    for path in sorted(root.rglob("go.mod")):
+        if "vendor" in path.parts or "testdata" in path.parts:
+            continue
+        # In-repo module pins have no build effect only when replaced by a local path.
+        if not go_mod_own_requires_replaced(path.read_text(encoding="utf-8")):
+            print(
+                f"{path} requires in-repo module without a local replace",
+                file=sys.stderr,
+            )
+            return False
+    return True
+
+
+def own_module_negative_controls(config: dict[str, object]) -> bool:
+    """Verify that negative controls for own-module package rules are refused."""
+    # Negative control (a): rule removed -> refused.
+    mutated_removed = json.loads(json.dumps(config))
+    mutated_removed["packageRules"].pop()
+    if own_module_rule_valid(mutated_removed):
+        print("own module rule negative control (removed) was accepted", file=sys.stderr)
+        return False
+    # Negative control (b): rule with enabled true -> refused.
+    mutated_enabled = json.loads(json.dumps(config))
+    mutated_enabled["packageRules"][-1]["enabled"] = True
+    if own_module_rule_valid(mutated_enabled):
+        print("own module rule negative control (enabled: true) was accepted", file=sys.stderr)
+        return False
+    # Negative control (c): rule moved before the automerge rule -> refused.
+    mutated_moved = json.loads(json.dumps(config))
+    rules = mutated_moved["packageRules"]
+    automerge_idx = next(
+        (i for i, r in enumerate(rules) if isinstance(r, dict) and r.get("automerge") is True),
+        None,
+    )
+    if automerge_idx is None:
+        print("automerge rule not found for negative control", file=sys.stderr)
+        return False
+    rule = rules.pop()
+    rules.insert(automerge_idx, rule)
+    if own_module_rule_valid(mutated_moved):
+        print("own module rule negative control (moved before automerge) was accepted", file=sys.stderr)
+        return False
+    # Negative control (d): synthetic go.mod text requiring a golusoris module without replace -> refused.
+    synthetic_unreplaced = (
+        "module example.com/synthetic\n\n"
+        "go 1.27\n\n"
+        "require github.com/golusoris/golusoris/core v0.12.1\n"
+    )
+    if go_mod_own_requires_replaced(synthetic_unreplaced):
+        print("synthetic go.mod without replace negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+def test_own_module_rule(config: dict[str, object]) -> bool:
+    """Report an invalid own-module package rule and prove negative controls are refused."""
+    if not own_module_rule_valid(config):
+        print(
+            "renovate.json must end with a gomod disable rule for own modules",
+            file=sys.stderr,
+        )
+        return False
+    if not own_module_replaced_valid(ROOT):
+        return False
+    return own_module_negative_controls(config)
+
+
 def python_cap_valid(config: dict[str, object], files: list[str], cap: str) -> bool:
     """Require exactly one docker Python cap rule for files at cap."""
     rules = config.get("packageRules")
@@ -852,6 +1013,7 @@ def main() -> int:
         test_negative_controls(config, contents),
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
+        test_own_module_rule(config),
         test_trainer_python_cap(config),
         test_sidecar_python_cap(config),
         test_chromedp_group(config),

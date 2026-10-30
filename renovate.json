@@ -692,6 +692,17 @@
         "cordanaLLM/praetor/**"
       ],
       "enabled": false
+    },
+    {
+      "description": "In-repo modules are replaced by local paths; pseudo-version bumps only feed a self-digest loop.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "github.com/golusoris/golusoris",
+        "github.com/golusoris/golusoris/**"
+      ],
+      "enabled": false
     }
   ],
   "lockFileMaintenance": {
