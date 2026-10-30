@@ -149,6 +149,12 @@ func TestStageDatasetCopiesLocalFileIntoContainerContract(t *testing.T) {
 			t.Error(cleanupErr)
 		}
 	})
+	assertStagedFiles(t, inputDir)
+	assertStagedPermissions(t, inputDir, outputDir)
+}
+
+func assertStagedFiles(t *testing.T, inputDir string) {
+	t.Helper()
 	data, err := os.ReadFile(filepath.Join(inputDir, "dataset"))
 	if err != nil {
 		t.Fatal(err)
@@ -167,21 +173,26 @@ func TestStageDatasetCopiesLocalFileIntoContainerContract(t *testing.T) {
 	if config["dataset_uri"] != "file:///work/input/dataset" {
 		t.Fatalf("dataset_uri = %v", config["dataset_uri"])
 	}
-	if runtime.GOOS != "windows" {
-		inputInfo, statErr := os.Stat(inputDir)
-		if statErr != nil {
-			t.Fatal(statErr)
-		}
-		outputInfo, statErr := os.Stat(outputDir)
-		if statErr != nil {
-			t.Fatal(statErr)
-		}
-		if got := inputInfo.Mode().Perm(); got != 0o555 {
-			t.Fatalf("input mode = %o; want 555", got)
-		}
-		if got := outputInfo.Mode().Perm(); got != 0o777 {
-			t.Fatalf("output mode = %o; want 777", got)
-		}
+}
+
+func assertStagedPermissions(t *testing.T, inputDir, outputDir string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	inputInfo, statErr := os.Stat(inputDir)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	outputInfo, statErr := os.Stat(outputDir)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if got := inputInfo.Mode().Perm(); got != 0o555 {
+		t.Fatalf("input mode = %o; want 555", got)
+	}
+	if got := outputInfo.Mode().Perm(); got != 0o777 {
+		t.Fatalf("output mode = %o; want 777", got)
 	}
 }
 
@@ -274,6 +285,21 @@ func TestStageDatasetRejectsSymlinkTenantDirectory(t *testing.T) {
 func TestStageDatasetRejectsTenantEscapeAndNonRegularSources(t *testing.T) {
 	t.Parallel()
 	datasetRoot := canonicalTempDir(t)
+	tenantA, tests := setupTenantEscapeFixtures(t, datasetRoot)
+	for _, rawURI := range tests {
+		_, _, _, err := StageDataset(
+			context.Background(), "trainer-dataset-*", map[string]any{"dataset_uri": rawURI},
+			datasetRoot, "tenant-a", rawURI, 16,
+		)
+		if err == nil {
+			t.Fatalf("StageDataset accepted confined-path violation %q", rawURI)
+		}
+	}
+	assertStageDatasetRejectsFIFO(t, datasetRoot, tenantA)
+}
+
+func setupTenantEscapeFixtures(t *testing.T, datasetRoot string) (string, []string) {
+	t.Helper()
 	tenantA := filepath.Join(datasetRoot, "tenant-a")
 	tenantB := filepath.Join(datasetRoot, "tenant-b")
 	for _, directory := range []string{tenantA, tenantB, filepath.Join(tenantA, "real")} {
@@ -299,15 +325,11 @@ func TestStageDatasetRejectsTenantEscapeAndNonRegularSources(t *testing.T) {
 		fileURI(t, filepath.Join(link, "dataset")),
 		fileURI(t, filepath.Join(tenantA, "real")),
 	}
-	for _, rawURI := range tests {
-		_, _, _, err := StageDataset(
-			context.Background(), "trainer-dataset-*", map[string]any{"dataset_uri": rawURI},
-			datasetRoot, "tenant-a", rawURI, 16,
-		)
-		if err == nil {
-			t.Fatalf("StageDataset accepted confined-path violation %q", rawURI)
-		}
-	}
+	return tenantA, tests
+}
+
+func assertStageDatasetRejectsFIFO(t *testing.T, datasetRoot, tenantA string) {
+	t.Helper()
 	if mkfifo, err := exec.LookPath("mkfifo"); err == nil {
 		fifo := filepath.Join(tenantA, "fifo")
 		if output, commandErr := exec.Command(mkfifo, fifo).CombinedOutput(); commandErr != nil {
@@ -475,7 +497,13 @@ func TestUploadOutputSnapshotsBeforeSourceMutation(t *testing.T) {
 	if !strings.Contains(object.Key, "/"+digest+"/artifact") {
 		t.Fatalf("key = %q; want digest %s", object.Key, digest)
 	}
-	reader, _, err := stored.Get(context.Background(), object.Key)
+	assertUploadedObjectBody(t, stored, object.Key)
+	assertSnapshotDirCleaned(t, snapshotDir)
+}
+
+func assertUploadedObjectBody(t *testing.T, stored storage.Bucket, key string) {
+	t.Helper()
+	reader, _, err := stored.Get(context.Background(), key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -489,6 +517,10 @@ func TestUploadOutputSnapshotsBeforeSourceMutation(t *testing.T) {
 	if got := string(body); got != "abc" {
 		t.Fatalf("uploaded body = %q; want snapshotted abc", got)
 	}
+}
+
+func assertSnapshotDirCleaned(t *testing.T, snapshotDir string) {
+	t.Helper()
 	entries, err := os.ReadDir(snapshotDir)
 	if err != nil {
 		t.Fatal(err)

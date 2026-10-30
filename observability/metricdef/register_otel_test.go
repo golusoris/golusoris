@@ -67,11 +67,22 @@ func TestRegisterOTelRoundTrip(t *testing.T) { //nolint:paralleltest // Provider
 		recordOTelDef(t, h, d)
 	}
 	assertOTelRoundTrip(t, reg, defs)
+	assertOTelGaugeMutations(t, reg, h)
+	assertOTelDefaultHistogramBuckets(t, reg)
+	assertOTelExplicitHistogramBuckets(t, reg)
+}
+
+func assertOTelGaugeMutations(t *testing.T, reg *prometheus.Registry, h *metricdef.Handles) {
+	t.Helper()
 	depth, err := h.OTelGauge(queueDepth.Name)
 	mustOK(t, err, depth.Set(9, "value"), depth.Add(-2, "value"))
 	if got := otelSeries(t, reg, queueDepth.Name)["queue=value"].GetGauge().GetValue(); got != 7 {
 		t.Errorf("Set + Add = %v, want 7", got)
 	}
+}
+
+func assertOTelDefaultHistogramBuckets(t *testing.T, reg *prometheus.Registry) {
+	t.Helper()
 	for _, name := range []string{"payload_bytes", "queue_size"} {
 		buckets := otelSeries(t, reg, name)[""].GetHistogram().GetBucket()
 		if len(buckets) != len(prometheus.DefBuckets) {
@@ -83,6 +94,10 @@ func TestRegisterOTelRoundTrip(t *testing.T) { //nolint:paralleltest // Provider
 			}
 		}
 	}
+}
+
+func assertOTelExplicitHistogramBuckets(t *testing.T, reg *prometheus.Registry) {
+	t.Helper()
 	buckets := otelSeries(t, reg, jobSeconds.Name)["backend=value"].GetHistogram().GetBucket()
 	if len(buckets) != len(jobSeconds.Buckets) || buckets[1].GetCumulativeCount() != 1 {
 		t.Fatalf("explicit buckets = %v", buckets)
@@ -126,21 +141,8 @@ func assertOTelRoundTrip(t *testing.T, reg *prometheus.Registry, defs []metricde
 		if family.GetName() == "target_info" || strings.HasPrefix(family.GetName(), "otel_scope_") {
 			continue
 		}
-		def, ok := catalog.Lookup(family.GetName())
-		if !ok || family.GetHelp() != def.Help {
-			t.Errorf("unexpected family/help: %v", family)
-		}
-		assertOTelValues(t, family)
-		var text bytes.Buffer
-		_, err = expfmt.MetricFamilyToText(&text, family)
-		mustOK(t, err)
-		for line := range strings.SplitSeq(text.String(), "\n") {
-			if line == "" || strings.HasPrefix(line, "#") {
-				continue
-			}
-			name, _, _ := strings.Cut(strings.Fields(line)[0], "{")
-			seen[name] = true
-		}
+		verifyFamilyAgainstCatalog(t, family, catalog)
+		collectRenderedSeries(t, family, seen)
 	}
 	got := make([]string, 0, len(seen))
 	for name := range seen {
@@ -149,6 +151,29 @@ func assertOTelRoundTrip(t *testing.T, reg *prometheus.Registry, defs []metricde
 	slices.Sort(got)
 	if !slices.Equal(got, catalog.Series()) {
 		t.Errorf("series = %v, want %v", got, catalog.Series())
+	}
+}
+
+func verifyFamilyAgainstCatalog(t *testing.T, family *dto.MetricFamily, catalog *metricdef.Catalog) {
+	t.Helper()
+	def, ok := catalog.Lookup(family.GetName())
+	if !ok || family.GetHelp() != def.Help {
+		t.Errorf("unexpected family/help: %v", family)
+	}
+	assertOTelValues(t, family)
+}
+
+func collectRenderedSeries(t *testing.T, family *dto.MetricFamily, seen map[string]bool) {
+	t.Helper()
+	var text bytes.Buffer
+	_, err := expfmt.MetricFamilyToText(&text, family)
+	mustOK(t, err)
+	for line := range strings.SplitSeq(text.String(), "\n") {
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, _, _ := strings.Cut(strings.Fields(line)[0], "{")
+		seen[name] = true
 	}
 }
 
@@ -203,6 +228,14 @@ func TestOTelLabelLimitsAndGaugeConcurrency(t *testing.T) { //nolint:paralleltes
 	}
 	h, err := metricdef.RegisterOTel(meter, jobsTotal, gaugeDef, histDef)
 	mustOK(t, err)
+
+	testOTelBoundedCounter(t, reg, h)
+	testOTelBoundedConcurrentGauge(t, reg, h, gaugeDef)
+	testOTelBoundedHistogram(t, reg, h, histDef)
+}
+
+func testOTelBoundedCounter(t *testing.T, reg *prometheus.Registry, h *metricdef.Handles) {
+	t.Helper()
 	jobs, err := h.Counter(jobsTotal.Name)
 	mustOK(t, err)
 	values := []string{"t1", "unexpected"}
@@ -219,6 +252,10 @@ func TestOTelLabelLimitsAndGaugeConcurrency(t *testing.T) { //nolint:paralleltes
 			t.Errorf("bounded counter series = %v", got)
 		}
 	}
+}
+
+func testOTelBoundedConcurrentGauge(t *testing.T, reg *prometheus.Registry, h *metricdef.Handles, gaugeDef metricdef.Def) {
+	t.Helper()
 	gauge, err := h.OTelGauge(gaugeDef.Name)
 	mustOK(t, err, gauge.Set(10, "first"))
 	var workers sync.WaitGroup
@@ -238,6 +275,10 @@ func TestOTelLabelLimitsAndGaugeConcurrency(t *testing.T) { //nolint:paralleltes
 	if len(depth) != 2 || depth["tenant=other"].GetGauge().GetValue() != 399 || depth["tenant=first"].GetGauge().GetValue() != 8 {
 		t.Errorf("bounded concurrent gauge = %v", depth)
 	}
+}
+
+func testOTelBoundedHistogram(t *testing.T, reg *prometheus.Registry, h *metricdef.Handles, histDef metricdef.Def) {
+	t.Helper()
 	histogram, err := h.Histogram(histDef.Name)
 	mustOK(t, err, histogram.Observe(t.Context(), 1, "unexpected"), histogram.Observe(t.Context(), 2, "also-unexpected"))
 	latency := otelSeries(t, reg, histDef.Name)
@@ -251,49 +292,71 @@ func TestOTelInstrumentNameBoundary(t *testing.T) {
 	for _, kind := range []metricdef.Kind{metricdef.KindCounter, metricdef.KindGauge, metricdef.KindHistogram} {
 		t.Run(kind.String(), func(t *testing.T) {
 			t.Parallel()
-			provider := sdkmetric.NewMeterProvider()
-			t.Cleanup(func() { mustOK(t, provider.Shutdown(context.Background())) })
-			meter := provider.Meter("test")
-			for _, length := range []int{255, 256} {
-				name := strings.Repeat("a", length)
-				if kind == metricdef.KindCounter {
-					name += "_total"
-				}
-				h, err := metricdef.RegisterOTel(meter, metricdef.Def{Name: name, Help: "Boundary.", Kind: kind})
-				if length == 255 {
-					if err != nil || h == nil {
-						t.Fatalf("valid name: %v, %v", h, err)
-					}
-					continue
-				}
-				if h != nil || !errors.Is(err, sdkmetric.ErrInstrumentName) || !strings.Contains(err.Error(), name) {
-					t.Errorf("invalid name: %v, %v", h, err)
-				}
-			}
+			testInstrumentNameBoundaryKind(t, kind)
 		})
 	}
+}
+
+func testInstrumentNameBoundaryKind(t *testing.T, kind metricdef.Kind) {
+	t.Helper()
+	provider := sdkmetric.NewMeterProvider()
+	t.Cleanup(func() { mustOK(t, provider.Shutdown(context.Background())) })
+	meter := provider.Meter("test")
+	for _, length := range []int{255, 256} {
+		assertInstrumentNameBoundaryLength(t, meter, kind, length)
+	}
+}
+
+func assertInstrumentNameBoundaryLength(t *testing.T, meter metric.Meter, kind metricdef.Kind, length int) {
+	t.Helper()
+	name := strings.Repeat("a", length)
+	if kind == metricdef.KindCounter {
+		name += "_total"
+	}
+	h, err := metricdef.RegisterOTel(meter, metricdef.Def{Name: name, Help: "Boundary.", Kind: kind})
+	if length == 255 {
+		if err != nil || h == nil {
+			t.Fatalf("valid name: %v, %v", h, err)
+		}
+		return
+	}
+	if h != nil || !errors.Is(err, sdkmetric.ErrInstrumentName) || !strings.Contains(err.Error(), name) {
+		t.Errorf("invalid name: %v, %v", h, err)
+	}
+}
+
+var invalidMappingDefs = []metricdef.Def{
+	{Name: "requests_ratio_total", Unit: "ratio", Help: "x", Kind: metricdef.KindCounter},
+	{Name: "latency_ratio", Unit: "ratio", Help: "x", Kind: metricdef.KindHistogram},
+	{Name: "app_value_min", Unit: "min", Help: "x", Kind: metricdef.KindGauge},
+	{Name: "app_value__widgets", Unit: "value__widgets", Help: "x", Kind: metricdef.KindGauge},
+	{Name: "app__depth", Help: "x", Kind: metricdef.KindGauge},
+	{Name: "app_total_jobs_total", Help: "x", Kind: metricdef.KindCounter},
+	{Name: "app_bytes_sent_bytes_total", Unit: "bytes", Help: "x", Kind: metricdef.KindCounter},
 }
 
 func TestRegisterOTelRejectsInvalidMappings(t *testing.T) {
 	t.Parallel()
 	meter := noop.NewMeterProvider().Meter("test")
-	for _, def := range []metricdef.Def{
-		{Name: "requests_ratio_total", Unit: "ratio", Help: "x", Kind: metricdef.KindCounter},
-		{Name: "latency_ratio", Unit: "ratio", Help: "x", Kind: metricdef.KindHistogram},
-		{Name: "app_value_min", Unit: "min", Help: "x", Kind: metricdef.KindGauge},
-		{Name: "app_value__widgets", Unit: "value__widgets", Help: "x", Kind: metricdef.KindGauge},
-		{Name: "app__depth", Help: "x", Kind: metricdef.KindGauge},
-		{Name: "app_total_jobs_total", Help: "x", Kind: metricdef.KindCounter},
-		{Name: "app_bytes_sent_bytes_total", Unit: "bytes", Help: "x", Kind: metricdef.KindCounter},
-	} {
+	for _, def := range invalidMappingDefs {
 		t.Run(def.Name, func(t *testing.T) {
 			t.Parallel()
-			h, err := metricdef.RegisterOTel(meter, def)
-			if h != nil || err == nil || !strings.Contains(err.Error(), def.Name) || !strings.Contains(err.Error(), "round-trip") {
-				t.Errorf("RegisterOTel = %v, %v", h, err)
-			}
+			assertInvalidOTelMapping(t, meter, def)
 		})
 	}
+	assertRegisterOTelEdgeCases(t, meter)
+}
+
+func assertInvalidOTelMapping(t *testing.T, meter metric.Meter, def metricdef.Def) {
+	t.Helper()
+	h, err := metricdef.RegisterOTel(meter, def)
+	if h != nil || err == nil || !strings.Contains(err.Error(), def.Name) || !strings.Contains(err.Error(), "round-trip") {
+		t.Errorf("RegisterOTel = %v, %v", h, err)
+	}
+}
+
+func assertRegisterOTelEdgeCases(t *testing.T, meter metric.Meter) {
+	t.Helper()
 	if _, err := metricdef.RegisterOTel(nil, jobsTotal); err == nil {
 		t.Error("nil meter accepted")
 	}

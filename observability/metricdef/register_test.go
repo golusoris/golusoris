@@ -394,7 +394,12 @@ func TestGaugeDelete(t *testing.T) {
 	mustOK(t, err)
 
 	mustOK(t, g.Set(10, "t1"))
+	assertGaugeDeleteEdgeCases(t, g)
+	assertGaugeDeleteSlotsAndFolding(t, reg, g, distinctGaugeDef.Name)
+}
 
+func assertGaugeDeleteEdgeCases(t *testing.T, g *metricdef.Gauge) {
+	t.Helper()
 	// Delete of existing series returns true.
 	if !g.Delete("t1") {
 		t.Error("Delete existing series returned false, want true")
@@ -410,7 +415,10 @@ func TestGaugeDelete(t *testing.T) {
 	if g.Delete("t1", "extra") {
 		t.Error("Delete with 2 labels returned true, want false")
 	}
+}
 
+func assertGaugeDeleteSlotsAndFolding(t *testing.T, reg *prometheus.Registry, g *metricdef.Gauge, defName string) {
+	t.Helper()
 	// Delete of an unseen value does not consume a distinct slot.
 	// Currently only "t1" was ever admitted. "unseen" must not consume the 2nd slot.
 	if g.Delete("unseen") {
@@ -419,7 +427,7 @@ func TestGaugeDelete(t *testing.T) {
 
 	// "t2" should be admitted as the 2nd distinct value (slot consumed).
 	mustOK(t, g.Set(20, "t2"))
-	got := series(t, reg, distinctGaugeDef.Name)
+	got := series(t, reg, defName)
 	if _, ok := got["tenant=other"]; ok {
 		t.Fatalf("tenant=other present, unseen consumed a slot: %v", keys(got))
 	}
@@ -432,7 +440,7 @@ func TestGaugeDelete(t *testing.T) {
 	if g.Delete("t3") {
 		t.Error("Delete folded value returned true, want false")
 	}
-	if _, ok := series(t, reg, distinctGaugeDef.Name)["tenant=other"]; !ok {
+	if _, ok := series(t, reg, defName)["tenant=other"]; !ok {
 		t.Fatal("Delete of a folded value removed the shared other series")
 	}
 	if !g.Delete(metricdef.OtherValue) {

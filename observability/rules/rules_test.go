@@ -51,12 +51,22 @@ func TestRenderPrometheusRule(t *testing.T) {
 	if err := yaml.UnmarshalStrict(raw, &pr); err != nil {
 		t.Fatalf("round trip: %v\n%s", err, raw)
 	}
+	assertPrometheusRuleMeta(t, raw, pr)
+	assertPrometheusRuleGroup(t, pr)
+}
+
+func assertPrometheusRuleMeta(t *testing.T, raw []byte, pr monitoringv1.PrometheusRule) {
+	t.Helper()
 	if pr.APIVersion != "monitoring.coreos.com/v1" || pr.Kind != "PrometheusRule" || pr.Name != "app" {
 		t.Fatalf("type/meta = %s %s %s", pr.APIVersion, pr.Kind, pr.Name)
 	}
 	if strings.Contains(string(raw), "creationTimestamp") || strings.Contains(string(raw), "status") {
 		t.Errorf("server-side fields rendered:\n%s", raw)
 	}
+}
+
+func assertPrometheusRuleGroup(t *testing.T, pr monitoringv1.PrometheusRule) {
+	t.Helper()
 	g := pr.Spec.Groups[0]
 	if *g.Interval != "30s" || len(g.Rules) != 2 || g.Rules[0].Record == "" {
 		t.Fatalf("group = %+v (records must precede alerts)", g)
@@ -65,7 +75,13 @@ func TestRenderPrometheusRule(t *testing.T) {
 	if *alert.For != "5m" || alert.Labels["severity"] != "critical" || alert.Labels["team"] != "platform" {
 		t.Errorf("alert labels/for = %v %v", alert.Labels, *alert.For)
 	}
-	for k, want := range map[string]string{"runbook_url": runbook, "summary": "Node {{ $labels.instance }} is down", "description": "No scrape for 5 minutes.", "dashboard": "https://grafana.example.org/d/nodes"} {
+	wantAnnotations := map[string]string{
+		"runbook_url": runbook,
+		"summary":     "Node {{ $labels.instance }} is down",
+		"description": "No scrape for 5 minutes.",
+		"dashboard":   "https://grafana.example.org/d/nodes",
+	}
+	for k, want := range wantAnnotations {
 		if alert.Annotations[k] != want {
 			t.Errorf("annotation %s = %q, want %q", k, alert.Annotations[k], want)
 		}
