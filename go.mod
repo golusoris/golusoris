@@ -29,7 +29,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/bmaupin/go-epub v1.1.0
 	github.com/bojanz/currency v1.5.0
-	github.com/brianvoe/gofakeit/v7 v7.18.0
+	github.com/brianvoe/gofakeit/v7 v7.18.1
 	github.com/caddyserver/certmagic v0.25.6
 	github.com/casbin/casbin/v3 v3.11.0
 	github.com/cespare/xxhash/v2 v2.3.0
