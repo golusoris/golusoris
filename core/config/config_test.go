@@ -138,6 +138,36 @@ func TestUnsupportedExtension(t *testing.T) {
 	}
 }
 
+func checkConfigValues(t *testing.T, c *config.Config) {
+	t.Helper()
+	if !c.Bool("enabled") {
+		t.Error("Bool: expected true")
+	}
+	if got := c.Float("ratio"); got != 1.5 {
+		t.Errorf("Float: got %v, want 1.5", got)
+	}
+	if got := c.Int64("count"); got != 42 {
+		t.Errorf("Int64: got %d, want 42", got)
+	}
+	if got := c.Strings("tags"); len(got) != 3 || got[0] != "a" {
+		t.Errorf("Strings: got %v", got)
+	}
+}
+
+func checkConfigExistence(t *testing.T, c *config.Config) {
+	t.Helper()
+	if !c.Exists("name") {
+		t.Error("Exists: expected true for 'name'")
+	}
+	if c.Exists("nonexistent.key") {
+		t.Error("Exists: expected false for missing key")
+	}
+	all := c.All()
+	if _, ok := all["name"]; !ok {
+		t.Error("All: expected 'name' key")
+	}
+}
+
 func TestGetters(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -151,28 +181,8 @@ func TestGetters(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if !c.Bool("enabled") {
-		t.Error("Bool: expected true")
-	}
-	if got := c.Float("ratio"); got != 1.5 {
-		t.Errorf("Float: got %v, want 1.5", got)
-	}
-	if got := c.Int64("count"); got != 42 {
-		t.Errorf("Int64: got %d, want 42", got)
-	}
-	if got := c.Strings("tags"); len(got) != 3 || got[0] != "a" {
-		t.Errorf("Strings: got %v", got)
-	}
-	if !c.Exists("name") {
-		t.Error("Exists: expected true for 'name'")
-	}
-	if c.Exists("nonexistent.key") {
-		t.Error("Exists: expected false for missing key")
-	}
-	all := c.All()
-	if _, ok := all["name"]; !ok {
-		t.Error("All: expected 'name' key")
-	}
+	checkConfigValues(t, c)
+	checkConfigExistence(t, c)
 }
 
 func TestOnChange(t *testing.T) {

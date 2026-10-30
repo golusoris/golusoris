@@ -681,6 +681,28 @@
         ".devcontainer/Dockerfile.praetor"
       ],
       "enabled": false
+    },
+    {
+      "description": "praetor-managed engine: updates arrive in one coordinated adoption pull request",
+      "matchPackageNames": [
+        "github.com/cordanaLLM/praetor",
+        "github.com/cordanaLLM/praetor/**",
+        "github.com/cordanaLLM/praetor/cmd/standardsctl",
+        "cordanaLLM/praetor",
+        "cordanaLLM/praetor/**"
+      ],
+      "enabled": false
+    },
+    {
+      "description": "In-repo modules are replaced by local paths; pseudo-version bumps only feed a self-digest loop.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchPackageNames": [
+        "github.com/golusoris/golusoris",
+        "github.com/golusoris/golusoris/**"
+      ],
+      "enabled": false
     }
   ],
   "lockFileMaintenance": {

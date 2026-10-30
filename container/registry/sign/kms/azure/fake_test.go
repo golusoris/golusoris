@@ -225,35 +225,48 @@ func (f *fakeVault) fail(w http.ResponseWriter, status int, code, msg string) {
 	reply(f.t, w, status, map[string]any{"error": map[string]string{"code": code, "message": msg}})
 }
 
-func (f *fakeVault) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
+func (f *fakeVault) authorize(w http.ResponseWriter, r *http.Request) bool {
 	if f.entra != nil && r.Host != vaultHost {
 		f.entra(w, r)
-		return
+		return false
 	}
 	f.requests++
 	if r.Host != vaultHost || r.URL.Query().Get("api-version") == "" {
 		f.fail(w, http.StatusBadRequest, "BadParameter", "host or api-version")
-		return
+		return false
 	}
 	if r.Header.Get("Authorization") != "Bearer "+fakeToken {
 		w.Header().Set("WWW-Authenticate", f.challenge)
 		f.fail(w, http.StatusUnauthorized, "Unauthorized", "AKV10000: Request is missing a Bearer or PoP token.")
-		return
+		return false
 	}
-	if f.hook != nil && f.hook(w, r) {
-		return
-	}
+	return f.hook == nil || !f.hook(w, r)
+}
+
+func (f *fakeVault) route(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-	switch {
-	case r.Method == http.MethodGet && len(parts) >= 2 && len(parts) <= 3 && parts[0] == "keys":
-		f.getKey(w, parts[1], strings.Join(parts[2:], ""))
-	case r.Method == http.MethodPost && len(parts) == 4 && parts[0] == "keys" && parts[3] == "sign":
-		f.sign(w, r, parts[1], parts[2])
-	default:
+	if len(parts) < 2 || parts[0] != "keys" {
 		f.fail(w, http.StatusNotFound, "NotFound", r.URL.Path)
+		return
 	}
+	if r.Method == http.MethodGet && len(parts) <= 3 {
+		f.getKey(w, parts[1], strings.Join(parts[2:], ""))
+		return
+	}
+	if r.Method == http.MethodPost && len(parts) == 4 && parts[3] == "sign" {
+		f.sign(w, r, parts[1], parts[2])
+		return
+	}
+	f.fail(w, http.StatusNotFound, "NotFound", r.URL.Path)
+}
+
+func (f *fakeVault) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.authorize(w, r) {
+		return
+	}
+	f.route(w, r)
 }
 
 // version finds a version of name; "" is the current one.

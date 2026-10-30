@@ -135,8 +135,14 @@ func TestBucket_PresignPutExpiryAndDifferentKey(t *testing.T) {
 	defer cancel()
 	clk := clockwork.NewRealClock()
 
-	// Positive: PUT within TTL = 2xx.
 	const keyA = "presign/expiry-key-a"
+	assertAzblobPresignPutPositive(ctx, t, b, keyA)
+	assertAzblobPresignPutExpired(ctx, t, b, clk)
+	assertAzblobPresignPutDifferentKey(ctx, t, b, keyA)
+}
+
+func assertAzblobPresignPutPositive(ctx context.Context, t *testing.T, b *azblob.Bucket, keyA string) {
+	t.Helper()
 	reqPos, err := b.PresignPut(ctx, keyA, storage.MinPresignTTL, storage.PresignPutOptions{})
 	if err != nil {
 		t.Fatalf("PresignPut positive: %v", err)
@@ -148,8 +154,10 @@ func TestBucket_PresignPutExpiryAndDifferentKey(t *testing.T) {
 	if err != nil || stat.Size != int64(len("positive payload")) {
 		t.Fatalf("Stat(%q) = %+v, %v", keyA, stat, err)
 	}
+}
 
-	// Expiry: new presign, wait past TTL -> PUT != 2xx.
+func assertAzblobPresignPutExpired(ctx context.Context, t *testing.T, b *azblob.Bucket, clk clockwork.Clock) {
+	t.Helper()
 	const keyExp = "presign/expiry-key-expired"
 	reqExp, err := b.PresignPut(ctx, keyExp, storage.MinPresignTTL, storage.PresignPutOptions{})
 	if err != nil {
@@ -164,7 +172,18 @@ func TestBucket_PresignPutExpiryAndDifferentKey(t *testing.T) {
 		}
 	}
 	// Polls for up to 4s so emulator clock skew cannot pass a live URL as expired.
-	expStatus := put(ctx, t, reqExp, []byte("late payload"))
+	expStatus := pollUntilExpiredPUT(ctx, t, reqExp, clk)
+	if expStatus/100 == 2 {
+		t.Fatalf("expired PUT status = %d, want != 2xx within 4s", expStatus)
+	}
+	if _, err = b.Stat(ctx, keyExp); !errors.Is(err, storage.ErrNotFound) {
+		t.Fatalf("Stat(%q) = %v, want ErrNotFound", keyExp, err)
+	}
+}
+
+func pollUntilExpiredPUT(ctx context.Context, t *testing.T, req storage.PresignedRequest, clk clockwork.Clock) int {
+	t.Helper()
+	expStatus := put(ctx, t, req, []byte("late payload"))
 	for range 8 {
 		if expStatus/100 != 2 {
 			break
@@ -174,16 +193,13 @@ func TestBucket_PresignPutExpiryAndDifferentKey(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatalf("context done polling for expiry: %v", ctx.Err())
 		}
-		expStatus = put(ctx, t, reqExp, []byte("late payload"))
+		expStatus = put(ctx, t, req, []byte("late payload"))
 	}
-	if expStatus/100 == 2 {
-		t.Fatalf("expired PUT status = %d, want != 2xx within 4s", expStatus)
-	}
-	if _, err = b.Stat(ctx, keyExp); !errors.Is(err, storage.ErrNotFound) {
-		t.Fatalf("Stat(%q) = %v, want ErrNotFound", keyExp, err)
-	}
+	return expStatus
+}
 
-	// Different key: presign for key A, rewrite URL path to key B -> PUT != 2xx and key B absent.
+func assertAzblobPresignPutDifferentKey(ctx context.Context, t *testing.T, b *azblob.Bucket, keyA string) {
+	t.Helper()
 	const keyB = "presign/expiry-key-b"
 	reqDiff, err := b.PresignPut(ctx, keyA, time.Minute, storage.PresignPutOptions{})
 	if err != nil {

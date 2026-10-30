@@ -256,41 +256,47 @@ func TestImage_Keyless(t *testing.T) {
 	for _, withTSA := range []bool{false, true} {
 		t.Run(map[bool]string{false: "current-time", true: "signed-timestamp"}[withTSA], func(t *testing.T) {
 			t.Parallel()
-			host := newRegistry(t, nil)
-			ref, digest := seed(t, host, false)
-			ca := newCA(t, "test fulcio")
-			token := idToken(t)
-			opts := sign.Options{FulcioURL: fulcioServer(t, ca, token).URL, Transport: newTransport(t)}
-			vopts := []verify.VerifierOption{verify.WithCurrentTime()}
-			var tsa *testTSA
-			if withTSA {
-				tt := newTSA(t)
-				tsa = &tt
-				opts.TSAURL = tsa.server(t).URL + "/api/v1/timestamp"
-				vopts = []verify.VerifierOption{verify.WithSignedTimestamps(1)}
-			}
-			s := sign.Signer{IDToken: func(context.Context) (string, error) { return token, nil }}
-			sig, err := sign.Image(testCtx(t), newClient(t), ref, s, opts)
-			if err != nil {
-				t.Fatalf("Image: %v", err)
-			}
-			v, err := verify.NewVerifier(trustRoot(t, &ca, tsa, nil), vopts...)
-			if err != nil {
-				t.Fatal(err)
-			}
-			id, err := verify.NewShortCertificateIdentity(testIssuer, "", testEmail, "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			b := loadBundle(t, sig.Bundle)
-			if _, err = v.Verify(b, verify.NewPolicy(artifactDigest(t, digest), verify.WithCertificateIdentity(id))); err != nil {
-				t.Fatalf("verify: %v", err)
-			}
-			other, _ := verify.NewShortCertificateIdentity(testIssuer, "", "mallory@example.com", "")
-			if _, err = v.Verify(b, verify.NewPolicy(artifactDigest(t, digest), verify.WithCertificateIdentity(other))); err == nil {
-				t.Fatal("bundle verified for another identity")
-			}
+			runImageKeylessCase(t, withTSA)
 		})
+	}
+}
+
+// runImageKeylessCase exercises keyless image signing with or without TSA.
+func runImageKeylessCase(t *testing.T, withTSA bool) {
+	t.Helper()
+	host := newRegistry(t, nil)
+	ref, digest := seed(t, host, false)
+	ca := newCA(t, "test fulcio")
+	token := idToken(t)
+	opts := sign.Options{FulcioURL: fulcioServer(t, ca, token).URL, Transport: newTransport(t)}
+	vopts := []verify.VerifierOption{verify.WithCurrentTime()}
+	var tsa *testTSA
+	if withTSA {
+		tt := newTSA(t)
+		tsa = &tt
+		opts.TSAURL = tsa.server(t).URL + "/api/v1/timestamp"
+		vopts = []verify.VerifierOption{verify.WithSignedTimestamps(1)}
+	}
+	s := sign.Signer{IDToken: func(context.Context) (string, error) { return token, nil }}
+	sig, err := sign.Image(testCtx(t), newClient(t), ref, s, opts)
+	if err != nil {
+		t.Fatalf("Image: %v", err)
+	}
+	v, err := verify.NewVerifier(trustRoot(t, &ca, tsa, nil), vopts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := verify.NewShortCertificateIdentity(testIssuer, "", testEmail, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := loadBundle(t, sig.Bundle)
+	if _, err = v.Verify(b, verify.NewPolicy(artifactDigest(t, digest), verify.WithCertificateIdentity(id))); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	other, _ := verify.NewShortCertificateIdentity(testIssuer, "", "mallory@example.com", "")
+	if _, err = v.Verify(b, verify.NewPolicy(artifactDigest(t, digest), verify.WithCertificateIdentity(other))); err == nil {
+		t.Fatal("bundle verified for another identity")
 	}
 }
 

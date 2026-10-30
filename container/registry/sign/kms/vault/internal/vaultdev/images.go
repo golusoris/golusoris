@@ -11,7 +11,7 @@ const (
 	VaultImage = "hashicorp/vault:2.2.1@sha256:962a92876e168d68eaaa24b0b8b49bbce1cb63024060a67bba95cd158a366fc2"
 	// OpenBaoImage is the OpenBao dev server, a Vault fork with the same
 	// transit and auth API.
-	OpenBaoImage = "openbao/openbao:2.7.1@sha256:6d2b93856e3fcf7b18ad855a0b51eaba474dc8b79cf554379ea32034797d2acf"
+	OpenBaoImage = "openbao/openbao:2.7.2@sha256:5046911075e137e154ce49ab051502f4ec7cf367d484ae4a4dce665d9b90561f"
 	// RyukImage is the testcontainers resource reaper, as in
 	// internal/testimages.
 	RyukImage = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"

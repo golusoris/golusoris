@@ -52,6 +52,37 @@ func mustOnComplete(t *testing.T, h *Handler, id string, fn completionFn) {
 	}
 }
 
+func testLocalScratchIsolationAccess(t *testing.T, first, second *localScratch) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := first.Create(ctx, tusd.FileInfo{ID: "shared", Size: 1}); err != nil {
+		t.Fatalf("create first upload: %v", err)
+	}
+	if _, err := second.Get(ctx, "shared"); !errors.Is(err, tusd.ErrNotFound) {
+		t.Fatalf("second scratch Get(shared) error = %v; want ErrNotFound", err)
+	}
+	if err := second.RemoveUpload(ctx, "shared"); err != nil {
+		t.Fatalf("second scratch RemoveUpload(shared): %v", err)
+	}
+	if _, err := first.Get(ctx, "shared"); err != nil {
+		t.Fatalf("second scratch removed first upload: %v", err)
+	}
+}
+
+func testLocalScratchIsolationCleanup(t *testing.T, first, second *localScratch) {
+	t.Helper()
+	secondRoot := second.root
+	if err := second.Close(); err != nil {
+		t.Fatalf("close second scratch: %v", err)
+	}
+	if _, err := os.Stat(secondRoot); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("owned scratch root after Close = %v; want not exist", err)
+	}
+	if _, err := os.Stat(first.root); err != nil {
+		t.Fatalf("closing second scratch affected first root: %v", err)
+	}
+}
+
 func TestLocalScratch_EmptyRootCreatesOwnedIsolation(t *testing.T) {
 	t.Parallel()
 	first, err := newLocalScratch("")
@@ -68,30 +99,8 @@ func TestLocalScratch_EmptyRootCreatesOwnedIsolation(t *testing.T) {
 		t.Fatalf("default scratch roots collide at %q", first.root)
 	}
 
-	ctx := context.Background()
-	if _, err = first.Create(ctx, tusd.FileInfo{ID: "shared", Size: 1}); err != nil {
-		t.Fatalf("create first upload: %v", err)
-	}
-	if _, err = second.Get(ctx, "shared"); !errors.Is(err, tusd.ErrNotFound) {
-		t.Fatalf("second scratch Get(shared) error = %v; want ErrNotFound", err)
-	}
-	if err = second.RemoveUpload(ctx, "shared"); err != nil {
-		t.Fatalf("second scratch RemoveUpload(shared): %v", err)
-	}
-	if _, err = first.Get(ctx, "shared"); err != nil {
-		t.Fatalf("second scratch removed first upload: %v", err)
-	}
-
-	secondRoot := second.root
-	if err = second.Close(); err != nil {
-		t.Fatalf("close second scratch: %v", err)
-	}
-	if _, err = os.Stat(secondRoot); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("owned scratch root after Close = %v; want not exist", err)
-	}
-	if _, err = os.Stat(first.root); err != nil {
-		t.Fatalf("closing second scratch affected first root: %v", err)
-	}
+	testLocalScratchIsolationAccess(t, first, second)
+	testLocalScratchIsolationCleanup(t, first, second)
 }
 
 func TestLocalScratch_CloseContextHonorsCancellation(t *testing.T) {
