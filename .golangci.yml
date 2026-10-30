@@ -276,38 +276,6 @@ linters:
         linters:
           - gocyclo
       # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/oauth2server/handletoken_internal_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/oauth2server/oauth2server_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/oidc/exchange_userinfo_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/oidc/exchange_userinfo_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/oidc/exchange_userinfo_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/passkeys/passkeys_ceremony_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/session/session_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^auth/session/session_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
       - path: ^cache/twotier/module_cluster_test\.go$
         linters:
           - gocognit
@@ -335,38 +303,6 @@ linters:
       - path: ^cmd/golusoris-mcp/main_test\.go$
         linters:
           - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/dns_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/dns_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/globaldb_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/globaldb_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/globaldb_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/region_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/multiregion/region_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^deploy/pulumi/app_dependency_test\.go$
-        linters:
-          - funlen
       # category C, entered 2026-10-30, expires 2026-11-09, #1017
       - path: ^grpc/tls_internal_test\.go$
         linters:
@@ -452,26 +388,6 @@ linters:
         linters:
           - gocyclo
       # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^media/audio/audio_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^media/audio/audio_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^media/audio/internal_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^media/game/game_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^media/img/pipeline/handler_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
       - path: ^net/dnsserver/internal_test\.go$
         linters:
           - gocyclo
@@ -500,18 +416,6 @@ linters:
         linters:
           - gocyclo
       # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^outbox/drainer_internal_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^outbox/drainer_internal_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^outbox/drainer_internal_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
       - path: ^payments/stripe/stripe_test\.go$
         linters:
           - funlen
@@ -535,54 +439,6 @@ linters:
       - path: ^pubsub/kafka/integration_test\.go$
         linters:
           - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^science/bio/bio_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^science/bio/bio_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^science/numerical/numerical_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^science/plot/plot_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^science/plot/plot_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^testutil/configfile/configfile_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^testutil/httpclient/httpclient_test\.go$
-        linters:
-          - funlen
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^testutil/kafka/image_internal_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^testutil/redis/image_internal_test\.go$
-        linters:
-          - gocognit
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^torrent/qbittorrent_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^torrent/rtorrent_test\.go$
-        linters:
-          - gocyclo
-      # category C, entered 2026-10-30, expires 2026-11-09, #1017
-      - path: ^torrent/transmission_test\.go$
-        linters:
-          - gocyclo
       # category C, entered 2026-10-30, expires 2026-11-09, #1017
       - path: ^web3/solana/solana_test\.go$
         linters:

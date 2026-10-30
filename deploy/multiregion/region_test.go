@@ -174,9 +174,9 @@ func testRegionConfig() regionConfig {
 	}
 }
 
-func TestRegionNetworkSeparatesPublicAndPrivateSubnets(t *testing.T) {
-	t.Parallel()
-	mocks := &stackMocks{}
+// runTestRegionNetwork creates and runs a mock region network.
+func runTestRegionNetwork(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
 		provider, err := aws.NewProvider(ctx, "primary", &aws.ProviderArgs{
 			Region: pulumi.String("us-east-1"),
@@ -196,13 +196,22 @@ func TestRegionNetworkSeparatesPublicAndPrivateSubnets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newRegionNetwork() error = %v", err)
 	}
+}
 
+// assertRegionNetworkSubnetPublicIP verifies public and private IP mappings on subnets.
+func assertRegionNetworkSubnetPublicIP(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	for _, subnet := range mocks.findAll("aws:ec2/subnet:Subnet") {
 		isPrivate := strings.Contains(subnet.name, "private")
 		if got := subnet.inputs["mapPublicIpOnLaunch"].BoolValue(); got == isPrivate {
 			t.Errorf("subnet %s mapPublicIpOnLaunch = %v, private = %v", subnet.name, got, isPrivate)
 		}
 	}
+}
+
+// assertRegionNetworkRouteTables verifies routing table configurations for subnets.
+func assertRegionNetworkRouteTables(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	for _, routeTable := range mocks.findAll("aws:ec2/routeTable:RouteTable") {
 		routeCount := 0
 		if routes, ok := routeTable.inputs["routes"]; ok {
@@ -215,6 +224,14 @@ func TestRegionNetworkSeparatesPublicAndPrivateSubnets(t *testing.T) {
 			t.Errorf("public route table %s has %d routes, want 1", routeTable.name, routeCount)
 		}
 	}
+}
+
+func TestRegionNetworkSeparatesPublicAndPrivateSubnets(t *testing.T) {
+	t.Parallel()
+	mocks := &stackMocks{}
+	runTestRegionNetwork(t, mocks)
+	assertRegionNetworkSubnetPublicIP(t, mocks)
+	assertRegionNetworkRouteTables(t, mocks)
 }
 
 func TestRegionFrontendTerminatesTLS(t *testing.T) {
@@ -363,14 +380,9 @@ func TestNewRegionService_Succeeds(t *testing.T) {
 // asserts the field values placed on each registered resource are exactly
 // what the pre-split function produced, so the extraction could not have
 // silently dropped or mistyped a field.
-func TestNewRegionService_WiresResourcesCorrectly(t *testing.T) {
-	t.Parallel()
-	cfg := testRegionConfig()
-	mocks := &stackMocks{}
-	if err := runNewRegionService(t, cfg, mocks); err != nil {
-		t.Fatalf("newRegionService() error = %v", err)
-	}
-
+// assertRegionTaskDefinitionResource verifies registered task definition inputs and dependencies.
+func assertRegionTaskDefinitionResource(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	taskDef, ok := mocks.find("aws:ecs/taskDefinition:TaskDefinition")
 	if !ok {
 		t.Fatal("no aws:ecs/taskDefinition:TaskDefinition resource was registered")
@@ -388,7 +400,12 @@ func TestNewRegionService_WiresResourcesCorrectly(t *testing.T) {
 	if deps := strings.Join(taskDef.deps, "\n"); !strings.Contains(deps, "secretVersion:SecretVersion::test-region-dsn-v") {
 		t.Errorf("task dependencies do not contain database secret version: %q", deps)
 	}
-	if _, ok = mocks.find("aws:secretsmanager/secret:Secret"); !ok {
+}
+
+// assertRegionSecretAndPolicyResource verifies database secret and IAM read policy.
+func assertRegionSecretAndPolicyResource(t *testing.T, mocks *stackMocks) {
+	t.Helper()
+	if _, ok := mocks.find("aws:secretsmanager/secret:Secret"); !ok {
 		t.Error("no regional database secret was registered")
 	}
 	policy, ok := mocks.find("aws:iam/rolePolicy:RolePolicy")
@@ -398,7 +415,11 @@ func TestNewRegionService_WiresResourcesCorrectly(t *testing.T) {
 	if got := policy.inputs["policy"].StringValue(); !strings.Contains(got, "secretsmanager:GetSecretValue") {
 		t.Errorf("secret-read policy = %q, want GetSecretValue", got)
 	}
+}
 
+// assertRegionClusterAndServiceResource verifies ECS cluster and service configuration.
+func assertRegionClusterAndServiceResource(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	cluster, ok := mocks.find("aws:ecs/cluster:Cluster")
 	if !ok {
 		t.Fatal("no aws:ecs/cluster:Cluster resource was registered")
@@ -419,9 +440,18 @@ func TestNewRegionService_WiresResourcesCorrectly(t *testing.T) {
 	}
 }
 
-// TestNewRegionService_WaitsForExecutionPolicies protects the task-start IAM
-// edge: the task definition waits for both execution-role policies, and the
-// service waits for that task definition before ECS can launch a task.
+func TestNewRegionService_WiresResourcesCorrectly(t *testing.T) {
+	t.Parallel()
+	cfg := testRegionConfig()
+	mocks := &stackMocks{}
+	if err := runNewRegionService(t, cfg, mocks); err != nil {
+		t.Fatalf("newRegionService() error = %v", err)
+	}
+	assertRegionTaskDefinitionResource(t, mocks)
+	assertRegionSecretAndPolicyResource(t, mocks)
+	assertRegionClusterAndServiceResource(t, mocks)
+}
+
 func TestNewRegionService_WaitsForExecutionPolicies(t *testing.T) {
 	t.Parallel()
 	mocks := &stackMocks{}

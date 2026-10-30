@@ -253,9 +253,9 @@ func TestLoudnessRejectsStalledDecoder(t *testing.T) {
 	}
 }
 
-func TestOptionsWithDefaults(t *testing.T) {
-	t.Parallel()
-	got := Options{}.withDefaults()
+// assertDefaultOptions verifies that zero-value options take repository defaults.
+func assertDefaultOptions(t *testing.T, got Options) {
+	t.Helper()
 	if got.MaxInputBytes != DefaultMaxInputBytes {
 		t.Errorf("MaxInputBytes = %d, want %d", got.MaxInputBytes, DefaultMaxInputBytes)
 	}
@@ -274,19 +274,28 @@ func TestOptionsWithDefaults(t *testing.T) {
 	if got.Backend != "pureGo" {
 		t.Errorf("Backend = %q, want pureGo", got.Backend)
 	}
-	// Explicit values survive.
-	custom := Options{
+}
+
+// assertExplicitOptionsSurvive verifies that explicitly set options are not overwritten by defaults.
+func assertExplicitOptionsSurvive(t *testing.T, custom Options) {
+	t.Helper()
+	if custom.MaxInputBytes != 98 || custom.MaxDecodedBytes != 99 || custom.MaxChannels != 4 ||
+		custom.DefaultPeakBuckets != 7 || custom.MaxPeakBuckets != 8 || custom.Backend != "x" {
+		t.Errorf("explicit options overwritten: %+v", custom)
+	}
+}
+
+func TestOptionsWithDefaults(t *testing.T) {
+	t.Parallel()
+	assertDefaultOptions(t, Options{}.withDefaults())
+	assertExplicitOptionsSurvive(t, Options{
 		MaxInputBytes:      98,
 		MaxDecodedBytes:    99,
 		MaxChannels:        4,
 		DefaultPeakBuckets: 7,
 		MaxPeakBuckets:     8,
 		Backend:            "x",
-	}.withDefaults()
-	if custom.MaxInputBytes != 98 || custom.MaxDecodedBytes != 99 || custom.MaxChannels != 4 ||
-		custom.DefaultPeakBuckets != 7 || custom.MaxPeakBuckets != 8 || custom.Backend != "x" {
-		t.Errorf("explicit options overwritten: %+v", custom)
-	}
+	}.withDefaults())
 }
 
 func TestOpenMP3BoundsSeekableLengthScan(t *testing.T) {

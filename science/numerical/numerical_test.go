@@ -17,48 +17,66 @@ func almostEqual(a, b float64) bool {
 	return math.Abs(a-b) <= floatTol
 }
 
+// testNewDenseValidMatrix asserts dimensions and elements of a populated dense matrix.
+func testNewDenseValidMatrix(t *testing.T) {
+	t.Helper()
+	data := []float64{1, 2, 3, 4}
+	m := numerical.NewDense(2, 2, data)
+	if m == nil {
+		t.Fatal("expected non-nil matrix")
+	}
+	r, c := m.Dims()
+	if r != 2 || c != 2 {
+		t.Fatalf("dims = (%d, %d), want (2, 2)", r, c)
+	}
+	if got := m.At(0, 0); got != 1.0 {
+		t.Fatalf("m.At(0, 0) = %f, want 1.0", got)
+	}
+	if got := m.At(1, 1); got != 4.0 {
+		t.Fatalf("m.At(1, 1) = %f, want 4.0", got)
+	}
+}
+
+// testNewDenseNilData asserts that passing nil data allocates a zeroed matrix.
+func testNewDenseNilData(t *testing.T) {
+	t.Helper()
+	m := numerical.NewDense(2, 3, nil)
+	r, c := m.Dims()
+	if r != 2 || c != 3 {
+		t.Fatalf("dims = (%d, %d), want (2, 3)", r, c)
+	}
+	if got := m.At(0, 0); got != 0.0 {
+		t.Fatalf("m.At(0, 0) = %f, want 0.0", got)
+	}
+}
+
+// testNewDenseMismatchedDataPanics asserts that passing mismatched data length panics.
+func testNewDenseMismatchedDataPanics(t *testing.T) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r == nil {
+			t.Fatal("expected panic on mismatched slice length")
+		}
+	}()
+	_ = numerical.NewDense(2, 2, []float64{1, 2, 3})
+}
+
 func TestNewDense(t *testing.T) {
 	t.Parallel()
 
 	t.Run("positive 2x2 matrix", func(t *testing.T) {
 		t.Parallel()
-		data := []float64{1, 2, 3, 4}
-		m := numerical.NewDense(2, 2, data)
-		if m == nil {
-			t.Fatal("expected non-nil matrix")
-		}
-		r, c := m.Dims()
-		if r != 2 || c != 2 {
-			t.Fatalf("dims = (%d, %d), want (2, 2)", r, c)
-		}
-		if got := m.At(0, 0); got != 1.0 {
-			t.Fatalf("m.At(0, 0) = %f, want 1.0", got)
-		}
-		if got := m.At(1, 1); got != 4.0 {
-			t.Fatalf("m.At(1, 1) = %f, want 4.0", got)
-		}
+		testNewDenseValidMatrix(t)
 	})
 
 	t.Run("boundary nil data creates zero matrix", func(t *testing.T) {
 		t.Parallel()
-		m := numerical.NewDense(2, 3, nil)
-		r, c := m.Dims()
-		if r != 2 || c != 3 {
-			t.Fatalf("dims = (%d, %d), want (2, 3)", r, c)
-		}
-		if got := m.At(0, 0); got != 0.0 {
-			t.Fatalf("m.At(0, 0) = %f, want 0.0", got)
-		}
+		testNewDenseNilData(t)
 	})
 
 	t.Run("negative mismatched data size panics", func(t *testing.T) {
 		t.Parallel()
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("expected panic on mismatched slice length")
-			}
-		}()
-		_ = numerical.NewDense(2, 2, []float64{1, 2, 3})
+		testNewDenseMismatchedDataPanics(t)
 	})
 }
 
