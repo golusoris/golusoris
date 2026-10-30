@@ -165,6 +165,20 @@ func TestResolveReplicaTag(t *testing.T) {
 	}
 }
 
+func verifyForeignTagErrorAndLog(t *testing.T, err error, logOutput, foreignID string) {
+	t.Helper()
+	msg := err.Error()
+	if !strings.Contains(msg, "remote-node") || !strings.Contains(msg, "local-node") || !strings.Contains(msg, "sticky") {
+		t.Fatalf("error message %q missing expected replica tags or sticky warning", msg)
+	}
+	if !strings.Contains(logOutput, "tus: upload belongs to another replica") ||
+		!strings.Contains(logOutput, foreignID) ||
+		!strings.Contains(logOutput, "remote-node") ||
+		!strings.Contains(logOutput, "local-node") {
+		t.Fatalf("log output %q missing expected warn fields", logOutput)
+	}
+}
+
 func TestGetUpload_ForeignTag_LogsAndErrors(t *testing.T) {
 	t.Parallel()
 	scratch, err := newLocalScratch(t.TempDir())
@@ -184,17 +198,7 @@ func TestGetUpload_ForeignTag_LogsAndErrors(t *testing.T) {
 	if !errors.Is(err, tusd.ErrNotFound) {
 		t.Fatalf("GetUpload err = %v; want errors.Is ErrNotFound", err)
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "remote-node") || !strings.Contains(msg, "local-node") || !strings.Contains(msg, "sticky") {
-		t.Fatalf("error message %q missing expected replica tags or sticky warning", msg)
-	}
-	logOutput := logBuf.String()
-	if !strings.Contains(logOutput, "tus: upload belongs to another replica") ||
-		!strings.Contains(logOutput, foreignID) ||
-		!strings.Contains(logOutput, "remote-node") ||
-		!strings.Contains(logOutput, "local-node") {
-		t.Fatalf("log output %q missing expected warn fields", logOutput)
-	}
+	verifyForeignTagErrorAndLog(t, err, logBuf.String(), foreignID)
 }
 
 func TestGetUpload_OwnTagAndLegacyMiss_NoWarnLog(t *testing.T) {
@@ -230,6 +234,49 @@ func TestGetUpload_OwnTagAndLegacyMiss_NoWarnLog(t *testing.T) {
 	}
 }
 
+func testForeignTagPatch(t *testing.T, client *http.Client, url string) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, url, strings.NewReader("data"))
+	if err != nil {
+		t.Fatalf("new PATCH request: %v", err)
+	}
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Upload-Offset", "0")
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("PATCH: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("PATCH status = %d; want 404", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read PATCH body: %v", err)
+	}
+	if !strings.Contains(string(body), "sticky") || !strings.Contains(string(body), "node-beta") || !strings.Contains(string(body), "node-alpha") {
+		t.Fatalf("PATCH body %q missing sticky notice or replica tags", string(body))
+	}
+}
+
+func testForeignTagHead(t *testing.T, client *http.Client, url string) {
+	t.Helper()
+	headReq, err := http.NewRequestWithContext(t.Context(), http.MethodHead, url, http.NoBody)
+	if err != nil {
+		t.Fatalf("new HEAD request: %v", err)
+	}
+	headReq.Header.Set("Tus-Resumable", "1.0.0")
+	headResp, err := client.Do(headReq)
+	if err != nil {
+		t.Fatalf("HEAD: %v", err)
+	}
+	defer func() { _ = headResp.Body.Close() }()
+	if headResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("HEAD status = %d; want 404", headResp.StatusCode)
+	}
+}
+
 func TestHTTP_ForeignTag_PatchAndHead(t *testing.T) {
 	t.Parallel()
 	opts := defaultOptions()
@@ -247,41 +294,6 @@ func TestHTTP_ForeignTag_PatchAndHead(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	url := srv.URL + "/files/node-beta_0123456789abcdef0123456789abcdef"
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPatch, url, strings.NewReader("data"))
-	if err != nil {
-		t.Fatalf("new PATCH request: %v", err)
-	}
-	req.Header.Set("Tus-Resumable", "1.0.0")
-	req.Header.Set("Upload-Offset", "0")
-	req.Header.Set("Content-Type", "application/offset+octet-stream")
-	resp, err := srv.Client().Do(req)
-	if err != nil {
-		t.Fatalf("PATCH: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("PATCH status = %d; want 404", resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read PATCH body: %v", err)
-	}
-	if !strings.Contains(string(body), "sticky") || !strings.Contains(string(body), "node-beta") || !strings.Contains(string(body), "node-alpha") {
-		t.Fatalf("PATCH body %q missing sticky notice or replica tags", string(body))
-	}
-
-	headReq, err := http.NewRequestWithContext(t.Context(), http.MethodHead, url, http.NoBody)
-	if err != nil {
-		t.Fatalf("new HEAD request: %v", err)
-	}
-	headReq.Header.Set("Tus-Resumable", "1.0.0")
-	headResp, err := srv.Client().Do(headReq)
-	if err != nil {
-		t.Fatalf("HEAD: %v", err)
-	}
-	defer func() { _ = headResp.Body.Close() }()
-	if headResp.StatusCode != http.StatusNotFound {
-		t.Fatalf("HEAD status = %d; want 404", headResp.StatusCode)
-	}
+	testForeignTagPatch(t, srv.Client(), url)
+	testForeignTagHead(t, srv.Client(), url)
 }
