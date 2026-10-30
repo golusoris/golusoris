@@ -41,27 +41,38 @@ func TestDispatchTool(t *testing.T) {
 	}
 }
 
-// TestServerRoundTrip drives the real MCP protocol over an in-memory transport,
-// proving the official-SDK server advertises the tools and dispatches calls.
-func TestServerRoundTrip(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	logger := slog.New(slog.DiscardHandler)
+var invalidInitToolArgs = []struct {
+	name string
+	args map[string]any
+}{
+	{name: "missing required", args: map[string]any{}},
+	{name: "wrong type", args: map[string]any{"name": 7}},
+	{name: "extra property", args: map[string]any{"name": "blog", "unexpected": true}},
+}
 
+// connectInMemoryMCP sets up in-memory MCP server and client sessions.
+func connectInMemoryMCP(t *testing.T, ctx context.Context) *sdkmcp.ClientSession {
+	t.Helper()
+	logger := slog.New(slog.DiscardHandler)
 	serverT, clientT := sdkmcp.NewInMemoryTransports()
 	serverSession, err := newServer(logger).Connect(ctx, serverT, nil)
 	if err != nil {
 		t.Fatalf("server connect: %v", err)
 	}
-	defer func() { _ = serverSession.Close() }()
+	t.Cleanup(func() { _ = serverSession.Close() })
 
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "test-client", Version: "0"}, nil)
 	cs, err := client.Connect(ctx, clientT, nil)
 	if err != nil {
 		t.Fatalf("client connect: %v", err)
 	}
-	defer func() { _ = cs.Close() }()
+	t.Cleanup(func() { _ = cs.Close() })
+	return cs
+}
 
+// assertMCPToolsListed verifies all expected tools are returned by tools/list.
+func assertMCPToolsListed(t *testing.T, ctx context.Context, cs *sdkmcp.ClientSession) {
+	t.Helper()
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil {
 		t.Fatalf("list tools: %v", err)
@@ -78,7 +89,11 @@ func TestServerRoundTrip(t *testing.T) {
 			t.Errorf("tools/list missing %q", want)
 		}
 	}
+}
 
+// assertValidInitToolCall verifies executing a valid golusoris_init tool call.
+func assertValidInitToolCall(t *testing.T, ctx context.Context, cs *sdkmcp.ClientSession) {
+	t.Helper()
 	res, err := cs.CallTool(ctx, &sdkmcp.CallToolParams{
 		Name:      "golusoris_init",
 		Arguments: map[string]any{"name": "blog"},
@@ -96,16 +111,12 @@ func TestServerRoundTrip(t *testing.T) {
 	if !strings.Contains(text.Text, "golusoris init blog") {
 		t.Errorf("call result = %q, want substring %q", text.Text, "golusoris init blog")
 	}
+}
 
-	invalid := []struct {
-		name string
-		args map[string]any
-	}{
-		{name: "missing required", args: map[string]any{}},
-		{name: "wrong type", args: map[string]any{"name": 7}},
-		{name: "extra property", args: map[string]any{"name": "blog", "unexpected": true}},
-	}
-	for _, tt := range invalid {
+// assertInvalidInitToolCalls verifies schema rejection on invalid arguments.
+func assertInvalidInitToolCalls(t *testing.T, ctx context.Context, cs *sdkmcp.ClientSession) {
+	t.Helper()
+	for _, tt := range invalidInitToolArgs {
 		got, callErr := cs.CallTool(ctx, &sdkmcp.CallToolParams{
 			Name:      "golusoris_init",
 			Arguments: tt.args,
@@ -117,6 +128,17 @@ func TestServerRoundTrip(t *testing.T) {
 			t.Fatalf("%s: schema-invalid call returned success; content=%v", tt.name, got.Content)
 		}
 	}
+}
+
+// TestServerRoundTrip drives the real MCP protocol over an in-memory transport,
+// proving the official-SDK server advertises the tools and dispatches calls.
+func TestServerRoundTrip(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	cs := connectInMemoryMCP(t, ctx)
+	assertMCPToolsListed(t, ctx, cs)
+	assertValidInitToolCall(t, ctx, cs)
+	assertInvalidInitToolCalls(t, ctx, cs)
 }
 
 // newTestClient uses a private transport: httptest.Server.Close resets http.DefaultTransport (#701).
