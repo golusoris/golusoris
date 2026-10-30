@@ -23,7 +23,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.5.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
-	github.com/aws/smithy-go v1.28.6
+	github.com/aws/smithy-go v1.28.7
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/benbjohnson/hashfs v0.2.2
 	github.com/bmatcuk/doublestar/v4 v4.10.4
