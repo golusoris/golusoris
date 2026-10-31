@@ -20,6 +20,7 @@ class GoModTest(unittest.TestCase):
     """Exercise official parsing and fail-closed command handling."""
 
     def setUp(self) -> None:
+        """Require the go binary and give each test a fresh go.mod path."""
         if shutil.which("go") is None:
             self.fail("go required for go.mod parser tests")
         directory = tempfile.TemporaryDirectory(prefix="golusoris-gomod-test-")
@@ -27,12 +28,14 @@ class GoModTest(unittest.TestCase):
         self.path = Path(directory.name) / "go.mod"
 
     def _read(self, text: str) -> gomod.GoMod:
+        """Write text as go.mod, parse it, and check the parser left the file unchanged."""
         self.path.write_text(text, encoding="utf-8")
         parsed = gomod.read_go_mod(self.path)
         self.assertEqual(self.path.read_text(encoding="utf-8"), text)
         return parsed
 
     def test_positive_require_and_replace_blocks_and_quoted_paths(self) -> None:
+        """Single-line and block require/replace entries, quoted paths and comments parse."""
         parsed = self._read(
             "module example.com/fixture\n"
             "require example.com/single v1.0.0 // indirect\n"
@@ -56,6 +59,7 @@ class GoModTest(unittest.TestCase):
         )
 
     def test_negative_malformed_go_mod(self) -> None:
+        """Syntax Go rejects raises GoModError instead of a partial result."""
         for fixture in (
             "require (\nexample.com/dep v1.0.0\n",
             "replace example.com/dep =>\n",
@@ -67,6 +71,7 @@ class GoModTest(unittest.TestCase):
                 self._read(fixture)
 
     def test_boundary_empty_require_and_versioned_replace(self) -> None:
+        """An empty require block and a versioned replace yield only the replace target."""
         parsed = self._read(
             "module example.com/fixture\nrequire (\n)\n"
             "replace example.com/dep v1.2.0 => example.com/remote v1.3.0\n"
@@ -74,11 +79,13 @@ class GoModTest(unittest.TestCase):
         self.assertEqual(parsed, gomod.GoMod(frozenset(), ("example.com/remote",)))
 
     def test_boundary_no_dependencies(self) -> None:
+        """Files without requires or replaces yield an empty GoMod."""
         for fixture in ("", "module example.com/fixture\n", "require (\n)\nreplace (\n)\n"):
             with self.subTest(fixture=fixture):
                 self.assertEqual(self._read(fixture), gomod.GoMod(frozenset(), ()))
 
     def test_boundary_entry_limit_and_negative_overflow(self) -> None:
+        """MAX_ENTRIES entries parse; one more raises GoModError."""
         fixture = "".join(
             f"require example.com/dep{index} v1.0.0\n"
             for index in range(gomod.MAX_ENTRIES)
@@ -88,15 +95,18 @@ class GoModTest(unittest.TestCase):
             self._read(fixture + "replace example.com/dep0 => ./x\n")
 
     def test_negative_missing_go_binary(self) -> None:
+        """A PATH without go raises GoModError."""
         with unittest.mock.patch.dict(os.environ, {"PATH": str(self.path.parent)}):
             with self.assertRaisesRegex(gomod.GoModError, "go.mod"):
                 self._read("module example.com/fixture\n")
 
     def test_negative_missing_go_mod(self) -> None:
+        """A missing go.mod raises GoModError."""
         with self.assertRaisesRegex(gomod.GoModError, "go.mod"):
             gomod.read_go_mod(self.path)
 
     def test_negative_timeout(self) -> None:
+        """A go command past its 30 s timeout raises GoModError."""
         with unittest.mock.patch.object(
             gomod.subprocess, "run", side_effect=subprocess.TimeoutExpired("go", 30)
         ) as run:
@@ -105,6 +115,7 @@ class GoModTest(unittest.TestCase):
         self.assertEqual(run.call_args.kwargs["timeout"], 30)
 
     def test_negative_bad_json(self) -> None:
+        """JSON output of the wrong shape raises GoModError."""
         for output in ("not json", "[]", '{"Require": [1]}', '{"Replace": "bad"}'):
             result = subprocess.CompletedProcess(["go"], 0, stdout=output, stderr="")
             with self.subTest(output=output), unittest.mock.patch.object(
