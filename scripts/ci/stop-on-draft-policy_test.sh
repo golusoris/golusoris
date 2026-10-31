@@ -98,4 +98,49 @@ neg_no_summary="$suite_root/no-summary.yml"
 sed '/GITHUB_STEP_SUMMARY/d' "$action_file" >"$neg_no_summary"
 expect_failure 'lacks step summary append' check_stop_on_draft_action "$neg_no_summary"
 
+
+# Workflows call the composite at a full commit SHA instead of inlining the step.
+check_stop_on_draft_usage() {
+	local workflow="$1" status=0
+	if grep -Fq 'Gate not run on a draft' "$workflow"; then
+		printf '%s must use the stop-on-draft composite action instead of an inline draft block\n' "${workflow##*/}" >&2
+		status=1
+	fi
+	if grep -E 'stop-on-draft@' "$workflow" | grep -Evq 'stop-on-draft@[0-9a-f]{40}([^0-9a-f]|$)'; then
+		printf '%s: stop-on-draft must be pinned to a full 40-character SHA\n' "${workflow##*/}" >&2
+		status=1
+	fi
+	return "$status"
+}
+
+# praetorctl adopt emits its managed workflows with the inline step and audit locks them byte for byte.
+praetor_managed="$(python3 -c 'import json, sys
+rules = json.load(open(sys.argv[1], encoding="utf-8"))["packageRules"]
+for rule in rules:
+    if rule.get("description", "").startswith("praetor-managed files"):
+        print("\n".join(rule["matchFileNames"]))' "$repo_root/renovate.json")"
+if [[ "$praetor_managed" != *.github/workflows/* ]]; then
+	printf 'renovate.json praetor-managed rule lists no workflow\n' >&2
+	exit 1
+fi
+
+for workflow in "$repo_root/.github/workflows"/*.yml "$repo_root/.github/workflows"/*.yaml; do
+	[[ -f "$workflow" ]] || continue
+	if grep -Fqx ".github/workflows/${workflow##*/}" <<<"$praetor_managed"; then
+		continue
+	fi
+	check_stop_on_draft_usage "$workflow"
+done
+
+# Negative case 5: inline draft block in a workflow.
+neg_inline="$suite_root/inline-block.yml"
+sed '0,/uses: golusoris\/golusoris\/\.github\/actions\/stop-on-draft@/s||env:\n          TITLE: Gate not run on a draft\n        uses: golusoris/golusoris/.github/actions/stop-on-draft@|' \
+	"$repo_root/.github/workflows/ci.yml" >"$neg_inline"
+expect_failure 'instead of an inline draft block' check_stop_on_draft_usage "$neg_inline"
+
+# Negative case 6: branch ref instead of a commit SHA.
+neg_ref="$suite_root/non-sha-ref.yml"
+sed 's|stop-on-draft@[0-9a-f]\{40\}|stop-on-draft@main|' "$repo_root/.github/workflows/ci.yml" >"$neg_ref"
+expect_failure 'pinned to a full 40-character SHA' check_stop_on_draft_usage "$neg_ref"
+
 printf 'stop-on-draft policy tests passed\n'
