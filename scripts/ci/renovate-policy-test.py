@@ -57,7 +57,6 @@ EXPECTED = {
     ("tools/tool-versions.env", "golang.org/x/vuln", "go"),
     ("tools/tool-versions.env", "github.com/joelanford/go-apidiff", "go"),
     ("tools/tool-versions.env", "github.com/evilmartians/lefthook/v2", "go"),
-    ("tools/tool-versions.env", "github.com/daixiang0/gci", "go"),
     ("tools/tool-versions.env", "github.com/vektra/mockery/v3", "go"),
     ("tools/tool-versions.env", "github.com/air-verse/air", "go"),
     ("tools/tool-versions.env", "github.com/sqlc-dev/sqlc", "go"),
