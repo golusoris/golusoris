@@ -158,7 +158,13 @@ func (c *client) do(ctx context.Context, method, path string, body, out any) (er
 		}
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.base.JoinPath("v1", path).String(), rd)
+	// Config validation refuses dot segments; escaping each segment keeps
+	// any reserved character inside its segment.
+	target := c.base.JoinPath("v1")
+	for seg := range strings.SplitSeq(path, "/") {
+		target = target.JoinPath(url.PathEscape(seg))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, target.String(), rd)
 	if err != nil {
 		return err
 	}
