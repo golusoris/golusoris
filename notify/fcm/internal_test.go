@@ -7,7 +7,8 @@ package fcm
 import (
 	"net/http"
 	"testing"
-	"time"
+
+	"github.com/golusoris/golusoris/notify"
 )
 
 func TestNewSenderClonesAndBoundsInjectedClient(t *testing.T) {
@@ -25,13 +26,13 @@ func TestNewSenderClonesAndBoundsInjectedClient(t *testing.T) {
 	if sender.hc == injected {
 		t.Fatal("NewSender retained caller-owned client")
 	}
-	if injected.Timeout != 0 || sender.hc.Timeout != defaultRequestTimeout {
+	if injected.Timeout != 0 || sender.hc.Timeout != notify.DefaultRequestTimeout {
 		t.Fatalf("injected/sender timeout = %v/%v", injected.Timeout, sender.hc.Timeout)
 	}
 	if sender.maxResponseBytes != defaultMaxResponseBytes {
 		t.Fatalf("max response bytes = %d, want %d", sender.maxResponseBytes, defaultMaxResponseBytes)
 	}
-	if sender.hc.Timeout != 10*time.Second {
-		t.Fatalf("timeout = %v, want 10s", sender.hc.Timeout)
+	if sender.hc.Timeout != notify.DefaultRequestTimeout {
+		t.Fatalf("timeout = %v, want %v", sender.hc.Timeout, notify.DefaultRequestTimeout)
 	}
 }
