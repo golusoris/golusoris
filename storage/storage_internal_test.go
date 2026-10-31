@@ -172,13 +172,21 @@ func TestLocalBucket_MetadataSidecarLifecycleAndListHiding(t *testing.T) {
 		t.Fatal(err)
 	}
 	const key = "nested/object"
-	if _, err = bucket.Put(context.Background(), key, strings.NewReader("first"), PutOptions{
+	metadataName := localMetadataPath(key, filepath.FromSlash(key))
+	metadataPath := filepath.Join(base, metadataName)
+
+	assertInitialMetadataSidecar(t, bucket, metadataPath, key)
+	assertDefaultReplacementMetadataSidecar(t, bucket, metadataPath, key)
+	assertDeletedMetadataSidecar(t, bucket, metadataPath, key)
+}
+
+func assertInitialMetadataSidecar(t *testing.T, bucket *LocalBucket, metadataPath, key string) {
+	t.Helper()
+	if _, err := bucket.Put(context.Background(), key, strings.NewReader("first"), PutOptions{
 		ContentType: "text/plain", Metadata: map[string]string{"generation": "one"},
 	}); err != nil {
 		t.Fatalf("Put attributes: %v", err)
 	}
-	metadataName := localMetadataPath(key, filepath.FromSlash(key))
-	metadataPath := filepath.Join(base, metadataName)
 	info, err := os.Lstat(metadataPath)
 	if err != nil || !info.Mode().IsRegular() {
 		t.Fatalf("metadata sidecar = %v, %v; want regular file", info, err)
@@ -187,11 +195,14 @@ func TestLocalBucket_MetadataSidecarLifecycleAndListHiding(t *testing.T) {
 	if err != nil || len(objects) != 1 || objects[0].Key != key {
 		t.Fatalf("List = %+v, %v; want only %q", objects, err, key)
 	}
+}
 
-	if _, err = bucket.Put(context.Background(), key, strings.NewReader("default"), PutOptions{}); err != nil {
+func assertDefaultReplacementMetadataSidecar(t *testing.T, bucket *LocalBucket, metadataPath, key string) {
+	t.Helper()
+	if _, err := bucket.Put(context.Background(), key, strings.NewReader("default"), PutOptions{}); err != nil {
 		t.Fatalf("Put default replacement: %v", err)
 	}
-	info, err = os.Lstat(metadataPath)
+	info, err := os.Lstat(metadataPath)
 	if err != nil || !info.Mode().IsRegular() {
 		t.Fatalf("default replacement metadata state = %v, %v; want regular sidecar", info, err)
 	}
@@ -199,19 +210,22 @@ func TestLocalBucket_MetadataSidecarLifecycleAndListHiding(t *testing.T) {
 	if err != nil || object.ContentType != DefaultContentType || object.Metadata != nil {
 		t.Fatalf("default Stat = %+v, %v", object, err)
 	}
+}
 
-	if _, err = bucket.Put(context.Background(), key, strings.NewReader("third"), PutOptions{
+func assertDeletedMetadataSidecar(t *testing.T, bucket *LocalBucket, metadataPath, key string) {
+	t.Helper()
+	if _, err := bucket.Put(context.Background(), key, strings.NewReader("third"), PutOptions{
 		ContentType: "text/third", Metadata: map[string]string{"generation": "three"},
 	}); err != nil {
 		t.Fatalf("Put attributes again: %v", err)
 	}
-	if err = bucket.Delete(context.Background(), key); err != nil {
+	if err := bucket.Delete(context.Background(), key); err != nil {
 		t.Fatalf("Delete: %v", err)
 	}
-	if _, err = os.Lstat(metadataPath); !errors.Is(err, fs.ErrNotExist) {
+	if _, err := os.Lstat(metadataPath); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("deleted metadata state = %v; want absent", err)
 	}
-	objects, err = bucket.List(context.Background(), ListOptions{Prefix: "nested/"})
+	objects, err := bucket.List(context.Background(), ListOptions{Prefix: "nested/"})
 	if err != nil || len(objects) != 0 {
 		t.Fatalf("List after Delete = %+v, %v; want empty", objects, err)
 	}
@@ -242,6 +256,18 @@ func TestLocalBucket_MetadataSidecarRejectsSymlinkWithoutFollowing(t *testing.T)
 		t.Skipf("symlink unavailable: %v", err)
 	}
 
+	assertSymlinkedMetadataRejection(t, bucket, key)
+	if err = bucket.Delete(context.Background(), key); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "unchanged" {
+		t.Fatalf("outside file = %q, %v; want unchanged", data, err)
+	}
+}
+
+func assertSymlinkedMetadataRejection(t *testing.T, bucket *LocalBucket, key string) {
+	t.Helper()
 	reader, _, getErr := bucket.Get(context.Background(), key)
 	if reader != nil {
 		if closeErr := reader.Close(); closeErr != nil {
@@ -255,13 +281,6 @@ func TestLocalBucket_MetadataSidecarRejectsSymlinkWithoutFollowing(t *testing.T)
 	if _, statErr := bucket.Stat(context.Background(), key); statErr == nil ||
 		!strings.Contains(statErr.Error(), "regular file") {
 		t.Fatalf("Stat error = %v; want regular-file rejection", statErr)
-	}
-	if err = bucket.Delete(context.Background(), key); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	data, err := os.ReadFile(outside)
-	if err != nil || string(data) != "unchanged" {
-		t.Fatalf("outside file = %q, %v; want unchanged", data, err)
 	}
 }
 
@@ -313,46 +332,56 @@ func TestLocalBucket_ConcurrentReplacementsKeepBodyAndMetadataPaired(t *testing.
 		t.Fatal(err)
 	}
 	for iteration := range 32 {
-		start := make(chan struct{})
-		results := make(chan error, 2)
-		var workers sync.WaitGroup
-		for index, generation := range []string{"a", "b"} {
-			bucket := firstBucket
-			if index == 1 {
-				bucket = secondBucket
-			}
-			workers.Add(1)
-			go func(bucket *LocalBucket) {
-				defer workers.Done()
-				<-start
-				_, putErr := bucket.Put(
-					context.Background(), "object", strings.NewReader(generation),
-					PutOptions{ContentType: "text/" + generation, Metadata: map[string]string{"generation": generation}},
-				)
-				results <- putErr
-			}(bucket)
+		runConcurrentReplacementIteration(t, firstBucket, secondBucket, iteration)
+	}
+}
+
+func runConcurrentReplacementIteration(t *testing.T, firstBucket, secondBucket *LocalBucket, iteration int) {
+	t.Helper()
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	var workers sync.WaitGroup
+	for index, generation := range []string{"a", "b"} {
+		bucket := firstBucket
+		if index == 1 {
+			bucket = secondBucket
 		}
-		close(start)
-		workers.Wait()
-		close(results)
-		for putErr := range results {
-			if putErr != nil {
-				t.Fatalf("iteration %d Put: %v", iteration, putErr)
-			}
+		workers.Add(1)
+		go func(b *LocalBucket, gen string) {
+			defer workers.Done()
+			<-start
+			_, putErr := b.Put(
+				context.Background(), "object", strings.NewReader(gen),
+				PutOptions{ContentType: "text/" + gen, Metadata: map[string]string{"generation": gen}},
+			)
+			results <- putErr
+		}(bucket, generation)
+	}
+	close(start)
+	workers.Wait()
+	close(results)
+	for putErr := range results {
+		if putErr != nil {
+			t.Fatalf("iteration %d Put: %v", iteration, putErr)
 		}
-		reader, object, getErr := firstBucket.Get(context.Background(), "object")
-		if getErr != nil {
-			t.Fatalf("iteration %d Get: %v", iteration, getErr)
-		}
-		body, readErr := io.ReadAll(reader)
-		closeErr := reader.Close()
-		if readErr != nil || closeErr != nil {
-			t.Fatalf("iteration %d read/close: %v / %v", iteration, readErr, closeErr)
-		}
-		generation := string(body)
-		if object.ContentType != "text/"+generation || object.Metadata["generation"] != generation {
-			t.Fatalf("iteration %d pair = body %q, object %+v", iteration, body, object)
-		}
+	}
+	assertPairedBodyAndMetadata(t, firstBucket, iteration)
+}
+
+func assertPairedBodyAndMetadata(t *testing.T, bucket *LocalBucket, iteration int) {
+	t.Helper()
+	reader, object, getErr := bucket.Get(context.Background(), "object")
+	if getErr != nil {
+		t.Fatalf("iteration %d Get: %v", iteration, getErr)
+	}
+	body, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		t.Fatalf("iteration %d read/close: %v / %v", iteration, readErr, closeErr)
+	}
+	generation := string(body)
+	if object.ContentType != "text/"+generation || object.Metadata["generation"] != generation {
+		t.Fatalf("iteration %d pair = body %q, object %+v", iteration, body, object)
 	}
 }
 
@@ -412,42 +441,61 @@ func TestLocalBucket_RecoversEveryInterruptedPublishPhase(t *testing.T) {
 	for phase := range 5 {
 		t.Run(fmt.Sprintf("phase-%d", phase), func(t *testing.T) {
 			t.Parallel()
-			fixture := prepareInterruptedLocalReplacement(t)
-			applyInterruptedLocalReplacementPhase(t, fixture.root, fixture.tx, phase)
-			if err := fixture.lock.Close(); err != nil {
-				t.Fatalf("release simulated crashed writer: %v", err)
-			}
-			if err := fixture.root.Close(); err != nil {
-				t.Fatalf("close simulated crashed writer root: %v", err)
-			}
-
-			reopened, err := NewLocalBucket(fixture.base)
-			if err != nil {
-				t.Fatal(err)
-			}
-			reader, object, err := reopened.Get(context.Background(), "object")
-			if err != nil {
-				t.Fatalf("Get after recovery: %v", err)
-			}
-			body, readErr := io.ReadAll(reader)
-			closeErr := reader.Close()
-			if readErr != nil || closeErr != nil {
-				t.Fatalf("read recovered object: %v / %v", readErr, closeErr)
-			}
-			wantGeneration := "old"
-			if phase == 4 {
-				wantGeneration = "new"
-			}
-			if string(body) != wantGeneration || object.ContentType != "text/"+wantGeneration ||
-				object.Metadata["generation"] != wantGeneration {
-				t.Fatalf("recovered pair = body %q, object %+v; want %q", body, object, wantGeneration)
-			}
-			objects, err := reopened.List(context.Background(), ListOptions{})
-			if err != nil || len(objects) != 1 || objects[0].Key != "object" {
-				t.Fatalf("List after recovery = %+v, %v; want only object", objects, err)
-			}
-			assertNoTransientLocalFiles(t, fixture.base)
+			testInterruptedPublishPhase(t, phase)
 		})
+	}
+}
+
+func testInterruptedPublishPhase(t *testing.T, phase int) {
+	t.Helper()
+	fixture := prepareInterruptedLocalReplacement(t)
+	applyInterruptedLocalReplacementPhase(t, fixture.root, fixture.tx, phase)
+	if err := fixture.lock.Close(); err != nil {
+		t.Fatalf("release simulated crashed writer: %v", err)
+	}
+	if err := fixture.root.Close(); err != nil {
+		t.Fatalf("close simulated crashed writer root: %v", err)
+	}
+	assertRecoveredPublishState(t, fixture.base, phase)
+}
+
+func assertRecoveredPublishState(t *testing.T, base string, phase int) {
+	t.Helper()
+	reopened, err := NewLocalBucket(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRecoveredObject(t, reopened, phase)
+	assertRecoveredList(t, reopened)
+	assertNoTransientLocalFiles(t, base)
+}
+
+func assertRecoveredObject(t *testing.T, reopened *LocalBucket, phase int) {
+	t.Helper()
+	reader, object, err := reopened.Get(context.Background(), "object")
+	if err != nil {
+		t.Fatalf("Get after recovery: %v", err)
+	}
+	body, readErr := io.ReadAll(reader)
+	closeErr := reader.Close()
+	if readErr != nil || closeErr != nil {
+		t.Fatalf("read recovered object: %v / %v", readErr, closeErr)
+	}
+	wantGeneration := "old"
+	if phase == 4 {
+		wantGeneration = "new"
+	}
+	if string(body) != wantGeneration || object.ContentType != "text/"+wantGeneration ||
+		object.Metadata["generation"] != wantGeneration {
+		t.Fatalf("recovered pair = body %q, object %+v; want %q", body, object, wantGeneration)
+	}
+}
+
+func assertRecoveredList(t *testing.T, reopened *LocalBucket) {
+	t.Helper()
+	objects, err := reopened.List(context.Background(), ListOptions{})
+	if err != nil || len(objects) != 1 || objects[0].Key != "object" {
+		t.Fatalf("List after recovery = %+v, %v; want only object", objects, err)
 	}
 }
 
@@ -617,6 +665,11 @@ func TestLocalOperationLock_UsesOpenedRootIdentity(t *testing.T) {
 			t.Errorf("close identity lock: %v", closeErr)
 		}
 	}()
+	assertOpenedRootLockFiles(t, oldBase, base)
+}
+
+func assertOpenedRootLockFiles(t *testing.T, oldBase, base string) {
+	t.Helper()
 	if info, statErr := os.Lstat(filepath.Join(oldBase, localLockName)); statErr != nil || !info.Mode().IsRegular() {
 		t.Fatalf("opened-root lock = %v, %v; want regular file", info, statErr)
 	}
@@ -628,6 +681,23 @@ func TestLocalOperationLock_UsesOpenedRootIdentity(t *testing.T) {
 func TestLocalBucket_ReclaimsPreJournalOrphanStages(t *testing.T) {
 	t.Parallel()
 	base := t.TempDir()
+	orphan := seedPreJournalOrphanFile(t, base)
+
+	reopened, err := NewLocalBucket(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists, err := reopened.Exists(context.Background(), "missing")
+	if err != nil || exists {
+		t.Fatalf("Exists after orphaned stage = %t, %v; want false, nil", exists, err)
+	}
+	if _, err = os.Lstat(filepath.Join(base, orphan)); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("orphan stage state = %v; want absent", err)
+	}
+}
+
+func seedPreJournalOrphanFile(t *testing.T, base string) string {
+	t.Helper()
 	bucket, err := NewLocalBucket(base)
 	if err != nil {
 		t.Fatal(err)
@@ -656,18 +726,7 @@ func TestLocalBucket_ReclaimsPreJournalOrphanStages(t *testing.T) {
 	if err = root.Close(); err != nil {
 		t.Fatal(err)
 	}
-
-	reopened, err := NewLocalBucket(base)
-	if err != nil {
-		t.Fatal(err)
-	}
-	exists, err := reopened.Exists(context.Background(), "missing")
-	if err != nil || exists {
-		t.Fatalf("Exists after orphaned stage = %t, %v; want false, nil", exists, err)
-	}
-	if _, err = os.Lstat(filepath.Join(base, orphan)); !errors.Is(err, fs.ErrNotExist) {
-		t.Fatalf("orphan stage state = %v; want absent", err)
-	}
+	return orphan
 }
 
 func TestReclaimLocalOrphanStages_PreservesJournalStages(t *testing.T) {
@@ -694,51 +753,60 @@ func TestReclaimLocalOrphanStages_PreservesJournalStages(t *testing.T) {
 
 func TestReclaimLocalOrphanStages_RejectsUnsafeAndOversizedState(t *testing.T) {
 	t.Parallel()
-	t.Run("symlink", func(t *testing.T) {
-		t.Parallel()
-		bucket, root, lock := prepareLocalStageRecovery(t)
-		defer closeLocalStageRecovery(t, root, lock)
-		outside := filepath.Join(t.TempDir(), "outside")
-		if err := os.WriteFile(outside, []byte("unchanged"), 0o600); err != nil {
-			t.Fatal(err)
+	t.Run("symlink", testReclaimLocalOrphanStagesSymlink)
+	t.Run("entry cap exact", testReclaimLocalOrphanStagesEntryCapExact)
+	t.Run("entry cap", testReclaimLocalOrphanStagesEntryCap)
+}
+
+func testReclaimLocalOrphanStagesSymlink(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	bucket, root, lock := prepareLocalStageRecovery(t)
+	defer closeLocalStageRecovery(t, root, lock)
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("unchanged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(bucket.base, localStagingDirectoryName, localTempPrefix+"unsafe"+localTempSuffix)
+	if err := os.Symlink(outside, stage); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	if err := reclaimLocalOrphanStages(context.Background(), root); err == nil ||
+		!strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("unsafe orphan error = %v; want regular-file rejection", err)
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "unchanged" {
+		t.Fatalf("outside file = %q, %v; want unchanged", data, err)
+	}
+}
+
+func testReclaimLocalOrphanStagesEntryCapExact(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	_, root, lock := prepareLocalStageRecovery(t)
+	defer closeLocalStageRecovery(t, root, lock)
+	stages := seedLocalOrphanStages(t, root, maxLocalOrphanStages)
+	if err := reclaimLocalOrphanStages(context.Background(), root); err != nil {
+		t.Fatalf("reclaim exact staging cap: %v", err)
+	}
+	for _, stage := range stages {
+		if _, err := root.Lstat(stage); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("reclaimed stage %q state = %v; want absent", stage, err)
 		}
-		stage := filepath.Join(bucket.base, localStagingDirectoryName, localTempPrefix+"unsafe"+localTempSuffix)
-		if err := os.Symlink(outside, stage); err != nil {
-			t.Skipf("symlink unavailable: %v", err)
-		}
-		if err := reclaimLocalOrphanStages(context.Background(), root); err == nil ||
-			!strings.Contains(err.Error(), "regular file") {
-			t.Fatalf("unsafe orphan error = %v; want regular-file rejection", err)
-		}
-		data, err := os.ReadFile(outside)
-		if err != nil || string(data) != "unchanged" {
-			t.Fatalf("outside file = %q, %v; want unchanged", data, err)
-		}
-	})
-	t.Run("entry cap exact", func(t *testing.T) {
-		t.Parallel()
-		_, root, lock := prepareLocalStageRecovery(t)
-		defer closeLocalStageRecovery(t, root, lock)
-		stages := seedLocalOrphanStages(t, root, maxLocalOrphanStages)
-		if err := reclaimLocalOrphanStages(context.Background(), root); err != nil {
-			t.Fatalf("reclaim exact staging cap: %v", err)
-		}
-		for _, stage := range stages {
-			if _, err := root.Lstat(stage); !errors.Is(err, fs.ErrNotExist) {
-				t.Fatalf("reclaimed stage %q state = %v; want absent", stage, err)
-			}
-		}
-	})
-	t.Run("entry cap", func(t *testing.T) {
-		t.Parallel()
-		_, root, lock := prepareLocalStageRecovery(t)
-		defer closeLocalStageRecovery(t, root, lock)
-		seedLocalOrphanStages(t, root, maxLocalOrphanStages+1)
-		if err := reclaimLocalOrphanStages(context.Background(), root); err == nil ||
-			!strings.Contains(err.Error(), "exceeds") {
-			t.Fatalf("oversized staging error = %v; want cap rejection", err)
-		}
-	})
+	}
+}
+
+func testReclaimLocalOrphanStagesEntryCap(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	_, root, lock := prepareLocalStageRecovery(t)
+	defer closeLocalStageRecovery(t, root, lock)
+	seedLocalOrphanStages(t, root, maxLocalOrphanStages+1)
+	if err := reclaimLocalOrphanStages(context.Background(), root); err == nil ||
+		!strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("oversized staging error = %v; want cap rejection", err)
+	}
 }
 
 func seedLocalOrphanStages(t *testing.T, root *os.Root, count int) []string {
@@ -790,81 +858,90 @@ func closeLocalStageRecovery(t *testing.T, root *os.Root, lock *localOperationLo
 
 func TestLocalOperationLock_RejectsUnsafeNodesAndReplacement(t *testing.T) {
 	t.Parallel()
-	t.Run("directory", func(t *testing.T) {
-		t.Parallel()
-		base := t.TempDir()
-		if err := os.Mkdir(filepath.Join(base, localLockName), 0o700); err != nil {
-			t.Fatal(err)
+	t.Run("directory", testLocalOperationLockUnsafeDirectory)
+	t.Run("symlink", testLocalOperationLockUnsafeSymlink)
+	t.Run("replaced identity", testLocalOperationLockReplacedIdentity)
+}
+
+func testLocalOperationLockUnsafeDirectory(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	base := t.TempDir()
+	if err := os.Mkdir(filepath.Join(base, localLockName), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Errorf("close unsafe-directory root: %v", closeErr)
 		}
-		root, err := os.OpenRoot(base)
-		if err != nil {
-			t.Fatal(err)
+	}()
+	if _, err = acquireLocalOperationLock(context.Background(), root, "unsafe directory"); err == nil ||
+		!strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("directory lock error = %v; want regular-file rejection", err)
+	}
+}
+
+func testLocalOperationLockUnsafeSymlink(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	base := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(base, localLockName)); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Errorf("close unsafe-symlink root: %v", closeErr)
 		}
-		defer func() {
-			if closeErr := root.Close(); closeErr != nil {
-				t.Errorf("close unsafe-directory root: %v", closeErr)
-			}
-		}()
-		if _, err = acquireLocalOperationLock(context.Background(), root, "unsafe directory"); err == nil ||
-			!strings.Contains(err.Error(), "regular file") {
-			t.Fatalf("directory lock error = %v; want regular-file rejection", err)
+	}()
+	if _, err = acquireLocalOperationLock(context.Background(), root, "unsafe symlink"); err == nil ||
+		!strings.Contains(err.Error(), "regular file") {
+		t.Fatalf("symlink lock error = %v; want regular-file rejection", err)
+	}
+}
+
+func testLocalOperationLockReplacedIdentity(t *testing.T) {
+	t.Helper()
+	t.Parallel()
+	base := t.TempDir()
+	path := filepath.Join(base, localLockName)
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if closeErr := root.Close(); closeErr != nil {
+			t.Errorf("close replaced-identity root: %v", closeErr)
 		}
-	})
-	t.Run("symlink", func(t *testing.T) {
-		t.Parallel()
-		base := t.TempDir()
-		outside := filepath.Join(t.TempDir(), "outside")
-		if err := os.WriteFile(outside, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(outside, filepath.Join(base, localLockName)); err != nil {
-			t.Skipf("symlink unavailable: %v", err)
-		}
-		root, err := os.OpenRoot(base)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			if closeErr := root.Close(); closeErr != nil {
-				t.Errorf("close unsafe-symlink root: %v", closeErr)
-			}
-		}()
-		if _, err = acquireLocalOperationLock(context.Background(), root, "unsafe symlink"); err == nil ||
-			!strings.Contains(err.Error(), "regular file") {
-			t.Fatalf("symlink lock error = %v; want regular-file rejection", err)
-		}
-	})
-	t.Run("replaced identity", func(t *testing.T) {
-		t.Parallel()
-		base := t.TempDir()
-		path := filepath.Join(base, localLockName)
-		if err := os.WriteFile(path, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		root, err := os.OpenRoot(base)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() {
-			if closeErr := root.Close(); closeErr != nil {
-				t.Errorf("close replaced-identity root: %v", closeErr)
-			}
-		}()
-		before, err := root.Lstat(localLockName)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err = os.Rename(path, path+".old"); err != nil {
-			t.Fatal(err)
-		}
-		if err = os.WriteFile(path, nil, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if _, err = openExistingLocalLock(root, before); err == nil ||
-			!strings.Contains(err.Error(), "changed during open") {
-			t.Fatalf("replaced lock error = %v; want identity rejection", err)
-		}
-	})
+	}()
+	before, err := root.Lstat(localLockName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Rename(path, path+".old"); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = openExistingLocalLock(root, before); err == nil ||
+		!strings.Contains(err.Error(), "changed during open") {
+		t.Fatalf("replaced lock error = %v; want identity rejection", err)
+	}
 }
 
 func TestLocalBucket_MetadataPublishFailureRollsBackOldPair(t *testing.T) {
@@ -886,7 +963,12 @@ func TestLocalBucket_MetadataPublishFailureRollsBackOldPair(t *testing.T) {
 	if err := fixture.root.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := NewLocalBucket(fixture.base)
+	assertRollbackOldPair(t, fixture.base)
+}
+
+func assertRollbackOldPair(t *testing.T, base string) {
+	t.Helper()
+	reopened, err := NewLocalBucket(base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -902,7 +984,7 @@ func TestLocalBucket_MetadataPublishFailureRollsBackOldPair(t *testing.T) {
 	if string(body) != "old" || object.ContentType != "text/old" || object.Metadata["generation"] != "old" {
 		t.Fatalf("pair after metadata failure = body %q object %+v", body, object)
 	}
-	assertNoTransientLocalFiles(t, fixture.base)
+	assertNoTransientLocalFiles(t, base)
 }
 
 func TestLocalMetadataSizeBoundaryAndReservedNamespace(t *testing.T) {
@@ -913,15 +995,8 @@ func TestLocalMetadataSizeBoundaryAndReservedNamespace(t *testing.T) {
 		t.Fatal(err)
 	}
 	exactValue := strings.Repeat("x", maxLocalAttributeBytes-len(baseline))
-	attrs.Metadata["value"] = exactValue
-	_, exact, err := bindLocalAttributes(attrs, 1, strings.Repeat("0", sha256.Size*2))
-	if err != nil || len(exact) != maxLocalAttributeBytes {
-		t.Fatalf("exact-boundary encode = %d bytes, %v", len(exact), err)
-	}
-	attrs.Metadata["value"] = exactValue + "x"
-	if _, _, err = bindLocalAttributes(attrs, 1, strings.Repeat("0", sha256.Size*2)); err == nil {
-		t.Fatal("metadata cap + 1 was accepted")
-	}
+	checkLocalAttributeBindBoundaries(t, exactValue)
+
 	base := t.TempDir()
 	bucket, err := NewLocalBucket(base)
 	if err != nil {
@@ -948,6 +1023,19 @@ func TestLocalMetadataSizeBoundaryAndReservedNamespace(t *testing.T) {
 	}
 }
 
+func checkLocalAttributeBindBoundaries(t *testing.T, exactValue string) {
+	t.Helper()
+	attrs := snapshotLocalAttributes("object", PutOptions{Metadata: map[string]string{"value": exactValue}})
+	_, exact, err := bindLocalAttributes(attrs, 1, strings.Repeat("0", sha256.Size*2))
+	if err != nil || len(exact) != maxLocalAttributeBytes {
+		t.Fatalf("exact-boundary encode = %d bytes, %v", len(exact), err)
+	}
+	attrs.Metadata["value"] = exactValue + "x"
+	if _, _, err = bindLocalAttributes(attrs, 1, strings.Repeat("0", sha256.Size*2)); err == nil {
+		t.Fatal("metadata cap + 1 was accepted")
+	}
+}
+
 func TestLocalBucket_ReservedNamespacesCannotBeAddressedOrListed(t *testing.T) {
 	t.Parallel()
 	bucket, err := NewLocalBucket(t.TempDir())
@@ -962,32 +1050,47 @@ func TestLocalBucket_ReservedNamespacesCannotBeAddressedOrListed(t *testing.T) {
 		localBackupPath("object", "object", "object"),
 	}
 	for _, key := range reserved {
-		if _, err = bucket.Put(context.Background(), key, strings.NewReader("x"), PutOptions{}); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("Put(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
-		if reader, _, getErr := bucket.Get(context.Background(), key); !errors.Is(getErr, ErrUnsafeKey) {
-			if reader != nil {
-				if closeErr := reader.Close(); closeErr != nil {
-					t.Errorf("close unexpected reader for %q: %v", key, closeErr)
-				}
+		assertReservedKeyRejected(t, bucket, key)
+	}
+}
+
+func assertReservedKeyRejected(t *testing.T, bucket *LocalBucket, key string) {
+	t.Helper()
+	assertReservedKeyWritesRejected(t, bucket, key)
+	assertReservedKeyReadsRejected(t, bucket, key)
+}
+
+func assertReservedKeyWritesRejected(t *testing.T, bucket *LocalBucket, key string) {
+	t.Helper()
+	if _, err := bucket.Put(context.Background(), key, strings.NewReader("x"), PutOptions{}); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("Put(%q) error = %v; want ErrUnsafeKey", key, err)
+	}
+	if err := bucket.Delete(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("Delete(%q) error = %v; want ErrUnsafeKey", key, err)
+	}
+}
+
+func assertReservedKeyReadsRejected(t *testing.T, bucket *LocalBucket, key string) {
+	t.Helper()
+	if reader, _, getErr := bucket.Get(context.Background(), key); !errors.Is(getErr, ErrUnsafeKey) {
+		if reader != nil {
+			if closeErr := reader.Close(); closeErr != nil {
+				t.Errorf("close unexpected reader for %q: %v", key, closeErr)
 			}
-			t.Errorf("Get(%q) error = %v; want ErrUnsafeKey", key, getErr)
 		}
-		if err = bucket.Delete(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("Delete(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
-		if _, err = bucket.Exists(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("Exists(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
-		if _, err = bucket.Stat(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("Stat(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
-		if _, err = bucket.URL(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("URL(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
-		if _, err = bucket.List(context.Background(), ListOptions{Prefix: key}); !errors.Is(err, ErrUnsafeKey) {
-			t.Errorf("List(%q) error = %v; want ErrUnsafeKey", key, err)
-		}
+		t.Errorf("Get(%q) error = %v; want ErrUnsafeKey", key, getErr)
+	}
+	if _, err := bucket.Exists(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("Exists(%q) error = %v; want ErrUnsafeKey", key, err)
+	}
+	if _, err := bucket.Stat(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("Stat(%q) error = %v; want ErrUnsafeKey", key, err)
+	}
+	if _, err := bucket.URL(context.Background(), key); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("URL(%q) error = %v; want ErrUnsafeKey", key, err)
+	}
+	if _, err := bucket.List(context.Background(), ListOptions{Prefix: key}); !errors.Is(err, ErrUnsafeKey) {
+		t.Errorf("List(%q) error = %v; want ErrUnsafeKey", key, err)
 	}
 }
 

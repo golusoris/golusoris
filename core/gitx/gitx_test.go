@@ -55,12 +55,9 @@ func initRepo(t *testing.T) string {
 	return dir
 }
 
-func TestRepoFacts(t *testing.T) {
-	t.Parallel()
-	dir := initRepo(t)
-	r := gitx.New(dir)
+func checkRepoIdentity(t *testing.T, r *gitx.Runner) {
+	t.Helper()
 	ctx := t.Context()
-
 	head, err := r.Head(ctx)
 	if err != nil || len(head) != 40 {
 		t.Fatalf("Head: %q %v", head, err)
@@ -73,6 +70,15 @@ func TestRepoFacts(t *testing.T) {
 	if err != nil || url != "https://github.com/golusoris/golusoris.git" {
 		t.Fatalf("RemoteURL: %q %v", url, err)
 	}
+	top, err := r.TopLevel(ctx)
+	if err != nil || top == "" {
+		t.Fatalf("TopLevel: %q %v", top, err)
+	}
+}
+
+func checkRepoDirty(t *testing.T, r *gitx.Runner, dir string) {
+	t.Helper()
+	ctx := t.Context()
 	dirty, err := r.IsDirty(ctx)
 	if err != nil || dirty {
 		t.Fatalf("IsDirty on clean repo: %v %v", dirty, err)
@@ -84,10 +90,15 @@ func TestRepoFacts(t *testing.T) {
 	if err != nil || !dirty {
 		t.Fatalf("IsDirty with untracked file: %v %v", dirty, err)
 	}
-	top, err := r.TopLevel(ctx)
-	if err != nil || top == "" {
-		t.Fatalf("TopLevel: %q %v", top, err)
-	}
+}
+
+func TestRepoFacts(t *testing.T) {
+	t.Parallel()
+	dir := initRepo(t)
+	r := gitx.New(dir)
+
+	checkRepoIdentity(t, r)
+	checkRepoDirty(t, r, dir)
 }
 
 func TestRunErrors(t *testing.T) {

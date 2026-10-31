@@ -124,40 +124,49 @@ func TestNewAnalyzerRejectsUnsupportedBackend(t *testing.T) {
 	}
 }
 
+type probeTestCase struct {
+	name   string
+	file   string
+	format audio.Format
+}
+
+var probeTests = []probeTestCase{
+	{"wav", fixWAV, audio.FormatWAV},
+	{"mp3", fixMP3, audio.FormatMP3},
+	{"ogg", fixOGG, audio.FormatOGG},
+	{"flac", fixFLAC, audio.FormatFLAC},
+	{"aiff", fixAIFF, audio.FormatAIFF},
+}
+
+// runProbeTestCase verifies probe analysis for a single audio fixture.
+func runProbeTestCase(t *testing.T, a audio.Analyzer, tt probeTestCase) {
+	t.Helper()
+	info, err := a.Probe(context.Background(), openFixture(t, tt.file), "")
+	if err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+	if info.Format != tt.format {
+		t.Errorf("Format = %q, want %q", info.Format, tt.format)
+	}
+	if info.SampleRate != 44100 {
+		t.Errorf("SampleRate = %d, want 44100", info.SampleRate)
+	}
+	if info.Channels != 2 {
+		t.Errorf("Channels = %d, want 2", info.Channels)
+	}
+	// Fixtures are ~3 s; compressed formats add small encoder padding.
+	if info.Duration < 2900*time.Millisecond || info.Duration > 3200*time.Millisecond {
+		t.Errorf("Duration = %s, want ~3s", info.Duration)
+	}
+}
+
 func TestProbe(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name   string
-		file   string
-		format audio.Format
-	}{
-		{"wav", fixWAV, audio.FormatWAV},
-		{"mp3", fixMP3, audio.FormatMP3},
-		{"ogg", fixOGG, audio.FormatOGG},
-		{"flac", fixFLAC, audio.FormatFLAC},
-		{"aiff", fixAIFF, audio.FormatAIFF},
-	}
 	a := newAnalyzer(t, audio.Options{})
-	for _, tt := range tests {
+	for _, tt := range probeTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			info, err := a.Probe(context.Background(), openFixture(t, tt.file), "")
-			if err != nil {
-				t.Fatalf("Probe: %v", err)
-			}
-			if info.Format != tt.format {
-				t.Errorf("Format = %q, want %q", info.Format, tt.format)
-			}
-			if info.SampleRate != 44100 {
-				t.Errorf("SampleRate = %d, want 44100", info.SampleRate)
-			}
-			if info.Channels != 2 {
-				t.Errorf("Channels = %d, want 2", info.Channels)
-			}
-			// Fixtures are ~3 s; compressed formats add small encoder padding.
-			if info.Duration < 2900*time.Millisecond || info.Duration > 3200*time.Millisecond {
-				t.Errorf("Duration = %s, want ~3s", info.Duration)
-			}
+			runProbeTestCase(t, a, tt)
 		})
 	}
 }
@@ -298,46 +307,61 @@ func TestProbeRejectsForgedWAVChannelCount(t *testing.T) {
 	}
 }
 
+type waveformTestCase struct {
+	name string
+	file string
+}
+
+var waveformTests = []waveformTestCase{
+	{"wav", fixWAV},
+	{"mp3", fixMP3},
+	{"ogg", fixOGG},
+	{"flac", fixFLAC},
+	{"aiff", fixAIFF},
+}
+
+// assertWaveformBuckets verifies bucket counts and bounds in waveform peak data.
+func assertWaveformBuckets(t *testing.T, ps audio.PeakSet, buckets int) {
+	t.Helper()
+	if ps.Buckets != buckets || len(ps.Min) != buckets || len(ps.Max) != buckets {
+		t.Fatalf("buckets = %d, len(min) = %d, len(max) = %d, want %d",
+			ps.Buckets, len(ps.Min), len(ps.Max), buckets)
+	}
+	var sawSignal bool
+	for i := range buckets {
+		if ps.Min[i] < -1 || ps.Max[i] > 1 {
+			t.Fatalf("bucket %d out of [-1,1]: min=%f max=%f", i, ps.Min[i], ps.Max[i])
+		}
+		if ps.Min[i] > ps.Max[i] {
+			t.Fatalf("bucket %d: min %f > max %f", i, ps.Min[i], ps.Max[i])
+		}
+		if ps.Max[i] > 0 {
+			sawSignal = true
+		}
+	}
+	if !sawSignal {
+		t.Error("expected non-zero peaks for a tone fixture")
+	}
+}
+
+// runWaveformTestCase runs waveform generation and validation for a single fixture.
+func runWaveformTestCase(t *testing.T, a audio.Analyzer, tt waveformTestCase, buckets int) {
+	t.Helper()
+	ps, err := a.Waveform(context.Background(), openFixture(t, tt.file), "", buckets)
+	if err != nil {
+		t.Fatalf("Waveform: %v", err)
+	}
+	assertWaveformBuckets(t, ps, buckets)
+}
+
 func TestWaveform(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name string
-		file string
-	}{
-		{"wav", fixWAV},
-		{"mp3", fixMP3},
-		{"ogg", fixOGG},
-		{"flac", fixFLAC},
-		{"aiff", fixAIFF},
-	}
 	a := newAnalyzer(t, audio.Options{})
 	const buckets = 128
-	for _, tt := range tests {
+	for _, tt := range waveformTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ps, err := a.Waveform(context.Background(), openFixture(t, tt.file), "", buckets)
-			if err != nil {
-				t.Fatalf("Waveform: %v", err)
-			}
-			if ps.Buckets != buckets || len(ps.Min) != buckets || len(ps.Max) != buckets {
-				t.Fatalf("buckets = %d, len(min) = %d, len(max) = %d, want %d",
-					ps.Buckets, len(ps.Min), len(ps.Max), buckets)
-			}
-			var sawSignal bool
-			for i := range buckets {
-				if ps.Min[i] < -1 || ps.Max[i] > 1 {
-					t.Fatalf("bucket %d out of [-1,1]: min=%f max=%f", i, ps.Min[i], ps.Max[i])
-				}
-				if ps.Min[i] > ps.Max[i] {
-					t.Fatalf("bucket %d: min %f > max %f", i, ps.Min[i], ps.Max[i])
-				}
-				if ps.Max[i] > 0 {
-					sawSignal = true
-				}
-			}
-			if !sawSignal {
-				t.Error("expected non-zero peaks for a tone fixture")
-			}
+			runWaveformTestCase(t, a, tt, buckets)
 		})
 	}
 }

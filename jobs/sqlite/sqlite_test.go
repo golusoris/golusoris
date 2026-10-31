@@ -109,6 +109,48 @@ func TestStandalone_insertWorkDrain(t *testing.T) {
 	}
 }
 
+// insertSampleTenantJobs inserts jobs with metadata for the provided tenants.
+func insertSampleTenantJobs(t *testing.T, ctx context.Context, producer *jobs.ClientSQL, tenants []string) {
+	t.Helper()
+	for _, tenant := range tenants {
+		meta, merr := json.Marshal(map[string]string{"tenant": tenant})
+		if merr != nil {
+			t.Fatal(merr)
+		}
+		if _, ierr := producer.Insert(ctx, encodeArgs{Asset: tenant}, &jobs.InsertOpts{Queue: "transcode", Metadata: meta}); ierr != nil {
+			t.Fatalf("Insert: %v", ierr)
+		}
+	}
+}
+
+// assertTenantedDepth verifies group counts and age bounds for tenanted queries.
+func assertTenantedDepth(t *testing.T, ctx context.Context, q *sqlite.DepthQuerier) {
+	t.Helper()
+	rows, err := q.QueryDepth(ctx, "tenant")
+	if err != nil {
+		t.Fatalf("QueryDepth: %v", err)
+	}
+	got := map[string]int64{}
+	for _, r := range rows {
+		got[r.Queue+"/"+r.State+"/"+r.Tenant] = r.Count
+		if r.OldestAge < 0 || r.OldestAge > time.Minute {
+			t.Errorf("OldestAge = %v, want fresh non-negative age", r.OldestAge)
+		}
+	}
+	if got["transcode/available/acme"] != 2 || got["transcode/available/globex"] != 1 || len(got) != 2 {
+		t.Fatalf("depth rows = %v, want acme=2 globex=1", got)
+	}
+}
+
+// assertUntenantedDepth verifies grouping when no tenant key is supplied.
+func assertUntenantedDepth(t *testing.T, ctx context.Context, q *sqlite.DepthQuerier) {
+	t.Helper()
+	untenanted, err := q.QueryDepth(ctx, "")
+	if err != nil || len(untenanted) != 1 || untenanted[0].Tenant != "" || untenanted[0].Count != 3 {
+		t.Fatalf("QueryDepth(no tenant key) = %+v, %v; want one group of 3", untenanted, err)
+	}
+}
+
 func TestDepthQuerier_groupsByQueueStateTenant(t *testing.T) {
 	t.Parallel()
 	db := openDB(t, 1)
@@ -130,34 +172,9 @@ func TestDepthQuerier_groupsByQueueStateTenant(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New producer: %v", err)
 	}
-	for _, tenant := range []string{"acme", "acme", "globex"} {
-		meta, merr := json.Marshal(map[string]string{"tenant": tenant})
-		if merr != nil {
-			t.Fatal(merr)
-		}
-		if _, ierr := producer.Insert(ctx, encodeArgs{Asset: tenant}, &jobs.InsertOpts{Queue: "transcode", Metadata: meta}); ierr != nil {
-			t.Fatalf("Insert: %v", ierr)
-		}
-	}
-	rows, err := q.QueryDepth(ctx, "tenant")
-	if err != nil {
-		t.Fatalf("QueryDepth: %v", err)
-	}
-	got := map[string]int64{}
-	for _, r := range rows {
-		got[r.Queue+"/"+r.State+"/"+r.Tenant] = r.Count
-		if r.OldestAge < 0 || r.OldestAge > time.Minute {
-			t.Errorf("OldestAge = %v, want fresh non-negative age", r.OldestAge)
-		}
-	}
-	if got["transcode/available/acme"] != 2 || got["transcode/available/globex"] != 1 || len(got) != 2 {
-		t.Fatalf("depth rows = %v, want acme=2 globex=1", got)
-	}
-
-	untenanted, err := q.QueryDepth(ctx, "")
-	if err != nil || len(untenanted) != 1 || untenanted[0].Tenant != "" || untenanted[0].Count != 3 {
-		t.Fatalf("QueryDepth(no tenant key) = %+v, %v; want one group of 3", untenanted, err)
-	}
+	insertSampleTenantJobs(t, ctx, producer, []string{"acme", "acme", "globex"})
+	assertTenantedDepth(t, ctx, q)
+	assertUntenantedDepth(t, ctx, q)
 }
 
 // TestModule_fxLifecycle wires db/sqlite's *sql.DB into jobs/sqlite.Module

@@ -29,8 +29,8 @@ func groupDepth(a slog.Attr) int {
 	return depth
 }
 
-func TestConvAttr(t *testing.T) {
-	t.Parallel()
+func testConvAttrNestedGroup(t *testing.T) {
+	t.Helper()
 	// positive: a two-level group keeps keys, order and nesting
 	got := convAttr(xslog.Group("outer", xslog.String("a", "1"), xslog.Group("inner", xslog.Int("b", 2)), xslog.Bool("c", true)))
 	if got.Key != "outer" || got.Value.Kind() != slog.KindGroup {
@@ -43,10 +43,18 @@ func TestConvAttr(t *testing.T) {
 	if inner := kids[1].Value.Group(); len(inner) != 1 || inner[0].Key != "b" || inner[0].Value.Int64() != 2 {
 		t.Fatalf("inner group mismatch: %v", kids[1])
 	}
+}
+
+func testConvAttrLeaf(t *testing.T) {
+	t.Helper()
 	// negative: a plain attr is copied, not grouped
 	if leaf := convAttr(xslog.String("k", "v")); leaf.Key != "k" || leaf.Value.Kind() == slog.KindGroup || leaf.Value.String() != "v" {
 		t.Fatalf("leaf mismatch: %v", leaf)
 	}
+}
+
+func testConvAttrDepthCap(t *testing.T) {
+	t.Helper()
 	// boundary: nesting at the cap is fully descended, beyond it is truncated, never a panic
 	if d := groupDepth(convAttr(nestedGroup(convAttrMaxDepth - 1))); d != convAttrMaxDepth-1 {
 		t.Fatalf("depth at cap: got %d", d)
@@ -54,4 +62,11 @@ func TestConvAttr(t *testing.T) {
 	if d := groupDepth(convAttr(nestedGroup(convAttrMaxDepth + 5))); d != convAttrMaxDepth {
 		t.Fatalf("depth beyond cap should stop at %d, got %d", convAttrMaxDepth, d)
 	}
+}
+
+func TestConvAttr(t *testing.T) {
+	t.Parallel()
+	testConvAttrNestedGroup(t)
+	testConvAttrLeaf(t)
+	testConvAttrDepthCap(t)
 }

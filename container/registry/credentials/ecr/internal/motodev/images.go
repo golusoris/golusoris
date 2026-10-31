@@ -12,7 +12,7 @@ package motodev
 const (
 	// MotoImage is the AWS API emulator for container credential and SDK
 	// integration tests.
-	MotoImage = "motoserver/moto:5.2.4@sha256:120b1589c6df7e35d2092935f6ff724486bb2c4189d0e36ce795baba1400ffd2"
+	MotoImage = "motoserver/moto:5.2.5@sha256:59a1965d845249b04def37a0e2565f9cc6c44543cb89b68e90f28f344b3b0d1a"
 	// RyukImage is the testcontainers resource reaper, as in
 	// internal/testimages.
 	RyukImage = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"

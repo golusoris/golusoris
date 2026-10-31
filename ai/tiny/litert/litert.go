@@ -33,12 +33,6 @@ import (
 	"github.com/golusoris/golusoris/storage"
 )
 
-// DefaultImage is the legacy mutable trainer image name.
-//
-// Deprecated: no trainer image is currently published at this reference.
-// [NewTrainer] requires an explicit digest-pinned [Options.Image].
-const DefaultImage = "ghcr.io/golusoris/tiny-litert-trainer:v1"
-
 const (
 	// BaseTextAverageWordEmbedding names the removed text classifier.
 	//

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/golusoris/golusoris/db/geo"
 	"github.com/golusoris/golusoris/internal/testimages"
 	"github.com/golusoris/golusoris/testutil/pg"
@@ -23,6 +25,16 @@ func TestPostGISPoint_Integration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)
 
+	createPostGISTestTable(t, ctx, pool)
+	input := geo.Point{Lon: 13.405, Lat: 52.52}
+	id := insertPostGISPoint(t, ctx, pool, input)
+	assertScannedPoints(t, ctx, pool, id, input)
+	assertPostGISNullAndInvalid(t, ctx, pool)
+	assertPointProperties(t, input)
+}
+
+func createPostGISTestTable(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	if _, err := pool.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS postgis"); err != nil {
 		t.Fatalf("create postgis extension: %v", err)
 	}
@@ -35,8 +47,10 @@ func TestPostGISPoint_Integration(t *testing.T) {
 	`); err != nil {
 		t.Fatalf("create temp table: %v", err)
 	}
+}
 
-	input := geo.Point{Lon: 13.405, Lat: 52.52}
+func insertPostGISPoint(t *testing.T, ctx context.Context, pool *pgxpool.Pool, input geo.Point) int {
+	t.Helper()
 	val, err := input.Value()
 	if err != nil {
 		t.Fatalf("Point.Value(): %v", err)
@@ -46,7 +60,11 @@ func TestPostGISPoint_Integration(t *testing.T) {
 	if err := pool.QueryRow(ctx, "INSERT INTO test_locations (geom) VALUES (ST_GeomFromEWKT($1)) RETURNING id", val).Scan(&id); err != nil {
 		t.Fatalf("insert point: %v", err)
 	}
+	return id
+}
 
+func assertScannedPoints(t *testing.T, ctx context.Context, pool *pgxpool.Pool, id int, input geo.Point) {
+	t.Helper()
 	var x, y float64
 	if err := pool.QueryRow(ctx, "SELECT ST_X(geom), ST_Y(geom) FROM test_locations WHERE id = $1", id).Scan(&x, &y); err != nil {
 		t.Fatalf("read ST_X/ST_Y: %v", err)
@@ -70,7 +88,10 @@ func TestPostGISPoint_Integration(t *testing.T) {
 	if math.Abs(scannedHexText.Lon-input.Lon) > 1e-6 || math.Abs(scannedHexText.Lat-input.Lat) > 1e-6 {
 		t.Fatalf("scanned hex text = %+v, want %+v", scannedHexText, input)
 	}
+}
 
+func assertPostGISNullAndInvalid(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
 	resetPoint := geo.Point{Lon: 10, Lat: 20}
 	if err := pool.QueryRow(ctx, "SELECT NULL::geometry").Scan(&resetPoint); err != nil {
 		t.Fatalf("scan NULL geometry: %v", err)
@@ -83,7 +104,10 @@ func TestPostGISPoint_Integration(t *testing.T) {
 	if err := pool.QueryRow(ctx, "SELECT ST_GeomFromText('LINESTRING(0 0, 1 1)', 4326)").Scan(&linestringPoint); err == nil {
 		t.Fatal("scan LINESTRING into Point succeeded, want error")
 	}
+}
 
+func assertPointProperties(t *testing.T, input geo.Point) {
+	t.Helper()
 	if input.String() != "(13.405000, 52.520000)" {
 		t.Fatalf("Point.String() = %q, want %q", input.String(), "(13.405000, 52.520000)")
 	}

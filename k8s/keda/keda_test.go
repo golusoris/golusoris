@@ -101,6 +101,22 @@ func testCtx(t *testing.T) context.Context {
 	return ctx
 }
 
+// assertMetricSpec validates metric name and target sizes.
+func assertMetricSpec(t *testing.T, ms *externalscalerpb.MetricSpec) {
+	t.Helper()
+	if ms.GetMetricName() != "river-queue-transcode" || ms.GetTargetSizeFloat() != 2.5 || ms.GetTargetSize() != 3 {
+		t.Fatalf("metric spec = %+v, want river-queue-transcode target 2.5", ms)
+	}
+}
+
+// assertMetricValue validates returned metric name and values.
+func assertMetricValue(t *testing.T, mv *externalscalerpb.MetricValue, metricName string) {
+	t.Helper()
+	if mv.GetMetricName() != metricName || mv.GetMetricValue() != 7 || mv.GetMetricValueFloat() != 7 {
+		t.Fatalf("metric value = %+v, want 7", mv)
+	}
+}
+
 func TestScaler_ActiveQueueReportsMetric(t *testing.T) {
 	t.Parallel()
 	client := dial(t, newScaler(t, newFakeSource(map[string]int64{"transcode": 7}), nil))
@@ -116,17 +132,13 @@ func TestScaler_ActiveQueueReportsMetric(t *testing.T) {
 		t.Fatalf("GetMetricSpec: %v", err)
 	}
 	ms := spec.GetMetricSpecs()[0]
-	if ms.GetMetricName() != "river-queue-transcode" || ms.GetTargetSizeFloat() != 2.5 || ms.GetTargetSize() != 3 {
-		t.Fatalf("metric spec = %+v, want river-queue-transcode target 2.5", ms)
-	}
+	assertMetricSpec(t, ms)
+
 	metrics, err := client.GetMetrics(ctx, &externalscalerpb.GetMetricsRequest{ScaledObjectRef: r, MetricName: ms.GetMetricName()})
 	if err != nil {
 		t.Fatalf("GetMetrics: %v", err)
 	}
-	mv := metrics.GetMetricValues()[0]
-	if mv.GetMetricName() != ms.GetMetricName() || mv.GetMetricValue() != 7 || mv.GetMetricValueFloat() != 7 {
-		t.Fatalf("metric value = %+v, want 7", mv)
-	}
+	assertMetricValue(t, metrics.GetMetricValues()[0], ms.GetMetricName())
 }
 
 func TestScaler_EmptyQueueIsInactiveForScaleToZero(t *testing.T) {

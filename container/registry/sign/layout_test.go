@@ -88,6 +88,27 @@ func wantLayoutRejected(t *testing.T, l *registry.Layout, h v1.Hash, p sign.Poli
 	}
 }
 
+func runImageLayoutSignsOffline(t *testing.T, key crypto.Signer, isIndex bool) {
+	t.Helper()
+	l, _, h := layoutImage(t, isIndex)
+	at := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	sig, err := sign.ImageLayout(testCtx(t), l, h, sign.Signer{Key: key}, sign.Options{Clock: clockwork.NewFakeClockAt(at)})
+	if err != nil {
+		t.Fatalf("ImageLayout: %v", err)
+	}
+	if sig.Subject.Digest != h || (sig.Subject.MediaType.IsIndex() != isIndex) {
+		t.Fatalf("subject = %+v", sig.Subject)
+	}
+	if _, err = verifyWithKey(t, sig.Bundle, key.Public(), h); err != nil {
+		t.Fatalf("cosign --key verification: %v", err)
+	}
+	checkLayoutReferrer(t, l, sig, at)
+	got, err := sign.VerifyLayout(testCtx(t), l, h, keyPolicy(key.Public()))
+	if err != nil || len(got) != 1 || got[0].Descriptor.Digest != sig.Descriptor.Digest || got[0].Result == nil {
+		t.Fatalf("VerifyLayout = %+v, %v", got, err)
+	}
+}
+
 // TestImageLayout_SignsOffline signs in a layout with every key type and
 // checks the bundle the way `cosign verify --key` does, then with
 // VerifyLayout.
@@ -118,24 +139,30 @@ func TestImageLayout_SignsOffline(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			l, _, h := layoutImage(t, tc.index)
-			at := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
-			sig, err := sign.ImageLayout(testCtx(t), l, h, sign.Signer{Key: tc.key}, sign.Options{Clock: clockwork.NewFakeClockAt(at)})
-			if err != nil {
-				t.Fatalf("ImageLayout: %v", err)
-			}
-			if sig.Subject.Digest != h || (sig.Subject.MediaType.IsIndex() != tc.index) {
-				t.Fatalf("subject = %+v", sig.Subject)
-			}
-			if _, err = verifyWithKey(t, sig.Bundle, tc.key.Public(), h); err != nil {
-				t.Fatalf("cosign --key verification: %v", err)
-			}
-			checkLayoutReferrer(t, l, sig, at)
-			got, err := sign.VerifyLayout(testCtx(t), l, h, keyPolicy(tc.key.Public()))
-			if err != nil || len(got) != 1 || got[0].Descriptor.Digest != sig.Descriptor.Digest || got[0].Result == nil {
-				t.Fatalf("VerifyLayout = %+v, %v", got, err)
-			}
+			runImageLayoutSignsOffline(t, tc.key, tc.index)
 		})
+	}
+}
+
+func checkReferrerAnnotations(t *testing.T, man *v1.Manifest, at time.Time) {
+	t.Helper()
+	want := map[string]string{
+		sign.AnnotationCreated:       at.Format(time.RFC3339),
+		sign.AnnotationBundleContent: "dsse-envelope",
+		sign.AnnotationPredicateType: sign.PredicateType,
+	}
+	for k, v := range want {
+		if man.Annotations[k] != v {
+			t.Fatalf("annotation %s = %q, want %q", k, man.Annotations[k], v)
+		}
+	}
+}
+
+func checkReferrerSubjectAndLayers(t *testing.T, man *v1.Manifest, sig sign.Signature) {
+	t.Helper()
+	if len(man.Layers) != 1 || man.Layers[0].MediaType != sign.BundleMediaType || man.Subject == nil ||
+		man.Subject.Digest != sig.Subject.Digest || man.Subject.MediaType != sig.Subject.MediaType {
+		t.Fatalf("referrer manifest = %+v", man)
 	}
 }
 
@@ -151,22 +178,49 @@ func checkLayoutReferrer(t *testing.T, l *registry.Layout, sig sign.Signature, a
 	if err != nil || desc.ArtifactType != sign.BundleMediaType || man.Config.MediaType != registry.EmptyJSONMediaType {
 		t.Fatalf("referrer = %+v, %+v, %v", desc, man, err)
 	}
-	if len(man.Layers) != 1 || man.Layers[0].MediaType != sign.BundleMediaType || man.Subject == nil ||
-		man.Subject.Digest != sig.Subject.Digest || man.Subject.MediaType != sig.Subject.MediaType {
-		t.Fatalf("referrer manifest = %+v", man)
-	}
-	want := map[string]string{
-		sign.AnnotationCreated:       at.Format(time.RFC3339),
-		sign.AnnotationBundleContent: "dsse-envelope",
-		sign.AnnotationPredicateType: sign.PredicateType,
-	}
-	for k, v := range want {
-		if man.Annotations[k] != v {
-			t.Fatalf("annotation %s = %q, want %q", k, man.Annotations[k], v)
-		}
-	}
+	checkReferrerSubjectAndLayers(t, man, sig)
+	checkReferrerAnnotations(t, man, at)
 	if blob, err := l.FetchBlob(ctx, man.Layers[0], 1<<20); err != nil || !bytes.Equal(blob, sig.Bundle) {
 		t.Fatalf("bundle layer = %q, %v", blob, err)
+	}
+}
+
+func runLayoutSignedRoundTrip(t *testing.T, api bool) {
+	t.Helper()
+	ctx := testCtx(t)
+	key := ecKey(t)
+	l, _, h := layoutImage(t, true)
+	sig, err := sign.ImageLayout(ctx, l, h, sign.Signer{Key: key}, sign.Options{})
+	if err != nil {
+		t.Fatalf("ImageLayout: %v", err)
+	}
+	verifyLayoutOne(t, l, h, keyPolicy(key.Public()))
+
+	host := newRegistry(t, nil, regsrv.WithReferrersSupport(api))
+	c := newClient(t)
+	if _, err = c.CopyFromLayout(ctx, l, h, host+"/app:v1"); err != nil {
+		t.Fatalf("CopyFromLayout: %v", err)
+	}
+	ref := host + "/app@" + h.String()
+	checkReferrer(t, host, ref, sig, mustCreated(t, l, sig))
+	if got := verifyOne(t, c, ref, keyPolicy(key.Public())); got.Descriptor.Digest != sig.Descriptor.Digest {
+		t.Fatalf("Verify after push = %+v", got.Descriptor)
+	}
+
+	remoteRef, digest := seed(t, host, false)
+	remoteSig, err := sign.Image(ctx, c, remoteRef, sign.Signer{Key: key}, sign.Options{})
+	if err != nil {
+		t.Fatalf("Image: %v", err)
+	}
+	back, err := registry.CreateLayout(filepath.Join(t.TempDir(), "back"), registry.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.CopyToLayout(ctx, remoteRef, back); err != nil {
+		t.Fatalf("CopyToLayout: %v", err)
+	}
+	if got := verifyLayoutOne(t, back, digest, keyPolicy(key.Public())); got.Descriptor.Digest != remoteSig.Descriptor.Digest {
+		t.Fatalf("VerifyLayout after pull = %+v", got.Descriptor)
 	}
 }
 
@@ -176,43 +230,10 @@ func checkLayoutReferrer(t *testing.T, l *registry.Layout, sig sign.Signature, a
 func TestLayout_SignedRoundTrip(t *testing.T) {
 	t.Parallel()
 	for _, api := range []bool{false, true} {
-		t.Run(map[bool]string{false: "tag-schema", true: "referrers-api"}[api], func(t *testing.T) {
+		name := map[bool]string{false: "tag-schema", true: "referrers-api"}[api]
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			ctx := testCtx(t)
-			key := ecKey(t)
-			l, _, h := layoutImage(t, true)
-			sig, err := sign.ImageLayout(ctx, l, h, sign.Signer{Key: key}, sign.Options{})
-			if err != nil {
-				t.Fatalf("ImageLayout: %v", err)
-			}
-			verifyLayoutOne(t, l, h, keyPolicy(key.Public()))
-
-			host := newRegistry(t, nil, regsrv.WithReferrersSupport(api))
-			c := newClient(t)
-			if _, err = c.CopyFromLayout(ctx, l, h, host+"/app:v1"); err != nil {
-				t.Fatalf("CopyFromLayout: %v", err)
-			}
-			ref := host + "/app@" + h.String()
-			checkReferrer(t, host, ref, sig, mustCreated(t, l, sig))
-			if got := verifyOne(t, c, ref, keyPolicy(key.Public())); got.Descriptor.Digest != sig.Descriptor.Digest {
-				t.Fatalf("Verify after push = %+v", got.Descriptor)
-			}
-
-			remoteRef, digest := seed(t, host, false)
-			remoteSig, err := sign.Image(ctx, c, remoteRef, sign.Signer{Key: key}, sign.Options{})
-			if err != nil {
-				t.Fatalf("Image: %v", err)
-			}
-			back, err := registry.CreateLayout(filepath.Join(t.TempDir(), "back"), registry.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err = c.CopyToLayout(ctx, remoteRef, back); err != nil {
-				t.Fatalf("CopyToLayout: %v", err)
-			}
-			if got := verifyLayoutOne(t, back, digest, keyPolicy(key.Public())); got.Descriptor.Digest != remoteSig.Descriptor.Digest {
-				t.Fatalf("VerifyLayout after pull = %+v", got.Descriptor)
-			}
+			runLayoutSignedRoundTrip(t, api)
 		})
 	}
 }

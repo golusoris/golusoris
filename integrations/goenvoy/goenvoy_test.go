@@ -57,6 +57,31 @@ func writeConfig(t *testing.T, body string) *config.Config {
 	return cfg
 }
 
+// assertSonarrOptions verifies sonarr service configuration unmarshaling.
+func assertSonarrOptions(t *testing.T, sonarr goenvoy.ServiceOptions) {
+	t.Helper()
+	if sonarr.Provider != "sonarr" || sonarr.BaseURL != "http://sonarr:8989" || sonarr.APIKey != "k3y" {
+		t.Fatalf("sonarr basics: %+v", sonarr)
+	}
+	if sonarr.Timeout != 10*time.Second || sonarr.CacheTTL != 30*time.Second {
+		t.Fatalf("durations: timeout=%v ttl=%v", sonarr.Timeout, sonarr.CacheTTL)
+	}
+	if sonarr.Retry.Max != 3 || sonarr.Retry.Wait != 100*time.Millisecond {
+		t.Fatalf("retry: %+v", sonarr.Retry)
+	}
+	if sonarr.Breaker.Max != 5 {
+		t.Fatalf("breaker: %+v", sonarr.Breaker)
+	}
+}
+
+// assertTMDbOptions verifies tmdb service configuration unmarshaling.
+func assertTMDbOptions(t *testing.T, tmdb goenvoy.ServiceOptions) {
+	t.Helper()
+	if tmdb.AccessToken != "tok" || tmdb.CacheTTL != 5*time.Minute {
+		t.Fatalf("tmdb: %+v", tmdb)
+	}
+}
+
 func TestLoadOptions_fileRoundTrip(t *testing.T) {
 	t.Parallel()
 	cfg := writeConfig(t, configYAML)
@@ -70,21 +95,8 @@ func TestLoadOptions_fileRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("sonarr service missing")
 	}
-	if sonarr.Provider != "sonarr" || sonarr.BaseURL != "http://sonarr:8989" || sonarr.APIKey != "k3y" {
-		t.Fatalf("sonarr basics: %+v", sonarr)
-	}
-	if sonarr.Timeout != 10*time.Second || sonarr.CacheTTL != 30*time.Second {
-		t.Fatalf("durations: timeout=%v ttl=%v", sonarr.Timeout, sonarr.CacheTTL)
-	}
-	if sonarr.Retry.Max != 3 || sonarr.Retry.Wait != 100*time.Millisecond {
-		t.Fatalf("retry: %+v", sonarr.Retry)
-	}
-	if sonarr.Breaker.Max != 5 {
-		t.Fatalf("breaker: %+v", sonarr.Breaker)
-	}
-	if tmdb := opts.Services["tmdb"]; tmdb.AccessToken != "tok" || tmdb.CacheTTL != 5*time.Minute {
-		t.Fatalf("tmdb: %+v", tmdb)
-	}
+	assertSonarrOptions(t, sonarr)
+	assertTMDbOptions(t, opts.Services["tmdb"])
 }
 
 // TestLoadOptions_envOverride proves env vars override file values when the app

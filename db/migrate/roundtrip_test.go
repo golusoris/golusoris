@@ -128,6 +128,12 @@ func TestUpDownUpRoundTrip(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = m.Close() })
 
+	testRoundTripInitialAndSteps(t, m, pool)
+	testRoundTripDownAndReUp(t, m, pool)
+}
+
+func testRoundTripInitialAndSteps(t *testing.T, m *dbmigrate.Migrator, pool *pgxpool.Pool) {
+	t.Helper()
 	// Boundary: Steps(-1) at version 0 returns os.ErrNotExist wrapped by db/migrate.
 	if stepErr := m.Steps(-1); !errors.Is(stepErr, os.ErrNotExist) {
 		t.Fatalf("Steps(-1) at version 0 err = %v, want os.ErrNotExist", stepErr)
@@ -162,7 +168,10 @@ func TestUpDownUpRoundTrip(t *testing.T) {
 	}
 	assertVersion(t, m, 2, false)
 	assertWidgetsCount(t, pool, 0)
+}
 
+func testRoundTripDownAndReUp(t *testing.T, m *dbmigrate.Migrator, pool *pgxpool.Pool) {
+	t.Helper()
 	// 3. Down -> no version (v0, false, nil), neither table exists.
 	if downErr := m.Down(); downErr != nil {
 		t.Fatalf("Down: %v", downErr)

@@ -43,7 +43,7 @@ regenerator.
 | `github.com/go-chi/chi/v5` | `v5.5.0` | root | [chi/](chi/README.md) |
 | `github.com/go-playground/validator/v10` | `v10.30.5` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
-| `github.com/yuin/goldmark/v2` | `v2.1.6` | root | [goldmark/](goldmark/README.md) |
+| `github.com/yuin/goldmark/v2` | `v2.1.9` | root | [goldmark/](goldmark/README.md) |
 | `github.com/prometheus/client_golang` | `v1.25.0` | root | [prometheus/](prometheus/README.md) |
 | `github.com/testcontainers/testcontainers-go` | `v0.44.0` | root | [testcontainers/](testcontainers/README.md) |
 | `log/slog` | `go1.27.3` | root + core + toolchain | [slog/](slog/README.md) |

@@ -38,6 +38,130 @@ type mockOIDCServer struct {
 	discoveryFails atomic.Bool
 }
 
+// handleMockDiscovery serves the OpenID Connect discovery document.
+func handleMockDiscovery(w http.ResponseWriter, mockServer *mockOIDCServer, serverURL string) {
+	mockServer.discoveryCount.Add(1)
+	if mockServer.discoveryFails.Load() {
+		http.Error(w, "discovery unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"issuer":                                serverURL,
+		"authorization_endpoint":                serverURL + "/auth",
+		"token_endpoint":                        serverURL + "/token",
+		"userinfo_endpoint":                     serverURL + "/userinfo",
+		"jwks_uri":                              serverURL + "/jwks",
+		"id_token_signing_alg_values_supported": []string{"RS256"},
+	})
+}
+
+// handleMockJWKS serves the JSON Web Key Set for the mock server.
+func handleMockJWKS(w http.ResponseWriter, rsaKey *rsa.PrivateKey) {
+	nStr := base64.RawURLEncoding.EncodeToString(rsaKey.N.Bytes())
+	eBytes := big.NewInt(int64(rsaKey.E)).Bytes()
+	eStr := base64.RawURLEncoding.EncodeToString(eBytes)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"keys": []map[string]any{
+			{
+				"kty": "RSA",
+				"alg": "RS256",
+				"use": "sig",
+				"kid": "key-1",
+				"n":   nStr,
+				"e":   eStr,
+			},
+		},
+	})
+}
+
+// signMockIDToken creates a signed ID token for token response mocking.
+func signMockIDToken(w http.ResponseWriter, code, serverURL string, mockServer *mockOIDCServer) (string, bool) {
+	signKey := mockServer.rsaKey
+	aud := "test-client"
+	if code == "bad-sig" {
+		signKey = mockServer.badKey
+	}
+	if code == "bad-aud" {
+		aud = "wrong-client"
+	}
+
+	now := clockwork.NewRealClock().Now()
+	claims := jwt.MapClaims{
+		"iss":   serverURL,
+		"sub":   "user-42",
+		"aud":   aud,
+		"exp":   now.Add(time.Hour).Unix(),
+		"iat":   now.Unix(),
+		"email": "alice@example.com",
+	}
+	if after, ok := strings.CutPrefix(code, "nonce:"); ok {
+		claims["nonce"] = after
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	tok.Header["kid"] = "key-1"
+	idTok, signErr := tok.SignedString(signKey)
+	if signErr != nil {
+		http.Error(w, signErr.Error(), http.StatusInternalServerError)
+		return "", false
+	}
+	return idTok, true
+}
+
+// handleMockToken handles OAuth2 token requests in the mock server.
+func handleMockToken(w http.ResponseWriter, r *http.Request, mockServer *mockOIDCServer, serverURL string) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	code := r.FormValue("code")
+	switch code {
+	case "err-400":
+		w.WriteHeader(http.StatusBadRequest)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
+	case "err-500":
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "server_error"})
+	case "missing-id-token":
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "acc-token-no-id",
+			"token_type":   "Bearer",
+		})
+	default:
+		idTok, ok := signMockIDToken(w, code, serverURL, mockServer)
+		if !ok {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  "valid-access-token",
+			"token_type":    "Bearer",
+			"expires_in":    3600,
+			"refresh_token": "valid-refresh-token",
+			"id_token":      idTok,
+		})
+	}
+}
+
+// handleMockUserInfo handles userinfo endpoint requests in the mock server.
+func handleMockUserInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Authorization") != "Bearer valid-access-token" {
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_token"})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"sub":        "user-42",
+		"email":      "alice@example.com",
+		"name":       "Alice W",
+		"picture":    "https://example.com/pic.png",
+		"department": "eng",
+	})
+}
+
 func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 	t.Helper()
 
@@ -55,110 +179,13 @@ func startMockOIDCServer(t *testing.T) *mockOIDCServer {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/.well-known/openid-configuration":
-			mockServer.discoveryCount.Add(1)
-			if mockServer.discoveryFails.Load() {
-				http.Error(w, "discovery unavailable", http.StatusServiceUnavailable)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"issuer":                                serverURL,
-				"authorization_endpoint":                serverURL + "/auth",
-				"token_endpoint":                        serverURL + "/token",
-				"userinfo_endpoint":                     serverURL + "/userinfo",
-				"jwks_uri":                              serverURL + "/jwks",
-				"id_token_signing_alg_values_supported": []string{"RS256"},
-			})
+			handleMockDiscovery(w, mockServer, serverURL)
 		case "/jwks":
-			nStr := base64.RawURLEncoding.EncodeToString(rsaKey.N.Bytes())
-			eBytes := big.NewInt(int64(rsaKey.E)).Bytes()
-			eStr := base64.RawURLEncoding.EncodeToString(eBytes)
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"keys": []map[string]any{
-					{
-						"kty": "RSA",
-						"alg": "RS256",
-						"use": "sig",
-						"kid": "key-1",
-						"n":   nStr,
-						"e":   eStr,
-					},
-				},
-			})
+			handleMockJWKS(w, mockServer.rsaKey)
 		case "/token":
-			if err := r.ParseForm(); err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			code := r.FormValue("code")
-			switch code {
-			case "err-400":
-				w.WriteHeader(http.StatusBadRequest)
-				_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_grant"})
-			case "err-500":
-				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(map[string]any{"error": "server_error"})
-			case "missing-id-token":
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"access_token": "acc-token-no-id",
-					"token_type":   "Bearer",
-				})
-			default:
-				signKey := rsaKey
-				aud := "test-client"
-				if code == "bad-sig" {
-					signKey = badKey
-				}
-				if code == "bad-aud" {
-					aud = "wrong-client"
-				}
-
-				// go-oidc checks exp against the wall clock.
-				now := clockwork.NewRealClock().Now()
-				claims := jwt.MapClaims{
-					"iss":   serverURL,
-					"sub":   "user-42",
-					"aud":   aud,
-					"exp":   now.Add(time.Hour).Unix(),
-					"iat":   now.Unix(),
-					"email": "alice@example.com",
-				}
-				if after, ok := strings.CutPrefix(code, "nonce:"); ok {
-					claims["nonce"] = after
-				}
-				tok := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-				tok.Header["kid"] = "key-1"
-				idTok, signErr := tok.SignedString(signKey)
-				if signErr != nil {
-					http.Error(w, signErr.Error(), http.StatusInternalServerError)
-					return
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				_ = json.NewEncoder(w).Encode(map[string]any{
-					"access_token":  "valid-access-token",
-					"token_type":    "Bearer",
-					"expires_in":    3600,
-					"refresh_token": "valid-refresh-token",
-					"id_token":      idTok,
-				})
-			}
+			handleMockToken(w, r, mockServer, serverURL)
 		case "/userinfo":
-			if r.Header.Get("Authorization") != "Bearer valid-access-token" {
-				w.WriteHeader(http.StatusUnauthorized)
-				_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_token"})
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"sub":        "user-42",
-				"email":      "alice@example.com",
-				"name":       "Alice W",
-				"picture":    "https://example.com/pic.png",
-				"department": "eng",
-			})
+			handleMockUserInfo(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -192,13 +219,11 @@ func requireUnauthorized(t *testing.T, err error) {
 	require.Equal(t, gerr.CodeUnauthorized, coded.Code)
 }
 
-func TestProvider_Exchange(t *testing.T) {
-	t.Parallel()
-	mock := startMockOIDCServer(t)
-	provider := newTestProvider(t, mock.server.URL)
+// assertValidExchange verifies a successful code exchange and token claims.
+func assertValidExchange(t *testing.T, provider *oidc.Provider) {
+	t.Helper()
 	ctx := t.Context()
-
-	// Positive: valid exchange returns full token set
+	t.Helper()
 	tokens, err := provider.Exchange(ctx, "valid", "test-verifier")
 	require.NoError(t, err)
 	require.Equal(t, "valid-access-token", tokens.AccessToken)
@@ -219,9 +244,15 @@ func TestProvider_Exchange(t *testing.T) {
 
 	var zeroTokens oidc.TokenSet
 	require.EqualError(t, zeroTokens.Claims(&claims), "auth/oidc: no verified id_token")
+}
 
+// assertExchangeErrors verifies error paths during token exchange.
+func assertExchangeErrors(t *testing.T, provider *oidc.Provider) {
+	t.Helper()
+	ctx := t.Context()
+	t.Helper()
 	// Negative: token endpoint returns 400
-	_, err = provider.Exchange(ctx, "err-400", "test-verifier")
+	_, err := provider.Exchange(ctx, "err-400", "test-verifier")
 	require.Error(t, err)
 	require.ErrorIs(t, err, oidc.ErrExchange)
 	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
@@ -260,6 +291,15 @@ func TestProvider_Exchange(t *testing.T) {
 	require.False(t, errors.Is(err, oidc.ErrIDTokenMissing))
 	require.False(t, errors.Is(err, oidc.ErrExchange))
 	require.False(t, errors.Is(err, oidc.ErrNonceMismatch))
+}
+
+func TestProvider_Exchange(t *testing.T) {
+	t.Parallel()
+	mock := startMockOIDCServer(t)
+	provider := newTestProvider(t, mock.server.URL)
+
+	assertValidExchange(t, provider)
+	assertExchangeErrors(t, provider)
 }
 
 func TestProvider_Begin(t *testing.T) {

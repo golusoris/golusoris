@@ -51,25 +51,35 @@ func TestConnString_OverridesDSN(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, err := opts.ConnString(t.Context(), dsn)
-			if err != nil {
-				t.Fatalf("ConnString: %v", err)
-			}
-			cfg, err := pgconn.ParseConfig(got)
-			if err != nil {
-				t.Fatalf("ParseConfig(%q): %v", got, err)
-			}
-			if cfg.TLSConfig != nil || len(cfg.Fallbacks) != 0 {
-				t.Fatal("db.ssl.mode=disable did not override sslmode=require in the DSN")
-			}
-			if cfg.Password != password {
-				t.Fatalf("password = %q, want the file's", cfg.Password)
-			}
-			if cfg.User != "app" || cfg.RuntimeParams["application_name"] != "svc" {
-				t.Fatalf("user %q or application_name %q lost", cfg.User, cfg.RuntimeParams["application_name"])
-			}
+			assertConnStringOverridesDSN(t, opts, dsn, password)
 		})
 	}
+	assertConnStringURLSSLModeDisable(t, opts)
+}
+
+func assertConnStringOverridesDSN(t *testing.T, opts dbpgx.Options, dsn, password string) {
+	t.Helper()
+	got, err := opts.ConnString(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("ConnString: %v", err)
+	}
+	cfg, err := pgconn.ParseConfig(got)
+	if err != nil {
+		t.Fatalf("ParseConfig(%q): %v", got, err)
+	}
+	if cfg.TLSConfig != nil || len(cfg.Fallbacks) != 0 {
+		t.Fatal("db.ssl.mode=disable did not override sslmode=require in the DSN")
+	}
+	if cfg.Password != password {
+		t.Fatalf("password = %q, want the file's", cfg.Password)
+	}
+	if cfg.User != "app" || cfg.RuntimeParams["application_name"] != "svc" {
+		t.Fatalf("user %q or application_name %q lost", cfg.User, cfg.RuntimeParams["application_name"])
+	}
+}
+
+func assertConnStringURLSSLModeDisable(t *testing.T, opts dbpgx.Options) {
+	t.Helper()
 	got, err := opts.ConnString(t.Context(), "postgres://app:old@db.example/app?sslmode=require")
 	if err != nil {
 		t.Fatal(err)

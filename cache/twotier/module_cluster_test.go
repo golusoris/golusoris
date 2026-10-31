@@ -58,6 +58,34 @@ func (c *prefixClient) DoMulti(_ context.Context, commands ...rueidis.Completed)
 	return results
 }
 
+// handlePipeExchanges serves HELLO and PING exchanges over the mock pipe.
+func handlePipeExchanges(t *testing.T, serverConn net.Conn, response string) {
+	t.Helper()
+	defer serverConn.Close()
+	if deadlineErr := serverConn.SetDeadline(time.Now().Add(5 * time.Second)); deadlineErr != nil {
+		t.Error(deadlineErr)
+		return
+	}
+	for _, exchange := range [][2]string{
+		{"*2\r\n$5\r\nHELLO\r\n$1\r\n2\r\n", "*0\r\n"},
+		{"*1\r\n$4\r\nPING\r\n", response},
+	} {
+		request := make([]byte, len(exchange[0]))
+		if _, readErr := io.ReadFull(serverConn, request); readErr != nil {
+			t.Error(readErr)
+			return
+		}
+		if string(request) != exchange[0] {
+			t.Errorf("request = %q, want %q", request, exchange[0])
+			return
+		}
+		if _, writeErr := io.WriteString(serverConn, exchange[1]); writeErr != nil {
+			t.Error(writeErr)
+			return
+		}
+	}
+}
+
 // Decode through the pinned client because RedisMessage has no exported value constructors.
 func prefixResult(t *testing.T, response string) (rueidis.Client, rueidis.RedisResult) {
 	t.Helper()
@@ -67,31 +95,7 @@ func prefixResult(t *testing.T, response string) (rueidis.Client, rueidis.RedisR
 		ClientSetInfo: rueidis.DisableClientSetInfo,
 		DialFn: func(string, *net.Dialer, *tls.Config) (net.Conn, error) {
 			clientConn, serverConn := net.Pipe()
-			go func() {
-				defer serverConn.Close()
-				if deadlineErr := serverConn.SetDeadline(time.Now().Add(5 * time.Second)); deadlineErr != nil {
-					t.Error(deadlineErr)
-					return
-				}
-				for _, exchange := range [][2]string{
-					{"*2\r\n$5\r\nHELLO\r\n$1\r\n2\r\n", "*0\r\n"},
-					{"*1\r\n$4\r\nPING\r\n", response},
-				} {
-					request := make([]byte, len(exchange[0]))
-					if _, readErr := io.ReadFull(serverConn, request); readErr != nil {
-						t.Error(readErr)
-						return
-					}
-					if string(request) != exchange[0] {
-						t.Errorf("request = %q, want %q", request, exchange[0])
-						return
-					}
-					if _, writeErr := io.WriteString(serverConn, exchange[1]); writeErr != nil {
-						t.Error(writeErr)
-						return
-					}
-				}
-			}()
+			go handlePipeExchanges(t, serverConn, response)
 			return clientConn, nil
 		},
 	})

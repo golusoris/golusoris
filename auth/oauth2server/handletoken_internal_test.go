@@ -108,38 +108,50 @@ func TestResolveCode_ExpiresAtBoundary(t *testing.T) {
 	}
 }
 
-func TestAuthorizePKCERequiresS256AndRFC7636Syntax(t *testing.T) {
-	t.Parallel()
-	verifier := "pkce-verifier-with-forty-three-or-more-characters"
-	sum := sha256.Sum256([]byte(verifier))
-	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
-	tests := []struct {
-		name  string
-		query url.Values
-		valid bool
-	}{
+type authorizePKCETestCase struct {
+	name  string
+	query url.Values
+	valid bool
+}
+
+// testAuthorizePKCECases builds table cases for PKCE syntax verification.
+func testAuthorizePKCECases(challenge, verifier string) []authorizePKCETestCase {
+	return []authorizePKCETestCase{
 		{name: "valid S256", query: url.Values{"code_challenge": {challenge}, "code_challenge_method": {"S256"}}, valid: true},
 		{name: "missing method", query: url.Values{"code_challenge": {challenge}}},
 		{name: "plain rejected", query: url.Values{"code_challenge": {verifier}, "code_challenge_method": {"plain"}}},
 		{name: "short challenge", query: url.Values{"code_challenge": {"short"}, "code_challenge_method": {"S256"}}},
 		{name: "invalid character", query: url.Values{"code_challenge": {challenge[:42] + "+"}, "code_challenge_method": {"S256"}}},
 	}
-	for _, test := range tests {
+}
+
+// checkAuthorizePKCETestCase verifies PKCE challenge and method validation.
+func checkAuthorizePKCETestCase(t *testing.T, tc authorizePKCETestCase, challenge, verifier string) {
+	t.Helper()
+	gotChallenge, gotMethod, message := authorizePKCE(tc.query)
+	if tc.valid {
+		if message != "" || gotChallenge != challenge || gotMethod != "S256" {
+			t.Fatalf("authorizePKCE() = %q, %q, %q", gotChallenge, gotMethod, message)
+		}
+		if !verifyPKCE(gotChallenge, gotMethod, verifier) {
+			t.Fatal("verifyPKCE() rejected valid verifier")
+		}
+		return
+	}
+	if message == "" {
+		t.Fatal("authorizePKCE() accepted invalid input")
+	}
+}
+
+func TestAuthorizePKCERequiresS256AndRFC7636Syntax(t *testing.T) {
+	t.Parallel()
+	verifier := "pkce-verifier-with-forty-three-or-more-characters"
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+	for _, test := range testAuthorizePKCECases(challenge, verifier) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			gotChallenge, gotMethod, message := authorizePKCE(test.query)
-			if test.valid {
-				if message != "" || gotChallenge != challenge || gotMethod != "S256" {
-					t.Fatalf("authorizePKCE() = %q, %q, %q", gotChallenge, gotMethod, message)
-				}
-				if !verifyPKCE(gotChallenge, gotMethod, verifier) {
-					t.Fatal("verifyPKCE() rejected valid verifier")
-				}
-				return
-			}
-			if message == "" {
-				t.Fatal("authorizePKCE() accepted invalid input")
-			}
+			checkAuthorizePKCETestCase(t, test, challenge, verifier)
 		})
 	}
 }

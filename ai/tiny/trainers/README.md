@@ -14,8 +14,7 @@ deliberately emits an artifact that must never be served as a model.
 No image digest is documented as available yet. Issue #563 stays open until
 the publish workflow has produced signed images and a consumer has pinned their
 recorded digests. Production callers must set `Options.Image` to an exact
-`ghcr.io/...@sha256:<64 hex>` reference; the mutable `DefaultImage` constants
-are deprecated and rejected by default.
+`ghcr.io/...@sha256:<64 hex>` reference.
 
 ## Contracts
 

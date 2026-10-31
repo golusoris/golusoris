@@ -15,22 +15,9 @@ import (
 	"github.com/golusoris/golusoris/core/capabilities"
 )
 
-// TestCapabilitiesContract is the drift guard between capabilities.yaml and
-// the tree: every listed import must be a real package directory, and every
-// importable package directory must be listed. Praetor and other governance
-// tooling trust this file, so it cannot silently rot.
-func TestCapabilitiesContract(t *testing.T) {
-	t.Parallel()
-	idx, err := capabilities.Load(capabilities.FileName)
-	if err != nil {
-		t.Fatalf("load %s: %v", capabilities.FileName, err)
-	}
-	if idx.Framework != "github.com/golusoris/golusoris" {
-		t.Fatalf("framework = %q", idx.Framework)
-	}
-
-	// 1. Listed → exists, and lives in the module it claims.
-	tree := packageDirs(t)
+// verifyPackagesInTree checks that listed packages exist and belong to the claimed module.
+func verifyPackagesInTree(t *testing.T, idx *capabilities.Index, tree map[string]string) {
+	t.Helper()
 	for _, p := range idx.Packages {
 		mod, ok := tree[p.Import]
 		if !ok {
@@ -45,21 +32,110 @@ func TestCapabilitiesContract(t *testing.T) {
 			t.Errorf("%s: capabilities.yaml says module %q, tree says %q", p.Import, want, mod)
 		}
 	}
+}
 
-	// 2. Exists → listed.
+// verifyTreePackagesListed checks that all discovered Go packages appear in capabilities.yaml.
+func verifyTreePackagesListed(t *testing.T, idx *capabilities.Index, tree map[string]string) {
+	t.Helper()
 	for imp := range tree {
 		if _, ok := idx.Lookup(imp); !ok {
 			t.Errorf("%s exists in the tree but is missing from capabilities.yaml", imp)
 		}
 	}
+}
 
-	// 3. Every declared module is real.
+// verifyDeclaredModules checks that each declared submodule has a real go.mod file.
+func verifyDeclaredModules(t *testing.T, idx *capabilities.Index) {
+	t.Helper()
 	for _, m := range idx.Modules {
 		rel := strings.TrimPrefix(m, idx.Framework+"/")
 		if _, err := os.Stat(filepath.Join(filepath.FromSlash(rel), "go.mod")); err != nil {
 			t.Errorf("module %s declared but %s/go.mod not found", m, rel)
 		}
 	}
+}
+
+// TestCapabilitiesContract is the drift guard between capabilities.yaml and
+// the tree: every listed import must be a real package directory, and every
+// importable package directory must be listed. Praetor and other governance
+// tooling trust this file, so it cannot silently rot.
+func TestCapabilitiesContract(t *testing.T) {
+	t.Parallel()
+	idx, err := capabilities.Load(capabilities.FileName)
+	if err != nil {
+		t.Fatalf("load %s: %v", capabilities.FileName, err)
+	}
+	if idx.Framework != "github.com/golusoris/golusoris" {
+		t.Fatalf("framework = %q", idx.Framework)
+	}
+
+	tree := packageDirs(t)
+	verifyPackagesInTree(t, idx, tree)
+	verifyTreePackagesListed(t, idx, tree)
+	verifyDeclaredModules(t, idx)
+}
+
+func shouldSkipDir(rel, name string) bool {
+	if rel == "." {
+		return false
+	}
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+		return true
+	}
+	switch name {
+	case "vendor", "testdata", "node_modules", "internal", "cmd", "examples":
+		return true
+	}
+	return rel == "tools"
+}
+
+func isSourceGoFile(name string) bool {
+	return strings.HasSuffix(name, ".go") && !strings.HasSuffix(name, "_test.go")
+}
+
+func computeImportPath(dir string, modules map[string]string) (string, string) {
+	modDir, modPath := nearestModule(dir, modules)
+	if dir == "." || dir == modDir {
+		return modPath, modPath
+	}
+	sub := strings.TrimPrefix(strings.TrimPrefix(dir, modDir), "/")
+	return modPath + "/" + sub, modPath
+}
+
+type packageDirsWalker struct {
+	root    string
+	modules map[string]string
+	out     map[string]string
+}
+
+func (w *packageDirsWalker) walkDir(rel, path, name string) error {
+	if shouldSkipDir(rel, name) {
+		return filepath.SkipDir
+	}
+	if rel != "." {
+		if gm, parseErr := astx.ParseGoMod(filepath.Join(path, "go.mod")); parseErr == nil {
+			w.modules[rel] = gm.Module
+		}
+	}
+	return nil
+}
+
+func (w *packageDirsWalker) walk(path string, d fs.DirEntry, walkErr error) error {
+	if walkErr != nil {
+		return walkErr
+	}
+	rel, _ := filepath.Rel(w.root, path)
+	rel = filepath.ToSlash(rel)
+	if d.IsDir() {
+		return w.walkDir(rel, path, d.Name())
+	}
+	if !isSourceGoFile(d.Name()) {
+		return nil
+	}
+	dir := filepath.ToSlash(filepath.Dir(rel))
+	imp, modPath := computeImportPath(dir, w.modules)
+	w.out[imp] = modPath
+	return nil
 }
 
 // packageDirs walks the repository and returns import path → module path for
@@ -75,46 +151,16 @@ func packageDirs(t *testing.T) map[string]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := make(map[string]string)
-	modules := map[string]string{".": rootMod.Module} // dir (slash, relative) → module path
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		rel, _ := filepath.Rel(root, path)
-		rel = filepath.ToSlash(rel)
-		if d.IsDir() {
-			name := d.Name()
-			if rel != "." && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "vendor" || name == "testdata" || name == "node_modules" || name == "internal" || name == "cmd" || name == "examples" || rel == "tools") {
-				return filepath.SkipDir
-			}
-			if rel != "." {
-				if gm, parseErr := astx.ParseGoMod(filepath.Join(path, "go.mod")); parseErr == nil {
-					modules[rel] = gm.Module
-				}
-			}
-			return nil
-		}
-		if !strings.HasSuffix(d.Name(), ".go") || strings.HasSuffix(d.Name(), "_test.go") {
-			return nil
-		}
-		dir := filepath.ToSlash(filepath.Dir(rel))
-		modDir, modPath := nearestModule(dir, modules)
-		imp := modPath
-		if sub := strings.TrimPrefix(strings.TrimPrefix(dir, modDir), "/"); sub != "" && dir != modDir {
-			imp = modPath + "/" + sub
-		}
-		if dir == "." {
-			imp = modPath
-		}
-		out[imp] = modPath
-		return nil
-	})
-	if err != nil {
+	walker := &packageDirsWalker{
+		root:    root,
+		modules: map[string]string{".": rootMod.Module},
+		out:     make(map[string]string),
+	}
+	if err = filepath.WalkDir(root, walker.walk); err != nil {
 		t.Fatal(err)
 	}
-	delete(out, rootMod.Module) // the root package itself is the umbrella, not a capability
-	return out
+	delete(walker.out, rootMod.Module) // the root package itself is the umbrella, not a capability
+	return walker.out
 }
 
 func nearestModule(dir string, modules map[string]string) (string, string) {
