@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# k8s.io/client-go — v0.37.1 snapshot
+# k8s.io/client-go — v0.37.2 snapshot
 
-Pinned: **v0.37.1**
-Source: [tagged source](https://github.com/kubernetes/client-go/tree/v0.37.1)
+Pinned: **v0.37.2**
+Source: [tagged source](https://github.com/kubernetes/client-go/tree/v0.37.2)
 
 ## In-cluster client
 
