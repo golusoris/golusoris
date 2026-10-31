@@ -49,7 +49,7 @@ on:
         description: Exact gosec version
         type: string
         # renovate: datasource=go depName=github.com/securego/gosec/v2 versioning=semver
-        default: v2.29.0
+        default: v2.30.0
       gosec-xtools-version:
         description: golang.org/x/tools version gosec is built against (Go 1.27.2 export data needs >= v0.51.0)
         type: string

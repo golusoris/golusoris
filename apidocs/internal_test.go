@@ -128,6 +128,8 @@ func resultContainsText(res *mcp.CallToolResult, substr string) bool {
 	return false
 }
 
+// TestSafeResolveURL covers BaseURL joins that must stay on the base origin
+// and prefix, including literal and percent-encoded dot segments (G125).
 func TestSafeResolveURL(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -145,6 +147,15 @@ func TestSafeResolveURL(t *testing.T) {
 		{"userinfo", "https://user:secret@api.test", "/x", "", true},
 		{"empty hostname", "http://:8080", "/x", "", true},
 		{"invalid base", "not-a-url", "/x", "", true},
+		{"trailing slash kept", "https://api.test/gw", "/x/", "https://api.test/gw/x/", false},
+		{"escaped user arg kept", "https://api.test", "/items/a%2Fb", "https://api.test/items/a%2Fb", false},
+		{"dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/../../admin", "", true},
+		{"encoded dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/%2e%2e/%2E%2E/admin", "", true},
+		{"dot segment", "https://api.test", "/./x", "", true},
+		{"encoded slash hides dot-dot", "https://api.test/gw/v1", "/items/..%2F..%2Fadmin", "", true},
+		{"encoded backslash hides dot-dot", "https://api.test/gw/v1", "/items/..%5C..%5Cadmin", "", true},
+		{"encoded slash with dotted name kept", "https://api.test", "/items/v1.2%2F..x", "https://api.test/items/v1.2%2F..x", false},
+		{"invalid escape", "https://api.test", "/x%zz", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
