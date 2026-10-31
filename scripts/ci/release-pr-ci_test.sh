@@ -5,9 +5,10 @@
 
 # Planted cases for scripts/ci/release-pr-ci.sh against a stub gh: the waiting runs
 # of a release branch head are approved once each, including runs appearing after
-# a delay; a run that already ran, a run of another branch or repository, and no
+# a delay and a release pull request listed late; a run that already ran, a run of another branch or repository, and no
 # release pull request approve nothing; a head without a run, a run appearing
-# too late, a failing or odd API answer fail the script.
+# too late, a reported release pull request never listed, a failing or odd
+# API answer fail the script.
 #   usage: scripts/ci/release-pr-ci_test.sh
 set -euo pipefail
 
@@ -22,7 +23,19 @@ SHA=0123456789abcdef0123456789abcdef01234567
 cat > "$WORK/gh" <<'STUB'
 #!/usr/bin/env bash
 case "$1" in
-	pr) printf '%s' "$STUB_HEADS" ;;
+	pr)
+		pr_file="$WORK/pr_lookups"
+		pr_count=0
+		if [ -f "$pr_file" ]; then
+			pr_count="$(cat "$pr_file")"
+		fi
+		pr_count=$((pr_count + 1))
+		printf '%s\n' "$pr_count" > "$pr_file"
+		if [ "$pr_count" -le "${STUB_PR_EMPTY_FIRST:-0}" ]; then
+			exit 0
+		fi
+		printf '%s' "$STUB_HEADS"
+		;;
 	api)
 		if [ "$2" = --method ]; then
 			[ "$STUB_APPROVE" = fail ] && exit 1
@@ -54,7 +67,7 @@ run_case() {
 		tries="$7"
 	fi
 	: > "$WORK/log"
-	rm -f "$WORK/run_lookups"
+	rm -f "$WORK/run_lookups" "$WORK/pr_lookups"
 	local env_args=()
 	if [ -z "$tries" ]; then
 		env_args+=(-u RELEASE_PR_CI_TRIES)
@@ -68,6 +81,8 @@ run_case() {
 		STUB_LOG="$WORK/log"
 		STUB_APPROVE="${6:-ok}"
 		STUB_EMPTY_FIRST="$empty_first"
+		STUB_PR_EMPTY_FIRST="${STUB_PR_EMPTY_FIRST:-0}"
+		RELEASE_PR_EXPECTED="${RELEASE_PR_EXPECTED:-false}"
 		RELEASE_PR_CI_WAIT=0
 	)
 	env "${env_args[@]}" bash "$HERE/release-pr-ci.sh" owner/repo > "$WORK/out" 2>&1 || rc=$?
@@ -107,4 +122,10 @@ grep -q 'after 2 tries' "$WORK/out"
 STUB_EMPTY_FIRST=10 run_case default-window "$HEAD" "11 action_required release-branch owner/repo" 0 1 ok ""
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
 
-echo "release pull request CI: 5 approved, 4 skipped, 6 refused"
+RELEASE_PR_EXPECTED=true STUB_PR_EMPTY_FIRST=1 run_case late-release-pr "$HEAD" "11 action_required release-branch owner/repo" 0 1
+grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
+RELEASE_PR_EXPECTED=true run_case expected-pr-missing "" "" 1 0
+grep -q 'none listed after 2 tries' "$WORK/out"
+RELEASE_PR_EXPECTED=yes run_case odd-expected "$HEAD" "11 action_required release-branch owner/repo" 2 0
+
+echo "release pull request CI: 6 approved, 4 skipped, 8 refused"

@@ -23,6 +23,8 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-26.04
+    outputs:
+      prs-created: ${{ steps.release.outputs.prs_created }}
     timeout-minutes: 10
     permissions:
       contents: write
@@ -35,7 +37,8 @@ jobs:
         with:
           client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+      - id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
@@ -62,4 +65,5 @@ jobs:
       - name: Approve the waiting runs on the release branch head
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_PR_EXPECTED: ${{ needs.release-please.outputs.prs-created == 'true' }}
         run: bash scripts/ci/release-pr-ci.sh "$GITHUB_REPOSITORY"
