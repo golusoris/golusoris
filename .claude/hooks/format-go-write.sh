@@ -27,13 +27,14 @@ file_path=$(printf '%s' "$payload" | jq -r '.tool_input.file_path // ""')
 [[ "$file_path" != *.go ]] && exit 0
 [ ! -f "$file_path" ] && exit 0
 
-# gofumpt is the stricter superset; gci handles import grouping. Either
-# is optional — we run whichever is on PATH.
+# gofumpt is the stricter superset; gci (via golangci-lint and the shared
+# .golangci.yml sections) handles import grouping. Either is optional.
 if command -v gofumpt >/dev/null 2>&1; then
   gofumpt -w "$file_path" 2>/dev/null || true
 fi
-if command -v gci >/dev/null 2>&1; then
-  gci write --skip-generated -s standard -s default -s 'prefix(github.com/golusoris/golusoris)' "$file_path" 2>/dev/null || true
+if command -v golangci-lint >/dev/null 2>&1; then
+  config="$(git -C "$(dirname "$file_path")" rev-parse --show-toplevel 2>/dev/null)/.golangci.yml"
+  [ -f "$config" ] && golangci-lint fmt --config "$config" --enable gci "$file_path" 2>/dev/null || true
 fi
 
 exit 0
