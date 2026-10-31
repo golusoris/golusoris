@@ -27,6 +27,7 @@ EXIT_ERROR = 3
 GLOBAL_TRIGGERS: tuple[str, ...] = (
     "go.work*",
     ".golangci.yml",
+    "ruff.toml",
     ".gosec.json",
     "tools/tool-versions.env",
     "scripts/ci/**",

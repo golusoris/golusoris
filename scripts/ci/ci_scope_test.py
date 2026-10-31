@@ -204,6 +204,21 @@ class CiScopeTest(unittest.TestCase):
         self.assertIn("global trigger: .github/actions/setup-go/action.yml", proc.stderr)
         self.assertIn("k8s/nri", proc.stdout.splitlines())
 
+    def test_negative_ruff_config_change_lints_every_python_file(self) -> None:
+        """A ruff.toml-only change selects every Python file, not none."""
+        (self.repo / "tool.py").write_text("value = 1\n", encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "-m", "add python")
+        base = self._git("rev-parse", "HEAD").strip()
+        (self.repo / "ruff.toml").write_text('[lint]\nselect = ["S"]\n', encoding="utf-8")
+        self._git("add", ".")
+        self._git("commit", "-m", "change ruff rules")
+
+        proc = self._run_scope("files", "*.py", base=base)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("global trigger: ruff.toml", proc.stderr)
+        self.assertIn("tool.py", proc.stdout.splitlines())
+
     def test_boundary_empty_diff_returns_empty_and_count_zero(self) -> None:
         """Zero changed files yields count 0 and empty module list."""
         proc = self._run_scope("modules", base=self.base_sha)

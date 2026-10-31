@@ -92,6 +92,12 @@ main() {
 		return 1
 	fi
 
+	# --config makes ruff.toml the only rule source; Ruff then ignores nested config files.
+	# Checked before the scoped no-files exit so no run passes without it.
+	if [[ ! -f "$root/ruff.toml" || -L "$root/ruff.toml" ]]; then
+		printf 'Ruff rule source missing: ruff.toml must be a regular file at the root\n' >&2
+		return 1
+	fi
 	local -a files=()
 	collect_files "$root"
 	if (( ${#files[@]} == 0 )); then
@@ -115,10 +121,8 @@ main() {
 		-v "$root:/repo:ro" \
 		-w /repo \
 		"$image" check \
-		--isolated \
+		--config ruff.toml \
 		--no-cache \
-		--target-version py312 \
-		--select E4,E7,E9,F,I,B,UP,S,RUF,PERF,ASYNC,C90 \
 		--output-format concise \
 		-- "${files[@]}"
 	printf 'Ruff: %d repository Python files passed\n' "${#files[@]}"

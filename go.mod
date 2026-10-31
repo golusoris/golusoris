@@ -150,10 +150,10 @@ require (
 	google.golang.org/api v0.304.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
-	k8s.io/dynamic-resource-allocation v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
+	k8s.io/dynamic-resource-allocation v0.37.2
 	modernc.org/sqlite v1.60.1
 	riverqueue.com/riverui v0.21.0
 	sigs.k8s.io/controller-runtime v0.25.2
