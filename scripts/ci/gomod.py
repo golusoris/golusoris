@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import json
-import subprocess
+import subprocess  # Runs only the fixed go mod edit command below. # nosec B404
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -31,7 +31,7 @@ def read_go_mod(path: Path) -> GoMod:
     if resolved.name != "go.mod" or not resolved.is_file():
         raise GoModError(f"could not read {path}: not a regular go.mod file")
     try:
-        proc = subprocess.run(  # noqa: S603 - fixed Go command without shell execution.
+        proc = subprocess.run(  # noqa: S603 - fixed Go command without shell. # nosec B603 B607
             ["go", "mod", "edit", "-json", str(resolved)],  # noqa: S607 - setup-go supplies Go on PATH.
             capture_output=True,
             text=True,
