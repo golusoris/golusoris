@@ -33,13 +33,18 @@ if [ "$EXPECTED" != true ] && [ "$EXPECTED" != false ]; then
 	exit 2
 fi
 
-# The author depends on the token release-please ran with, so the release branch name selects.
+# The author depends on the token release-please ran with, so a release branch of this
+# repository selects; only writers can push one, and writers may approve runs anyway.
 release_heads() {
-	local listed branch sha
-	listed="$("$GH" pr list --repo "$REPO" --state open --label 'autorelease: pending' \
-		--json headRefName,headRefOid --jq '.[] | "\(.headRefName) \(.headRefOid)"')"
-	while read -r branch sha; do
-		if [[ "$branch" =~ ^release-please--[A-Za-z0-9._/-]+$ ]]; then
+	local listed branch sha cross
+	if ! listed="$("$GH" pr list --repo "$REPO" --state open --label 'autorelease: pending' \
+		--json headRefName,headRefOid,isCrossRepository \
+		--jq '.[] | "\(.headRefName) \(.headRefOid) \(.isCrossRepository)"')"; then
+		echo "error: could not list open release pull requests" >&2
+		return 1
+	fi
+	while read -r branch sha cross; do
+		if [[ "$branch" =~ ^release-please--[A-Za-z0-9._/-]+$ ]] && [ "$cross" = false ]; then
 			printf '%s %s\n' "$branch" "$sha"
 		fi
 	done <<< "$listed"
