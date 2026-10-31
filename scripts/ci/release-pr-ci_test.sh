@@ -5,8 +5,8 @@
 
 # Planted cases for scripts/ci/release-pr-ci.sh against a stub gh: the waiting runs
 # of a release branch head are approved once each, including runs appearing after
-# a delay and a release pull request listed late; a run that already ran, a run of another branch or repository, and no
-# release pull request approve nothing; a head without a run, a run appearing
+# a delay and a release pull request listed late; a run that already ran, a run of another branch or repository, a labelled
+# pull request on a non-release branch, and no release pull request approve nothing; a head without a run, a run appearing
 # too late, a reported release pull request never listed, a failing or odd
 # API answer fail the script.
 #   usage: scripts/ci/release-pr-ci_test.sh
@@ -95,37 +95,38 @@ run_case() {
 	echo "ok   $name: exit $rc, $got approvals"
 }
 
-HEAD="release-branch $SHA"
+HEAD="release-please--branches--main $SHA"
 
-run_case waiting "$HEAD" "11 action_required release-branch owner/repo
-12 action_required release-branch owner/repo" 0 2
+run_case waiting "$HEAD" "11 action_required release-please--branches--main owner/repo
+12 action_required release-please--branches--main owner/repo" 0 2
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
 grep -qx 'repos/owner/repo/actions/runs/12/approve' "$WORK/log"
-run_case one-of-two "$HEAD" "11 success release-branch owner/repo
-12 action_required release-branch owner/repo" 0 1
+run_case one-of-two "$HEAD" "11 success release-please--branches--main owner/repo
+12 action_required release-please--branches--main owner/repo" 0 1
 grep -qx 'repos/owner/repo/actions/runs/12/approve' "$WORK/log"
-run_case already-ran "$HEAD" "11 success release-branch owner/repo
-12 none release-branch owner/repo" 0 0
+run_case already-ran "$HEAD" "11 success release-please--branches--main owner/repo
+12 none release-please--branches--main owner/repo" 0 0
 run_case other-branch "$HEAD" "11 action_required other-branch owner/repo" 0 0
-run_case other-repository "$HEAD" "11 action_required release-branch fork/repo" 0 0
+run_case other-repository "$HEAD" "11 action_required release-please--branches--main fork/repo" 0 0
 run_case no-release-pr "" "" 0 0
+run_case non-release-head "feature/x $SHA" "11 action_required feature/x owner/repo" 0 0
 run_case no-run "$HEAD" "" 1 0
-grep -q 'no pull request run on release-branch' "$WORK/out"
+grep -q 'no pull request run on release-please--branches--main' "$WORK/out"
 run_case api-fails "$HEAD" fail 1 0
-run_case approve-fails "$HEAD" "11 action_required release-branch owner/repo" 1 0 fail
-run_case odd-run "$HEAD" "null action_required release-branch owner/repo" 1 0
-run_case odd-head "release-branch not-a-sha" "11 action_required release-branch owner/repo" 1 0
-STUB_EMPTY_FIRST=1 run_case late-run "$HEAD" "11 action_required release-branch owner/repo" 0 1 ok 2
+run_case approve-fails "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0 fail
+run_case odd-run "$HEAD" "null action_required release-please--branches--main owner/repo" 1 0
+run_case odd-head "release-please--branches--main not-a-sha" "11 action_required release-please--branches--main owner/repo" 1 0
+STUB_EMPTY_FIRST=1 run_case late-run "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1 ok 2
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
-STUB_EMPTY_FIRST=2 run_case too-late "$HEAD" "11 action_required release-branch owner/repo" 1 0 ok 2
+STUB_EMPTY_FIRST=2 run_case too-late "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0 ok 2
 grep -q 'after 2 tries' "$WORK/out"
-STUB_EMPTY_FIRST=10 run_case default-window "$HEAD" "11 action_required release-branch owner/repo" 0 1 ok ""
+STUB_EMPTY_FIRST=10 run_case default-window "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1 ok ""
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
 
-RELEASE_PR_EXPECTED=true STUB_PR_EMPTY_FIRST=1 run_case late-release-pr "$HEAD" "11 action_required release-branch owner/repo" 0 1
+RELEASE_PR_EXPECTED=true STUB_PR_EMPTY_FIRST=1 run_case late-release-pr "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
 RELEASE_PR_EXPECTED=true run_case expected-pr-missing "" "" 1 0
 grep -q 'none listed after 2 tries' "$WORK/out"
-RELEASE_PR_EXPECTED=yes run_case odd-expected "$HEAD" "11 action_required release-branch owner/repo" 2 0
+RELEASE_PR_EXPECTED=yes run_case odd-expected "$HEAD" "11 action_required release-please--branches--main owner/repo" 2 0
 
-echo "release pull request CI: 6 approved, 4 skipped, 8 refused"
+echo "release pull request CI: 6 approved, 5 skipped, 8 refused"
