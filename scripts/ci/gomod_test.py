@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import tempfile
 import unittest
 import unittest.mock
@@ -105,10 +104,22 @@ class GoModTest(unittest.TestCase):
         with self.assertRaisesRegex(gomod.GoModError, "go.mod"):
             gomod.read_go_mod(self.path)
 
+    def test_negative_not_a_go_mod_file(self) -> None:
+        """A directory or a file with another name is refused before Go runs."""
+        other = self.path.with_name("other.mod")
+        other.write_text("module example.com/fixture\n", encoding="utf-8")
+        for target in (self.path.parent, other):
+            with self.subTest(target=target), unittest.mock.patch.object(
+                gomod.subprocess, "run"
+            ) as run, self.assertRaisesRegex(gomod.GoModError, "regular go.mod"):
+                gomod.read_go_mod(target)
+            run.assert_not_called()
+
     def test_negative_timeout(self) -> None:
         """A go command past its 30 s timeout raises GoModError."""
+        self.path.write_text("module example.com/fixture\n", encoding="utf-8")
         with unittest.mock.patch.object(
-            gomod.subprocess, "run", side_effect=subprocess.TimeoutExpired("go", 30)
+            gomod.subprocess, "run", side_effect=gomod.subprocess.TimeoutExpired("go", 30)
         ) as run:
             with self.assertRaises(gomod.GoModError):
                 gomod.read_go_mod(self.path)
@@ -116,8 +127,9 @@ class GoModTest(unittest.TestCase):
 
     def test_negative_bad_json(self) -> None:
         """JSON output of the wrong shape raises GoModError."""
+        self.path.write_text("module example.com/fixture\n", encoding="utf-8")
         for output in ("not json", "[]", '{"Require": [1]}', '{"Replace": "bad"}'):
-            result = subprocess.CompletedProcess(["go"], 0, stdout=output, stderr="")
+            result = gomod.subprocess.CompletedProcess(["go"], 0, stdout=output, stderr="")
             with self.subTest(output=output), unittest.mock.patch.object(
                 gomod.subprocess, "run", return_value=result
             ), self.assertRaises(gomod.GoModError):

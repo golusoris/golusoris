@@ -27,9 +27,12 @@ class GoMod:
 
 def read_go_mod(path: Path) -> GoMod:
     """Read module JSON through Go, bounding dependency extraction."""
+    resolved = path.resolve()
+    if resolved.name != "go.mod" or not resolved.is_file():
+        raise GoModError(f"could not read {path}: not a regular go.mod file")
     try:
         proc = subprocess.run(  # noqa: S603 - fixed Go command without shell execution.
-            ["go", "mod", "edit", "-json", str(path.resolve())],  # noqa: S607 - setup-go supplies Go on PATH.
+            ["go", "mod", "edit", "-json", str(resolved)],  # noqa: S607 - setup-go supplies Go on PATH.
             capture_output=True,
             text=True,
             timeout=30,
