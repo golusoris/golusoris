@@ -145,6 +145,12 @@ func TestSafeResolveURL(t *testing.T) {
 		{"userinfo", "https://user:secret@api.test", "/x", "", true},
 		{"empty hostname", "http://:8080", "/x", "", true},
 		{"invalid base", "not-a-url", "/x", "", true},
+		{"trailing slash kept", "https://api.test/gw", "/x/", "https://api.test/gw/x/", false},
+		{"escaped user arg kept", "https://api.test", "/items/a%2Fb", "https://api.test/items/a%2Fb", false},
+		{"dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/../../admin", "", true},
+		{"encoded dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/%2e%2e/%2E%2E/admin", "", true},
+		{"dot segment", "https://api.test", "/./x", "", true},
+		{"invalid escape", "https://api.test", "/x%zz", "", true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

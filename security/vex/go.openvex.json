@@ -1,0 +1,24 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/golusoris/golusoris/blob/main/security/vex/go.openvex.json",
+  "author": "golusoris maintainers",
+  "timestamp": "2026-10-31T18:29:12Z",
+  "version": 1,
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GO-2026-5932"
+      },
+      "products": [
+        {
+          "@id": "pkg:golang/golang.org/x/crypto"
+        }
+      ],
+      "last_updated": "2026-10-31T18:29:12Z",
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_present",
+      "impact_statement": "The advisory covers golang.org/x/crypto/openpgp, which no golusoris build contains: osv matches the whole golang.org/x/crypto module, no Go file in the repository imports golang.org/x/crypto/openpgp, and govulncheck v1.9.0 in symbol mode on all 31 modules reports GO-2026-5932 at module level only (required, no package imported, no symbol called) in the 14 modules that require golang.org/x/crypto.",
+      "status_notes": "category: D; entered: 2026-10-31; expires: 2027-02-28"
+    }
+  ]
+}
