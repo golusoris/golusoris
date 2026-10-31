@@ -152,6 +152,9 @@ func TestSafeResolveURL(t *testing.T) {
 		{"dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/../../admin", "", true},
 		{"encoded dot-dot climbs out of base path", "https://api.test/gw/v1", "/items/%2e%2e/%2E%2E/admin", "", true},
 		{"dot segment", "https://api.test", "/./x", "", true},
+		{"encoded slash hides dot-dot", "https://api.test/gw/v1", "/items/..%2F..%2Fadmin", "", true},
+		{"encoded backslash hides dot-dot", "https://api.test/gw/v1", "/items/..%5C..%5Cadmin", "", true},
+		{"encoded slash with dotted name kept", "https://api.test", "/items/v1.2%2F..x", "https://api.test/items/v1.2%2F..x", false},
 		{"invalid escape", "https://api.test", "/x%zz", "", true},
 	}
 	for _, tt := range tests {

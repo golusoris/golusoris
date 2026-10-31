@@ -292,8 +292,20 @@ func safeResolveURL(baseURL, path string) (string, error) {
 	return resolved.String(), nil
 }
 
+// hasDotSegment reports whether a decoded path segment, split on the
+// separators "/" and "\\" that a downstream decoder may honour, holds a "."
+// or ".." part (for example "..%2F.." decodes to "../..").
+func hasDotSegment(raw string) bool {
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if part == "." || part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
 // joinToolPath appends an escaped tool path below the BaseURL path. Each
-// segment must unescape cleanly and must not be "." or "..", so neither
+// segment must unescape cleanly and contain no "." or ".." part, so neither
 // literal nor percent-encoded dot segments climb out of the BaseURL path
 // prefix. Segments are kept verbatim: OpenAPI matrix and label styles rely
 // on literal ";", "," and "=", which re-escaping would change.
@@ -308,7 +320,7 @@ func joinToolPath(base *url.URL, escapedPath string) (*url.URL, error) {
 		if err != nil {
 			return nil, fmt.Errorf("apidocs: invalid tool path segment: %w", err)
 		}
-		if raw == "." || raw == ".." {
+		if hasDotSegment(raw) {
 			return nil, errors.New("apidocs: tool path escapes BaseURL path")
 		}
 		b.WriteByte('/')
