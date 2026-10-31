@@ -110,6 +110,8 @@ jobs:
           go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
       - name: Check gofumpt formatting
         run: bash scripts/ci/check-gofumpt.sh
+      - name: Check gci pre-commit hook
+        run: make gci-hook-test
       - name: Lint primary modules
         env:
           GO_MODULE_GROUP: primary
