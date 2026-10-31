@@ -10,8 +10,8 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 import gomod
 
@@ -88,7 +88,7 @@ class GoModTest(unittest.TestCase):
             self._read(fixture + "replace example.com/dep0 => ./x\n")
 
     def test_negative_missing_go_binary(self) -> None:
-        with mock.patch.dict(os.environ, {"PATH": str(self.path.parent)}):
+        with unittest.mock.patch.dict(os.environ, {"PATH": str(self.path.parent)}):
             with self.assertRaisesRegex(gomod.GoModError, "go.mod"):
                 self._read("module example.com/fixture\n")
 
@@ -97,7 +97,7 @@ class GoModTest(unittest.TestCase):
             gomod.read_go_mod(self.path)
 
     def test_negative_timeout(self) -> None:
-        with mock.patch.object(
+        with unittest.mock.patch.object(
             gomod.subprocess, "run", side_effect=subprocess.TimeoutExpired("go", 30)
         ) as run:
             with self.assertRaises(gomod.GoModError):
@@ -107,7 +107,7 @@ class GoModTest(unittest.TestCase):
     def test_negative_bad_json(self) -> None:
         for output in ("not json", "[]", '{"Require": [1]}', '{"Replace": "bad"}'):
             result = subprocess.CompletedProcess(["go"], 0, stdout=output, stderr="")
-            with self.subTest(output=output), mock.patch.object(
+            with self.subTest(output=output), unittest.mock.patch.object(
                 gomod.subprocess, "run", return_value=result
             ), self.assertRaises(gomod.GoModError):
                 gomod.read_go_mod(self.path)
