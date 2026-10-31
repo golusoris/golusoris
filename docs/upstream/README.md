@@ -39,7 +39,7 @@ regenerator.
 | `github.com/golang-migrate/migrate/v4` | `v4.20.1` | root | [golang-migrate/](golang-migrate/README.md) |
 | `github.com/sqlc-dev/sqlc` | `v1.31.1` | repository tool pin | [sqlc/](sqlc/README.md) |
 | `@scalar/api-reference` | `v1.75.1` | embedded asset | [scalar/](scalar/README.md) |
-| `k8s.io/client-go` | `v0.37.1` | root | [k8s/](k8s/README.md) |
+| `k8s.io/client-go` | `v0.37.2` | root | [k8s/](k8s/README.md) |
 | `github.com/go-chi/chi/v5` | `v5.5.0` | root | [chi/](chi/README.md) |
 | `github.com/go-playground/validator/v10` | `v10.30.5` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
