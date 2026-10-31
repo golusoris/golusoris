@@ -38,8 +38,11 @@ editors:
   - universal
   - vscode
   - antigravity
-# praetor#36 (BUG-371): the flavor detector classifies this framework library as a
-# go-service and scaffolds a service Dockerfile and security workflow it does not ship.
+# cordanaLLM/praetor#36 (BUG-371): detection classifies this framework library as a
+# go-service, which demands a service Dockerfile and security workflow it does not ship.
+# Remove this pin once #36 lands and flavor audit without it picks go-library.
+flavors:
+  - name: go-library
 # The Go API compatibility workflow installs these before building: hw/udev
 # and media/3d are cgo modules (same list as scripts/ci/install-cgo-libs.sh).
 api:
