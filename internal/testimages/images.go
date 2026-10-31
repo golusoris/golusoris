@@ -26,7 +26,7 @@ const (
 	// Redis is the default Redis integration-test image.
 	Redis = "redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0"
 	// NATS is the default NATS integration-test image.
-	NATS = "nats:2-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde"
+	NATS = "nats:2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5"
 	// ClickHouse is the default ClickHouse integration-test image.
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
