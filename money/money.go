@@ -103,13 +103,22 @@ func (m Money) String() string {
 	if decimals == 0 {
 		return fmt.Sprintf("%d %s", m.Amount, m.Currency)
 	}
-	divisor := int64(math.Pow10(decimals))
-	major := m.Amount / divisor
-	minor := m.Amount % divisor
-	if minor < 0 {
-		minor = -minor
+	sign := ""
+	var u uint64
+	switch {
+	case m.Amount == math.MinInt64:
+		sign = "-"
+		u = 1 << 63
+	case m.Amount < 0:
+		sign = "-"
+		u = uint64(-m.Amount)
+	default:
+		u = uint64(m.Amount)
 	}
-	return fmt.Sprintf("%d.%0*d %s", major, decimals, minor, m.Currency)
+	divisor := uint64(math.Pow10(decimals))
+	major := u / divisor
+	minor := u % divisor
+	return fmt.Sprintf("%s%d.%0*d %s", sign, major, decimals, minor, m.Currency)
 }
 
 func (m Money) checkSameCurrency(other Money) error {

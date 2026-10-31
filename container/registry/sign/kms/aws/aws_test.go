@@ -449,6 +449,32 @@ func spki(t *testing.T, curve asn1.ObjectIdentifier) []byte {
 	return der
 }
 
+type unsupportedKeyCase struct {
+	name, want string
+	edit       func(k *fakeKey)
+}
+
+func runUnsupportedKeyCase(t *testing.T, tc unsupportedKeyCase) {
+	t.Helper()
+	f, addr := newFake(t)
+	k := f.addKey("k", "ECC_NIST_P256")
+	f.set(func(*fakeKMS) { tc.edit(k) })
+	s, err := aws.New(t.Context(), fakeConfig(addr, "k"))
+	if tc.want == "" {
+		// A swapped public key passes New and fails at the first Sign.
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		if _, serr := s.Sign(rand.Reader, digestOf(crypto.SHA256, "m"), crypto.SHA256); serr == nil || !strings.Contains(serr.Error(), "does not verify") {
+			t.Fatalf("Sign with a swapped public key = %v, want does not verify", serr)
+		}
+		return
+	}
+	if !errors.Is(err, aws.ErrUnsupportedKey) || !strings.Contains(err.Error(), tc.want) {
+		t.Fatalf("New error = %v, want ErrUnsupportedKey %q", err, tc.want)
+	}
+}
+
 func TestNew_UnsupportedKeys(t *testing.T) {
 	t.Parallel()
 	p256DER, err := x509.MarshalPKIXPublicKey(genKey(t, "ECC_NIST_P256").Public())
@@ -456,10 +482,7 @@ func TestNew_UnsupportedKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	secp256k1 := spki(t, asn1.ObjectIdentifier{1, 3, 132, 0, 10})
-	for _, tc := range []struct {
-		name, want string
-		edit       func(k *fakeKey)
-	}{
+	cases := []unsupportedKeyCase{
 		{"encrypt usage", `key usage "ENCRYPT_DECRYPT"`, func(k *fakeKey) { k.usage = "ENCRYPT_DECRYPT" }},
 		{"no algorithms", "signing algorithms []", func(k *fakeKey) { k.algs = nil }},
 		{"secp256k1", "unsupported elliptic curve", func(k *fakeKey) { k.spec, k.der = "ECC_SECG_P256K1", secp256k1 }},
@@ -469,26 +492,11 @@ func TestNew_UnsupportedKeys(t *testing.T) {
 		{"unknown spec", `key spec "ML_DSA_65"`, func(k *fakeKey) { k.spec = "ML_DSA_65" }},
 		{"bad der", "asn1", func(k *fakeKey) { k.der = []byte{0x30, 0x01} }},
 		{"other p256 der", "", func(k *fakeKey) { k.der = p256DER }},
-	} {
+	}
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f, addr := newFake(t)
-			k := f.addKey("k", "ECC_NIST_P256")
-			f.set(func(*fakeKMS) { tc.edit(k) })
-			s, err := aws.New(t.Context(), fakeConfig(addr, "k"))
-			if tc.want == "" {
-				// A swapped public key passes New and fails at the first Sign.
-				if err != nil {
-					t.Fatalf("New: %v", err)
-				}
-				if _, serr := s.Sign(rand.Reader, digestOf(crypto.SHA256, "m"), crypto.SHA256); serr == nil || !strings.Contains(serr.Error(), "does not verify") {
-					t.Fatalf("Sign with a swapped public key = %v, want does not verify", serr)
-				}
-				return
-			}
-			if !errors.Is(err, aws.ErrUnsupportedKey) || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("New error = %v, want ErrUnsupportedKey %q", err, tc.want)
-			}
+			runUnsupportedKeyCase(t, tc)
 		})
 	}
 }

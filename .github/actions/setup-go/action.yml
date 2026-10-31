@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Set up repository Go toolchain
+description: Install the go.mod toolchain with the shared all-module cache key
+
+inputs:
+  cache:
+    description: Enable the Go module and build caches
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+      with:
+        go-version-file: go.mod
+        cache: ${{ inputs.cache }}
+        cache-dependency-path: '**/go.sum'

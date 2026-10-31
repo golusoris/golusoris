@@ -155,6 +155,55 @@ func trAssertListAndGet(t *testing.T, ctx context.Context, c Client, hash string
 	}
 }
 
+// trAssertAdd verifies adding a magnet to Transmission.
+func trAssertAdd(t *testing.T, ctx context.Context, c Client, hash string) {
+	t.Helper()
+	gotHash, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"})
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	if gotHash != hash {
+		t.Errorf("Add hash = %q, want %q", gotHash, hash)
+	}
+}
+
+// trAssertPauseResume verifies pause and resume in Transmission.
+func trAssertPauseResume(t *testing.T, ctx context.Context, c Client, lastMethod *string, hash string) {
+	t.Helper()
+	if err := c.Pause(ctx, hash); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if *lastMethod != "torrent-stop" {
+		t.Errorf("Pause method = %q, want torrent-stop", *lastMethod)
+	}
+	if err := c.Resume(ctx, hash); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if *lastMethod != "torrent-start" {
+		t.Errorf("Resume method = %q, want torrent-start", *lastMethod)
+	}
+}
+
+// trAssertStats verifies Transmission stats retrieval.
+func trAssertStats(t *testing.T, ctx context.Context, c Client) {
+	t.Helper()
+	stats, err := c.Stats(ctx)
+	if err != nil {
+		t.Fatalf("Stats: %v", err)
+	}
+	if stats.TorrentCount != 1 || stats.DownloadRate != 2048 || stats.UploadRate != 1024 {
+		t.Errorf("Stats = %+v", stats)
+	}
+}
+
+// trAssertRemove verifies removing a torrent in Transmission.
+func trAssertRemove(t *testing.T, ctx context.Context, c Client, hash string) {
+	t.Helper()
+	if err := c.Remove(ctx, hash, true); err != nil {
+		t.Fatalf("Remove: %v", err)
+	}
+}
+
 func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
 	t.Parallel()
 	const hash = "abcdef0123456789abcdef0123456789abcdef01"
@@ -163,40 +212,11 @@ func TestTransmission_AddListGetPauseResumeRemoveStats(t *testing.T) {
 	c := newTestTransmission(t, srv.URL)
 	ctx := context.Background()
 
-	gotHash, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"})
-	if err != nil {
-		t.Fatalf("Add: %v", err)
-	}
-	if gotHash != hash {
-		t.Errorf("Add hash = %q, want %q", gotHash, hash)
-	}
-
+	trAssertAdd(t, ctx, c, hash)
 	trAssertListAndGet(t, ctx, c, hash)
-
-	if err = c.Pause(ctx, hash); err != nil {
-		t.Fatalf("Pause: %v", err)
-	}
-	if lastMethod != "torrent-stop" {
-		t.Errorf("Pause method = %q, want torrent-stop", lastMethod)
-	}
-	if err = c.Resume(ctx, hash); err != nil {
-		t.Fatalf("Resume: %v", err)
-	}
-	if lastMethod != "torrent-start" {
-		t.Errorf("Resume method = %q, want torrent-start", lastMethod)
-	}
-
-	stats, err := c.Stats(ctx)
-	if err != nil {
-		t.Fatalf("Stats: %v", err)
-	}
-	if stats.TorrentCount != 1 || stats.DownloadRate != 2048 || stats.UploadRate != 1024 {
-		t.Errorf("Stats = %+v", stats)
-	}
-
-	if err = c.Remove(ctx, hash, true); err != nil {
-		t.Fatalf("Remove: %v", err)
-	}
+	trAssertPauseResume(t, ctx, c, &lastMethod, hash)
+	trAssertStats(t, ctx, c)
+	trAssertRemove(t, ctx, c, hash)
 }
 
 func TestTransmission_AddFile(t *testing.T) {

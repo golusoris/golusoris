@@ -21,7 +21,6 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
-[![ko-fi](https://img.shields.io/badge/ko--fi-support-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/lusoris)
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed supply-chain controls.
 
@@ -504,19 +503,17 @@ Code is licensed under the [European Union Public Licence 1.2](LICENSE)
 [REUSE](https://reuse.software)-compliant — see [LICENSING.md](LICENSING.md)
 for the full split, third-party carve-outs, and the DCO contribution terms.
 
-## Support
+## Support golusoris
 
-If golusoris saves you time, a coffee helps ☕
+**Why it matters.** golusoris is a composable Go framework: opt-in fx modules for what a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s), spread over [31 Go modules](#tooling) that `make verify-all` builds, lints, scans and race-tests on every change.
 
-<p align="left">
-  <a href="https://ko-fi.com/lusoris" target="_blank">
-    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" />
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://github.com/sponsors/lusoris" target="_blank">
-    <img src="https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Sponsors" />
-  </a>
-</p>
+**What support funds.**
+
+- CI time for the required Linux, macOS and Windows matrix.
+- Keeping all [31 Go modules](#tooling) green under `make verify-all` on every change.
+
+Sponsor on [GitHub Sponsors](https://github.com/sponsors/lusoris), any amount; no support or priority is sold. Open Collective: pending.
+Also on [Ko-fi](https://ko-fi.com/lusoris).
 
 ## Standards & Governance
 
@@ -557,7 +554,7 @@ generated agent context against `AGENTS.md`.
 private scratch-link policy.
 
 **Debt Baseline**: `.standards-baseline.json` anchors the debt ratchet at
-0 recorded infractions; audit forbids growth.
+5 recorded infractions; audit forbids growth.
 
 [praetor-docs-badge]: https://github.com/golusoris/golusoris/actions/workflows/praetor-docs.yml/badge.svg
 [praetor-docs-runs]: https://github.com/golusoris/golusoris/actions/workflows/praetor-docs.yml

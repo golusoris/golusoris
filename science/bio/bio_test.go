@@ -50,12 +50,11 @@ func TestParseFASTAContextLongMultilineRecord(t *testing.T) {
 	}
 }
 
-func TestParseFASTAContextLimits(t *testing.T) {
-	t.Parallel()
-
+// testFASTALimitsTotalBytes tests total byte limit boundary cases for FASTA parsing.
+func testFASTALimitsTotalBytes(t *testing.T) {
+	t.Helper()
 	t.Run("total bytes exact", func(t *testing.T) {
 		t.Parallel()
-
 		input := ">x\nAC\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input)), MaxRecords: 1, MaxLineBytes: 2}
 		if _, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(input), opts); err != nil {
@@ -65,7 +64,6 @@ func TestParseFASTAContextLimits(t *testing.T) {
 
 	t.Run("total bytes plus one", func(t *testing.T) {
 		t.Parallel()
-
 		input := ">x\nAC\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input) - 1), MaxRecords: 1, MaxLineBytes: 2}
 		_, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(input), opts)
@@ -76,7 +74,6 @@ func TestParseFASTAContextLimits(t *testing.T) {
 
 	t.Run("total bytes plus one with short reads", func(t *testing.T) {
 		t.Parallel()
-
 		input := "\n\n\n\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input) - 1), MaxRecords: 1, MaxLineBytes: 1}
 		_, err := bio.ParseFASTAContext(context.Background(), &oneByteReader{r: strings.NewReader(input)}, opts)
@@ -87,17 +84,19 @@ func TestParseFASTAContextLimits(t *testing.T) {
 
 	t.Run("total bytes exact with short reads", func(t *testing.T) {
 		t.Parallel()
-
 		input := "\n\n\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input)), MaxRecords: 1, MaxLineBytes: 1}
 		if _, err := bio.ParseFASTAContext(context.Background(), &oneByteReader{r: strings.NewReader(input)}, opts); err != nil {
 			t.Fatalf("exact limit error = %v", err)
 		}
 	})
+}
 
+// testFASTALimitsLine tests line byte limit boundary cases for FASTA parsing.
+func testFASTALimitsLine(t *testing.T) {
+	t.Helper()
 	t.Run("line exact", func(t *testing.T) {
 		t.Parallel()
-
 		opts := bio.FASTAOptions{MaxBytes: 16, MaxRecords: 1, MaxLineBytes: 3}
 		if _, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(">x\nACG\n"), opts); err != nil {
 			t.Fatalf("exact limit error = %v", err)
@@ -106,17 +105,19 @@ func TestParseFASTAContextLimits(t *testing.T) {
 
 	t.Run("line plus one", func(t *testing.T) {
 		t.Parallel()
-
 		opts := bio.FASTAOptions{MaxBytes: 16, MaxRecords: 1, MaxLineBytes: 3}
 		_, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(">x\nACGT\n"), opts)
 		if !errors.Is(err, bio.ErrFASTALineTooLong) {
 			t.Fatalf("limit+1 error = %v, want ErrFASTALineTooLong", err)
 		}
 	})
+}
 
+// testFASTALimitsRecords tests record count limit boundary cases for FASTA parsing.
+func testFASTALimitsRecords(t *testing.T) {
+	t.Helper()
 	t.Run("records exact", func(t *testing.T) {
 		t.Parallel()
-
 		input := ">a\nA\n>b\nC\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input)), MaxRecords: 2, MaxLineBytes: 2}
 		if _, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(input), opts); err != nil {
@@ -126,7 +127,6 @@ func TestParseFASTAContextLimits(t *testing.T) {
 
 	t.Run("records plus one", func(t *testing.T) {
 		t.Parallel()
-
 		input := ">a\nA\n>b\nC\n>c\nG\n"
 		opts := bio.FASTAOptions{MaxBytes: int64(len(input)), MaxRecords: 2, MaxLineBytes: 2}
 		_, err := bio.ParseFASTAContext(context.Background(), strings.NewReader(input), opts)
@@ -134,6 +134,13 @@ func TestParseFASTAContextLimits(t *testing.T) {
 			t.Fatalf("limit+1 error = %v, want ErrFASTATooManyRecords", err)
 		}
 	})
+}
+
+func TestParseFASTAContextLimits(t *testing.T) {
+	t.Parallel()
+	testFASTALimitsTotalBytes(t)
+	testFASTALimitsLine(t)
+	testFASTALimitsRecords(t)
 }
 
 func TestParseFASTAContextCancellation(t *testing.T) {

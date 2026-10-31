@@ -17,11 +17,7 @@ import (
 	k8stesting "k8s.io/client-go/testing"
 )
 
-// apiServerLike adds the API server behaviour the ResourceSlice controller
-// relies on and the fake clientset lacks: GenerateName, integer
-// ResourceVersions and spec field selectors on list and watch. The create
-// and update reactors mirror the upstream controller tests.
-func apiServerLike(k *fake.Clientset) {
+func attachCreateReactor(k *fake.Clientset) {
 	var mu sync.Mutex
 	counter := 0
 	k.PrependReactor("create", "resourceslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -38,6 +34,9 @@ func apiServerLike(k *fake.Clientset) {
 		counter++
 		return false, nil, nil
 	})
+}
+
+func attachUpdateReactor(k *fake.Clientset) {
 	k.PrependReactor("update", "resourceslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		s, ok := action.(k8stesting.UpdateAction).GetObject().(*resourceapi.ResourceSlice)
 		if !ok {
@@ -50,6 +49,9 @@ func apiServerLike(k *fake.Clientset) {
 		s.ResourceVersion = strconv.Itoa(rev + 1)
 		return false, nil, nil
 	})
+}
+
+func attachListReactor(k *fake.Clientset) {
 	gvr := resourceapi.SchemeGroupVersion.WithResource("resourceslices")
 	gvk := resourceapi.SchemeGroupVersion.WithKind("ResourceSlice")
 	k.PrependReactor("list", "resourceslices", func(action k8stesting.Action) (bool, runtime.Object, error) {
@@ -71,6 +73,10 @@ func apiServerLike(k *fake.Clientset) {
 		list.Items = kept
 		return true, list, nil
 	})
+}
+
+func attachWatchReactor(k *fake.Clientset) {
+	gvr := resourceapi.SchemeGroupVersion.WithResource("resourceslices")
 	k.PrependWatchReactor("resourceslices", func(action k8stesting.Action) (bool, watch.Interface, error) {
 		sel := action.(k8stesting.WatchAction).GetWatchRestrictions().Fields
 		w, err := k.Tracker().Watch(gvr, "")
@@ -82,6 +88,17 @@ func apiServerLike(k *fake.Clientset) {
 			return e, !ok || matches(sel, s)
 		}), nil
 	})
+}
+
+// apiServerLike adds the API server behaviour the ResourceSlice controller
+// relies on and the fake clientset lacks: GenerateName, integer
+// ResourceVersions and spec field selectors on list and watch. The create
+// and update reactors mirror the upstream controller tests.
+func apiServerLike(k *fake.Clientset) {
+	attachCreateReactor(k)
+	attachUpdateReactor(k)
+	attachListReactor(k)
+	attachWatchReactor(k)
 }
 
 func matches(sel fields.Selector, s *resourceapi.ResourceSlice) bool {

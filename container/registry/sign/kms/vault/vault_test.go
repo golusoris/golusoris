@@ -168,27 +168,32 @@ func TestSign_KeyTypes(t *testing.T) {
 	for _, tc := range signCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f, addr := newFake(t)
-			k := f.addKey("k", tc.typ, 1)
-			s := newSigner(t, tokenConfig(addr))
-			digest := digestOf(tc.opts.HashFunc(), "payload")
-			sig, err := s.Sign(rand.Reader, digest, tc.opts)
-			if err != nil {
-				t.Fatalf("Sign: %v", err)
-			}
-			if !verifies(k.versions[1].Public(), digest, sig, tc.opts) {
-				t.Fatal("signature does not verify under the key's public half")
-			}
-			got := f.get()
-			if wantPath := strings.TrimSuffix("transit/sign/k/"+tc.path, "/"); got.signPath != wantPath {
-				t.Errorf("path = %q, want %q", got.signPath, wantPath)
-			}
-			for key, v := range tc.want {
-				if got.signBody[key] != v {
-					t.Errorf("body[%s] = %v, want %v", key, got.signBody[key], v)
-				}
-			}
+			runSignKeyTypeCase(t, tc)
 		})
+	}
+}
+
+func runSignKeyTypeCase(t *testing.T, tc signCase) {
+	t.Helper()
+	f, addr := newFake(t)
+	k := f.addKey("k", tc.typ, 1)
+	s := newSigner(t, tokenConfig(addr))
+	digest := digestOf(tc.opts.HashFunc(), "payload")
+	sig, err := s.Sign(rand.Reader, digest, tc.opts)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if !verifies(k.versions[1].Public(), digest, sig, tc.opts) {
+		t.Fatal("signature does not verify under the key's public half")
+	}
+	got := f.get()
+	if wantPath := strings.TrimSuffix("transit/sign/k/"+tc.path, "/"); got.signPath != wantPath {
+		t.Errorf("path = %q, want %q", got.signPath, wantPath)
+	}
+	for key, v := range tc.want {
+		if got.signBody[key] != v {
+			t.Errorf("body[%s] = %v, want %v", key, got.signBody[key], v)
+		}
 	}
 }
 

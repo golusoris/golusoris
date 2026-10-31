@@ -160,6 +160,52 @@ func TestSafeResolveURL(t *testing.T) {
 	}
 }
 
+// verifyRedirectOriginPolicy validates cross-origin and same-origin redirect policies.
+func verifyRedirectOriginPolicy(t *testing.T, confined *http.Client, callerErr error, callerChecks *int) {
+	t.Helper()
+	via, err := http.NewRequest(http.MethodGet, "http://api.test/start", nil)
+	if err != nil {
+		t.Fatalf("build via request: %v", err)
+	}
+	crossOrigin, err := http.NewRequest(http.MethodGet, "https://api.test/next", nil)
+	if err != nil {
+		t.Fatalf("build cross-origin request: %v", err)
+	}
+	if got := confined.CheckRedirect(crossOrigin, []*http.Request{via}); !errors.Is(got, errRedirectEscapesBaseOrigin) {
+		t.Fatalf("cross-origin redirect error = %v", got)
+	}
+	if *callerChecks != 0 {
+		t.Fatalf("caller redirect checks = %d, want 0 for rejected origin", *callerChecks)
+	}
+
+	sameOrigin, err := http.NewRequest(http.MethodGet, "http://API.TEST:80/next", nil)
+	if err != nil {
+		t.Fatalf("build same-origin request: %v", err)
+	}
+	if got := confined.CheckRedirect(sameOrigin, []*http.Request{via}); !errors.Is(got, callerErr) {
+		t.Fatalf("same-origin redirect error = %v, want caller policy", got)
+	}
+	if *callerChecks != 1 {
+		t.Fatalf("caller redirect checks = %d, want 1", *callerChecks)
+	}
+}
+
+// verifyRedirectChainLimit validates hard redirect limit before caller policy.
+func verifyRedirectChainLimit(t *testing.T, confined *http.Client, callerChecks *int) {
+	t.Helper()
+	sameOrigin, err := http.NewRequest(http.MethodGet, "http://API.TEST:80/next", nil)
+	if err != nil {
+		t.Fatalf("build same-origin request: %v", err)
+	}
+	redirectChain := make([]*http.Request, 10)
+	if got := confined.CheckRedirect(sameOrigin, redirectChain); got == nil || !strings.Contains(got.Error(), "10 redirects") {
+		t.Fatalf("redirect-chain error = %v, want hard limit", got)
+	}
+	if *callerChecks != 1 {
+		t.Fatalf("caller redirect checks = %d, want hard limit before caller policy", *callerChecks)
+	}
+}
+
 func TestSameOriginClientClonesAndComposesRedirectPolicy(t *testing.T) {
 	t.Parallel()
 	callerErr := errors.New("caller stopped redirect")
@@ -190,39 +236,8 @@ func TestSameOriginClientClonesAndComposesRedirectPolicy(t *testing.T) {
 		t.Fatalf("custom timeout = %s, want %s", custom.Timeout, customTimeout)
 	}
 
-	via, err := http.NewRequest(http.MethodGet, "http://api.test/start", nil)
-	if err != nil {
-		t.Fatalf("build via request: %v", err)
-	}
-	crossOrigin, err := http.NewRequest(http.MethodGet, "https://api.test/next", nil)
-	if err != nil {
-		t.Fatalf("build cross-origin request: %v", err)
-	}
-	if got := confined.CheckRedirect(crossOrigin, []*http.Request{via}); !errors.Is(got, errRedirectEscapesBaseOrigin) {
-		t.Fatalf("cross-origin redirect error = %v", got)
-	}
-	if callerChecks != 0 {
-		t.Fatalf("caller redirect checks = %d, want 0 for rejected origin", callerChecks)
-	}
-
-	sameOrigin, err := http.NewRequest(http.MethodGet, "http://API.TEST:80/next", nil)
-	if err != nil {
-		t.Fatalf("build same-origin request: %v", err)
-	}
-	if got := confined.CheckRedirect(sameOrigin, []*http.Request{via}); !errors.Is(got, callerErr) {
-		t.Fatalf("same-origin redirect error = %v, want caller policy", got)
-	}
-	if callerChecks != 1 {
-		t.Fatalf("caller redirect checks = %d, want 1", callerChecks)
-	}
-
-	redirectChain := make([]*http.Request, 10)
-	if got := confined.CheckRedirect(sameOrigin, redirectChain); got == nil || !strings.Contains(got.Error(), "10 redirects") {
-		t.Fatalf("redirect-chain error = %v, want hard limit", got)
-	}
-	if callerChecks != 1 {
-		t.Fatalf("caller redirect checks = %d, want hard limit before caller policy", callerChecks)
-	}
+	verifyRedirectOriginPolicy(t, confined, callerErr, &callerChecks)
+	verifyRedirectChainLimit(t, confined, &callerChecks)
 }
 
 const parameterSpec = `openapi: 3.0.3
@@ -264,21 +279,14 @@ paths:
           description: ok
 `
 
-func TestPathItemParametersMergeAndPreserveLocations(t *testing.T) {
-	t.Parallel()
-	tools, err := openAPIToTools([]byte(parameterSpec))
-	if err != nil {
-		t.Fatalf("openAPIToTools: %v", err)
-	}
-	if len(tools) != 1 {
-		t.Fatalf("tools count = %d, want 1", len(tools))
-	}
-
+// assertParameterSchema validates properties, required items, and override description.
+func assertParameterSchema(t *testing.T, schemaRaw json.RawMessage) {
+	t.Helper()
 	var schema struct {
 		Properties map[string]json.RawMessage `json:"properties"`
 		Required   []string                   `json:"required"`
 	}
-	if schemaErr := json.Unmarshal(tools[0].InputSchema, &schema); schemaErr != nil {
+	if schemaErr := json.Unmarshal(schemaRaw, &schema); schemaErr != nil {
 		t.Fatalf("unmarshal input schema: %v", schemaErr)
 	}
 	for _, name := range []string{"id", "X-Tenant", "session", "mode"} {
@@ -294,11 +302,15 @@ func TestPathItemParametersMergeAndPreserveLocations(t *testing.T) {
 	if got := string(schema.Properties["mode"]); !strings.Contains(got, "operation override") {
 		t.Errorf("mode schema = %s, want operation-level override", got)
 	}
+}
 
+// assertPathItemProxyRequest validates outbound request URL, headers, and cookies.
+func assertPathItemProxyRequest(t *testing.T, tool Tool) {
+	t.Helper()
 	req, errRes := buildProxyRequest(
 		context.Background(),
 		Options{BaseURL: "https://api.test"},
-		tools[0],
+		tool,
 		json.RawMessage(`{"id":"a/b","X-Tenant":"acme","session":"token","mode":"full"}`),
 	)
 	if errRes != nil {
@@ -317,6 +329,20 @@ func TestPathItemParametersMergeAndPreserveLocations(t *testing.T) {
 	if err != nil || cookie.Value != "token" {
 		t.Errorf("session cookie = %+v, err = %v", cookie, err)
 	}
+}
+
+func TestPathItemParametersMergeAndPreserveLocations(t *testing.T) {
+	t.Parallel()
+	tools, err := openAPIToTools([]byte(parameterSpec))
+	if err != nil {
+		t.Fatalf("openAPIToTools: %v", err)
+	}
+	if len(tools) != 1 {
+		t.Fatalf("tools count = %d, want 1", len(tools))
+	}
+
+	assertParameterSchema(t, tools[0].InputSchema)
+	assertPathItemProxyRequest(t, tools[0])
 }
 
 func TestBuildProxyRequestRejectsInvalidCookieValue(t *testing.T) {
@@ -375,9 +401,7 @@ func TestBuildProxyRequestRejectsPathDotSegments(t *testing.T) {
 	}
 }
 
-func TestBuildProxyRequestSerializesOpenAPIParameterStyles(t *testing.T) {
-	t.Parallel()
-	spec := []byte(`openapi: 3.0.3
+const parameterStylesSpec = `openapi: 3.0.3
 info:
   title: Serialization
   version: "1"
@@ -425,8 +449,32 @@ paths:
           explode: true
           schema: {type: object, additionalProperties: {type: string}}
       responses: {'200': {description: ok}}
-`)
-	tools, err := openAPIToTools(spec)
+`
+
+// assertProxyRequestStyles validates serialized path, query, header, and cookie values.
+func assertProxyRequestStyles(t *testing.T, req *http.Request, filter map[string]string) {
+	t.Helper()
+	if got, want := req.URL.EscapedPath(), "/items/red,blue/.red.blue/;color=blue;role=admin"; got != want {
+		t.Errorf("path = %q, want %q", got, want)
+	}
+	wantQuery := "color=blue&compact=color%2Cblue%2Crole%2Cadmin&deep%5Bcolor%5D=blue&deep%5Brole%5D=admin&pipes=red%7Cblue&role=admin&spaces=red+blue&tags=red&tags=blue"
+	if got := req.URL.RawQuery; got != wantQuery {
+		t.Errorf("query = %q, want %q", got, wantQuery)
+	}
+	if got := req.Header.Get("X-Filter"); got != "color=blue,role=admin" {
+		t.Errorf("X-Filter = %q, want exploded object", got)
+	}
+	for name, want := range filter {
+		cookie, cookieErr := req.Cookie(name)
+		if cookieErr != nil || cookie.Value != want {
+			t.Errorf("cookie %q = %+v, err = %v", name, cookie, cookieErr)
+		}
+	}
+}
+
+func TestBuildProxyRequestSerializesOpenAPIParameterStyles(t *testing.T) {
+	t.Parallel()
+	tools, err := openAPIToTools([]byte(parameterStylesSpec))
 	if err != nil {
 		t.Fatalf("openAPIToTools: %v", err)
 	}
@@ -456,22 +504,7 @@ paths:
 		}
 		t.Fatalf("buildProxyRequest: %+v", errRes.Content)
 	}
-	if got, want := req.URL.EscapedPath(), "/items/red,blue/.red.blue/;color=blue;role=admin"; got != want {
-		t.Errorf("path = %q, want %q", got, want)
-	}
-	wantQuery := "color=blue&compact=color%2Cblue%2Crole%2Cadmin&deep%5Bcolor%5D=blue&deep%5Brole%5D=admin&pipes=red%7Cblue&role=admin&spaces=red+blue&tags=red&tags=blue"
-	if got := req.URL.RawQuery; got != wantQuery {
-		t.Errorf("query = %q, want %q", got, wantQuery)
-	}
-	if got := req.Header.Get("X-Filter"); got != "color=blue,role=admin" {
-		t.Errorf("X-Filter = %q, want exploded object", got)
-	}
-	for name, want := range filter {
-		cookie, cookieErr := req.Cookie(name)
-		if cookieErr != nil || cookie.Value != want {
-			t.Errorf("cookie %q = %+v, err = %v", name, cookie, cookieErr)
-		}
-	}
+	assertProxyRequestStyles(t, req, filter)
 }
 
 // kin-openapi >=0.150 defaults explode=false for delimited styles.

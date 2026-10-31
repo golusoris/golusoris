@@ -201,17 +201,9 @@ func rtAssertListAndGet(t *testing.T, ctx context.Context, c Client, hash string
 	}
 }
 
-func TestRTorrent_ListGetMutateStats(t *testing.T) {
-	t.Parallel()
-	const hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
-	st := &rtServerState{
-		hash: hash, name: "ubuntu.iso", size: 4096, label: "iso",
-		complete: 1, ratioMilli: 1500,
-	}
-	srv := newRTorrentServer(t, st)
-	c := newTestRTorrent(t, srv.URL)
-	ctx := context.Background()
-
+// rtAssertAdd verifies adding magnets and files to rTorrent.
+func rtAssertAdd(t *testing.T, ctx context.Context, c Client, st *rtServerState, hash string) {
+	t.Helper()
 	if _, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Label: "iso", SavePath: "/x"}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
@@ -225,9 +217,11 @@ func TestRTorrent_ListGetMutateStats(t *testing.T) {
 	if st.last() != "load.raw" { // AddTorrentStopped maps to load.raw
 		t.Errorf("AddFile(paused) called %q, want load.raw", st.last())
 	}
+}
 
-	rtAssertListAndGet(t, ctx, c, hash)
-
+// rtAssertPauseResume verifies pausing and resuming a torrent in rTorrent.
+func rtAssertPauseResume(t *testing.T, ctx context.Context, c Client, st *rtServerState, hash string) {
+	t.Helper()
 	if err := c.Pause(ctx, hash); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
@@ -240,7 +234,11 @@ func TestRTorrent_ListGetMutateStats(t *testing.T) {
 	if st.last() != "d.resume" {
 		t.Errorf("Resume called %q, want d.resume", st.last())
 	}
+}
 
+// rtAssertStats verifies rTorrent stats retrieval.
+func rtAssertStats(t *testing.T, ctx context.Context, c Client) {
+	t.Helper()
 	stats, err := c.Stats(ctx)
 	if err != nil {
 		t.Fatalf("Stats: %v", err)
@@ -248,13 +246,35 @@ func TestRTorrent_ListGetMutateStats(t *testing.T) {
 	if stats.TorrentCount != 1 || stats.DownloadRate != 2048 || stats.UploadRate != 2048 {
 		t.Errorf("Stats = %+v", stats)
 	}
+}
 
+// rtAssertRemove verifies removing a torrent in rTorrent.
+func rtAssertRemove(t *testing.T, ctx context.Context, c Client, st *rtServerState, hash string) {
+	t.Helper()
 	if err := c.Remove(ctx, hash, true); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if st.last() != "d.erase" {
 		t.Errorf("Remove called %q, want d.erase", st.last())
 	}
+}
+
+func TestRTorrent_ListGetMutateStats(t *testing.T) {
+	t.Parallel()
+	const hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+	st := &rtServerState{
+		hash: hash, name: "ubuntu.iso", size: 4096, label: "iso",
+		complete: 1, ratioMilli: 1500,
+	}
+	srv := newRTorrentServer(t, st)
+	c := newTestRTorrent(t, srv.URL)
+	ctx := context.Background()
+
+	rtAssertAdd(t, ctx, c, st, hash)
+	rtAssertListAndGet(t, ctx, c, hash)
+	rtAssertPauseResume(t, ctx, c, st, hash)
+	rtAssertStats(t, ctx, c)
+	rtAssertRemove(t, ctx, c, st, hash)
 }
 
 func TestRTorrent_GetNotFound(t *testing.T) {

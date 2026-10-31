@@ -12,10 +12,15 @@ Cursor, Aider, Codex, and Continue.
 **Why this exists:** Public docs may be ahead of or behind the version the
 framework pins. These snapshots keep generated suggestions on the selected API.
 
-**How to update:** When bumping a dependency, run `make docs-upstream` for the
-refresh recipe. Update the table and matching snapshot from the exact selected
-tag, then run `scripts/verify-upstream-pins.sh`. The table is the verifier's
-mapping authority; its authority column says where each pin is resolved.
+**How to update:** The merge train runs `scripts/ci/regenerate.py write` to
+regenerate module pin strings in the table and matching snapshot headings,
+`Pinned` lines, and `Source` tags. Review the exact selected upstream tag and
+edit curated “Changes since” prose by hand; regeneration leaves it untouched.
+Run `make docs-upstream` for the recipe, then `make docs-upstream-verify` after
+regeneration. The table is the verifier's mapping authority; its authority column
+says where each pin is resolved. Scalar pins use `scalar-bundle-update.sh`;
+repository tool and Go toolchain rows are reported as skipped by the module pin
+regenerator.
 
 ## Index
 
@@ -38,7 +43,7 @@ mapping authority; its authority column says where each pin is resolved.
 | `github.com/go-chi/chi/v5` | `v5.5.0` | root | [chi/](chi/README.md) |
 | `github.com/go-playground/validator/v10` | `v10.30.5` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
-| `github.com/yuin/goldmark/v2` | `v2.1.6` | root | [goldmark/](goldmark/README.md) |
+| `github.com/yuin/goldmark/v2` | `v2.1.9` | root | [goldmark/](goldmark/README.md) |
 | `github.com/prometheus/client_golang` | `v1.25.0` | root | [prometheus/](prometheus/README.md) |
 | `github.com/testcontainers/testcontainers-go` | `v0.44.0` | root | [testcontainers/](testcontainers/README.md) |
 | `log/slog` | `go1.27.3` | root + core + toolchain | [slog/](slog/README.md) |

@@ -273,74 +273,83 @@ func TestNewPortalSession(t *testing.T) {
 	}
 }
 
+type createPaymentIntentTestCase struct {
+	name       string
+	amount     int64
+	currency   string
+	customerID string
+	status     int
+	body       string
+	wantID     string
+	wantErr    bool
+	wantCust   bool
+}
+
+var createPaymentIntentTests = []createPaymentIntentTestCase{
+	{
+		name:     "success without customer",
+		amount:   1500,
+		currency: "usd",
+		status:   http.StatusOK,
+		body:     `{"id":"pi_1","amount":1500,"currency":"usd","status":"requires_payment_method"}`,
+		wantID:   "pi_1",
+	},
+	{
+		name:       "success with customer",
+		amount:     999,
+		currency:   "eur",
+		customerID: "cus_55",
+		status:     http.StatusOK,
+		body:       `{"id":"pi_2","amount":999,"currency":"eur"}`,
+		wantID:     "pi_2",
+		wantCust:   true,
+	},
+	{
+		name:     "stripe api error propagates",
+		amount:   100,
+		currency: "usd",
+		status:   http.StatusInternalServerError,
+		body:     errorBody("api_error", "internal error", ""),
+		wantErr:  true,
+	},
+}
+
+// runCreatePaymentIntentSubtest drives CreatePaymentIntent against a stub server and checks result/payload.
+func runCreatePaymentIntentSubtest(t *testing.T, tc createPaymentIntentTestCase) {
+	t.Helper()
+	var got capturedRequest
+	srv := stubServer(t, tc.status, tc.body, &got)
+	c := newStubClient(t, srv)
+
+	pi, err := c.CreatePaymentIntent(context.Background(), tc.amount, tc.currency, tc.customerID)
+	if tc.wantErr {
+		require.Error(t, err)
+		require.Nil(t, pi)
+		var serr *sdk.Error
+		require.ErrorAs(t, err, &serr)
+		require.Equal(t, sdk.ErrorTypeAPI, serr.Type)
+		return
+	}
+	require.NoError(t, err)
+	require.NotNil(t, pi)
+	require.Equal(t, tc.wantID, pi.ID)
+
+	require.Equal(t, http.MethodPost, got.method)
+	require.Equal(t, "/v1/payment_intents", got.path)
+	require.Equal(t, tc.currency, got.form.Get("currency"))
+	if tc.wantCust {
+		require.Equal(t, tc.customerID, got.form.Get("customer"))
+	} else {
+		require.Empty(t, got.form.Get("customer"))
+	}
+}
+
 func TestCreatePaymentIntent(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name       string
-		amount     int64
-		currency   string
-		customerID string
-		status     int
-		body       string
-		wantID     string
-		wantErr    bool
-		wantCust   bool
-	}{
-		{
-			name:     "success without customer",
-			amount:   1500,
-			currency: "usd",
-			status:   http.StatusOK,
-			body:     `{"id":"pi_1","amount":1500,"currency":"usd","status":"requires_payment_method"}`,
-			wantID:   "pi_1",
-		},
-		{
-			name:       "success with customer",
-			amount:     999,
-			currency:   "eur",
-			customerID: "cus_55",
-			status:     http.StatusOK,
-			body:       `{"id":"pi_2","amount":999,"currency":"eur"}`,
-			wantID:     "pi_2",
-			wantCust:   true,
-		},
-		{
-			name:     "stripe api error propagates",
-			amount:   100,
-			currency: "usd",
-			status:   http.StatusInternalServerError,
-			body:     errorBody("api_error", "internal error", ""),
-			wantErr:  true,
-		},
-	}
-	for _, tc := range tests {
+	for _, tc := range createPaymentIntentTests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			var got capturedRequest
-			srv := stubServer(t, tc.status, tc.body, &got)
-			c := newStubClient(t, srv)
-
-			pi, err := c.CreatePaymentIntent(context.Background(), tc.amount, tc.currency, tc.customerID)
-			if tc.wantErr {
-				require.Error(t, err)
-				require.Nil(t, pi)
-				var serr *sdk.Error
-				require.ErrorAs(t, err, &serr)
-				require.Equal(t, sdk.ErrorTypeAPI, serr.Type)
-				return
-			}
-			require.NoError(t, err)
-			require.NotNil(t, pi)
-			require.Equal(t, tc.wantID, pi.ID)
-
-			require.Equal(t, http.MethodPost, got.method)
-			require.Equal(t, "/v1/payment_intents", got.path)
-			require.Equal(t, tc.currency, got.form.Get("currency"))
-			if tc.wantCust {
-				require.Equal(t, tc.customerID, got.form.Get("customer"))
-			} else {
-				require.Empty(t, got.form.Get("customer"))
-			}
+			runCreatePaymentIntentSubtest(t, tc)
 		})
 	}
 }

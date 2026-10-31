@@ -57,6 +57,24 @@ func relTree(t *testing.T, root string) []string {
 	return got
 }
 
+// assertNestedTreeContents verifies each copied file matches source contents.
+func assertNestedTreeContents(t *testing.T, src, dst string) {
+	t.Helper()
+	for _, rel := range []string{"a.txt", "sub/b.txt", "sub/deeper/c.txt"} {
+		want, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(dst, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(want) {
+			t.Fatalf("%s: content mismatch: got %q want %q", rel, got, want)
+		}
+	}
+}
+
 func TestCopyDir_NestedTreeRoundTrip(t *testing.T) {
 	t.Parallel()
 	src := t.TempDir()
@@ -78,19 +96,7 @@ func TestCopyDir_NestedTreeRoundTrip(t *testing.T) {
 	if strings.Join(srcEntries, ",") != strings.Join(dstEntries, ",") {
 		t.Fatalf("tree mismatch:\n src=%v\n dst=%v", srcEntries, dstEntries)
 	}
-	for _, rel := range []string{"a.txt", "sub/b.txt", "sub/deeper/c.txt"} {
-		want, err := os.ReadFile(filepath.Join(src, filepath.FromSlash(rel)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.ReadFile(filepath.Join(dst, filepath.FromSlash(rel)))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(got) != string(want) {
-			t.Fatalf("%s: content mismatch: got %q want %q", rel, got, want)
-		}
-	}
+	assertNestedTreeContents(t, src, dst)
 
 	info, err := os.Stat(filepath.Join(dst, "restricted.txt"))
 	if err != nil {
@@ -198,79 +204,95 @@ func TestCopyDir_SkipPredicate(t *testing.T) {
 	}
 }
 
+// newSymlinkSrc creates a directory tree containing a target file and a symlink.
+func newSymlinkSrc(t *testing.T) (string, string) {
+	t.Helper()
+	root := t.TempDir()
+	writeFile(t, root, "target/f.txt", "payload", 0o640)
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(filepath.Join(root, "target"), link); err != nil {
+		t.Skipf("symlinks unsupported: %v", err)
+	}
+	return root, link
+}
+
+// testCopyDirSymlinkDeep tests symlink copying with SymlinkDeep.
+func testCopyDirSymlinkDeep(t *testing.T) {
+	t.Helper()
+	src, _ := newSymlinkSrc(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	opts := archive.CopyOptions{OnSymlink: archive.SymlinkDeep}
+	if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
+		t.Fatalf("CopyDir: %v", err)
+	}
+	dstLink := filepath.Join(dst, "link")
+	info, err := os.Lstat(dstLink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		t.Fatal("deep: dst entry is still a symlink")
+	}
+	got, err := os.ReadFile(filepath.Join(dstLink, "f.txt"))
+	if err != nil || string(got) != "payload" {
+		t.Fatalf("deep: contents not copied: %v %q", err, got)
+	}
+}
+
+// testCopyDirSymlinkShallow tests symlink copying with SymlinkShallow.
+func testCopyDirSymlinkShallow(t *testing.T) {
+	t.Helper()
+	src, link := newSymlinkSrc(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	opts := archive.CopyOptions{OnSymlink: archive.SymlinkShallow}
+	if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
+		t.Fatalf("CopyDir: %v", err)
+	}
+	dstLink := filepath.Join(dst, "link")
+	info, err := os.Lstat(dstLink)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatal("shallow: dst entry is not a symlink")
+	}
+	orig, err := os.Readlink(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.Readlink(dstLink)
+	if err != nil || got != orig {
+		t.Fatalf("shallow: got link target %q want %q (err=%v)", got, orig, err)
+	}
+}
+
+// testCopyDirSymlinkIgnore tests symlink copying with SymlinkIgnore.
+func testCopyDirSymlinkIgnore(t *testing.T) {
+	t.Helper()
+	src, _ := newSymlinkSrc(t)
+	dst := filepath.Join(t.TempDir(), "out")
+	opts := archive.CopyOptions{OnSymlink: archive.SymlinkIgnore}
+	if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
+		t.Fatalf("CopyDir: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(dst, "link")); !os.IsNotExist(err) {
+		t.Fatalf("ignore: expected no entry, got err=%v", err)
+	}
+}
+
 func TestCopyDir_SymlinkPolicy(t *testing.T) {
 	t.Parallel()
-
-	newSrc := func(t *testing.T) (root string, linkPath string) {
-		t.Helper()
-		root = t.TempDir()
-		writeFile(t, root, "target/f.txt", "payload", 0o640)
-		link := filepath.Join(root, "link")
-		if err := os.Symlink(filepath.Join(root, "target"), link); err != nil {
-			t.Skipf("symlinks unsupported: %v", err)
-		}
-		return root, link
-	}
-
 	t.Run("deep", func(t *testing.T) {
 		t.Parallel()
-		src, _ := newSrc(t)
-		dst := filepath.Join(t.TempDir(), "out")
-		opts := archive.CopyOptions{OnSymlink: archive.SymlinkDeep}
-		if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
-			t.Fatalf("CopyDir: %v", err)
-		}
-		dstLink := filepath.Join(dst, "link")
-		info, err := os.Lstat(dstLink)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			t.Fatal("deep: dst entry is still a symlink")
-		}
-		got, err := os.ReadFile(filepath.Join(dstLink, "f.txt"))
-		if err != nil || string(got) != "payload" {
-			t.Fatalf("deep: contents not copied: %v %q", err, got)
-		}
+		testCopyDirSymlinkDeep(t)
 	})
-
 	t.Run("shallow", func(t *testing.T) {
 		t.Parallel()
-		src, link := newSrc(t)
-		dst := filepath.Join(t.TempDir(), "out")
-		opts := archive.CopyOptions{OnSymlink: archive.SymlinkShallow}
-		if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
-			t.Fatalf("CopyDir: %v", err)
-		}
-		dstLink := filepath.Join(dst, "link")
-		info, err := os.Lstat(dstLink)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.Mode()&os.ModeSymlink == 0 {
-			t.Fatal("shallow: dst entry is not a symlink")
-		}
-		orig, err := os.Readlink(link)
-		if err != nil {
-			t.Fatal(err)
-		}
-		got, err := os.Readlink(dstLink)
-		if err != nil || got != orig {
-			t.Fatalf("shallow: got link target %q want %q (err=%v)", got, orig, err)
-		}
+		testCopyDirSymlinkShallow(t)
 	})
-
 	t.Run("ignore", func(t *testing.T) {
 		t.Parallel()
-		src, _ := newSrc(t)
-		dst := filepath.Join(t.TempDir(), "out")
-		opts := archive.CopyOptions{OnSymlink: archive.SymlinkIgnore}
-		if err := archive.CopyDir(t.Context(), src, dst, opts); err != nil {
-			t.Fatalf("CopyDir: %v", err)
-		}
-		if _, err := os.Lstat(filepath.Join(dst, "link")); !os.IsNotExist(err) {
-			t.Fatalf("ignore: expected no entry, got err=%v", err)
-		}
+		testCopyDirSymlinkIgnore(t)
 	})
 }
 

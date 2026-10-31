@@ -18,7 +18,9 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	httpclient "github.com/golusoris/golusoris/httpx/client"
@@ -217,4 +219,157 @@ func TestSend_TokenResponseSizeBoundary(t *testing.T) {
 	require.NoError(t, err)
 	err = over.Send(t.Context(), notify.Message{To: []string{"device"}, Subject: "subject"})
 	require.ErrorIs(t, err, httpclient.ErrBodyTooLarge)
+}
+
+func TestSend_TokenRefreshedAfterExpiry(t *testing.T) {
+	t.Parallel()
+
+	clock := clockwork.NewFakeClockAt(time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC))
+	var tokenCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			tokenCalls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"t","expires_in":3600,"token_type":"Bearer"}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/projects/my-project/messages:send"):
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	sa := fakeSA(t, srv.URL+"/token")
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa, Endpoint: srv.URL, Clock: clock})
+	require.NoError(t, err)
+
+	msg := notify.Message{To: []string{"device"}, Subject: "s", Body: "b"}
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(1), tokenCalls.Load())
+	clock.Advance(54 * time.Minute)
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(1), tokenCalls.Load())
+	clock.Advance(2 * time.Minute)
+	require.NoError(t, s.Send(t.Context(), msg))
+
+	require.Equal(t, int32(2), tokenCalls.Load())
+}
+
+func TestSend_TokenWithoutExpiresInRefetchesEachSend(t *testing.T) {
+	t.Parallel()
+
+	clock := clockwork.NewFakeClockAt(time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC))
+	var tokenCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			tokenCalls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"t","token_type":"Bearer"}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/projects/my-project/messages:send"):
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	sa := fakeSA(t, srv.URL+"/token")
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa, Endpoint: srv.URL, Clock: clock})
+	require.NoError(t, err)
+
+	msg := notify.Message{To: []string{"device"}, Subject: "s", Body: "b"}
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(1), tokenCalls.Load())
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(2), tokenCalls.Load())
+}
+
+func TestSend_TokenNonPositiveExpiresInRefetchesEachSend(t *testing.T) {
+	t.Parallel()
+
+	clock := clockwork.NewFakeClockAt(time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC))
+	var tokenCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/token":
+			tokenCalls.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"t","expires_in":0,"token_type":"Bearer"}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/projects/my-project/messages:send"):
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	sa := fakeSA(t, srv.URL+"/token")
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa, Endpoint: srv.URL, Clock: clock})
+	require.NoError(t, err)
+
+	msg := notify.Message{To: []string{"device"}, Subject: "s", Body: "b"}
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(1), tokenCalls.Load())
+	require.NoError(t, s.Send(t.Context(), msg))
+	require.Equal(t, int32(2), tokenCalls.Load())
+}
+
+func TestSend_CanceledContextSkipsTokenRequest(t *testing.T) {
+	t.Parallel()
+
+	var tokenCalls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenCalls.Add(1)
+		_, _ = w.Write([]byte(`{"access_token":"t","expires_in":3600}`))
+	}))
+	t.Cleanup(srv.Close)
+	sa := fakeSA(t, srv.URL)
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa, Endpoint: srv.URL})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err = s.Send(ctx, notify.Message{To: []string{"device"}, Subject: "s"})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, tokenCalls.Load())
+}
+
+func TestSend_TokenEndpointServerError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			http.Error(w, `{"error":"internal_server_error"}`, http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+
+	sa := fakeSA(t, srv.URL+"/token")
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa, Endpoint: srv.URL})
+	require.NoError(t, err)
+
+	err = s.Send(t.Context(), notify.Message{To: []string{"device"}, Subject: "s", Body: "b"})
+	require.Error(t, err)
+}
+
+func TestSend_MalformedPrivateKey(t *testing.T) {
+	t.Parallel()
+
+	sa := fcm.ServiceAccount{
+		Type:        "service_account",
+		ProjectID:   "my-project",
+		ClientEmail: "ci@my-project.iam.gserviceaccount.com",
+		PrivateKey:  "-----BEGIN RSA PRIVATE KEY-----\nnot-a-valid-pem\n-----END RSA PRIVATE KEY-----",
+		TokenURI:    "http://unused/token",
+	}
+	s, err := fcm.NewSender(fcm.Options{ServiceAccount: &sa})
+	require.NoError(t, err)
+
+	err = s.Send(t.Context(), notify.Message{To: []string{"device"}, Subject: "s", Body: "b"})
+	require.Error(t, err)
 }

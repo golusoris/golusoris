@@ -46,67 +46,76 @@ func TestAssertBoundedClone_Positive(t *testing.T) {
 	AssertBoundedClone(t, source, clone, 10*time.Second)
 }
 
+type boundedCloneNegativeCase struct {
+	name    string
+	source  func() *http.Client
+	clone   func(src *http.Client) *http.Client
+	timeout time.Duration
+}
+
+var boundedCloneNegativeCases = []boundedCloneNegativeCase{
+	{
+		name: "same pointer",
+		source: func() *http.Client {
+			return &http.Client{Transport: http.DefaultTransport}
+		},
+		clone: func(src *http.Client) *http.Client {
+			return src
+		},
+		timeout: 10 * time.Second,
+	},
+	{
+		name: "mutated source timeout",
+		source: func() *http.Client {
+			return &http.Client{Transport: http.DefaultTransport, Timeout: 5 * time.Second}
+		},
+		clone: func(_ *http.Client) *http.Client {
+			return &http.Client{Transport: http.DefaultTransport, Timeout: 10 * time.Second}
+		},
+		timeout: 10 * time.Second,
+	},
+	{
+		name: "wrong timeout",
+		source: func() *http.Client {
+			return &http.Client{Transport: http.DefaultTransport}
+		},
+		clone: func(_ *http.Client) *http.Client {
+			return &http.Client{Transport: http.DefaultTransport, Timeout: 5 * time.Second}
+		},
+		timeout: 10 * time.Second,
+	},
+	{
+		name: "swapped transport",
+		source: func() *http.Client {
+			return &http.Client{Transport: http.DefaultTransport}
+		},
+		clone: func(_ *http.Client) *http.Client {
+			return &http.Client{Transport: &http.Transport{}, Timeout: 10 * time.Second}
+		},
+		timeout: 10 * time.Second,
+	},
+}
+
+// checkBoundedCloneNegativeCase asserts that invalid clones trigger failure in AssertBoundedClone.
+func checkBoundedCloneNegativeCase(t *testing.T, tc boundedCloneNegativeCase) {
+	t.Helper()
+	src := tc.source()
+	cln := tc.clone(src)
+	failed := runInFakeTB(func(tb testing.TB) {
+		tb.Helper()
+		AssertBoundedClone(tb, src, cln, tc.timeout)
+	})
+	if !failed {
+		t.Fatalf("case %q: expected failure", tc.name)
+	}
+}
+
 func TestAssertBoundedClone_Negatives(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name    string
-		source  func() *http.Client
-		clone   func(src *http.Client) *http.Client
-		timeout time.Duration
-	}{
-		{
-			name: "same pointer",
-			source: func() *http.Client {
-				return &http.Client{Transport: http.DefaultTransport}
-			},
-			clone: func(src *http.Client) *http.Client {
-				return src
-			},
-			timeout: 10 * time.Second,
-		},
-		{
-			name: "mutated source timeout",
-			source: func() *http.Client {
-				return &http.Client{Transport: http.DefaultTransport, Timeout: 5 * time.Second}
-			},
-			clone: func(_ *http.Client) *http.Client {
-				return &http.Client{Transport: http.DefaultTransport, Timeout: 10 * time.Second}
-			},
-			timeout: 10 * time.Second,
-		},
-		{
-			name: "wrong timeout",
-			source: func() *http.Client {
-				return &http.Client{Transport: http.DefaultTransport}
-			},
-			clone: func(_ *http.Client) *http.Client {
-				return &http.Client{Transport: http.DefaultTransport, Timeout: 5 * time.Second}
-			},
-			timeout: 10 * time.Second,
-		},
-		{
-			name: "swapped transport",
-			source: func() *http.Client {
-				return &http.Client{Transport: http.DefaultTransport}
-			},
-			clone: func(_ *http.Client) *http.Client {
-				return &http.Client{Transport: &http.Transport{}, Timeout: 10 * time.Second}
-			},
-			timeout: 10 * time.Second,
-		},
-	}
-	for _, tc := range cases {
+	for _, tc := range boundedCloneNegativeCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			src := tc.source()
-			cln := tc.clone(src)
-			failed := runInFakeTB(func(tb testing.TB) {
-				tb.Helper()
-				AssertBoundedClone(tb, src, cln, tc.timeout)
-			})
-			if !failed {
-				t.Fatalf("case %q: expected failure", tc.name)
-			}
+			checkBoundedCloneNegativeCase(t, tc)
 		})
 	}
 }
