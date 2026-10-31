@@ -445,8 +445,8 @@ rules:
         state: partial
         runner: ruff
         mechanism: >-
-          Ruff 0.16.8 from its immutable image digest through scripts/ci/python-lint.sh. The
-          bounded Git selector covers tracked plus non-ignored untracked Python, rejects
+          Ruff 0.16.8 from its immutable image digest through scripts/ci/python-lint.sh, which
+          passes the root ruff.toml with --config as its only rule source. The bounded Git selector covers tracked plus non-ignored untracked Python, rejects
           symlinks, excludes the HISS corpus and vendor trees, rejects file-level noqa, and
           requires specific codes plus an inline WHY on scoped noqa. make python-lint runs
           inside make verify-all; GitHub Lint and the Gitea CI gate use the same wrapper.
@@ -455,8 +455,9 @@ rules:
           positive/unexplained-noqa.py fails the suppression policy, and
           negative/clean-module.py passes. The suite also proves explained, empty-reason and
           file-level suppression handling plus tracked, untracked, fixture-exclusion, symlink,
-          immutable-container, and scanner-failure behavior. Production Ruff selects
-          E/F/I/B/UP/S/RUF/PERF/ASYNC/C90.
+          immutable-container, and scanner-failure behavior; S603 fixtures prove ruff.toml is the
+          rule source, nested configs are ignored and a missing ruff.toml fails. Production
+          Ruff selects E/F/I/B/UP/S/RUF/PERF/ASYNC/C90.
       - language: c
         state: partial
         runner: clang

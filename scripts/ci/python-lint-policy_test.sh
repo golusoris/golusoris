@@ -20,6 +20,7 @@ new_repo() {
 	install -m 0755 "$repo_root/scripts/ci/python-lint.sh" "$root/scripts/ci/python-lint.sh"
 	install -m 0755 "$repo_root/scripts/ci/ci_scope.py" "$root/scripts/ci/ci_scope.py"
 	install -m 0644 "$repo_root/tools/tool-versions.env" "$root/tools/tool-versions.env"
+	install -m 0644 "$repo_root/ruff.toml" "$root/ruff.toml"
 	git -C "$root" init -q
 	printf '%s\n' '.workingdir/' >"$root/.gitignore"
 	printf '%s\n' "$root"
@@ -91,6 +92,33 @@ printf 'import json\n' >"$fixture_root/.config/hiss/testdata/HISS-10/python/posi
 git -C "$fixture_root" add .
 bash "$fixture_root/scripts/ci/python-lint.sh" --root "$fixture_root" >/dev/null
 
+if grep -Eq -- '--(select|extend-select|ignore|isolated)\b' "$repo_root/scripts/ci/python-lint.sh"; then
+	printf 'python-lint.sh must take Ruff rules only from ruff.toml\n' >&2
+	exit 1
+fi
+
+untrusted_call='import subprocess\n\n\ndef run(cmd: str) -> None:\n    subprocess.run([cmd], check=False)\n'
+rule_source_root="$(new_repo rule-source)"
+# shellcheck disable=SC2059 # The format string is the fixture body.
+printf "$untrusted_call" >"$rule_source_root/bad.py"
+git -C "$rule_source_root" add .
+expect_failure 'S603' bash "$rule_source_root/scripts/ci/python-lint.sh" --root "$rule_source_root"
+
+nested_root="$(new_repo nested-config)"
+mkdir -p "$nested_root/sub"
+printf '[lint]\nselect = ["E"]\n' >"$nested_root/sub/ruff.toml"
+# shellcheck disable=SC2059 # The format string is the fixture body.
+printf "$untrusted_call" >"$nested_root/sub/bad.py"
+git -C "$nested_root" add .
+expect_failure 'S603' bash "$nested_root/scripts/ci/python-lint.sh" --root "$nested_root"
+
+missing_config_root="$(new_repo missing-config)"
+rm "$missing_config_root/ruff.toml"
+printf 'value = 1\n' >"$missing_config_root/clean.py"
+git -C "$missing_config_root" add .
+expect_failure 'Ruff rule source missing' \
+	bash "$missing_config_root/scripts/ci/python-lint.sh" --root "$missing_config_root"
+
 symlink_root="$(new_repo symlink)"
 printf 'value = 1\n' >"$suite_root/outside.py"
 ln -s "$suite_root/outside.py" "$symlink_root/external.py"
@@ -111,9 +139,8 @@ for required in \
 	'--read-only' \
 	'--cap-drop ALL' \
 	'ghcr.io/astral-sh/ruff:0.16.8@sha256:ec3c84a063840fc9a678004f4d958ea4e1e79de1ee3f94dc0f0df3a4a3a1f1a7' \
-	'--isolated' \
-	'--no-cache' \
-	'--target-version py312'; do
+	'--config ruff.toml' \
+	'--no-cache'; do
 	if ! grep -Fq -- "$required" "$fake_log"; then
 		printf 'Ruff container contract lacks: %s\n' "$required" >&2
 		exit 1
