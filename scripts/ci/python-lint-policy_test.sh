@@ -119,6 +119,17 @@ git -C "$missing_config_root" add .
 expect_failure 'Ruff rule source missing' \
 	bash "$missing_config_root/scripts/ci/python-lint.sh" --root "$missing_config_root"
 
+scoped_root="$(new_repo missing-config-scoped)"
+rm "$scoped_root/ruff.toml"
+printf 'note\n' >"$scoped_root/README"
+git -C "$scoped_root" add .
+scoped_tree="$(git -C "$scoped_root" write-tree)"
+scoped_base="$(GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.invalid GIT_COMMITTER_NAME=t \
+	GIT_COMMITTER_EMAIL=t@example.invalid git -C "$scoped_root" commit-tree -m base "$scoped_tree")"
+git -C "$scoped_root" update-ref HEAD "$scoped_base"
+expect_failure 'Ruff rule source missing' env CI_SCOPE_BASE="$scoped_base" \
+	bash "$scoped_root/scripts/ci/python-lint.sh" --root "$scoped_root"
+
 symlink_root="$(new_repo symlink)"
 printf 'value = 1\n' >"$suite_root/outside.py"
 ln -s "$suite_root/outside.py" "$symlink_root/external.py"
