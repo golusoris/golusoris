@@ -8,11 +8,9 @@ set -euo pipefail
 
 files=$(go_files "$@")
 [ -n "$files" ] || skip "no staged Go files"
-need_tool gci "run make tools-bootstrap"
+need_tool golangci-lint "run make tools-bootstrap"
 
-# Sections mirror linters.settings.gci in .golangci.yml.
-sections=(-s standard -s default -s 'prefix(github.com/golusoris/golusoris)' --custom-order)
+config="$(git rev-parse --show-toplevel)/.golangci.yml"
 # shellcheck disable=SC2086 # file list is intentionally word-split
-unsorted=$(gci list "${sections[@]}" $files)
-[ -z "$unsorted" ] || fail "imports not gci-grouped (run: gci write ${sections[*]} <file>):
-$unsorted"
+golangci-lint fmt --config "$config" --enable gci --diff $files ||
+  fail "imports not gci-grouped (run: golangci-lint fmt --enable gci <file>)"
