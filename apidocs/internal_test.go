@@ -128,6 +128,8 @@ func resultContainsText(res *mcp.CallToolResult, substr string) bool {
 	return false
 }
 
+// TestSafeResolveURL covers BaseURL joins that must stay on the base origin
+// and prefix, including literal and percent-encoded dot segments (G125).
 func TestSafeResolveURL(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

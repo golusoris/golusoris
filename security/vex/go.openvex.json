@@ -11,13 +11,138 @@
       },
       "products": [
         {
-          "@id": "pkg:golang/golang.org/x/crypto"
+          "@id": "pkg:golang/github.com/golusoris/golusoris",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry/sign",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry/sign/kms/aws",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry/sign/kms/azure",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry/sign/kms/gcp",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/container/registry/sign/kms/vault",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/core",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/deploy",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/media/img",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/pdf",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/storage/azblob",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/storage/gcs",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/testutil/promcheck",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/web3/evm",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
+        },
+        {
+          "@id": "pkg:golang/github.com/golusoris/golusoris/web3/solana",
+          "subcomponents": [
+            {
+              "@id": "pkg:golang/golang.org/x/crypto"
+            }
+          ]
         }
       ],
       "last_updated": "2026-10-31T18:29:12Z",
       "status": "not_affected",
       "justification": "vulnerable_code_not_present",
-      "impact_statement": "The advisory covers golang.org/x/crypto/openpgp, which no golusoris build contains: osv matches the whole golang.org/x/crypto module, no Go file in the repository imports golang.org/x/crypto/openpgp, and govulncheck v1.9.0 in symbol mode on all 31 modules reports GO-2026-5932 at module level only (required, no package imported, no symbol called) in the 14 modules that require golang.org/x/crypto.",
+      "impact_statement": "The advisory covers golang.org/x/crypto/openpgp, which no golusoris build contains: osv matches the whole golang.org/x/crypto module, no Go file in the repository imports golang.org/x/crypto/openpgp, and govulncheck v1.9.0 in symbol mode on all 31 modules reports GO-2026-5932 at module level only (required, no package imported, no symbol called) in 14 of the 16 golusoris modules listed as products, all of which require golang.org/x/crypto.",
       "status_notes": "category: D; entered: 2026-10-31; expires: 2027-02-28"
     }
   ]
