@@ -27,6 +27,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+import gomod
+
 VEX_PATH = Path(".trivy/openvex.json")
 DEFAULT_TIMEOUT_SECONDS = 60
 GIT_TIMEOUT_SECONDS = 60
@@ -69,38 +71,6 @@ def escape_toml_string(text: str) -> str:
         .replace("\r", "\\r")
         .replace("\t", "\\t")
     )
-
-
-def parse_require_line(line: str) -> tuple[str | None, bool]:
-    """Parse a require line outside a block and return (pkg, starts_block)."""
-    parts = line.split()
-    if len(parts) >= 2 and parts[1].startswith("("):
-        return None, True
-    if len(parts) == 1 and parts[0].startswith("require("):
-        return None, True
-    if len(parts) >= 2:
-        return parts[1], False
-    return None, False
-
-
-def parse_go_mod_requires(content: str) -> set[str]:
-    """Parse require paths from go.mod content (both single-line and blocks)."""
-    requires: set[str] = set()
-    in_block = False
-    for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("//"):
-            continue
-        if in_block:
-            if line == ")":
-                in_block = False
-            elif not line.startswith("//"):
-                requires.add(line.split()[0])
-        elif line.startswith("require"):
-            pkg, in_block = parse_require_line(line)
-            if pkg:
-                requires.add(pkg)
-    return requires
 
 
 def parse_npm_package_name(purl: str) -> str:
@@ -173,10 +143,10 @@ def target_dirs_for_golang(
         if not mod_file.is_file():
             continue
         try:
-            content = mod_file.read_text(encoding="utf-8")
-        except OSError as error:
+            mod_data = gomod.read_go_mod(mod_file)
+        except gomod.GoModError as error:
             raise CheckError(f"could not read {mod_file}: {error}") from error
-        if module_name in parse_go_mod_requires(content):
+        if module_name in mod_data.requires:
             matching_dirs.append(mod_dir)
     return matching_dirs
 
@@ -582,6 +552,14 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         failures.extend(fails_4_6)
 
         total_refused = refused_1_3 + refused_4_6
+        mod_file = repo / "a" / "go.mod"
+        mod_file.write_text("module a\nrequire (\n", encoding="utf-8")
+        try:
+            check_drift(repo, today=test_today)
+        except CheckError:
+            total_refused += 1
+        else:
+            failures.append("plant 7 (malformed go.mod) was accepted")
         return failures, total_refused, accepted
 
 
