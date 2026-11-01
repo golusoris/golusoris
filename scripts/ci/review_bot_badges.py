@@ -103,10 +103,15 @@ def codacy_data(repo: str, get: Fetch) -> dict | None:
 
 def codacy(repo: str, get: Fetch) -> str | None:
     data = codacy_data(repo, get)
-    if data is None or data.get("addedState") in CODACY_INACTIVE_STATES:
+    if data is None:
         return None
-    if data.get("addedState") not in CODACY_ACTIVE_STATES:
-        raise DetectionError(f"codacy: unknown addedState {data.get('addedState')!r}")
+    state = data.get("addedState")
+    if not isinstance(state, str):
+        raise DetectionError(f"codacy: addedState is not a string: {state!r}")
+    if state in CODACY_INACTIVE_STATES:
+        return None
+    if state not in CODACY_ACTIVE_STATES:
+        raise DetectionError(f"codacy: unknown addedState {state!r}")
     badges_obj = data.get("badges")
     grade = badges_obj.get("grade") if isinstance(badges_obj, dict) else None
     if not isinstance(grade, str) or not grade.startswith(CODACY_GRADE_PREFIX):

@@ -83,7 +83,14 @@ class DetectionTest(unittest.TestCase):
         )
 
     def test_codacy_missing_or_unknown_state_is_error(self) -> None:
-        for data in ({}, {"addedState": "Pending"}, {"addedState": None}):
+        for data in (
+            {},
+            {"addedState": "Pending"},
+            {"addedState": None},
+            {"addedState": ["NotAdded"]},
+            {"addedState": {"state": "Added"}},
+            {"addedState": 1},
+        ):
             with self.subTest(data=data), self.assertRaises(rbb.DetectionError):
                 rbb.codacy(REPO, stub({CODACY: codacy_answer(data)}))
 
