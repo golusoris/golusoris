@@ -344,7 +344,7 @@ func DeliverWebhook(ctx context.Context, cfg Config, req WebhookRequest) error {
 		opts.MaxAttempts = 3
 	}
 	if opts.Timeout <= 0 {
-		opts.Timeout = 10 * time.Second
+		opts.Timeout = notify.DefaultRequestTimeout
 	}
 	if opts.Backoff == nil {
 		opts.Backoff = func(int) time.Duration { return 50 * time.Millisecond }

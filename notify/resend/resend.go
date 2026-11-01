@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 
 	gerr "github.com/golusoris/golusoris/core/errors"
 	httpclient "github.com/golusoris/golusoris/httpx/client"
@@ -48,7 +47,7 @@ type Options struct {
 	// (https://api.resend.com is the default; EU customers may set
 	// https://api.eu.resend.com).
 	Endpoint string `koanf:"endpoint"`
-	// HTTPClient is optional and cloned; a non-positive timeout becomes 10s.
+	// HTTPClient is optional and cloned; a non-positive timeout becomes [notify.DefaultRequestTimeout].
 	HTTPClient *http.Client
 }
 
@@ -72,7 +71,7 @@ func NewSender(opts Options) (*Sender, error) {
 	if endpoint == "" {
 		endpoint = DefaultEndpoint
 	}
-	hc := httpclient.CloneBounded(opts.HTTPClient, 10*time.Second)
+	hc := httpclient.CloneBounded(opts.HTTPClient, notify.DefaultRequestTimeout)
 	return &Sender{opts: opts, endpoint: endpoint, hc: hc}, nil
 }
 

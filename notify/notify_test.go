@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/golusoris/golusoris/notify"
 )
@@ -117,5 +118,12 @@ func TestMultiSendsToAll(t *testing.T) {
 	}
 	if len(a.got) != 1 || len(b.got) != 1 {
 		t.Errorf("expected both senders called, a=%d b=%d", len(a.got), len(b.got))
+	}
+}
+
+func TestDefaultRequestTimeout(t *testing.T) {
+	t.Parallel()
+	if notify.DefaultRequestTimeout != 10*time.Second {
+		t.Fatalf("DefaultRequestTimeout = %v, want 10s", notify.DefaultRequestTimeout)
 	}
 }
