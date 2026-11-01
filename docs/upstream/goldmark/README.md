@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# yuin/goldmark — v2.1.9 snapshot
+# yuin/goldmark — v2.1.11 snapshot
 
-Pinned: **v2.1.9**
-Source: [tagged source](https://github.com/yuin/goldmark/tree/v2.1.9)
+Pinned: **v2.1.11**
+Source: [tagged source](https://github.com/yuin/goldmark/tree/v2.1.11)
 
 ## Basic usage
 
