@@ -80,6 +80,23 @@ git -C "$file_level_root" add .
 expect_failure 'Ruff file-level noqa is forbidden' \
 	bash "$file_level_root/scripts/ci/python-lint.sh" --root "$file_level_root"
 
+excepted_root="$(new_repo excepted)"
+mkdir -p "$excepted_root/tools/figures"
+{
+	for _ in $(seq 1 268); do printf '%s\n' '# padding to the excepted line'; done
+	printf '%s\n' 'import json  # noqa: F401'
+} >"$excepted_root/tools/figures/mkdocs_hook.py"
+printf '%s\n' 'import json  # noqa: F401' >"$excepted_root/other.py"
+git -C "$excepted_root" add .
+# The listed file and line pass; the same unexplained noqa in another file still fails.
+expect_failure 'Ruff noqa needs specific codes and an inline WHY: other.py:1' \
+	bash "$excepted_root/scripts/ci/python-lint.sh" --root "$excepted_root"
+rm "$excepted_root/other.py"
+git -C "$excepted_root" add -A
+PYTHON_LINT_TODAY=2026-11-01 bash "$excepted_root/scripts/ci/python-lint.sh" --root "$excepted_root" >/dev/null
+expect_failure 'noqa exception expired on 2026-11-04: tools/figures/mkdocs_hook.py:269' \
+	env PYTHON_LINT_TODAY=2026-11-05 bash "$excepted_root/scripts/ci/python-lint.sh" --root "$excepted_root"
+
 untracked_root="$(new_repo untracked)"
 printf 'value = 1\n' >"$untracked_root/clean.py"
 git -C "$untracked_root" add .

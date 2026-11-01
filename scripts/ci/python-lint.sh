@@ -50,6 +50,30 @@ collect_files() {
 	done <<<"$listing"
 }
 
+# Expiring noqa-WHY exceptions, one file and line each: "path:line|expires|reason"; an expired entry fails again.
+readonly -a noqa_exceptions=(
+	'tools/figures/mkdocs_hook.py:269|2026-11-04|Category B (3 days from 2026-11-01): Praetor-locked asset, fixed by engine order engine-golusoris-1286-asset-findings-20261101'
+)
+
+# Succeeds when "path:line" has an unexpired entry in noqa_exceptions; prints the expiry and fails once it has passed.
+noqa_exception_allows() {
+	local key="$1"
+	local entry rest expires today
+	# PYTHON_LINT_TODAY exists only so the policy test can prove expiry.
+	today="${PYTHON_LINT_TODAY:-$(date -u +%F)}"
+	for entry in "${noqa_exceptions[@]}"; do
+		[[ "${entry%%|*}" == "$key" ]] || continue
+		rest="${entry#*|}"
+		expires="${rest%%|*}"
+		if [[ "$today" > "$expires" ]]; then
+			printf 'noqa exception expired on %s: %s\n' "$expires" "$key" >&2
+			return 1
+		fi
+		return 0
+	done
+	return 1
+}
+
 check_noqa_explanations() {
 	local root="$1"
 	shift
@@ -66,7 +90,8 @@ check_noqa_explanations() {
 				return 1
 			fi
 			if [[ "$line" == *'# noqa'* ]] &&
-				[[ ! "$line" =~ $explained_noqa ]]; then
+				[[ ! "$line" =~ $explained_noqa ]] &&
+				! noqa_exception_allows "$path:$line_number"; then
 				printf 'Ruff noqa needs specific codes and an inline WHY: %s:%d\n' \
 					"$path" "$line_number" >&2
 				return 1
