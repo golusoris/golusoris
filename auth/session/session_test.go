@@ -242,59 +242,79 @@ func TestDestroyExpiresCookie(t *testing.T) {
 	}
 }
 
+type sessionCookieSecureCase struct {
+	name          string
+	allowInsecure bool
+	wantSecure    bool
+}
+
+var sessionCookieSecureCases = []sessionCookieSecureCase{
+	{name: "secure default", wantSecure: true},
+	{name: "explicit insecure development", allowInsecure: true, wantSecure: false},
+}
+
+// assertSessionSavedCookie verifies session save cookie flags.
+func assertSessionSavedCookie(t *testing.T, mgr *session.Manager, wantSecure bool) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, "/", nil)
+	created, err := mgr.Load(request)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	saveResponse := httptest.NewRecorder()
+	if err := mgr.SaveContext(request.Context(), saveResponse, created); err != nil {
+		t.Fatalf("SaveContext: %v", err)
+	}
+	savedCookies := saveResponse.Result().Cookies()
+	if len(savedCookies) != 1 {
+		t.Fatalf("expected exactly one saved cookie, got %d", len(savedCookies))
+	}
+	if savedCookies[0].Secure != wantSecure || !savedCookies[0].HttpOnly {
+		t.Errorf("saved cookie Secure=%v HttpOnly=%v", savedCookies[0].Secure, savedCookies[0].HttpOnly)
+	}
+}
+
+// assertSessionDestroyCookie verifies session destroy cookie flags.
+func assertSessionDestroyCookie(t *testing.T, mgr *session.Manager, wantSecure bool) {
+	t.Helper()
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	r.AddCookie(&http.Cookie{Name: "sid", Value: "some-session-id"})
+	w := httptest.NewRecorder()
+	if err := mgr.Destroy(w, r); err != nil {
+		t.Fatalf("Destroy: %v", err)
+	}
+	cookies := w.Result().Cookies()
+	if len(cookies) != 1 {
+		t.Fatalf("expected exactly one expiring cookie, got %d", len(cookies))
+	}
+	c := cookies[0]
+	if c.MaxAge != -1 || c.Value != "" {
+		t.Errorf("expected an expired empty cookie, got MaxAge=%d Value=%q", c.MaxAge, c.Value)
+	}
+	if c.Secure != wantSecure {
+		t.Errorf("Secure = %v, want %v", c.Secure, wantSecure)
+	}
+	if !c.HttpOnly {
+		t.Error("expected HttpOnly on the expiring cookie")
+	}
+}
+
+// checkSessionCookieSecureCase checks both save and destroy cookie security.
+func checkSessionCookieSecureCase(t *testing.T, tc sessionCookieSecureCase) {
+	t.Helper()
+	mgr := mustManager(t, session.NewMemoryStore(), session.Options{
+		AllowInsecureCookie: tc.allowInsecure,
+	})
+	assertSessionSavedCookie(t, mgr, tc.wantSecure)
+	assertSessionDestroyCookie(t, mgr, tc.wantSecure)
+}
+
 func TestSessionCookiesAreSecureUnlessExplicitlyDisabled(t *testing.T) {
 	t.Parallel()
-	for _, test := range []struct {
-		name          string
-		allowInsecure bool
-		wantSecure    bool
-	}{
-		{name: "secure default", wantSecure: true},
-		{name: "explicit insecure development", allowInsecure: true, wantSecure: false},
-	} {
+	for _, test := range sessionCookieSecureCases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			mgr := mustManager(t, session.NewMemoryStore(), session.Options{
-				AllowInsecureCookie: test.allowInsecure,
-			})
-
-			request := httptest.NewRequest(http.MethodPost, "/", nil)
-			created, err := mgr.Load(request)
-			if err != nil {
-				t.Fatalf("Load: %v", err)
-			}
-			saveResponse := httptest.NewRecorder()
-			if err := mgr.SaveContext(request.Context(), saveResponse, created); err != nil {
-				t.Fatalf("SaveContext: %v", err)
-			}
-			savedCookies := saveResponse.Result().Cookies()
-			if len(savedCookies) != 1 {
-				t.Fatalf("expected exactly one saved cookie, got %d", len(savedCookies))
-			}
-			if savedCookies[0].Secure != test.wantSecure || !savedCookies[0].HttpOnly {
-				t.Errorf("saved cookie Secure=%v HttpOnly=%v", savedCookies[0].Secure, savedCookies[0].HttpOnly)
-			}
-
-			r := httptest.NewRequest(http.MethodGet, "/", nil)
-			r.AddCookie(&http.Cookie{Name: "sid", Value: "some-session-id"})
-			w := httptest.NewRecorder()
-			if err := mgr.Destroy(w, r); err != nil {
-				t.Fatalf("Destroy: %v", err)
-			}
-			cookies := w.Result().Cookies()
-			if len(cookies) != 1 {
-				t.Fatalf("expected exactly one expiring cookie, got %d", len(cookies))
-			}
-			c := cookies[0]
-			if c.MaxAge != -1 || c.Value != "" {
-				t.Errorf("expected an expired empty cookie, got MaxAge=%d Value=%q", c.MaxAge, c.Value)
-			}
-			if c.Secure != test.wantSecure {
-				t.Errorf("Secure = %v, want %v", c.Secure, test.wantSecure)
-			}
-			if !c.HttpOnly {
-				t.Error("expected HttpOnly on the expiring cookie")
-			}
+			checkSessionCookieSecureCase(t, test)
 		})
 	}
 }
@@ -432,6 +452,33 @@ func TestSaveContextPassesContextToStore(t *testing.T) {
 	}
 }
 
+// runMemoryStoreIteration performs one read/write/delete cycle against the memory store.
+func runMemoryStoreIteration(ctx context.Context, store session.Store, worker, iteration int) error {
+	id := "sid-" + strconv.Itoa((worker+iteration)%4)
+	if err := store.Save(ctx, id, map[string]any{"worker": worker}, time.Minute); err != nil {
+		return err
+	}
+	if _, err := store.Load(ctx, id); err != nil && !isNotFoundErr(err) {
+		return err
+	}
+	if iteration%3 == 0 {
+		if err := store.Delete(ctx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runMemoryStoreWorker runs iterations for a worker goroutine until complete or error.
+func runMemoryStoreWorker(ctx context.Context, store session.Store, worker, iterations int, errCh chan<- error) {
+	for iteration := range iterations {
+		if err := runMemoryStoreIteration(ctx, store, worker, iteration); err != nil {
+			errCh <- err
+			return
+		}
+	}
+}
+
 func TestMemoryStoreConcurrentAccess(t *testing.T) {
 	t.Parallel()
 	store := session.NewMemoryStore()
@@ -446,23 +493,7 @@ func TestMemoryStoreConcurrentAccess(t *testing.T) {
 	for worker := range workers {
 		go func() {
 			defer wg.Done()
-			for iteration := range iterations {
-				id := "sid-" + strconv.Itoa((worker+iteration)%4)
-				if err := store.Save(t.Context(), id, map[string]any{"worker": worker}, time.Minute); err != nil {
-					errCh <- err
-					return
-				}
-				if _, err := store.Load(t.Context(), id); err != nil && !isNotFoundErr(err) {
-					errCh <- err
-					return
-				}
-				if iteration%3 == 0 {
-					if err := store.Delete(t.Context(), id); err != nil {
-						errCh <- err
-						return
-					}
-				}
-			}
+			runMemoryStoreWorker(t.Context(), store, worker, iterations, errCh)
 		}()
 	}
 	wg.Wait()

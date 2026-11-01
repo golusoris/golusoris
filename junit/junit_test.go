@@ -77,13 +77,17 @@ func TestWriteGolden(t *testing.T) {
 	}
 }
 
-func TestWriteCountsAndTimes(t *testing.T) {
-	t.Parallel()
-	doc := decode(t, write(t, gateReport()))
+// assertTestsuitesCounts verifies aggregate test count, failure count, error count, and time.
+func assertTestsuitesCounts(t *testing.T, doc wireSuites) {
+	t.Helper()
 	if doc.Tests != 3 || doc.Failures != 1 || doc.Errors != 0 || doc.Time != "3.750" {
 		t.Errorf("testsuites = %+v", doc)
 	}
-	s := doc.Suites[0]
+}
+
+// assertTestsuiteCountsAndTimes verifies suite counts, timestamp format, and testcase durations.
+func assertTestsuiteCountsAndTimes(t *testing.T, s wireSuite) {
+	t.Helper()
 	if s.Tests != 3 || s.Failures != 1 || s.Skipped != 1 || s.Errors != 0 || s.Time != "3.750" {
 		t.Errorf("testsuite counts = %+v", s)
 	}
@@ -93,6 +97,13 @@ func TestWriteCountsAndTimes(t *testing.T) {
 	if s.Cases[0].Time != "1.500" || s.Cases[2].Time != "0.000" {
 		t.Errorf("case times = %q, %q", s.Cases[0].Time, s.Cases[2].Time)
 	}
+}
+
+func TestWriteCountsAndTimes(t *testing.T) {
+	t.Parallel()
+	doc := decode(t, write(t, gateReport()))
+	assertTestsuitesCounts(t, doc)
+	assertTestsuiteCountsAndTimes(t, doc.Suites[0])
 }
 
 // TestWriteRoundTrip decodes the output again: escaping must be lossless for

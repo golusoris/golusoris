@@ -170,6 +170,12 @@ func TestPresignPut_SignsThroughIAMSignBlob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	assertIAMPresignedURL(t, req, u, sig)
+	assertIAMSignBlobRecorded(t, rec)
+}
+
+func assertIAMPresignedURL(t *testing.T, req storage.PresignedRequest, u *url.URL, sig []byte) {
+	t.Helper()
 	q := u.Query()
 	if got := q.Get("X-Goog-Signature"); got != hex.EncodeToString(sig) {
 		t.Fatalf("X-Goog-Signature = %q", got)
@@ -187,6 +193,10 @@ func TestPresignPut_SignsThroughIAMSignBlob(t *testing.T) {
 	if !req.Expires.Equal(signedAt.Add(90 * time.Second)) {
 		t.Fatalf("Expires = %s, signed at %s", req.Expires, signedAt)
 	}
+}
+
+func assertIAMSignBlobRecorded(t *testing.T, rec *signBlobRecorder) {
+	t.Helper()
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	if !strings.HasSuffix(rec.path, "/projects/-/serviceAccounts/uploader@proj.iam.gserviceaccount.com:signBlob") {
@@ -213,8 +223,13 @@ func TestPresignPut_ExpiryAndPathBakedIntoSignature(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	q := u.Query()
+	assertBakedExpiryAndPath(t, req, u, keyA)
+	assertCanonicalHashVariants(t, b, rec, keyA)
+}
 
+func assertBakedExpiryAndPath(t *testing.T, req storage.PresignedRequest, u *url.URL, keyA string) {
+	t.Helper()
+	q := u.Query()
 	if got := q.Get("X-Goog-Expires"); got != "1" {
 		t.Fatalf("X-Goog-Expires = %q, want %q", got, "1")
 	}
@@ -234,15 +249,18 @@ func TestPresignPut_ExpiryAndPathBakedIntoSignature(t *testing.T) {
 	if u.Path != wantPath {
 		t.Fatalf("URL Path = %q, want %q", u.Path, wantPath)
 	}
+}
 
+func assertCanonicalHashVariants(t *testing.T, b *Bucket, rec *signBlobRecorder, keyA string) {
+	t.Helper()
 	base := canonicalHash(t, rec)
-	if _, err = b.PresignPut(context.Background(), "presign/other-key.txt", storage.MinPresignTTL, storage.PresignPutOptions{}); err != nil {
+	if _, err := b.PresignPut(context.Background(), "presign/other-key.txt", storage.MinPresignTTL, storage.PresignPutOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := canonicalHash(t, rec); got == base {
 		t.Fatalf("canonical request hash unchanged for a different key: %q", got)
 	}
-	if _, err = b.PresignPut(context.Background(), keyA, 2*time.Second, storage.PresignPutOptions{}); err != nil {
+	if _, err := b.PresignPut(context.Background(), keyA, 2*time.Second, storage.PresignPutOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	if got := canonicalHash(t, rec); got == base {

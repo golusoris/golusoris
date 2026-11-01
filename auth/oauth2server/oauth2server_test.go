@@ -101,9 +101,9 @@ func requireLegacyClientAdd(add func(oauth2server.Client)) func(oauth2server.Cli
 	return add
 }
 
-func TestServer_AuthCodePKCEFlow(t *testing.T) {
-	t.Parallel()
-
+// newTestAuthCodePKCEServer sets up an OAuth2 test server configured for PKCE.
+func newTestAuthCodePKCEServer(t *testing.T) *httptest.Server {
+	t.Helper()
 	clk := clockwork.NewFakeClock()
 	clients := oauth2server.NewMemoryClientStore()
 	require.NoError(t, clients.Register(oauth2server.Client{
@@ -127,11 +127,12 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 
 	ts := httptest.NewServer(srv.Routes())
 	t.Cleanup(ts.Close)
+	return ts
+}
 
-	verifier := "the-verifier-must-be-43-chars-or-more-aaaaaa"
-	sum := sha256.Sum256([]byte(verifier))
-	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
-
+// requestAuthCodePKCE performs the authorization redirect and returns the issued code.
+func requestAuthCodePKCE(t *testing.T, ts *httptest.Server, challenge string) string {
+	t.Helper()
 	q := url.Values{}
 	q.Set("response_type", "code")
 	q.Set("client_id", "spa")
@@ -156,7 +157,12 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	code := parsed.Query().Get("code")
 	require.Equal(t, "xyz", parsed.Query().Get("state"), "state must round-trip through the redirect")
 	require.NotEmpty(t, code)
+	return code
+}
 
+// exchangeAuthCodePKCE exchanges the authorization code for tokens and returns the token form for reuse tests.
+func exchangeAuthCodePKCE(t *testing.T, ts *httptest.Server, code, verifier string) url.Values {
+	t.Helper()
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("code", code)
@@ -178,9 +184,23 @@ func TestServer_AuthCodePKCEFlow(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(tokResp.Body).Decode(&body))
 	require.NoError(t, tokResp.Body.Close())
+
 	require.NotEmpty(t, body.AccessToken)
 	require.Equal(t, "Bearer", body.TokenType)
 	require.Equal(t, "openid profile", body.Scope)
+	return form
+}
+
+func TestServer_AuthCodePKCEFlow(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestAuthCodePKCEServer(t)
+	verifier := "the-verifier-must-be-43-chars-or-more-aaaaaa"
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+
+	code := requestAuthCodePKCE(t, ts, challenge)
+	form := exchangeAuthCodePKCE(t, ts, code, verifier)
 
 	// Reusing the code is rejected.
 	tokResp2, err := ts.Client().Post(ts.URL+"/token", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))

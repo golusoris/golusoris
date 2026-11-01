@@ -42,49 +42,58 @@ func docFixtureBytes() []byte {
 	return buf
 }
 
+type knownSignatureCase struct {
+	name     string
+	buf      []byte
+	wantMIME string
+	wantExt  string
+	wantCat  safety.Category
+}
+
+// WHY: Package-level test cases keep TestDetectBytes_KnownSignatures within complexity limits.
+var knownSignatureCases = []knownSignatureCase{
+	{"png", pngFixture, "image/png", "png", safety.CategoryImage},
+	{"jpeg", jpegFixture, "image/jpeg", "jpg", safety.CategoryImage},
+	// PDF is filed under filetype's own Archive matcher map upstream, not
+	// Document; Category mirrors that verbatim (see detect.go doc comment).
+	{"pdf", pdfFixture, "application/pdf", "pdf", safety.CategoryArchive},
+	{"zip", zipFixture, "application/zip", "zip", safety.CategoryArchive},
+	// One fixture per remaining Category, so categoryOf's full mapping
+	// (not just Image/Archive) is exercised.
+	{"mp4", mp4Fixture, "video/mp4", "mp4", safety.CategoryVideo},
+	{"midi", midiFixture, "audio/midi", "mid", safety.CategoryAudio},
+	{"ttf", ttfFixture, "application/font-sfnt", "ttf", safety.CategoryFont},
+	{"doc", docFixture, "application/msword", "doc", safety.CategoryDocument},
+	{"wasm", wasmFixture, "application/wasm", "wasm", safety.CategoryApplication},
+}
+
 func TestDetectBytes_KnownSignatures(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name     string
-		buf      []byte
-		wantMIME string
-		wantExt  string
-		wantCat  safety.Category
-	}{
-		{"png", pngFixture, "image/png", "png", safety.CategoryImage},
-		{"jpeg", jpegFixture, "image/jpeg", "jpg", safety.CategoryImage},
-		// PDF is filed under filetype's own Archive matcher map upstream, not
-		// Document; Category mirrors that verbatim (see detect.go doc comment).
-		{"pdf", pdfFixture, "application/pdf", "pdf", safety.CategoryArchive},
-		{"zip", zipFixture, "application/zip", "zip", safety.CategoryArchive},
-		// One fixture per remaining Category, so categoryOf's full mapping
-		// (not just Image/Archive) is exercised.
-		{"mp4", mp4Fixture, "video/mp4", "mp4", safety.CategoryVideo},
-		{"midi", midiFixture, "audio/midi", "mid", safety.CategoryAudio},
-		{"ttf", ttfFixture, "application/font-sfnt", "ttf", safety.CategoryFont},
-		{"doc", docFixture, "application/msword", "doc", safety.CategoryDocument},
-		{"wasm", wasmFixture, "application/wasm", "wasm", safety.CategoryApplication},
-	}
-	for _, tt := range tests {
+	for _, tt := range knownSignatureCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := safety.DetectBytes(tt.buf)
-			if err != nil {
-				t.Fatalf("DetectBytes: %v", err)
-			}
-			if !got.Matched {
-				t.Fatal("Matched = false, want true")
-			}
-			if got.MIME != tt.wantMIME {
-				t.Errorf("MIME = %q, want %q", got.MIME, tt.wantMIME)
-			}
-			if got.Extension != tt.wantExt {
-				t.Errorf("Extension = %q, want %q", got.Extension, tt.wantExt)
-			}
-			if got.Category != tt.wantCat {
-				t.Errorf("Category = %q, want %q", got.Category, tt.wantCat)
-			}
+			assertKnownSignature(t, tt)
 		})
+	}
+}
+
+func assertKnownSignature(t *testing.T, tc knownSignatureCase) {
+	t.Helper()
+	got, err := safety.DetectBytes(tc.buf)
+	if err != nil {
+		t.Fatalf("DetectBytes: %v", err)
+	}
+	if !got.Matched {
+		t.Fatal("Matched = false, want true")
+	}
+	if got.MIME != tc.wantMIME {
+		t.Errorf("MIME = %q, want %q", got.MIME, tc.wantMIME)
+	}
+	if got.Extension != tc.wantExt {
+		t.Errorf("Extension = %q, want %q", got.Extension, tc.wantExt)
+	}
+	if got.Category != tc.wantCat {
+		t.Errorf("Category = %q, want %q", got.Category, tc.wantCat)
 	}
 }
 
@@ -222,18 +231,20 @@ func TestDetect_ReaderWithoutLenHint(t *testing.T) {
 	}
 }
 
-func TestCheckDeclaredType(t *testing.T) {
-	t.Parallel()
+type checkDeclaredTestCase struct {
+	name        string
+	got         safety.Detection
+	declared    string
+	wantErr     bool
+	wantInvalid bool
+}
+
+// WHY: Helper func keeps TestCheckDeclaredType under cognitive complexity limits.
+func checkDeclaredTypeCases() []checkDeclaredTestCase {
 	png := safety.Detection{MIME: "image/png", Extension: "png", Category: safety.CategoryImage, Matched: true}
 	unknown := safety.Detection{Category: safety.CategoryUnknown}
 
-	tests := []struct {
-		name        string
-		got         safety.Detection
-		declared    string
-		wantErr     bool
-		wantInvalid bool // also want errors.Is(err, ErrDeclaredTypeInvalid)
-	}{
+	return []checkDeclaredTestCase{
 		{name: "matches", got: png, declared: "image/png"},
 		{name: "matches with params", got: png, declared: "image/png; charset=binary"},
 		{name: "matches with case difference", got: png, declared: "IMAGE/PNG"},
@@ -241,38 +252,42 @@ func TestCheckDeclaredType(t *testing.T) {
 		{name: "mismatch", got: png, declared: "application/pdf", wantErr: true},
 		{
 			// A parameter attribute with no "=value" fails mime.ParseMediaType.
-			// This must be an explicit, documented mismatch decision
-			// (ErrDeclaredTypeInvalid), not a raw-string comparison fallback.
 			name: "malformed declaration is an explicit mismatch", got: png,
 			declared: "image/png; charset", wantErr: true, wantInvalid: true,
 		},
 		{
-			// Same malformed shape, but the base type itself does not even
-			// match got.MIME — still reported via the invalid-declaration
-			// path, not the ordinary mismatch path, since the type could not
-			// be parsed out of the declaration at all.
+			// Same malformed shape, but the base type itself does not even match got.MIME.
 			name: "malformed declaration with unrelated base type", got: png,
 			declared: "application/pdf; charset", wantErr: true, wantInvalid: true,
 		},
 		{name: "empty declared is a no-op", got: png, declared: ""},
 		{name: "unmatched detection is a no-op", got: unknown, declared: "image/png"},
 	}
-	for _, tt := range tests {
+}
+
+func TestCheckDeclaredType(t *testing.T) {
+	t.Parallel()
+	for _, tt := range checkDeclaredTypeCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := safety.CheckDeclaredType(tt.got, tt.declared)
-			if tt.wantErr && !errors.Is(err, safety.ErrTypeMismatch) {
-				t.Fatalf("err = %v, want ErrTypeMismatch", err)
-			}
-			if tt.wantInvalid && !errors.Is(err, safety.ErrDeclaredTypeInvalid) {
-				t.Fatalf("err = %v, want also ErrDeclaredTypeInvalid", err)
-			}
-			if !tt.wantInvalid && errors.Is(err, safety.ErrDeclaredTypeInvalid) {
-				t.Fatalf("err = %v, want NOT ErrDeclaredTypeInvalid", err)
-			}
-			if !tt.wantErr && err != nil {
-				t.Fatalf("err = %v, want nil", err)
-			}
+			assertCheckDeclaredType(t, tt)
 		})
+	}
+}
+
+func assertCheckDeclaredType(t *testing.T, tc checkDeclaredTestCase) {
+	t.Helper()
+	err := safety.CheckDeclaredType(tc.got, tc.declared)
+	if tc.wantErr && !errors.Is(err, safety.ErrTypeMismatch) {
+		t.Fatalf("err = %v, want ErrTypeMismatch", err)
+	}
+	if tc.wantInvalid && !errors.Is(err, safety.ErrDeclaredTypeInvalid) {
+		t.Fatalf("err = %v, want also ErrDeclaredTypeInvalid", err)
+	}
+	if !tc.wantInvalid && errors.Is(err, safety.ErrDeclaredTypeInvalid) {
+		t.Fatalf("err = %v, want NOT ErrDeclaredTypeInvalid", err)
+	}
+	if !tc.wantErr && err != nil {
+		t.Fatalf("err = %v, want nil", err)
 	}
 }

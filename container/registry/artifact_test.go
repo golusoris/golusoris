@@ -80,6 +80,31 @@ func mustRead(t *testing.T, p string) []byte {
 	return b
 }
 
+func verifyArtifactDescriptor(t *testing.T, desc v1.Descriptor) {
+	t.Helper()
+	if desc.ArtifactType != scoreType || desc.MediaType != types.OCIManifestSchema1 {
+		t.Fatalf("descriptor = %+v", desc)
+	}
+}
+
+func verifyPulledFiles(t *testing.T, dir string, scores, report []byte) {
+	t.Helper()
+	if b := mustRead(t, filepath.Join(dir, "scores.json")); !bytes.Equal(b, scores) {
+		t.Fatalf("scores.json = %q", b)
+	}
+	if b := mustRead(t, filepath.Join(dir, "report.txt")); !bytes.Equal(b, report) {
+		t.Fatalf("report.txt = %q", b)
+	}
+}
+
+func verifyArtifactManifest(t *testing.T, man *v1.Manifest) {
+	t.Helper()
+	if man.Annotations["dev.vmafx.run"] != "1" || man.Layers[0].MediaType != "application/vnd.vmafx.scores.v1+json" ||
+		man.Layers[1].Annotations["k"] != "v" || man.Config.MediaType != registry.EmptyJSONMediaType {
+		t.Fatalf("manifest = %+v", man)
+	}
+}
+
 func TestArtifact_RoundTrip(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil)
@@ -97,9 +122,7 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PushArtifact: %v", err)
 	}
-	if desc.ArtifactType != scoreType || desc.MediaType != types.OCIManifestSchema1 {
-		t.Fatalf("descriptor = %+v", desc)
-	}
+	verifyArtifactDescriptor(t, desc)
 	resolved, err := c.Resolve(ctx, host+"/vmafx/scores:run-1")
 	if err != nil || resolved.DigestStr() != desc.Digest.String() {
 		t.Fatalf("Resolve = %v, %v; want %s", resolved, err, desc.Digest)
@@ -109,20 +132,12 @@ func TestArtifact_RoundTrip(t *testing.T) {
 	if err != nil || got.Digest != desc.Digest {
 		t.Fatalf("PullArtifact = %v, %v", got.Digest, err)
 	}
-	if b := mustRead(t, filepath.Join(dir, "scores.json")); !bytes.Equal(b, scores) {
-		t.Fatalf("scores.json = %q", b)
-	}
-	if b := mustRead(t, filepath.Join(dir, "report.txt")); !bytes.Equal(b, report) {
-		t.Fatalf("report.txt = %q", b)
-	}
+	verifyPulledFiles(t, dir, scores, report)
 	_, man, err := c.ArtifactManifest(ctx, host+"/vmafx/scores:run-1")
 	if err != nil {
 		t.Fatalf("ArtifactManifest: %v", err)
 	}
-	if man.Annotations["dev.vmafx.run"] != "1" || man.Layers[0].MediaType != "application/vnd.vmafx.scores.v1+json" ||
-		man.Layers[1].Annotations["k"] != "v" || man.Config.MediaType != registry.EmptyJSONMediaType {
-		t.Fatalf("manifest = %+v", man)
-	}
+	verifyArtifactManifest(t, man)
 }
 
 func TestPushArtifact_StableDigest(t *testing.T) {
@@ -201,11 +216,9 @@ func TestPullArtifact_DigestMismatchRejected(t *testing.T) {
 	}
 }
 
-func TestArtifact_SizeCaps(t *testing.T) {
-	t.Parallel()
-	host := newArtifactRegistry(t, nil)
-	ctx := testCtx(t)
-	small := artifactClient(t, registry.Options{MaxBlobBytes: 8}, nil)
+// checkArtifactBlobLimit tests pushing and pulling blobs at and over the per-blob size cap.
+func checkArtifactBlobLimit(t *testing.T, ctx context.Context, host string, small *registry.Client) {
+	t.Helper()
 	blob := func(body string) registry.Artifact {
 		return registry.Artifact{ArtifactType: scoreType, Blobs: []registry.Blob{{Name: "b", Reader: strings.NewReader(body)}}}
 	}
@@ -224,33 +237,27 @@ func TestArtifact_SizeCaps(t *testing.T) {
 	if _, err = small.PushArtifact(ctx, host+"/r:nine", pathBlob); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("path over limit err = %v", err)
 	}
-	big, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:sixteen", blob("0123456789abcdef"))
-	if err != nil {
-		t.Fatalf("push big: %v", err)
-	}
+}
+
+// checkArtifactClientCaps verifies that clients with total, manifest, and blob count limits reject oversized artifacts.
+func checkArtifactClientCaps(t *testing.T, ctx context.Context, host string, small *registry.Client, big, two v1.Descriptor) {
+	t.Helper()
 	cases := map[string]*registry.Client{
 		"blob":     small,
 		"total":    artifactClient(t, registry.Options{MaxTotalBytes: 15}, nil),
 		"manifest": artifactClient(t, registry.Options{MaxManifestBytes: 64}, nil),
 		"count":    artifactClient(t, registry.Options{MaxBlobs: 1}, nil),
 	}
-	two, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:two", registry.Artifact{
-		ArtifactType: scoreType,
-		Blobs:        []registry.Blob{{Reader: strings.NewReader("a")}, {Reader: strings.NewReader("b")}},
-	})
-	if err != nil {
-		t.Fatalf("push two: %v", err)
-	}
 	for name, c := range cases {
 		target := big
 		if name == "count" {
 			target = two
 		}
-		if _, err = c.PullArtifact(ctx, host+"/r@"+target.Digest.String(), t.TempDir(), registry.PullOptions{}); !errors.Is(err, registry.ErrTooLarge) {
+		if _, err := c.PullArtifact(ctx, host+"/r@"+target.Digest.String(), t.TempDir(), registry.PullOptions{}); !errors.Is(err, registry.ErrTooLarge) {
 			t.Errorf("%s cap: pull err = %v, want ErrTooLarge", name, err)
 		}
 	}
-	if _, err = cases["count"].PushArtifact(ctx, host+"/r:x", registry.Artifact{
+	if _, err := cases["count"].PushArtifact(ctx, host+"/r:x", registry.Artifact{
 		ArtifactType: scoreType,
 		Blobs:        []registry.Blob{{Reader: strings.NewReader("a")}, {Reader: strings.NewReader("b")}},
 	}); !errors.Is(err, registry.ErrTooLarge) {
@@ -263,6 +270,30 @@ func TestArtifact_SizeCaps(t *testing.T) {
 	if _, err = artifactClient(t, registry.Options{}, nil).FetchBlob(ctx, host+"/r", man.Layers[0], 15); !errors.Is(err, registry.ErrTooLarge) {
 		t.Fatalf("FetchBlob over maxBytes err = %v", err)
 	}
+}
+
+func TestArtifact_SizeCaps(t *testing.T) {
+	t.Parallel()
+	host := newArtifactRegistry(t, nil)
+	ctx := testCtx(t)
+	small := artifactClient(t, registry.Options{MaxBlobBytes: 8}, nil)
+	checkArtifactBlobLimit(t, ctx, host, small)
+
+	blob := func(body string) registry.Artifact {
+		return registry.Artifact{ArtifactType: scoreType, Blobs: []registry.Blob{{Name: "b", Reader: strings.NewReader(body)}}}
+	}
+	big, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:sixteen", blob("0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("push big: %v", err)
+	}
+	two, err := artifactClient(t, registry.Options{}, nil).PushArtifact(ctx, host+"/r:two", registry.Artifact{
+		ArtifactType: scoreType,
+		Blobs:        []registry.Blob{{Reader: strings.NewReader("a")}, {Reader: strings.NewReader("b")}},
+	})
+	if err != nil {
+		t.Fatalf("push two: %v", err)
+	}
+	checkArtifactClientCaps(t, ctx, host, small, big, two)
 }
 
 func TestPullArtifact_ArtifactTypeMismatch(t *testing.T) {

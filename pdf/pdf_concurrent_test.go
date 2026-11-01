@@ -26,14 +26,17 @@ import (
 
 const concurrentRenderTimeout = 20 * time.Second
 
-func TestRendererConcurrentCallsKeepPageContentIsolated(t *testing.T) {
-	t.Parallel()
-	chromePath := findChrome(t)
-	alphaStarted := make(chan struct{})
-	releaseAlpha := make(chan struct{})
+type concurrentRenderResult struct {
+	name string
+	data []byte
+	err  error
+}
+
+// newAlphaBetaServer serves /alpha (blocking until released) and /beta (which triggers alpha release).
+func newAlphaBetaServer(t *testing.T, alphaStarted, releaseAlpha chan struct{}) *httptest.Server {
+	t.Helper()
 	var alphaOnce sync.Once
 	var releaseOnce sync.Once
-
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		switch r.URL.Path {
@@ -57,43 +60,12 @@ func TestRendererConcurrentCallsKeepPageContentIsolated(t *testing.T) {
 		}
 	}))
 	t.Cleanup(server.Close)
+	return server
+}
 
-	renderer, err := pdf.NewRendererContext(t.Context(), pdf.Options{
-		Timeout:    concurrentRenderTimeout,
-		NoSandbox:  true,
-		DisableGPU: true,
-		ChromePath: chromePath,
-	})
-	if err != nil {
-		t.Fatalf("NewRendererContext() error = %v", err)
-	}
-	t.Cleanup(renderer.Close)
-
-	ctx, cancel := context.WithTimeout(context.Background(), concurrentRenderTimeout)
-	t.Cleanup(cancel)
-	type result struct {
-		name string
-		data []byte
-		err  error
-	}
-	results := make(chan result, 2)
-	go func() {
-		data, renderErr := renderer.RenderURL(ctx, server.URL+"/alpha", pdf.RenderOptions{})
-		results <- result{name: "alpha", data: data, err: renderErr}
-	}()
-
-	select {
-	case <-alphaStarted:
-	case got := <-results:
-		t.Fatalf("alpha render returned before request: %v", got.err)
-	case <-ctx.Done():
-		t.Fatalf("alpha request did not start: %v", ctx.Err())
-	}
-	go func() {
-		data, renderErr := renderer.RenderURL(ctx, server.URL+"/beta", pdf.RenderOptions{})
-		results <- result{name: "beta", data: data, err: renderErr}
-	}()
-
+// verifyConcurrentRenderResults verifies parsed metadata and titles of rendered PDFs.
+func verifyConcurrentRenderResults(t *testing.T, ctx context.Context, results <-chan concurrentRenderResult) {
+	t.Helper()
 	for range 2 {
 		got := <-results
 		if got.err != nil {
@@ -109,6 +81,48 @@ func TestRendererConcurrentCallsKeepPageContentIsolated(t *testing.T) {
 			t.Errorf("RenderURL(%s) title = %q", got.name, info.Title)
 		}
 	}
+}
+
+func TestRendererConcurrentCallsKeepPageContentIsolated(t *testing.T) {
+	t.Parallel()
+	chromePath := findChrome(t)
+	alphaStarted := make(chan struct{})
+	releaseAlpha := make(chan struct{})
+
+	server := newAlphaBetaServer(t, alphaStarted, releaseAlpha)
+
+	renderer, err := pdf.NewRendererContext(t.Context(), pdf.Options{
+		Timeout:    concurrentRenderTimeout,
+		NoSandbox:  true,
+		DisableGPU: true,
+		ChromePath: chromePath,
+	})
+	if err != nil {
+		t.Fatalf("NewRendererContext() error = %v", err)
+	}
+	t.Cleanup(renderer.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), concurrentRenderTimeout)
+	t.Cleanup(cancel)
+	results := make(chan concurrentRenderResult, 2)
+	go func() {
+		data, renderErr := renderer.RenderURL(ctx, server.URL+"/alpha", pdf.RenderOptions{})
+		results <- concurrentRenderResult{name: "alpha", data: data, err: renderErr}
+	}()
+
+	select {
+	case <-alphaStarted:
+	case got := <-results:
+		t.Fatalf("alpha render returned before request: %v", got.err)
+	case <-ctx.Done():
+		t.Fatalf("alpha request did not start: %v", ctx.Err())
+	}
+	go func() {
+		data, renderErr := renderer.RenderURL(ctx, server.URL+"/beta", pdf.RenderOptions{})
+		results <- concurrentRenderResult{name: "beta", data: data, err: renderErr}
+	}()
+
+	verifyConcurrentRenderResults(t, ctx, results)
 }
 
 func resolveCandidate(candidate string) (string, error) {

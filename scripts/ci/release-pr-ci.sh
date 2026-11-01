@@ -10,7 +10,8 @@
 # check.
 #   usage: scripts/ci/release-pr-ci.sh OWNER/REPO
 #   needs: gh with a token that may read pull requests and write actions
-#   env:   RELEASE_PR_CI_TRIES (default 18), RELEASE_PR_CI_WAIT seconds (default 10)
+#   env:   RELEASE_PR_CI_TRIES (default 18), RELEASE_PR_CI_WAIT seconds (default 10),
+#          RELEASE_PR_EXPECTED=true when release-please reported a pull request
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
@@ -26,10 +27,45 @@ if [[ ! "$TRIES" =~ ^[1-9][0-9]?$ ]] || [[ ! "$WAIT" =~ ^[0-9]{1,3}$ ]]; then
 	exit 2
 fi
 
-HEADS="$("$GH" pr list --repo "$REPO" --state open \
-	--author 'app/github-actions' --label 'autorelease: pending' \
-	--json headRefName,headRefOid --jq '.[] | "\(.headRefName) \(.headRefOid)"')"
+EXPECTED="${RELEASE_PR_EXPECTED:-false}"
+if [ "$EXPECTED" != true ] && [ "$EXPECTED" != false ]; then
+	echo "error: unexpected RELEASE_PR_EXPECTED" >&2
+	exit 2
+fi
+
+# The author depends on the token release-please ran with, so a release branch of this
+# repository selects; only writers can push one, and writers may approve runs anyway.
+release_heads() {
+	local listed branch sha cross
+	if ! listed="$("$GH" pr list --repo "$REPO" --state open --label 'autorelease: pending' \
+		--json headRefName,headRefOid,isCrossRepository \
+		--jq '.[] | "\(.headRefName) \(.headRefOid) \(.isCrossRepository)"')"; then
+		echo "error: could not list open release pull requests" >&2
+		return 1
+	fi
+	while read -r branch sha cross; do
+		if [[ "$branch" =~ ^release-please--[A-Za-z0-9._/-]+$ ]] && [ "$cross" = false ]; then
+			printf '%s %s\n' "$branch" "$sha"
+		fi
+	done <<< "$listed"
+}
+
+# A pull request release-please has just opened can be missing from the list for a moment.
+HEADS=""
+for ((try = 1; try <= TRIES; try++)); do
+	HEADS="$(release_heads)"
+	if [ -n "$HEADS" ] || [ "$EXPECTED" != true ]; then
+		break
+	fi
+	if [ "$try" -lt "$TRIES" ]; then
+		sleep "$WAIT"
+	fi
+done
 if [ -z "$HEADS" ]; then
+	if [ "$EXPECTED" = true ]; then
+		echo "error: release-please reported a pull request, none listed after $TRIES tries" >&2
+		exit 1
+	fi
 	echo "No open release pull request."
 	exit 0
 fi

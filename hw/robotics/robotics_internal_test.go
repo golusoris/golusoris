@@ -16,6 +16,30 @@ import (
 	"gobot.io/x/gobot/v2"
 )
 
+// interruptUntilDone signals the process repeatedly until the master finishes or timeout occurs.
+func interruptUntilDone(t *testing.T, self *os.Process, done <-chan error, m *Master) {
+	t.Helper()
+	tick := time.NewTicker(50 * time.Millisecond)
+	defer tick.Stop()
+	for range 200 { // 200 x 50ms = 10s
+		if err := self.Signal(os.Interrupt); err != nil {
+			t.Fatalf("send interrupt: %v", err)
+		}
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			if m.m.Running() {
+				t.Fatal("master still running after interrupt")
+			}
+			return
+		case <-tick.C:
+		}
+	}
+	t.Fatal("Start did not return after interrupt")
+}
+
 // TestMasterRunsRobotWorkUntilInterrupt is not parallel: it sends os.Interrupt
 // to the test process, which every signal subscriber receives.
 //
@@ -45,25 +69,7 @@ func TestMasterRunsRobotWorkUntilInterrupt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find own process: %v", err)
 	}
-	tick := time.NewTicker(50 * time.Millisecond)
-	defer tick.Stop()
-	for range 200 { // 200 x 50ms = 10s
-		if err := self.Signal(os.Interrupt); err != nil {
-			t.Fatalf("send interrupt: %v", err)
-		}
-		select {
-		case err := <-done:
-			if err != nil {
-				t.Fatalf("Start() error = %v", err)
-			}
-			if m.m.Running() {
-				t.Fatal("master still running after interrupt")
-			}
-			return
-		case <-tick.C:
-		}
-	}
-	t.Fatal("Start did not return after interrupt")
+	interruptUntilDone(t, self, done, m)
 }
 
 func TestMasterStopWithoutStart(t *testing.T) {

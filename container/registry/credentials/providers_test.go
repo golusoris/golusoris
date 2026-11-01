@@ -115,11 +115,8 @@ func TestStaticFiles_SecretBounds(t *testing.T) {
 	}
 }
 
-func TestCache(t *testing.T) {
-	t.Parallel()
-	clk := clock.NewFake()
-	var calls atomic.Int32
-	expiring := credentials.ProviderFunc(func(_ context.Context, host string) (credentials.Credential, error) {
+func fakeExpiringProvider(clk clock.Clock, calls *atomic.Int32) credentials.ProviderFunc {
+	return func(_ context.Context, host string) (credentials.Credential, error) {
 		calls.Add(1)
 		switch host {
 		case "exp.example":
@@ -129,8 +126,14 @@ func TestCache(t *testing.T) {
 		default:
 			return credentials.Credential{}, credentials.ErrNoCredential
 		}
-	})
-	c := credentials.NewCache(expiring, clk, 10*time.Minute)
+	}
+}
+
+func TestCache(t *testing.T) {
+	t.Parallel()
+	clk := clock.NewFake()
+	var calls atomic.Int32
+	c := credentials.NewCache(fakeExpiringProvider(clk, &calls), clk, 10*time.Minute)
 	ctx := t.Context()
 	for range 3 {
 		if _, err := c.Credential(ctx, "exp.example"); err != nil {

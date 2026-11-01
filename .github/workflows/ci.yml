@@ -16,7 +16,7 @@ on:
 
 # Praetor engine that local hooks and Make targets run; .config/lefthook/engine.sh reads this pin.
 env:
-  PRAETOR_REF: 8dacd54b19d527da9318252a43ce6303fed7a0c4
+  PRAETOR_REF: cfce004b3f3a29e2edd8598e46ddc0855aa8deec
 
 permissions:
   contents: read
@@ -90,6 +90,8 @@ jobs:
           go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
       - name: Check gofumpt formatting
         run: bash scripts/ci/check-gofumpt.sh
+      - name: Check gci pre-commit hook
+        run: make gci-hook-test
       - name: Lint primary modules
         env:
           GO_MODULE_GROUP: primary

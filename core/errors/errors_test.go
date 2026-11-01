@@ -103,82 +103,90 @@ func TestErrorString(t *testing.T) {
 	}
 }
 
+type problemTestCase struct {
+	name         string
+	err          error
+	fallback     int
+	wantStatus   int
+	wantType     string
+	wantDetail   string
+	wantCode     string
+	wantErrField string
+}
+
+var problemCases = []problemTestCase{
+	{
+		name:         "coded client error",
+		err:          errors.NotFound("user not found"),
+		fallback:     http.StatusInternalServerError,
+		wantStatus:   http.StatusNotFound,
+		wantType:     "https://golusoris.dev/errors/not_found",
+		wantDetail:   "user not found",
+		wantCode:     "not_found",
+		wantErrField: "user not found",
+	},
+	{
+		name:         "coded server error is sanitized",
+		err:          errors.New(errors.CodeUnavailable, "postgres password leaked"),
+		fallback:     http.StatusBadRequest,
+		wantStatus:   http.StatusServiceUnavailable,
+		wantType:     "https://golusoris.dev/errors/unavailable",
+		wantDetail:   "internal server error",
+		wantCode:     "unavailable",
+		wantErrField: "internal server error",
+	},
+	{
+		name:         "uncoded client error",
+		err:          stderrors.New("invalid JSON"),
+		fallback:     http.StatusBadRequest,
+		wantStatus:   http.StatusBadRequest,
+		wantType:     "about:blank",
+		wantDetail:   "invalid JSON",
+		wantErrField: "invalid JSON",
+	},
+	{
+		name:         "invalid fallback is safe",
+		err:          stderrors.New("secret"),
+		fallback:     0,
+		wantStatus:   http.StatusInternalServerError,
+		wantType:     "about:blank",
+		wantDetail:   "internal server error",
+		wantErrField: "internal server error",
+	},
+}
+
+func checkProblem(t *testing.T, tc problemTestCase) {
+	t.Helper()
+	problem := errors.ProblemFromError(tc.err, tc.fallback, "/items/42")
+	if problem.Status != tc.wantStatus {
+		t.Errorf("Status = %d, want %d", problem.Status, tc.wantStatus)
+	}
+	if problem.Type != tc.wantType {
+		t.Errorf("Type = %q, want %q", problem.Type, tc.wantType)
+	}
+	if problem.Detail != tc.wantDetail {
+		t.Errorf("Detail = %q, want %q", problem.Detail, tc.wantDetail)
+	}
+	if problem.Code != tc.wantCode {
+		t.Errorf("Code = %q, want %q", problem.Code, tc.wantCode)
+	}
+	if problem.ErrorMessage != tc.wantErrField {
+		t.Errorf("ErrorMessage = %q, want %q", problem.ErrorMessage, tc.wantErrField)
+	}
+	if problem.Instance != "/items/42" {
+		t.Errorf("Instance = %q", problem.Instance)
+	}
+	if strings.Contains(problem.Detail, "leaked") {
+		t.Errorf("Detail leaked secret: %q", problem.Detail)
+	}
+}
+
 func TestProblemFromError(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name         string
-		err          error
-		fallback     int
-		wantStatus   int
-		wantType     string
-		wantDetail   string
-		wantCode     string
-		wantErrField string
-	}{
-		{
-			name:         "coded client error",
-			err:          errors.NotFound("user not found"),
-			fallback:     http.StatusInternalServerError,
-			wantStatus:   http.StatusNotFound,
-			wantType:     "https://golusoris.dev/errors/not_found",
-			wantDetail:   "user not found",
-			wantCode:     "not_found",
-			wantErrField: "user not found",
-		},
-		{
-			name:         "coded server error is sanitized",
-			err:          errors.New(errors.CodeUnavailable, "postgres password leaked"),
-			fallback:     http.StatusBadRequest,
-			wantStatus:   http.StatusServiceUnavailable,
-			wantType:     "https://golusoris.dev/errors/unavailable",
-			wantDetail:   "internal server error",
-			wantCode:     "unavailable",
-			wantErrField: "internal server error",
-		},
-		{
-			name:         "uncoded client error",
-			err:          stderrors.New("invalid JSON"),
-			fallback:     http.StatusBadRequest,
-			wantStatus:   http.StatusBadRequest,
-			wantType:     "about:blank",
-			wantDetail:   "invalid JSON",
-			wantErrField: "invalid JSON",
-		},
-		{
-			name:         "invalid fallback is safe",
-			err:          stderrors.New("secret"),
-			fallback:     0,
-			wantStatus:   http.StatusInternalServerError,
-			wantType:     "about:blank",
-			wantDetail:   "internal server error",
-			wantErrField: "internal server error",
-		},
-	}
-	for _, tc := range cases {
+	for _, tc := range problemCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			problem := errors.ProblemFromError(tc.err, tc.fallback, "/items/42")
-			if problem.Status != tc.wantStatus {
-				t.Errorf("Status = %d, want %d", problem.Status, tc.wantStatus)
-			}
-			if problem.Type != tc.wantType {
-				t.Errorf("Type = %q, want %q", problem.Type, tc.wantType)
-			}
-			if problem.Detail != tc.wantDetail {
-				t.Errorf("Detail = %q, want %q", problem.Detail, tc.wantDetail)
-			}
-			if problem.Code != tc.wantCode {
-				t.Errorf("Code = %q, want %q", problem.Code, tc.wantCode)
-			}
-			if problem.ErrorMessage != tc.wantErrField {
-				t.Errorf("ErrorMessage = %q, want %q", problem.ErrorMessage, tc.wantErrField)
-			}
-			if problem.Instance != "/items/42" {
-				t.Errorf("Instance = %q", problem.Instance)
-			}
-			if strings.Contains(problem.Detail, "leaked") {
-				t.Errorf("Detail leaked secret: %q", problem.Detail)
-			}
+			checkProblem(t, tc)
 		})
 	}
 }

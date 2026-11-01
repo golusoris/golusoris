@@ -1,8 +1,44 @@
 {
   "version": 1,
-  "generated_at": "2026-10-19T00:58:11Z",
+  "generated_at": "2026-10-30T19:55:22Z",
   "repository": "golusoris/golusoris",
-  "commit_sha": "2ae162ad41b0c0d27d7a7c299ae1ab332ec30b3e",
-  "total_infractions": 0,
-  "infractions": []
+  "commit_sha": "23e511497b08dc37aea0a1e53b236ec34aba7dd7",
+  "total_infractions": 5,
+  "infractions": [
+    {
+      "rule_id": "HISS-11",
+      "file_path": ".github/workflows/tiny-trainer-images.yml",
+      "line_number": 174,
+      "message": "tiny-gemma-trainer",
+      "fingerprint": ".github/workflows/tiny-trainer-images.yml:HISS-11:image:tiny-gemma-trainer"
+    },
+    {
+      "rule_id": "HISS-11",
+      "file_path": ".github/workflows/tiny-trainer-images.yml",
+      "line_number": 176,
+      "message": "tiny-litert-trainer",
+      "fingerprint": ".github/workflows/tiny-trainer-images.yml:HISS-11:image:tiny-litert-trainer"
+    },
+    {
+      "rule_id": "HISS-11",
+      "file_path": "deploy/ci/cnpg-restore/storage.yaml",
+      "line_number": 44,
+      "message": "@CNPG_POSTGRES_IMAGE@",
+      "fingerprint": "deploy/ci/cnpg-restore/storage.yaml:HISS-11:image:@CNPG_POSTGRES_IMAGE@"
+    },
+    {
+      "rule_id": "HISS-11",
+      "file_path": "deploy/ci/cnpg-restore/storage.yaml",
+      "line_number": 57,
+      "message": "@VERSITY_IMAGE@",
+      "fingerprint": "deploy/ci/cnpg-restore/storage.yaml:HISS-11:image:@VERSITY_IMAGE@"
+    },
+    {
+      "rule_id": "HISS-11",
+      "file_path": "scripts/ci/pull_test_images_test.py",
+      "line_number": 58,
+      "message": "example.invalid/emulator:nonexistent",
+      "fingerprint": "scripts/ci/pull_test_images_test.py:HISS-11:image:example.invalid/emulator:nonexistent"
+    }
+  ]
 }

@@ -5,7 +5,7 @@ go 1.27.3
 replace github.com/golusoris/golusoris/core => ./core
 
 require (
-	charm.land/bubbletea/v2 v2.1.0
+	charm.land/bubbletea/v2 v2.1.1
 	cloud.google.com/go/pubsub/v2 v2.7.0
 	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
@@ -17,19 +17,19 @@ require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/autobrr/go-qbittorrent v1.19.0
 	github.com/autobrr/go-rtorrent v1.13.0
-	github.com/aws/aws-sdk-go-v2 v1.47.4
-	github.com/aws/aws-sdk-go-v2/config v1.33.10
-	github.com/aws/aws-sdk-go-v2/credentials v1.20.10
-	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.4.19
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.5
-	github.com/aws/aws-sdk-go-v2/service/sts v1.51.5
-	github.com/aws/smithy-go v1.28.6
+	github.com/aws/aws-sdk-go-v2 v1.47.5
+	github.com/aws/aws-sdk-go-v2/config v1.33.12
+	github.com/aws/aws-sdk-go-v2/credentials v1.20.12
+	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.5.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
+	github.com/aws/aws-sdk-go-v2/service/sts v1.51.6
+	github.com/aws/smithy-go v1.28.7
 	github.com/baruwa-enterprise/clamd v1.0.1
 	github.com/benbjohnson/hashfs v0.2.2
 	github.com/bmatcuk/doublestar/v4 v4.10.4
 	github.com/bmaupin/go-epub v1.1.0
 	github.com/bojanz/currency v1.5.0
-	github.com/brianvoe/gofakeit/v7 v7.18.0
+	github.com/brianvoe/gofakeit/v7 v7.18.1
 	github.com/caddyserver/certmagic v0.25.6
 	github.com/casbin/casbin/v3 v3.11.0
 	github.com/cespare/xxhash/v2 v2.3.0
@@ -52,9 +52,9 @@ require (
 	github.com/golusoris/goenvoy/arr/sonarr v1.5.6
 	github.com/golusoris/goenvoy/arr/v2 v2.6.2
 	github.com/golusoris/goenvoy/metadata v1.4.3
-	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.2
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.5
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.6
-	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.2
+	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.5
 	github.com/golusoris/golusoris/core v0.12.1
 	github.com/google/uuid v1.6.0
 	github.com/grafana/grafana-foundation-sdk/go v0.0.21
@@ -67,7 +67,7 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20261003132456-662581bb6bb6
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/jszwec/csvutil v1.10.0
+	github.com/jszwec/csvutil v1.10.1
 	github.com/leanovate/gopter v0.2.11
 	github.com/maypok86/otter/v2 v2.3.0
 	github.com/mholt/archives v0.1.5
@@ -121,7 +121,7 @@ require (
 	github.com/uptrace/bun/extra/bundebug v1.3.0
 	github.com/wneessen/go-mail v0.8.1
 	github.com/xuri/excelize/v2 v2.11.1-0.20261011032807-402e3bdd9eae
-	github.com/yuin/goldmark/v2 v2.1.6
+	github.com/yuin/goldmark/v2 v2.1.9
 	github.com/zeebo/blake3 v0.2.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
@@ -150,10 +150,10 @@ require (
 	google.golang.org/api v0.304.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
-	k8s.io/api v0.37.1
-	k8s.io/apimachinery v0.37.1
-	k8s.io/client-go v0.37.1
-	k8s.io/dynamic-resource-allocation v0.37.1
+	k8s.io/api v0.37.2
+	k8s.io/apimachinery v0.37.2
+	k8s.io/client-go v0.37.2
+	k8s.io/dynamic-resource-allocation v0.37.2
 	modernc.org/sqlite v1.60.1
 	riverqueue.com/riverui v0.21.0
 	sigs.k8s.io/controller-runtime v0.25.2
@@ -177,18 +177,18 @@ require (
 	github.com/alexedwards/argon2id v1.0.0 // indirect
 	github.com/andybalholm/brotli v1.2.6 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.24 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.7 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.7 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.22 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.8 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.10.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/sso v1.38.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.43.5 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.25 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.5 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.8 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.8 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.23 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.9 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.8 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.12.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/sso v1.39.0 // indirect
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.0 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bodgit/plumbing v1.3.0 // indirect

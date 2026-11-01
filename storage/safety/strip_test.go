@@ -252,9 +252,19 @@ func TestStrip_GIFPreservesAnimationAndDropsComments(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
+	assertGIFStrippedBytes(t, contentType, gotBytes, marker)
+	assertGIFAnimationPreserved(t, gotBytes)
+}
+
+func assertGIFStrippedBytes(t *testing.T, contentType string, gotBytes, marker []byte) {
+	t.Helper()
 	if contentType != "image/gif" || bytes.Contains(gotBytes, marker) {
 		t.Fatalf("content type = %q, comment retained = %t", contentType, bytes.Contains(gotBytes, marker))
 	}
+}
+
+func assertGIFAnimationPreserved(t *testing.T, gotBytes []byte) {
+	t.Helper()
 	got, err := gif.DecodeAll(bytes.NewReader(gotBytes))
 	if err != nil {
 		t.Fatalf("DecodeAll: %v", err)

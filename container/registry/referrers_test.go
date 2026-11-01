@@ -6,6 +6,7 @@ package registry_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -22,6 +23,30 @@ import (
 
 const bundleType = "application/vnd.dev.sigstore.bundle.v0.3+json"
 
+func pushReferrerTypes(t *testing.T, ctx context.Context, c *registry.Client, host string, subject v1.Descriptor, types []string) {
+	t.Helper()
+	for _, typ := range types {
+		if _, err := c.PushArtifact(ctx, host+"/r", registry.Artifact{ArtifactType: typ, Subject: &subject}); err != nil {
+			t.Fatalf("push referrer %s: %v", typ, err)
+		}
+	}
+}
+
+func checkFallbackReferrers(t *testing.T, ctx context.Context, c *registry.Client, host string, subject v1.Descriptor) {
+	t.Helper()
+	prov, err := c.Referrers(ctx, host+"/r@"+subject.Digest.String(), "application/vnd.vmafx.provenance.v1+json")
+	if err != nil || len(prov) != 1 || prov[0].ArtifactType != "application/vnd.vmafx.provenance.v1+json" {
+		t.Fatalf("filtered referrers = %+v, %v", prov, err)
+	}
+	all, err := c.Referrers(ctx, host+"/r:model", "")
+	if err != nil || len(all) != 2 {
+		t.Fatalf("all referrers = %+v, %v", all, err)
+	}
+	if _, err = artifactClient(t, registry.Options{MaxReferrers: 1}, nil).Referrers(ctx, host+"/r:model", ""); !errors.Is(err, registry.ErrTooLarge) {
+		t.Fatalf("over cap err = %v, want ErrTooLarge", err)
+	}
+}
+
 func TestReferrers_TagSchemaFallback(t *testing.T) {
 	t.Parallel()
 	host := newArtifactRegistry(t, nil) // no referrers API
@@ -35,22 +60,8 @@ func TestReferrers_TagSchemaFallback(t *testing.T) {
 	if err != nil || len(none) != 0 {
 		t.Fatalf("Referrers before = %v, %v", none, err)
 	}
-	for _, typ := range []string{"application/vnd.vmafx.provenance.v1+json", "application/vnd.vmafx.report.v1+json"} {
-		if _, err = c.PushArtifact(ctx, host+"/r", registry.Artifact{ArtifactType: typ, Subject: &subject}); err != nil {
-			t.Fatalf("push referrer %s: %v", typ, err)
-		}
-	}
-	prov, err := c.Referrers(ctx, host+"/r@"+subject.Digest.String(), "application/vnd.vmafx.provenance.v1+json")
-	if err != nil || len(prov) != 1 || prov[0].ArtifactType != "application/vnd.vmafx.provenance.v1+json" {
-		t.Fatalf("filtered referrers = %+v, %v", prov, err)
-	}
-	all, err := c.Referrers(ctx, host+"/r:model", "")
-	if err != nil || len(all) != 2 {
-		t.Fatalf("all referrers = %+v, %v", all, err)
-	}
-	if _, err = artifactClient(t, registry.Options{MaxReferrers: 1}, nil).Referrers(ctx, host+"/r:model", ""); !errors.Is(err, registry.ErrTooLarge) {
-		t.Fatalf("over cap err = %v, want ErrTooLarge", err)
-	}
+	pushReferrerTypes(t, ctx, c, host, subject, []string{"application/vnd.vmafx.provenance.v1+json", "application/vnd.vmafx.report.v1+json"})
+	checkFallbackReferrers(t, ctx, c, host, subject)
 }
 
 func TestReferrers_API(t *testing.T) {
@@ -125,6 +136,31 @@ func writeCosignBundle(t *testing.T, repo name.Repository, subject v1.Descriptor
 	return h
 }
 
+func verifyCosignBundleReferrer(t *testing.T, refs []v1.Descriptor, bundleDigest v1.Hash, err error) {
+	t.Helper()
+	if err != nil || len(refs) != 1 || refs[0].Digest != bundleDigest {
+		t.Fatalf("bundle referrers = %+v, %v; want %s", refs, err, bundleDigest)
+	}
+	if refs[0].Annotations["dev.sigstore.bundle.predicateType"] != "https://sigstore.dev/cosign/sign/v1" {
+		t.Fatalf("referrer annotations = %v", refs[0].Annotations)
+	}
+}
+
+func verifyCosignBundleManifestAndBlob(t *testing.T, ctx context.Context, c *registry.Client, host string, bundleDigest, subjectDigest v1.Hash, bundle []byte) {
+	t.Helper()
+	_, man, err := c.ArtifactManifest(ctx, host+"/vmafx/model@"+bundleDigest.String())
+	if err != nil || len(man.Layers) != 1 || man.Layers[0].MediaType != bundleType || man.Subject.Digest != subjectDigest {
+		t.Fatalf("bundle manifest = %+v, %v", man, err)
+	}
+	got, err := c.FetchBlob(ctx, host+"/vmafx/model", man.Layers[0], 1<<20)
+	if err != nil || !bytes.Equal(got, bundle) {
+		t.Fatalf("bundle bytes = %q, %v", got, err)
+	}
+	if others, _ := c.Referrers(ctx, host+"/vmafx/model:v3", scoreType); len(others) != 0 {
+		t.Fatalf("artifactType filter leaked %v", others)
+	}
+}
+
 // TestReferrers_CosignBundle proves a cosign bundle attached to a pushed
 // artifact is discoverable by artifactType and readable through the client.
 func TestReferrers_CosignBundle(t *testing.T) {
@@ -147,21 +183,6 @@ func TestReferrers_CosignBundle(t *testing.T) {
 	bundleDigest := writeCosignBundle(t, repo, subject, bundle)
 
 	refs, err := c.Referrers(ctx, host+"/vmafx/model:v3", bundleType)
-	if err != nil || len(refs) != 1 || refs[0].Digest != bundleDigest {
-		t.Fatalf("bundle referrers = %+v, %v; want %s", refs, err, bundleDigest)
-	}
-	if refs[0].Annotations["dev.sigstore.bundle.predicateType"] != "https://sigstore.dev/cosign/sign/v1" {
-		t.Fatalf("referrer annotations = %v", refs[0].Annotations)
-	}
-	_, man, err := c.ArtifactManifest(ctx, host+"/vmafx/model@"+bundleDigest.String())
-	if err != nil || len(man.Layers) != 1 || man.Layers[0].MediaType != bundleType || man.Subject.Digest != subject.Digest {
-		t.Fatalf("bundle manifest = %+v, %v", man, err)
-	}
-	got, err := c.FetchBlob(ctx, host+"/vmafx/model", man.Layers[0], 1<<20)
-	if err != nil || !bytes.Equal(got, bundle) {
-		t.Fatalf("bundle bytes = %q, %v", got, err)
-	}
-	if others, _ := c.Referrers(ctx, host+"/vmafx/model:v3", scoreType); len(others) != 0 {
-		t.Fatalf("artifactType filter leaked %v", others)
-	}
+	verifyCosignBundleReferrer(t, refs, bundleDigest, err)
+	verifyCosignBundleManifestAndBlob(t, ctx, c, host, bundleDigest, subject.Digest, bundle)
 }

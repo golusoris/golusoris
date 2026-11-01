@@ -13,9 +13,9 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
-func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
-	t.Parallel()
-	mocks := &stackMocks{}
+// runTestGlobalDBStack runs the pulumi program creating global DB resources under mock.
+func runTestGlobalDBStack(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
 		primaryProvider, err := aws.NewProvider(ctx, "primary", &aws.ProviderArgs{Region: pulumi.String("us-east-1")})
 		if err != nil {
@@ -43,7 +43,11 @@ func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newGlobalDB() error = %v", err)
 	}
+}
 
+// assertGlobalDBClusters verifies cluster subnet groups and security group associations.
+func assertGlobalDBClusters(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	clusters := mocks.findAll("aws:rds/cluster:Cluster")
 	if len(clusters) != 2 {
 		t.Fatalf("regional cluster count = %d, want 2", len(clusters))
@@ -56,6 +60,11 @@ func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
 			t.Errorf("cluster %s security group count = %d, want 1", cluster.name, len(got))
 		}
 	}
+}
+
+// assertGlobalDBSubnetGroups verifies subnet groups contain private subnets only.
+func assertGlobalDBSubnetGroups(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	for _, subnetGroup := range mocks.findAll("aws:rds/subnetGroup:SubnetGroup") {
 		for _, subnetID := range subnetGroup.inputs["subnetIds"].ArrayValue() {
 			if !strings.Contains(subnetID.StringValue(), "private") {
@@ -63,7 +72,11 @@ func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
 			}
 		}
 	}
+}
 
+// assertGlobalDBInstances verifies regional DB instances are non-public and bound to subnet groups.
+func assertGlobalDBInstances(t *testing.T, mocks *stackMocks) {
+	t.Helper()
 	instances := mocks.findAll("aws:rds/clusterInstance:ClusterInstance")
 	if len(instances) != 2 {
 		t.Fatalf("regional instance count = %d, want 2", len(instances))
@@ -76,6 +89,15 @@ func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
 			t.Errorf("instance %s is publicly accessible", instance.name)
 		}
 	}
+}
+
+func TestGlobalDBUsesRegionalVPCPlacement(t *testing.T) {
+	t.Parallel()
+	mocks := &stackMocks{}
+	runTestGlobalDBStack(t, mocks)
+	assertGlobalDBClusters(t, mocks)
+	assertGlobalDBSubnetGroups(t, mocks)
+	assertGlobalDBInstances(t, mocks)
 }
 
 func newMockRegionNetwork(ctx *pulumi.Context, name string) (*regionNetwork, error) {

@@ -47,27 +47,35 @@ func (f *fakeDockerCLI) invoke(
 		return errors.New("fake docker: empty command")
 	}
 	if args[0] == "run" {
-		envFile := dockerOptionValue(args, "--env-file")
-		cidFile := dockerOptionValue(args, "--cidfile")
-		if cidFile == "" {
-			return errors.New("fake docker: missing --cidfile")
-		}
-		if err := os.WriteFile(cidFile, []byte(fakeDockerContainerID), 0o600); err != nil {
-			return err
-		}
-		f.mu.Lock()
-		f.environmentFiles = append(f.environmentFiles, envFile)
-		f.cidFiles = append(f.cidFiles, cidFile)
-		f.mu.Unlock()
-		if f.started != nil {
-			close(f.started)
-		}
-		if f.waitForCancel {
-			<-ctx.Done()
-			return errors.New("fake docker: CLI killed")
-		}
-		return f.runErr
+		return f.handleRun(ctx, args)
 	}
+	return f.handleContainer(args)
+}
+
+func (f *fakeDockerCLI) handleRun(ctx context.Context, args []string) error {
+	envFile := dockerOptionValue(args, "--env-file")
+	cidFile := dockerOptionValue(args, "--cidfile")
+	if cidFile == "" {
+		return errors.New("fake docker: missing --cidfile")
+	}
+	if err := os.WriteFile(cidFile, []byte(fakeDockerContainerID), 0o600); err != nil {
+		return err
+	}
+	f.mu.Lock()
+	f.environmentFiles = append(f.environmentFiles, envFile)
+	f.cidFiles = append(f.cidFiles, cidFile)
+	f.mu.Unlock()
+	if f.started != nil {
+		close(f.started)
+	}
+	if f.waitForCancel {
+		<-ctx.Done()
+		return errors.New("fake docker: CLI killed")
+	}
+	return f.runErr
+}
+
+func (f *fakeDockerCLI) handleContainer(args []string) error {
 	if len(args) < 2 || args[0] != "container" {
 		return errors.New("fake docker: unexpected command")
 	}
@@ -127,6 +135,12 @@ func TestBuildDockerArgsUsesSortedEnvironmentFile(t *testing.T) {
 		"/tmp/container.cid",
 		"container-name",
 	)
+	assertDockerArgsSecrets(t, args, envFile)
+	assertDockerEnvFile(t, envFile)
+}
+
+func assertDockerArgsSecrets(t *testing.T, args []string, envFile string) {
+	t.Helper()
 	joined := strings.Join(args, "\x00")
 	if strings.Contains(joined, "do-not-leak") || strings.Contains(joined, "also-secret") {
 		t.Fatalf("docker argv exposes an environment value: %q", args)
@@ -134,6 +148,10 @@ func TestBuildDockerArgsUsesSortedEnvironmentFile(t *testing.T) {
 	if !strings.Contains(joined, "--env-file\x00"+envFile) {
 		t.Fatalf("docker argv environment file = %q; want %q", args, envFile)
 	}
+}
+
+func assertDockerEnvFile(t *testing.T, envFile string) {
+	t.Helper()
 	payload, err := os.ReadFile(envFile)
 	if err != nil {
 		t.Fatalf("read Docker environment: %v", err)
@@ -187,31 +205,46 @@ func TestDockerRunnerRemovesEnvironmentAndCIDFiles(t *testing.T) {
 	for name, runErr := range map[string]error{"success": nil, "failure": errRun} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			fake := &fakeDockerCLI{runErr: runErr}
-			runner := &DockerRunner{command: newDockerCommandFunc(fake.invoke)}
-			err := runner.Run(t.Context(), RunSpec{
-				Image: "example.invalid/trainer:v1", Env: map[string]string{"TOKEN": "secret"},
-				InputDir: t.TempDir(), OutputDir: t.TempDir(), AllowUnpinnedImage: true,
-			})
-			if runErr == nil && err != nil {
-				t.Fatalf("Run() error = %v", err)
-			}
-			if runErr != nil && !errors.Is(err, runErr) {
-				t.Fatalf("Run() error = %v; want %v", err, runErr)
-			}
-			calls, envFiles, cidFiles := fake.snapshot()
-			if len(calls) < 3 || len(envFiles) != 1 || len(cidFiles) != 1 {
-				t.Fatalf("Docker calls/env/cid = %q/%q/%q", calls, envFiles, cidFiles)
-			}
-			for _, path := range []string{envFiles[0], cidFiles[0], filepath.Dir(cidFiles[0])} {
-				if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
-					t.Fatalf("temporary Docker path remains %q: %v", path, statErr)
-				}
-			}
-			if strings.Contains(strings.Join(calls[0], "\x00"), "secret") {
-				t.Fatalf("docker argv exposes environment value: %q", calls[0])
-			}
+			testDockerRunnerCleanup(t, runErr)
 		})
+	}
+}
+
+func testDockerRunnerCleanup(t *testing.T, runErr error) {
+	t.Helper()
+	fake := &fakeDockerCLI{runErr: runErr}
+	runner := &DockerRunner{command: newDockerCommandFunc(fake.invoke)}
+	err := runner.Run(t.Context(), RunSpec{
+		Image: "example.invalid/trainer:v1", Env: map[string]string{"TOKEN": "secret"},
+		InputDir: t.TempDir(), OutputDir: t.TempDir(), AllowUnpinnedImage: true,
+	})
+	assertDockerRunErr(t, err, runErr)
+	assertDockerCallsAndCleanedFiles(t, fake)
+}
+
+func assertDockerRunErr(t *testing.T, err, runErr error) {
+	t.Helper()
+	if runErr == nil && err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if runErr != nil && !errors.Is(err, runErr) {
+		t.Fatalf("Run() error = %v; want %v", err, runErr)
+	}
+}
+
+func assertDockerCallsAndCleanedFiles(t *testing.T, fake *fakeDockerCLI) {
+	t.Helper()
+	calls, envFiles, cidFiles := fake.snapshot()
+	if len(calls) < 3 || len(envFiles) != 1 || len(cidFiles) != 1 {
+		t.Fatalf("Docker calls/env/cid = %q/%q/%q", calls, envFiles, cidFiles)
+	}
+	for _, path := range []string{envFiles[0], cidFiles[0], filepath.Dir(cidFiles[0])} {
+		if _, statErr := os.Stat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("temporary Docker path remains %q: %v", path, statErr)
+		}
+	}
+	if strings.Contains(strings.Join(calls[0], "\x00"), "secret") {
+		t.Fatalf("docker argv exposes environment value: %q", calls[0])
 	}
 }
 

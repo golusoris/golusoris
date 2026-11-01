@@ -38,12 +38,6 @@ import (
 	"github.com/golusoris/golusoris/storage"
 )
 
-// DefaultImage is the legacy mutable trainer image name.
-//
-// Deprecated: no trainer image is currently published at this reference.
-// [NewTrainer] requires an explicit digest-pinned [Options.Image].
-const DefaultImage = "ghcr.io/golusoris/tiny-gemma-trainer:v1"
-
 const (
 	// BaseGemma3270M is the KerasHub gemma3_270m preset.
 	BaseGemma3270M = "gemma3:270m"

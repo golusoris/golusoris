@@ -179,27 +179,9 @@ func (sa *softwareAuthenticator) makeAssertionRequest(
 	return req
 }
 
-func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
-	t.Parallel()
-
-	const rpID = "example.com"
-	const rpOrigin = "https://example.com"
-
-	svc, err := passkeys.New(passkeys.Options{
-		RPID:      rpID,
-		RPName:    "Example Corp",
-		RPOrigins: []string{rpOrigin},
-	})
-	require.NoError(t, err)
-
-	auth := newSoftwareAuthenticator(t)
-	user := &ceremonyUser{
-		id:          []byte("user-12345678"),
-		name:        "alice@example.com",
-		displayName: "Alice",
-	}
-
-	// 1. BeginRegistration + FinishRegistration (Positive)
+// assertPasskeysRegistrationCeremony executes the registration ceremony and returns the session and request for negative tests.
+func assertPasskeysRegistrationCeremony(t *testing.T, svc *passkeys.Service, auth *softwareAuthenticator, user *ceremonyUser, rpOrigin, rpID string) (*passkeys.SessionData, *http.Request) {
+	t.Helper()
 	creation, regSess, err := svc.BeginRegistration(user)
 	require.NoError(t, err)
 	require.NotNil(t, creation)
@@ -213,10 +195,13 @@ func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
 	require.Equal(t, auth.credID, cred.ID)
 	require.Equal(t, "none", cred.AttestationType)
 
-	// Save credential to user
 	user.credentials = append(user.credentials, *cred)
+	return regSess, regReq
+}
 
-	// 2. BeginLogin + FinishLogin (Positive)
+// assertPasskeysLoginCeremony executes the login ceremony and returns the login session for negative tests.
+func assertPasskeysLoginCeremony(t *testing.T, svc *passkeys.Service, auth *softwareAuthenticator, user *ceremonyUser, rpOrigin, rpID string) *passkeys.SessionData {
+	t.Helper()
 	assertion, loginSess, err := svc.BeginLogin(user)
 	require.NoError(t, err)
 	require.NotNil(t, assertion)
@@ -229,13 +214,16 @@ func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
 	require.NotNil(t, authCred)
 	require.Equal(t, auth.credID, authCred.ID)
 
-	// Update credential counter
 	user.credentials[0] = *authCred
+	return loginSess
+}
 
-	// 3. Negatives for FinishRegistration:
+// assertPasskeysRegistrationNegatives verifies invalid registration attempts are rejected.
+func assertPasskeysRegistrationNegatives(t *testing.T, svc *passkeys.Service, auth *softwareAuthenticator, user *ceremonyUser, regSess *passkeys.SessionData, regReq *http.Request, rpOrigin, rpID string) {
+	t.Helper()
 	// a. Wrong challenge
 	badChallengeReq := auth.makeRegistrationRequest(t, "wrong-challenge", rpOrigin, rpID)
-	_, err = svc.FinishRegistration(user, *regSess, badChallengeReq)
+	_, err := svc.FinishRegistration(user, *regSess, badChallengeReq)
 	require.Error(t, err)
 
 	// b. Wrong origin
@@ -253,11 +241,14 @@ func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
 	staleSess.Challenge = "stale-challenge-value"
 	_, err = svc.FinishRegistration(user, staleSess, regReq)
 	require.Error(t, err)
+}
 
-	// 4. Negatives for FinishLogin:
+// assertPasskeysLoginNegatives verifies invalid login attempts and boundaries are rejected.
+func assertPasskeysLoginNegatives(t *testing.T, svc *passkeys.Service, auth *softwareAuthenticator, user *ceremonyUser, loginSess *passkeys.SessionData, rpOrigin, rpID string) {
+	t.Helper()
 	// a. Wrong challenge
 	badLoginChallengeReq := auth.makeAssertionRequest(t, "wrong-challenge", rpOrigin, rpID, user.id, 2, false)
-	_, err = svc.FinishLogin(user, *loginSess, badLoginChallengeReq)
+	_, err := svc.FinishLogin(user, *loginSess, badLoginChallengeReq)
 	require.Error(t, err)
 
 	// b. Wrong origin
@@ -288,4 +279,30 @@ func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
 	}
 	_, _, emptyErr := svc.BeginLogin(emptyUser)
 	require.Error(t, emptyErr)
+}
+
+func TestWebAuthn_FullCeremonyAndSecurityChecks(t *testing.T) {
+	t.Parallel()
+
+	const rpID = "example.com"
+	const rpOrigin = "https://example.com"
+
+	svc, err := passkeys.New(passkeys.Options{
+		RPID:      rpID,
+		RPName:    "Example Corp",
+		RPOrigins: []string{rpOrigin},
+	})
+	require.NoError(t, err)
+
+	auth := newSoftwareAuthenticator(t)
+	user := &ceremonyUser{
+		id:          []byte("user-12345678"),
+		name:        "alice@example.com",
+		displayName: "Alice",
+	}
+
+	regSess, regReq := assertPasskeysRegistrationCeremony(t, svc, auth, user, rpOrigin, rpID)
+	loginSess := assertPasskeysLoginCeremony(t, svc, auth, user, rpOrigin, rpID)
+	assertPasskeysRegistrationNegatives(t, svc, auth, user, regSess, regReq, rpOrigin, rpID)
+	assertPasskeysLoginNegatives(t, svc, auth, user, loginSess, rpOrigin, rpID)
 }

@@ -146,23 +146,33 @@ func TestVerify_KeySignature(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			host := newRegistry(t, nil, regsrv.WithReferrersSupport(tc.api))
-			ref, _ := seed(t, host, tc.index)
-			c := newClient(t)
-			sig, err := sign.Image(testCtx(t), c, ref, sign.Signer{Key: tc.key}, sign.Options{})
-			if err != nil {
-				t.Fatalf("Image: %v", err)
-			}
-			got := verifyOne(t, c, ref, keyPolicy(tc.key.Public()))
-			if got.Descriptor.Digest != sig.Descriptor.Digest || got.Descriptor.ArtifactType != sign.BundleMediaType ||
-				got.Descriptor.Annotations[sign.AnnotationBundleContent] != "dsse-envelope" || got.Subject.Digest != sig.Subject.Digest ||
-				got.Subject.MediaType != sig.Subject.MediaType ||
-				!bytes.Equal(got.Bundle, sig.Bundle) || got.Result.Statement.GetPredicateType() != sign.PredicateType ||
-				got.Result.Signature.PublicKeyID == nil {
-				t.Fatalf("verified = %+v, signed = %+v", got, sig)
-			}
-			wantRejected(t, c, ref, keyPolicy(ecKey(t).Public()), "verify bundle")
+			runVerifyKeySignatureCase(t, tc.key, tc.index, tc.api)
 		})
+	}
+}
+
+func runVerifyKeySignatureCase(t *testing.T, key crypto.Signer, index, api bool) {
+	t.Helper()
+	host := newRegistry(t, nil, regsrv.WithReferrersSupport(api))
+	ref, _ := seed(t, host, index)
+	c := newClient(t)
+	sig, err := sign.Image(testCtx(t), c, ref, sign.Signer{Key: key}, sign.Options{})
+	if err != nil {
+		t.Fatalf("Image: %v", err)
+	}
+	got := verifyOne(t, c, ref, keyPolicy(key.Public()))
+	checkVerifiedKeySignature(t, got, sig)
+	wantRejected(t, c, ref, keyPolicy(ecKey(t).Public()), "verify bundle")
+}
+
+func checkVerifiedKeySignature(t *testing.T, got sign.VerifiedSignature, sig sign.Signature) {
+	t.Helper()
+	if got.Descriptor.Digest != sig.Descriptor.Digest || got.Descriptor.ArtifactType != sign.BundleMediaType ||
+		got.Descriptor.Annotations[sign.AnnotationBundleContent] != "dsse-envelope" || got.Subject.Digest != sig.Subject.Digest ||
+		got.Subject.MediaType != sig.Subject.MediaType ||
+		!bytes.Equal(got.Bundle, sig.Bundle) || got.Result.Statement.GetPredicateType() != sign.PredicateType ||
+		got.Result.Signature.PublicKeyID == nil {
+		t.Fatalf("verified = %+v, signed = %+v", got, sig)
 	}
 }
 
@@ -411,19 +421,14 @@ func TestVerify_Annotations(t *testing.T) {
 	}
 }
 
-// TestVerify_RejectsForeignBundles pushes one crafted referrer per case, each
-// signed by the policy key, and expects the check that catches it.
-func TestVerify_RejectsForeignBundles(t *testing.T) {
-	t.Parallel()
-	kp, err := sgsign.NewEphemeralKeypair(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cases := []struct {
-		name, reason string
-		bundle       func(t *testing.T, subject v1.Descriptor, other v1.Hash, manifest []byte) []byte
-		layer        types.MediaType
-	}{
+type foreignBundleCase struct {
+	name, reason string
+	bundle       func(t *testing.T, subject v1.Descriptor, other v1.Hash, manifest []byte) []byte
+	layer        types.MediaType
+}
+
+func foreignBundleCases(kp *sgsign.EphemeralKeypair) []foreignBundleCase {
+	return []foreignBundleCase{
 		{
 			name: "signature of another image", reason: "verify bundle",
 			bundle: func(t *testing.T, _ v1.Descriptor, other v1.Hash, _ []byte) []byte {
@@ -474,20 +479,35 @@ func TestVerify_RejectsForeignBundles(t *testing.T) {
 			bundle: func(*testing.T, v1.Descriptor, v1.Hash, []byte) []byte { return []byte(`{"spdxVersion":"SPDX-2.3"}`) },
 		},
 	}
-	for _, tc := range cases {
+}
+
+func runRejectForeignBundleCase(t *testing.T, tc foreignBundleCase, kp *sgsign.EphemeralKeypair) {
+	t.Helper()
+	host := newRegistry(t, nil, regsrv.WithReferrersSupport(true))
+	ref, _ := seed(t, host, false)
+	_, other := seed(t, host, false)
+	c := newClient(t)
+	subject, manifest := subjectOf(t, c, ref)
+	layer := tc.layer
+	if layer == "" {
+		layer = sign.BundleMediaType
+	}
+	pushReferrer(t, c, ref, subject, string(layer), layer, tc.bundle(t, subject, other, manifest))
+	wantRejected(t, c, ref, keyPolicy(kp.GetPublicKey()), tc.reason)
+}
+
+// TestVerify_RejectsForeignBundles pushes one crafted referrer per case, each
+// signed by the policy key, and expects the check that catches it.
+func TestVerify_RejectsForeignBundles(t *testing.T) {
+	t.Parallel()
+	kp, err := sgsign.NewEphemeralKeypair(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range foreignBundleCases(kp) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			host := newRegistry(t, nil, regsrv.WithReferrersSupport(true))
-			ref, _ := seed(t, host, false)
-			_, other := seed(t, host, false)
-			c := newClient(t)
-			subject, manifest := subjectOf(t, c, ref)
-			layer := tc.layer
-			if layer == "" {
-				layer = sign.BundleMediaType
-			}
-			pushReferrer(t, c, ref, subject, string(layer), layer, tc.bundle(t, subject, other, manifest))
-			wantRejected(t, c, ref, keyPolicy(kp.GetPublicKey()), tc.reason)
+			runRejectForeignBundleCase(t, tc, kp)
 		})
 	}
 }

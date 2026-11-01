@@ -10,9 +10,9 @@ import (
 	"time"
 )
 
-func TestNewSenderClonesAndBoundsHTTPClient(t *testing.T) {
-	t.Parallel()
-
+// assertInjectedClientCloned verifies caller client isolation and transport preservation.
+func assertInjectedClientCloned(t *testing.T) {
+	t.Helper()
 	transport := http.DefaultTransport
 	injected := &http.Client{Transport: transport}
 	sender, err := NewSender(Options{WebhookURL: "https://example.test/hook", HTTPClient: injected})
@@ -28,7 +28,11 @@ func TestNewSenderClonesAndBoundsHTTPClient(t *testing.T) {
 	if sender.hc.Transport != transport {
 		t.Fatal("NewSender replaced injected transport")
 	}
+}
 
+// assertSenderTimeouts verifies custom, negative, and default timeout handling.
+func assertSenderTimeouts(t *testing.T) {
+	t.Helper()
 	const customTimeout = 23 * time.Second
 	custom, err := NewSender(Options{
 		WebhookURL: "https://example.test/hook",
@@ -59,4 +63,10 @@ func TestNewSenderClonesAndBoundsHTTPClient(t *testing.T) {
 	if defaults.hc.Timeout != 10*time.Second {
 		t.Fatalf("default timeout = %s, want 10s", defaults.hc.Timeout)
 	}
+}
+
+func TestNewSenderClonesAndBoundsHTTPClient(t *testing.T) {
+	t.Parallel()
+	assertInjectedClientCloned(t)
+	assertSenderTimeouts(t)
 }
