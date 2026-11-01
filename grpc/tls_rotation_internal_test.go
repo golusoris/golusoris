@@ -255,9 +255,9 @@ func (s *safeBuffer) String() string {
 	return s.buf.String()
 }
 
-// TestServerTLS_CorruptReplacementKeepsOldCertAndLogs verifies issue #627: a
-// certificate that does not match its key leaves the old certificate in use
-// for new connections and logs the reload failure.
+// TestServerTLS_CorruptReplacementKeepsOldCertAndLogs verifies issue #627 over
+// mTLS: a certificate that does not match its key leaves the old certificate
+// in use for new connections and logs the reload failure.
 func TestServerTLS_CorruptReplacementKeepsOldCertAndLogs(t *testing.T) {
 	t.Parallel()
 	var logBuf safeBuffer
@@ -265,10 +265,13 @@ func TestServerTLS_CorruptReplacementKeepsOldCertAndLogs(t *testing.T) {
 	ca := tlsxtest.NewCA(t)
 	cert1 := ca.Server(t, "127.0.0.1")
 	srvFiles := ca.WriteFiles(t, t.TempDir(), cert1)
-	cfg := Config{TLS: true, CertFile: srvFiles.Cert, KeyFile: srvFiles.Key}
+	cfg := Config{
+		TLS: true, CertFile: srvFiles.Cert, KeyFile: srvFiles.Key, CAFile: srvFiles.CA,
+		ClientAuth: "require_and_verify",
+	}
 	addr := startServerWithOptions(t, cfg, slog.New(slog.NewTextHandler(&logBuf, nil)), clk, nil)
 
-	cliTLS, err := tlsx.LoadClientConfig(tlsx.Files{CA: srvFiles.CA})
+	cliTLS, err := tlsx.LoadClientConfig(ca.WriteFiles(t, t.TempDir(), ca.Client(t, "client")))
 	require.NoError(t, err)
 	cliTLS.ServerName = "127.0.0.1"
 	cliCreds := credentials.NewTLS(cliTLS)
