@@ -21,6 +21,8 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
 [![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
+[![CodeRabbit reviews](https://img.shields.io/coderabbit/prs/github/golusoris/golusoris)](https://coderabbit.ai)
+[![Codacy grade](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
 
 A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed supply-chain controls.
 
