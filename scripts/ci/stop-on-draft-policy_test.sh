@@ -98,4 +98,122 @@ neg_no_summary="$suite_root/no-summary.yml"
 sed '/GITHUB_STEP_SUMMARY/d' "$action_file" >"$neg_no_summary"
 expect_failure 'lacks step summary append' check_stop_on_draft_action "$neg_no_summary"
 
+
+# Workflows call the composite at a full commit SHA instead of inlining the step.
+check_stop_on_draft_usage() {
+	local workflow="$1" status=0
+	if grep -Fq 'Gate not run on a draft' "$workflow"; then
+		printf '%s must use the stop-on-draft composite action instead of an inline draft block\n' "${workflow##*/}" >&2
+		status=1
+	fi
+	if grep -E 'stop-on-draft@' "$workflow" | grep -Evq 'stop-on-draft@[0-9a-f]{40}([[:space:]"'"'"']|$)'; then
+		printf '%s: stop-on-draft must be pinned to a full 40-character SHA\n' "${workflow##*/}" >&2
+		status=1
+	fi
+	check_stop_on_draft_jobs "$workflow" || status=1
+	return "$status"
+}
+
+# Every job a pull_request event runs makes stop-on-draft its first step; see stop_on_draft_jobs.py.
+check_stop_on_draft_jobs() {
+	python3 "$repo_root/scripts/ci/stop_on_draft_jobs.py" "$1"
+}
+
+# praetorctl adopt emits its managed workflows with the inline step and audit locks them byte for byte.
+praetor_managed="$(python3 -c 'import json, sys
+rules = json.load(open(sys.argv[1], encoding="utf-8"))["packageRules"]
+for rule in rules:
+    if rule.get("description", "").startswith("praetor-managed files"):
+        print("\n".join(rule["matchFileNames"]))' "$repo_root/renovate.json")"
+if [[ "$praetor_managed" != *.github/workflows/* ]]; then
+	printf 'renovate.json praetor-managed rule lists no workflow\n' >&2
+	exit 1
+fi
+
+for workflow in "$repo_root/.github/workflows"/*.yml "$repo_root/.github/workflows"/*.yaml; do
+	[[ -f "$workflow" ]] || continue
+	if grep -Fqx ".github/workflows/${workflow##*/}" <<<"$praetor_managed"; then
+		continue
+	fi
+	check_stop_on_draft_usage "$workflow"
+done
+
+# Negative case 5: inline draft block in a workflow.
+neg_inline="$suite_root/inline-block.yml"
+python3 - "$repo_root/.github/workflows/ci.yml" "$neg_inline" <<'PY'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+marker = "uses: golusoris/golusoris/.github/actions/stop-on-draft@"
+block = "env:\n          TITLE: Gate not run on a draft\n        " + marker
+open(sys.argv[2], "w", encoding="utf-8").write(text.replace(marker, block, 1))
+PY
+expect_failure 'instead of an inline draft block' check_stop_on_draft_usage "$neg_inline"
+
+# Negative case 6: branch ref instead of a commit SHA.
+neg_ref="$suite_root/non-sha-ref.yml"
+sed 's|stop-on-draft@[0-9a-f]\{40\}|stop-on-draft@main|' "$repo_root/.github/workflows/ci.yml" >"$neg_ref"
+expect_failure 'pinned to a full 40-character SHA' check_stop_on_draft_usage "$neg_ref"
+
+# Negative case 6b: a full SHA with a branch suffix is still a mutable ref.
+neg_suffix="$suite_root/suffixed-ref.yml"
+sed 's|\(stop-on-draft@[0-9a-f]\{40\}\)|\1-branch|' "$repo_root/.github/workflows/ci.yml" >"$neg_suffix"
+expect_failure 'pinned to a full 40-character SHA' check_stop_on_draft_usage "$neg_suffix"
+
+# Job checker unit tests: triggers, headers, conditions, action identity, exit codes.
+python3 -B "$repo_root/scripts/ci/stop_on_draft_jobs_test.py"
+
+# Negative case 7: one job drops the step; the other calls in ci.yml must not mask it.
+neg_job_missing="$suite_root/job-missing.yml"
+python3 - "$repo_root/.github/workflows/ci.yml" "$neg_job_missing" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8").read().splitlines(keepends=True)
+first = next(i for i, line in enumerate(lines) if "/stop-on-draft@" in line)
+del lines[first - 1 : first + 1]
+open(sys.argv[2], "w", encoding="utf-8").writelines(lines)
+PY
+expect_failure 'must run the stop-on-draft action as its first step' check_stop_on_draft_usage "$neg_job_missing"
+
+# Negative case 8: the step runs after checkout.
+neg_after_checkout="$suite_root/after-checkout.yml"
+cat >"$neg_after_checkout" <<'YAML'
+on:
+  pull_request:
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Stop on a draft pull request
+        uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553
+YAML
+expect_failure 'job build must run the stop-on-draft action as its first step' \
+	check_stop_on_draft_usage "$neg_after_checkout"
+
+# Negative case 9: a pull_request-only job without the step is applicable.
+neg_pr_only="$suite_root/pr-only.yml"
+sed 's/^    if: github.event_name != .pull_request. && .*$/    if: github.event_name == '"'"'pull_request'"'"'/' \
+	"$repo_root/.github/workflows/tiny-trainer-images.yml" >"$neg_pr_only"
+expect_failure 'job publish-policy must run the stop-on-draft action' check_stop_on_draft_usage "$neg_pr_only"
+
+# Boundary: jobs that cannot run on pull_request, and workflows without that trigger, need no step.
+not_pr="$suite_root/not-pr.yml"
+cat >"$not_pr" <<'YAML'
+on:
+  pull_request:
+  merge_group:
+jobs:
+  attribution:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+  publish:
+    if: github.event_name != 'pull_request' && github.event_name == 'push'
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+YAML
+check_stop_on_draft_usage "$not_pr"
+check_stop_on_draft_usage "$repo_root/.github/workflows/stale.yml"
+
 printf 'stop-on-draft policy tests passed\n'
