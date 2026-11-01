@@ -37,6 +37,8 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Stop on a draft pull request
+        uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
