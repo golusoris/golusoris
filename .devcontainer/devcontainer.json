@@ -19,13 +19,13 @@
       "bootstrap": {
         "version": 1,
         "state": "source-bundle",
-        "builderImage": "docker.io/library/golang@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d",
+        "builderImage": "docker.io/library/golang@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c",
         "baseImage": "mcr.microsoft.com/devcontainers/base@sha256:91eff046d5c12318fc98e59258982b87ba896c467427ed8b5dab5a02107a5db7",
         "golangciLintVersion": "v2.15.0",
-        "sourceSHA256": "sha256:475165422ad340781a9e80ab5c642694fb873ec9f10d10150bf9cc6ba2957a50",
-        "archiveSHA256": "sha256:4478b0dce27838db20a906fc9d261e1c23cf8ed2a4c93708c6b9ddbafca827ec",
-        "archiveParts": 7,
-        "dockerfileSHA256": "sha256:a58cd51f1f07bed81aa0e4d846059c69b0754b61d5c4ade6ae67aced9aa8be26"
+        "sourceSHA256": "sha256:ccd4b3fd4f8aa0ddaf2b0247038b31286b85ecb15edf1470b9d5202be8071b12",
+        "archiveSHA256": "sha256:5c65a1c413b3f77a03319bf63111f50d14529669045da0f47a7c44f3b975c028",
+        "archiveParts": 8,
+        "dockerfileSHA256": "sha256:1f98d151aeef97e9c235594035ad0faa4f7df4781e5b6d456d223b704f6067b8"
       }
     },
     "vscode": {
