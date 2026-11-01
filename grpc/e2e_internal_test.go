@@ -18,6 +18,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/tlsx"
 	"github.com/golusoris/golusoris/core/tlsx/tlsxtest"
 )
@@ -81,7 +82,13 @@ func startServer(t *testing.T, cfg Config) string {
 // startServerWith also lets register add test services before serving.
 func startServerWith(t *testing.T, cfg Config, register func(*grpc.Server)) string {
 	t.Helper()
-	opts, err := frameworkServerOptions(cfg.withDefaults(), slog.New(slog.DiscardHandler), nil)
+	return startServerWithOptions(t, cfg, slog.New(slog.DiscardHandler), nil, register)
+}
+
+// startServerWithOptions also takes the server logger and the TLS reload clock.
+func startServerWithOptions(t *testing.T, cfg Config, logger *slog.Logger, clk clock.Clock, register func(*grpc.Server)) string {
+	t.Helper()
+	opts, err := frameworkServerOptions(cfg.withDefaults(), logger, clk)
 	require.NoError(t, err)
 	srv := grpc.NewServer(opts...)
 	srv.RegisterService(&slowDesc, sleeper{})

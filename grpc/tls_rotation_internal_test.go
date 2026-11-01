@@ -5,10 +5,13 @@
 package grpc
 
 import (
+	"bytes"
 	"context"
 	"log/slog"
 	"math/big"
 	"net"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -230,4 +233,58 @@ func TestServerTLS_UntrustedRotationRejectsNewConnKeepsHeldRPC(t *testing.T) {
 
 	// 6. Release the held RPC: it still completes OK on the old conn and its peer cert is cert1.
 	finishHeldRPC(t, hs, rpcDone, waitCtx, p1, cert1.Serial, "held RPC must still complete OK")
+}
+
+// safeBuffer collects log output written from server goroutines.
+type safeBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+// Write appends p under the lock.
+func (s *safeBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+// String returns everything written so far.
+func (s *safeBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
+}
+
+// TestServerTLS_CorruptReplacementKeepsOldCertAndLogs verifies issue #627 over
+// mTLS: a certificate that does not match its key leaves the old certificate
+// in use for new connections and logs the reload failure.
+func TestServerTLS_CorruptReplacementKeepsOldCertAndLogs(t *testing.T) {
+	t.Parallel()
+	var logBuf safeBuffer
+	clk := clock.NewFake()
+	ca := tlsxtest.NewCA(t)
+	cert1 := ca.Server(t, "127.0.0.1")
+	srvFiles := ca.WriteFiles(t, t.TempDir(), cert1)
+	cfg := Config{
+		TLS: true, CertFile: srvFiles.Cert, KeyFile: srvFiles.Key, CAFile: srvFiles.CA,
+		ClientAuth: "require_and_verify",
+	}
+	addr := startServerWithOptions(t, cfg, slog.New(slog.NewTextHandler(&logBuf, nil)), clk, nil)
+
+	cliTLS, err := tlsx.LoadClientConfig(ca.WriteFiles(t, t.TempDir(), ca.Client(t, "client")))
+	require.NoError(t, err)
+	cliTLS.ServerName = "127.0.0.1"
+	cliCreds := credentials.NewTLS(cliTLS)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	// A new certificate under the old key is a half-written rotation.
+	require.NoError(t, os.WriteFile(srvFiles.Cert, ca.Server(t, "127.0.0.1").CertPEM, 0o600))
+	clk.Advance(tlsx.DefaultMinInterval + time.Second)
+
+	var p peer.Peer
+	_, err = healthpb.NewHealthClient(dial(t, addr, cliCreds)).Check(ctx, &healthpb.HealthCheckRequest{}, grpc.Peer(&p))
+	require.NoError(t, err)
+	require.Equal(t, cert1.Serial, peerCertSerial(t, p), "new conn must keep cert1")
+	require.Regexp(t, `level=WARN msg="tlsx: reload failed; keeping last good certificate"`, logBuf.String())
 }
