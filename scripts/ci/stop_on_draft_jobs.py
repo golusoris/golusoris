@@ -25,6 +25,9 @@ REQUIRED = re.compile(
 )
 ON_KEY = re.compile(r"^(on|'on'|\"on\"):\s*(.*)$")
 PR_KEY = re.compile(r"^  (pull_request|'pull_request'|\"pull_request\")\s*:")
+PR_ITEM = re.compile(
+    r"^\s*-\s+(pull_request|'pull_request'|\"pull_request\")\s*(#.*)?$"
+)
 JOB_HEADER = re.compile(r"^  (['\"]?)([A-Za-z0-9_-]+)\1:\s*(#.*)?$")
 JOB_IF = re.compile(r"^    if:\s*(.+?)\s*$")
 JOB_KEY = re.compile(r"^    [A-Za-z_-]+:")
@@ -45,7 +48,7 @@ class Job:
 
 def unquote(value: str) -> str:
     """Drop a trailing YAML comment and one pair of matching outer quotes."""
-    value = re.sub(r"\s+#.*$", "", value).strip()
+    value = re.sub(r"(^|\s+)#.*$", "", value).strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
         return value[1:-1]
     return value
@@ -53,7 +56,7 @@ def unquote(value: str) -> str:
 
 def top_level(line: str) -> bool:
     """Report whether a line starts a new top-level key."""
-    return bool(line) and not line[0].isspace() and not line.startswith("#")
+    return bool(line) and not line[0].isspace() and line[0] not in "#-"
 
 
 def pr_triggered(lines: list[str]) -> bool:
@@ -69,7 +72,7 @@ def pr_triggered(lines: list[str]) -> bool:
             in_on = True
         elif in_on and top_level(line):
             return False
-        elif in_on and PR_KEY.match(line):
+        elif in_on and (PR_KEY.match(line) or PR_ITEM.match(line)):
             return True
     return False
 

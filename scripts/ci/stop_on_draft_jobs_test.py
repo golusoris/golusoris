@@ -74,6 +74,23 @@ class StopOnDraftJobsTest(unittest.TestCase):
             1,
         )
 
+    def test_on_header_comment_reads_block(self) -> None:
+        """Negative: a comment after on: does not hide the block below."""
+        text = workflow(
+            on="on: # triggers\n  pull_request:", uses="actions/checkout@v7"
+        )
+        self.assertEqual(len(self.check(text)), 1)
+
+    def test_block_sequence_trigger(self) -> None:
+        """Negative: on: with a - pull_request sequence item triggers the check."""
+        for on in (
+            "on:\n  - push\n  - pull_request",
+            "on:\n- push\n- pull_request # x",
+        ):
+            with self.subTest(on=on):
+                text = workflow(on=on, uses="actions/checkout@v7")
+                self.assertEqual(len(self.check(text)), 1)
+
     def test_quoted_flow_trigger(self) -> None:
         """Negative: on: ["pull_request"] still triggers the check."""
         self.assertEqual(
