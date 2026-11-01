@@ -27,9 +27,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/golusoris/golusoris/core/validate"
 )
+
+// DefaultRequestTimeout bounds outbound HTTP sender requests when options supply no positive timeout.
+const DefaultRequestTimeout = 10 * time.Second
 
 // Message is the unified notification payload. Senders ignore fields
 // they don't support (e.g. an SMS sender ignores HTML).
