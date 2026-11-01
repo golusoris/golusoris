@@ -62,6 +62,7 @@ main() {
 		'scripts/ci/portability_test.py'
 		'scripts/ci/ci_scope_test.py'
 		'scripts/ci/gomod_test.py'
+		'scripts/ci/review_bot_badges_test.py'
 	)
 	local test_file
 	for test_file in "${tests[@]}"; do
