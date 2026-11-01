@@ -55,6 +55,7 @@ readonly -a noqa_exceptions=(
 	'tools/figures/mkdocs_hook.py:269|2026-11-04|Category B (3 days from 2026-11-01): Praetor-locked asset, fixed by engine order engine-golusoris-1286-asset-findings-20261101'
 )
 
+# Succeeds when "path:line" has an unexpired entry in noqa_exceptions; prints the expiry and fails once it has passed.
 noqa_exception_allows() {
 	local key="$1"
 	local entry rest expires today
