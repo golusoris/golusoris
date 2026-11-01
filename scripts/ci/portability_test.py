@@ -144,10 +144,17 @@ class PortabilityDriverTest(TestCase):
 
     def test_process_output_bounds_pipe_inheriting_descendant(self) -> None:
         runner = portability.ProcessRunner()
-        grandchild = "import time; time.sleep(10)"
+        grandchild = "import time; time.sleep(60)"
         parent = (
             "import subprocess,sys; "
             f"subprocess.Popen([sys.executable, '-c', {grandchild!r}]); "
+        )
+        # Two pipe joins, the tree kill and its grace, plus 3 s for two interpreter starts (Windows took 4.97 s).
+        teardown_budget = (
+            2 * portability.PROCESS_PIPE_JOIN_SECONDS
+            + portability.PROCESS_TASKKILL_SECONDS
+            + portability.PROCESS_TERMINATE_GRACE_SECONDS
+            + 3
         )
         started = time.monotonic()
         with tempfile.TemporaryDirectory() as directory:
@@ -158,10 +165,10 @@ class PortabilityDriverTest(TestCase):
                     (sys.executable, "-c", parent),
                     cwd=Path(directory),
                     environment=dict(os.environ),
-                    timeout=8,
+                    timeout=30,
                     max_output_bytes=4,
                 )
-        self.assertLess(time.monotonic() - started, 4)
+        self.assertLess(time.monotonic() - started, teardown_budget)
 
     @skipUnless(os.name == "posix", "process groups are POSIX")
     def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
