@@ -18,6 +18,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/tlsx"
 	"github.com/golusoris/golusoris/core/tlsx/tlsxtest"
 )
@@ -81,7 +82,13 @@ func startServer(t *testing.T, cfg Config) string {
 // startServerWith also lets register add test services before serving.
 func startServerWith(t *testing.T, cfg Config, register func(*grpc.Server)) string {
 	t.Helper()
-	opts, err := frameworkServerOptions(cfg.withDefaults(), slog.New(slog.DiscardHandler), nil)
+	return startServerWithOptions(t, cfg, slog.New(slog.DiscardHandler), nil, register)
+}
+
+// startServerWithOptions builds and serves the server with explicit logger and clock.
+func startServerWithOptions(t *testing.T, cfg Config, logger *slog.Logger, clk clock.Clock, register func(*grpc.Server)) string {
+	t.Helper()
+	opts, err := frameworkServerOptions(cfg.withDefaults(), logger, clk)
 	require.NoError(t, err)
 	srv := grpc.NewServer(opts...)
 	srv.RegisterService(&slowDesc, sleeper{})
@@ -127,10 +134,10 @@ func dial(t *testing.T, addr string, creds credentials.TransportCredentials) *gr
 	return conn
 }
 
-func sleepRPC(conn *grpc.ClientConn, d time.Duration) error {
+func sleepRPC(conn *grpc.ClientConn, d time.Duration, opts ...grpc.CallOption) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	return conn.Invoke(ctx, sleepMethod, &healthpb.HealthCheckRequest{Service: d.String()}, &healthpb.HealthCheckResponse{})
+	return conn.Invoke(ctx, sleepMethod, &healthpb.HealthCheckRequest{Service: d.String()}, &healthpb.HealthCheckResponse{}, opts...)
 }
 
 // TestLongRPC_ConnectionAge is the #589 acceptance over mTLS: an RPC running
