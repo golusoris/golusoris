@@ -105,14 +105,37 @@ func TestRemovedFlagDrifts(t *testing.T) {
 	}
 }
 
+type driftTestCase struct {
+	name   string
+	mutate func(dir string) error
+	want   string
+}
+
+func checkDriftCase(t *testing.T, files map[string][]byte, tc driftTestCase) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := clikit.WriteFiles(dir, files); err != nil {
+		t.Fatal(err)
+	}
+	if err := tc.mutate(dir); err != nil {
+		t.Fatal(err)
+	}
+	err := clikit.CheckDrift(dir, files)
+	if tc.want == "" {
+		if err != nil {
+			t.Fatalf("CheckDrift = %v, want nil", err)
+		}
+		return
+	}
+	if !errors.Is(err, clikit.ErrDrift) || !strings.Contains(err.Error(), tc.want) {
+		t.Fatalf("CheckDrift = %v, want ErrDrift naming %q", err, tc.want)
+	}
+}
+
 func TestCheckDrift(t *testing.T) {
 	t.Parallel()
 	files := map[string][]byte{"a/one.txt": []byte("1\n"), "two.txt": []byte("2\n")}
-	cases := []struct {
-		name   string
-		mutate func(dir string) error
-		want   string
-	}{
+	cases := []driftTestCase{
 		{"clean", func(string) error { return nil }, ""},
 		{"stale", func(dir string) error { return write(dir, "two.txt", "changed\n") }, "stale: two.txt"},
 		{"missing", func(dir string) error { return os.Remove(filepath.Join(dir, "a", "one.txt")) }, "missing: a/one.txt"},
@@ -122,23 +145,7 @@ func TestCheckDrift(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
-			if err := clikit.WriteFiles(dir, files); err != nil {
-				t.Fatal(err)
-			}
-			if err := tc.mutate(dir); err != nil {
-				t.Fatal(err)
-			}
-			err := clikit.CheckDrift(dir, files)
-			if tc.want == "" {
-				if err != nil {
-					t.Fatalf("CheckDrift = %v, want nil", err)
-				}
-				return
-			}
-			if !errors.Is(err, clikit.ErrDrift) || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("CheckDrift = %v, want ErrDrift naming %q", err, tc.want)
-			}
+			checkDriftCase(t, files, tc)
 		})
 	}
 }

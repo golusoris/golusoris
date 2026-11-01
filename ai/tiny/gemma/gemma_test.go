@@ -60,38 +60,55 @@ func TestTrainer_Name(t *testing.T) {
 func happyPathRunner(t *testing.T, wantNetworkDisabled bool) *tiny.StubRunner {
 	t.Helper()
 	return &tiny.StubRunner{Fn: func(_ context.Context, spec tiny.RunSpec) error {
-		cfgBytes, readErr := os.ReadFile(filepath.Join(spec.InputDir, "config.json"))
-		if readErr != nil {
-			return readErr
-		}
-		var cfg map[string]any
-		if jerr := json.Unmarshal(cfgBytes, &cfg); jerr != nil {
-			return jerr
-		}
-		if cfg["job_name"] != "intent-finetune" {
-			t.Errorf("expected job_name intent-finetune, got %v", cfg["job_name"])
-		}
-		if cfg["base_model"] != "gemma3:270m" {
-			t.Errorf("expected base_model gemma3:270m, got %v", cfg["base_model"])
-		}
-		if spec.Env["TINY_BASE_MODEL"] != "gemma3:270m" {
-			t.Errorf("expected TINY_BASE_MODEL=gemma3:270m, got %q", spec.Env["TINY_BASE_MODEL"])
-		}
-		if spec.Env["HF_TOKEN"] != "hf_fake" {
-			t.Errorf("expected HF_TOKEN=hf_fake, got %q", spec.Env["HF_TOKEN"])
-		}
-		if spec.NetworkDisabled != wantNetworkDisabled {
-			t.Errorf("NetworkDisabled = %v; want %v", spec.NetworkDisabled, wantNetworkDisabled)
-		}
-		if werr := os.WriteFile(filepath.Join(spec.OutputDir, gemma.ArtifactName), []byte("fake-lora-bytes"), 0o600); werr != nil {
-			return werr
-		}
-		b, err := json.Marshal(map[string]float64{"loss": 0.42, "epochs": 3})
-		if err != nil {
+		if err := validateHappyPathConfig(t, spec.InputDir); err != nil {
 			return err
 		}
-		return os.WriteFile(filepath.Join(spec.OutputDir, gemma.MetricsName), b, 0o600)
+		validateHappyPathEnv(t, spec, wantNetworkDisabled)
+		return writeHappyPathArtifacts(spec.OutputDir)
 	}}
+}
+
+func validateHappyPathConfig(t *testing.T, inputDir string) error {
+	t.Helper()
+	cfgBytes, readErr := os.ReadFile(filepath.Join(inputDir, "config.json"))
+	if readErr != nil {
+		return readErr
+	}
+	var cfg map[string]any
+	if jerr := json.Unmarshal(cfgBytes, &cfg); jerr != nil {
+		return jerr
+	}
+	if cfg["job_name"] != "intent-finetune" {
+		t.Errorf("expected job_name intent-finetune, got %v", cfg["job_name"])
+	}
+	if cfg["base_model"] != "gemma3:270m" {
+		t.Errorf("expected base_model gemma3:270m, got %v", cfg["base_model"])
+	}
+	return nil
+}
+
+func validateHappyPathEnv(t *testing.T, spec tiny.RunSpec, wantNetworkDisabled bool) {
+	t.Helper()
+	if spec.Env["TINY_BASE_MODEL"] != "gemma3:270m" {
+		t.Errorf("expected TINY_BASE_MODEL=gemma3:270m, got %q", spec.Env["TINY_BASE_MODEL"])
+	}
+	if spec.Env["HF_TOKEN"] != "hf_fake" {
+		t.Errorf("expected HF_TOKEN=hf_fake, got %q", spec.Env["HF_TOKEN"])
+	}
+	if spec.NetworkDisabled != wantNetworkDisabled {
+		t.Errorf("NetworkDisabled = %v; want %v", spec.NetworkDisabled, wantNetworkDisabled)
+	}
+}
+
+func writeHappyPathArtifacts(outputDir string) error {
+	if werr := os.WriteFile(filepath.Join(outputDir, gemma.ArtifactName), []byte("fake-lora-bytes"), 0o600); werr != nil {
+		return werr
+	}
+	b, err := json.Marshal(map[string]float64{"loss": 0.42, "epochs": 3})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outputDir, gemma.MetricsName), b, 0o600)
 }
 
 func happyPathJob(t *testing.T) (tiny.Job, string) {

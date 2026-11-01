@@ -14,9 +14,9 @@ import (
 
 const (
 	// Postgres is the default PostgreSQL integration-test image.
-	Postgres = "postgres:18-alpine@sha256:898c60cb390d1085bc97bdd6a1ae968757421df394b071848b52b1c09c89d6a5"
+	Postgres = "postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5"
 	// PostGIS is the PostgreSQL 18 PostGIS integration-test image.
-	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:fd143c649af607c6872a1e59ccb3e43c299f207ab975a4c286fbb204b6e6f7b7"
+	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:c53a483fc274072dfa02cd491efa79f3c8ae0a10774a0ece6c9c53b6a632cdef"
 	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
 	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:9d9c930220cb9bf2f956d10a8f909cf9973d9672ca0278aef2c1e6facccad2e0"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
@@ -26,7 +26,7 @@ const (
 	// Redis is the default Redis integration-test image.
 	Redis = "redis:8-alpine@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0"
 	// NATS is the default NATS integration-test image.
-	NATS = "nats:2-alpine@sha256:7ae34c25dfd6fe2e01c6483eabef20d796690fdcac6c4d94ca780a6cf9877fde"
+	NATS = "nats:2-alpine@sha256:823e7f1d6d8ffe3b30dbd73d4a06bbb939acf94929f7fdf224404da7a05bafb5"
 	// ClickHouse is the default ClickHouse integration-test image.
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
@@ -40,11 +40,11 @@ const (
 	// Ryuk is the testcontainers resource-reaper image.
 	Ryuk = "testcontainers/ryuk:0.14.0@sha256:7c1a8a9a47c780ed0f983770a662f80deb115d95cce3e2daa3d12115b8cd28f0"
 	// ClamAV is the malware-scanner image; it ships its signatures, so clamd starts offline.
-	ClamAV = "clamav/clamav:1.5.4@sha256:e19130cdebaeacc71fa46eab3ed6f69941f2f22aa5e08d55e9197f8edf43ce5e"
+	ClamAV = "clamav/clamav:1.5.4@sha256:bda39705e291105049c3936e2803ac90b955172af8030f94f05dce1252df6c6d"
 	// PubSubEmulator is the Google Cloud Pub/Sub emulator integration-test image.
 	PubSubEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:588.0.0-emulators@sha256:be2f0e582a94c9e06e7a384fe2b3b39d590eeb8da65a110eda991598c100fe80"
 	// Mailpit is the SMTP server and API emulator image for notify tests.
-	Mailpit = "axllent/mailpit:v1.31.6@sha256:23fe39e81bde596a918000b3135c0f85dc8bb4c9ea6be274b051143f3e300387"
+	Mailpit = "axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498"
 	// StripeMock is the Stripe API emulator image for payments/stripe integration tests.
 	StripeMock = "stripe/stripe-mock:v0.206.0@sha256:aeb96b83e87a893d2ac005e363ac01ffa6e59a5ad85b49c155dfc9129de02e78"
 	// Bugsink is the Sentry-compatible error reporting server image for observability tests.

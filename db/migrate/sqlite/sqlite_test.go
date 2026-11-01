@@ -85,6 +85,12 @@ func TestUpVersionDownForce(t *testing.T) {
 	opts := tempDB(t)
 	m := newMigrator(t, opts)
 
+	testMigrateUpAndStepBack(t, m, opts)
+	testMigrateForceAndDown(t, m, opts)
+}
+
+func testMigrateUpAndStepBack(t *testing.T, m *dbmigrate.Migrator, opts dbsqlite.Options) {
+	t.Helper()
 	if err := m.Up(); err != nil {
 		t.Fatalf("Up: %v", err)
 	}
@@ -101,6 +107,10 @@ func TestUpVersionDownForce(t *testing.T) {
 	if got := tableCount(t, opts, "gadgets"); got != 0 {
 		t.Fatalf("gadgets still present after Steps(-1)")
 	}
+}
+
+func testMigrateForceAndDown(t *testing.T, m *dbmigrate.Migrator, opts dbsqlite.Options) {
+	t.Helper()
 	if err := m.Force(1); err != nil {
 		t.Fatalf("Force: %v", err)
 	}

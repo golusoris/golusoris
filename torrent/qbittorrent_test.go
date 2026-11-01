@@ -139,25 +139,20 @@ func qbitTorrentJSON(hash, name, state string, size int64, progress, ratio float
 	}
 }
 
-func TestQBittorrent_LoginAndCRUD(t *testing.T) {
-	t.Parallel()
-	const hash = "abcdef0123456789abcdef0123456789abcdef01"
-	st := &qbitState{torrents: []map[string]any{
-		qbitTorrentJSON(hash, "ubuntu.iso", "uploading", 2048, 1.0, 1.5),
-	}}
-	srv := newQBittorrentServer(t, st)
-	c := bootQBittorrent(t, srv.URL)
-	ctx := context.Background()
-
+// qbitAssertAdd verifies adding a magnet link through qBittorrent client.
+func qbitAssertAdd(t *testing.T, ctx context.Context, c Client, st *qbitState, hash string) {
+	t.Helper()
 	if _, err := c.Add(ctx, "magnet:?xt=urn:btih:"+hash, AddOptions{Paused: true, Label: "iso"}); err != nil {
 		t.Fatalf("Add: %v", err)
 	}
 	if addPath := st.last(); addPath != "torrents/add" {
 		t.Errorf("Add hit %q, want torrents/add", addPath)
 	}
+}
 
-	qbitAssertListAndGet(t, ctx, c, hash)
-
+// qbitAssertPauseResume verifies pause and resume actions hit expected API endpoints.
+func qbitAssertPauseResume(t *testing.T, ctx context.Context, c Client, st *qbitState, hash string) {
+	t.Helper()
 	if err := c.Pause(ctx, hash); err != nil {
 		t.Fatalf("Pause: %v", err)
 	}
@@ -171,7 +166,11 @@ func TestQBittorrent_LoginAndCRUD(t *testing.T) {
 	if resumePath := st.last(); resumePath != "torrents/start" {
 		t.Errorf("Resume hit %q, want torrents/start", resumePath)
 	}
+}
 
+// qbitAssertStats verifies cumulative torrent client stats.
+func qbitAssertStats(t *testing.T, ctx context.Context, c Client) {
+	t.Helper()
 	stats, err := c.Stats(ctx)
 	if err != nil {
 		t.Fatalf("Stats: %v", err)
@@ -179,13 +178,34 @@ func TestQBittorrent_LoginAndCRUD(t *testing.T) {
 	if stats.TorrentCount != 1 || stats.DownloadRate != 4096 || stats.UploadRate != 2048 {
 		t.Errorf("Stats = %+v", stats)
 	}
+}
 
+// qbitAssertRemove verifies removing a torrent hits the delete endpoint.
+func qbitAssertRemove(t *testing.T, ctx context.Context, c Client, st *qbitState, hash string) {
+	t.Helper()
 	if err := c.Remove(ctx, hash, true); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if delPath := st.last(); delPath != "torrents/delete" {
 		t.Errorf("Remove hit %q, want torrents/delete", delPath)
 	}
+}
+
+func TestQBittorrent_LoginAndCRUD(t *testing.T) {
+	t.Parallel()
+	const hash = "abcdef0123456789abcdef0123456789abcdef01"
+	st := &qbitState{torrents: []map[string]any{
+		qbitTorrentJSON(hash, "ubuntu.iso", "uploading", 2048, 1.0, 1.5),
+	}}
+	srv := newQBittorrentServer(t, st)
+	c := bootQBittorrent(t, srv.URL)
+	ctx := context.Background()
+
+	qbitAssertAdd(t, ctx, c, st, hash)
+	qbitAssertListAndGet(t, ctx, c, hash)
+	qbitAssertPauseResume(t, ctx, c, st, hash)
+	qbitAssertStats(t, ctx, c)
+	qbitAssertRemove(t, ctx, c, st, hash)
 }
 
 func TestQBittorrent_AddFile(t *testing.T) {

@@ -8,6 +8,12 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
 
+duplicate_pins="$(awk -F= '/^[A-Za-z0-9_]+=/ { print $1 }' "$repo_root/tools/tool-versions.env" | sort | uniq -d)"
+if [[ -n "$duplicate_pins" ]]; then
+	printf 'duplicate tool pin in tools/tool-versions.env: %s\n' "$duplicate_pins" >&2
+	exit 1
+fi
+
 # shellcheck source=/dev/null
 . "$repo_root/tools/tool-versions.env"
 
@@ -19,7 +25,6 @@ for value in \
 	"$GOVULNCHECK_VERSION" \
 	"$GO_COMPAT_TOOL_VERSION" \
 	"$LEFTHOOK_VERSION" \
-	"$GCI_VERSION" \
 	"$MOCKERY_VERSION" \
 	"$AIR_VERSION" \
 	"$SQLC_VERSION" \
@@ -111,7 +116,6 @@ fi
 
 for variable in \
 	LEFTHOOK_VERSION \
-	GCI_VERSION \
 	MOCKERY_VERSION \
 	AIR_VERSION \
 	SQLC_VERSION \

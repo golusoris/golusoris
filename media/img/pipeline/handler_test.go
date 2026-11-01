@@ -454,49 +454,59 @@ func TestHandler_sourceByteLimit(t *testing.T) {
 	}
 }
 
+type sourceReadCancelCase struct {
+	name        string
+	payload     string
+	cancelFirst bool
+	wantReads   int
+}
+
+var sourceReadCancelCases = []sourceReadCancelCase{
+	{name: "before first read", payload: "unread", cancelFirst: true, wantReads: 0},
+	{name: "after zero-byte read", payload: "", wantReads: 1},
+	{name: "after partial read", payload: "partial", wantReads: 1},
+}
+
+// checkSourceReadCancelCase executes a cancellation subtest for the handler pipeline.
+func checkSourceReadCancelCase(t *testing.T, tt sourceReadCancelCase) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	reader := &cancelingReadCloser{payload: tt.payload}
+	if tt.cancelFirst {
+		cancel()
+	} else {
+		reader.cancel = cancel
+	}
+	proc := &fakeProcessor{}
+	p, _ := newHandlerPipeline(t, proc, fixedReaderSource{reader: reader})
+	tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/img/"+tok, nil).WithContext(ctx)
+	req.SetPathValue("signed", tok)
+	rec := httptest.NewRecorder()
+
+	p.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500 after cancellation; body=%s", rec.Code, rec.Body.String())
+	}
+	if reader.reads != tt.wantReads {
+		t.Fatalf("source reads = %d, want %d", reader.reads, tt.wantReads)
+	}
+	if proc.lastW != 0 {
+		t.Fatalf("processor ran after source cancellation: width = %d", proc.lastW)
+	}
+}
+
 func TestHandler_sourceReadHonorsRequestCancellation(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct {
-		name        string
-		payload     string
-		cancelFirst bool
-		wantReads   int
-	}{
-		{name: "before first read", payload: "unread", cancelFirst: true, wantReads: 0},
-		{name: "after zero-byte read", payload: "", wantReads: 1},
-		{name: "after partial read", payload: "partial", wantReads: 1},
-	} {
+	for _, tt := range sourceReadCancelCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
-			reader := &cancelingReadCloser{payload: tt.payload}
-			if tt.cancelFirst {
-				cancel()
-			} else {
-				reader.cancel = cancel
-			}
-			proc := &fakeProcessor{}
-			p, _ := newHandlerPipeline(t, proc, fixedReaderSource{reader: reader})
-			tok, err := p.Sign("k", pipeline.Transform{Width: 50, Format: "png"}, time.Minute)
-			if err != nil {
-				t.Fatalf("Sign: %v", err)
-			}
-			req := httptest.NewRequest(http.MethodGet, "/img/"+tok, nil).WithContext(ctx)
-			req.SetPathValue("signed", tok)
-			rec := httptest.NewRecorder()
-
-			p.Handler().ServeHTTP(rec, req)
-
-			if rec.Code != http.StatusInternalServerError {
-				t.Fatalf("status = %d, want 500 after cancellation; body=%s", rec.Code, rec.Body.String())
-			}
-			if reader.reads != tt.wantReads {
-				t.Fatalf("source reads = %d, want %d", reader.reads, tt.wantReads)
-			}
-			if proc.lastW != 0 {
-				t.Fatalf("processor ran after source cancellation: width = %d", proc.lastW)
-			}
+			checkSourceReadCancelCase(t, tt)
 		})
 	}
 }

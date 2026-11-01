@@ -244,73 +244,82 @@ func TestSameOriginRedirectRetainsConfiguredCredentials(t *testing.T) {
 	}
 }
 
+type authAndHeadersTestCase struct {
+	name       string
+	opts       extclient.ServiceOptions
+	perRequest map[string]string
+	wantAuth   string
+	wantHeader map[string]string
+}
+
+var authAndHeadersTests = []authAndHeadersTestCase{
+	{
+		name:     "bearer",
+		opts:     extclient.ServiceOptions{Bearer: "tok123"},
+		wantAuth: "Bearer tok123",
+	},
+	{
+		name:       "api key header",
+		opts:       extclient.ServiceOptions{AuthHeader: map[string]string{"X-API-Key": "secret"}},
+		wantHeader: map[string]string{"X-Api-Key": "secret"},
+	},
+	{
+		name: "bearer wins over auth header Authorization",
+		opts: extclient.ServiceOptions{
+			Bearer:     "tok123",
+			AuthHeader: map[string]string{"Authorization": "Basic nope"},
+		},
+		wantAuth: "Bearer tok123",
+	},
+	{
+		name: "bearer wins over default Authorization header",
+		opts: extclient.ServiceOptions{
+			Bearer:  "tok123",
+			Headers: map[string]string{"Authorization": "Basic nope"},
+		},
+		wantAuth: "Bearer tok123",
+	},
+	{
+		name:       "per-request overrides default",
+		opts:       extclient.ServiceOptions{Headers: map[string]string{"X-Trace": "default"}},
+		perRequest: map[string]string{"X-Trace": "override"},
+		wantHeader: map[string]string{"X-Trace": "override"},
+	},
+}
+
+// runAuthAndHeadersSubtest validates request Authorization and custom headers against expected values.
+func runAuthAndHeadersSubtest(t *testing.T, tt authAndHeadersTestCase) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tt.wantAuth != "" && r.Header.Get("Authorization") != tt.wantAuth {
+			t.Errorf("Authorization = %q, want %q", r.Header.Get("Authorization"), tt.wantAuth)
+		}
+		for k, v := range tt.wantHeader {
+			if got := r.Header.Get(k); got != v {
+				t.Errorf("header %s = %q, want %q", k, got, v)
+			}
+		}
+		_ = json.NewEncoder(w).Encode(user{ID: "1"})
+	}))
+	defer srv.Close()
+
+	opts := tt.opts
+	opts.BaseURL = srv.URL
+	c, err := extclient.New(opts)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if _, err := extclient.Get[user](context.Background(), c, "/x", tt.perRequest); err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+}
+
 func TestAuthAndHeaders(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name       string
-		opts       extclient.ServiceOptions
-		perRequest map[string]string
-		wantAuth   string
-		wantHeader map[string]string
-	}{
-		{
-			name:     "bearer",
-			opts:     extclient.ServiceOptions{Bearer: "tok123"},
-			wantAuth: "Bearer tok123",
-		},
-		{
-			name:       "api key header",
-			opts:       extclient.ServiceOptions{AuthHeader: map[string]string{"X-API-Key": "secret"}},
-			wantHeader: map[string]string{"X-Api-Key": "secret"},
-		},
-		{
-			name: "bearer wins over auth header Authorization",
-			opts: extclient.ServiceOptions{
-				Bearer:     "tok123",
-				AuthHeader: map[string]string{"Authorization": "Basic nope"},
-			},
-			wantAuth: "Bearer tok123",
-		},
-		{
-			name: "bearer wins over default Authorization header",
-			opts: extclient.ServiceOptions{
-				Bearer:  "tok123",
-				Headers: map[string]string{"Authorization": "Basic nope"},
-			},
-			wantAuth: "Bearer tok123",
-		},
-		{
-			name:       "per-request overrides default",
-			opts:       extclient.ServiceOptions{Headers: map[string]string{"X-Trace": "default"}},
-			perRequest: map[string]string{"X-Trace": "override"},
-			wantHeader: map[string]string{"X-Trace": "override"},
-		},
-	}
-	for _, tt := range tests {
+	for _, tt := range authAndHeadersTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if tt.wantAuth != "" && r.Header.Get("Authorization") != tt.wantAuth {
-					t.Errorf("Authorization = %q, want %q", r.Header.Get("Authorization"), tt.wantAuth)
-				}
-				for k, v := range tt.wantHeader {
-					if got := r.Header.Get(k); got != v {
-						t.Errorf("header %s = %q, want %q", k, got, v)
-					}
-				}
-				_ = json.NewEncoder(w).Encode(user{ID: "1"})
-			}))
-			defer srv.Close()
-
-			opts := tt.opts
-			opts.BaseURL = srv.URL
-			c, err := extclient.New(opts)
-			if err != nil {
-				t.Fatalf("New: %v", err)
-			}
-			if _, err := extclient.Get[user](context.Background(), c, "/x", tt.perRequest); err != nil {
-				t.Fatalf("Get: %v", err)
-			}
+			runAuthAndHeadersSubtest(t, tt)
 		})
 	}
 }

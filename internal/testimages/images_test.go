@@ -84,9 +84,9 @@ func cacheManifestPins() map[string]bool {
 	}
 }
 
-func TestCacheManifestMatchesDefaultPins(t *testing.T) {
-	t.Parallel()
-	path := filepath.Join("..", "..", ".github", "testcontainers-images.txt")
+// readManifestFile reads the manifest content up to the size limit.
+func readManifestFile(t *testing.T, path string) []byte {
+	t.Helper()
 	file, err := os.Open(path)
 	if err != nil {
 		t.Fatalf("os.Open(%q) error = %v", path, err)
@@ -104,8 +104,12 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 	if len(content) > manifestReadLimit {
 		t.Fatalf("manifest exceeds %d bytes", manifestReadLimit)
 	}
+	return content
+}
 
-	want := cacheManifestPins()
+// verifyManifestLines parses manifest entries and checks against expected images.
+func verifyManifestLines(t *testing.T, content []byte, want map[string]bool) {
+	t.Helper()
 	scanner := bufio.NewScanner(strings.NewReader(string(content)))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -122,7 +126,7 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 		}
 		want[line] = true
 	}
-	if err = scanner.Err(); err != nil {
+	if err := scanner.Err(); err != nil {
 		t.Fatalf("scan manifest: %v", err)
 	}
 	for image, seen := range want {
@@ -130,4 +134,12 @@ func TestCacheManifestMatchesDefaultPins(t *testing.T) {
 			t.Errorf("cache manifest missing %q", image)
 		}
 	}
+}
+
+func TestCacheManifestMatchesDefaultPins(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join("..", "..", ".github", "testcontainers-images.txt")
+	content := readManifestFile(t, path)
+	want := cacheManifestPins()
+	verifyManifestLines(t, content, want)
 }

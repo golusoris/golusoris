@@ -13,15 +13,47 @@ import (
 	"github.com/golusoris/golusoris/internal/testimages"
 )
 
+type optionsImageCase struct {
+	name    string
+	image   string
+	want    string
+	refused bool
+}
+
+// checkOptionsImageRefused verifies that invalid or mutable image references are rejected.
+func checkOptionsImageRefused(t *testing.T, got string, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("image() = %q, want a mutable reference refused", got)
+	}
+	if !strings.Contains(err.Error(), "testutil/redis: validate image") {
+		t.Fatalf("image() error = %v, want it to name the helper and the validation", err)
+	}
+}
+
+// checkOptionsImageValid verifies that valid image references resolve to the expected tag and digest.
+func checkOptionsImageValid(t *testing.T, got, want string, err error) {
+	t.Helper()
+	if err != nil || got != want {
+		t.Fatalf("image() = %q, %v; want %q", got, err, want)
+	}
+}
+
+// checkOptionsImageCase evaluates one test case for options image resolution.
+func checkOptionsImageCase(t *testing.T, tc optionsImageCase) {
+	t.Helper()
+	got, err := Options{Image: tc.image}.image()
+	if tc.refused {
+		checkOptionsImageRefused(t, got, err)
+		return
+	}
+	checkOptionsImageValid(t, got, tc.want, err)
+}
+
 func TestOptionsImage(t *testing.T) {
 	t.Parallel()
 	const pinned = "redis:7-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499"
-	cases := []struct {
-		name    string
-		image   string
-		want    string
-		refused bool
-	}{
+	cases := []optionsImageCase{
 		{name: "empty uses the repository pin", want: testimages.Redis},
 		{name: "explicit immutable reference", image: pinned, want: pinned},
 		{name: "tag without digest", image: "redis:7-alpine", refused: true},
@@ -31,19 +63,7 @@ func TestOptionsImage(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := Options{Image: tc.image}.image()
-			if tc.refused {
-				if err == nil {
-					t.Fatalf("image() = %q, want a mutable reference refused", got)
-				}
-				if !strings.Contains(err.Error(), "testutil/redis: validate image") {
-					t.Fatalf("image() error = %v, want it to name the helper and the validation", err)
-				}
-				return
-			}
-			if err != nil || got != tc.want {
-				t.Fatalf("image() = %q, %v; want %q", got, err, tc.want)
-			}
+			checkOptionsImageCase(t, tc)
 		})
 	}
 }

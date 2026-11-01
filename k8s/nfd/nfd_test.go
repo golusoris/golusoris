@@ -180,43 +180,47 @@ func TestWriteFeatureFile_missingDirFails(t *testing.T) {
 	require.ErrorContains(t, err, "nfd: create temp file")
 }
 
-// TestWriteFeatureFile_readersNeverSeePartialFile rewrites the file while a
-// reader polls it: every observed content must be one complete version.
-func TestWriteFeatureFile_readersNeverSeePartialFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	big := func(v string) map[string]string {
-		m := make(map[string]string, 400)
-		for i := range 400 {
-			m["example.com/k"+leftPad(i)] = v
-		}
-		return m
+func makeBigFeatures(v string) map[string]string {
+	m := make(map[string]string, 400)
+	for i := range 400 {
+		m["example.com/k"+leftPad(i)] = v
 	}
-	require.NoError(t, nfd.WriteFeatureFile(dir, "f", big("a")))
+	return m
+}
+
+// buildExpectedFeatureContents builds the expected valid serialized feature file contents.
+func buildExpectedFeatureContents(t *testing.T) map[string]bool {
+	t.Helper()
 	want := map[string]bool{}
 	for _, v := range []string{"a", "b"} {
 		tmp := t.TempDir()
-		require.NoError(t, nfd.WriteFeatureFile(tmp, "f", big(v)))
+		require.NoError(t, nfd.WriteFeatureFile(tmp, "f", makeBigFeatures(v)))
 		b, err := os.ReadFile(filepath.Join(tmp, "f"))
 		require.NoError(t, err)
 		want[string(b)] = true
 	}
+	return want
+}
 
-	var wg sync.WaitGroup
-	stop := make(chan struct{})
-	wg.Go(func() {
-		for i := range 200 {
-			v := "a"
-			if i%2 == 1 {
-				v = "b"
-			}
-			if err := nfd.WriteFeatureFile(dir, "f", big(v)); err != nil {
-				t.Error(err)
-				break
-			}
+// runFeatureFileWriter rewrites the feature file repeatedly between versions.
+func runFeatureFileWriter(t *testing.T, dir string, stop chan struct{}) {
+	t.Helper()
+	for i := range 200 {
+		v := "a"
+		if i%2 == 1 {
+			v = "b"
 		}
-		close(stop)
-	})
+		if err := nfd.WriteFeatureFile(dir, "f", makeBigFeatures(v)); err != nil {
+			t.Error(err)
+			break
+		}
+	}
+	close(stop)
+}
+
+// verifyConcurrentFeatureFileReads polls the feature file during concurrent writes.
+func verifyConcurrentFeatureFileReads(t *testing.T, dir string, want map[string]bool, stop <-chan struct{}) {
+	t.Helper()
 	reads := 0
 	for done := false; !done && reads < 1_000_000; reads++ {
 		select {
@@ -226,16 +230,28 @@ func TestWriteFeatureFile_readersNeverSeePartialFile(t *testing.T) {
 		}
 		b, err := os.ReadFile(filepath.Join(dir, "f"))
 		if runtime.GOOS == "windows" {
-			// Windows cannot replace a file while a reader holds it open, so a
-			// reader that never pauses would starve every rename; poll instead.
 			time.Sleep(time.Millisecond)
 			if err != nil {
-				continue // a rename can briefly deny sharing on Windows
+				continue
 			}
 		}
 		require.NoError(t, err)
 		require.True(t, want[string(b)], "observed a partial file of %d bytes", len(b))
 	}
+}
+
+// TestWriteFeatureFile_readersNeverSeePartialFile rewrites the file while a
+// reader polls it: every observed content must be one complete version.
+func TestWriteFeatureFile_readersNeverSeePartialFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	require.NoError(t, nfd.WriteFeatureFile(dir, "f", makeBigFeatures("a")))
+	want := buildExpectedFeatureContents(t)
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	wg.Go(func() { runFeatureFileWriter(t, dir, stop) })
+	verifyConcurrentFeatureFileReads(t, dir, want, stop)
 	wg.Wait()
 	assertNoTemps(t, dir)
 }

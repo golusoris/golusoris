@@ -92,6 +92,38 @@ func peerCertSerial(t *testing.T, p peer.Peer) *big.Int {
 	return tlsInfo.State.PeerCertificates[0].SerialNumber
 }
 
+// startHeldRPC invokes the hold method asynchronously and waits for the server to observe start.
+func startHeldRPC(t *testing.T, conn *grpc.ClientConn, hs *holdServer, ctx context.Context) (<-chan error, *peer.Peer) {
+	t.Helper()
+	rpcCtx, rpcCancel := context.WithTimeout(ctx, 10*time.Second)
+	t.Cleanup(rpcCancel)
+	p := new(peer.Peer)
+	rpcDone := make(chan error, 1)
+	go func() {
+		var resp healthpb.HealthCheckResponse
+		rpcDone <- conn.Invoke(rpcCtx, holdMethod, &healthpb.HealthCheckRequest{}, &resp, grpc.Peer(p))
+	}()
+	select {
+	case <-hs.started:
+	case <-ctx.Done():
+		t.Fatalf("held RPC failed to start: %v", ctx.Err())
+	}
+	return rpcDone, p
+}
+
+// finishHeldRPC releases the holdServer, waits for RPC completion, and verifies peer cert serial.
+func finishHeldRPC(t *testing.T, hs *holdServer, rpcDone <-chan error, waitCtx context.Context, p *peer.Peer, wantSerial *big.Int, desc string) {
+	t.Helper()
+	close(hs.release)
+	select {
+	case err := <-rpcDone:
+		require.NoError(t, err, desc)
+	case <-waitCtx.Done():
+		t.Fatalf("held RPC timed out completing: %v", waitCtx.Err())
+	}
+	require.Equal(t, wantSerial, peerCertSerial(t, *p), "held RPC on old conn must still see cert1")
+}
+
 // TestServerTLS_ExistingRPCsFinishAcrossRotation verifies issue #627:
 // existing in-flight RPCs finish across a certificate rotation, while new
 // connections pick up the rotated certificate.
@@ -123,22 +155,9 @@ func TestServerTLS_ExistingRPCsFinishAcrossRotation(t *testing.T) {
 	conn1 := dial(t, addr, cliCreds)
 
 	// 2. Open a held RPC on conn1.
-	rpcCtx, rpcCancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer rpcCancel()
-	var p1 peer.Peer
-	rpcDone := make(chan error, 1)
-	go func() {
-		var resp healthpb.HealthCheckResponse
-		rpcDone <- conn1.Invoke(rpcCtx, holdMethod, &healthpb.HealthCheckRequest{}, &resp, grpc.Peer(&p1))
-	}()
-
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer waitCancel()
-	select {
-	case <-hs.started:
-	case <-waitCtx.Done():
-		t.Fatalf("held RPC failed to start: %v", waitCtx.Err())
-	}
+	rpcDone, p1 := startHeldRPC(t, conn1, hs, waitCtx)
 
 	// 3. Rotate server TLS files to cert2.
 	cert2 := ca.Server(t, "127.0.0.1")
@@ -157,14 +176,7 @@ func TestServerTLS_ExistingRPCsFinishAcrossRotation(t *testing.T) {
 	require.Equal(t, cert2.Serial, peerCertSerial(t, p2), "handshake sees cert2")
 
 	// 6. Release the held RPC: it completes OK on the old conn and its peer cert is still cert1.
-	close(hs.release)
-	select {
-	case err := <-rpcDone:
-		require.NoError(t, err, "held RPC must complete OK")
-	case <-waitCtx.Done():
-		t.Fatalf("held RPC timed out completing: %v", waitCtx.Err())
-	}
-	require.Equal(t, cert1.Serial, peerCertSerial(t, p1), "held RPC on old conn must still see cert1")
+	finishHeldRPC(t, hs, rpcDone, waitCtx, p1, cert1.Serial, "held RPC must complete OK")
 }
 
 // TestServerTLS_UntrustedRotationRejectsNewConnKeepsHeldRPC verifies that
@@ -198,22 +210,9 @@ func TestServerTLS_UntrustedRotationRejectsNewConnKeepsHeldRPC(t *testing.T) {
 	conn1 := dial(t, addr, cliCreds)
 
 	// 2. Open a held RPC on conn1.
-	rpcCtx, rpcCancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer rpcCancel()
-	var p1 peer.Peer
-	rpcDone := make(chan error, 1)
-	go func() {
-		var resp healthpb.HealthCheckResponse
-		rpcDone <- conn1.Invoke(rpcCtx, holdMethod, &healthpb.HealthCheckRequest{}, &resp, grpc.Peer(&p1))
-	}()
-
 	waitCtx, waitCancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer waitCancel()
-	select {
-	case <-hs.started:
-	case <-waitCtx.Done():
-		t.Fatalf("held RPC failed to start: %v", waitCtx.Err())
-	}
+	rpcDone, p1 := startHeldRPC(t, conn1, hs, waitCtx)
 
 	// 3. Rotate server files to a cert issued by an untrusted CA.
 	untrustedCA := tlsxtest.NewCA(t)
@@ -230,12 +229,5 @@ func TestServerTLS_UntrustedRotationRejectsNewConnKeepsHeldRPC(t *testing.T) {
 	require.Equal(t, codes.Unavailable, status.Code(err), "err = %v", err)
 
 	// 6. Release the held RPC: it still completes OK on the old conn and its peer cert is cert1.
-	close(hs.release)
-	select {
-	case err := <-rpcDone:
-		require.NoError(t, err, "held RPC must still complete OK")
-	case <-waitCtx.Done():
-		t.Fatalf("held RPC timed out completing: %v", waitCtx.Err())
-	}
-	require.Equal(t, cert1.Serial, peerCertSerial(t, p1), "held RPC on old conn must still see cert1")
+	finishHeldRPC(t, hs, rpcDone, waitCtx, p1, cert1.Serial, "held RPC must still complete OK")
 }

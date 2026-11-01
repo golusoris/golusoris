@@ -250,16 +250,15 @@ func (f *fakeKMS) sign(w http.ResponseWriter, r *http.Request, name string) {
 	})
 }
 
-// input returns the bytes to sign, the options and the verified-checksum
-// field, or nil when the request does not fit the algorithm.
-func (f *fakeKMS) input(body map[string]any, alg string) ([]byte, crypto.SignerOpts, string) {
-	if alg == "EC_SIGN_ED25519" {
-		data, err := base64.StdEncoding.DecodeString(body["data"].(string))
-		if err != nil || body["dataCrc32c"] != crc(data) {
-			return nil, nil, ""
-		}
-		return data, crypto.Hash(0), "verifiedDataCrc32c"
+func dataInput(body map[string]any) ([]byte, crypto.SignerOpts, string) {
+	data, err := base64.StdEncoding.DecodeString(body["data"].(string))
+	if err != nil || body["dataCrc32c"] != crc(data) {
+		return nil, nil, ""
 	}
+	return data, crypto.Hash(0), "verifiedDataCrc32c"
+}
+
+func digestInput(body map[string]any, alg string) ([]byte, crypto.SignerOpts, string) {
 	digest, _ := body["digest"].(map[string]any)
 	if len(digest) != 1 {
 		return nil, nil, ""
@@ -277,6 +276,15 @@ func (f *fakeKMS) input(body map[string]any, alg string) ([]byte, crypto.SignerO
 		return d, opts, "verifiedDigestCrc32c"
 	}
 	return nil, nil, ""
+}
+
+// input returns the bytes to sign, the options and the verified-checksum
+// field, or nil when the request does not fit the algorithm.
+func (f *fakeKMS) input(body map[string]any, alg string) ([]byte, crypto.SignerOpts, string) {
+	if alg == "EC_SIGN_ED25519" {
+		return dataInput(body)
+	}
+	return digestInput(body, alg)
 }
 
 // countingTokens hands out fakeToken and counts the calls.

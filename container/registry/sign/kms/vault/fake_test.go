@@ -169,22 +169,18 @@ func (f *fakeTransit) fail(w http.ResponseWriter, status int, msg string) {
 	reply(f.t, w, status, map[string]any{"errors": []string{msg}})
 }
 
-func (f *fakeTransit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.requests++
+func (f *fakeTransit) validateRequest(w http.ResponseWriter, r *http.Request) bool {
 	if f.hook != nil && f.hook(w, r) {
-		return
+		return false
 	}
 	if r.Method == http.MethodPost && r.Header.Get("Content-Type") != "application/json" {
 		f.fail(w, http.StatusBadRequest, "want a JSON body")
-		return
+		return false
 	}
-	path := strings.TrimPrefix(r.URL.Path, "/v1/")
-	if strings.HasPrefix(path, "auth/") && strings.HasSuffix(path, "/login") {
-		f.login(w, r, path)
-		return
-	}
+	return true
+}
+
+func (f *fakeTransit) dispatchTransit(w http.ResponseWriter, r *http.Request, path string) {
 	if r.Header.Get("X-Vault-Token") != f.token || f.token == "" {
 		f.fail(w, http.StatusForbidden, "permission denied")
 		return
@@ -198,6 +194,21 @@ func (f *fakeTransit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.fail(w, http.StatusNotFound, "no handler for "+path)
+}
+
+func (f *fakeTransit) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.requests++
+	if !f.validateRequest(w, r) {
+		return
+	}
+	path := strings.TrimPrefix(r.URL.Path, "/v1/")
+	if strings.HasPrefix(path, "auth/") && strings.HasSuffix(path, "/login") {
+		f.login(w, r, path)
+		return
+	}
+	f.dispatchTransit(w, r, path)
 }
 
 func (f *fakeTransit) login(w http.ResponseWriter, r *http.Request, path string) {

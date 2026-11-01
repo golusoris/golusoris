@@ -27,6 +27,40 @@ type probeJobArgs struct {
 
 func (probeJobArgs) Kind() string { return "probe-ui-job" }
 
+// assertBasicAuthRejectsWrongCreds verifies request rejection with 401 on invalid basic auth.
+func assertBasicAuthRejectsWrongCreds(t *testing.T, handler http.Handler, path string) {
+	t.Helper()
+	reqWrong := httptest.NewRequest(http.MethodGet, path, nil)
+	reqWrong.SetBasicAuth("admin", "wrong-password")
+	recWrong := httptest.NewRecorder()
+	handler.ServeHTTP(recWrong, reqWrong)
+	if recWrong.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong creds status = %d, want 401", recWrong.Code)
+	}
+}
+
+// pollJobInUI polls job API states until the probe job appears or deadline expires.
+func pollJobInUI(t *testing.T, handler http.Handler, prefix string) {
+	t.Helper()
+	clk := clockwork.NewRealClock()
+	deadline := clk.Now().Add(10 * time.Second)
+	var bodyStr string
+	for clk.Now().Before(deadline) {
+		for _, state := range []string{"completed", "running", "available"} {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, prefix+"/api/jobs?state="+state, nil)
+			req.SetBasicAuth("admin", "secret")
+			handler.ServeHTTP(rec, req)
+			if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "probe-ui-job") {
+				return
+			}
+			bodyStr = rec.Body.String()
+		}
+		clk.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("job probe-ui-job not found in jobs API response: %s", bodyStr)
+}
+
 func TestHandler_RealRiver(t *testing.T) {
 	t.Parallel()
 
@@ -63,40 +97,6 @@ func TestHandler_RealRiver(t *testing.T) {
 	t.Cleanup(stopUI)
 
 	authed := ui.WithBasicAuth(h, "admin", "secret")
-
-	// 1. Wrong credentials -> 401
-	reqWrong := httptest.NewRequest(http.MethodGet, prefix+"/api/jobs", nil)
-	reqWrong.SetBasicAuth("admin", "wrong-password")
-	recWrong := httptest.NewRecorder()
-	authed.ServeHTTP(recWrong, reqWrong)
-	if recWrong.Code != http.StatusUnauthorized {
-		t.Fatalf("wrong creds status = %d, want 401", recWrong.Code)
-	}
-
-	// 2. Right credentials -> 200 and lists inserted job
-	clk := clockwork.NewRealClock()
-	deadline := clk.Now().Add(10 * time.Second)
-	var bodyStr string
-	found := false
-	for clk.Now().Before(deadline) {
-		for _, state := range []string{"completed", "running", "available"} {
-			rec := httptest.NewRecorder()
-			req := httptest.NewRequest(http.MethodGet, prefix+"/api/jobs?state="+state, nil)
-			req.SetBasicAuth("admin", "secret")
-			authed.ServeHTTP(rec, req)
-			if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "probe-ui-job") {
-				bodyStr = rec.Body.String()
-				found = true
-				break
-			}
-		}
-		if found {
-			break
-		}
-		clk.Sleep(50 * time.Millisecond)
-	}
-
-	if !found {
-		t.Fatalf("job probe-ui-job not found in jobs API response: %s", bodyStr)
-	}
+	assertBasicAuthRejectsWrongCreds(t, authed, prefix+"/api/jobs")
+	pollJobInUI(t, authed, prefix)
 }

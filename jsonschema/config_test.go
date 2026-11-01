@@ -104,22 +104,21 @@ func TestGenerateConfig_ValidatesHelmValues(t *testing.T) {
 	}
 }
 
-func TestGenerateConfig_DefaultsAndEnvNames(t *testing.T) {
-	t.Parallel()
-	var doc struct {
-		Properties map[string]struct {
+type configSchemaDoc struct {
+	Properties map[string]struct {
+		Default     any    `json:"default"`
+		Description string `json:"description"`
+		Properties  map[string]struct {
 			Default     any    `json:"default"`
 			Description string `json:"description"`
-			Properties  map[string]struct {
-				Default     any    `json:"default"`
-				Description string `json:"description"`
-			} `json:"properties"`
 		} `json:"properties"`
-		Required []string `json:"required"`
-	}
-	if err := json.Unmarshal(generateFixture(t), &doc); err != nil {
-		t.Fatal(err)
-	}
+	} `json:"properties"`
+	Required []string `json:"required"`
+}
+
+// assertSchemaDefaults verifies duration and nil defaults across schema properties.
+func assertSchemaDefaults(t *testing.T, doc configSchemaDoc) {
+	t.Helper()
 	if doc.Properties["connect_timeout"].Default != "5s" || doc.Properties["retry"].Properties["initial"].Default != "50ms" {
 		t.Errorf("duration defaults = %v, %v", doc.Properties["connect_timeout"].Default,
 			doc.Properties["retry"].Properties["initial"].Default)
@@ -131,6 +130,11 @@ func TestGenerateConfig_DefaultsAndEnvNames(t *testing.T) {
 		!strings.Contains(got.Description, `APP_TLS_CERT_FILE (declare config.Options.CompoundKeys entry "tls.cert_file")`) {
 		t.Errorf("nil pointer leaf = %+v", got)
 	}
+}
+
+// assertSchemaDescriptionsAndRequired verifies hoisted and slice descriptions and required fields.
+func assertSchemaDescriptionsAndRequired(t *testing.T, doc configSchemaDoc) {
+	t.Helper()
 	if got := doc.Properties["name"].Description; got != "Service name. Env: APP_NAME." {
 		t.Errorf("hoisted field description = %q", got)
 	}
@@ -140,6 +144,16 @@ func TestGenerateConfig_DefaultsAndEnvNames(t *testing.T) {
 	if len(doc.Required) != 0 {
 		t.Errorf("required = %v, want none", doc.Required)
 	}
+}
+
+func TestGenerateConfig_DefaultsAndEnvNames(t *testing.T) {
+	t.Parallel()
+	var doc configSchemaDoc
+	if err := json.Unmarshal(generateFixture(t), &doc); err != nil {
+		t.Fatal(err)
+	}
+	assertSchemaDefaults(t, doc)
+	assertSchemaDescriptionsAndRequired(t, doc)
 }
 
 func TestGenerateConfig_NoEnvPrefixOmitsEnvNames(t *testing.T) {

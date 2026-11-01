@@ -22,14 +22,16 @@ import (
 // shellTimeout bounds one shell run (HISS-02).
 const shellTimeout = 30 * time.Second
 
-// harnesses drive each generated script outside an interactive session and
-// print the candidates for `myapp serve --format <TAB>`. bash and zsh get the
-// minimal stand-ins for the completion-system functions the scripts call.
-var harnesses = map[clikit.Shell]struct {
+type shellHarness struct {
 	bin  string
 	args []string
 	body string
-}{
+}
+
+// harnesses drive each generated script outside an interactive session and
+// print the candidates for `myapp serve --format <TAB>`. bash and zsh get the
+// minimal stand-ins for the completion-system functions the scripts call.
+var harnesses = map[clikit.Shell]shellHarness{
 	clikit.Bash: {"bash", []string{"--noprofile", "--norc", "-c"}, `
 source "$1"
 _get_comp_words_by_ref() { cur=${COMP_WORDS[COMP_CWORD]}; prev=${COMP_WORDS[COMP_CWORD-1]}; words=("${COMP_WORDS[@]}"); cword=$COMP_CWORD; }
@@ -57,6 +59,31 @@ complete -C "myapp serve --format "
 `},
 }
 
+func testShellHarness(t *testing.T, bin string, shell clikit.Shell, h shellHarness) {
+	t.Helper()
+	path, err := exec.LookPath(h.bin)
+	if err != nil {
+		t.Skipf("%s not installed", h.bin)
+	}
+	script := filepath.Join(t.TempDir(), "completion")
+	var buf bytes.Buffer
+	if err := clikit.WriteCompletion(&buf, buildTree(true), shell); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runShell(t, bin, path, append(slices.Clone(h.args), h.body, "harness", script))
+	for _, want := range []string{"json", "yaml", "text"} {
+		if !slices.Contains(got, want) {
+			t.Errorf("%s offered %q, want it to contain %q", shell, got, want)
+		}
+	}
+	if slices.Contains(got, "--port") {
+		t.Errorf("%s offered flags instead of values: %q", shell, got)
+	}
+}
+
 // TestShellHarnesses is the #630 acceptance: the enumerated flag completes
 // its values in each installed shell. PowerShell has no harness here: pwsh is
 // rarely installed on the CI hosts; its script speaks the same __complete
@@ -70,27 +97,7 @@ func TestShellHarnesses(t *testing.T) {
 	for shell, h := range harnesses {
 		t.Run(string(shell), func(t *testing.T) {
 			t.Parallel()
-			path, err := exec.LookPath(h.bin)
-			if err != nil {
-				t.Skipf("%s not installed", h.bin)
-			}
-			script := filepath.Join(t.TempDir(), "completion")
-			var buf bytes.Buffer
-			if err := clikit.WriteCompletion(&buf, buildTree(true), shell); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(script, buf.Bytes(), 0o600); err != nil {
-				t.Fatal(err)
-			}
-			got := runShell(t, bin, path, append(slices.Clone(h.args), h.body, "harness", script))
-			for _, want := range []string{"json", "yaml", "text"} {
-				if !slices.Contains(got, want) {
-					t.Errorf("%s offered %q, want it to contain %q", shell, got, want)
-				}
-			}
-			if slices.Contains(got, "--port") {
-				t.Errorf("%s offered flags instead of values: %q", shell, got)
-			}
+			testShellHarness(t, bin, shell, h)
 		})
 	}
 }

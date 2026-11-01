@@ -31,10 +31,16 @@ func writeToken(t *testing.T, p, body string) {
 
 func TestFileToken(t *testing.T) {
 	t.Parallel()
-	ctx := testCtx(t)
 	p := filepath.Join(t.TempDir(), "oidc-token")
-	writeToken(t, p, "first.jwt.sig\n")
 	src := sign.FileToken{Path: p}
+	checkFileTokenContents(t, src, p)
+	checkFileTokenFaults(t, src, p)
+}
+
+func checkFileTokenContents(t *testing.T, src sign.FileToken, p string) {
+	t.Helper()
+	ctx := testCtx(t)
+	writeToken(t, p, "first.jwt.sig\n")
 	if tok, err := src.Token(ctx); err != nil || tok != "first.jwt.sig" {
 		t.Fatalf("Token = %q, %v", tok, err)
 	}
@@ -55,6 +61,11 @@ func TestFileToken(t *testing.T) {
 	if _, err := src.Token(ctx); !errors.Is(err, sign.ErrNoToken) {
 		t.Fatalf("blank token err = %v", err)
 	}
+}
+
+func checkFileTokenFaults(t *testing.T, src sign.FileToken, p string) {
+	t.Helper()
+	ctx := testCtx(t)
 	if _, err := (sign.FileToken{Path: p + ".missing"}).Token(ctx); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("missing file err = %v", err)
 	}
@@ -98,15 +109,27 @@ func tokenJSON(w http.ResponseWriter, value string) {
 
 func TestGitHubToken(t *testing.T) {
 	srv := githubRuntime(t, func(w http.ResponseWriter, audience string) { tokenJSON(w, "jwt-for-"+audience) })
-	setGitHubEnv(t, srv, githubBearer)
-	ctx := testCtx(t)
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", srv.URL+"/idtoken?api-version=2.0")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", githubBearer)
 	tr := newTransport(t)
+	checkGitHubTokenAudiences(t, tr)
+	checkGitHubTokenFaults(t, srv, tr)
+}
+
+func checkGitHubTokenAudiences(t *testing.T, tr http.RoundTripper) {
+	t.Helper()
+	ctx := testCtx(t)
 	if tok, err := (sign.GitHubToken{Transport: tr}).Token(ctx); err != nil || tok != "jwt-for-sigstore" {
 		t.Fatalf("default audience = %q, %v", tok, err)
 	}
 	if tok, err := (sign.GitHubToken{Audience: "vmafx", Transport: tr}).Token(ctx); err != nil || tok != "jwt-for-vmafx" {
 		t.Fatalf("custom audience = %q, %v", tok, err)
 	}
+}
+
+func checkGitHubTokenFaults(t *testing.T, srv *httptest.Server, tr http.RoundTripper) {
+	t.Helper()
+	ctx := testCtx(t)
 	setGitHubEnv(t, srv, "wrong-bearer")
 	_, err := (sign.GitHubToken{Transport: tr}).Token(ctx)
 	if err == nil || !strings.Contains(err.Error(), "403") || strings.Contains(err.Error(), "wrong-bearer") {

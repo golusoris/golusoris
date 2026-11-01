@@ -111,6 +111,10 @@ check_workflow() {
 		printf '%s uses deprecated Cosign SBOM attachments\n' "$path" >&2
 		return 1
 	fi
+	if grep -Fq 'ghcr.io/golusoris/' "$path"; then
+		printf '%s must derive repository dynamically instead of hardcoding namespace\n' "$path" >&2
+		return 1
+	fi
 }
 
 mkdir -p "$suite_root/bin"
@@ -206,5 +210,11 @@ expect_failure check_workflow "$without_identity"
 without_smoke="$suite_root/without-smoke.yml"
 sed '/name: Smoke exact publish candidate/,+4d' "$workflow" >"$without_smoke"
 expect_failure check_workflow "$without_smoke"
+
+with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
+# shellcheck disable=SC2016 # The planted line keeps $GITHUB_ENV literal.
+sed 's/echo "IMAGE_REPO=.*/echo "IMAGE_REPO=ghcr.io\/golusoris\/tiny-litert-sidecar" >> "$GITHUB_ENV"/' \
+	"$workflow" >"$with_hardcoded_repo"
+expect_failure check_workflow "$with_hardcoded_repo"
 
 printf 'tiny litert sidecar publication policy tests passed\n'

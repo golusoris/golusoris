@@ -46,24 +46,38 @@ func TestSLOGroup(t *testing.T) {
 	if g.Name != "slo-api_availability" || len(g.Records) != 7 || len(g.Alerts) != 2 {
 		t.Fatalf("group = %s, %d records, %d alerts", g.Name, len(g.Records), len(g.Alerts))
 	}
+	assertSLOGroupRecords(t, g)
+	assertSLOFastAlert(t, g.Alerts[0])
+	assertSLOSlowAlertAndRender(t, g)
+}
+
+func assertSLOGroupRecords(t *testing.T, g rules.Group) {
+	t.Helper()
 	wantRecords := []string{"5m", "30m", "1h", "2h", "6h", "1d", "3d"}
 	for i, w := range wantRecords {
 		if r := g.Records[i]; r.Name != "slo:sli_error:ratio_rate"+w || r.Labels["slo"] != "api_availability" || !strings.Contains(r.Expr, "["+w+"]") {
 			t.Errorf("record %d = %+v", i, r)
 		}
 	}
-	fast := g.Alerts[0]
+}
+
+func assertSLOFastAlert(t *testing.T, fast rules.Alert) {
+	t.Helper()
 	wantFast := `(slo:sli_error:ratio_rate1h{slo="api_availability"} > (14.4 * 0.001) and slo:sli_error:ratio_rate5m{slo="api_availability"} > (14.4 * 0.001))` +
 		` or (slo:sli_error:ratio_rate6h{slo="api_availability"} > (6 * 0.001) and slo:sli_error:ratio_rate30m{slo="api_availability"} > (6 * 0.001))`
 	if fast.Name != "APIAvailabilityErrorBudgetBurnFast" || fast.Severity != rules.SeverityCritical || fast.Expr != wantFast {
 		t.Errorf("fast alert = %s %s\n%s", fast.Name, fast.Severity, fast.Expr)
 	}
+	if fast.Labels["slo"] != "api_availability" || fast.Labels["team"] != "api" || fast.RunbookURL != runbook {
+		t.Errorf("alert labels/runbook = %v %s", fast.Labels, fast.RunbookURL)
+	}
+}
+
+func assertSLOSlowAlertAndRender(t *testing.T, g rules.Group) {
+	t.Helper()
 	slow := g.Alerts[1]
 	if slow.Severity != rules.SeverityWarning || !strings.Contains(slow.Expr, "ratio_rate3d") || !strings.Contains(slow.Expr, "(3 * 0.001)") {
 		t.Errorf("slow alert = %+v", slow)
-	}
-	if fast.Labels["slo"] != "api_availability" || fast.Labels["team"] != "api" || fast.RunbookURL != runbook {
-		t.Errorf("alert labels/runbook = %v %s", fast.Labels, fast.RunbookURL)
 	}
 	if _, err := rules.RenderRuleFile(g); err != nil {
 		t.Errorf("SLO group does not render: %v", err)

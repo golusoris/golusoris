@@ -83,6 +83,63 @@ func TestSweepExpired(t *testing.T) {
 	}
 }
 
+func seedMaintenanceUploads(t *testing.T, scratch *localScratch, ctx context.Context, total int) {
+	t.Helper()
+	for i := range total {
+		id := fmt.Sprintf("expired-%03d", i)
+		if _, err := scratch.Create(ctx, tusd.FileInfo{ID: id}); err != nil {
+			t.Fatalf("create %s: %v", id, err)
+		}
+		agePastMtime(t, scratch.root, id, 48*time.Hour)
+		completionID := fmt.Sprintf("complete-%03d", i)
+		if err := scratch.SaveCompletion(ctx, newCompletionRecord(CompletedUpload{ID: completionID})); err != nil {
+			t.Fatalf("save completion %s: %v", completionID, err)
+		}
+	}
+}
+
+func scanExpiryBatch(t *testing.T, scratch *localScratch, ctx context.Context, expired map[string]struct{}) {
+	t.Helper()
+	ids, expiryErr := scratch.Expired(ctx, time.Now(), time.Hour)
+	if expiryErr != nil {
+		t.Fatalf("Expired: %v", expiryErr)
+	}
+	if len(ids) > maxMaintenanceBatch {
+		t.Fatalf("expiry batch = %d", len(ids))
+	}
+	for _, id := range ids {
+		expired[id] = struct{}{}
+	}
+}
+
+func scanCompletionBatch(t *testing.T, scratch *localScratch, ctx context.Context, completed map[string]struct{}) {
+	t.Helper()
+	ids, completionErr := scratch.CompletionIDs(ctx, maxMaintenanceBatch)
+	if completionErr != nil {
+		t.Fatalf("CompletionIDs: %v", completionErr)
+	}
+	if len(ids) > maxMaintenanceBatch {
+		t.Fatalf("completion batch = %d", len(ids))
+	}
+	for _, id := range ids {
+		completed[id] = struct{}{}
+	}
+}
+
+func collectMaintenanceBatches(t *testing.T, scratch *localScratch, ctx context.Context, total int) (map[string]struct{}, map[string]struct{}) {
+	t.Helper()
+	expired := make(map[string]struct{}, total)
+	completed := make(map[string]struct{}, total)
+	for range 8 {
+		scanExpiryBatch(t, scratch, ctx, expired)
+		scanCompletionBatch(t, scratch, ctx, completed)
+		if len(expired) == total && len(completed) == total {
+			break
+		}
+	}
+	return expired, completed
+}
+
 func TestLocalScratch_MaintenanceScansAreBoundedAndAdvance(t *testing.T) {
 	t.Parallel()
 	scratch, err := newLocalScratch(t.TempDir())
@@ -92,45 +149,9 @@ func TestLocalScratch_MaintenanceScansAreBoundedAndAdvance(t *testing.T) {
 	t.Cleanup(func() { _ = scratch.Close() })
 	ctx := context.Background()
 	const total = maxMaintenanceBatch + 44
-	for i := range total {
-		id := fmt.Sprintf("expired-%03d", i)
-		if _, err = scratch.Create(ctx, tusd.FileInfo{ID: id}); err != nil {
-			t.Fatalf("create %s: %v", id, err)
-		}
-		agePastMtime(t, scratch.root, id, 48*time.Hour)
-		completionID := fmt.Sprintf("complete-%03d", i)
-		if err = scratch.SaveCompletion(ctx, newCompletionRecord(CompletedUpload{ID: completionID})); err != nil {
-			t.Fatalf("save completion %s: %v", completionID, err)
-		}
-	}
+	seedMaintenanceUploads(t, scratch, ctx, total)
 
-	expired := make(map[string]struct{}, total)
-	completed := make(map[string]struct{}, total)
-	for range 8 {
-		ids, expiryErr := scratch.Expired(ctx, time.Now(), time.Hour)
-		if expiryErr != nil {
-			t.Fatalf("Expired: %v", expiryErr)
-		}
-		if len(ids) > maxMaintenanceBatch {
-			t.Fatalf("expiry batch = %d", len(ids))
-		}
-		for _, id := range ids {
-			expired[id] = struct{}{}
-		}
-		ids, completionErr := scratch.CompletionIDs(ctx, maxMaintenanceBatch)
-		if completionErr != nil {
-			t.Fatalf("CompletionIDs: %v", completionErr)
-		}
-		if len(ids) > maxMaintenanceBatch {
-			t.Fatalf("completion batch = %d", len(ids))
-		}
-		for _, id := range ids {
-			completed[id] = struct{}{}
-		}
-		if len(expired) == total && len(completed) == total {
-			break
-		}
-	}
+	expired, completed := collectMaintenanceBatches(t, scratch, ctx, total)
 	if len(expired) != total || len(completed) != total {
 		t.Fatalf("cursor coverage: expired=%d completed=%d want=%d", len(expired), len(completed), total)
 	}
@@ -246,6 +267,79 @@ func TestLocalScratch_ExpiryScanRestartsAtDirectoryEnd(t *testing.T) {
 	}
 }
 
+func startAsyncPatch(t *testing.T, server *httptest.Server, location string) (*io.PipeWriter, <-chan int, <-chan error) {
+	t.Helper()
+	reader, writer := io.Pipe()
+	t.Cleanup(func() {
+		_ = reader.Close()
+		_ = writer.Close()
+	})
+	req, err := http.NewRequest(http.MethodPatch, location, reader)
+	if err != nil {
+		t.Fatalf("new PATCH: %v", err)
+	}
+	req.ContentLength = 4
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Upload-Offset", "0")
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	statusCodes := make(chan int, 1)
+	requestErrs := make(chan error, 1)
+	go func() {
+		resp, requestErr := server.Client().Do(req)
+		if requestErr != nil {
+			requestErrs <- requestErr
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		statusCodes <- resp.StatusCode
+	}()
+	return writer, statusCodes, requestErrs
+}
+
+func waitForMaintenanceLock(t *testing.T, h *Handler, id string, statusCodes <-chan int, requestErrs <-chan error) {
+	t.Helper()
+	busy := false
+	for range 3000 {
+		select {
+		case requestErr := <-requestErrs:
+			t.Fatalf("PATCH before lock observation: %v", requestErr)
+		case status := <-statusCodes:
+			t.Fatalf("PATCH returned before body release with status %d", status)
+		default:
+		}
+		unlock, ok := h.locker.tryMaintenanceLock(id)
+		if !ok {
+			busy = true
+			break
+		}
+		unlock()
+		time.Sleep(time.Millisecond)
+	}
+	if !busy {
+		t.Fatal("PATCH did not acquire the shared upload lock")
+	}
+}
+
+func completePatchAndVerify(t *testing.T, writer *io.PipeWriter, statusCodes <-chan int, requestErrs <-chan error) {
+	t.Helper()
+	if _, err := writer.Write([]byte("data")); err != nil {
+		t.Fatalf("write PATCH body: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close PATCH body: %v", err)
+	}
+	select {
+	case requestErr := <-requestErrs:
+		t.Fatalf("PATCH: %v", requestErr)
+	case status := <-statusCodes:
+		if status != http.StatusNoContent {
+			t.Fatalf("PATCH status = %d, want 204", status)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("PATCH did not finish")
+	}
+}
+
 func TestSweepExpired_SkipsActivePatchAndRechecksActivity(t *testing.T) {
 	t.Parallel()
 	opts := defaultOptions()
@@ -263,72 +357,14 @@ func TestSweepExpired_SkipsActivePatchAndRechecksActivity(t *testing.T) {
 	id := path.Base(location)
 	agePastMtime(t, p.Opts.ScratchDir, id, 2*time.Hour)
 
-	reader, writer := io.Pipe()
-	t.Cleanup(func() {
-		_ = reader.Close()
-		_ = writer.Close()
-	})
-	req, err := http.NewRequest(http.MethodPatch, location, reader)
-	if err != nil {
-		t.Fatalf("new PATCH: %v", err)
-	}
-	req.ContentLength = 4
-	req.Header.Set("Tus-Resumable", "1.0.0")
-	req.Header.Set("Upload-Offset", "0")
-	req.Header.Set("Content-Type", "application/offset+octet-stream")
-	responses := make(chan *http.Response, 1)
-	requestErrs := make(chan error, 1)
-	go func() {
-		resp, requestErr := server.Client().Do(req) //nolint:bodyclose // receiver owns response body
-		if requestErr != nil {
-			requestErrs <- requestErr
-			return
-		}
-		responses <- resp
-	}()
+	writer, statusCodes, requestErrs := startAsyncPatch(t, server, location)
+	waitForMaintenanceLock(t, h, id, statusCodes, requestErrs)
 
-	busy := false
-	for range 3000 {
-		select {
-		case requestErr := <-requestErrs:
-			t.Fatalf("PATCH before lock observation: %v", requestErr)
-		case resp := <-responses:
-			_ = resp.Body.Close()
-			t.Fatalf("PATCH returned before body release with status %d", resp.StatusCode)
-		default:
-		}
-		unlock, ok := h.locker.tryMaintenanceLock(id)
-		if !ok {
-			busy = true
-			break
-		}
-		unlock()
-		time.Sleep(time.Millisecond)
-	}
-	if !busy {
-		t.Fatal("PATCH did not acquire the shared upload lock")
-	}
 	h.sweepExpired(context.Background())
 	if _, err = h.scratch.Get(context.Background(), id); err != nil {
 		t.Fatalf("active PATCH scratch was swept: %v", err)
 	}
-	if _, err = writer.Write([]byte("data")); err != nil {
-		t.Fatalf("write PATCH body: %v", err)
-	}
-	if err = writer.Close(); err != nil {
-		t.Fatalf("close PATCH body: %v", err)
-	}
-	select {
-	case requestErr := <-requestErrs:
-		t.Fatalf("PATCH: %v", requestErr)
-	case resp := <-responses:
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNoContent {
-			t.Fatalf("PATCH status = %d, want 204", resp.StatusCode)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("PATCH did not finish")
-	}
+	completePatchAndVerify(t, writer, statusCodes, requestErrs)
 
 	h.sweepExpired(context.Background())
 	if _, err = h.scratch.Get(context.Background(), id); err != nil {
@@ -566,6 +602,63 @@ func TestOnCompleteRejectsInvalidRegistration(t *testing.T) {
 	}
 }
 
+func testRunCallbacksInitialFailure(t *testing.T, scratch *localScratch, record *completionRecord, first, second *int) {
+	t.Helper()
+	firstHandler := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
+	if err := firstHandler.OnComplete("first", func(context.Context, CompletedUpload) error {
+		*first++
+		return nil
+	}); err != nil {
+		t.Fatalf("register first callback: %v", err)
+	}
+	if err := firstHandler.OnComplete("second", func(context.Context, CompletedUpload) error {
+		*second++
+		return errBoom
+	}); err != nil {
+		t.Fatalf("register second callback: %v", err)
+	}
+	if err := firstHandler.runCallbacks(context.Background(), record); err == nil {
+		t.Fatal("expected error from first callback")
+	}
+	if *first != 1 || *second != 1 || !slices.Equal(record.CompletedCallbackIDs, []string{"first"}) {
+		t.Fatalf("after failure: first=%d second=%d completed=%v", *first, *second, record.CompletedCallbackIDs)
+	}
+}
+
+func testRunCallbacksReorderedRetry(t *testing.T, scratch *localScratch, first, second, inserted *int) {
+	t.Helper()
+	reordered := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
+	if err := reordered.OnComplete("second", func(context.Context, CompletedUpload) error {
+		*second++
+		return nil
+	}); err != nil {
+		t.Fatalf("register reordered second callback: %v", err)
+	}
+	if err := reordered.OnComplete("inserted", func(context.Context, CompletedUpload) error {
+		*inserted++
+		return nil
+	}); err != nil {
+		t.Fatalf("register inserted callback: %v", err)
+	}
+	if err := reordered.OnComplete("first", func(context.Context, CompletedUpload) error {
+		*first++
+		return nil
+	}); err != nil {
+		t.Fatalf("register reordered first callback: %v", err)
+	}
+	record, err := scratch.Completion(context.Background(), "checkpoint")
+	if err != nil {
+		t.Fatalf("Completion: %v", err)
+	}
+	if err = reordered.runCallbacks(context.Background(), &record); err != nil {
+		t.Fatalf("retry callbacks: %v", err)
+	}
+	wantCompleted := []string{"first", "second", "inserted"}
+	if *first != 1 || *second != 2 || *inserted != 1 || !slices.Equal(record.CompletedCallbackIDs, wantCompleted) {
+		t.Fatalf("after retry: first=%d second=%d inserted=%d completed=%v", *first, *second, *inserted, record.CompletedCallbackIDs)
+	}
+}
+
 // TestRunCallbacks_CheckpointsStableIDs ensures deployment-time callback
 // reordering and insertion cannot replay an acknowledged callback or skip a new one.
 func TestRunCallbacks_CheckpointsStableIDs(t *testing.T) {
@@ -578,56 +671,43 @@ func TestRunCallbacks_CheckpointsStableIDs(t *testing.T) {
 	if err = scratch.SaveCompletion(context.Background(), record); err != nil {
 		t.Fatalf("SaveCompletion: %v", err)
 	}
-	firstHandler := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
 	var first, second, inserted int
-	if err = firstHandler.OnComplete("first", func(context.Context, CompletedUpload) error {
-		first++
-		return nil
-	}); err != nil {
-		t.Fatalf("register first callback: %v", err)
-	}
-	if err = firstHandler.OnComplete("second", func(context.Context, CompletedUpload) error {
-		second++
-		return errBoom
-	}); err != nil {
-		t.Fatalf("register second callback: %v", err)
-	}
-	if err = firstHandler.runCallbacks(context.Background(), &record); err == nil {
-		t.Fatal("expected error from first callback")
-	}
-	if first != 1 || second != 1 || !slices.Equal(record.CompletedCallbackIDs, []string{"first"}) {
-		t.Fatalf("after failure: first=%d second=%d completed=%v", first, second, record.CompletedCallbackIDs)
-	}
+	testRunCallbacksInitialFailure(t, scratch, &record, &first, &second)
+	testRunCallbacksReorderedRetry(t, scratch, &first, &second, &inserted)
+}
 
-	reordered := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
-	if err = reordered.OnComplete("second", func(context.Context, CompletedUpload) error {
-		second++
+func testCompletionMetadataCallbackIsolation(t *testing.T, scratch *localScratch, record *completionRecord) {
+	t.Helper()
+	h := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
+	var retained map[string]string
+	if err := h.OnComplete("mutator", func(_ context.Context, upload CompletedUpload) error {
+		retained = upload.MetaData
+		upload.MetaData["owner"] = "callback-mutated"
 		return nil
 	}); err != nil {
-		t.Fatalf("register reordered second callback: %v", err)
+		t.Fatal(err)
 	}
-	if err = reordered.OnComplete("inserted", func(context.Context, CompletedUpload) error {
-		inserted++
+	if err := h.OnComplete("observer", func(_ context.Context, upload CompletedUpload) error {
+		if upload.MetaData["owner"] != "alice" {
+			t.Fatalf("later callback metadata = %v; want isolated original", upload.MetaData)
+		}
 		return nil
 	}); err != nil {
-		t.Fatalf("register inserted callback: %v", err)
+		t.Fatal(err)
 	}
-	if err = reordered.OnComplete("first", func(context.Context, CompletedUpload) error {
-		first++
-		return nil
-	}); err != nil {
-		t.Fatalf("register reordered first callback: %v", err)
+	if err := h.runCallbacks(context.Background(), record); err != nil {
+		t.Fatal(err)
 	}
-	record, err = scratch.Completion(context.Background(), "checkpoint")
+	retained["after-return"] = "mutation"
+	if record.Upload.MetaData["owner"] != "alice" || record.Upload.MetaData["after-return"] != "" {
+		t.Fatalf("record metadata aliased callback payload: %v", record.Upload.MetaData)
+	}
+	persisted, err := scratch.Completion(context.Background(), "metadata-clone")
 	if err != nil {
-		t.Fatalf("Completion: %v", err)
+		t.Fatal(err)
 	}
-	if err = reordered.runCallbacks(context.Background(), &record); err != nil {
-		t.Fatalf("retry callbacks: %v", err)
-	}
-	wantCompleted := []string{"first", "second", "inserted"}
-	if first != 1 || second != 2 || inserted != 1 || !slices.Equal(record.CompletedCallbackIDs, wantCompleted) {
-		t.Fatalf("after retry: first=%d second=%d inserted=%d completed=%v", first, second, inserted, record.CompletedCallbackIDs)
+	if persisted.Upload.MetaData["owner"] != "alice" || persisted.Upload.MetaData["after-return"] != "" {
+		t.Fatalf("persisted metadata aliased callback payload: %v", persisted.Upload.MetaData)
 	}
 }
 
@@ -649,37 +729,7 @@ func TestCompletionMetadataIsClonedAcrossDurableAndCallbackBoundaries(t *testing
 	if err = scratch.SaveCompletion(context.Background(), record); err != nil {
 		t.Fatal(err)
 	}
-	h := &Handler{scratch: scratch, log: slog.New(slog.DiscardHandler)}
-	var retained map[string]string
-	if err = h.OnComplete("mutator", func(_ context.Context, upload CompletedUpload) error {
-		retained = upload.MetaData
-		upload.MetaData["owner"] = "callback-mutated"
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err = h.OnComplete("observer", func(_ context.Context, upload CompletedUpload) error {
-		if upload.MetaData["owner"] != "alice" {
-			t.Fatalf("later callback metadata = %v; want isolated original", upload.MetaData)
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err = h.runCallbacks(context.Background(), &record); err != nil {
-		t.Fatal(err)
-	}
-	retained["after-return"] = "mutation"
-	if record.Upload.MetaData["owner"] != "alice" || record.Upload.MetaData["after-return"] != "" {
-		t.Fatalf("record metadata aliased callback payload: %v", record.Upload.MetaData)
-	}
-	persisted, err := scratch.Completion(context.Background(), "metadata-clone")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if persisted.Upload.MetaData["owner"] != "alice" || persisted.Upload.MetaData["after-return"] != "" {
-		t.Fatalf("persisted metadata aliased callback payload: %v", persisted.Upload.MetaData)
-	}
+	testCompletionMetadataCallbackIsolation(t, scratch, &record)
 }
 
 func TestCompletionRecordRejectsUnversionedState(t *testing.T) {

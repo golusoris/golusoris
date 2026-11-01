@@ -278,7 +278,10 @@ func safeResolveURL(baseURL, path string) (string, error) {
 	if ref.IsAbs() || ref.Host != "" {
 		return "", errors.New("apidocs: tool path escapes BaseURL origin")
 	}
-	resolved := base.JoinPath(ref.EscapedPath())
+	resolved, err := joinToolPath(base, ref.EscapedPath())
+	if err != nil {
+		return "", err
+	}
 	resolved.RawQuery = ref.RawQuery
 	resolved.ForceQuery = ref.ForceQuery
 	resolved.Fragment = ""
@@ -287,4 +290,52 @@ func safeResolveURL(baseURL, path string) (string, error) {
 		return "", errors.New("apidocs: tool path escapes BaseURL origin")
 	}
 	return resolved.String(), nil
+}
+
+// hasDotSegment reports whether a decoded path segment, split on the
+// separators "/" and "\\" that a downstream decoder may honour, holds a "."
+// or ".." part (for example "..%2F.." decodes to "../..").
+func hasDotSegment(raw string) bool {
+	for _, part := range strings.FieldsFunc(raw, func(r rune) bool { return r == '/' || r == '\\' }) {
+		if part == "." || part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
+// joinToolPath appends an escaped tool path below the BaseURL path. Each
+// segment must unescape cleanly and contain no "." or ".." part, so neither
+// literal nor percent-encoded dot segments climb out of the BaseURL path
+// prefix. Segments are kept verbatim: OpenAPI matrix and label styles rely
+// on literal ";", "," and "=", which re-escaping would change.
+func joinToolPath(base *url.URL, escapedPath string) (*url.URL, error) {
+	var b strings.Builder
+	b.WriteString(strings.TrimSuffix(base.EscapedPath(), "/"))
+	for seg := range strings.SplitSeq(escapedPath, "/") {
+		if seg == "" {
+			continue
+		}
+		raw, err := url.PathUnescape(seg)
+		if err != nil {
+			return nil, fmt.Errorf("apidocs: invalid tool path segment: %w", err)
+		}
+		if hasDotSegment(raw) {
+			return nil, errors.New("apidocs: tool path escapes BaseURL path")
+		}
+		b.WriteByte('/')
+		b.WriteString(seg)
+	}
+	if strings.HasSuffix(escapedPath, "/") || b.Len() == 0 {
+		b.WriteByte('/')
+	}
+	joined := b.String()
+	decoded, err := url.PathUnescape(joined)
+	if err != nil {
+		return nil, fmt.Errorf("apidocs: invalid tool path: %w", err)
+	}
+	resolved := *base
+	resolved.Path = decoded
+	resolved.RawPath = joined
+	return &resolved, nil
 }

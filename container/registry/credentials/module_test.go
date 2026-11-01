@@ -63,10 +63,8 @@ func authOf(t *testing.T, kc authn.Keychain, host string) *authn.AuthConfig {
 	return cfg
 }
 
-func TestKeychain(t *testing.T) {
-	t.Parallel()
-	boom := errors.New("token exchange failed")
-	kc := credentials.Keychain(credentials.ProviderFunc(func(_ context.Context, host string) (credentials.Credential, error) {
+func fakeKeychainProvider(boom error) credentials.ProviderFunc {
+	return credentials.ProviderFunc(func(_ context.Context, host string) (credentials.Credential, error) {
 		switch host {
 		case "basic.example":
 			return credentials.Credential{Username: "u", Password: "p"}, nil
@@ -77,7 +75,13 @@ func TestKeychain(t *testing.T) {
 		default:
 			return credentials.Credential{}, credentials.ErrNoCredential
 		}
-	}))
+	})
+}
+
+func TestKeychain(t *testing.T) {
+	t.Parallel()
+	boom := errors.New("token exchange failed")
+	kc := credentials.Keychain(fakeKeychainProvider(boom))
 	if got := authOf(t, kc, "basic.example"); got.Username != "u" || got.Password != "p" {
 		t.Fatalf("basic = %+v", got)
 	}

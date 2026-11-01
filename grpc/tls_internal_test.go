@@ -40,6 +40,56 @@ func loopbackConnPair(t *testing.T) (net.Conn, net.Conn) {
 	return res.conn, clientConn
 }
 
+// testReloadingCredsSuccess tests that handshake against matching authority succeeds.
+func testReloadingCredsSuccess(t *testing.T, serverCreds credentials.TransportCredentials, clientCreds credentials.TransportCredentials) {
+	t.Helper()
+	serverRaw, clientRaw := loopbackConnPair(t)
+	defer serverRaw.Close()
+	defer clientRaw.Close()
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		sConn, _, sErr := serverCreds.ServerHandshake(serverRaw)
+		if sConn != nil {
+			_ = sConn.Close()
+		}
+		serverErrCh <- sErr
+	}()
+
+	cConn, authInfo, cErr := clientCreds.ClientHandshake(t.Context(), "localhost", clientRaw)
+	if cConn != nil {
+		_ = cConn.Close()
+	}
+	require.NoError(t, cErr)
+	require.NoError(t, <-serverErrCh)
+	require.NotNil(t, authInfo)
+	require.Equal(t, "tls", authInfo.AuthType())
+}
+
+// testReloadingCredsWrongServerName tests that handshake against wrong server name fails.
+func testReloadingCredsWrongServerName(t *testing.T, serverCreds credentials.TransportCredentials, clientCreds credentials.TransportCredentials) {
+	t.Helper()
+	serverRaw, clientRaw := loopbackConnPair(t)
+	defer serverRaw.Close()
+	defer clientRaw.Close()
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		sConn, _, sErr := serverCreds.ServerHandshake(serverRaw)
+		if sConn != nil {
+			_ = sConn.Close()
+		}
+		serverErrCh <- sErr
+	}()
+
+	cConn, _, cErr := clientCreds.ClientHandshake(t.Context(), "wrong.example.invalid", clientRaw)
+	if cConn != nil {
+		_ = cConn.Close()
+	}
+	require.Error(t, cErr)
+	<-serverErrCh
+}
+
 func TestReloadingCreds_ClientHandshakeSuccessAndFailure(t *testing.T) {
 	t.Parallel()
 
@@ -57,54 +107,14 @@ func TestReloadingCreds_ClientHandshakeSuccessAndFailure(t *testing.T) {
 	require.NoError(t, err)
 	clientCreds := reloadingCreds{reloader: clientReloader}
 
-	// Positive: handshake against matching authority succeeds
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		serverRaw, clientRaw := loopbackConnPair(t)
-		defer serverRaw.Close()
-		defer clientRaw.Close()
-
-		serverErrCh := make(chan error, 1)
-		go func() {
-			sConn, _, sErr := serverCreds.ServerHandshake(serverRaw)
-			if sConn != nil {
-				_ = sConn.Close()
-			}
-			serverErrCh <- sErr
-		}()
-
-		cConn, authInfo, cErr := clientCreds.ClientHandshake(t.Context(), "localhost", clientRaw)
-		if cConn != nil {
-			_ = cConn.Close()
-		}
-		require.NoError(t, cErr)
-		require.NoError(t, <-serverErrCh)
-		require.NotNil(t, authInfo)
-		require.Equal(t, "tls", authInfo.AuthType())
+		testReloadingCredsSuccess(t, serverCreds, clientCreds)
 	})
 
-	// Negative: handshake against wrong server name fails
 	t.Run("wrong server name", func(t *testing.T) {
 		t.Parallel()
-		serverRaw, clientRaw := loopbackConnPair(t)
-		defer serverRaw.Close()
-		defer clientRaw.Close()
-
-		serverErrCh := make(chan error, 1)
-		go func() {
-			sConn, _, sErr := serverCreds.ServerHandshake(serverRaw)
-			if sConn != nil {
-				_ = sConn.Close()
-			}
-			serverErrCh <- sErr
-		}()
-
-		cConn, _, cErr := clientCreds.ClientHandshake(t.Context(), "wrong.example.invalid", clientRaw)
-		if cConn != nil {
-			_ = cConn.Close()
-		}
-		require.Error(t, cErr)
-		<-serverErrCh
+		testReloadingCredsWrongServerName(t, serverCreds, clientCreds)
 	})
 }
 
