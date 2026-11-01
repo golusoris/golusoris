@@ -106,7 +106,7 @@ check_stop_on_draft_usage() {
 		printf '%s must use the stop-on-draft composite action instead of an inline draft block\n' "${workflow##*/}" >&2
 		status=1
 	fi
-	if grep -E 'stop-on-draft@' "$workflow" | grep -Evq 'stop-on-draft@[0-9a-f]{40}([^0-9a-f]|$)'; then
+	if grep -E 'stop-on-draft@' "$workflow" | grep -Evq 'stop-on-draft@[0-9a-f]{40}([[:space:]"'"'"']|$)'; then
 		printf '%s: stop-on-draft must be pinned to a full 40-character SHA\n' "${workflow##*/}" >&2
 		status=1
 	fi
@@ -140,14 +140,27 @@ done
 
 # Negative case 5: inline draft block in a workflow.
 neg_inline="$suite_root/inline-block.yml"
-sed '0,/uses: golusoris\/golusoris\/\.github\/actions\/stop-on-draft@/s||env:\n          TITLE: Gate not run on a draft\n        uses: golusoris/golusoris/.github/actions/stop-on-draft@|' \
-	"$repo_root/.github/workflows/ci.yml" >"$neg_inline"
+python3 - "$repo_root/.github/workflows/ci.yml" "$neg_inline" <<'PY'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+marker = "uses: golusoris/golusoris/.github/actions/stop-on-draft@"
+block = "env:\n          TITLE: Gate not run on a draft\n        " + marker
+open(sys.argv[2], "w", encoding="utf-8").write(text.replace(marker, block, 1))
+PY
 expect_failure 'instead of an inline draft block' check_stop_on_draft_usage "$neg_inline"
 
 # Negative case 6: branch ref instead of a commit SHA.
 neg_ref="$suite_root/non-sha-ref.yml"
 sed 's|stop-on-draft@[0-9a-f]\{40\}|stop-on-draft@main|' "$repo_root/.github/workflows/ci.yml" >"$neg_ref"
 expect_failure 'pinned to a full 40-character SHA' check_stop_on_draft_usage "$neg_ref"
+
+# Negative case 6b: a full SHA with a branch suffix is still a mutable ref.
+neg_suffix="$suite_root/suffixed-ref.yml"
+sed 's|\(stop-on-draft@[0-9a-f]\{40\}\)|\1-branch|' "$repo_root/.github/workflows/ci.yml" >"$neg_suffix"
+expect_failure 'pinned to a full 40-character SHA' check_stop_on_draft_usage "$neg_suffix"
+
+# Job checker unit tests: triggers, headers, conditions, action identity, exit codes.
+python3 -B "$repo_root/scripts/ci/stop_on_draft_jobs_test.py"
 
 # Negative case 7: one job drops the step; the other calls in ci.yml must not mask it.
 neg_job_missing="$suite_root/job-missing.yml"
