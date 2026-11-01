@@ -12,6 +12,7 @@ import hashlib
 import http.client
 import io
 import os
+import re
 import sys
 import tempfile
 import time
@@ -23,6 +24,15 @@ import portability
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+# Two pipe joins, the tree kill and its grace, plus 3 s for two interpreter starts (Windows took 4.97 s).
+TEARDOWN_BUDGET_SECONDS = (
+    2 * portability.PROCESS_PIPE_JOIN_SECONDS
+    + portability.PROCESS_TASKKILL_SECONDS
+    + portability.PROCESS_TERMINATE_GRACE_SECONDS
+    + 3
+)
+WALL_CLOCK_LITERAL = re.compile(r"assertLess\(\s*time\.monotonic\(\)\s*-\s*\w+\s*,\s*[\d.]")
 
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
@@ -133,14 +143,22 @@ class PortabilityDriverTest(TestCase):
                         sys.executable,
                         "-c",
                         "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
-                        "sys.stdout.flush(); time.sleep(10)",
+                        "sys.stdout.flush(); time.sleep(60)",
                     ),
                     cwd=Path(directory),
                     environment=dict(os.environ),
-                    timeout=8,
+                    timeout=30,
                     max_output_bytes=4,
                 )
-        self.assertLess(time.monotonic() - started, 3)
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
+
+    def test_wall_clock_bounds_derive_from_runner_constants(self) -> None:
+        # A literal bound drifts below the runner's own teardown constants and flakes on slow hosts.
+        source = Path(__file__).read_text(encoding="utf-8")
+        self.assertIsNone(WALL_CLOCK_LITERAL.search(source))
+        self.assertIsNotNone(
+            WALL_CLOCK_LITERAL.search("self.assert" + "Less(time.monotonic() - started, 3)")
+        )
 
     def test_process_output_bounds_pipe_inheriting_descendant(self) -> None:
         runner = portability.ProcessRunner()
@@ -148,13 +166,6 @@ class PortabilityDriverTest(TestCase):
         parent = (
             "import subprocess,sys; "
             f"subprocess.Popen([sys.executable, '-c', {grandchild!r}]); "
-        )
-        # Two pipe joins, the tree kill and its grace, plus 3 s for two interpreter starts (Windows took 4.97 s).
-        teardown_budget = (
-            2 * portability.PROCESS_PIPE_JOIN_SECONDS
-            + portability.PROCESS_TASKKILL_SECONDS
-            + portability.PROCESS_TERMINATE_GRACE_SECONDS
-            + 3
         )
         started = time.monotonic()
         with tempfile.TemporaryDirectory() as directory:
@@ -168,7 +179,7 @@ class PortabilityDriverTest(TestCase):
                     timeout=30,
                     max_output_bytes=4,
                 )
-        self.assertLess(time.monotonic() - started, teardown_budget)
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
 
     @skipUnless(os.name == "posix", "process groups are POSIX")
     def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
