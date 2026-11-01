@@ -70,6 +70,7 @@ def fetch(url: str) -> tuple[int, str, str]:
 
 
 def coderabbit(repo: str, get: Fetch) -> str | None:
+    """Return the CodeRabbit badge line if shields knows the repository, None if not."""
     url = f"https://img.shields.io/coderabbit/prs/github/{repo}"
     status, _, body = get(url)
     match = re.search(r"<title>([^<]*)</title>", body)
@@ -84,6 +85,7 @@ def coderabbit(repo: str, get: Fetch) -> str | None:
 
 
 def codacy_data(repo: str, get: Fetch) -> dict | None:
+    """Return the Codacy repository object, None on 404; raise on any other answer."""
     owner, name = repo.split("/", 1)
     status, _, body = get(
         f"https://app.codacy.com/api/v3/organizations/gh/{owner}/repositories/{name}"
@@ -102,6 +104,7 @@ def codacy_data(repo: str, get: Fetch) -> dict | None:
 
 
 def codacy(repo: str, get: Fetch) -> str | None:
+    """Return the Codacy grade badge line if the repository is added, None if not."""
     data = codacy_data(repo, get)
     if data is None:
         return None
@@ -123,14 +126,17 @@ DETECTORS = (coderabbit, codacy)
 
 
 def badges(repo: str, get: Fetch = fetch) -> list[str]:
+    """Return the badge line of every review bot active on the repository."""
     return [line for line in (detect(repo, get) for detect in DETECTORS) if line]
 
 
 def missing(readme: str, lines: list[str]) -> list[str]:
+    """Return the badge lines that the README text does not contain."""
     return [line for line in lines if line not in readme]
 
 
 def run(repo: str, check: Path | None, get: Fetch) -> int:
+    """Print the badge lines, or check the README for them; return the exit code."""
     readme = check.read_text(encoding="utf-8") if check is not None else None
     lines = badges(repo, get)
     if readme is None:
@@ -143,6 +149,7 @@ def run(repo: str, check: Path | None, get: Fetch) -> int:
 
 
 def main(argv: list[str], get: Fetch = fetch) -> int:
+    """Parse arguments and run detection; return 0, 1 (badge missing) or 3 (error)."""
     parser = argparse.ArgumentParser(
         description="Detect review bots and render their README badges."
     )
