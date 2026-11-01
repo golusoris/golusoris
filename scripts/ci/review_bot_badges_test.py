@@ -71,8 +71,27 @@ class DetectionTest(unittest.TestCase):
         self.assertEqual(rbb.badges(REPO, stub(INACTIVE)), [])
 
     def test_codacy_not_added_renders_nothing(self) -> None:
-        answers = dict(ALL_ACTIVE, **{CODACY: codacy_answer({"addedState": "Pending"})})
+        answers = dict(
+            ALL_ACTIVE, **{CODACY: codacy_answer({"addedState": "NotAdded"})}
+        )
         self.assertIsNone(rbb.codacy(REPO, stub(answers)))
+
+    def test_codacy_following_counts_as_active(self) -> None:
+        data = {"addedState": "Following", "badges": {"grade": GRADE}}
+        self.assertIn(
+            GRADE, rbb.codacy(REPO, stub({CODACY: codacy_answer(data)})) or ""
+        )
+
+    def test_codacy_missing_or_unknown_state_is_error(self) -> None:
+        for data in ({}, {"addedState": "Pending"}, {"addedState": None}):
+            with self.subTest(data=data), self.assertRaises(rbb.DetectionError):
+                rbb.codacy(REPO, stub({CODACY: codacy_answer(data)}))
+
+    def test_shields_metric_counts_are_active(self) -> None:
+        for count in ("0", "999", "1k", "1.2k", "10k", "999k", "1M", "1.5G"):
+            answers = {SHIELDS: shields(f"coderabbit reviews: {count}")}
+            with self.subTest(count=count):
+                self.assertIsNotNone(rbb.coderabbit(REPO, stub(answers)))
 
     def test_codacy_foreign_or_absent_badge_is_error(self) -> None:
         for badges_obj in ({"grade": "https://evil.example/x"}, {}, "x", None):
@@ -145,6 +164,12 @@ class ExitCodeTest(unittest.TestCase):
         missing_file = str(Path(self.tmp.name) / "absent.md")
         self.assertEqual(
             run_main([REPO, "--check", missing_file], ALL_ACTIVE), rbb.EXIT_ERROR
+        )
+
+    def test_undecodable_readme_exits_3(self) -> None:
+        self.readme.write_bytes(b"\xff\xfe\xfa not utf-8")
+        self.assertEqual(
+            run_main([REPO, "--check", str(self.readme)], ALL_ACTIVE), rbb.EXIT_ERROR
         )
 
     def test_bad_arguments_exit_3(self) -> None:

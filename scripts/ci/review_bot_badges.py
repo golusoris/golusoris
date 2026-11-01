@@ -29,9 +29,13 @@ from pathlib import Path
 TIMEOUT_SECONDS = 15
 MAX_BODY_BYTES = 1 << 20
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
-CODERABBIT_ACTIVE_RE = re.compile(r"^coderabbit reviews: \d+$")
+# shields renders the count with metric(): 999, 1.2k, 10k, 1M.
+CODERABBIT_ACTIVE_RE = re.compile(r"^coderabbit reviews: \d+(?:\.\d)?[kMGTPEZY]?$")
 CODERABBIT_INACTIVE = "coderabbit reviews: provider or repo not found"
 CODACY_GRADE_PREFIX = "https://app.codacy.com/project/badge/Grade/"
+# Codacy API v3 AddedState enum.
+CODACY_ACTIVE_STATES = frozenset({"Added", "Following"})
+CODACY_INACTIVE_STATES = frozenset({"NotAdded"})
 EXIT_MISSING = 1
 EXIT_ERROR = 3
 
@@ -99,8 +103,10 @@ def codacy_data(repo: str, get: Fetch) -> dict | None:
 
 def codacy(repo: str, get: Fetch) -> str | None:
     data = codacy_data(repo, get)
-    if data is None or data.get("addedState") != "Added":
+    if data is None or data.get("addedState") in CODACY_INACTIVE_STATES:
         return None
+    if data.get("addedState") not in CODACY_ACTIVE_STATES:
+        raise DetectionError(f"codacy: unknown addedState {data.get('addedState')!r}")
     badges_obj = data.get("badges")
     grade = badges_obj.get("grade") if isinstance(badges_obj, dict) else None
     if not isinstance(grade, str) or not grade.startswith(CODACY_GRADE_PREFIX):
@@ -148,7 +154,7 @@ def main(argv: list[str], get: Fetch = fetch) -> int:
         return EXIT_ERROR
     try:
         return run(args.repo, args.check, get)
-    except (OSError, DetectionError) as err:
+    except (OSError, UnicodeError, DetectionError) as err:
         print(f"review_bot_badges: {err}", file=sys.stderr)
         return EXIT_ERROR
 
