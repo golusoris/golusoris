@@ -25,11 +25,12 @@ import portability
 ROOT = Path(__file__).resolve().parents[2]
 
 
-# Two pipe joins, the tree kill and its grace, plus 3 s for two interpreter starts (Windows took 4.97 s).
+# Two pipe joins, the tree kill, its grace and the direct-child reap, plus 3 s for two interpreter starts (Windows took 4.97 s).
 TEARDOWN_BUDGET_SECONDS = (
     2 * portability.PROCESS_PIPE_JOIN_SECONDS
     + portability.PROCESS_TASKKILL_SECONDS
     + portability.PROCESS_TERMINATE_GRACE_SECONDS
+    + portability.PROCESS_KILL_WAIT_SECONDS
     + 3
 )
 WALL_CLOCK_LITERAL = re.compile(r"assertLess\(\s*time\.monotonic\(\)\s*-\s*\w+\s*,\s*[\d.]")
