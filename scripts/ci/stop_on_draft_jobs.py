@@ -26,7 +26,7 @@ REQUIRED = re.compile(
 ON_KEY = re.compile(r"^(on|'on'|\"on\"):\s*(.*)$")
 PR_KEY = re.compile(r"^  (pull_request|'pull_request'|\"pull_request\")\s*:")
 PR_ITEM = re.compile(
-    r"^\s*-\s+(pull_request|'pull_request'|\"pull_request\")\s*(#.*)?$"
+    r"^(  )?-\s+(pull_request|'pull_request'|\"pull_request\")\s*(#.*)?$"
 )
 JOB_HEADER = re.compile(r"^  (['\"]?)([A-Za-z0-9_-]+)\1:\s*(#.*)?$")
 JOB_IF = re.compile(r"^    if:\s*(.+?)\s*$")
@@ -59,6 +59,25 @@ def top_level(line: str) -> bool:
     return bool(line) and not line[0].isspace() and line[0] not in "#-"
 
 
+def split_top(body: str) -> list[str]:
+    """Split a flow collection body on commas outside nested brackets."""
+    items, depth, start = [], 0, 0
+    for index, char in enumerate(body):
+        depth += (char in "[{") - (char in "]}")
+        if char == "," and depth == 0:
+            items.append(body[start:index])
+            start = index + 1
+    return [*items, body[start:]]
+
+
+def direct_entries(value: str) -> set[str]:
+    """Return the event names an inline on: value lists directly, not nested values."""
+    body = value
+    if len(value) >= 2 and value[0] + value[-1] in ("[]", "{}"):
+        body = value[1:-1]
+    return {unquote(item.split(":", 1)[0].strip()) for item in split_top(body)}
+
+
 def pr_triggered(lines: list[str]) -> bool:
     """Report whether the workflow's on: block lists pull_request."""
     in_on = False
@@ -67,8 +86,7 @@ def pr_triggered(lines: list[str]) -> bool:
         if head:
             inline = unquote(head.group(2)) if head.group(2) else ""
             if inline:
-                tokens = re.split(r"[\s,\[\]{}:]+", inline)
-                return "pull_request" in {unquote(token) for token in tokens}
+                return "pull_request" in direct_entries(inline)
             in_on = True
         elif in_on and top_level(line):
             return False

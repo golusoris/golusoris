@@ -91,6 +91,28 @@ class StopOnDraftJobsTest(unittest.TestCase):
                 text = workflow(on=on, uses="actions/checkout@v7")
                 self.assertEqual(len(self.check(text)), 1)
 
+    def test_nested_pull_request_value_is_not_a_trigger(self) -> None:
+        """Boundary: pull_request nested under push is a value, not a trigger."""
+        for on in (
+            "on: {push: {branches: [pull_request]}}",
+            "on:\n  push:\n    branches:\n      - pull_request",
+            "on:\n  push:\n    branches: [pull_request]",
+        ):
+            with self.subTest(on=on):
+                text = workflow(on=on, uses="actions/checkout@v7")
+                self.assertEqual(self.check(text), [])
+
+    def test_direct_flow_entries_trigger(self) -> None:
+        """Negative: direct flow entries, with or without nested values, trigger."""
+        for on in (
+            "on: {push: {branches: [main]}, pull_request: {}}",
+            "on: [push, 'pull_request']",
+            "on: pull_request",
+        ):
+            with self.subTest(on=on):
+                text = workflow(on=on, uses="actions/checkout@v7")
+                self.assertEqual(len(self.check(text)), 1)
+
     def test_quoted_flow_trigger(self) -> None:
         """Negative: on: ["pull_request"] still triggers the check."""
         self.assertEqual(
