@@ -177,6 +177,9 @@ def download_archive(asset: Asset, directory: Path) -> Path:
         failure = error
     except (OSError, http.client.HTTPException) as error:
         failure = InstallError(f"Pact FFI download failed: {error}")
+    except BaseException:
+        cleanup_temporary(temporary, archive, remove=True)
+        raise
     cleanup_error = cleanup_temporary(temporary, archive, remove=not complete)
     raise_install_failure(failure, cleanup_error)
     return archive
@@ -214,6 +217,9 @@ def extract_archive(
         failure = error
     except (EOFError, OSError) as error:
         failure = InstallError(f"invalid Pact FFI gzip archive: {error}")
+    except BaseException:
+        cleanup_temporary(temporary, temporary_path, remove=True)
+        raise
     cleanup_error = cleanup_temporary(temporary, temporary_path, remove=failure is not None)
     raise_install_failure(failure, cleanup_error)
     return destination
@@ -268,30 +274,46 @@ def fix_macos_install_name(system_name: str, library: Path) -> None:
         raise InstallError(f"failed to set Pact FFI install name: {error}") from error
 
 
+def cached_archive_path(asset: Asset, library_dir: Path) -> Path:
+    """Key the kept archive by its pinned digest so a pin change downloads the new asset."""
+    return library_dir / f"{asset.sha256}-{asset.filename}"
+
+
 def cached_archive(asset: Asset, library_dir: Path) -> Path:
     """Return the kept archive, downloading it once; extract_archive re-verifies its digest."""
-    archive = library_dir / asset.filename
+    archive = cached_archive_path(asset, library_dir)
     if archive.exists():
         return archive
     downloaded = download_archive(asset, library_dir)
     try:
         os.replace(downloaded, archive)
     except OSError as error:
-        downloaded.unlink(missing_ok=True)
-        raise InstallError(f"failed to keep Pact FFI archive: {error}") from error
+        failure = InstallError(f"failed to keep Pact FFI archive: {error}")
+        try:
+            downloaded.unlink(missing_ok=True)
+        except OSError as cleanup:
+            raise InstallError(f"{failure}; unlink {downloaded.name}: {cleanup}") from error
+        raise failure from error
     return archive
 
 
-def install(module: Path, library_dir: Path, *, cache: bool = False) -> Path:
+def require_contained(library_dir: Path, cache_root: Path) -> None:
+    """Refuse a cache directory that a symlinked component moves outside cache_root."""
+    if not library_dir.resolve().is_relative_to(cache_root.resolve()):
+        raise InstallError(f"Pact FFI cache directory resolves outside {cache_root}: {library_dir}")
+
+
+def install(module: Path, library_dir: Path, *, cache_root: Path | None = None) -> Path:
     """Verify the dependency pin, then install the matching locked asset.
 
-    With cache, the verified archive stays in library_dir and later runs re-verify it
-    against the pinned digest instead of downloading; a mismatching archive is refused.
+    With cache_root, library_dir must resolve beneath it; the verified archive stays there
+    and later runs re-verify it against the pinned digest instead of downloading.
     """
     verify_pact_go_pin(module)
     system_name = platform.system()
     asset = select_asset(system_name, platform.machine())
-    if cache:
+    if cache_root is not None:
+        require_contained(library_dir, cache_root)
         library = extract_archive(cached_archive(asset, library_dir), library_dir, asset)
     else:
         archive = download_archive(asset, library_dir)
@@ -309,11 +331,17 @@ def main() -> int:
     parser.add_argument("--lib-dir", required=True, type=Path)
     parser.add_argument("--module", type=Path, default=Path("testutil/pact/go.mod"))
     parser.add_argument(
-        "--cache", action="store_true", help="keep the archive and re-verify it on later runs"
+        "--cache",
+        action="store_true",
+        help="keep the archive beneath the working directory and re-verify it on later runs",
     )
     arguments = parser.parse_args()
     try:
-        library = install(arguments.module, arguments.lib_dir, cache=arguments.cache)
+        library = install(
+            arguments.module,
+            arguments.lib_dir,
+            cache_root=Path.cwd() if arguments.cache else None,
+        )
     except InstallError as error:
         print(f"Pact FFI install failed: {error}", file=sys.stderr)
         return 1

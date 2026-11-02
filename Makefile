@@ -335,8 +335,17 @@ pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/p
 	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
-$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
-$(PACT_FFI_TARGETS): export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) -L$(PACT_FFI_DIR) -Wl,-rpath,$(PACT_FFI_DIR))
+# override keeps the Pact paths when a caller sets these variables on the make command line;
+# go splits CGO_LDFLAGS with shell quoting, so quoted paths survive spaces.
+$(PACT_FFI_TARGETS): override export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+ifeq ($(OS),Windows_NT)
+# MinGW has no rpath; Windows finds pact_ffi.dll through PATH, as the portability workflow does.
+PACT_PATH_SEP := $(if $(findstring ;,$(PATH)),;,:)
+$(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)')
+$(PACT_FFI_TARGETS): override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)
+else
+$(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+endif
 
 .PHONY: verify-all
 verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate

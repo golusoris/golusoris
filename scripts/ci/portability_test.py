@@ -399,7 +399,7 @@ class PactFFIInstallerTests(TestCase):
                 pact_ffi.urllib.request, "urlopen", return_value=io.BytesIO(payload)
             ) as urlopen,
         ):
-            library = pact_ffi.install(ROOT / "testutil/pact/go.mod", root, cache=True)
+            library = pact_ffi.install(ROOT / "testutil/pact/go.mod", root, cache_root=root)
         self.download_calls = urlopen.call_count
         return library
 
@@ -414,7 +414,7 @@ class PactFFIInstallerTests(TestCase):
             root = Path(directory)
             self.assertEqual(self._cache_install(root, asset, compressed).read_bytes(), b"verified pact ffi")
             self.assertEqual(self.download_calls, 1)
-            self.assertTrue((root / asset.filename).is_file())
+            self.assertTrue(pact_ffi.cached_archive_path(asset, root).is_file())
             self._cache_install(root, asset, b"")
             self.assertEqual(self.download_calls, 0)
 
@@ -427,7 +427,7 @@ class PactFFIInstallerTests(TestCase):
         )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / asset.filename).write_bytes(gzip.compress(b"planted bytes"))
+            pact_ffi.cached_archive_path(asset, root).write_bytes(gzip.compress(b"planted bytes"))
             with self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"):
                 self._cache_install(root, asset, good)
             self.assertFalse((root / asset.library).exists())
@@ -444,6 +444,55 @@ class PactFFIInstallerTests(TestCase):
                 self._cache_install(root, asset, gzip.compress(b"attacker bytes"))
             self.assertEqual(list(root.iterdir()), [])
 
+    def test_boundary_pin_change_downloads_new_archive_beside_stale_one(self) -> None:
+        old = gzip.compress(b"old pinned ffi")
+        new = gzip.compress(b"new pinned ffi")
+        old_asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(old).hexdigest(), "libpact_ffi.so")
+        new_asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(new).hexdigest(), "libpact_ffi.so")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._cache_install(root, old_asset, old)
+            self.assertEqual(self._cache_install(root, new_asset, new).read_bytes(), b"new pinned ffi")
+            self.assertEqual(self.download_calls, 1)
+
+    def test_negative_symlinked_cache_directory_outside_root_is_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+            root = Path(directory)
+            (root / "cache").symlink_to(outside, target_is_directory=True)
+            with self.assertRaisesRegex(pact_ffi.InstallError, "resolves outside"):
+                pact_ffi.install(
+                    ROOT / "testutil/pact/go.mod", root / "cache" / "pact-ffi", cache_root=root
+                )
+            self.assertEqual(list(Path(outside).iterdir()), [])
+
+    def test_negative_interrupted_download_removes_temporary(self) -> None:
+        asset = pact_ffi.Asset("fixture.so.gz", "0" * 64, "libpact_ffi.so")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request, "urlopen", side_effect=KeyboardInterrupt
+                ),
+                self.assertRaises(KeyboardInterrupt),
+            ):
+                pact_ffi.download_archive(asset, root)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_negative_keep_and_cleanup_failures_raise_one_install_error(self) -> None:
+        compressed = gzip.compress(b"verified pact ffi")
+        asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(compressed).hexdigest(), "libpact_ffi.so")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request, "urlopen", return_value=io.BytesIO(compressed)
+                ),
+                mock.patch.object(pact_ffi.os, "replace", side_effect=OSError("replace denied")),
+                mock.patch.object(Path, "unlink", side_effect=OSError("unlink denied")),
+                self.assertRaisesRegex(pact_ffi.InstallError, "replace denied; unlink .*unlink denied"),
+            ):
+                pact_ffi.cached_archive(asset, root)
+
     def test_local_gates_install_pact_ffi_into_ignored_repository_directory(self) -> None:
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         targets = next(
@@ -456,8 +505,9 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn("PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi", makefile)
         self.assertIn("scripts/ci/pact_ffi.py --cache --lib-dir \"$(PACT_FFI_DIR)\"", makefile)
         self.assertIn("$(PACT_FFI_TARGETS): pact-ffi", makefile)
-        self.assertIn("$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH", makefile)
-        self.assertIn("-L$(PACT_FFI_DIR) -Wl,-rpath,$(PACT_FFI_DIR)", makefile)
+        self.assertIn("override export PACT_GO_LIB_DOWNLOAD_PATH", makefile)
+        self.assertIn("'-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)'", makefile)
+        self.assertIn("override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)", makefile)
         ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".workingdir/", ignored)
 
