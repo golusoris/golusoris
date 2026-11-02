@@ -144,16 +144,7 @@ Consult `docs/upstream/` before API suggestions; public docs may differ from pin
 
 ## CI Contract
 
-- `golangci-lint`: 30+ linters; `.golangci.yml`
-- `govulncheck`
-- `go test -race -count=1`; merged coverage gate 70%; security-critical target 85%
-- Ruff 0.16.8: full-tree Python lint; immutable image
-- Python 3.12+: 33 checkpoint + 5 command-policy + 10 portability-policy tests
-- Clang/clang-tidy 22.1.8: full-tree C warnings; reproducible checked eBPF object
-- All-module `apidiff` versus previous root tag; execution required, incompatibilities informational before v1.0
-- Conventional-commit PR title
-- Runners: GitHub-hosted `ubuntu-26.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
-- Docker Hub pulls -> `scripts/ci/docker-hub-mirror.sh` (mirror.gcr.io, same digests) right after checkout in every pulling job; anonymous Hub pulls hit rate limit (#739).
+Linters, test, coverage, runner and mirror rules: [`docs/principles.md`](docs/principles.md#ci-contract).
 
 ## Working Agreements
 
