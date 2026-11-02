@@ -15,7 +15,7 @@ LF line endings, whatever the working tree or a Windows checkout shows.
 from __future__ import annotations
 
 import shutil
-import subprocess
+import subprocess  # Runs only fixed git subcommands below. # nosec B404
 import sys
 from pathlib import Path, PurePosixPath
 
@@ -35,7 +35,7 @@ def _git(root: Path, *args: str, stdin: bytes | None = None) -> bytes:
         raise CheckError("git is not on PATH")
     if not root.is_dir():
         raise CheckError(f"{root} is not a directory")
-    done = subprocess.run(  # noqa: S603 - fixed git subcommands; root checked above.
+    done = subprocess.run(  # noqa: S603 - fixed git subcommands; root checked above. # nosec B603
         [git, *args], cwd=root, input=stdin, capture_output=True, check=True, timeout=60
     )
     return done.stdout
@@ -72,16 +72,24 @@ def _read_blobs(root: Path, oids: list[str]) -> list[bytes]:
     return blobs
 
 
-def agents_contents(root: Path) -> dict[str, bytes]:
-    """Return every AGENTS.md: tracked ones as staged, untracked ones from disk."""
+def _read_lf(path: Path) -> bytes:
+    """Read a working-tree file with LF endings, as the index stores it."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
+def agents_contents(root: Path, *, worktree: bool = False) -> dict[str, bytes]:
+    """Return every AGENTS.md: tracked ones as staged (or as on disk), untracked ones from disk."""
     staged = _staged_blobs(root)
     paths = sorted(staged)
-    blobs = _read_blobs(root, [staged[p] for p in paths]) if paths else []
-    contents = dict(zip(paths, blobs, strict=True))
+    if worktree:
+        contents = {p: _read_lf(root / p) for p in paths if (root / p).is_file()}
+    else:
+        blobs = _read_blobs(root, [staged[p] for p in paths]) if paths else []
+        contents = dict(zip(paths, blobs, strict=True))
     new = _git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", f"*{NAME}")
     for path in sorted({p.decode("utf-8") for p in new.split(b"\0") if p}):
         if _is_agents(path):
-            contents[path] = (root / path).read_bytes().replace(b"\r\n", b"\n")
+            contents[path] = _read_lf(root / path)
     return contents
 
 
@@ -105,10 +113,19 @@ def oversized(contents: dict[str, bytes]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    """Check argv[1] (default: current directory): 0 fits, 1 oversized, 3 check error."""
-    root = Path(argv[1] if len(argv) > 1 else ".").resolve()
+    """Check [--worktree] [root] (default: current directory): 0 fits, 1 oversized, 3 error.
+
+    Without --worktree tracked files are read as staged (pre-commit); with it, as on disk.
+    """
+    args = argv[1:]
+    worktree = "--worktree" in args
+    rest = [a for a in args if a != "--worktree"]
+    if len(rest) > 1:
+        sys.stderr.write("context-size: error: usage: context_size.py [--worktree] [root]\n")
+        return 3
+    root = Path(rest[0] if rest else ".").resolve()
     try:
-        problems = oversized(agents_contents(root))
+        problems = oversized(agents_contents(root, worktree=worktree))
     except (CheckError, OSError, UnicodeDecodeError, subprocess.SubprocessError) as err:
         sys.stderr.write(f"context-size: error: {err}\n")
         return 3

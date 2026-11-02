@@ -231,7 +231,7 @@ caveman-context: ## lint every canonical agent-facing context surface
 
 .PHONY: context-size
 context-size: ## fail when an AGENTS.md exceeds a coding client's context cap
-	@python3 -B scripts/ci/context_size.py .
+	@python3 -B scripts/ci/context_size.py --worktree .
 
 .PHONY: text-register-policy
 text-register-policy: ## verify required register skills and plugin projections

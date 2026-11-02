@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import shutil
-import subprocess
+import subprocess  # Runs only fixed git commands in a scratch repository. # nosec B404
 import sys
 import tempfile
 import unittest
@@ -34,7 +34,7 @@ class ContextSizeTest(unittest.TestCase):
         """Run one git command in the scratch repository."""
         git = shutil.which("git")
         self.assertIsNotNone(git)
-        subprocess.run(  # noqa: S603 - fixed git command on runner PATH.
+        subprocess.run(  # noqa: S603 - fixed git command on runner PATH. # nosec B603
             [str(git), *args], cwd=self.root, check=True, capture_output=True, timeout=60
         )
 
@@ -69,6 +69,20 @@ class ContextSizeTest(unittest.TestCase):
         self.write("AGENTS.md", "a" * (CAP + 1))
         (self.root / "AGENTS.md").write_text("short", encoding="utf-8")
         self.assertEqual(len(self.check()), 1)
+
+    def test_worktree_mode_checks_unstaged_edits(self) -> None:
+        self.write("AGENTS.md", "short")
+        (self.root / "AGENTS.md").write_text("a" * (CAP + 1), encoding="utf-8")
+        self.assertEqual(self.check(), [])
+        self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
+
+    def test_worktree_mode_skips_deleted_file(self) -> None:
+        self.write("AGENTS.md", "a" * (CAP + 1))
+        (self.root / "AGENTS.md").unlink()
+        self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 0)
+
+    def test_extra_argument_exits_with_error_status(self) -> None:
+        self.assertEqual(context_size.main(["cs", str(self.root), str(self.root)]), 3)
 
     def test_deleted_working_tree_file_is_still_checked(self) -> None:
         self.write("AGENTS.md", "a" * (CAP + 1))
