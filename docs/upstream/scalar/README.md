@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# Scalar API reference UI — v1.75.1 snapshot
+# Scalar API reference UI — v1.76.2 snapshot
 
-Pinned: **v1.75.1**
-Source: [published package v1.75.1](https://www.npmjs.com/package/@scalar/api-reference/v/1.75.1)
+Pinned: **v1.76.2**
+Source: [published package v1.76.2](https://www.npmjs.com/package/@scalar/api-reference/v/1.76.2)
 Used via: `apidocs/embed/scalar.js`; version authority is
 `apidocs/embed/SCALAR_VERSION` and the bundle header.
 
@@ -55,5 +55,5 @@ Chrome and reads the network log to prove it.
 
 ## Links
 
-- [Published package](https://www.npmjs.com/package/@scalar/api-reference/v/1.75.1)
+- [Published package](https://www.npmjs.com/package/@scalar/api-reference/v/1.76.2)
 - [Scalar documentation](https://guides.scalar.com/scalar/scalar-api-references)
