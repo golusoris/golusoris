@@ -37,6 +37,7 @@ class ContextSizeTest(unittest.TestCase):
     """Positive, negative and boundary cases for both client caps."""
 
     def setUp(self) -> None:
+        """Create a scratch repository with the hook's git variables removed."""
         # A git hook exports these; inherited, they would point the scratch repo at the real one.
         env = unittest.mock.patch.dict(os.environ)
         env.start()
@@ -69,89 +70,108 @@ class ContextSizeTest(unittest.TestCase):
         return context_size.oversized(context_size.agents_contents(self.root))
 
     def test_repository_agents_files_fit_every_cap(self) -> None:
+        """This repository's AGENTS.md files fit both caps."""
         contents = context_size.agents_contents(ROOT)
         self.assertIn("AGENTS.md", contents)
         self.assertEqual(context_size.oversized(contents), [])
 
     def test_file_at_windsurf_cap_passes(self) -> None:
+        """A file of exactly 12,000 characters passes, counted as characters."""
         self.write("AGENTS.md", "ä" * CAP)
         self.assertEqual(self.check(), [])
 
     def test_file_past_windsurf_cap_fails(self) -> None:
+        """One character past the Windsurf cap is reported."""
         self.write("AGENTS.md", "a" * (CAP + 1))
         found = self.check()
         self.assertEqual(len(found), 1)
         self.assertIn("Windsurf cap", found[0])
 
     def test_staged_content_decides_not_the_working_tree(self) -> None:
+        """Index mode checks the staged copy, not the working copy."""
         self.write("AGENTS.md", "a" * (CAP + 1))
         (self.root / "AGENTS.md").write_text("short", encoding="utf-8")
         self.assertEqual(len(self.check()), 1)
 
     def test_worktree_mode_checks_unstaged_edits(self) -> None:
+        """Worktree mode catches an oversized unstaged edit."""
         self.write("AGENTS.md", "short")
         (self.root / "AGENTS.md").write_text("a" * (CAP + 1), encoding="utf-8")
         self.assertEqual(self.check(), [])
         self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
 
     def test_worktree_mode_counts_crlf_bytes(self) -> None:
+        """Worktree mode counts CRLF bytes as on disk; index mode counts LF."""
         for name in ("AGENTS.md", "a/AGENTS.md", "a/b/AGENTS.md"):
             self.write(name, "a\r\n" * 4000, stage=name == "AGENTS.md")
         self.assertEqual(self.check(), [])
         self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
 
     def test_hook_environment_does_not_reach_the_scratch_repository(self) -> None:
+        """Hook variables are gone, so the checker reads the scratch repository."""
         self.assertTrue(all(name not in os.environ for name in REPO_ENV))
         self.write("AGENTS.md", "short")
         self.assertEqual(set(context_size.agents_contents(self.root)), {"AGENTS.md"})
 
     def test_worktree_mode_skips_deleted_file(self) -> None:
+        """Worktree mode skips a tracked file deleted from disk."""
         self.write("AGENTS.md", "a" * (CAP + 1))
         (self.root / "AGENTS.md").unlink()
         self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 0)
 
     def test_extra_argument_exits_with_error_status(self) -> None:
+        """A second positional argument is a usage error, exit 3."""
         self.assertEqual(context_size.main(["cs", str(self.root), str(self.root)]), 3)
 
     def test_deleted_working_tree_file_is_still_checked(self) -> None:
+        """Index mode still checks a staged file deleted from disk."""
         self.write("AGENTS.md", "a" * (CAP + 1))
         (self.root / "AGENTS.md").unlink()
         self.assertEqual(len(self.check()), 1)
 
     def test_untracked_file_is_checked(self) -> None:
+        """An untracked AGENTS.md is checked."""
         self.write("new/AGENTS.md", "a" * (CAP + 1), stage=False)
         self.assertIn("new/AGENTS.md", self.check()[0])
 
     def test_path_with_space_is_checked(self) -> None:
+        """A path with a space is checked as one path."""
         self.write("user guide/AGENTS.md", "a" * (CAP + 1))
         self.assertIn("user guide/AGENTS.md", self.check()[0])
 
     @unittest.skipIf(sys.platform == "win32", "Windows file names cannot hold a newline")
     def test_tracked_path_with_newline_is_checked(self) -> None:
+        """A tracked path with a newline is read by object ID."""
         self.write("odd\ndir/AGENTS.md", "a" * (CAP + 1))
         self.assertIn("odd\ndir/AGENTS.md", self.check()[0])
 
     def test_missing_root_exits_with_error_status(self) -> None:
+        """A missing root is a check error, exit 3."""
         self.assertEqual(context_size.main(["context_size", str(self.root / "absent")]), 3)
 
     def test_git_failure_exits_with_error_status(self) -> None:
+        """A failing git command is a check error, exit 3."""
         shutil.rmtree(self.root / ".git")
         self.assertEqual(context_size.main(["context_size", str(self.root)]), 3)
 
     def test_oversized_file_exits_with_finding_status(self) -> None:
+        """An oversized file is a finding, exit 1."""
         self.write("AGENTS.md", "a" * (CAP + 1))
         self.assertEqual(context_size.main(["context_size", str(self.root)]), 1)
 
     def test_other_names_ending_in_agents_md_are_ignored(self) -> None:
+        """Only the exact name AGENTS.md is checked."""
         self.write("ARCHIVE-AGENTS.md", "a" * (CAP + 1))
         self.write("loose-AGENTS.md", "a" * (CAP + 1), stage=False)
         self.assertEqual(self.check(), [])
 
     def test_crlf_endings_count_as_lf(self) -> None:
+        """Index mode counts an untracked CRLF file with LF endings."""
         self.write("AGENTS.md", "a\r\n" * 4001, stage=False)
         self.assertEqual(self.check(), [])
 
     def test_chain_past_codex_cap_fails_only_on_the_deep_file(self) -> None:
+        """Only the file whose root-to-leaf chain passes 32 KiB is reported."""
         for name in ("AGENTS.md", "a/AGENTS.md", "a/b/AGENTS.md"):
             self.write(name, "a" * 11_000)
         found = self.check()
@@ -159,6 +179,7 @@ class ContextSizeTest(unittest.TestCase):
         self.assertIn("a/b/AGENTS.md: chain 33000 B > Codex cap", found[0])
 
     def test_sibling_files_do_not_share_a_chain(self) -> None:
+        """Files in sibling directories are counted on separate chains."""
         for name in ("AGENTS.md", "a/AGENTS.md", "b/AGENTS.md"):
             self.write(name, "a" * 11_000)
         self.assertEqual(self.check(), [])
