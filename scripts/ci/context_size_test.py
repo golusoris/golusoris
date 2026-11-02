@@ -21,6 +21,8 @@ import context_size
 
 ROOT = Path(__file__).resolve().parents[2]
 CAP = context_size.WINDSURF_CHARS_PER_FILE
+NEAR = (CAP * 95 + 99) // 100
+CHAIN_NEAR = (context_size.CODEX_BYTES_PER_CHAIN * 95 + 99) // 100
 REPO_ENV = (
     "GIT_DIR",
     "GIT_WORK_TREE",
@@ -75,10 +77,24 @@ class ContextSizeTest(unittest.TestCase):
         self.assertIn("AGENTS.md", contents)
         self.assertEqual(context_size.oversized(contents), [])
 
-    def test_file_at_windsurf_cap_passes(self) -> None:
-        """A file of exactly 12,000 characters passes, counted as characters."""
-        self.write("AGENTS.md", "ä" * CAP)
+    def test_file_below_near_cap_passes(self) -> None:
+        """A file one character below 95% of the Windsurf cap passes, counted as characters."""
+        self.write("AGENTS.md", "ä" * (NEAR - 1))
         self.assertEqual(self.check(), [])
+
+    def test_file_at_near_cap_fails(self) -> None:
+        """A file at 95% of the Windsurf cap is reported, as the fleet survey reports it."""
+        self.write("AGENTS.md", "ä" * NEAR)
+        self.assertEqual(len(self.check()), 1)
+
+    def test_chain_at_codex_near_cap_boundary(self) -> None:
+        """A chain one byte below 95% of the Codex cap passes; at 95% it is reported."""
+        self.write("AGENTS.md", "a" * 10_000)
+        self.write("a/AGENTS.md", "a" * 10_000)
+        self.write("a/b/AGENTS.md", "a" * (CHAIN_NEAR - 20_001))
+        self.assertEqual(self.check(), [])
+        self.write("a/b/AGENTS.md", "a" * (CHAIN_NEAR - 20_000))
+        self.assertEqual(len(self.check()), 1)
 
     def test_file_past_windsurf_cap_fails(self) -> None:
         """One character past the Windsurf cap is reported."""
@@ -103,7 +119,7 @@ class ContextSizeTest(unittest.TestCase):
     def test_worktree_mode_counts_crlf_bytes(self) -> None:
         """Worktree mode counts CRLF bytes as on disk; index mode counts LF."""
         for name in ("AGENTS.md", "a/AGENTS.md", "a/b/AGENTS.md"):
-            self.write(name, "a\r\n" * 4000, stage=name == "AGENTS.md")
+            self.write(name, "a\r\n" * 3700, stage=name == "AGENTS.md")
         self.assertEqual(self.check(), [])
         self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
 
@@ -176,7 +192,7 @@ class ContextSizeTest(unittest.TestCase):
             self.write(name, "a" * 11_000)
         found = self.check()
         self.assertEqual(len(found), 1)
-        self.assertIn("a/b/AGENTS.md: chain 33000 B > Codex cap", found[0])
+        self.assertIn("a/b/AGENTS.md: chain 33000 B >= 95% of Codex cap", found[0])
 
     def test_sibling_files_do_not_share_a_chain(self) -> None:
         """Files in sibling directories are counted on separate chains."""

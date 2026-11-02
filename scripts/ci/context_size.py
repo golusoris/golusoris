@@ -6,7 +6,8 @@
 
 Windsurf reads each rule file up to 12,000 characters; Codex reads the AGENTS.md files on the
 path from the repository root to the working directory up to 32 KiB together. A file past
-either cap is silently truncated for that client.
+either cap is silently truncated for that client. The check fails from 95% of a cap on, as the
+fleet context survey does, so growth is caught before truncation.
 
 Tracked files are read from the index, so the check sees what the next commit holds, with
 LF line endings, whatever the working tree or a Windows checkout shows.
@@ -22,6 +23,7 @@ from pathlib import Path, PurePosixPath
 NAME = "AGENTS.md"
 WINDSURF_CHARS_PER_FILE = 12_000
 CODEX_BYTES_PER_CHAIN = 32 * 1024
+NEAR_CAP_PERCENT = 95
 
 
 class CheckError(Exception):
@@ -99,16 +101,21 @@ def _chain(path: str) -> list[str]:
     return [PurePosixPath(*parts[:depth], NAME).as_posix() for depth in range(len(parts) + 1)]
 
 
+def _near_cap(size: int, cap: int) -> bool:
+    """Return whether size reaches 95% of cap, compared in integers like the fleet survey."""
+    return size * 100 >= cap * NEAR_CAP_PERCENT
+
+
 def oversized(contents: dict[str, bytes]) -> list[str]:
-    """Return one message per AGENTS.md or AGENTS.md chain past a client cap."""
+    """Return one message per AGENTS.md or AGENTS.md chain at or past 95% of a client cap."""
     problems = []
     for name in sorted(contents):
         chars = len(contents[name].decode("utf-8"))
-        if chars > WINDSURF_CHARS_PER_FILE:
-            problems.append(f"{name}: {chars} chars > Windsurf cap {WINDSURF_CHARS_PER_FILE}")
+        if _near_cap(chars, WINDSURF_CHARS_PER_FILE):
+            problems.append(f"{name}: {chars} chars >= 95% of Windsurf cap {WINDSURF_CHARS_PER_FILE}")
         chain_bytes = sum(len(contents[c]) for c in _chain(name) if c in contents)
-        if chain_bytes > CODEX_BYTES_PER_CHAIN:
-            problems.append(f"{name}: chain {chain_bytes} B > Codex cap {CODEX_BYTES_PER_CHAIN}")
+        if _near_cap(chain_bytes, CODEX_BYTES_PER_CHAIN):
+            problems.append(f"{name}: chain {chain_bytes} B >= 95% of Codex cap {CODEX_BYTES_PER_CHAIN}")
     return problems
 
 
