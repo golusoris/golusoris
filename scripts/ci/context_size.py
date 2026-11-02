@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Fail when an AGENTS.md exceeds a coding client's context cap.
+"""Fail when an AGENTS.md reaches 95% of a coding client's context cap.
 
 Windsurf reads each rule file up to 12,000 characters; Codex reads the AGENTS.md files on the
 path from the repository root to the working directory up to 32 KiB together. A file past

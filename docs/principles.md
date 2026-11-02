@@ -164,16 +164,18 @@ References:
 
 ### CI contract
 
-- `golangci-lint`: 30+ linters; `.golangci.yml`
-- `govulncheck`
-- `go test -race -count=1`; merged coverage gate 70%; security-critical target 85%
-- Ruff 0.16.8: full-tree Python lint; immutable image
-- Python 3.12+: 33 checkpoint + 5 command-policy + 10 portability-policy tests
-- Clang/clang-tidy 22.1.8: full-tree C warnings; reproducible checked eBPF object
-- All-module `apidiff` versus previous root tag; execution required, incompatibilities informational before v1.0
-- Conventional-commit PR title
-- Runners: GitHub-hosted `ubuntu-26.04`; no pre-baked tools. Jobs install `tools/tool-versions.env` pins via SHA-pinned installers; cgo headers via `scripts/ci/install-cgo-libs.sh`
-- Docker Hub pulls -> `scripts/ci/docker-hub-mirror.sh` (mirror.gcr.io, same digests) right after checkout in every pulling job; anonymous Hub pulls hit rate limit (#739).
+Each line names the file or command that enforces it; [`.github/workflows/ci.yml`](https://github.com/golusoris/golusoris/blob/main/.github/workflows/ci.yml) wires them.
+
+- `golangci-lint` with 30+ linters per [`.golangci.yml`](https://github.com/golusoris/golusoris/blob/main/.golangci.yml): `make lint-all`
+- `govulncheck`: `make vuln-all`
+- `go test -race -count=1` in every module: `make test-all`; the merged coverage gate is 70% (`Check coverage threshold (70%)` step in `ci.yml`); the security-critical target is 85%
+- Ruff 0.16.8 from a digest-pinned image ([`tools/tool-versions.env`](https://github.com/golusoris/golusoris/blob/main/tools/tool-versions.env)): `make python-lint`, running [`scripts/ci/python-lint.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/python-lint.sh); diff-scoped on pull requests, where `CI_SCOPE_BASE` is set, and full-tree when it is empty
+- Python 3.12+ regression suites: `make python-test`
+- Clang/clang-tidy 22.1.8 warnings and a reproducible checked eBPF object: `make c-quality`, running [`scripts/ci/c-quality.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/c-quality.sh); diff-scoped on pull requests, full-tree when `CI_SCOPE_BASE` is empty or a changed header can affect every translation unit
+- All-module `apidiff` against the previous root tag, run by [`scripts/ci/go-apidiff.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/go-apidiff.sh); execution is required, incompatibilities are informational before v1.0
+- Conventional-commit pull request title: the `pr-title` job in `ci.yml`
+- Runners: default Linux jobs use GitHub-hosted `ubuntu-26.04`; release binaries build on `ubuntu-24.04`, and platform-matrix jobs use the runners their matrix declares. No job relies on pre-baked tools: each installs what it needs as a version pin from `tools/tool-versions.env`, a digest-pinned image or a SHA-pinned action; cgo headers come from [`scripts/ci/install-cgo-libs.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/install-cgo-libs.sh)
+- Docker Hub pulls go through [`scripts/ci/docker-hub-mirror.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/docker-hub-mirror.sh) (mirror.gcr.io, same digests) right after checkout in every pulling job, because anonymous Hub pulls hit the rate limit (#739)
 
 ---
 
