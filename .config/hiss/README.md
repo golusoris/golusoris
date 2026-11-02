@@ -58,7 +58,13 @@ state.
 
 ## Adding or moving a fixture
 
-See the section *Updating the HISS-20 enforcement coverage catalogue* in
-[`AGENTS.md`](../../AGENTS.md). The short version: when a rule gains coverage, move the
-fixture from `gap/` to `positive/` and update the claim in the same PR as the mechanism — and
-never weaken a fixture to make a stale claim pass.
+When a rule gains coverage, move the fixture from `gap/` to `positive/` and update the claim
+in the same PR as the mechanism. In full:
+
+1. Move or add the matching fixture under
+   `.config/hiss/testdata/HISS-NN/<language>/{positive,negative,gap}/`. Keep the negatives.
+2. Update the claim's `state` in `coverage.yaml` and name the exact decider in `mechanism`.
+3. Base `rationale` on measured tool output, never on an inference from configuration alone.
+4. When a tool other than the HISS scanner decides the claim, set `runner`; an omitted
+   `runner` means `praetorctl audit`.
+5. Run `make hiss-coverage`. Never weaken a fixture to make a stale claim pass.

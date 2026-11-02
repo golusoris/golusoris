@@ -140,17 +140,7 @@ praetorctl hiss coverage --verify
 
 ## Pinned Upstream Docs
 
-Consult `docs/upstream/` before API suggestions. Public docs may differ from repository pins.
-
-| Package | Pinned version |
-| :--- | :--- |
-| `go.uber.org/fx` | v1.24.0 |
-| `jackc/pgx/v5` | v5.11.0 |
-| `ogen-go/ogen` | v1.24.0 |
-| `riverqueue/river` | v0.49.0 |
-| `knadh/koanf/v2` | v2.3.8 (`core/`) |
-
-Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
+Consult `docs/upstream/` before API suggestions; public docs may differ from pins. Pins + refresh recipe `make docs-upstream` in [`docs/upstream/README.md`](../docs/upstream/README.md).
 
 ## CI Contract
 
@@ -180,8 +170,4 @@ Refresh recipe: `make docs-upstream`; full table: `docs/upstream/README.md`.
 
 ## HISS-20 Coverage Updates
 
-1. Coverage change -> move or add matching `.config/hiss/testdata/HISS-NN/<language>/{positive,negative,gap}/` fixture. Keep negatives.
-2. Update claim `state`; name exact decider in `mechanism`.
-3. `rationale` -> measured tool output, never config-only inference.
-4. Non-HISS decider -> set `runner`; omitted runner means `praetorctl audit`.
-5. Run `make hiss-coverage`; never weaken fixtures for stale claims.
+Steps: [`.config/hiss/README.md`](../.config/hiss/README.md#adding-or-moving-a-fixture).
