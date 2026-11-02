@@ -6,7 +6,7 @@ replace github.com/golusoris/golusoris/core => ./core
 
 require (
 	charm.land/bubbletea/v2 v2.1.1
-	cloud.google.com/go/pubsub/v2 v2.7.0
+	cloud.google.com/go/pubsub/v2 v2.8.0
 	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
 	github.com/99designs/gqlgen v0.17.98
