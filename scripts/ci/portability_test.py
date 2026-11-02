@@ -391,7 +391,7 @@ class PactFFIInstallerTests(TestCase):
             self.assertFalse((root / asset.library).exists())
 
     def _cache_install(self, root: Path, asset: pact_ffi.Asset, payload: bytes) -> Path:
-        """Run install(cache=True) on a Linux fixture asset whose download returns payload."""
+        """Run install(cache_root=root) on a Linux fixture asset whose download returns payload."""
         with (
             mock.patch.object(pact_ffi.platform, "system", return_value="Linux"),
             mock.patch.object(pact_ffi, "select_asset", return_value=asset),
