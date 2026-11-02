@@ -268,16 +268,37 @@ def fix_macos_install_name(system_name: str, library: Path) -> None:
         raise InstallError(f"failed to set Pact FFI install name: {error}") from error
 
 
-def install(module: Path, library_dir: Path) -> Path:
-    """Verify the dependency pin, then install the matching locked asset."""
+def cached_archive(asset: Asset, library_dir: Path) -> Path:
+    """Return the kept archive, downloading it once; extract_archive re-verifies its digest."""
+    archive = library_dir / asset.filename
+    if archive.exists():
+        return archive
+    downloaded = download_archive(asset, library_dir)
+    try:
+        os.replace(downloaded, archive)
+    except OSError as error:
+        downloaded.unlink(missing_ok=True)
+        raise InstallError(f"failed to keep Pact FFI archive: {error}") from error
+    return archive
+
+
+def install(module: Path, library_dir: Path, *, cache: bool = False) -> Path:
+    """Verify the dependency pin, then install the matching locked asset.
+
+    With cache, the verified archive stays in library_dir and later runs re-verify it
+    against the pinned digest instead of downloading; a mismatching archive is refused.
+    """
     verify_pact_go_pin(module)
     system_name = platform.system()
     asset = select_asset(system_name, platform.machine())
-    archive = download_archive(asset, library_dir)
-    try:
-        library = extract_archive(archive, library_dir, asset)
-    finally:
-        archive.unlink(missing_ok=True)
+    if cache:
+        library = extract_archive(cached_archive(asset, library_dir), library_dir, asset)
+    else:
+        archive = download_archive(asset, library_dir)
+        try:
+            library = extract_archive(archive, library_dir, asset)
+        finally:
+            archive.unlink(missing_ok=True)
     fix_macos_install_name(system_name, library)
     return library
 
@@ -287,9 +308,12 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--lib-dir", required=True, type=Path)
     parser.add_argument("--module", type=Path, default=Path("testutil/pact/go.mod"))
+    parser.add_argument(
+        "--cache", action="store_true", help="keep the archive and re-verify it on later runs"
+    )
     arguments = parser.parse_args()
     try:
-        library = install(arguments.module, arguments.lib_dir)
+        library = install(arguments.module, arguments.lib_dir, cache=arguments.cache)
     except InstallError as error:
         print(f"Pact FFI install failed: {error}", file=sys.stderr)
         return 1

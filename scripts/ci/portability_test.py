@@ -390,6 +390,77 @@ class PactFFIInstallerTests(TestCase):
                 pact_ffi.extract_archive(archive, root, asset)
             self.assertFalse((root / asset.library).exists())
 
+    def _cache_install(self, root: Path, asset: pact_ffi.Asset, payload: bytes) -> Path:
+        """Run install(cache=True) on a Linux fixture asset whose download returns payload."""
+        with (
+            mock.patch.object(pact_ffi.platform, "system", return_value="Linux"),
+            mock.patch.object(pact_ffi, "select_asset", return_value=asset),
+            mock.patch.object(
+                pact_ffi.urllib.request, "urlopen", return_value=io.BytesIO(payload)
+            ) as urlopen,
+        ):
+            library = pact_ffi.install(ROOT / "testutil/pact/go.mod", root, cache=True)
+        self.download_calls = urlopen.call_count
+        return library
+
+    def test_positive_cache_downloads_once_then_reuses_verified_archive(self) -> None:
+        compressed = gzip.compress(b"verified pact ffi")
+        asset = pact_ffi.Asset(
+            filename="fixture.so.gz",
+            sha256=hashlib.sha256(compressed).hexdigest(),
+            library="libpact_ffi.so",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertEqual(self._cache_install(root, asset, compressed).read_bytes(), b"verified pact ffi")
+            self.assertEqual(self.download_calls, 1)
+            self.assertTrue((root / asset.filename).is_file())
+            self._cache_install(root, asset, b"")
+            self.assertEqual(self.download_calls, 0)
+
+    def test_negative_planted_cached_archive_digest_mismatch_is_refused(self) -> None:
+        good = gzip.compress(b"verified pact ffi")
+        asset = pact_ffi.Asset(
+            filename="fixture.so.gz",
+            sha256=hashlib.sha256(good).hexdigest(),
+            library="libpact_ffi.so",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / asset.filename).write_bytes(gzip.compress(b"planted bytes"))
+            with self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"):
+                self._cache_install(root, asset, good)
+            self.assertFalse((root / asset.library).exists())
+
+    def test_negative_cache_download_digest_mismatch_keeps_nothing(self) -> None:
+        asset = pact_ffi.Asset(
+            filename="fixture.so.gz",
+            sha256="0" * 64,
+            library="libpact_ffi.so",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"):
+                self._cache_install(root, asset, gzip.compress(b"attacker bytes"))
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_local_gates_install_pact_ffi_into_ignored_repository_directory(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        targets = next(
+            line.split(":=", 1)[1].split()
+            for line in makefile.splitlines()
+            if line.startswith("PACT_FFI_TARGETS :=")
+        )
+        for target in ("verify-all", "test-all", "ci-all", "portability-test", "build-all"):
+            self.assertIn(target, targets)
+        self.assertIn("PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi", makefile)
+        self.assertIn("scripts/ci/pact_ffi.py --cache --lib-dir \"$(PACT_FFI_DIR)\"", makefile)
+        self.assertIn("$(PACT_FFI_TARGETS): pact-ffi", makefile)
+        self.assertIn("$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH", makefile)
+        self.assertIn("-L$(PACT_FFI_DIR) -Wl,-rpath,$(PACT_FFI_DIR)", makefile)
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        self.assertIn(".workingdir/", ignored)
+
     def test_truncated_download_is_wrapped_and_removed(self) -> None:
         class TruncatedResponse:
             def __enter__(self) -> TruncatedResponse:

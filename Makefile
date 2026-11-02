@@ -325,6 +325,19 @@ docs-upstream: ## print the recipe for refreshing a docs/upstream/ snapshot (see
 docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
+# testutil/pact links libpact_ffi; CI installs it per job, local gates use the same
+# digest-pinned installer into an ignored repository directory, never a host path.
+PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi
+PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln-all portability-test
+
+.PHONY: pact-ffi
+pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
+	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
+
+$(PACT_FFI_TARGETS): pact-ffi
+$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+$(PACT_FFI_TARGETS): export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) -L$(PACT_FFI_DIR) -Wl,-rpath,$(PACT_FFI_DIR))
+
 .PHONY: verify-all
 verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
