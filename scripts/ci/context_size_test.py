@@ -12,8 +12,8 @@ import subprocess  # Runs only fixed git commands in a scratch repository. # nos
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -38,7 +38,7 @@ class ContextSizeTest(unittest.TestCase):
 
     def setUp(self) -> None:
         # A git hook exports these; inherited, they would point the scratch repo at the real one.
-        env = mock.patch.dict(os.environ)
+        env = unittest.mock.patch.dict(os.environ)
         env.start()
         self.addCleanup(env.stop)
         for name in REPO_ENV:
