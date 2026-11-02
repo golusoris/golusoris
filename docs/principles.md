@@ -168,7 +168,7 @@ Each line names the file or command that enforces it; [`.github/workflows/ci.yml
 
 - `golangci-lint` with 30+ linters per [`.golangci.yml`](https://github.com/golusoris/golusoris/blob/main/.golangci.yml): `make lint-all`
 - `govulncheck`: `make vuln-all`
-- `go test -race -count=1` in every module: `make test-all`; the merged coverage gate is 70% (`Check coverage threshold (70%)` step in `ci.yml`); the security-critical target is 85%
+- `go test -race -count=1`: `make test-all`, through [`scripts/ci/go-modules.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/go-modules.sh); full runs cover every module, pull requests cover the changed modules and their dependents when `CI_SCOPE_BASE` is set; the merged coverage gate is 70% (`Check coverage threshold (70%)` step in `ci.yml`); the security-critical target is 85%
 - Ruff 0.16.8 from a digest-pinned image ([`tools/tool-versions.env`](https://github.com/golusoris/golusoris/blob/main/tools/tool-versions.env)): `make python-lint`, running [`scripts/ci/python-lint.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/python-lint.sh); diff-scoped on pull requests, where `CI_SCOPE_BASE` is set, and full-tree when it is empty
 - Python 3.12+ regression suites: `make python-test`
 - Clang/clang-tidy 22.1.8 warnings and a reproducible checked eBPF object: `make c-quality`, running [`scripts/ci/c-quality.sh`](https://github.com/golusoris/golusoris/blob/main/scripts/ci/c-quality.sh); diff-scoped on pull requests, full-tree when `CI_SCOPE_BASE` is empty or a changed header can affect every translation unit

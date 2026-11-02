@@ -230,7 +230,7 @@ caveman-context: ## lint every canonical agent-facing context surface
 	@git ls-files -z --cached --others --exclude-standard -- '*AGENTS.md' '.agents/agents/*.md' '.agents/skills/*/SKILL.md' '.claude/skills/*.md' ':(exclude).claude/skills/**/README.md' | xargs -0 -n 200 $(PRAETORCTL) caveman check --kind=context
 
 .PHONY: context-size
-context-size: ## fail when an AGENTS.md reaches 95% of a coding client's context cap
+context-size: ## fail when an AGENTS.md file or AGENTS.md path chain reaches 95% of a coding client's context cap
 	@python3 -B scripts/ci/context_size.py --worktree .
 
 .PHONY: text-register-policy
