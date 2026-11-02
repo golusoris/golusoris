@@ -24,39 +24,64 @@ WINDSURF_CHARS_PER_FILE = 12_000
 CODEX_BYTES_PER_CHAIN = 32 * 1024
 
 
+class CheckError(Exception):
+    """The check could not run; main reports it with exit status 3."""
+
+
 def _git(root: Path, *args: str, stdin: bytes | None = None) -> bytes:
     """Run one fixed git command in root and return its stdout."""
     git = shutil.which("git")
     if git is None:
-        raise SystemExit("context-size: git is not on PATH")
+        raise CheckError("git is not on PATH")
     if not root.is_dir():
-        raise SystemExit(f"context-size: {root} is not a directory")
+        raise CheckError(f"{root} is not a directory")
     done = subprocess.run(  # noqa: S603 - fixed git subcommands; root checked above.
         [git, *args], cwd=root, input=stdin, capture_output=True, check=True, timeout=60
     )
     return done.stdout
 
 
-def _agents_paths(raw: bytes) -> list[str]:
-    """Return the NUL-separated paths whose basename is exactly AGENTS.md."""
-    paths = (p.decode("utf-8") for p in raw.split(b"\0") if p)
-    return sorted({p for p in paths if PurePosixPath(p).name == NAME})
+def _is_agents(path: str) -> bool:
+    """Return whether path names a file called exactly AGENTS.md."""
+    return PurePosixPath(path).name == NAME
+
+
+def _staged_blobs(root: Path) -> dict[str, str]:
+    """Map each staged AGENTS.md path to its index object ID."""
+    raw = _git(root, "ls-files", "-z", "--stage", "--", f"*{NAME}")
+    blobs = {}
+    for entry in filter(None, raw.split(b"\0")):
+        meta, _, path = entry.decode("utf-8").partition("\t")
+        if _is_agents(path):
+            blobs[path] = meta.split()[1]
+    return blobs
+
+
+def _read_blobs(root: Path, oids: list[str]) -> list[bytes]:
+    """Read blobs by object ID; IDs are hex, so newline-separated batch input is safe."""
+    batch = _git(root, "cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in oids).encode())
+    blobs = []
+    for oid in oids:
+        header, _, batch = batch.partition(b"\n")
+        fields = header.split()
+        if len(fields) != 3 or fields[0].decode() != oid:
+            raise CheckError(f"git cat-file returned {header!r} for {oid}")
+        size = int(fields[2])
+        blobs.append(batch[:size])
+        batch = batch[size + 1 :]
+    return blobs
 
 
 def agents_contents(root: Path) -> dict[str, bytes]:
     """Return every AGENTS.md: tracked ones as staged, untracked ones from disk."""
-    staged = _git(root, "ls-files", "-z", "--cached", "--", f"*{NAME}")
-    tracked = _agents_paths(staged)
-    contents: dict[str, bytes] = {}
-    if tracked:
-        batch = _git(root, "cat-file", "--batch", stdin="".join(f":{p}\n" for p in tracked).encode())
-        for path in tracked:
-            header, _, batch = batch.partition(b"\n")
-            size = int(header.split()[2])
-            contents[path], batch = batch[:size], batch[size + 1 :]
+    staged = _staged_blobs(root)
+    paths = sorted(staged)
+    blobs = _read_blobs(root, [staged[p] for p in paths]) if paths else []
+    contents = dict(zip(paths, blobs, strict=True))
     new = _git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", f"*{NAME}")
-    for path in _agents_paths(new):
-        contents[path] = (root / path).read_bytes().replace(b"\r\n", b"\n")
+    for path in sorted({p.decode("utf-8") for p in new.split(b"\0") if p}):
+        if _is_agents(path):
+            contents[path] = (root / path).read_bytes().replace(b"\r\n", b"\n")
     return contents
 
 
@@ -80,9 +105,13 @@ def oversized(contents: dict[str, bytes]) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    """Check the repository at argv[1] (default: current directory)."""
+    """Check argv[1] (default: current directory): 0 fits, 1 oversized, 3 check error."""
     root = Path(argv[1] if len(argv) > 1 else ".").resolve()
-    problems = oversized(agents_contents(root))
+    try:
+        problems = oversized(agents_contents(root))
+    except (CheckError, OSError, UnicodeDecodeError, subprocess.SubprocessError) as err:
+        sys.stderr.write(f"context-size: error: {err}\n")
+        return 3
     for line in problems:
         sys.stderr.write(f"context-size: {line}; move bulk to linked on-demand docs\n")
     return 1 if problems else 0

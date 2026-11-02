@@ -83,6 +83,22 @@ class ContextSizeTest(unittest.TestCase):
         self.write("user guide/AGENTS.md", "a" * (CAP + 1))
         self.assertIn("user guide/AGENTS.md", self.check()[0])
 
+    @unittest.skipIf(sys.platform == "win32", "Windows file names cannot hold a newline")
+    def test_tracked_path_with_newline_is_checked(self) -> None:
+        self.write("odd\ndir/AGENTS.md", "a" * (CAP + 1))
+        self.assertIn("odd\ndir/AGENTS.md", self.check()[0])
+
+    def test_missing_root_exits_with_error_status(self) -> None:
+        self.assertEqual(context_size.main(["context_size", str(self.root / "absent")]), 3)
+
+    def test_git_failure_exits_with_error_status(self) -> None:
+        shutil.rmtree(self.root / ".git")
+        self.assertEqual(context_size.main(["context_size", str(self.root)]), 3)
+
+    def test_oversized_file_exits_with_finding_status(self) -> None:
+        self.write("AGENTS.md", "a" * (CAP + 1))
+        self.assertEqual(context_size.main(["context_size", str(self.root)]), 1)
+
     def test_other_names_ending_in_agents_md_are_ignored(self) -> None:
         self.write("ARCHIVE-AGENTS.md", "a" * (CAP + 1))
         self.write("loose-AGENTS.md", "a" * (CAP + 1), stage=False)
