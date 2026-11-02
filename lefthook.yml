@@ -34,6 +34,8 @@ pre-commit:
       run: bash scripts/hooks/govet.sh {staged_files}
     context-check:
       run: sh .config/lefthook/engine.sh compile-context --verify
+    context-size:
+      run: python3 -B scripts/ci/context_size.py .
     hiss-audit:
       run: sh .config/lefthook/engine.sh audit
     hiss-coverage:

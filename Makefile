@@ -229,6 +229,10 @@ caveman-context: ## lint every canonical agent-facing context surface
 	@# AGENTS.md; .paperclip/harness.json is linted by praetorctl audit through register.sources.
 	@git ls-files -z --cached --others --exclude-standard -- '*AGENTS.md' '.agents/agents/*.md' '.agents/skills/*/SKILL.md' '.claude/skills/*.md' ':(exclude).claude/skills/**/README.md' | xargs -0 -n 200 $(PRAETORCTL) caveman check --kind=context
 
+.PHONY: context-size
+context-size: ## fail when an AGENTS.md exceeds a coding client's context cap
+	@python3 -B scripts/ci/context_size.py --worktree .
+
 .PHONY: text-register-policy
 text-register-policy: ## verify required register skills and plugin projections
 	@bash scripts/ci/text-register-policy.sh .
@@ -322,7 +326,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 	bash scripts/verify-upstream-pins.sh
 
 .PHONY: verify-all
-verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

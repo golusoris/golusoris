@@ -45,7 +45,7 @@ main() {
 
 	if [[ -f "$root/scripts/ci/ci_scope.py" ]]; then
 		local rc=0
-		"$python_bin" "$root/scripts/ci/ci_scope.py" --root "$root" any '*.py' 'scripts/ci/*' '.config/lefthook/*' || rc=$?
+		"$python_bin" "$root/scripts/ci/ci_scope.py" --root "$root" any '*.py' 'scripts/ci/*' '.config/lefthook/*' '*AGENTS.md' || rc=$?
 		case "$rc" in
 			0) ;;
 			1)
@@ -63,6 +63,7 @@ main() {
 		'scripts/ci/ci_scope_test.py'
 		'scripts/ci/gomod_test.py'
 		'scripts/ci/review_bot_badges_test.py'
+		'scripts/ci/context_size_test.py'
 	)
 	local test_file
 	for test_file in "${tests[@]}"; do
