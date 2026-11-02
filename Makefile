@@ -328,7 +328,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 # testutil/pact links libpact_ffi; CI installs it per job, local gates use the same
 # digest-pinned installer into an ignored repository directory, never a host path.
 PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi
-PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln-all portability-test
+PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln-all portability-test fault-recovery
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi

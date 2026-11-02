@@ -444,6 +444,23 @@ class PactFFIInstallerTests(TestCase):
                 self._cache_install(root, asset, gzip.compress(b"attacker bytes"))
             self.assertEqual(list(root.iterdir()), [])
 
+    def test_negative_rejected_cache_exits_with_error_code_three(self) -> None:
+        good = gzip.compress(b"verified pact ffi")
+        asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(good).hexdigest(), "libpact_ffi.so")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            pact_ffi.cached_archive_path(asset, root).write_bytes(gzip.compress(b"planted bytes"))
+            argv = ["pact_ffi.py", "--cache", "--lib-dir", str(root)]
+            argv += ["--module", str(ROOT / "testutil/pact/go.mod")]
+            with (
+                mock.patch.object(pact_ffi.sys, "argv", argv),
+                mock.patch.object(pact_ffi.Path, "cwd", return_value=root),
+                mock.patch.object(pact_ffi.platform, "system", return_value="Linux"),
+                mock.patch.object(pact_ffi, "select_asset", return_value=asset),
+                contextlib.redirect_stderr(io.StringIO()),
+            ):
+                self.assertEqual(pact_ffi.main(), 3)
+
     def test_boundary_pin_change_downloads_new_archive_beside_stale_one(self) -> None:
         old = gzip.compress(b"old pinned ffi")
         new = gzip.compress(b"new pinned ffi")
@@ -500,7 +517,14 @@ class PactFFIInstallerTests(TestCase):
             for line in makefile.splitlines()
             if line.startswith("PACT_FFI_TARGETS :=")
         )
-        for target in ("verify-all", "test-all", "ci-all", "portability-test", "build-all"):
+        for target in (
+            "verify-all",
+            "test-all",
+            "ci-all",
+            "portability-test",
+            "build-all",
+            "fault-recovery",
+        ):
             self.assertIn(target, targets)
         self.assertIn("PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi", makefile)
         self.assertIn("scripts/ci/pact_ffi.py --cache --lib-dir \"$(PACT_FFI_DIR)\"", makefile)

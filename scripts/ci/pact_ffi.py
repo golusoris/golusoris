@@ -32,6 +32,10 @@ MAX_LIBRARY_BYTES = 64 << 20
 CHUNK_BYTES = 64 << 10
 
 
+# scripts/ci exit-code contract: 3 = error, fail closed.
+EXIT_ERROR = 3
+
+
 class InstallError(RuntimeError):
     """Report a fail-closed Pact FFI installation error."""
 
@@ -344,7 +348,7 @@ def main() -> int:
         )
     except InstallError as error:
         print(f"Pact FFI install failed: {error}", file=sys.stderr)
-        return 1
+        return EXIT_ERROR
     print(f"installed verified Pact FFI v{FFI_VERSION}: {library}")
     return 0
 
