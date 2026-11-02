@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import ast
 import contextlib
 import gzip
 import hashlib
@@ -23,6 +24,35 @@ import portability
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+# Two pipe joins, the tree kill, its grace and the direct-child reap, plus 3 s for two interpreter starts (Windows took 4.97 s).
+TEARDOWN_BUDGET_SECONDS = (
+    2 * portability.PROCESS_PIPE_JOIN_SECONDS
+    + portability.PROCESS_TASKKILL_SECONDS
+    + portability.PROCESS_TERMINATE_GRACE_SECONDS
+    + portability.PROCESS_KILL_WAIT_SECONDS
+    + 3
+)
+
+
+def _is_pure_number(node: ast.expr) -> bool:
+    """Report whether an expression is built from numeric literals only."""
+    leaves = [n for n in ast.walk(node) if isinstance(n, (ast.Name, ast.Attribute, ast.Call, ast.Constant))]
+    return all(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) for n in leaves)
+
+
+def literal_wall_clock_bounds(source: str) -> list[int]:
+    """Return lines whose assert compares a time.monotonic() expression with a pure number."""
+    lines = []
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
+            continue
+        if not node.func.attr.startswith("assert"):
+            continue
+        timed = any("monotonic" in ast.unparse(arg) for arg in node.args)
+        if timed and any(_is_pure_number(arg) for arg in node.args):
+            lines.append(node.lineno)
+    return lines
 
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
@@ -133,18 +163,34 @@ class PortabilityDriverTest(TestCase):
                         sys.executable,
                         "-c",
                         "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
-                        "sys.stdout.flush(); time.sleep(10)",
+                        "sys.stdout.flush(); time.sleep(60)",
                     ),
                     cwd=Path(directory),
                     environment=dict(os.environ),
-                    timeout=8,
+                    timeout=30,
                     max_output_bytes=4,
                 )
-        self.assertLess(time.monotonic() - started, 3)
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
+
+    def test_wall_clock_bounds_derive_from_runner_constants(self) -> None:
+        # A literal bound drifts below the runner's own teardown constants and flakes on slow hosts.
+        source = Path(__file__).read_text(encoding="utf-8")
+        self.assertEqual(literal_wall_clock_bounds(source), [])
+        planted = (
+            "self.assertLess(time.monotonic() - started, 3)",
+            "self.assertLess((time.monotonic() - started), 3)",
+            "self.assertLessEqual(time.monotonic() - started, 2 + 1.5)",
+            "self.assertGreater(3, time.monotonic() - started)",
+        )
+        for line in planted:
+            with self.subTest(line=line):
+                self.assertEqual(literal_wall_clock_bounds(line), [1])
+        derived = "self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)"
+        self.assertEqual(literal_wall_clock_bounds(derived), [])
 
     def test_process_output_bounds_pipe_inheriting_descendant(self) -> None:
         runner = portability.ProcessRunner()
-        grandchild = "import time; time.sleep(10)"
+        grandchild = "import time; time.sleep(60)"
         parent = (
             "import subprocess,sys; "
             f"subprocess.Popen([sys.executable, '-c', {grandchild!r}]); "
@@ -158,10 +204,10 @@ class PortabilityDriverTest(TestCase):
                     (sys.executable, "-c", parent),
                     cwd=Path(directory),
                     environment=dict(os.environ),
-                    timeout=8,
+                    timeout=30,
                     max_output_bytes=4,
                 )
-        self.assertLess(time.monotonic() - started, 4)
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
 
     @skipUnless(os.name == "posix", "process groups are POSIX")
     def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
