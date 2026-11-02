@@ -72,24 +72,24 @@ def _read_blobs(root: Path, oids: list[str]) -> list[bytes]:
     return blobs
 
 
-def _read_lf(path: Path) -> bytes:
-    """Read a working-tree file with LF endings, as the index stores it."""
-    return path.read_bytes().replace(b"\r\n", b"\n")
-
-
 def agents_contents(root: Path, *, worktree: bool = False) -> dict[str, bytes]:
-    """Return every AGENTS.md: tracked ones as staged (or as on disk), untracked ones from disk."""
+    """Return every AGENTS.md as the next commit holds it, or with worktree=True as on disk.
+
+    Commit view: tracked files from the index, untracked ones with the LF endings that
+    eol=lf gives them on add. Disk view: raw bytes, since clients read those.
+    """
     staged = _staged_blobs(root)
     paths = sorted(staged)
     if worktree:
-        contents = {p: _read_lf(root / p) for p in paths if (root / p).is_file()}
+        contents = {p: (root / p).read_bytes() for p in paths if (root / p).is_file()}
     else:
         blobs = _read_blobs(root, [staged[p] for p in paths]) if paths else []
         contents = dict(zip(paths, blobs, strict=True))
     new = _git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", f"*{NAME}")
     for path in sorted({p.decode("utf-8") for p in new.split(b"\0") if p}):
         if _is_agents(path):
-            contents[path] = _read_lf(root / path)
+            raw = (root / path).read_bytes()
+            contents[path] = raw if worktree else raw.replace(b"\r\n", b"\n")
     return contents
 
 

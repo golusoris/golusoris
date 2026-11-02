@@ -6,12 +6,14 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess  # Runs only fixed git commands in a scratch repository. # nosec B404
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -19,12 +21,28 @@ import context_size
 
 ROOT = Path(__file__).resolve().parents[2]
 CAP = context_size.WINDSURF_CHARS_PER_FILE
+REPO_ENV = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+    "GIT_NAMESPACE",
+)
 
 
 class ContextSizeTest(unittest.TestCase):
     """Positive, negative and boundary cases for both client caps."""
 
     def setUp(self) -> None:
+        # A git hook exports these; inherited, they would point the scratch repo at the real one.
+        env = mock.patch.dict(os.environ)
+        env.start()
+        self.addCleanup(env.stop)
+        for name in REPO_ENV:
+            os.environ.pop(name, None)
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
@@ -75,6 +93,17 @@ class ContextSizeTest(unittest.TestCase):
         (self.root / "AGENTS.md").write_text("a" * (CAP + 1), encoding="utf-8")
         self.assertEqual(self.check(), [])
         self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
+
+    def test_worktree_mode_counts_crlf_bytes(self) -> None:
+        for name in ("AGENTS.md", "a/AGENTS.md", "a/b/AGENTS.md"):
+            self.write(name, "a\r\n" * 4000, stage=name == "AGENTS.md")
+        self.assertEqual(self.check(), [])
+        self.assertEqual(context_size.main(["cs", "--worktree", str(self.root)]), 1)
+
+    def test_hook_environment_does_not_reach_the_scratch_repository(self) -> None:
+        self.assertTrue(all(name not in os.environ for name in REPO_ENV))
+        self.write("AGENTS.md", "short")
+        self.assertEqual(set(context_size.agents_contents(self.root)), {"AGENTS.md"})
 
     def test_worktree_mode_skips_deleted_file(self) -> None:
         self.write("AGENTS.md", "a" * (CAP + 1))
