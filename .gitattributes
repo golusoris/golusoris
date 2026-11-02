@@ -5,6 +5,8 @@ core/codec/jcs/testdata/cyberphone/** -text
 .config/hiss/testdata/README.md text eol=lf
 media/audio/testdata/** -text
 testutil/fixture/testdata/** text eol=lf
+# Client caps count characters; a CRLF checkout must not push AGENTS.md past them.
+AGENTS.md text eol=lf
 
 # BEGIN praetor managed attributes (praetorctl adopt)
 # praetorctl audit hashes these files; keep their checkout bytes the same on every platform.

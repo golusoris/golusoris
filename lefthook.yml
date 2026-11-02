@@ -35,7 +35,6 @@ pre-commit:
     context-check:
       run: sh .config/lefthook/engine.sh compile-context --verify
     context-size:
-      glob: "*AGENTS.md"
       run: python3 -B scripts/ci/context_size.py .
     hiss-audit:
       run: sh .config/lefthook/engine.sh audit
