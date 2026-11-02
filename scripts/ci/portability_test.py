@@ -475,7 +475,11 @@ class PactFFIInstallerTests(TestCase):
     def test_negative_symlinked_cache_directory_outside_root_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
             root = Path(directory)
-            (root / "cache").symlink_to(outside, target_is_directory=True)
+            try:
+                (root / "cache").symlink_to(outside, target_is_directory=True)
+            except OSError as error:
+                # Windows without Developer Mode or SeCreateSymbolicLinkPrivilege refuses symlinks.
+                self.skipTest(f"symlink creation unavailable on this host: {error}")
             with self.assertRaisesRegex(pact_ffi.InstallError, "resolves outside"):
                 pact_ffi.install(
                     ROOT / "testutil/pact/go.mod", root / "cache" / "pact-ffi", cache_root=root
