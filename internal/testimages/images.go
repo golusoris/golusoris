@@ -32,7 +32,7 @@ const (
 	// Redpanda is the Kafka-compatible integration-test image.
 	Redpanda = "redpandadata/redpanda:v26.2.6@sha256:8b1076e0d61bfceb66594dc01536427ce0b529f8ead35fdab9763ab6085891ce"
 	// VersityGW is the S3-compatible gateway that enforces SigV4 for storage tests.
-	VersityGW = "versity/versitygw:v1.9.0@sha256:eb7f786fcd91e72194e48fcf1ac16302d686bf8e3a71434bdbc067a6efd3fdc7"
+	VersityGW = "versity/versitygw:v1.10.0@sha256:89cad13cc981986ee284cbafea4613f9533ce6fd5f37a2c96c4c4fb8adb3a316"
 	// FakeGCSServer is the GCS emulator for the storage/gcs module tests.
 	FakeGCSServer = "fsouza/fake-gcs-server:1.56.1@sha256:797ce226d62f947c009dc40246b30cfb456b8473d8241407f9d6f2c04e4d69ef"
 	// Azurite is the Azure Storage emulator for the storage/azblob module tests.
