@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120" role="img" aria-label="golusoris — composable Go framework built on Uber Fx">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1020"/>
+      <stop offset="55%" stop-color="#111a35"/>
+      <stop offset="100%" stop-color="#0a1a2f"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#06b6d4"/>
+      <stop offset="50%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.18"/>
+      <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.18"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="120" rx="12" fill="url(#bg)"/>
+
+  <!-- Fx module DAG / HISS lattice graph motif -->
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M720 60 L780 36 L860 36 L920 60 L980 36 L1060 60 L1140 36"
+          stroke="url(#glow)" stroke-width="8"/>
+    <path d="M720 60 L780 84 L860 84 L920 60 L980 84 L1060 60 L1140 84"
+          stroke="url(#glow)" stroke-width="8"/>
+    <path d="M720 60 L780 36 L860 36 L920 60 L980 36 L1060 60 L1140 36"
+          stroke="url(#accent)" stroke-width="2" opacity="0.9"/>
+    <path d="M720 60 L780 84 L860 84 L920 60 L980 84 L1060 60 L1140 84"
+          stroke="url(#accent)" stroke-width="2" opacity="0.9"/>
+    <path d="M780 36 L780 84 M860 36 L860 84 M980 36 L980 84 M1060 36 L1060 84"
+          stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="4 6" opacity="0.5"/>
+  </g>
+  <g fill="#111a35" stroke-width="2">
+    <circle cx="720" cy="60" r="6" stroke="#06b6d4"/>
+    <circle cx="780" cy="36" r="5" stroke="#06b6d4"/>
+    <circle cx="780" cy="84" r="5" stroke="#06b6d4"/>
+    <circle cx="860" cy="36" r="5" stroke="#3b82f6"/>
+    <circle cx="860" cy="84" r="5" stroke="#3b82f6"/>
+    <circle cx="920" cy="60" r="7" stroke="#3b82f6"/>
+    <circle cx="980" cy="36" r="5" stroke="#8b5cf6"/>
+    <circle cx="980" cy="84" r="5" stroke="#8b5cf6"/>
+    <circle cx="1060" cy="60" r="6" stroke="#8b5cf6"/>
+    <circle cx="1140" cy="36" r="5" stroke="#8b5cf6"/>
+    <circle cx="1140" cy="84" r="5" stroke="#8b5cf6"/>
+  </g>
+
+  <text x="44" y="74" font-family="ui-sans-serif,Segoe UI,Helvetica,Arial,sans-serif"
+        font-size="54" font-weight="700" fill="#f8fafc" letter-spacing="-1">golu<tspan fill="url(#accent)">soris</tspan></text>
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,monospace" font-size="14" fill="#94a3b8">
+    <text x="300" y="52">Composable Go framework · Uber Fx modules</text>
+    <text x="300" y="76">HISS-21 lattice · Power of 10 · 31 Go modules</text>
+  </g>
+</svg>
