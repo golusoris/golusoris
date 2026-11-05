@@ -5,10 +5,11 @@
 
 # Planted cases for scripts/ci/release-pr-ci.sh against a stub gh: the waiting runs
 # of a release branch head are approved once each, including runs appearing after
-# a delay and a release pull request listed late; a run that already ran, a run of another branch or repository, a labelled
+# a delay, a release pull request listed late, and a transiently failing pull request
+# listing retried to success; a run that already ran, a run of another branch or repository, a labelled
 # pull request on a non-release or fork branch, and no release pull request approve nothing; a head without a run, a run
-# appearing too late, a reported release pull request never listed, a failing pull request listing, a failing or odd
-# API answer fail the script.
+# appearing too late, a reported release pull request never listed, an exhausted transient or non-transient pull
+# request listing failure, a failing or odd API answer fail the script.
 #   usage: scripts/ci/release-pr-ci_test.sh
 set -euo pipefail
 
@@ -34,7 +35,16 @@ case "$1" in
 		if [ "$pr_count" -le "${STUB_PR_EMPTY_FIRST:-0}" ]; then
 			exit 0
 		fi
-		[ "$STUB_HEADS" = fail ] && exit 1
+		if [ "$pr_count" -le "${STUB_PR_FAIL_FIRST:-0}" ]; then
+			printf '%s\n' "${STUB_PR_FAIL_MSG:-HTTP 502: Bad Gateway}" >&2
+			exit 1
+		fi
+		if [ "$STUB_HEADS" = fail ]; then
+			if [ -n "${STUB_PR_FAIL_MSG:-}" ]; then
+				printf '%s\n' "$STUB_PR_FAIL_MSG" >&2
+			fi
+			exit 1
+		fi
 		printf '%s' "$STUB_HEADS"
 		;;
 	api)
@@ -83,8 +93,11 @@ run_case() {
 		STUB_APPROVE="${6:-ok}"
 		STUB_EMPTY_FIRST="$empty_first"
 		STUB_PR_EMPTY_FIRST="${STUB_PR_EMPTY_FIRST:-0}"
+		STUB_PR_FAIL_FIRST="${STUB_PR_FAIL_FIRST:-0}"
+		STUB_PR_FAIL_MSG="${STUB_PR_FAIL_MSG:-}"
 		RELEASE_PR_EXPECTED="${RELEASE_PR_EXPECTED:-false}"
 		RELEASE_PR_CI_WAIT=0
+		RELEASE_PR_CI_LIST_BACKOFF=0
 	)
 	env "${env_args[@]}" bash "$HERE/release-pr-ci.sh" owner/repo > "$WORK/out" 2>&1 || rc=$?
 	got="$(wc -l < "$WORK/log")"
@@ -117,6 +130,17 @@ grep -q 'no pull request run on release-please--branches--main' "$WORK/out"
 run_case api-fails "$HEAD" fail 1 0
 run_case pr-list-fails fail "11 action_required release-please--branches--main owner/repo" 1 0
 grep -q 'could not list open release pull requests' "$WORK/out"
+STUB_PR_FAIL_FIRST=1 run_case pr-list-retry-502 "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
+grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
+[ "$(< "$WORK/pr_lookups")" -eq 2 ]
+STUB_PR_FAIL_FIRST=3 run_case pr-list-retry-exhausted "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0
+[ "$(< "$WORK/pr_lookups")" -eq 3 ]
+grep -q 'could not list open release pull requests' "$WORK/out"
+grep -q 'HTTP 502: Bad Gateway' "$WORK/out"
+STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 404: Not Found" run_case pr-list-non-transient "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0
+[ "$(< "$WORK/pr_lookups")" -eq 1 ]
+grep -q 'could not list open release pull requests' "$WORK/out"
+grep -q 'HTTP 404: Not Found' "$WORK/out"
 run_case approve-fails "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0 fail
 run_case odd-run "$HEAD" "null action_required release-please--branches--main owner/repo" 1 0
 run_case odd-head "release-please--branches--main not-a-sha false" "11 action_required release-please--branches--main owner/repo" 1 0
@@ -133,4 +157,4 @@ RELEASE_PR_EXPECTED=true run_case expected-pr-missing "" "" 1 0
 grep -q 'none listed after 2 tries' "$WORK/out"
 RELEASE_PR_EXPECTED=yes run_case odd-expected "$HEAD" "11 action_required release-please--branches--main owner/repo" 2 0
 
-echo "release pull request CI: 6 approved, 6 skipped, 9 refused"
+echo "release pull request CI: 7 approved, 6 skipped, 11 refused"

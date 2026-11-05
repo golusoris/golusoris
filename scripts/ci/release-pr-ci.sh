@@ -11,6 +11,7 @@
 #   usage: scripts/ci/release-pr-ci.sh OWNER/REPO
 #   needs: gh with a token that may read pull requests and write actions
 #   env:   RELEASE_PR_CI_TRIES (default 18), RELEASE_PR_CI_WAIT seconds (default 10),
+#          RELEASE_PR_CI_LIST_BACKOFF seconds (default 2),
 #          RELEASE_PR_EXPECTED=true when release-please reported a pull request
 set -euo pipefail
 
@@ -22,8 +23,9 @@ REPO="$1"
 GH="${GH_BIN:-gh}"
 TRIES="${RELEASE_PR_CI_TRIES:-18}"
 WAIT="${RELEASE_PR_CI_WAIT:-10}"
-if [[ ! "$TRIES" =~ ^[1-9][0-9]?$ ]] || [[ ! "$WAIT" =~ ^[0-9]{1,3}$ ]]; then
-	echo "error: unexpected RELEASE_PR_CI_TRIES or RELEASE_PR_CI_WAIT" >&2
+BASE="${RELEASE_PR_CI_LIST_BACKOFF:-2}"
+if [[ ! "$TRIES" =~ ^[1-9][0-9]?$ ]] || [[ ! "$WAIT" =~ ^[0-9]{1,3}$ ]] || [[ ! "$BASE" =~ ^[0-9]{1,2}$ ]]; then
+	echo "error: unexpected RELEASE_PR_CI_TRIES, RELEASE_PR_CI_WAIT or RELEASE_PR_CI_LIST_BACKOFF" >&2
 	exit 2
 fi
 
@@ -33,16 +35,35 @@ if [ "$EXPECTED" != true ] && [ "$EXPECTED" != false ]; then
 	exit 2
 fi
 
+readonly LIST_ATTEMPTS=3
+
 # The author depends on the token release-please ran with, so a release branch of this
 # repository selects; only writers can push one, and writers may approve runs anyway.
 release_heads() {
-	local listed branch sha cross
-	if ! listed="$("$GH" pr list --repo "$REPO" --state open --label 'autorelease: pending' \
-		--json headRefName,headRefOid,isCrossRepository \
-		--jq '.[] | "\(.headRefName) \(.headRefOid) \(.isCrossRepository)"')"; then
-		echo "error: could not list open release pull requests" >&2
-		return 1
-	fi
+	local -r transient_regex='HTTP 50[0-9]|502 Bad Gateway|503|504|connection reset|connection refused|[Tt]imeout|EOF|TLS handshake'
+	local listed="" branch sha cross attempt err err_file
+	err_file="$(mktemp "${TMPDIR:-/tmp}/golusoris-release-pr-ci.XXXXXX")"
+
+	for ((attempt = 1; attempt <= LIST_ATTEMPTS; attempt++)); do
+		if listed="$("$GH" pr list --repo "$REPO" --state open --label 'autorelease: pending' \
+			--json headRefName,headRefOid,isCrossRepository \
+			--jq '.[] | "\(.headRefName) \(.headRefOid) \(.isCrossRepository)"' 2>"$err_file")"; then
+			break
+		fi
+		err="$(cat "$err_file")"
+		# Retry only transient forge or network errors, at most LIST_ATTEMPTS times.
+		if [[ ! "$err" =~ $transient_regex ]] || [ "$attempt" -eq "$LIST_ATTEMPTS" ]; then
+			echo "error: could not list open release pull requests" >&2
+			[ -n "$err" ] && printf '%s\n' "$err" >&2
+			rm -f "$err_file"
+			return 1
+		fi
+		if [ "$BASE" -gt 0 ]; then
+			sleep $((attempt * BASE + RANDOM % BASE))
+		fi
+	done
+	rm -f "$err_file"
+
 	while read -r branch sha cross; do
 		if [[ "$branch" =~ ^release-please--[A-Za-z0-9._/-]+$ ]] && [ "$cross" = false ]; then
 			printf '%s %s\n' "$branch" "$sha"
