@@ -351,7 +351,7 @@ def check_release_tool_pins(root: Path) -> list[str]:
 
 VALID_FIXTURE_ENV = """\
 COSIGN_VERSION=3.1.4
-SYFT_VERSION=1.54.1
+SYFT_VERSION=1.56.0
 GORELEASER_VERSION=2.19.0
 """
 
@@ -363,7 +363,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
       - name: Install syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          syft-version: v1.54.1
+          syft-version: v1.56.0
       - name: Install goreleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:
@@ -379,7 +379,7 @@ VALID_FIXTURE_WORKFLOW = r"""\
       - name: Verify tools
         run: |
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
           node --version | grep -Eq '^v24\.22\.2$'
@@ -578,11 +578,11 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-build.yml"
             content = path.read_text(encoding="utf-8")
-            content = content.replace("syft-version: v1.54.1", "syft-version: v1.54.0")
+            content = content.replace("syft-version: v1.56.0", "syft-version: v1.55.0")
             content = content.replace("1\\.54\\.1", "1\\.54\\.0")
             path.write_text(content, encoding="utf-8")
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "syft: pin 1.54.1 != pin 1.54.0")
+            self.assert_planted_defect(problems, "syft: pin 1.56.0 != pin 1.55.0")
 
     def test_planted_env_differs(self) -> None:
         # Tests detection of tools/tool-versions.env differing from workflow pin.
