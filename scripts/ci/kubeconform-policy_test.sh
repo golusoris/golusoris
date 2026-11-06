@@ -10,6 +10,9 @@ readonly repo_root
 suite_root="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-kubeconform-policy.XXXXXX")"
 readonly suite_root
 trap 'rm -rf "$suite_root"' EXIT
+# Expected pins come from the pin file, so a version bump never needs a test edit.
+# shellcheck source=/dev/null
+source "$repo_root/tools/tool-versions.env"
 
 expect_failure() {
 	local expected="$1"
@@ -67,9 +70,9 @@ FAKE_LOG="$fake_log" KUBECONFORM_BIN="$fake" \
 	bash "$repo_root/scripts/ci/kubeconform.sh" --root "$clean_root" >/dev/null
 for required in \
 	'-strict' \
-	'-kubernetes-version 1.37.1' \
-	'a6f9a32d2ccb64b6e4f5b41419b9c2e8ee0cce18' \
-	'ad3b08c5045129d7bb1eeffd8e61719b2c8dd1e2' \
+	"-kubernetes-version ${KUBERNETES_SCHEMA_VERSION#v}" \
+	"$KUBERNETES_SCHEMA_COMMIT" \
+	"$CRD_SCHEMA_COMMIT" \
 	'-skip AppStack'; do
 	if ! grep -Fq -- "$required" "$fake_log"; then
 		printf 'kubeconform contract lacks: %s\n' "$required" >&2
