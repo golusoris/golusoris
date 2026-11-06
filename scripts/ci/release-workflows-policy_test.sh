@@ -251,6 +251,92 @@ check_release_draft_contract() {
 	done
 }
 
+check_release_please_tagging() {
+	# The merged release pull request is tagged by release-please, never by hand.
+	check_release_please_workflow "$2" || return 1
+	check_release_please_config "$1"
+}
+
+check_release_please_workflow() {
+	local workflow="$1"
+	if grep -Eiq '^[[:space:]]*skip-github-release:[[:space:]]*['\''"]?true['\''"]?' "$workflow"; then
+		printf 'release-please skips the tag and release step: %s\n' "$workflow" >&2
+		return 1
+	fi
+	if ! grep -Eq '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*actions/create-github-app-token@' "$workflow"; then
+		printf 'release-please lacks GitHub App token minting: %s\n' "$workflow" >&2
+		return 1
+	fi
+	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+	awk '
+		/uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1; next }
+		in_action && /^[[:space:]]*token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { found = 1; exit }
+		in_action && /^[[:space:]]*-[[:space:]]/ { in_action = 0 }
+		END { exit !found }
+	' "$workflow" || {
+		printf 'release-please does not pass App token to release-please-action: %s\n' "$workflow" >&2
+		return 1
+	}
+}
+
+check_release_please_config() {
+	local config="$1"
+	python3 -B - "$config" <<'PY' || return 1
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    config = json.load(handle)
+packages = config["packages"]
+problems = []
+if config.get("force-tag-creation") is not True:
+    problems.append("force-tag-creation must be true")
+if config.get("skip-github-release") is True:
+    problems.append("top-level config skips tags and releases")
+if config.get("include-v-in-tag") is not True:
+    problems.append("top-level include-v-in-tag must be true")
+if config.get("include-component-in-tag") is not False:
+    problems.append("top-level include-component-in-tag must be false")
+if packages["."].get("draft") is not True:
+    problems.append("root package draft must be true for the GoReleaser draft")
+if packages["core"].get("draft") is not True:
+    problems.append("core package draft must be true so core tags never take releases/latest")
+core = packages.get("core", {})
+if core.get("component") != "core":
+    problems.append("core package component must be 'core'")
+if core.get("include-component-in-tag") is not True:
+    problems.append("core package include-component-in-tag must be true")
+if core.get("tag-separator") != "/":
+    problems.append("core package tag-separator must be '/'")
+for pkg_name, expected_keys in {
+    ".": {
+        "include-v-in-tag": True,
+        "include-component-in-tag": False,
+        "component": None,
+        "tag-separator": None,
+    },
+    "core": {
+        "include-v-in-tag": True,
+    },
+}.items():
+    pkg = packages.get(pkg_name, {})
+    for key, expected_val in expected_keys.items():
+        if expected_val is None:
+            if key in pkg:
+                problems.append(f"{pkg_name} package must not set {key}")
+        elif key in pkg and pkg[key] != expected_val:
+            val_repr = str(expected_val).lower() if isinstance(expected_val, bool) else repr(expected_val)
+            problems.append(f"{pkg_name} package {key} must be {val_repr}")
+for path, package in packages.items():
+    if package.get("force-tag-creation") is False:
+        problems.append(f"{path} overrides force-tag-creation to false")
+    if package.get("skip-github-release") is True:
+        problems.append(f"{path} skips its tag and release")
+if problems:
+    sys.exit("release-please tagging contract: " + "; ".join(problems))
+PY
+}
+
 check_verifier() {
 	local path="$1"
 	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
@@ -336,6 +422,8 @@ verifier="$repo_root/.github/workflows/verify-provenance.yml"
 template="$repo_root/template/.github/workflows/release.yml"
 downstream_docs="$repo_root/docs/ci-downstream.md"
 goreleaser_config="$repo_root/tools/.goreleaser.yml"
+release_please="$repo_root/.github/workflows/release-please.yml"
+release_please_config="$repo_root/release-please-config.json"
 
 check_release_go "$release_go"
 check_root_release "$release_build"
@@ -350,6 +438,7 @@ check_caller_permissions "$downstream_docs"
 check_release_draft_contract "$goreleaser_config"
 check_release_draft_contract "$downstream_docs"
 check_downstream_signer_contract "$downstream_docs"
+check_release_please_tagging "$release_please_config" "$release_please"
 
 parser="$suite_root/release-receipt-parser.mjs"
 extract_receipt_parser "$release_go" >"$parser"
@@ -496,5 +585,147 @@ sed '/^[[:space:]]*signer-digest:/d' "$downstream_docs" >"$negative"
 expect_failure 'signer digest' check_downstream_signer_contract "$negative"
 sed '/- "{{ \.Tag }}"/d' "$downstream_docs" >"$negative"
 expect_failure 'image receipt contract' check_downstream_signer_contract "$negative"
+
+negative_config="$suite_root/negative-release-please-config.json"
+sed '/"force-tag-creation": true,/d' "$release_please_config" >"$negative_config"
+expect_failure 'force-tag-creation must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["force-tag-creation"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'core overrides force-tag-creation to false' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["skip-github-release"] = True
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'top-level config skips tags and releases' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["."]["draft"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'root package draft must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["draft"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'core package draft must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["skip-github-release"] = True
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'core skips its tag and release' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["tag-separator"] = "-"
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure "core package tag-separator must be '/'" \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["."]["include-v-in-tag"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure '. package include-v-in-tag must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line)
+        if "manifest-file: .release-please-manifest.json" in line:
+            dst.write("          skip-github-release: true\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please skips the tag and release step' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line)
+        if "manifest-file: .release-please-manifest.json" in line:
+            dst.write("          skip-github-release: \"true\"\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please skips the tag and release step' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" in line:
+            dst.write(line.replace("token:", "# token:"))
+        else:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "actions/create-github-app-token" not in line:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please lacks GitHub App token minting' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "actions/create-github-app-token" in line:
+            dst.write(line.replace("uses:", "# uses:"))
+        else:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please lacks GitHub App token minting' \
+	check_release_please_tagging "$release_please_config" "$negative"
 
 printf 'release workflow policy tests passed\n'
