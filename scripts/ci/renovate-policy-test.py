@@ -44,6 +44,7 @@ PRIVATE_JOB_WORKFLOWS = (
 
 EXPECTED = {
     (".github/workflows/rebuild-on-base.yml", "tonistiigi/binfmt", "docker"),
+    (".github/workflows/rebuild-on-base.yml", "anchore/syft", "github-releases"),
     (".github/workflows/ci-go.yml", "mvdan.cc/gofumpt", "go"),
     (".github/workflows/ci-go.yml", "github.com/golangci/golangci-lint/v2", "go"),
     (".github/workflows/ci-go.yml", "github.com/securego/gosec/v2", "go"),
@@ -997,6 +998,45 @@ def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
     return True
 
 
+SYFT_USE = "uses: anchore/sbom-action/download-syft@"
+
+
+def syft_workflow_uncovered(config: dict[str, object], workflows: dict[str, str]) -> list[str]:
+    """Return workflows whose download-syft inputs Renovate would not move with SYFT_VERSION."""
+    syft = [item for item in extract(config, workflows) if item["dep_name"] == "anchore/syft"]
+    return sorted(
+        path
+        for path, content in workflows.items()
+        if content.count(SYFT_USE) != sum(1 for item in syft if item["path"] == path)
+    )
+
+
+def test_syft_workflow_pins(config: dict[str, object]) -> bool:
+    """Every workflow syft-version input must share the update branch of SYFT_VERSION."""
+    workflows = {
+        path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
+        for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+    }
+    if not any(SYFT_USE in content for content in workflows.values()):
+        print("no download-syft workflow found; syft coverage check has nothing to prove", file=sys.stderr)
+        return False
+    uncovered = syft_workflow_uncovered(config, workflows)
+    if uncovered:
+        print(f"download-syft inputs outside Renovate: {uncovered}", file=sys.stderr)
+        return False
+    managers = config.get("customManagers")
+    stripped = dict(config)
+    stripped["customManagers"] = [
+        manager
+        for manager in (managers if isinstance(managers, list) else [])
+        if not (isinstance(manager, dict) and "download-syft" in json.dumps(manager.get("matchStrings")))
+    ]
+    if not syft_workflow_uncovered(stripped, workflows):
+        print("syft coverage negative control was not rejected", file=sys.stderr)
+        return False
+    return True
+
+
 def main() -> int:
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
@@ -1019,6 +1059,7 @@ def main() -> int:
         test_minimum_age(config),
         test_runner_hold(config),
         test_backup_restore_dockerfile(config),
+        test_syft_workflow_pins(config),
     )
     if not all(checks):
         return 1
