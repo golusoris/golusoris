@@ -268,8 +268,12 @@ packages = config["packages"]
 problems = []
 if config.get("force-tag-creation") is not True:
     problems.append("force-tag-creation must be true")
+if config.get("skip-github-release") is True:
+    problems.append("top-level config skips tags and releases")
 if packages["."].get("draft") is not True:
     problems.append("root package draft must be true for the GoReleaser draft")
+if packages["core"].get("draft") is True:
+    problems.append("core package draft must be false for direct publication")
 for path, package in packages.items():
     if package.get("skip-github-release") is True:
         problems.append(f"{path} skips its tag and release")
@@ -531,16 +535,29 @@ negative_config="$suite_root/negative-release-please-config.json"
 sed '/"force-tag-creation": true,/d' "$release_please_config" >"$negative_config"
 expect_failure 'force-tag-creation must be true' \
 	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["skip-github-release"]=True; json.dump(c,open(sys.argv[2],"w"))' \
+	"$release_please_config" "$negative_config"
+expect_failure 'top-level config skips tags and releases' \
+	check_release_please_tagging "$negative_config" "$release_please"
 python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["."]["draft"]=False; json.dump(c,open(sys.argv[2],"w"))' \
 	"$release_please_config" "$negative_config"
 expect_failure 'root package draft must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["core"]["draft"]=True; json.dump(c,open(sys.argv[2],"w"))' \
+	"$release_please_config" "$negative_config"
+expect_failure 'core package draft must be false' \
 	check_release_please_tagging "$negative_config" "$release_please"
 python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["core"]["skip-github-release"]=True; json.dump(c,open(sys.argv[2],"w"))' \
 	"$release_please_config" "$negative_config"
 expect_failure 'core skips its tag and release' \
 	check_release_please_tagging "$negative_config" "$release_please"
-sed '/manifest-file: .release-please-manifest.json/a\          skip-github-release: true' \
-	"$release_please" >"$negative"
+python3 -B -c 'import sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for line in src:
+        dst.write(line)
+        if "manifest-file: .release-please-manifest.json" in line:
+            dst.write("          skip-github-release: true\n")' \
+	"$release_please" "$negative"
 expect_failure 'release-please skips the tag and release step' \
 	check_release_please_tagging "$release_please_config" "$negative"
 
