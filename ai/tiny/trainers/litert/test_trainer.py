@@ -33,6 +33,48 @@ def image_config(dataset: Path) -> dict[str, object]:
 
 
 class LiteRTTrainerTest(TestCase):
+    def test_validation_split_shuffles_with_the_training_seed(self) -> None:
+        tensorflow = mock.Mock()
+        loader = tensorflow.keras.utils.image_dataset_from_directory
+        loader.side_effect = ["training", "validation"]
+
+        datasets = trainer._load_image_data(
+            tensorflow, Path("images"), {"validation_fraction": 0.25, "batch_size": 32}
+        )
+
+        self.assertEqual(datasets, ("training", "validation"))
+        self.assertEqual(loader.call_count, 2)
+        training, validation = [call.kwargs for call in loader.call_args_list]
+        self.assertEqual(training["subset"], "training")
+        self.assertEqual(validation["subset"], "validation")
+        self.assertIs(training["shuffle"], True)
+        self.assertIs(validation["shuffle"], True)
+        self.assertEqual(training["seed"], 1_337)
+        self.assertEqual(validation["seed"], training["seed"])
+
+    def test_from_scratch_backbone_updates_every_batch_normalization_momentum(
+        self,
+    ) -> None:
+        class BatchNormalization:
+            momentum = 0.999
+
+        tensorflow = mock.Mock()
+        tensorflow.keras.layers.BatchNormalization = BatchNormalization
+        backbone = tensorflow.keras.applications.MobileNetV2.return_value
+        normalization_layers = [BatchNormalization(), BatchNormalization()]
+        backbone.layers = [normalization_layers[0], object(), normalization_layers[1]]
+
+        trainer._build_image_model(
+            tensorflow, 2, {"do_data_augmentation": False, "learning_rate": 0.001}
+        )
+
+        self.assertIsNone(
+            tensorflow.keras.applications.MobileNetV2.call_args.kwargs["weights"]
+        )
+        for index, layer in enumerate(normalization_layers):
+            with self.subTest(layer=index):
+                self.assertEqual(layer.momentum, 0.9)
+
     def test_main_places_expansion_workspace_on_output_mount(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

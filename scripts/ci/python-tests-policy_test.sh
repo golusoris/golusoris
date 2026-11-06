@@ -62,6 +62,7 @@ write_suite "$clean_root/scripts/ci/ci_scope_test.py" 'self.assertTrue(True)'
 write_suite "$clean_root/scripts/ci/gomod_test.py" 'self.assertTrue(True)'
 write_suite "$clean_root/scripts/ci/review_bot_badges_test.py" 'self.assertTrue(True)'
 write_suite "$clean_root/scripts/ci/context_size_test.py" 'self.assertTrue(True)'
+write_suite "$clean_root/scripts/ci/tiny-litert-sidecar-docs-policy_test.py" 'self.assertTrue(True)'
 git -C "$clean_root" add .
 bash "$clean_root/scripts/ci/python-tests.sh" --root "$clean_root" >/dev/null
 
@@ -73,6 +74,7 @@ write_suite "$failure_root/scripts/ci/ci_scope_test.py" 'self.assertTrue(True)'
 write_suite "$failure_root/scripts/ci/gomod_test.py" 'self.assertTrue(True)'
 write_suite "$failure_root/scripts/ci/review_bot_badges_test.py" 'self.assertTrue(True)'
 write_suite "$failure_root/scripts/ci/context_size_test.py" 'self.assertTrue(True)'
+write_suite "$failure_root/scripts/ci/tiny-litert-sidecar-docs-policy_test.py" 'self.assertTrue(True)'
 git -C "$failure_root" add .
 expect_failure 'FAILED' bash "$failure_root/scripts/ci/python-tests.sh" --root "$failure_root"
 
@@ -91,6 +93,7 @@ write_suite "$empty_root/scripts/ci/ci_scope_test.py" 'self.assertTrue(True)'
 write_suite "$empty_root/scripts/ci/gomod_test.py" 'self.assertTrue(True)'
 write_suite "$empty_root/scripts/ci/review_bot_badges_test.py" 'self.assertTrue(True)'
 write_suite "$empty_root/scripts/ci/context_size_test.py" 'self.assertTrue(True)'
+write_suite "$empty_root/scripts/ci/tiny-litert-sidecar-docs-policy_test.py" 'self.assertTrue(True)'
 git -C "$empty_root" add .
 expect_failure 'NO TESTS RAN' bash "$empty_root/scripts/ci/python-tests.sh" --root "$empty_root"
 
@@ -103,6 +106,7 @@ write_suite "$symlink_root/scripts/ci/ci_scope_test.py" 'self.assertTrue(True)'
 write_suite "$symlink_root/scripts/ci/gomod_test.py" 'self.assertTrue(True)'
 write_suite "$symlink_root/scripts/ci/review_bot_badges_test.py" 'self.assertTrue(True)'
 write_suite "$symlink_root/scripts/ci/context_size_test.py" 'self.assertTrue(True)'
+write_suite "$symlink_root/scripts/ci/tiny-litert-sidecar-docs-policy_test.py" 'self.assertTrue(True)'
 git -C "$symlink_root" add .
 expect_failure 'Python tests refuse symlink input' \
 	bash "$symlink_root/scripts/ci/python-tests.sh" --root "$symlink_root"

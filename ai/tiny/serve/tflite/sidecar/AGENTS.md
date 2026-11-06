@@ -7,6 +7,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 # ai/tiny/serve/tflite/sidecar
 
 LiteRT HTTP inference sidecar runtime, container, and test suite.
+Deployment: [README](README.md).
 
 ## Contract
 

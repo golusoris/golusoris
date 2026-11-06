@@ -44,26 +44,25 @@ build_and_verify_image() {
 
 prepare_smoke_fixtures() {
 	local target_dir="$1"
+	local repo_root="$2"
 	mkdir -p "$target_dir/models"
 
-	printf 'generating trainer-compatible minimal .tflite model...\n'
-	uv run --python 3.13 --with tensorflow==2.21.0 python -c "
-import tensorflow as tf
-inputs = tf.keras.Input(shape=(160, 160, 3), name='image')
-x = tf.keras.layers.GlobalAveragePooling2D()(inputs)
-outputs = tf.keras.layers.Dense(2, activation='softmax', name='scores')(x)
-model = tf.keras.Model(inputs=inputs, outputs=outputs)
-converter = tf.lite.TFLiteConverter.from_keras_model(model)
-with open('$target_dir/models/model.tflite', 'wb') as f:
-    f.write(converter.convert())
-"
+	printf 'training seeded image folders with the locked LiteRT trainer...\n'
+	local python_version
+	python_version="$(
+		# shellcheck source=scripts/ci/tiny-trainer-locks.sh
+		source "$repo_root/scripts/ci/tiny-trainer-locks.sh"
+		extract_dockerfile_python_version "$repo_root/ai/tiny/trainers/litert/Dockerfile"
+	)"
+	uv venv --python "$python_version" "$target_dir/venv"
+	uv pip install --python "$target_dir/venv/bin/python" --require-hashes \
+		-r "$repo_root/ai/tiny/trainers/litert/requirements.lock"
+	PYTHONPATH="$repo_root/ai/tiny" \
+		"$target_dir/venv/bin/python" \
+		"$repo_root/ai/tiny/serve/tflite/sidecar/smoke_fixtures.py" "$target_dir"
 	test -s "$target_dir/models/model.tflite"
 
-	# Known test 2x2 PNG
-	printf '%s' 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAE0lEQVR4nGP4z8Dwn4EBTPxnAAAd8AP92a2PFgAAAABJRU5ErkJggg==' \
-		| base64 --decode >"$target_dir/test.png"
-
-	chmod -R a+rX "$target_dir"
+	chmod -R a+rX "$target_dir/models"
 }
 
 resolve_smoke_port() {
@@ -95,6 +94,7 @@ run_predictor_integration() {
 	local repo_root="$1"
 	local port="$2"
 	local fixtures_dir="$3"
+	local labels="$4"
 
 	printf 'running Go Predictor integration test against sidecar...\n'
 	(
@@ -102,9 +102,36 @@ run_predictor_integration() {
 		TFLITE_SIDECAR_ENDPOINT="http://127.0.0.1:${port}" \
 		TFLITE_MODEL_URI="file:///models/model.tflite" \
 		TFLITE_MODEL_PATH="$fixtures_dir/models/model.tflite" \
-		TFLITE_IMAGE_PATH="$fixtures_dir/test.png" \
-		GOFLAGS=-p=4 go test -tags=integration -race -count=1 ./ai/tiny/serve/tflite/...
+		TFLITE_LABELS="$labels" \
+		TFLITE_EXPECT="red=$fixtures_dir/red.png,blue=$fixtures_dir/blue.png" \
+		go test -p=4 -tags=integration -race -count=1 -v \
+			-run '^TestIntegration_LiveSidecar_LoadAndPredict$' ./ai/tiny/serve/tflite/...
 	)
+}
+
+reject_reversed_labels() {
+	local repo_root="$1"
+	local port="$2"
+	local fixtures_dir="$3"
+	local reversed_labels
+	reversed_labels="$(python3 - "$fixtures_dir/labels" <<'PY'
+import sys
+from pathlib import Path
+
+print(",".join(reversed(Path(sys.argv[1]).read_text().split(","))))
+PY
+	)"
+	local negative_log="$fixtures_dir/reversed-labels.log"
+	if run_predictor_integration "$repo_root" "$port" "$fixtures_dir" "$reversed_labels" >"$negative_log" 2>&1; then
+		printf 'FAIL: reversed trainer labels passed the mapping assertion\n' >&2
+		return 1
+	fi
+	cat "$negative_log"
+	if ! grep -Fq 'deterministic label mapping' "$negative_log"; then
+		printf 'FAIL: reversed labels failed for a reason other than label mapping\n' >&2
+		return 1
+	fi
+	printf 'planted reversed labels: rejected by mapping assertion as expected\n'
 }
 
 main() {
@@ -112,10 +139,10 @@ main() {
 	local repo_root
 	repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
-	build_and_verify_image "$image" "$repo_root"
-
 	tiny_sidecar_smoke_tmp="$(mktemp -d "${TMPDIR:-/tmp}/tiny-sidecar.XXXXXX")"
-	prepare_smoke_fixtures "$tiny_sidecar_smoke_tmp"
+	prepare_smoke_fixtures "$tiny_sidecar_smoke_tmp" "$repo_root"
+
+	build_and_verify_image "$image" "$repo_root"
 
 	local port
 	port="$(resolve_smoke_port)"
@@ -131,7 +158,8 @@ main() {
 		"$image")"
 
 	wait_sidecar_ready "$port" "$container_id"
-	run_predictor_integration "$repo_root" "$port" "$tiny_sidecar_smoke_tmp"
+	run_predictor_integration "$repo_root" "$port" "$tiny_sidecar_smoke_tmp" "$(cat "$tiny_sidecar_smoke_tmp/labels")"
+	reject_reversed_labels "$repo_root" "$port" "$tiny_sidecar_smoke_tmp"
 
 	printf 'tiny litert sidecar smoke: %s PASSED\n' "$image"
 }

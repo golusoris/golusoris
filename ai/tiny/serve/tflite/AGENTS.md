@@ -47,6 +47,7 @@ in `Model.Metadata["sha256"]`, non-empty URI, and at least two unique non-empty 
 `{"image": "<base64>"}`, and validates finite probabilities in `[0,1]` matching loaded labels.
 
 Sidecar implementation ships in `ai/tiny/serve/tflite/sidecar/`.
+Deployment: [sidecar README](sidecar/README.md).
 
 ## Runtime status
 

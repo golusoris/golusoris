@@ -197,6 +197,7 @@ tiny-litert-sidecar-test: tiny-litert-sidecar-publish-policy-test ## execute tin
 .PHONY: tiny-litert-sidecar-publish-policy-test
 tiny-litert-sidecar-publish-policy-test: ## verify fail-closed sidecar publication and supply-chain identity
 	@bash scripts/ci/tiny-litert-sidecar-publish-policy_test.sh
+	@python3 -B scripts/ci/tiny-litert-sidecar-docs-policy_test.py
 
 .PHONY: python-test python-tests
 python-test: tiny-trainer-test tiny-litert-sidecar-test ## execute the required Python regression suites
