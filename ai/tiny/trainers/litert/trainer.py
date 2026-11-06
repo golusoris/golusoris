@@ -306,8 +306,9 @@ def _load_image_data(
     train_data = tensorflow.keras.utils.image_dataset_from_directory(
         subset="training", shuffle=True, **dataset_options
     )
+    # Matching seeded shuffles keep validation disjoint from training.
     validation_data = tensorflow.keras.utils.image_dataset_from_directory(
-        subset="validation", shuffle=False, **dataset_options
+        subset="validation", shuffle=True, **dataset_options
     )
     return train_data, validation_data
 
@@ -335,6 +336,10 @@ def _build_image_model(
         weights=None,
         pooling="avg",
     )
+    # Faster moving statistics make short from-scratch training usable at inference.
+    for layer in backbone.layers:
+        if isinstance(layer, tensorflow.keras.layers.BatchNormalization):
+            layer.momentum = 0.9
     backbone.trainable = True
     features = backbone(features)
     outputs = tensorflow.keras.layers.Dense(
