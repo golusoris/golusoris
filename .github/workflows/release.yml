@@ -99,11 +99,31 @@ jobs:
           cat "$RUNNER_TEMP/api-section.md"
           echo "section=$(base64 -w0 <"$RUNNER_TEMP/api-section.md")" >>"$GITHUB_OUTPUT"
 
+  # Unprivileged: it reads the tagged commit range and hands only a pass or fail to the release job.
+  depth-evidence:
+    name: Depth evidence for a minor or major release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require e2e, upgrade and dogfood evidence for the released range
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: bash scripts/ci/release-depth-evidence.sh check "${GITHUB_REF_NAME}"
+
   release-build:
     name: GoReleaser
-    needs: [require-green-ci, apidiff]
+    needs: [require-green-ci, apidiff, depth-evidence]
     # The API summary is informational: when its job fails, the notes say so and the release goes on.
-    if: ${{ !cancelled() && needs.require-green-ci.result == 'success' }}
+    if: ${{ !cancelled() && needs.require-green-ci.result == 'success' && needs.depth-evidence.result == 'success' }}
     uses: ./.github/workflows/release-build.yml
     permissions:
       contents: write

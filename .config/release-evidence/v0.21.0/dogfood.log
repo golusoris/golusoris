@@ -1,0 +1,60 @@
+00:49:25 admitted go-test: available 27.4 GiB, swap free 87.5 GiB, load 17.8
+2026-11-07T00:49:25+01:00 go: go version go1.27.3-X:nodwarf5 linux/amd64; source core/v0.12.2 797933359452be64e8dfff65087c687f80de0935
+2026-11-07T00:49:25+01:00 using release binaries from <release v0.21.0 linux_amd64 archive, sha256 checked>: 12415bb0ab0c7786 5d06cf996b65a15a
+time=2026-11-07T00:49:25.113+01:00 level=INFO msg="golusoris-mcp serving on stdio"
+time=2026-11-07T00:49:25.113+01:00 level=INFO msg="server run start"
+time=2026-11-07T00:49:25.113+01:00 level=INFO msg="server connecting"
+time=2026-11-07T00:49:25.113+01:00 level=INFO msg="server session connected" session_id=""
+time=2026-11-07T00:49:25.113+01:00 level=INFO msg="session initialized"
+time=2026-11-07T00:49:25.115+01:00 level=INFO msg="server session disconnected" session_id=""
+time=2026-11-07T00:49:25.115+01:00 level=INFO msg="server session ended"
+initialize: {"name": "golusoris-mcp", "version": "0.21.0"}
+tools/list: golusoris_add golusoris_bump golusoris_init
+raw golusoris_init: {"content": [{"type": "text", "text": "Run:\n  golusoris init dogapp --module example.com/dogapp"}]}
+command golusoris_init: golusoris init dogapp --module example.com/dogapp
+raw golusoris_bump: {"content": [{"type": "text", "text": "Run:\n  golusoris bump v0.21.0\n\nCheck docs/migrations/ for breaking-change notes."}]}
+command golusoris_bump: golusoris bump v0.21.0
+raw golusoris_add: {"content": [{"type": "text", "text": "Run:\n  golusoris add db"}]}
+command golusoris_add: golusoris add db
+2026-11-07T00:49:25+01:00 run: golusoris init dogapp --module example.com/dogapp
+  created dogapp/go.mod
+  created dogapp/cmd/app/main.go
+  created dogapp/LICENSE
+  created dogapp/REUSE.toml
+
+App scaffolded in ./dogapp (EUPL-1.2, REUSE-ready)
+Next steps:
+  cd dogapp
+  go get github.com/golusoris/golusoris/core@latest
+  go mod tidy
+  go run ./cmd/app
+2026-11-07T00:49:25+01:00 run: golusoris bump v0.21.0
+Running: go get github.com/golusoris/golusoris@v0.21.0
+Running: go mod tidy
+
+Bumped github.com/golusoris/golusoris to v0.21.0.
+Check docs/migrations/ in the framework repo for breaking-change notes.
+2026-11-07T00:49:25+01:00 go.mod: 	github.com/golusoris/golusoris/core v0.12.1;
+?   	example.com/dogapp/cmd/app	[no test files]
+2026-11-07T00:49:26+01:00 scaffold build/vet/test rc=0
+2026-11-07T00:49:31+01:00 app start: rc=124 (124 = still running when stopped after 5s)
+[Fx] PROVIDE	fx.Lifecycle <= go.uber.org/fx.New.func1()
+[Fx] PROVIDE	fx.Shutdowner <= go.uber.org/fx.(*App).shutdowner-fm()
+[Fx] PROVIDE	fx.DotGraph <= go.uber.org/fx.(*App).dotGraph-fm()
+[Fx] PROVIDE	config.Options <= github.com/golusoris/golusoris/core/config.init.func1() from module "golusoris.config"
+[Fx] PROVIDE	*config.Config <= github.com/golusoris/golusoris/core/config.init.func2() from module "golusoris.config"
+2026-11-07T00:49:31+01:00 run: golusoris add db
+Add "db" to your fx.New() call:
+
+  import "github.com/golusoris/golusoris"
+
+  fx.New(
+    // ...
+    golusoris.DB,
+  )
+20:		golusoris.DB,
+go: found github.com/golusoris/golusoris in github.com/golusoris/golusoris v0.21.0
+2026-11-07T00:49:35+01:00 go.mod after add: 	github.com/golusoris/golusoris v0.21.0;	github.com/golusoris/golusoris/core v0.12.1;
+2026-11-07T00:49:35+01:00 applied golusoris add db: build/vet rc=0
+2026-11-07T00:49:35+01:00 result: PASS
+DOGRC=0
