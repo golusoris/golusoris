@@ -45,7 +45,7 @@ require (
 	github.com/gkampitakis/go-snaps v0.5.25
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-logr/logr v1.4.4
-	github.com/go-playground/form/v4 v4.5.0
+	github.com/go-playground/form/v4 v4.5.1
 	github.com/go-webauthn/webauthn v0.18.2
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang-migrate/migrate/v4 v4.20.1
