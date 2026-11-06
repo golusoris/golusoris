@@ -9,10 +9,6 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  push:
-    tags:
-      - 'v[0-9]*.[0-9]*.[0-9]*'
-      - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
 permissions:
   contents: read
@@ -25,10 +21,9 @@ jobs:
   publish:
     name: Fast-forward public GitHub
     if: >-
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_branch == 'main') ||
-      startsWith(github.ref, 'refs/tags/')
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: cauda-k8s-office-canary
     container:
       # Source and bump authority: lusoris/k8s apps/dev/gitea-actions-runner/job-image.
@@ -42,10 +37,7 @@ jobs:
           fetch-depth: 0
       - name: Publish only validated, non-divergent refs
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          SOURCE_REF: ${{ github.ref }}
           VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
-          GITEA_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           test -n "$PUBLIC_GITHUB_TOKEN"
@@ -68,66 +60,13 @@ jobs:
           git remote add public https://github.com/golusoris/golusoris.git
           git fetch --no-tags public main
 
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            test -n "$VALIDATED_SHA"
-            git cat-file -e "$VALIDATED_SHA^{commit}"
-            current=$(git rev-parse refs/remotes/origin/main)
-            if [ "$VALIDATED_SHA" != "$current" ]; then
-              echo "Validated commit was superseded by $current; the newer CI run will publish."
-              exit 0
-            fi
-            git merge-base --is-ancestor refs/remotes/public/main "$VALIDATED_SHA" ||
-              { echo "::error::public GitHub main diverged; refusing a non-fast-forward update"; exit 1; }
-            git push public "$VALIDATED_SHA:refs/heads/main"
+          test -n "$VALIDATED_SHA"
+          git cat-file -e "$VALIDATED_SHA^{commit}"
+          current=$(git rev-parse refs/remotes/origin/main)
+          if [ "$VALIDATED_SHA" != "$current" ]; then
+            echo "Validated commit was superseded by $current; the newer CI run will publish."
             exit 0
           fi
-
-          tag=${SOURCE_REF#refs/tags/}
-          test -n "$tag"
-          git fetch --no-tags origin "refs/tags/$tag:refs/tags/$tag"
-          sha=$(git rev-parse "refs/tags/$tag^{commit}")
-          git merge-base --is-ancestor "$sha" refs/remotes/origin/main
-          git merge-base --is-ancestor "$sha" refs/remotes/public/main
-
-          # Ancestry is not validation. The branch path above forwards only
-          # what Gitea CI concluded green, but the tag path used to accept any
-          # commit already on main -- and main advances on the public forge
-          # directly, where an admin can merge past a red required check
-          # (enforce_admins). v0.12.0 was tagged 6 s after its merge commit
-          # with `CI success` failing, and nothing on either lane objected.
-          #
-          # node is the Actions runner's own dependency (it executes every JS
-          # action), so this adds no tool the image does not already carry --
-          # unlike curl or jq, which nothing else here uses.
-          status_check=$(mktemp)
-          trap 'rm -f "$askpass" "$status_check"' EXIT
-          cat > "$status_check" <<'NODE'
-          (async () => {
-            const [api, repo, sha, token] = process.argv.slice(2);
-            const res = await fetch(`${api}/repos/${repo}/commits/${sha}/status`, {
-              headers: { Authorization: `token ${token}`, Accept: "application/json" },
-              // HISS-02: no unbounded I/O.
-              signal: AbortSignal.timeout(30_000),
-            });
-            if (!res.ok) {
-              console.log(`::error::commit status lookup for ${sha} failed: HTTP ${res.status}`);
-              process.exit(1);
-            }
-            const body = await res.json();
-            if (body.state !== "success") {
-              console.log(`::error::CI state on ${sha} is "${body.state}" -- refusing to forward tag`);
-              process.exit(1);
-            }
-            console.log(`CI is green on ${sha}.`);
-          })().catch((err) => {
-            // process.argv[4], not sha: that binding lives inside the IIFE.
-            console.log(`::error::commit status lookup for ${process.argv[4]} failed: ${err.message}`);
-            process.exit(1);
-          });
-          NODE
-          node "$status_check" "$GITHUB_API_URL" "$GITHUB_REPOSITORY" "$sha" "$GITEA_TOKEN"
-          if git ls-remote --exit-code --tags public "refs/tags/$tag" >/tmp/public-tag; then
-            test "$(awk 'NR==1 {print $1}' /tmp/public-tag)" = "$(git rev-parse "refs/tags/$tag")"
-          else
-            git push public "refs/tags/$tag:refs/tags/$tag"
-          fi
+          git merge-base --is-ancestor refs/remotes/public/main "$VALIDATED_SHA" ||
+            { echo "::error::public GitHub main diverged; refusing a non-fast-forward update"; exit 1; }
+          git push public "$VALIDATED_SHA:refs/heads/main"

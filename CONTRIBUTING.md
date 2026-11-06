@@ -221,21 +221,15 @@ sub-module — and keeps a single release PR up to date from Conventional
 Commits history, accumulating both components' version bumps and changelog
 entries.
 
-The action runs with `skip-github-release: true`, so release-please never
-tags or publishes a release by itself here; it only opens/updates the PR. A
-maintainer:
+A maintainer:
 
 1. Reviews and merges the release PR.
-2. Pushes the tags explicitly on the merge commit: `vX.Y.Z` for the root
-   module on every release, and `core/vX.Y.Z` only when the `core` sub-module
-   changed in that release (its version is in the manifest; v0.10.1 had no
-   core tag). Use annotated tags and push them by name, for example
-   `git tag -a v0.10.2 <merge> -m v0.10.2 && git push origin v0.10.2`.
-   release-please labels its PR `autorelease: pending` on open; because the
-   action runs with `skip-github-release: true` it never relabels, so the
-   maintainer swaps the label to `autorelease: tagged` after pushing the tags.
-   release-please refuses to open the next release PR while a merged one is
-   still labelled pending.
+2. On merge, release-please creates `vX.Y.Z` (a draft root release,
+   `force-tag-creation: true`, published by `release.yml` after GoReleaser
+   fills it) and `core/vX.Y.Z` tags itself with the release App token when the
+   `core` sub-module changed in that release (its release stays a draft,
+   so `releases/latest` keeps tracking the root module), and relabels the PR
+   `autorelease: tagged`.
 3. Pushing the root `vX.Y.Z` tag triggers two workflows:
    - [`release.yml`](.github/workflows/release.yml) — calls reusable
      [`release-build.yml`](.github/workflows/release-build.yml) which builds,
