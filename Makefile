@@ -138,6 +138,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/allocation-budget-policy_test.sh
 	@bash scripts/ci/core-skew-policy_test.sh
 	@bash scripts/ci/fault-recovery-policy_test.sh
+	@bash scripts/ci/pulumi-sizing-budget_test.sh
 	@bash scripts/ci/kubeconform-policy_test.sh
 	@bash scripts/ci/check-gofumpt_test.sh
 	@bash scripts/ci/buf-lint-policy_test.sh
@@ -274,6 +275,11 @@ allocation-budget: ## enforce measured hot-path allocation budgets
 .PHONY: core-skew
 core-skew: ## build and test the root against the required core version, in-repo replaces dropped
 	@bash scripts/ci/core-skew.sh
+
+.PHONY: pulumi-sizing-test
+pulumi-sizing-test: ## measure examples/minimal against the Pulumi Fargate task size (needs Docker; Linux)
+	@bash scripts/ci/pulumi-sizing-budget.sh
+	go test -tags sizing -count=1 -run TestSizing -p 4 ./examples/minimal
 
 .PHONY: fault-recovery
 fault-recovery: ## fail when a short test recovers a nil-dereference fault (golang/go#81238)

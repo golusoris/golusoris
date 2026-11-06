@@ -58,3 +58,7 @@ jobs:
             ./realtime/pubsub \
             ./cache/twotier \
             ./outbox
+      - name: Measure the Pulumi task sizing against examples/minimal
+        env:
+          RYUK_RECONNECTION_TIMEOUT: 30m
+        run: make pulumi-sizing-test

@@ -37,6 +37,8 @@ beside the copied program directory.
             └────────┘  └───────────┘
 ```
 
+Measured: examples/minimal peaks at 70.0 MiB RSS and 0.015 vCPU at 200 rps of `GET /livez` (30 s, `make pulumi-sizing-test`), on amd64, not ARM64.
+
 The DB DSN and bare Redis address are written to AWS Secrets Manager and
 injected into the ECS task as `APP_DB_DSN` and `APP_CACHE_REDIS_ADDR`.
 `APP_CACHE_REDIS_TLS=true` enables verified TLS for the TLS-only ElastiCache
