@@ -6,6 +6,7 @@
   "bump-patch-for-minor-pre-major": false,
   "include-v-in-tag": true,
   "include-component-in-tag": false,
+  "force-tag-creation": true,
   "changelog-path": "CHANGELOG.md",
   "changelog-sections": [
     {
@@ -60,14 +61,16 @@
   ],
   "packages": {
     ".": {
-      "package-name": "golusoris"
+      "package-name": "golusoris",
+      "draft": true
     },
     "core": {
       "package-name": "golusoris-core",
       "component": "core",
       "include-component-in-tag": true,
       "tag-separator": "/",
-      "changelog-path": "CHANGELOG.md"
+      "changelog-path": "CHANGELOG.md",
+      "draft": false
     }
   }
 }

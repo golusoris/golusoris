@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# release-please prepares release metadata on public GitHub. Gitea remains the
-# canonical source: an equivalent Gitea PR must pass canonical CI before its
-# immutable vX.Y.Z tag is created there and forwarded to GitHub.
+# release-please keeps the release pull request current. Merging it is the
+# operator's publish step: the next run creates the tags and a draft root
+# release with the App token, whose tag push starts release.yml.
 name: release-please
 
 # Serialize release-PR maintenance; cancel a stale run when a newer push
@@ -43,8 +43,6 @@ jobs:
           token: ${{ steps.app-token.outputs.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          # Release-PR-only mode: tags and releases originate on Gitea.
-          skip-github-release: true
 
   # The CI runs of a pull request opened with the repository token wait for an
   # approval, and main requires the CI success check. A dispatched run does not
