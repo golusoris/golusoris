@@ -50,7 +50,7 @@ ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
     "node": re.compile(r"node\s+--version\s*\|\s*grep\s+-Eq"),
 }
 
-NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1""")
+NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1\s*$""")
 
 ACTION_LINE_RE = re.compile(r"uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
 VERSION_RE = re.compile(r"(\d+)\\\.(\d+)\\\.(\d+)")
@@ -120,6 +120,7 @@ def parse_assertion_line(
     problems: list[str],
 ) -> None:
     # Extracts assertion version from tool grep regex.
+    line = line.rstrip()
     for tool, pattern in ASSERTION_PATTERNS.items():
         if not pattern.search(line):
             continue
@@ -432,6 +433,21 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
             text = text.replace("'^v24\\.22\\.2$'", "'v24\\.22\\.2'")
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "not anchored")
+
+    def test_planted_node_assertion_trailing_or_true(self) -> None:
+        # Tests detection of node assertion with trailing command bypass.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "node --version | grep -Eq '^v24\\.22\\.2$'",
+                "node --version | grep -Eq '^v24\\.22\\.2$' || true",
+            )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "not anchored")
