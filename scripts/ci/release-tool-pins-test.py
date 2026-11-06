@@ -28,6 +28,7 @@ TOOL_ACTIONS: dict[str, tuple[str, str]] = {
     "anchore/sbom-action/download-syft": ("syft", "syft-version"),
     "goreleaser/goreleaser-action": ("goreleaser", "version"),
     "docker/setup-buildx-action": ("buildx", "version"),
+    "actions/setup-node": ("node", "node-version"),
 }
 
 ENV_TOOL_VARS: dict[str, str] = {
@@ -41,6 +42,7 @@ ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
     "syft": re.compile(r"syft\s+version\s*\|\s*grep\s+-Eq"),
     "goreleaser": re.compile(r"goreleaser\s+--version\s*\|\s*grep\s+-Eq"),
     "buildx": re.compile(r"docker\s+buildx\s+version\s*\|\s*grep\s+-Eq"),
+    "node": re.compile(r"node\s+--version\s*\|\s*grep\s+-Eq"),
 }
 
 ACTION_LINE_RE = re.compile(r"uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
@@ -93,7 +95,7 @@ def parse_action_line(
     if action not in TOOL_ACTIONS:
         return
     tool, key = TOOL_ACTIONS[action]
-    pin_re = re.compile(rf"^\s*{re.escape(key)}:\s+v(\d+\.\d+\.\d+)\s*$")
+    pin_re = re.compile(rf"^\s*{re.escape(key)}:\s+['\"]?v?(\d+\.\d+\.\d+)['\"]?\s*$")
     end = min(total, idx + 1 + LOOKAHEAD_LINES)
     for look_idx in range(idx + 1, end):
         km = pin_re.search(lines[look_idx])
@@ -218,7 +220,7 @@ def check_env_pins(root: Path, all_pins: list[Pin]) -> list[str]:
     pins_by_tool: dict[str, list[Pin]] = {}
     for p in all_pins:
         pins_by_tool.setdefault(p.tool, []).append(p)
-    # Buildx has no env entry in tools/tool-versions.env: skip rule c for Buildx.
+    # Buildx and node have no env entry in tools/tool-versions.env: skip rule c for them.
     for tool, var_name in ENV_TOOL_VARS.items():
         if var_name not in env_vars:
             problems.append(f"{rel_env}:1: {tool}: missing {var_name}")
@@ -227,7 +229,9 @@ def check_env_pins(root: Path, all_pins: list[Pin]) -> list[str]:
         env_ver = env_raw.lstrip("v")
         tool_pins = pins_by_tool.get(tool, [])
         if not tool_pins:
-            problems.append(f"{rel_env}:{env_line}: {tool}: no workflow install pin to compare")
+            problems.append(
+                f"{rel_env}:{env_line}: {tool}: no workflow install pin to compare"
+            )
             continue
         expected_ver = tool_pins[0].version
         if env_ver != expected_ver:
@@ -290,12 +294,17 @@ VALID_FIXTURE_WORKFLOW = r"""\
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
           version: v0.38.0
+      - name: Install node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.2
       - name: Verify tools
         run: |
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
+          node --version | grep -Eq '^v24\.22\.2$'
 """
 
 
@@ -334,7 +343,24 @@ class ReleaseToolPinsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "buildx: assertion 0.37.1 != pin 0.38.0")
+            self.assert_planted_defect(
+                problems, "buildx: assertion 0.37.1 != pin 0.38.0"
+            )
+
+    def test_planted_node_assertion_mismatch(self) -> None:
+        # Tests detection of node assertion differing from pin in same file.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace("24\\.22\\.2", "24\\.21\\.0"),
+                encoding="utf-8",
+            )
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(
+                problems, "node: assertion 24.21.0 != pin 24.22.2"
+            )
 
     def test_planted_pins_differ_across_files(self) -> None:
         # Tests detection of pins differing across workflow files.
@@ -356,11 +382,15 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / "tools/tool-versions.env"
             path.write_text(
-                path.read_text(encoding="utf-8").replace("COSIGN_VERSION=3.1.4", "COSIGN_VERSION=3.1.2"),
+                path.read_text(encoding="utf-8").replace(
+                    "COSIGN_VERSION=3.1.4", "COSIGN_VERSION=3.1.2"
+                ),
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "cosign: env 3.1.2 != workflow pin 3.1.4")
+            self.assert_planted_defect(
+                problems, "cosign: env 3.1.2 != workflow pin 3.1.4"
+            )
 
     def test_planted_duplicate_env_key(self) -> None:
         # Tests refusal of duplicate key assignment in tools/tool-versions.env.
@@ -382,11 +412,15 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-build.yml"
             path.write_text(
-                path.read_text(encoding="utf-8").replace("cosign-release: v3.1.4", "missing: v3.1.4"),
+                path.read_text(encoding="utf-8").replace(
+                    "cosign-release: v3.1.4", "missing: v3.1.4"
+                ),
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "sigstore/cosign-installer has no cosign-release pin")
+            self.assert_planted_defect(
+                problems, "sigstore/cosign-installer has no cosign-release pin"
+            )
 
     def test_planted_assertion_without_version(self) -> None:
         # Tests detection of assertion regex without parseable version.
@@ -399,14 +433,18 @@ class ReleaseToolPinsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "cosign: assertion regex yielded no version")
+            self.assert_planted_defect(
+                problems, "cosign: assertion regex yielded no version"
+            )
 
     def test_planted_empty_file(self) -> None:
         # Tests refusal of workflow file lacking any install pins.
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
-            (root / ".github/workflows/release-build.yml").write_text("", encoding="utf-8")
+            (root / ".github/workflows/release-build.yml").write_text(
+                "", encoding="utf-8"
+            )
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "yielded no install pins")
 
@@ -418,9 +456,16 @@ class ReleaseToolPinsTest(unittest.TestCase):
             for name in WORKFLOW_FILES:
                 path = root / name
                 text = path.read_text(encoding="utf-8")
-                path.write_text(text.replace("goreleaser/goreleaser-action", "example/other-action"), encoding="utf-8")
+                path.write_text(
+                    text.replace(
+                        "goreleaser/goreleaser-action", "example/other-action"
+                    ),
+                    encoding="utf-8",
+                )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(problems, "goreleaser: no workflow install pin to compare")
+            self.assert_planted_defect(
+                problems, "goreleaser: no workflow install pin to compare"
+            )
 
     def test_file_over_line_bound_fails(self) -> None:
         # Boundary: a file one line past the bound is refused, not truncated.
