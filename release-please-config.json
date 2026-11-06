@@ -62,7 +62,13 @@
   "packages": {
     ".": {
       "package-name": "golusoris",
-      "draft": true
+      "draft": true,
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "README.md"
+        }
+      ]
     },
     "core": {
       "package-name": "golusoris-core",

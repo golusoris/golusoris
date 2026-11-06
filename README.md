@@ -3,32 +3,79 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
+<!-- markdownlint-disable MD013 MD023 MD033 MD036 MD041 -->
+<!-- Centred header uses inline HTML, banner image, indented headings, and wide badge lines. -->
+<div align="center">
 
-# golusoris
+  <img src="docs/assets/golusoris-readme-banner.svg" alt="golusoris — composable Go framework built on Uber Fx" height="120" />
 
-[![HISS-21 lattice](https://img.shields.io/badge/Standards-Praetor%20HISS--21%20lattice-brightgreen)](AGENTS.md)
+  <!-- README-STANDARD badge block: one group, fixed order -->
+  <!-- 1 release/version -->
+  [![Release](https://img.shields.io/static/v1?label=release&message=v0.20.0&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases) <!-- x-release-please-version -->
+  <!-- 2 CI/build -->
+  [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
+  [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
+  [![Platform Neutrality](https://github.com/golusoris/golusoris/actions/workflows/portability.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/portability.yml)
+  [![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/docs.yml)
+  [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
+  <!-- 3 security/scorecard -->
+  [![Security](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml)
+  [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
+  [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF-Scorecard-06b6d4?style=for-the-badge&labelColor=111a35)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
+  [![Codacy](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
+  [![CodeRabbit](https://img.shields.io/badge/Reviews-CodeRabbit-8b5cf6?style=for-the-badge&logo=coderabbit&logoColor=white&labelColor=111a35)](https://coderabbit.ai)
+  <!-- 4 standards -->
+  [![HISS-21](https://img.shields.io/badge/Standards-HISS--21-06b6d4?style=for-the-badge&logo=nasa&labelColor=111a35)](AGENTS.md)
+  [![Power of 10](https://img.shields.io/badge/NASA_JPL-Power_of_10-3b82f6?style=for-the-badge&logo=nasa&labelColor=111a35)](docs/principles.md)
+  [![Conventional Commits](https://img.shields.io/badge/Commits-Conventional-8b5cf6?style=for-the-badge&logo=conventionalcommits&logoColor=white&labelColor=111a35)](CONTRIBUTING.md)
+  <!-- 5 licence -->
+  [![Code: EUPL-1.2](https://img.shields.io/badge/Code-EUPL--1.2-3b82f6?style=for-the-badge&labelColor=111a35)](LICENSING.md)
+  [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/Docs-CC--BY--SA--4.0-3b82f6?style=for-the-badge&labelColor=111a35)](LICENSING.md)
+  [![REUSE](https://img.shields.io/badge/REUSE-compliant-3b82f6?style=for-the-badge&labelColor=111a35)](https://reuse.software/)
+  <!-- 6 support -->
+  [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-8b5cf6?style=for-the-badge&logo=githubsponsors&logoColor=white&labelColor=111a35)](https://github.com/sponsors/lusoris)
+  [![Ko-fi](https://img.shields.io/badge/Support-Ko--fi-8b5cf6?style=for-the-badge&logo=kofi&logoColor=white&labelColor=111a35)](https://ko-fi.com/lusoris)
 
-[![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver)](https://github.com/golusoris/golusoris/releases)
-[![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
-[![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
-[![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
-[![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
-[![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
-[![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
-[![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg)](https://golusoris.github.io/golusoris/)
-[![Code: EUPL-1.2](https://img.shields.io/badge/code-EUPL--1.2-315c9b.svg)](LICENSING.md)
-[![Docs: CC BY-SA 4.0](https://img.shields.io/badge/docs-CC%20BY--SA%204.0-b85c00.svg)](LICENSING.md)
-[![REUSE compliant](https://img.shields.io/badge/REUSE-compliant-green.svg)](https://reuse.software/)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
-[![CodeRabbit reviews](https://img.shields.io/coderabbit/prs/github/golusoris/golusoris)](https://coderabbit.ai)
-[![Codacy grade](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
+  **Composable Go framework — opt-in Uber Fx modules for production backends**
 
-A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx). Pick the modules your app needs — nothing else ships. Every module follows the same [principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding, Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed supply-chain controls.
+  *High-integrity systems engineering · NASA/JPL Power of 10 · HISS-21 lattice*
 
-**Documentation:** <https://golusoris.github.io/golusoris/> — the mkdocs site built from
-[`docs/`](docs/index.md) on every push to `main` by
-[`docs.yml`](.github/workflows/docs.yml).
+</div>
+
+A composable Go framework built around [`go.uber.org/fx`](https://github.com/uber-go/fx).
+Pick the modules your app needs — nothing else ships. Every module follows the same
+[principles](docs/principles.md): Power-of-10 coding rules, SEI CERT secure-coding,
+Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed
+supply-chain controls.
+
+**[📖 Full documentation](https://golusoris.github.io/golusoris/)** · [Documentation source](docs/index.md)
+
+The MkDocs site is built from [`docs/`](docs/index.md) by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) on pushes to `main` that
+change `docs/`, `mkdocs.yml`, the build script, the tool pins or the workflow, and
+on manual dispatch.
+
+---
+
+## Why golusoris
+
+The full contract is in [docs/principles.md](docs/principles.md). Short form:
+
+| # | Rule |
+| --- | --- |
+| **Coding** | NASA/JPL Power of 10 adapted for Go — no `goto`, bounded loops, ≤60-line functions, every error checked, no unreviewed lint/gosec/reachable-vulnerability finding on merge |
+| **Security** | SEI CERT for Go — safe crypto, input validation at every boundary, no `unsafe` outside reviewed hot-paths |
+| **Style** | Google Go Style Guide (canonical) + Effective Go (secondary) |
+| **Architecture** | C4 diagrams in `docs/architecture/`; Nygard ADRs in `docs/adr/` |
+| **Supply chain** | SBOM, cosign signing, and build-provenance attestations on every release |
+| **Compliance** | No blanket certification; apps map and verify their own OWASP, NIST, EU, BSI, NCSC, privacy, and AI controls |
+| **APIs** | RFC 9457 Problem Details · OpenAPI 3.1 · OTel SemConv v1.26 · JWT/OAuth 2.1/PKCE/WebAuthn |
+| **Testing** | Table-driven tests · `-race` on every CI run · 70% coverage (85% security-critical) · real containers over mocks |
+| **Deployment** | Twelve-Factor · CNCF cloud-native · OCI multi-arch · rootless + read-only FS |
+
+Every merged commit: **no unreviewed lint, gosec, or reachable-vulnerability
+finding · race-green.** Exact vulnerability exceptions bind the module
+checksum and patched-source hash, then fail closed on drift.
 
 ---
 
@@ -56,31 +103,24 @@ The default `core/config.Module` reads `APP_` environment variables through
 koanf. Applications can opt into YAML or JSON files; packages without
 configuration expose constructors or options directly.
 
----
+### Scaffolding
 
-## Principles
-
-The full contract is in [docs/principles.md](docs/principles.md). Short form:
-
-| # | Rule |
-| --- | --- |
-| **Coding** | NASA/JPL Power of 10 adapted for Go — no `goto`, bounded loops, ≤60-line functions, every error checked, no unreviewed lint/gosec/reachable-vulnerability finding on merge |
-| **Security** | SEI CERT for Go — safe crypto, input validation at every boundary, no `unsafe` outside reviewed hot-paths |
-| **Style** | Google Go Style Guide (canonical) + Effective Go (secondary) |
-| **Architecture** | C4 diagrams in `docs/architecture/`; Nygard ADRs in `docs/adr/` |
-| **Supply chain** | SBOM, cosign signing, and build-provenance attestations on every release |
-| **Compliance** | No blanket certification; apps map and verify their own OWASP, NIST, EU, BSI, NCSC, privacy, and AI controls |
-| **APIs** | RFC 9457 Problem Details · OpenAPI 3.1 · OTel SemConv v1.26 · JWT/OAuth 2.1/PKCE/WebAuthn |
-| **Testing** | Table-driven tests · `-race` on every CI run · 70% coverage (85% security-critical) · real containers over mocks |
-| **Deployment** | Twelve-Factor · CNCF cloud-native · OCI multi-arch · rootless + read-only FS |
-
-Every merged commit: **no unreviewed lint, gosec, or reachable-vulnerability
-finding · race-green.** Exact vulnerability exceptions bind the module
-checksum and patched-source hash, then fail closed on drift.
+```sh
+golusoris init my-service          # generate a minimal new app
+golusoris add grpc                 # wire grpc module into existing app
+golusoris add auth/oidc
+golusoris bump v0.9.0              # go get + go mod tidy to that version; the core/ import-path rewrite is in docs/migrations/v0.9.0.md
+```
 
 ---
 
-## Module catalog
+## Architecture at a glance
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
+[![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
+[![Uber Fx](https://img.shields.io/badge/built_on-Uber_Fx-3b82f6?style=flat-square&labelColor=111a35)](https://github.com/uber-go/fx)
+[![C4 Architecture](https://img.shields.io/badge/Architecture-C4_Model-8b5cf6?style=flat-square&labelColor=111a35)](docs/architecture/README.md)
 
 ### Core
 
@@ -441,7 +481,22 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 
 ---
 
-## Tooling
+## Guides and reference
+
+| Topic | Documentation |
+| --- | --- |
+| Coding principles & assurance contract | [Principles](docs/principles.md) |
+| Architecture Decisions (ADRs) | [Architecture Decisions](docs/adr/README.md) |
+| C4 Architecture models | [Architecture](docs/architecture/README.md) |
+| Minor-version migration guides | [Migration Guides](docs/migrations/v0.13.0.md) |
+| Root capability contract | [Capability contract](capabilities.yaml) |
+| Licensing split & DCO | [Licensing](LICENSING.md) |
+| Project governance & scope | [Governance](GOVERNANCE.md) |
+| Security policy & vulnerability reporting | [Security](SECURITY.md) |
+| Upstream pinned API snapshots | [Upstream Snapshots](docs/upstream/README.md) |
+| CI & downstream consumption | [CI / Downstream Consumption](docs/ci-downstream.md) |
+
+### Tooling
 
 ```sh
 make verify-all  # universal gate: build/lint/security/race across all 31 Go modules plus governance and licensing
@@ -456,18 +511,39 @@ make reuse-lint  # REUSE / SPDX compliance
 Local git hooks run through [lefthook](lefthook.yml) (`lefthook install`); see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Scaffolding
+---
 
-```sh
-golusoris init my-service          # generate a minimal new app
-golusoris add grpc                 # wire grpc module into existing app
-golusoris add auth/oidc
-golusoris bump v0.9.0              # go get + go mod tidy to that version; the core/ import-path rewrite is in docs/migrations/v0.9.0.md
-```
+## Contribute
+
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for setup, required checks, git hooks,
+DCO sign-off, and pull-request expectations. The
+[engineering principles](docs/principles.md) cover coding and supply-chain
+standards; the [architecture guide](docs/architecture/README.md) explains the
+system layout.
+
+- [Report an issue or request a feature](https://github.com/golusoris/golusoris/issues)
+- [Contributing guide](CONTRIBUTING.md)
+- [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md)
+- [Support development](SUPPORT.md)
 
 ---
 
-## Status
+## Support golusoris
+
+**Why it matters.** golusoris is a composable Go framework: opt-in fx modules for what a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s), spread over [31 Go modules](#tooling) that `make verify-all` builds, lints, scans and race-tests on every change.
+
+**What support funds.**
+
+- CI time for the required Linux, macOS and Windows matrix.
+- Keeping all [31 Go modules](#tooling) green under `make verify-all` on every change.
+
+Sponsor on [GitHub Sponsors](https://github.com/sponsors/lusoris), any amount; no support or priority is sold. Open Collective: pending.
+Also on [Ko-fi](https://ko-fi.com/lusoris).
+
+---
+
+## Roadmap and releases
 
 Pre-1.0, actively developed. The root module and the `core/` sub-module are
 versioned separately; `.release-please-manifest.json` holds both current
@@ -498,24 +574,14 @@ four deterministic module-sweep shards.
 
 ---
 
-## License
+## Upstream and license
 
 Code is licensed under the [European Union Public Licence 1.2](LICENSE)
 (`EUPL-1.2`); documentation under `CC-BY-SA-4.0`. The repository is
 [REUSE](https://reuse.software)-compliant — see [LICENSING.md](LICENSING.md)
 for the full split, third-party carve-outs, and the DCO contribution terms.
 
-## Support golusoris
-
-**Why it matters.** golusoris is a composable Go framework: opt-in fx modules for what a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s), spread over [31 Go modules](#tooling) that `make verify-all` builds, lints, scans and race-tests on every change.
-
-**What support funds.**
-
-- CI time for the required Linux, macOS and Windows matrix.
-- Keeping all [31 Go modules](#tooling) green under `make verify-all` on every change.
-
-Sponsor on [GitHub Sponsors](https://github.com/sponsors/lusoris), any amount; no support or priority is sold. Open Collective: pending.
-Also on [Ko-fi](https://ko-fi.com/lusoris).
+---
 
 ## Standards & Governance
 

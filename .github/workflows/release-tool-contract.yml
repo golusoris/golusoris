@@ -46,7 +46,7 @@ jobs:
       - name: Install pinned Syft
         uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
-          syft-version: v1.54.1
+          syft-version: v1.56.0
 
       - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
@@ -103,7 +103,7 @@ jobs:
           docker info
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.1([[:space:]]|$)'
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
           node --version | grep -Eq '^v24\.22\.2$'
           test "$(gitleaks version)" = "$GITLEAKS_VERSION"
