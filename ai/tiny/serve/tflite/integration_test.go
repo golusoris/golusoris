@@ -19,10 +19,14 @@ import (
 	"github.com/golusoris/golusoris/ai/tiny/serve/tflite"
 )
 
+// maxIntegrationLabels bounds the env-supplied label list so the loops below have a scalar upper bound (HISS-02).
+const maxIntegrationLabels = 16
+
 func TestIntegration_LiveSidecar_LoadAndPredict(t *testing.T) {
 	labels := strings.Split(requiredIntegrationEnv(t, "TFLITE_LABELS"), ",")
 	cases := strings.Split(requiredIntegrationEnv(t, "TFLITE_EXPECT"), ",")
 	require.GreaterOrEqual(t, len(labels), 2, "TFLITE_LABELS requires at least two labels")
+	require.LessOrEqual(t, len(labels), maxIntegrationLabels, "TFLITE_LABELS exceeds maxIntegrationLabels")
 	require.Len(t, cases, len(labels), "TFLITE_EXPECT requires one case per label")
 
 	endpoint := os.Getenv("TFLITE_SIDECAR_ENDPOINT")
