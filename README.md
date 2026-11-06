@@ -11,7 +11,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
   <!-- README-STANDARD badge block: one group, fixed order -->
   <!-- 1 release/version -->
-  [![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases)
+  [![Release](https://img.shields.io/static/v1?label=release&message=v0.20.0&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases) <!-- x-release-please-version -->
   <!-- 2 CI/build -->
   [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
   [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
@@ -21,9 +21,9 @@ SPDX-License-Identifier: CC-BY-SA-4.0
   <!-- 3 security/scorecard -->
   [![Security](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml)
   [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
-  [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
+  [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF-Scorecard-06b6d4?style=for-the-badge&labelColor=111a35)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
   [![Codacy](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
-  [![CodeRabbit reviews](https://img.shields.io/coderabbit/prs/github/golusoris/golusoris)](https://coderabbit.ai)
+  [![CodeRabbit](https://img.shields.io/badge/Reviews-CodeRabbit-8b5cf6?style=for-the-badge&logo=coderabbit&logoColor=white&labelColor=111a35)](https://coderabbit.ai)
   <!-- 4 standards -->
   [![HISS-21](https://img.shields.io/badge/Standards-HISS--21-06b6d4?style=for-the-badge&logo=nasa&labelColor=111a35)](AGENTS.md)
   [![Power of 10](https://img.shields.io/badge/NASA_JPL-Power_of_10-3b82f6?style=for-the-badge&logo=nasa&labelColor=111a35)](docs/principles.md)

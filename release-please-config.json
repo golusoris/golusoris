@@ -60,7 +60,13 @@
   ],
   "packages": {
     ".": {
-      "package-name": "golusoris"
+      "package-name": "golusoris",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "README.md"
+        }
+      ]
     },
     "core": {
       "package-name": "golusoris-core",
