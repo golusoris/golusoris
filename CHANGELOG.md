@@ -15,7 +15,7 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
-## [0.21.0](https://github.com/golusoris/golusoris/compare/v0.20.1...v0.21.0) (2026-11-06)
+## [0.21.0](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.21.0) (2026-11-06)
 
 
 ### ⚠ BREAKING CHANGES
