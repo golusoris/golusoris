@@ -17,6 +17,7 @@ Keras MobileNet V2 image-classification container entrypoint.
 - Images: extension and header match; count, bytes, dimensions, pixels,
   channels bounded; two labels and two images per label.
 - Network: denied; `pretrained=false`; no remote weight acquisition.
+- Validation split: matching seeded shuffles; from-scratch backbone BN momentum: 0.9.
 - Conversion: `TFLITE_BUILTINS` only; `TFL3` header; interpreter allocation
   and finite-output invocation before publication.
 - Output: `model.tflite`; required `metrics.json` with metrics and training
