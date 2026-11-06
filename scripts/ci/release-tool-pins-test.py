@@ -52,7 +52,7 @@ ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
 
 NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1\s*$""")
 
-ACTION_LINE_RE = re.compile(r"uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
+ACTION_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
 VERSION_RE = re.compile(r"(\d+)\\\.(\d+)\\\.(\d+)")
 ENV_LINE_RE = re.compile(r"^([A-Z0-9_]+)=(.*)$")
 MAX_FILES = 16
@@ -464,6 +464,20 @@ class ReleaseToolPinsTest(unittest.TestCase):
                 "uses: actions/setup-node",
                 "# uses: actions/setup-node",
             )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing install pin")
+
+    def test_planted_dash_commented_node_install_pin(self) -> None:
+        # Tests detection when the setup-node step is a dash-prefixed commented uses line.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            step = "      - name: Install node\n        uses: actions/setup-node"
+            self.assertIn(step, text)
+            text = text.replace(step, "      - # uses: actions/setup-node")
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "missing install pin")
