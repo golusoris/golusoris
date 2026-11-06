@@ -3,13 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Planted cases for scripts/ci/release-pr-ci.sh against a stub gh: the waiting runs
-# of a release branch head are approved once each, including runs appearing after
-# a delay, a release pull request listed late, and a transiently failing pull request
-# listing retried to success; a run that already ran, a run of another branch or repository, a labelled
-# pull request on a non-release or fork branch, and no release pull request approve nothing; a head without a run, a run
-# appearing too late, a reported release pull request never listed, an exhausted transient or non-transient pull
-# request listing failure, a failing or odd API answer fail the script.
+# Planted cases for scripts/ci/release-pr-ci.sh against a stub gh, so approval and retry regressions fail here, not in a release.
 #   usage: scripts/ci/release-pr-ci_test.sh
 set -euo pipefail
 
@@ -70,6 +64,13 @@ case "$1" in
 esac
 STUB
 chmod 0755 "$WORK/gh"
+# Records each delay instead of waiting it out.
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/sleep" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$1" >> "$WORK/sleeps"
+STUB
+chmod 0755 "$WORK/bin/sleep"
 
 # run_case NAME HEADS RUNS WANT_RC WANT_APPROVALS [APPROVE] [TRIES, empty = script default]
 run_case() {
@@ -97,7 +98,8 @@ run_case() {
 		STUB_PR_FAIL_MSG="${STUB_PR_FAIL_MSG:-}"
 		RELEASE_PR_EXPECTED="${RELEASE_PR_EXPECTED:-false}"
 		RELEASE_PR_CI_WAIT=0
-		RELEASE_PR_CI_LIST_BACKOFF=0
+		RELEASE_PR_CI_LIST_BACKOFF="${LIST_BACKOFF:-0}"
+		PATH="$WORK/bin:$PATH"
 	)
 	env "${env_args[@]}" bash "$HERE/release-pr-ci.sh" owner/repo > "$WORK/out" 2>&1 || rc=$?
 	got="$(wc -l < "$WORK/log")"
@@ -141,6 +143,14 @@ STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 404: Not Found" run_case pr-list-non
 [ "$(< "$WORK/pr_lookups")" -eq 1 ]
 grep -q 'could not list open release pull requests' "$WORK/out"
 grep -q 'HTTP 404: Not Found' "$WORK/out"
+STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 403: API rate limit exceeded" run_case pr-list-retry-rate-limit "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
+[ "$(< "$WORK/pr_lookups")" -eq 2 ]
+STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="dial tcp: lookup api.github.com: no such host" run_case pr-list-retry-dns "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
+[ "$(< "$WORK/pr_lookups")" -eq 2 ]
+: > "$WORK/sleeps"
+STUB_PR_FAIL_FIRST=1 LIST_BACKOFF=08 run_case pr-list-backoff-decimal "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
+sleep_arg="$(head -n 1 "$WORK/sleeps")"
+[ "$sleep_arg" -ge 8 ] && [ "$sleep_arg" -le 15 ]
 run_case approve-fails "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0 fail
 run_case odd-run "$HEAD" "null action_required release-please--branches--main owner/repo" 1 0
 run_case odd-head "release-please--branches--main not-a-sha false" "11 action_required release-please--branches--main owner/repo" 1 0

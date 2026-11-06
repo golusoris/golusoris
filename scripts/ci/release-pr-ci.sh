@@ -28,6 +28,9 @@ if [[ ! "$TRIES" =~ ^[1-9][0-9]?$ ]] || [[ ! "$WAIT" =~ ^[0-9]{1,3}$ ]] || [[ ! 
 	echo "error: unexpected RELEASE_PR_CI_TRIES, RELEASE_PR_CI_WAIT or RELEASE_PR_CI_LIST_BACKOFF" >&2
 	exit 2
 fi
+# Leading zeros would otherwise read as octal, and 08 or 09 abort the arithmetic.
+WAIT=$((10#$WAIT))
+BASE=$((10#$BASE))
 
 EXPECTED="${RELEASE_PR_EXPECTED:-false}"
 if [ "$EXPECTED" != true ] && [ "$EXPECTED" != false ]; then
@@ -40,7 +43,7 @@ readonly LIST_ATTEMPTS=3
 # The author depends on the token release-please ran with, so a release branch of this
 # repository selects; only writers can push one, and writers may approve runs anyway.
 release_heads() {
-	local -r transient_regex='HTTP 50[0-9]|502 Bad Gateway|503|504|connection reset|connection refused|[Tt]imeout|EOF|TLS handshake'
+	local -r transient_regex='HTTP 50[0-9]|HTTP 429|[Rr]ate limit|502 Bad Gateway|503|504|connection reset|connection refused|[Tt]imeout|deadline exceeded|no such host|[Tt]emporary failure in name resolution|EOF|TLS handshake'
 	local listed="" branch sha cross attempt err err_file
 	err_file="$(mktemp "${TMPDIR:-/tmp}/golusoris-release-pr-ci.XXXXXX")"
 
