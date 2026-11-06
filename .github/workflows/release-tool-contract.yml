@@ -103,7 +103,7 @@ jobs:
           docker info
           docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.1([[:space:]]|$)'
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
+          syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
           node --version | grep -Eq '^v24\.22\.2$'
           test "$(gitleaks version)" = "$GITLEAKS_VERSION"

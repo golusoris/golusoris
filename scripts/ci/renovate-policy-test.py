@@ -1096,7 +1096,9 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
 
 def syft_coverage_controls(config: dict[str, object], managers: list[object]) -> bool:
     """A wrong capture or a drifting datasource must fail; a step without the input must not count."""
-    sample = "      - uses: anchore/sbom-action/download-syft@0123abc # v0.24.3\n        with:\n          syft-version: v1.54.1\n"
+    # The positive sample follows the live pin, so a Syft bump cannot fail the control itself.
+    pin = (ROOT / TOOL_VERSIONS_PATH).read_text(encoding="utf-8").split("SYFT_VERSION=", 1)[1].split()[0]
+    sample = f"      - uses: anchore/sbom-action/download-syft@0123abc # v0.24.3\n        with:\n          syft-version: v{pin}\n"
     bare = "      - uses: anchore/sbom-action/download-syft@0123abc # v0.24.3\n      - run: echo bare-download-step\n"
     workflows = {".github/workflows/sample.yml": sample + bare}
     if syft_workflow_uncovered(config, workflows):
