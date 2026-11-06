@@ -112,7 +112,9 @@ func runLoad(t *testing.T, clk clock.Clock, url string, cfg sizingConfig, exited
 
 	start := clk.Now()
 	sent, aborted := dispatch(ctx, clk, jobs, sink, cfg, exited)
-	cancel()
+	if aborted != nil {
+		cancel()
+	}
 	close(jobs)
 	wg.Wait()
 	wall := clk.Since(start)

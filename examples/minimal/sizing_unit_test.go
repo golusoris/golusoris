@@ -9,6 +9,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -223,5 +225,19 @@ func TestLoadDispatchStopsOnCancel(t *testing.T) {
 	sent, err := dispatch(ctx, clockwork.NewFakeClock(), make(chan struct{}, 1), newErrSink(), cfg, make(chan struct{}))
 	if !errors.Is(err, context.Canceled) || sent != 0 {
 		t.Fatalf("dispatch = %d, %v; want 0, context.Canceled", sent, err)
+	}
+}
+
+func TestLoadRunDrainsInFlight(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		realClock().Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	cfg := sizingConfig{rps: 1000, requests: 3}
+	res := runLoad(t, realClock(), srv.URL, cfg, make(chan struct{}))
+	if res.aborted != nil || res.failed != 0 || res.completed != 3 {
+		t.Fatalf("runLoad = %+v; want 3 completed, 0 failed, no abort", res)
 	}
 }
