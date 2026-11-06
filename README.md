@@ -105,6 +105,18 @@ configuration expose constructors or options directly.
 
 ### Scaffolding
 
+Install `golusoris` (and `golusoris-mcp`) from a release archive. `go install
+…/cmd/golusoris@<version>` is refused while the root `go.mod` replaces the
+`core` submodule with `./core`; a clone build (`go build ./cmd/golusoris`) works.
+
+```sh
+v=0.21.0 # x-release-please-version
+gh release download "v$v" -R golusoris/golusoris \
+  -p "golusoris_${v}_linux_amd64.tar.gz" -p checksums.txt -p checksums.txt.sigstore.json
+sha256sum --ignore-missing -c checksums.txt   # cosign check of checksums.txt: SECURITY.md
+tar -xzf "golusoris_${v}_linux_amd64.tar.gz" golusoris golusoris-mcp
+```
+
 ```sh
 golusoris init my-service          # generate a minimal new app
 golusoris add grpc                 # wire grpc module into existing app
