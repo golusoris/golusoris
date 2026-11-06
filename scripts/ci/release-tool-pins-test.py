@@ -23,6 +23,11 @@ WORKFLOW_FILES: tuple[str, ...] = (
     ".github/workflows/tiny-trainer-images.yml",
 )
 
+REQUIRED_TOOLS_BY_FILE: dict[str, tuple[str, ...]] = {
+    ".github/workflows/release-go.yml": ("node",),
+    ".github/workflows/release-tool-contract.yml": ("node",),
+}
+
 TOOL_ACTIONS: dict[str, tuple[str, str]] = {
     "sigstore/cosign-installer": ("cosign", "cosign-release"),
     "anchore/sbom-action/download-syft": ("syft", "syft-version"),
@@ -44,6 +49,8 @@ ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
     "buildx": re.compile(r"docker\s+buildx\s+version\s*\|\s*grep\s+-Eq"),
     "node": re.compile(r"node\s+--version\s*\|\s*grep\s+-Eq"),
 }
+
+NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1""")
 
 ACTION_LINE_RE = re.compile(r"uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
 VERSION_RE = re.compile(r"(\d+)\\\.(\d+)\\\.(\d+)")
@@ -116,6 +123,8 @@ def parse_assertion_line(
     for tool, pattern in ASSERTION_PATTERNS.items():
         if not pattern.search(line):
             continue
+        if tool == "node" and not NODE_ANCHORED_RE.search(line):
+            problems.append(f"{rel_path}:{idx + 1}: node: assertion not anchored")
         vm = VERSION_RE.search(line)
         if vm:
             ver = f"{vm.group(1)}.{vm.group(2)}.{vm.group(3)}"
@@ -253,6 +262,27 @@ def check_scope_coverage(
     ]
 
 
+def check_workflow_node_and_required_tools(
+    rel_path: str,
+    pins: list[Pin],
+    assertions: list[Assertion],
+) -> list[str]:
+    # Enforces required tool pins/assertions and node pin-assertion pairing.
+    problems: list[str] = []
+    pin_tools = {p.tool for p in pins}
+    assertion_tools = {a.tool for a in assertions}
+    for tool in REQUIRED_TOOLS_BY_FILE.get(rel_path, ())[:MAX_FILES]:
+        if tool not in pin_tools:
+            problems.append(f"{rel_path}: {tool}: missing install pin")
+        if tool not in assertion_tools:
+            problems.append(f"{rel_path}: {tool}: missing version assertion")
+    if "node" in pin_tools and "node" not in assertion_tools:
+        msg = f"{rel_path}: node: missing version assertion"
+        if msg not in problems:
+            problems.append(msg)
+    return problems
+
+
 def check_release_tool_pins(root: Path) -> list[str]:
     # Coordinates rules a-d across workflows and tool-versions.env.
     problems: list[str] = []
@@ -265,6 +295,9 @@ def check_release_tool_pins(root: Path) -> list[str]:
         pins_by_file[rel_path] = pins
         all_pins.extend(pins)
         problems.extend(check_file_assertions(pins, assertions))
+        problems.extend(
+            check_workflow_node_and_required_tools(rel_path, pins, assertions)
+        )
     problems.extend(check_scope_coverage(WORKFLOW_FILES, pins_by_file))
     problems.extend(check_pins_equal_across_files(all_pins))
     problems.extend(check_env_pins(root, all_pins))
@@ -361,6 +394,47 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(
                 problems, "node: assertion 24.21.0 != pin 24.22.2"
             )
+
+    def test_planted_required_tool_missing_pin_and_assertion(self) -> None:
+        # Tests detection when required tool install pin and assertion are missing.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("actions/setup-node", "actions/setup-other")
+            text = text.replace(
+                "node --version | grep -Eq '^v24\\.22\\.2$'", "echo skip"
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing install pin")
+
+    def test_planted_missing_node_version_assertion(self) -> None:
+        # Tests detection when node version assertion is missing despite install pin.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-tool-contract.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "node --version | grep -Eq '^v24\\.22\\.2$'", "echo skip"
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing version assertion")
+
+    def test_planted_node_assertion_unanchored(self) -> None:
+        # Tests detection of unanchored node version assertion.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("'^v24\\.22\\.2$'", "'v24\\.22\\.2'")
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "not anchored")
 
     def test_planted_pins_differ_across_files(self) -> None:
         # Tests detection of pins differing across workflow files.
