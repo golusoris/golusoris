@@ -26,6 +26,7 @@ const maxKeptErrors = 5
 var (
 	errStatus    = errors.New("unexpected status")
 	errSaturated = errors.New("sizing: all load workers busy; the app cannot keep the fixed rate")
+	errAppDied   = errors.New("sizing: app exited during the load run")
 )
 
 type loadResult struct {
@@ -34,6 +35,7 @@ type loadResult struct {
 	failed    int64
 	firstErrs []error
 	wall      time.Duration
+	aborted   error
 }
 
 func (r loadResult) errSummary() string {
@@ -86,9 +88,11 @@ func getOK(parent context.Context, client *http.Client, url string) error {
 	return nil
 }
 
-// runLoad fires cfg.requests GETs at cfg.rps through loadWorkers workers and times the whole run.
-func runLoad(t *testing.T, clk clock.Clock, url string, cfg sizingConfig) loadResult {
+// runLoad fires cfg.requests GETs at cfg.rps through loadWorkers workers and times the whole run; it stops early when exited closes.
+func runLoad(t *testing.T, clk clock.Clock, url string, cfg sizingConfig, exited <-chan struct{}) loadResult {
 	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	client := &http.Client{Transport: &http.Transport{MaxIdleConnsPerHost: loadWorkers}}
 	defer client.CloseIdleConnections()
 	sink := newErrSink()
@@ -98,7 +102,7 @@ func runLoad(t *testing.T, clk clock.Clock, url string, cfg sizingConfig) loadRe
 	for range loadWorkers {
 		wg.Go(func() {
 			for range jobs {
-				if err := getOK(t.Context(), client, url); err != nil {
+				if err := getOK(ctx, client, url); err != nil {
 					sink.add(err)
 				}
 				completed.Add(1)
@@ -107,22 +111,29 @@ func runLoad(t *testing.T, clk clock.Clock, url string, cfg sizingConfig) loadRe
 	}
 
 	start := clk.Now()
-	sent := dispatch(clk, jobs, sink, cfg)
+	sent, aborted := dispatch(ctx, clk, jobs, sink, cfg, exited)
+	cancel()
 	close(jobs)
 	wg.Wait()
 	wall := clk.Since(start)
 
 	failed, first := sink.snapshot()
-	return loadResult{sent: sent, completed: completed.Load(), failed: failed, firstErrs: first, wall: wall}
+	return loadResult{sent: sent, completed: completed.Load(), failed: failed, firstErrs: first, wall: wall, aborted: aborted}
 }
 
-// dispatch hands one job per tick to the workers until cfg.requests are sent.
-func dispatch(clk clock.Clock, jobs chan<- struct{}, sink *errSink, cfg sizingConfig) int64 {
+// dispatch hands one job per tick to the workers until cfg.requests are sent, the app exits or ctx ends.
+func dispatch(ctx context.Context, clk clock.Clock, jobs chan<- struct{}, sink *errSink, cfg sizingConfig, exited <-chan struct{}) (int64, error) {
 	ticker := clk.NewTicker(max(time.Second/time.Duration(cfg.rps), time.Nanosecond))
 	defer ticker.Stop()
 	var sent int64
 	for sent < cfg.requests {
-		<-ticker.Chan()
+		select {
+		case <-ticker.Chan():
+		case <-exited:
+			return sent, errAppDied
+		case <-ctx.Done():
+			return sent, fmt.Errorf("sizing: load run: %w", ctx.Err())
+		}
 		select {
 		case jobs <- struct{}{}:
 		default:
@@ -130,5 +141,5 @@ func dispatch(clk clock.Clock, jobs chan<- struct{}, sink *errSink, cfg sizingCo
 		}
 		sent++
 	}
-	return sent
+	return sent, nil
 }

@@ -87,7 +87,10 @@ func measure(t *testing.T, clk clock.Clock, cfg sizingConfig, bin, dsn string) {
 	app := startApp(t, clk, bin, dsn)
 	pid := app.cmd.Process.Pid
 	before := readProc(t, pid)
-	res := runLoad(t, clk, "http://"+app.addr+probePath, cfg)
+	res := runLoad(t, clk, "http://"+app.addr+probePath, cfg, app.exited)
+	if res.aborted != nil {
+		t.Fatalf("sizing: %v after %d of %d requests; %s\n%s", res.aborted, res.sent, cfg.requests, res.errSummary(), app.logs.String())
+	}
 	after := readProc(t, pid)
 
 	cores := avgCores(before, after, res.wall)

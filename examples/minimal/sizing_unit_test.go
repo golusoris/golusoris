@@ -7,11 +7,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/jonboulle/clockwork"
 )
 
 func envFrom(m map[string]string) func(string) string {
@@ -188,5 +191,37 @@ func TestParseRetryable(t *testing.T) {
 	}
 	if retryable(errors.New("timeout"), "address already in use") {
 		t.Error("a live app must not retry")
+	}
+}
+
+func TestLoadDispatchSendsAll(t *testing.T) {
+	t.Parallel()
+	jobs := make(chan struct{}, 3)
+	cfg := sizingConfig{rps: 1000, requests: 3}
+	sent, err := dispatch(t.Context(), realClock(), jobs, newErrSink(), cfg, make(chan struct{}))
+	if err != nil || sent != 3 {
+		t.Fatalf("dispatch = %d, %v; want 3, nil", sent, err)
+	}
+}
+
+func TestLoadDispatchStopsOnExit(t *testing.T) {
+	t.Parallel()
+	exited := make(chan struct{})
+	close(exited)
+	cfg := sizingConfig{rps: 1, requests: 100}
+	sent, err := dispatch(t.Context(), clockwork.NewFakeClock(), make(chan struct{}, 1), newErrSink(), cfg, exited)
+	if !errors.Is(err, errAppDied) || sent != 0 {
+		t.Fatalf("dispatch = %d, %v; want 0, errAppDied", sent, err)
+	}
+}
+
+func TestLoadDispatchStopsOnCancel(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	cfg := sizingConfig{rps: 1, requests: 100}
+	sent, err := dispatch(ctx, clockwork.NewFakeClock(), make(chan struct{}, 1), newErrSink(), cfg, make(chan struct{}))
+	if !errors.Is(err, context.Canceled) || sent != 0 {
+		t.Fatalf("dispatch = %d, %v; want 0, context.Canceled", sent, err)
 	}
 }
