@@ -249,4 +249,105 @@ tags='[{"tagName":"v1.3.0"},{"tagName":"core/v1.1.0"},{"tagName":"v1.2.0"}]'
 [[ -z "$(previous_release '[]' v1.0.0)" ]]
 expect_failure 'usage:' bash "$repo_root/scripts/ci/previous-published-release.sh"
 
+# --- release range ---------------------------------------------------------------------------
+
+# History: #1 and #2 are released in v0.1.0 (lightweight tag); #3 and #4 come after it.
+range_repo="$suite_root/range"
+mkdir -p "$range_repo"
+rgit() {
+	git -C "$range_repo" -c commit.gpgsign=false -c tag.gpgsign=false \
+		-c user.name=Tester -c user.email=tester@example.test "$@"
+}
+rgit init -q
+for n in 1 2; do rgit commit -q --allow-empty -m "fix(x): change $n (#$n)"; done
+rgit tag v0.1.0
+for n in 3 4; do rgit commit -q --allow-empty -m "fix(x): change $n (#$n)"; done
+sha_of() { rgit log --format=%H --grep="(#$1)\$" -n 1; }
+
+# release_bullet prints a release-please bullet for PR $1 with its commit link.
+release_bullet() {
+	local sha
+	sha="$(sha_of "$1")"
+	printf '* **x:** change %s ([#%s](https://example.test/issues/%s)) ([%s](https://example.test/commit/%s))\n' \
+		"$1" "$1" "$1" "${sha:0:7}" "$sha"
+}
+
+# range_changelog writes the CHANGELOG of the range repository from stdin.
+range_changelog() {
+	{
+		printf '# Changelog\n\n'
+		cat
+	} >"$range_repo/CHANGELOG.md"
+}
+
+# range_entry prints an entry header and a Bug Fixes section holding the stdin bullets.
+range_entry() {
+	printf '## [%s](https://example.test/compare/v0.0.0...v%s) (2026-01-01)\n\n### Bug Fixes\n\n' "$1" "$1"
+	cat
+	printf '\n'
+}
+
+# Positive: the newest entry lists only commits after the tagged release.
+{
+	{ release_bullet 3; release_bullet 4; } | range_entry 0.2.0
+	{ release_bullet 1; release_bullet 2; } | range_entry 0.1.0
+} | range_changelog
+bash "$script" --root "$range_repo" range
+
+# Negative: the newest entry re-lists a commit that v0.1.0 already contains.
+{
+	{ release_bullet 3; release_bullet 2; } | range_entry 0.2.0
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure "lists $(sha_of 2 | cut -c1-7) (#2), already released in v0.1.0" \
+	bash "$script" --root "$range_repo" range
+
+# Negative: a breaking bullet carries only (#1), whose commit predates the tag.
+{
+	printf '## [0.2.0](https://example.test/compare/v0.1.0...v0.2.0) (2026-01-01)\n\n### ⚠ BREAKING CHANGES\n\n'
+	printf '* **x:** a breaking change ([#1](https://example.test/issues/1))\n\n'
+	release_bullet 3 | { printf '### Bug Fixes\n\n'; cat; printf '\n'; }
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure 'already released in v0.1.0' bash "$script" --root "$range_repo" range
+
+# Boundary: a breaking bullet whose PR is after the tag passes, and one with no PR is skipped.
+{
+	printf '## [0.2.0](https://example.test/compare/v0.1.0...v0.2.0) (2026-01-01)\n\n### ⚠ BREAKING CHANGES\n\n'
+	printf '* **x:** a breaking change ([#4](https://example.test/issues/4))\n* **x:** gemma.DefaultImage is removed.\n\n'
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+bash "$script" --root "$range_repo" range
+
+# Boundary: 0.1.1 was never tagged, so the base is 0.1.0 and 0.1.1's own changes are not the base.
+{
+	release_bullet 3 | range_entry 0.1.2
+	release_bullet 2 | range_entry 0.1.1
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+bash "$script" --root "$range_repo" range
+{
+	{ release_bullet 3; release_bullet 2; } | range_entry 0.1.2
+	release_bullet 2 | range_entry 0.1.1
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure 'already released in v0.1.0' bash "$script" --root "$range_repo" range
+
+# Boundary: no earlier entry has a tag, so there is no base to compare with.
+{
+	release_bullet 3 | range_entry 0.3.0
+	release_bullet 2 | range_entry 0.2.0
+} | range_changelog
+expect_failure 'CHANGELOG entry 0.3.0 has no earlier entry with a release tag' \
+	bash "$script" --root "$range_repo" range
+
+# Negative: a bullet names a commit that is not in the repository.
+{
+	printf '* **x:** ghost ([aaaaaaa](https://example.test/commit/%s))\n' "$(printf 'a%.0s' $(seq 1 40))" | range_entry 0.2.0
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure "which is not in the repository" bash "$script" --root "$range_repo" range
+
+expect_failure 'usage:' bash "$script" --root "$range_repo" range extra
+
 printf 'Release-notes breaking-change positive, negative and boundary tests passed\n'

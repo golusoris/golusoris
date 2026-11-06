@@ -8,6 +8,8 @@
 #   notes <tag> [<previous>] prints the release-notes block for <tag>: every breaking entry after the
 #                            previous published release (every entry when none is named), each with its
 #                            guide; prints nothing when no entry in that range is breaking
+#   range                    the newest CHANGELOG entry must not list a change that the nearest earlier tagged
+#                            release already shipped (0.21.0 re-listed v0.20.0 changes after untagged 0.20.1)
 #   api <previous> --apidiff FILE | --unavailable REASON
 #                            prints the "API compatibility" section from the output of go-apidiff.sh,
 #                            or the reason there is none; the section is never empty
@@ -15,14 +17,15 @@
 set -euo pipefail
 
 usage() {
-	printf 'usage: %s [--root DIR] check | [--root DIR] notes <tag> [<previous-published-tag>]\n' \
+	printf 'usage: %s [--root DIR] check | [--root DIR] range | [--root DIR] notes <tag> [<previous-published-tag>]\n' \
 		"${0##*/}" >&2
 	printf '       %s api <previous-published-tag> --apidiff FILE | --unavailable REASON\n' \
 		"${0##*/}" >&2
 }
 
 # changelog_entries prints "V<TAB>version" per release entry, newest first, and
-# "B<TAB>version<TAB>text" per bullet of that entry's breaking-changes section.
+# "B<TAB>version<TAB>text" per bullet of that entry's breaking-changes section, and
+# "L<TAB>version<TAB>text" per bullet of any section.
 changelog_entries() {
 	LC_ALL=C awk '
 		/^## / {
@@ -38,6 +41,11 @@ changelog_entries() {
 		/^### / {
 			breaking = ($0 ~ /BREAKING CHANGES/)
 			next
+		}
+		version != "" && /^\* / {
+			text = $0
+			sub(/^\* /, "", text)
+			printf "L\t%s\t%s\n", version, text
 		}
 		breaking && version != "" && /^\* / {
 			text = $0
@@ -73,6 +81,79 @@ check_newest() {
 	if awk -F'\t' -v v="$newest" '$1 == "B" && $2 == v { found = 1 } END { exit !found }' <<<"$entries"; then
 		require_guide "$root" "$newest"
 	fi
+}
+
+readonly range_max_bullets=2000 range_max_entries=200
+
+# range_base prints the nearest entry below the newest whose v<version> tag exists; untagged ones are skipped.
+range_base() {
+	local root="$1" entries="$2" newest="$3" candidate scanned=0
+	while IFS= read -r candidate; do
+		scanned=$((scanned + 1))
+		if ((scanned > range_max_entries)); then
+			printf 'CHANGELOG entry %s: no tagged earlier entry within %d entries\n' "$newest" "$range_max_entries" >&2
+			return 1
+		fi
+		if git -C "$root" rev-parse -q --verify "refs/tags/v$candidate^{commit}" >/dev/null; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done < <(awk -F'\t' -v n="$newest" '$1 == "V" { if (seen) { print $2 } else if ($2 == n) { seen = 1 } }' <<<"$entries")
+	printf 'CHANGELOG entry %s has no earlier entry with a release tag\n' "$newest" >&2
+	return 1
+}
+
+# bullet_commit prints the sha a bullet names, else the first-parent commit whose subject ends in its (#K).
+bullet_commit() {
+	local text="$1" pr="$2" subjects="$3"
+	if [[ "$text" =~ commit/([0-9a-f]{40}) ]]; then
+		printf '%s\n' "${BASH_REMATCH[1]}"
+	elif [[ -n "$pr" ]]; then
+		awk -v want="(#$pr)" 'length($0) > 41 && substr($0, length($0) - length(want) + 1) == want { print substr($0, 1, 40); exit }' <<<"$subjects"
+	fi
+}
+
+# check_range fails when the newest entry lists a change its nearest tagged release already shipped.
+check_range() {
+	local root="$1" entries newest base bullets subjects text pr sha count=0 failed=0
+	entries="$(changelog_entries "$root/CHANGELOG.md")"
+	newest="$(awk -F'\t' '$1 == "V" { print $2; exit }' <<<"$entries")"
+	if [[ -z "$newest" ]]; then
+		printf 'CHANGELOG.md has no release entry\n' >&2
+		return 1
+	fi
+	base="$(range_base "$root" "$entries" "$newest")" || return 1
+	bullets="$(awk -F'\t' -v v="$newest" '$1 == "L" && $2 == v { print $3 }' <<<"$entries")"
+	subjects="$(git -C "$root" log --first-parent --format='%H %s' HEAD)"
+	while IFS= read -r text; do
+		if [[ -z "$text" ]]; then
+			continue
+		fi
+		count=$((count + 1))
+		if ((count > range_max_bullets)); then
+			printf 'CHANGELOG entry %s has more than %d bullets\n' "$newest" "$range_max_bullets" >&2
+			return 1
+		fi
+		pr=""
+		if [[ "$text" =~ \[#([0-9]+)\] ]] || [[ "$text" =~ \(#([0-9]+)\) ]]; then
+			pr="${BASH_REMATCH[1]}"
+		fi
+		sha="$(bullet_commit "$text" "$pr" "$subjects")"
+		if [[ -z "$sha" ]]; then
+			continue
+		fi
+		if ! git -C "$root" cat-file -e "$sha^{commit}" 2>/dev/null; then
+			printf 'CHANGELOG entry %s lists commit %s, which is not in the repository\n' "$newest" "$sha" >&2
+			failed=1
+			continue
+		fi
+		if git -C "$root" merge-base --is-ancestor "$sha" "v$base"; then
+			printf 'CHANGELOG entry %s lists %s%s, already released in v%s\n' \
+				"$newest" "${sha:0:7}" "${pr:+ (#$pr)}" "$base" >&2
+			failed=1
+		fi
+	done <<<"$bullets"
+	return "$failed"
 }
 
 # versions_in_range prints the entries from the tag's own down to, not including, the previous one.
@@ -259,12 +340,16 @@ main() {
 		return 1
 	fi
 	case "${1:-}" in
-		check)
+		check | range)
 			if (($# != 1)); then
 				usage
 				return 2
 			fi
-			check_newest "$root"
+			if [[ "$1" == check ]]; then
+				check_newest "$root"
+			else
+				check_range "$root"
+			fi
 			;;
 		notes)
 			if (($# < 2 || $# > 3)); then
