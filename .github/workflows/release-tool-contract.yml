@@ -81,6 +81,11 @@ jobs:
           GITLEAKS_DIR: ${{ runner.temp }}/gitleaks-bin
         run: echo "$GITLEAKS_DIR" >> "$GITHUB_PATH"
 
+      - name: Install pinned Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.2
+
       - name: Verify the release runtime contract
         shell: bash
         run: |
@@ -100,6 +105,7 @@ jobs:
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.54\.1([[:space:]]|$)'
           goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
+          node --version | grep -Eq '^v24\.22\.2$'
           test "$(gitleaks version)" = "$GITLEAKS_VERSION"
           roundtrip_dir="$(mktemp -d "$RUNNER_TEMP/cosign-roundtrip.XXXXXX")"
           trap 'rm -rf "$roundtrip_dir"' EXIT
