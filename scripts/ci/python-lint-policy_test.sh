@@ -87,9 +87,9 @@ mkdir -p "$former_exception_root/tools/figures"
 	printf '%s\n' 'import json  # noqa: F401'
 } >"$former_exception_root/tools/figures/mkdocs_hook.py"
 git -C "$former_exception_root" add .
-# The retired mkdocs_hook.py:269 exception grants nothing: an unexplained noqa there fails like anywhere else.
+# The date sits inside the retired window, so only the removal of the exception makes the case fail.
 expect_failure 'Ruff noqa needs specific codes and an inline WHY: tools/figures/mkdocs_hook.py:269' \
-	bash "$former_exception_root/scripts/ci/python-lint.sh" --root "$former_exception_root"
+	env PYTHON_LINT_TODAY=2026-11-01 bash "$former_exception_root/scripts/ci/python-lint.sh" --root "$former_exception_root"
 
 untracked_root="$(new_repo untracked)"
 printf 'value = 1\n' >"$untracked_root/clean.py"
