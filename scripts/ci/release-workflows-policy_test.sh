@@ -254,10 +254,24 @@ check_release_draft_contract() {
 check_release_please_tagging() {
 	local config="$1" workflow="$2"
 	# The merged release pull request is tagged by release-please, never by hand.
-	if grep -Eq '^[[:space:]]*skip-github-release:[[:space:]]*true' "$workflow"; then
+	if grep -Eiq '^[[:space:]]*skip-github-release:[[:space:]]*['\''"]?true['\''"]?' "$workflow"; then
 		printf 'release-please skips the tag and release step: %s\n' "$workflow" >&2
 		return 1
 	fi
+	if ! grep -Fq 'actions/create-github-app-token' "$workflow"; then
+		printf 'release-please lacks GitHub App token minting: %s\n' "$workflow" >&2
+		return 1
+	fi
+	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+	awk '
+		/uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1; next }
+		in_action && /token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { found = 1; exit }
+		in_action && /^[[:space:]]*-[[:space:]]/ { in_action = 0 }
+		END { exit !found }
+	' "$workflow" || {
+		printf 'release-please does not pass App token to release-please-action: %s\n' "$workflow" >&2
+		return 1
+	}
 	python3 -B - "$config" <<'PY' || return 1
 import json
 import sys
@@ -270,11 +284,24 @@ if config.get("force-tag-creation") is not True:
     problems.append("force-tag-creation must be true")
 if config.get("skip-github-release") is True:
     problems.append("top-level config skips tags and releases")
+if config.get("include-v-in-tag") is not True:
+    problems.append("top-level include-v-in-tag must be true")
+if config.get("include-component-in-tag") is not False:
+    problems.append("top-level include-component-in-tag must be false")
 if packages["."].get("draft") is not True:
     problems.append("root package draft must be true for the GoReleaser draft")
-if packages["core"].get("draft") is True:
-    problems.append("core package draft must be false for direct publication")
+if packages["core"].get("draft") is not True:
+    problems.append("core package draft must be true so core tags never take releases/latest")
+core = packages.get("core", {})
+if core.get("component") != "core":
+    problems.append("core package component must be 'core'")
+if core.get("include-component-in-tag") is not True:
+    problems.append("core package include-component-in-tag must be true")
+if core.get("tag-separator") != "/":
+    problems.append("core package tag-separator must be '/'")
 for path, package in packages.items():
+    if package.get("force-tag-creation") is False:
+        problems.append(f"{path} overrides force-tag-creation to false")
     if package.get("skip-github-release") is True:
         problems.append(f"{path} skips its tag and release")
 if problems:
@@ -535,21 +562,59 @@ negative_config="$suite_root/negative-release-please-config.json"
 sed '/"force-tag-creation": true,/d' "$release_please_config" >"$negative_config"
 expect_failure 'force-tag-creation must be true' \
 	check_release_please_tagging "$negative_config" "$release_please"
-python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["skip-github-release"]=True; json.dump(c,open(sys.argv[2],"w"))' \
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["force-tag-creation"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure 'core overrides force-tag-creation to false' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["skip-github-release"] = True
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
 	"$release_please_config" "$negative_config"
 expect_failure 'top-level config skips tags and releases' \
 	check_release_please_tagging "$negative_config" "$release_please"
-python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["."]["draft"]=False; json.dump(c,open(sys.argv[2],"w"))' \
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["."]["draft"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
 	"$release_please_config" "$negative_config"
 expect_failure 'root package draft must be true' \
 	check_release_please_tagging "$negative_config" "$release_please"
-python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["core"]["draft"]=True; json.dump(c,open(sys.argv[2],"w"))' \
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["draft"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
 	"$release_please_config" "$negative_config"
-expect_failure 'core package draft must be false' \
+expect_failure 'core package draft must be true' \
 	check_release_please_tagging "$negative_config" "$release_please"
-python3 -B -c 'import json,sys; c=json.load(open(sys.argv[1])); c["packages"]["core"]["skip-github-release"]=True; json.dump(c,open(sys.argv[2],"w"))' \
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["skip-github-release"] = True
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
 	"$release_please_config" "$negative_config"
 expect_failure 'core skips its tag and release' \
+	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["core"]["tag-separator"] = "-"
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure "core package tag-separator must be '/'" \
 	check_release_please_tagging "$negative_config" "$release_please"
 python3 -B -c 'import sys
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
@@ -559,6 +624,32 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
             dst.write("          skip-github-release: true\n")' \
 	"$release_please" "$negative"
 expect_failure 'release-please skips the tag and release step' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for line in src:
+        dst.write(line)
+        if "manifest-file: .release-please-manifest.json" in line:
+            dst.write("          skip-github-release: \"true\"\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please skips the tag and release step' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for line in src:
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for line in src:
+        if "actions/create-github-app-token" not in line:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please lacks GitHub App token minting' \
 	check_release_please_tagging "$release_please_config" "$negative"
 
 printf 'release workflow policy tests passed\n'

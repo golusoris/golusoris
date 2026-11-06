@@ -70,7 +70,7 @@
       "include-component-in-tag": true,
       "tag-separator": "/",
       "changelog-path": "CHANGELOG.md",
-      "draft": false
+      "draft": true
     }
   }
 }
