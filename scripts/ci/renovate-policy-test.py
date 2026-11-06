@@ -247,7 +247,7 @@ def extract(config: dict[str, object], contents: dict[str, str]) -> list[dict[st
                     captures = {key: value for key, value in match.groupdict().items() if value}
                     dep_name = captures.get("depName") or manager.get("depNameTemplate")
                     datasource = captures.get("datasource") or manager.get("datasourceTemplate")
-                    current_value = captures.get("currentValue")
+                    current_value = captures.get("currentValue") or manager.get("currentValueTemplate")
                     if not all(isinstance(value, str) and value for value in (dep_name, datasource, current_value)):
                         raise ValueError(f"incomplete extraction in {path}: {manager.get('description')}")
                     found.append(
@@ -998,6 +998,30 @@ def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
     return True
 
 
+def test_current_value_template() -> bool:
+    """A currentValueTemplate stands in for a missing capture; with neither, extraction fails."""
+    manager = {
+        "customType": "regex",
+        "managerFilePatterns": ["/^pin\\.txt$/"],
+        "matchStrings": ["ref: (?<currentDigest>[0-9a-f]{40})"],
+        "datasourceTemplate": "git-refs",
+        "depNameTemplate": "https://example.invalid/engine",
+        "currentValueTemplate": "HEAD",
+    }
+    contents = {"pin.txt": "ref: " + "a" * 40 + "\n"}
+    found = extract({"customManagers": [manager]}, contents)
+    if [item["current_value"] for item in found] != ["HEAD"]:
+        print(f"currentValueTemplate was not used: {found}", file=sys.stderr)
+        return False
+    bare = {key: value for key, value in manager.items() if key != "currentValueTemplate"}
+    try:
+        extract({"customManagers": [bare]}, contents)
+    except ValueError:
+        return True
+    print("extraction without currentValue or currentValueTemplate was accepted", file=sys.stderr)
+    return False
+
+
 SYFT_USE = "uses: anchore/sbom-action/download-syft@"
 
 
@@ -1060,6 +1084,7 @@ def main() -> int:
         test_runner_hold(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
+        test_current_value_template(),
     )
     if not all(checks):
         return 1
