@@ -17,6 +17,7 @@ messages; the release pull request remains the single changelog authority.
 
 ## [0.20.1](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.20.1) (2026-10-26)
 
+> **Note:** 0.20.1 was never tagged or released; its changes ship in the next release.
 
 ### Bug Fixes
 
