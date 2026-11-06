@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+-->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 120" width="1200" height="120" role="img" aria-label="golusoris — composable Go framework built on Uber Fx">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">

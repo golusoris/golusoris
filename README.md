@@ -4,35 +4,33 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 <!-- markdownlint-disable MD013 MD023 MD033 MD036 MD041 -->
-<!-- A centred header needs inline HTML, a banner image, indented headings and
-     badge lines past 80 columns, so those five rules are off for this file.
-     Same directive style as docs/adr/0000-template.md. The prose below still
-     wraps at 80. -->
+<!-- Centred header uses inline HTML, banner image, indented headings, and wide badge lines. -->
 <div align="center">
 
   <img src="docs/assets/golusoris-readme-banner.svg" alt="golusoris — composable Go framework built on Uber Fx" height="120" />
 
-  <!-- README-STANDARD badge block: one group, fixed order (docs/README-STANDARD.md) -->
+  <!-- README-STANDARD badge block: one group, fixed order -->
   <!-- 1 release/version -->
   [![Release](https://img.shields.io/github/v/release/golusoris/golusoris?display_name=tag&sort=semver&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases)
   <!-- 2 CI/build -->
   [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
-  [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
+  [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
   [![Platform Neutrality](https://github.com/golusoris/golusoris/actions/workflows/portability.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/portability.yml)
   [![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/docs.yml)
-  [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
+  [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
   <!-- 3 security/scorecard -->
   [![Security](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml)
   [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
-  [![OpenSSF Scorecard](https://img.shields.io/badge/OpenSSF-Scorecard-06b6d4?style=for-the-badge&labelColor=111a35)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
+  [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/golusoris/golusoris/badge)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
   [![Codacy](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
-  [![CodeRabbit](https://img.shields.io/badge/Reviews-CodeRabbit-8b5cf6?style=for-the-badge&logo=coderabbit&logoColor=white&labelColor=111a35)](https://coderabbit.ai)
+  [![CodeRabbit reviews](https://img.shields.io/coderabbit/prs/github/golusoris/golusoris)](https://coderabbit.ai)
   <!-- 4 standards -->
   [![HISS-21](https://img.shields.io/badge/Standards-HISS--21-06b6d4?style=for-the-badge&logo=nasa&labelColor=111a35)](AGENTS.md)
   [![Power of 10](https://img.shields.io/badge/NASA_JPL-Power_of_10-3b82f6?style=for-the-badge&logo=nasa&labelColor=111a35)](docs/principles.md)
   [![Conventional Commits](https://img.shields.io/badge/Commits-Conventional-8b5cf6?style=for-the-badge&logo=conventionalcommits&logoColor=white&labelColor=111a35)](CONTRIBUTING.md)
   <!-- 5 licence -->
-  [![License](https://img.shields.io/badge/License-EUPL--1.2_·_CC--BY--SA--4.0-3b82f6?style=for-the-badge&labelColor=111a35)](LICENSING.md)
+  [![Code: EUPL-1.2](https://img.shields.io/badge/Code-EUPL--1.2-3b82f6?style=for-the-badge&labelColor=111a35)](LICENSING.md)
+  [![Docs: CC BY-SA 4.0](https://img.shields.io/badge/Docs-CC--BY--SA--4.0-3b82f6?style=for-the-badge&labelColor=111a35)](LICENSING.md)
   [![REUSE](https://img.shields.io/badge/REUSE-compliant-3b82f6?style=for-the-badge&labelColor=111a35)](https://reuse.software/)
   <!-- 6 support -->
   [![GitHub Sponsors](https://img.shields.io/badge/Sponsor-GitHub-8b5cf6?style=for-the-badge&logo=githubsponsors&logoColor=white&labelColor=111a35)](https://github.com/sponsors/lusoris)
@@ -51,6 +49,9 @@ Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed
 supply-chain controls.
 
 **[📖 Full documentation](https://golusoris.github.io/golusoris/)** · [Documentation source](docs/index.md)
+
+The MkDocs site is built from [`docs/`](docs/index.md) on every push to `main` by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml).
 
 ---
 
