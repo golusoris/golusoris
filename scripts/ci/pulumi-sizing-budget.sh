@@ -3,9 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Fails when the sizing-test budget defaults in examples/minimal/sizing_test.go
-# differ from the Fargate task size in deploy/pulumi/app.go (taskCPU units of
-# 1/1024 vCPU, taskMemory in MiB). Usage: pulumi-sizing-budget.sh [app.go sizing_test.go]
+# Fails when sizing_test.go budget defaults differ from the app.go Fargate task size; usage: [app.go sizing_test.go].
 
 set -euo pipefail
 
@@ -14,7 +12,14 @@ readonly repo_root
 app_go="${1:-$repo_root/deploy/pulumi/app.go}"
 sizing_go="${2:-$repo_root/examples/minimal/sizing_test.go}"
 
-# const_value prints the single value of `name = value` in a Go file, quotes stripped.
+for path in "$app_go" "$sizing_go"; do
+	if [[ ! -f "$path" ]]; then
+		printf 'pulumi-sizing-budget: %s: not a regular file\n' "$path" >&2
+		exit 1
+	fi
+done
+
+# const_value prints the single unquoted value of `name = value` in a Go file.
 const_value() {
 	local file="$1" name="$2" out
 	out="$(sed -nE "s/^[[:space:]]*${name}[[:space:]]*=[[:space:]]*\"?([0-9.]+)\"?[[:space:]]*(\/\/.*)?\$/\\1/p" "$file")"
@@ -30,7 +35,7 @@ task_mem="$(const_value "$app_go" taskMemory)"
 test_mem="$(const_value "$sizing_go" defaultMemoryBudgetMiB)"
 test_cpu="$(const_value "$sizing_go" defaultCPUBudget)"
 
-# awk compares decimals exactly enough: 256/1024 == 0.25.
+# awk divides exactly enough: 256/1024 == 0.25.
 if ! awk -v units="$task_cpu" -v want="$test_cpu" 'BEGIN { exit !(units / 1024 == want + 0) }'; then
 	printf 'pulumi-sizing-budget: taskCPU %s (%s vCPU) != sizing default %s vCPU\n' \
 		"$task_cpu" "$(awk -v u="$task_cpu" 'BEGIN { print u / 1024 }')" "$test_cpu" >&2

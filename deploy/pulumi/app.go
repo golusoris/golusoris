@@ -56,8 +56,7 @@ type appTaskResources struct {
 	redisSecret   *appSecret
 }
 
-// taskCPU + taskMemory are the Fargate sizing defaults (0.25 vCPU / 512 MiB), measured against
-// examples/minimal by `make pulumi-sizing-test`; scripts/ci/pulumi-sizing-budget.sh keeps the test budget equal.
+// taskCPU + taskMemory are the Fargate sizing defaults (0.25 vCPU / 512 MiB) that pulumi-sizing-budget.sh pins to the sizing test.
 const (
 	taskCPU      = "256"
 	taskMemory   = "512"

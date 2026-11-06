@@ -2,17 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Command minimal demonstrates a minimal golusoris app composing five modules:
-// Core (config + log + clock + id), DB (pgx + migrate), HTTP (server + router),
-// OTel (tracer + meter), and K8s runtime metadata/client wiring. It serves
-// /livez, /readyz and /startupz; /readyz reports the Postgres ping.
-//
-// Run:
-//
-//	export APP_HTTP_ADDR=":8080"
-//	export APP_DB_DSN="postgres://..."
-//	export APP_K8S_KUBECONFIG="/path/to/kubeconfig" # outside a cluster; in a pod the in-cluster config is used
-//	go run github.com/golusoris/golusoris/examples/minimal
+// Command minimal composes Core, DB, HTTP, OTel and K8s and serves /livez, /readyz and /startupz.
+// It needs APP_DB_DSN and, outside a cluster, APP_K8S_KUBECONFIG; run it with `go run ./examples/minimal`.
 package main
 
 import (

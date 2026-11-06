@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Proves pulumi-sizing-budget.sh passes on the repository and fails on mutated copies.
+# Proves pulumi-sizing-budget.sh passes on the repository and fails with rc 1 on mutated or invalid inputs.
 
 set -euo pipefail
 
@@ -19,9 +19,10 @@ sizing_go="$repo_root/examples/minimal/sizing_test.go"
 expect_failure() {
 	local expected="$1"
 	shift
-	local output
-	if output="$("$@" 2>&1)"; then
-		printf 'expected failure: %s\n' "$*" >&2
+	local output rc=0
+	output="$("$@" 2>&1)" || rc=$?
+	if [[ "$rc" -ne 1 ]]; then
+		printf 'want rc 1, got %s: %s\n' "$rc" "$*" >&2
 		return 1
 	fi
 	if [[ "$output" != *"$expected"* ]]; then
@@ -46,5 +47,10 @@ expect_failure 'taskCPU 256 (0.25 vCPU) != sizing default 0.5 vCPU' bash "$check
 
 : >"$suite_root/empty.go"
 expect_failure 'want exactly one taskCPU constant' bash "$check" "$suite_root/empty.go" "$sizing_go"
+
+expect_failure "$suite_root/missing.go: not a regular file" bash "$check" "$suite_root/missing.go" "$sizing_go"
+expect_failure "$suite_root/missing.go: not a regular file" bash "$check" "$app_go" "$suite_root/missing.go"
+expect_failure "$suite_root: not a regular file" bash "$check" "$suite_root" "$sizing_go"
+expect_failure "$suite_root: not a regular file" bash "$check" "$app_go" "$suite_root"
 
 printf 'pulumi-sizing-budget_test: ok\n'
