@@ -29,7 +29,7 @@ def write_dataset(root: Path) -> Path:
                 pattern[:, stripes] = (232, 232, 232)
             else:
                 pattern[stripes, :] = (232, 232, 232)
-            for index in range(32):
+            for index in range(96):
                 pixels = np.clip(
                     pattern + rng.integers(-8, 9, size=(160, 160, 3)), 0, 255
                 ).astype(np.uint8)
@@ -76,9 +76,9 @@ def main(root: Path) -> None:
         "dataset_uri": archive.as_uri(),
         "max_dataset_bytes": 16 << 20,
         "hyperparams": {
-            "epochs": 1000,
-            "batch_size": 8,
-            "learning_rate": 0.0001,
+            "epochs": 30,
+            "batch_size": 32,
+            "learning_rate": 0.001,
             "validation_fraction": 0.25,
             "do_data_augmentation": False,
             "pretrained": False,
