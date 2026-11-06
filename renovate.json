@@ -55,6 +55,19 @@
     },
     {
       "customType": "regex",
+      "description": "Move every workflow download-syft input with the SYFT_VERSION pin, so one update branch carries both.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "uses: anchore/sbom-action/download-syft@\\S+[^\\n]*\\n\\s+with:\\n\\s+syft-version: (?<currentValue>v\\S+)"
+      ],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "anchore/syft",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
       "description": "Update the rebuild QEMU installer tag and immutable digest as one pair.",
       "managerFilePatterns": [
         "/^\\.github/workflows/rebuild-on-base\\.yml$/"
