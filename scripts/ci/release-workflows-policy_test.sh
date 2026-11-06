@@ -252,26 +252,35 @@ check_release_draft_contract() {
 }
 
 check_release_please_tagging() {
-	local config="$1" workflow="$2"
 	# The merged release pull request is tagged by release-please, never by hand.
+	check_release_please_workflow "$2" || return 1
+	check_release_please_config "$1"
+}
+
+check_release_please_workflow() {
+	local workflow="$1"
 	if grep -Eiq '^[[:space:]]*skip-github-release:[[:space:]]*['\''"]?true['\''"]?' "$workflow"; then
 		printf 'release-please skips the tag and release step: %s\n' "$workflow" >&2
 		return 1
 	fi
-	if ! grep -Fq 'actions/create-github-app-token' "$workflow"; then
+	if ! grep -Eq '^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*actions/create-github-app-token@' "$workflow"; then
 		printf 'release-please lacks GitHub App token minting: %s\n' "$workflow" >&2
 		return 1
 	fi
 	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
 	awk '
 		/uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1; next }
-		in_action && /token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { found = 1; exit }
+		in_action && /^[[:space:]]*token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { found = 1; exit }
 		in_action && /^[[:space:]]*-[[:space:]]/ { in_action = 0 }
 		END { exit !found }
 	' "$workflow" || {
 		printf 'release-please does not pass App token to release-please-action: %s\n' "$workflow" >&2
 		return 1
 	}
+}
+
+check_release_please_config() {
+	local config="$1"
 	python3 -B - "$config" <<'PY' || return 1
 import json
 import sys
@@ -299,6 +308,25 @@ if core.get("include-component-in-tag") is not True:
     problems.append("core package include-component-in-tag must be true")
 if core.get("tag-separator") != "/":
     problems.append("core package tag-separator must be '/'")
+for pkg_name, expected_keys in {
+    ".": {
+        "include-v-in-tag": True,
+        "include-component-in-tag": False,
+        "component": None,
+        "tag-separator": None,
+    },
+    "core": {
+        "include-v-in-tag": True,
+    },
+}.items():
+    pkg = packages.get(pkg_name, {})
+    for key, expected_val in expected_keys.items():
+        if expected_val is None:
+            if key in pkg:
+                problems.append(f"{pkg_name} package must not set {key}")
+        elif key in pkg and pkg[key] != expected_val:
+            val_repr = str(expected_val).lower() if isinstance(expected_val, bool) else repr(expected_val)
+            problems.append(f"{pkg_name} package {key} must be {val_repr}")
 for path, package in packages.items():
     if package.get("force-tag-creation") is False:
         problems.append(f"{path} overrides force-tag-creation to false")
@@ -616,9 +644,21 @@ with open(sys.argv[2], "w", encoding="utf-8") as dst:
 	"$release_please_config" "$negative_config"
 expect_failure "core package tag-separator must be '/'" \
 	check_release_please_tagging "$negative_config" "$release_please"
+python3 -B -c 'import json,sys
+with open(sys.argv[1], encoding="utf-8") as src:
+    c = json.load(src)
+c["packages"]["."]["include-v-in-tag"] = False
+with open(sys.argv[2], "w", encoding="utf-8") as dst:
+    json.dump(c, dst)' \
+	"$release_please_config" "$negative_config"
+expect_failure '. package include-v-in-tag must be true' \
+	check_release_please_tagging "$negative_config" "$release_please"
 python3 -B -c 'import sys
+MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for line in src:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
         dst.write(line)
         if "manifest-file: .release-please-manifest.json" in line:
             dst.write("          skip-github-release: true\n")' \
@@ -626,8 +666,11 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
 expect_failure 'release-please skips the tag and release step' \
 	check_release_please_tagging "$release_please_config" "$negative"
 python3 -B -c 'import sys
+MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for line in src:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
         dst.write(line)
         if "manifest-file: .release-please-manifest.json" in line:
             dst.write("          skip-github-release: \"true\"\n")' \
@@ -636,17 +679,50 @@ expect_failure 'release-please skips the tag and release step' \
 	check_release_please_tagging "$release_please_config" "$negative"
 # shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
 python3 -B -c 'import sys
+MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for line in src:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
         if "token: ${{ steps.app-token.outputs.token }}" not in line:
             dst.write(line)' \
 	"$release_please" "$negative"
 expect_failure 'release-please does not pass App token to release-please-action' \
 	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
 python3 -B -c 'import sys
+MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for line in src:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" in line:
+            dst.write(line.replace("token:", "# token:"))
+        else:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
         if "actions/create-github-app-token" not in line:
+            dst.write(line)' \
+	"$release_please" "$negative"
+expect_failure 'release-please lacks GitHub App token minting' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "actions/create-github-app-token" in line:
+            dst.write(line.replace("uses:", "# uses:"))
+        else:
             dst.write(line)' \
 	"$release_please" "$negative"
 expect_failure 'release-please lacks GitHub App token minting' \

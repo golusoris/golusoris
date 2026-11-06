@@ -2,9 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# release-please keeps the release pull request current. Merging it is the
-# operator's publish step: the next run creates the tags and a draft root
-# release with the App token, whose tag push starts release.yml.
+# Maintain the release PR; merging it tags the release with the App token and starts release.yml.
 name: release-please
 
 # Serialize release-PR maintenance; cancel a stale run when a newer push

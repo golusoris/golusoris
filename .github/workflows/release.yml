@@ -2,10 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Framework release — triggers on the v*.*.* tag release-please creates after
-# the release pull request merges. Retry the original tag-triggered run; a
-# separate manual ref can diverge from the OIDC source identity and immutable
-# release target.
+# Triggers on the release-please tag so publication binds to immutable release refs and OIDC identities.
 #
 # The framework ships Go library + two CLIs (no Docker image), so this
 # workflow runs goreleaser directly instead of calling the reusable
