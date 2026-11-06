@@ -143,6 +143,10 @@ STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 404: Not Found" run_case pr-list-non
 [ "$(< "$WORK/pr_lookups")" -eq 1 ]
 grep -q 'could not list open release pull requests' "$WORK/out"
 grep -q 'HTTP 404: Not Found' "$WORK/out"
+STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 404: Not Found (https://api.github.com/repos/owner/repo/pulls/503?x=504)" run_case pr-list-non-transient-digits "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0
+[ "$(< "$WORK/pr_lookups")" -eq 1 ]
+STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 503: Service Unavailable" run_case pr-list-retry-503 "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
+[ "$(< "$WORK/pr_lookups")" -eq 2 ]
 STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="HTTP 403: API rate limit exceeded" run_case pr-list-retry-rate-limit "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1
 [ "$(< "$WORK/pr_lookups")" -eq 2 ]
 STUB_PR_FAIL_FIRST=1 STUB_PR_FAIL_MSG="dial tcp: lookup api.github.com: no such host" run_case pr-list-retry-dns "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1

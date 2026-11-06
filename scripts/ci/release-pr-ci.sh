@@ -43,7 +43,7 @@ readonly LIST_ATTEMPTS=3
 # The author depends on the token release-please ran with, so a release branch of this
 # repository selects; only writers can push one, and writers may approve runs anyway.
 release_heads() {
-	local -r transient_regex='HTTP 50[0-9]|HTTP 429|[Rr]ate limit|502 Bad Gateway|503|504|connection reset|connection refused|[Tt]imeout|deadline exceeded|no such host|[Tt]emporary failure in name resolution|EOF|TLS handshake'
+	local -r transient_regex='HTTP 50[0-9]|HTTP 429|[Rr]ate limit|502 Bad Gateway|503 Service Unavailable|504 Gateway Time-?out|connection reset|connection refused|[Tt]imeout|deadline exceeded|no such host|[Tt]emporary failure in name resolution|EOF|TLS handshake'
 	local listed="" branch sha cross attempt err err_file
 	err_file="$(mktemp "${TMPDIR:-/tmp}/golusoris-release-pr-ci.XXXXXX")"
 
