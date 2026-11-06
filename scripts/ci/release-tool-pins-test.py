@@ -55,6 +55,8 @@ NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1\s*
 ACTION_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
 VERSION_RE = re.compile(r"(\d+)\\\.(\d+)\\\.(\d+)")
 ENV_LINE_RE = re.compile(r"^([A-Z0-9_]+)=(.*)$")
+RUN_INLINE_RE = re.compile(r"^(?P<pre>\s*(?:-\s+)?)run:\s+(?P<cmd>[^|>\s].*)$")
+RUN_BLOCK_RE = re.compile(r"^(?P<pre>\s*(?:-\s+)?)run:\s*[|>][-+0-9]*\s*(?:#.*)?$")
 MAX_FILES = 16
 MAX_LINES = 4096
 LOOKAHEAD_LINES = 6
@@ -148,6 +150,34 @@ def parse_assertion_line(
         return
 
 
+def run_block_end(lines: list[str], start: int, key_col: int) -> int:
+    # First non-blank line indented at or left of the run key column ends the block.
+    for j in range(start, len(lines)):
+        line = lines[j]
+        if line.strip() and len(line) - len(line.lstrip()) <= key_col:
+            return j
+    return len(lines)
+
+
+def collect_run_lines(lines: list[str]) -> list[tuple[int, str]]:
+    # Only text inside a step's run value may satisfy a version assertion.
+    found: list[tuple[int, str]] = []
+    skip_until = 0
+    for idx, line in enumerate(lines):
+        if idx < skip_until or is_comment_line(line):
+            continue
+        block = RUN_BLOCK_RE.match(line)
+        if block:
+            end = run_block_end(lines, idx + 1, len(block.group("pre")))
+            found.extend((j, lines[j]) for j in range(idx + 1, end))
+            skip_until = end
+            continue
+        inline = RUN_INLINE_RE.match(line)
+        if inline:
+            found.append((idx, inline.group("cmd")))
+    return found
+
+
 def parse_workflow_file(
     path: Path, rel_path: str
 ) -> tuple[list[Pin], list[Assertion], list[str]]:
@@ -163,7 +193,8 @@ def parse_workflow_file(
         if is_comment_line(line):
             continue
         parse_action_line(idx, line, lines, total, rel_path, pins, problems)
-        parse_assertion_line(idx, line, rel_path, assertions, problems)
+    for idx, text in collect_run_lines(lines):
+        parse_assertion_line(idx, text, rel_path, assertions, problems)
     return pins, assertions, problems
 
 
@@ -452,6 +483,37 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "missing version assertion")
+
+    def test_planted_node_assertion_outside_run(self) -> None:
+        # Tests that a step name carrying the assertion text does not satisfy it.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("node --version | grep -Eq '^v24\\.22\\.2$'", "echo ok")
+            text += (
+                "      - name: node --version | grep -Eq '^v24\\.22\\.2$'\n"
+                "        run: echo ok\n"
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing version assertion")
+
+    def test_inline_run_node_assertion_valid(self) -> None:
+        # Positive: an inline run value carries the assertion.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("node --version | grep -Eq '^v24\\.22\\.2$'", "echo ok")
+            text += (
+                "      - name: Verify node\n"
+                "        run: node --version | grep -Eq '^v24\\.22\\.2$'\n"
+            )
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(check_release_tool_pins(root), [])
 
     def test_planted_commented_node_install_pin(self) -> None:
         # Tests detection when setup-node uses action line in release-go.yml is commented out.
