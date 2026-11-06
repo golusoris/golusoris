@@ -74,6 +74,11 @@ class Assertion(NamedTuple):
     version: str
 
 
+def is_comment_line(line: str) -> bool:
+    # Identifies comment lines starting with hash after leading whitespace.
+    return line.lstrip().startswith("#")
+
+
 def read_bounded_lines(path: Path) -> list[str]:
     # A file past the bound fails instead of being checked only in part.
     lines: list[str] = []
@@ -95,6 +100,8 @@ def parse_action_line(
     problems: list[str],
 ) -> None:
     # Extracts action version pin within bounded lookahead window.
+    if is_comment_line(line):
+        return
     match = ACTION_LINE_RE.search(line)
     if not match:
         return
@@ -105,6 +112,8 @@ def parse_action_line(
     pin_re = re.compile(rf"^\s*{re.escape(key)}:\s+['\"]?v?(\d+\.\d+\.\d+)['\"]?\s*$")
     end = min(total, idx + 1 + LOOKAHEAD_LINES)
     for look_idx in range(idx + 1, end):
+        if is_comment_line(lines[look_idx]):
+            continue
         km = pin_re.search(lines[look_idx])
         if km:
             pins.append(Pin(rel_path, look_idx + 1, tool, km.group(1)))
@@ -120,6 +129,8 @@ def parse_assertion_line(
     problems: list[str],
 ) -> None:
     # Extracts assertion version from tool grep regex.
+    if is_comment_line(line):
+        return
     line = line.rstrip()
     for tool, pattern in ASSERTION_PATTERNS.items():
         if not pattern.search(line):
@@ -149,6 +160,8 @@ def parse_workflow_file(
     problems: list[str] = []
     total = len(lines)
     for idx, line in enumerate(lines):
+        if is_comment_line(line):
+            continue
         parse_action_line(idx, line, lines, total, rel_path, pins, problems)
         parse_assertion_line(idx, line, rel_path, assertions, problems)
     return pins, assertions, problems
@@ -424,6 +437,36 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "missing version assertion")
+
+    def test_planted_commented_node_assertion(self) -> None:
+        # Tests detection when node version assertion in release-go.yml is commented out.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "node --version | grep -Eq '^v24\\.22\\.2$'",
+                "# node --version | grep -Eq '^v24\\.22\\.2$'",
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing version assertion")
+
+    def test_planted_commented_node_install_pin(self) -> None:
+        # Tests detection when setup-node uses action line in release-go.yml is commented out.
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "uses: actions/setup-node",
+                "# uses: actions/setup-node",
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing install pin")
 
     def test_planted_node_assertion_unanchored(self) -> None:
         # Tests detection of unanchored node version assertion.
