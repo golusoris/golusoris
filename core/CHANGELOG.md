@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.2](https://github.com/golusoris/golusoris/compare/core/v0.12.1...core/v0.12.2) (2026-11-06)
+
+
+### Bug Fixes
+
+* **deps:** update module golang.org/x/net to v0.62.0 [security] ([#1158](https://github.com/golusoris/golusoris/issues/1158)) ([f8fe1d3](https://github.com/golusoris/golusoris/commit/f8fe1d3ee58e4a1662899f368cb7efab8ba969eb))
+
 ## [0.12.1](https://github.com/golusoris/golusoris/compare/core/v0.12.0...core/v0.12.1) (2026-10-22)
 
 
