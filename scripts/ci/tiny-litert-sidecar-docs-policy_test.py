@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 IMAGE = "ghcr.io/golusoris/tiny-litert-sidecar"
-REFERENCE = re.compile(re.escape(IMAGE) + r"""[^\s\x60"'<>)]*""")
+REFERENCE = re.compile(re.escape(IMAGE) + r"""[^\s\x60"'<>)]*""", re.IGNORECASE)
 PINNED = re.compile(re.escape(IMAGE) + r"@sha256:[0-9a-f]{64}")
 README = Path(__file__).resolve().parents[2] / "ai/tiny/serve/tflite/sidecar/README.md"
 
@@ -30,12 +30,15 @@ def check(text: str) -> None:
 def check_fixtures() -> None:
     """Exercise clean, mutable, mixed, absent and malformed references."""
     pinned = IMAGE + "@sha256:" + "a" * 64
+    host_variant = IMAGE.replace("ghcr.io", "GHCR.IO", 1) + ":v0.1.1"
     check(f"{pinned}\n{pinned}\n")
     for reference in (
         IMAGE,
         IMAGE + ":latest",
         IMAGE + ":v0.1.1",
         IMAGE + ":v0.1.1@sha256:" + "a" * 64,
+        IMAGE.upper() + ":v0.1.1",
+        host_variant,
         IMAGE + "@sha256:" + "a" * 63,
         IMAGE + "@sha256:" + "a" * 65,
         IMAGE + "@sha256:" + "g" * 64,
@@ -46,11 +49,12 @@ def check_fixtures() -> None:
         except ValueError:
             continue
         raise AssertionError(f"planted reference accepted: {reference!r}")
-    try:
-        check(pinned + "\n" + IMAGE + ":latest")
-    except ValueError:
-        return
-    raise AssertionError("planted mutable reference hidden by a valid digest")
+    for mutable in (IMAGE + ":latest", host_variant):
+        try:
+            check(pinned + "\n" + mutable)
+        except ValueError:
+            continue
+        raise AssertionError(f"planted mutable reference hidden by a valid digest: {mutable!r}")
 
 
 def main() -> int:
