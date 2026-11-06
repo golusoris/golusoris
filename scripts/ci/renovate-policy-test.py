@@ -257,6 +257,7 @@ def extract(config: dict[str, object], contents: dict[str, str]) -> list[dict[st
                             "datasource": str(datasource),
                             "current_value": str(current_value),
                             "current_digest": captures.get("currentDigest", ""),
+                            "versioning": str(captures.get("versioning") or manager.get("versioningTemplate") or ""),
                         }
                     )
     return found
@@ -1023,16 +1024,48 @@ def test_current_value_template() -> bool:
 
 
 SYFT_USE = "uses: anchore/sbom-action/download-syft@"
+TOOL_VERSIONS_PATH = "tools/tool-versions.env"
+
+
+def syft_version_inputs(content: str) -> list[str]:
+    """Return the syft-version input of every download-syft step, read independently of Renovate."""
+    values = []
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        if SYFT_USE not in line:
+            continue
+        indent = len(line) - len(line.lstrip())
+        for follow in lines[index + 1 :]:
+            stripped = follow.strip()
+            if stripped and (len(follow) - len(follow.lstrip()) < indent or stripped.startswith("- ")):
+                break
+            if stripped.startswith("syft-version:"):
+                values.append(stripped.removeprefix("syft-version:").strip())
+                break
+    return values
 
 
 def syft_workflow_uncovered(config: dict[str, object], workflows: dict[str, str]) -> list[str]:
-    """Return workflows whose download-syft inputs Renovate would not move with SYFT_VERSION."""
+    """Return workflows whose syft-version inputs Renovate would not move with SYFT_VERSION."""
+    authority = [
+        item
+        for item in extract(config, {TOOL_VERSIONS_PATH: (ROOT / TOOL_VERSIONS_PATH).read_text(encoding="utf-8")})
+        if item["dep_name"] == "anchore/syft"
+    ]
+    if len(authority) != 1:
+        return sorted(workflows)
+    want = (authority[0]["datasource"], authority[0]["versioning"], authority[0]["current_value"].removeprefix("v"))
     syft = [item for item in extract(config, workflows) if item["dep_name"] == "anchore/syft"]
-    return sorted(
-        path
-        for path, content in workflows.items()
-        if content.count(SYFT_USE) != sum(1 for item in syft if item["path"] == path)
-    )
+    uncovered = []
+    for path, content in workflows.items():
+        records = [item for item in syft if item["path"] == path]
+        inputs = syft_version_inputs(content)
+        drift = any(
+            (item["datasource"], item["versioning"], item["current_value"].removeprefix("v")) != want for item in records
+        )
+        if sorted(item["current_value"] for item in records) != sorted(inputs) or drift:
+            uncovered.append(path)
+    return sorted(uncovered)
 
 
 def test_syft_workflow_pins(config: dict[str, object]) -> bool:
@@ -1058,6 +1091,32 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
     if not syft_workflow_uncovered(stripped, workflows):
         print("syft coverage negative control was not rejected", file=sys.stderr)
         return False
+    return syft_coverage_controls(config, managers if isinstance(managers, list) else [])
+
+
+def syft_coverage_controls(config: dict[str, object], managers: list[object]) -> bool:
+    """A wrong capture or a drifting datasource must fail; a step without the input must not count."""
+    sample = "      - uses: anchore/sbom-action/download-syft@0123abc # v0.24.3\n        with:\n          syft-version: v1.54.1\n"
+    bare = "      - uses: anchore/sbom-action/download-syft@0123abc # v0.24.3\n      - run: syft version\n"
+    workflows = {".github/workflows/sample.yml": sample + bare}
+    if syft_workflow_uncovered(config, workflows):
+        print("syft coverage counted a download-syft step without a syft-version input", file=sys.stderr)
+        return False
+    syft = [m for m in managers if isinstance(m, dict) and "download-syft" in json.dumps(m.get("matchStrings"))]
+    if len(syft) != 1:
+        print(f"expected one download-syft manager, found {len(syft)}", file=sys.stderr)
+        return False
+    variants = {
+        "SHA capture": {**syft[0], "matchStrings": ["uses: anchore/sbom-action/download-syft@(?<currentValue>[0-9a-f]+)"]},
+        "drifting versioning": {**syft[0], "versioningTemplate": "loose"},
+        "drifting datasource": {**syft[0], "datasourceTemplate": "github-tags"},
+    }
+    for name, variant in variants.items():
+        mutated = dict(config)
+        mutated["customManagers"] = [variant if m is syft[0] else m for m in managers]
+        if not syft_workflow_uncovered(mutated, {".github/workflows/sample.yml": sample}):
+            print(f"syft coverage control not rejected: {name}", file=sys.stderr)
+            return False
     return True
 
 
