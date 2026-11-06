@@ -50,8 +50,10 @@ supply-chain controls.
 
 **[📖 Full documentation](https://golusoris.github.io/golusoris/)** · [Documentation source](docs/index.md)
 
-The MkDocs site is built from [`docs/`](docs/index.md) on every push to `main` by
-[`.github/workflows/docs.yml`](.github/workflows/docs.yml).
+The MkDocs site is built from [`docs/`](docs/index.md) by
+[`.github/workflows/docs.yml`](.github/workflows/docs.yml) on pushes to `main` that
+change `docs/`, `mkdocs.yml`, the build script, the tool pins or the workflow, and
+on manual dispatch.
 
 ---
 
