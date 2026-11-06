@@ -254,10 +254,12 @@ func waitReady(t *testing.T, app *runningApp, url string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), readyTimeout)
 	defer cancel()
+	client := &http.Client{Transport: http.DefaultTransport.(*http.Transport).Clone()}
+	defer client.CloseIdleConnections()
 	const attempts = 240
 	var last error
 	for range attempts {
-		if last = getOK(ctx, http.DefaultClient, url); last == nil {
+		if last = getOK(ctx, client, url); last == nil {
 			return
 		}
 		select {
