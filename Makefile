@@ -122,6 +122,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/release_smoke_test.py
 	@bash scripts/ci/scalar-bundle-update_test.sh
 	@bash scripts/ci/release-notes-breaking_test.sh
+	@bash scripts/ci/release-depth-evidence_test.sh
 	@bash scripts/ci/generation-policy_test.sh
 	@bash scripts/ci/helm-chart_test.sh
 	@bash scripts/ci/trivy-policy_test.sh
@@ -166,6 +167,10 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 .PHONY: release-notes-check
 release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
 	@bash scripts/ci/release-notes-breaking.sh check
+
+.PHONY: release-depth-check
+release-depth-check: ## refuse a minor/major release-please PR without depth evidence
+	@bash scripts/ci/release-depth-evidence.sh pending
 
 .PHONY: python-lint
 python-lint: ## lint every repository-owned Python source with immutable Ruff
@@ -356,7 +361,7 @@ $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(
 endif
 
 .PHONY: verify-all
-verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check release-depth-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

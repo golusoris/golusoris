@@ -1,0 +1,96 @@
+# Depth evidence for v0.21.0: one row per user-visible first-parent commit.
+# base: v0.20.0
+# Proof logs: depth-proofs worktree at tag 79793335 (e2e: 12 TestE2E_* PASS; policy tests rc 0).
+# deps rows: CI run 42306477155 on tag commit (Build, Test race+coverage, govulncheck) + upgrade.log + dogfood.log builds.
+895e0ec	1324	ai/tiny/litert test_trainer.py (12 passed) + sidecar CI run 42284907602	PASS	
+d84d602	1320	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+b5c3271	1300	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+de71adc	1247	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+2899be9	1297	CI run 42306477155 Terraform modules job on tag commit 79793335	PASS	
+af915b9	1284	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+9e1936c	1282	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+a033608	1279	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+ae34582	1275	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+4284ee0	1218	depth/e2e TestE2E_1218	PASS	
+0fab923	1274	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+805e533	1273	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+d92f8a7	1204	scripts/ci policy tests (ci_scope_test, 22 OK)	PASS	
+40d730f	1272	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c9b2328	1271	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+606bcab	1269	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+764ddca	1265	scripts/ci/release-pr-ci_test.sh	PASS	
+51f1f5d	1263	depth/e2e TestE2E_1263	PASS	
+69f6aac	1268	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+5374ec4	1217	scripts/hooks gci-hook_test.sh	PASS	
+7896e19	1251	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+35a842d	1098	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+47359ce	1258	depth/e2e TestE2E_1258 + gemma/litert TestNewTrainer_requiresPinnedImageOrExplicitTrust	PASS	
+79b9755	1249	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+7046eba	1244	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+ecb845c	1165	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+d438f2f	1248	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+a371f37	1246	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+97609c5	1238	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+26a7314	1237	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+3181ff0	1236	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+eea92eb	1233	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+d3120d8	1231	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+174b3a7	1229	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+b718725	1153	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+f0ab6f6	1198	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+06c18a4	1171	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+57c2372	1214	depth/e2e TestE2E_1214	PASS	
+2e79353	1211	scripts/ci tiny image publish policy tests	PASS	
+bca6dae	1207	depth/e2e TestE2E_1207 + TestE2E_1207_TokenEndpointFailure	PASS	
+686e6a1	1208	scripts/ci trainer lock policy test	PASS	
+f1e240a	1220	depth/e2e TestE2E_1220	PASS	
+5f294f3	1206	depth/e2e TestE2E_1206	PASS	
+5d7d7ea	1203	depth/e2e TestE2E_1203	PASS	
+f8fe1d3	1158	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+3463612	1199	scripts/ci renovate-policy + tool-versions tests	PASS	
+0e9f918	1196	depth/e2e TestE2E_1196	PASS	
+a7ef185	1173	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c870b50	1155	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+5441f9e	1170	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+2227795	1164	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+7bfea80	1157	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+5880608	1161	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+0ecca54	1159	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+e303e6a	1116	depth/e2e TestE2E_1116	PASS	
+f1a7728	1156	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+14c5777	1099	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+67d8cb8	1154	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+433e77b	1152	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+fc8cf7a	1149	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+0e3083d	1150	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+45624d6	1133	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+f11d939	1147	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c51a961	1139	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+72dafb2	1114	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+22fc429	1118	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c004a24	1117	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c54bbb6	1111	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+945a386	1115	scripts/ci concurrency policy test	PASS	
+c563437	1112	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+61183fe	1110	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+f26444c	1108	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+b6f26aa	1109	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+c558fab	1096	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+f4415e1	1107	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+6692184	1105	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+dd92a86	1102	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+78ebacf	1100	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+f64d840	1097	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+b3f0469	1088	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+ab27421	1080	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+bec0944	1081	scripts/ci/scalar-bundle-update_test.sh	PASS	
+789b52a	1073	scripts/ci/require-green-ci_test.sh	PASS	
+41f7e76	1079	scripts/ci/verify-system-packages test + Platform Neutrality CI run 42306477133	PASS	
+2f7a9b6	1075	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+4829fd1	1064	ai/tiny test_contract.py	PASS	
+9fb50bc	1072	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+6278bf2	1028	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+308de31	1071	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+e3265a0	1068	scripts/ci/require-green-ci_test.sh	PASS	
+47d239f	1070	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
+d6e716c	1067	CI run 42306477155 Build + Test (race + coverage) on tag commit 79793335	PASS	
