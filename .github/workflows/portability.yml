@@ -25,6 +25,7 @@ concurrency:
 
 # main requires these matrix contexts, so the merge queue runs them too; each leg had its first hosted green
 # before it became required: Platform Neutrality (Linux), Platform Neutrality (Linux arm64), Platform Neutrality (macOS), Platform Neutrality (macOS Intel), Platform Neutrality (Windows).
+# Platform Neutrality (Windows arm64) is advisory (continue-on-error) until #1341 is fixed.
 jobs:
   portability:
     name: Platform Neutrality (${{ matrix.name }})
@@ -46,7 +47,7 @@ jobs:
             runner: macos-15-intel
           - name: Windows
             runner: windows-2025
-    steps:
+    steps: &portability-steps
       - name: Stop on a draft pull request
         uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212
       - name: Checkout source
@@ -118,3 +119,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
           CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: python -B scripts/ci/portability.py
+
+  portability-advisory:
+    name: Platform Neutrality (Windows arm64)
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+    continue-on-error: true
+    steps: *portability-steps

@@ -157,6 +157,58 @@ class StopOnDraftJobsTest(unittest.TestCase):
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(stop_on_draft_jobs.main([str(self.path)]), 3)
 
+    def test_yaml_anchor_steps_are_gated(self) -> None:
+        """Positive: steps with a YAML anchor are parsed correctly."""
+        text = "\n".join([
+            "on:",
+            "  pull_request:",
+            "jobs:",
+            "  build:",
+            "    runs-on: ubuntu-26.04",
+            "    steps: &build-steps",
+            f"      - uses: {GATE}",
+            "      - run: make test",
+            "",
+        ])
+        self.assertEqual(self.check(text), [])
+
+    def test_yaml_alias_steps_resolve_to_anchor(self) -> None:
+        """Positive: a job whose steps are a YAML alias inherits the anchor's gate."""
+        text = "\n".join([
+            "on:",
+            "  pull_request:",
+            "jobs:",
+            "  build:",
+            "    runs-on: ubuntu-26.04",
+            "    steps: &build-steps",
+            f"      - uses: {GATE}",
+            "      - run: make test",
+            "  advisory:",
+            "    runs-on: windows-11-arm",
+            "    continue-on-error: true",
+            "    steps: *build-steps",
+            "",
+        ])
+        self.assertEqual(self.check(text), [])
+
+    def test_yaml_alias_without_gate_still_fails(self) -> None:
+        """Negative: an alias to ungated steps does not pass."""
+        text = "\n".join([
+            "on:",
+            "  pull_request:",
+            "jobs:",
+            "  build:",
+            "    runs-on: ubuntu-26.04",
+            "    steps: &build-steps",
+            "      - uses: actions/checkout@v7",
+            "      - run: make test",
+            "  advisory:",
+            "    runs-on: windows-11-arm",
+            "    steps: *build-steps",
+            "",
+        ])
+        self.assertEqual(len(self.check(text)), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -349,7 +349,13 @@ class PortabilityDriverTest(TestCase):
                     workflow,
                     rf"(?m)^ +- name: {re.escape(name)}\n +runner: {re.escape(runner)}$",
                 )
-        self.assertNotIn("continue-on-error:", workflow)
+        self.assertIn("continue-on-error: true", workflow)
+        self.assertRegex(
+            workflow, r"(?m)^ +name: Platform Neutrality \(Windows arm64\)"
+        )
+        self.assertRegex(workflow, r"(?m)^ +runs-on: windows-11-arm$")
+        self.assertIn("steps: *portability-steps", workflow)
+        self.assertIn("&portability-steps", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
         # A floating label moves to the next system image without a reviewed change.

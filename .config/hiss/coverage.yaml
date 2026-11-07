@@ -744,8 +744,9 @@ rules:
           scripts/ci/portability.py discovers 1..64 Git-visible Go modules, requires the root
           module and 1..512 packages per module, then runs go build, go vet, and go test -short
           without a command shell. make portability-test runs the same driver locally;
-          .github/workflows/portability.yml runs it on Linux (amd64 and arm64), macOS (arm64 and Intel), and Windows with
-          fail-fast disabled and digest-pinned toolchain actions.
+          .github/workflows/portability.yml runs it on Linux (amd64 and arm64), macOS (arm64 and Intel), and Windows
+          with fail-fast disabled and digest-pinned toolchain actions. A Windows arm64 advisory leg
+          (continue-on-error, windows-11-arm) runs the same steps via YAML anchor until #1341 is resolved.
         rationale: >-
           scripts/ci/portability_test.py proves every discovered module receives all three
           phases; a Git-reported worktree deletion is excluded while an unknown deletion fails
@@ -755,5 +756,6 @@ rules:
           negative/portable-path.go delegates separators to filepath. The claim remains
           partial: gap/silent-platform-skip_test.go exits green after skipping its only Windows
           behavior because the driver proves packages and phases, not per-test execution.
-          All five legs (Linux, Linux arm64, macOS, macOS Intel, Windows) are required
-          status contexts in the active ruleset after their first hosted green run.
+          All five required legs (Linux, Linux arm64, macOS, macOS Intel, Windows) are required
+          status contexts in the active ruleset after their first hosted green run. Windows arm64
+          runs as an advisory leg (continue-on-error true) until #1341 is resolved.
