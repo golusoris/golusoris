@@ -35,6 +35,10 @@ STEP_START = re.compile(r"^      - ")
 STEP_USES = re.compile(r"^      (- |  )uses:\s*(.+?)\s*$")
 
 
+YAML_ANCHOR = re.compile(r"&(\S+)")
+YAML_ALIAS = re.compile(r"\*(\S+)")
+
+
 @dataclass
 class Job:
     """Job fields the check reads."""
@@ -44,6 +48,8 @@ class Job:
     reusable: bool = False
     in_steps: bool = False
     steps: list[str] = field(default_factory=list)
+    steps_anchor: str = ""
+    steps_alias: str = ""
 
 
 def unquote(value: str) -> str:
@@ -103,7 +109,18 @@ def read_job_line(job: Job, line: str) -> None:
     if re.match(r"^    uses:", line):
         job.reusable = True
     if JOB_KEY.match(line):
-        job.in_steps = bool(re.match(r"^    steps:\s*(#.*)?$", line))
+        steps_match = re.match(r"^    steps:\s*(.*?)\s*(#.*)?$", line)
+        if steps_match:
+            tag = steps_match.group(1) or ""
+            anchor = YAML_ANCHOR.search(tag)
+            alias = YAML_ALIAS.search(tag)
+            if anchor:
+                job.steps_anchor = anchor.group(1)
+            if alias:
+                job.steps_alias = alias.group(1)
+            job.in_steps = True
+        else:
+            job.in_steps = False
         return
     if not job.in_steps:
         return
@@ -152,14 +169,26 @@ def gated(job: Job) -> bool:
     return not job.reusable and bool(job.steps) and bool(REQUIRED.match(job.steps[0]))
 
 
+def resolve_aliases(found: list[Job]) -> None:
+    """Copy steps from anchor jobs to alias jobs."""
+    anchors: dict[str, Job] = {j.steps_anchor: j for j in found if j.steps_anchor}
+    for job in found:
+        if job.steps_alias and not job.steps:
+            source = anchors.get(job.steps_alias)
+            if source:
+                job.steps = list(source.steps)
+
+
 def violations(path: Path) -> list[str]:
     """Return one message per applicable job without stop-on-draft first."""
     lines = path.read_text(encoding="utf-8").splitlines()
     if not pr_triggered(lines):
         return []
+    found = jobs(lines)
+    resolve_aliases(found)
     return [
         f"{path.name}: job {job.name} must run the stop-on-draft action as its first step"
-        for job in jobs(lines)
+        for job in found
         if not exempt(job) and not gated(job)
     ]
 
