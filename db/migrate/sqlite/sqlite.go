@@ -63,18 +63,12 @@ func New(opts dbmigrate.Options, sqliteOpts dbsqlite.Options, logger *slog.Logge
 }
 
 // Module provides a *dbmigrate.Migrator for SQLite and (when
-// db.migrate.auto=true) runs Up() on fx Start. Requires the db/sqlite Options
-// (db/sqlite.Module provides them), a *config.Config and a *slog.Logger. Use
-// it instead of db/migrate.Module, not next to it.
+// db.migrate.auto=true) runs Up() on fx Start, whether or not anything
+// requests the *Migrator. Requires the db/sqlite Options (db/sqlite.Module
+// provides them), a *config.Config and a *slog.Logger. Use it instead of
+// db/migrate.Module, not next to it.
 var Module = fx.Module(
 	"golusoris.db.migrate.sqlite",
 	fx.Provide(dbmigrate.LoadOptions),
-	fx.Provide(func(lc fx.Lifecycle, opts dbmigrate.Options, sqliteOpts dbsqlite.Options, logger *slog.Logger) (*dbmigrate.Migrator, error) {
-		m, err := New(opts, sqliteOpts, logger)
-		if err != nil {
-			return nil, err
-		}
-		dbmigrate.Bind(lc, m, opts, logger)
-		return m, nil
-	}),
+	dbmigrate.ProvideMigrator(New),
 )
