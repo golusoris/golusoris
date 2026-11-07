@@ -37,7 +37,7 @@ beside the copied program directory.
             └────────┘  └───────────┘
 ```
 
-Measured: examples/minimal peaks at 70.0 MiB RSS and 0.015 vCPU at 200 rps of `GET /livez` (30 s, `make pulumi-sizing-test`), on amd64, not ARM64.
+Measured in one run of the soak workflow ([run 42323872844](https://github.com/golusoris/golusoris/actions/runs/42323872844), `make pulumi-sizing-test`, 200 rps of `GET /livez` for 30 s): examples/minimal peaks at 63.1 MiB RSS and 0.034 vCPU on amd64 (ubuntu-26.04), and at 61.0 MiB RSS and 0.032 vCPU on arm64 (ubuntu-24.04-arm). The task size is 512 MiB and 0.25 vCPU. The weekly soak workflow repeats both measurements.
 
 The DB DSN and bare Redis address are written to AWS Secrets Manager and
 injected into the ECS task as `APP_DB_DSN` and `APP_CACHE_REDIS_ADDR`.
