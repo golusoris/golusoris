@@ -91,8 +91,8 @@ docker buildx build --load --platform linux/amd64 \
   -t local/tiny-gemma-trainer ai/tiny/trainers/gemma
 ```
 
-The separate Python ABI and ML-wheel constraints currently limit both release
-images to `linux/amd64`. `.github/workflows/tiny-trainer-images.yml` runs on
+Release images are multi-arch manifest lists covering `linux/amd64` and
+`linux/arm64`. `.github/workflows/tiny-trainer-images.yml` runs on
 every pull request and performs a real offline LiteRT train, conversion, and
 interpreter invocation. Publishing remains blocked until the repository has a
 review-protected `tiny-trainer-publish` environment, a protected

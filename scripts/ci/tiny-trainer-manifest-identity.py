@@ -55,6 +55,15 @@ def verify_single_manifest(
         )
 
 
+def verify_index_digest(raw: bytes, expected: str) -> None:
+    """Reject an index whose raw bytes do not hash to the expected digest."""
+    actual = "sha256:" + hashlib.sha256(raw).hexdigest()
+    if actual != expected:
+        raise ValueError(
+            f"index digest mismatch: got {actual}, expected {expected}",
+        )
+
+
 def verify_index(manifest: dict[str, Any]) -> None:
     """Verify a manifest list contains both required platform entries."""
     media_type = manifest.get("mediaType")
@@ -103,6 +112,7 @@ def main() -> int:
     try:
         manifest, raw = read_manifest()
         if index_mode:
+            verify_index_digest(raw, expected)
             verify_index(manifest)
         else:
             verify_single_manifest(manifest, raw, expected)

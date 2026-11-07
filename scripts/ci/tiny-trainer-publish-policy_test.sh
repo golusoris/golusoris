@@ -183,15 +183,20 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.mani
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[]}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 
 valid_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}},{"digest":"sha256:'"$(printf 'f%.0s' {1..64})"'","platform":{"architecture":"arm64","os":"linux"}}]}'
+valid_index_digest="sha256:$(printf '%s' "$valid_index" | sha256sum | awk '{ print $1 }')"
 printf '%s' "$valid_index" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
-	"$config_digest" --index >/dev/null
+	"$valid_index_digest" --index >/dev/null
+expect_failure bash -c "printf '%s' '$valid_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
 amd64_only_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}}]}'
-expect_failure bash -c "printf '%s' '$amd64_only_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+amd64_only_digest="sha256:$(printf '%s' "$amd64_only_index" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$amd64_only_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$amd64_only_digest' --index"
 empty_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
-expect_failure bash -c "printf '%s' '$empty_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+empty_index_digest="sha256:$(printf '%s' "$empty_index" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$empty_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$empty_index_digest' --index"
 expect_failure python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" --index
 bad_platform_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":"not-a-dict"}]}'
-expect_failure bash -c "printf '%s' '$bad_platform_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+bad_platform_digest="sha256:$(printf '%s' "$bad_platform_index" | sha256sum | awk '{ print $1 }')"
+expect_failure bash -c "printf '%s' '$bad_platform_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$bad_platform_digest' --index"
 
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
