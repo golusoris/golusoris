@@ -334,10 +334,19 @@ class PortabilityDriverTest(TestCase):
         for fragment in required:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
-        # Whole lines: "ubuntu-26.04" is a prefix of "ubuntu-26.04-arm".
-        for runner in ("ubuntu-26.04", "ubuntu-26.04-arm", "macos-26", "windows-2025"):
-            with self.subTest(runner=runner):
-                self.assertRegex(workflow, rf"(?m)^ +runner: {re.escape(runner)}$")
+        # Name-runner pairings: a renamed matrix entry stops emitting the required context.
+        pairs = (
+            ("Linux", "ubuntu-26.04"),
+            ("Linux arm64", "ubuntu-26.04-arm"),
+            ("macOS", "macos-26"),
+            ("Windows", "windows-2025"),
+        )
+        for name, runner in pairs:
+            with self.subTest(name=name, runner=runner):
+                self.assertRegex(
+                    workflow,
+                    rf"(?m)^ +- name: {re.escape(name)}\n +runner: {re.escape(runner)}$",
+                )
         self.assertNotIn("continue-on-error:", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
