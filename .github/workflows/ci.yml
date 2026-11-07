@@ -806,6 +806,8 @@ jobs:
         run: make ci-policy-test
       - name: Check the newest CHANGELOG entry (migration guide, release range)
         run: make release-notes-check
+      - name: Require depth evidence for a minor or major release
+        run: make release-depth-check
 
   terraform:
     name: Terraform modules
