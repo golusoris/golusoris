@@ -176,8 +176,9 @@ check_release_caller() {
 	local path="$1"
 	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 	for contract in \
-		'    needs: [require-green-ci, apidiff]' \
-		"if: \${{ !cancelled() && needs.require-green-ci.result == 'success' }}" \
+		'    needs: [require-green-ci, apidiff, depth-evidence]' \
+		"if: \${{ !cancelled() && needs.require-green-ci.result == 'success' && needs.depth-evidence.result == 'success' }}" \
+		'bash scripts/ci/release-depth-evidence.sh check "${GITHUB_REF_NAME}"' \
 		'uses: ./.github/workflows/release-build.yml'; do
 		grep -Fq -- "$contract" "$path" || {
 			printf 'release caller lacks contract %s\n' "$contract" >&2
@@ -559,6 +560,11 @@ negative_caller="$suite_root/negative-caller.yml"
 cp "$release" "$negative_caller"
 printf '\n      - uses: actions/attest-build-provenance@v4\n' >>"$negative_caller"
 expect_failure 'release caller must not attest provenance' check_release_caller "$negative_caller"
+negative_depth="$suite_root/negative-depth.yml"
+sed 's/needs: \[require-green-ci, apidiff, depth-evidence\]/needs: [require-green-ci, apidiff]/' "$release" >"$negative_depth"
+expect_failure 'release caller lacks contract' check_release_caller "$negative_depth"
+sed "s/ && needs.depth-evidence.result == 'success'//" "$release" >"$negative_depth"
+expect_failure 'release caller lacks contract' check_release_caller "$negative_depth"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 sed '/"$remote_sha" != "$SOURCE_SHA"/d' "$release_go" >"$negative"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
