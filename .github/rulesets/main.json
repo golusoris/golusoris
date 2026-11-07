@@ -154,6 +154,9 @@
             "context": "Platform Neutrality (Linux)"
           },
           {
+            "context": "Platform Neutrality (Linux arm64)"
+          },
+          {
             "context": "Platform Neutrality (macOS)"
           },
           {
