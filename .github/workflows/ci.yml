@@ -804,7 +804,7 @@ jobs:
           echo "$RUNNER_TEMP/shellcheck-bin" >> "$GITHUB_PATH"
       - name: Run the CI script policy tests
         run: make ci-policy-test
-      - name: Require a migration guide for a breaking CHANGELOG entry
+      - name: Check the newest CHANGELOG entry (migration guide, release range)
         run: make release-notes-check
       - name: Require depth evidence for a minor or major release
         run: make release-depth-check

@@ -165,8 +165,9 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/osv-ignores.py check
 
 .PHONY: release-notes-check
-release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
+release-notes-check: ## require a migration guide for a breaking newest CHANGELOG entry and no change an earlier tagged release shipped
 	@bash scripts/ci/release-notes-breaking.sh check
+	@bash scripts/ci/release-notes-breaking.sh range
 
 .PHONY: release-depth-check
 release-depth-check: ## refuse a minor/major release-please PR without depth evidence
