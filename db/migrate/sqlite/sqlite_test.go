@@ -23,6 +23,7 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/log"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	"github.com/golusoris/golusoris/db/migrate/internal/upcount"
 	migratesqlite "github.com/golusoris/golusoris/db/migrate/sqlite"
 	dbsqlite "github.com/golusoris/golusoris/db/sqlite"
 )
@@ -221,26 +222,6 @@ func TestModuleRunsUpOnStartWhenAuto(t *testing.T) {
 	}
 }
 
-// upCounter counts "up complete" records, one per Migrator.Up call.
-type upCounter struct {
-	slog.Handler
-	n *atomic.Int32
-}
-
-func (c upCounter) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "db/migrate: up complete" {
-		c.n.Add(1)
-	}
-	return c.Handler.Handle(ctx, r)
-}
-
-// Enabled is true because DiscardHandler would drop the record before Handle.
-func (upCounter) Enabled(context.Context, slog.Level) bool { return true }
-
-func countingLogger(n *atomic.Int32) *slog.Logger {
-	return slog.New(upCounter{Handler: slog.DiscardHandler, n: n})
-}
-
 func moduleApp(t *testing.T, opts dbsqlite.Options, mopts dbmigrate.Options, logger *slog.Logger, extra ...fx.Option) *fxtest.App {
 	t.Helper()
 	cfg, err := config.New(config.Options{EnvPrefix: "MIGRATE_SQLITE_TEST_"})
@@ -259,7 +240,7 @@ func TestModuleAutoRunsUpWithoutConsumer(t *testing.T) {
 	t.Parallel()
 	opts := tempDB(t)
 	var ups atomic.Int32
-	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), countingLogger(&ups))
+	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), upcount.Logger(&ups))
 	app.RequireStart()
 	app.RequireStop()
 	if got := tableCount(t, opts, "widgets", "gadgets"); got != 2 {
@@ -286,7 +267,7 @@ func TestModuleAutoWithConsumerSharesOneMigrator(t *testing.T) {
 	opts := tempDB(t)
 	var ups atomic.Int32
 	var first, second *dbmigrate.Migrator
-	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), countingLogger(&ups),
+	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), upcount.Logger(&ups),
 		fx.Invoke(func(m *dbmigrate.Migrator) { first = m }),
 		fx.Invoke(func(m *dbmigrate.Migrator) { second = m }),
 	)

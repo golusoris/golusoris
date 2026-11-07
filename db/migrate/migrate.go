@@ -273,14 +273,18 @@ func LoadOptions(cfg *config.Config) (Options, error) {
 }
 
 // Bind ties m to the fx lifecycle: Up() on start when opts.Auto is set, and a
-// best-effort Close on stop that never fails the stop.
+// best-effort Close on stop that never fails the stop. A failed Up closes m,
+// because fx runs no OnStop for a hook whose OnStart failed.
 func Bind(lc fx.Lifecycle, m *Migrator, opts Options, logger *slog.Logger) {
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
 			if !opts.Auto {
 				return nil
 			}
-			return m.Up()
+			if err := m.Up(); err != nil {
+				return errors.Join(err, m.Close())
+			}
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			// Best-effort: closing migrate also closes its DB; never fail fx stop on it.
@@ -308,10 +312,18 @@ func (l *lazyMigrator) get() (*Migrator, error) {
 
 // ProvideMigrator provides a *Migrator built by build from Options, the
 // database options D and a *slog.Logger, bound to the fx lifecycle by [Bind].
-// The Migrator is built on first request, or at fx start when Options.Auto is
-// set so Up() runs even if no constructor asks for it. Driver modules call it
-// from their fx.Module; applications use [Module] or those modules.
+// The Migrator is built on first request, or by an invoke during fx.New when
+// Options.Auto is set, so Up() runs at fx start even if no constructor asks for
+// it; a build error therefore fails fx.New. That invoke resolves Options and D
+// in every graph, as fx resolves invoke parameters eagerly. Up() runs in hook
+// order: a constructor that takes *Migrator gets its OnStart after Up(), while
+// a module that needs the schema without taking *Migrator must be listed after
+// the migrate module. Driver modules call it from their fx.Module;
+// applications use [Module] or those modules.
 func ProvideMigrator[D any](build func(Options, D, *slog.Logger) (*Migrator, error)) fx.Option {
+	if build == nil {
+		return fx.Error(errors.New("db/migrate: ProvideMigrator: nil build function"))
+	}
 	return fx.Options(
 		fx.Provide(fx.Annotate(
 			func(lc fx.Lifecycle, opts Options, db D, logger *slog.Logger) *lazyMigrator {

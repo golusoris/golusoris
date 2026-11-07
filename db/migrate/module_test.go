@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"sync/atomic"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -19,31 +20,12 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/log"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	"github.com/golusoris/golusoris/db/migrate/internal/upcount"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 	pgtest "github.com/golusoris/golusoris/testutil/pg"
 )
 
 const moduleQueryTimeout = 30 * time.Second
-
-// upCounter counts "up complete" records, one per Migrator.Up call.
-type upCounter struct {
-	slog.Handler
-	n *atomic.Int32
-}
-
-func (c upCounter) Handle(ctx context.Context, r slog.Record) error {
-	if r.Message == "db/migrate: up complete" {
-		c.n.Add(1)
-	}
-	return c.Handler.Handle(ctx, r)
-}
-
-// Enabled is true because DiscardHandler would drop the record before Handle.
-func (upCounter) Enabled(context.Context, slog.Level) bool { return true }
-
-func countingLogger(n *atomic.Int32) *slog.Logger {
-	return slog.New(upCounter{Handler: slog.DiscardHandler, n: n})
-}
 
 func moduleOptions(t *testing.T, dsn string, mopts dbmigrate.Options, logger *slog.Logger, extra ...fx.Option) []fx.Option {
 	t.Helper()
@@ -63,7 +45,7 @@ func stepProbeTables(t *testing.T, dsn string) int {
 	defer cancel()
 	conn, err := pgx.Connect(ctx, dsn)
 	require.NoError(t, err)
-	defer func() { _ = conn.Close(ctx) }()
+	defer func() { require.NoError(t, conn.Close(ctx)) }()
 	var n int
 	require.NoError(t, conn.QueryRow(ctx,
 		"SELECT count(*) FROM information_schema.tables WHERE table_name LIKE 'step_probe_%'").Scan(&n))
@@ -75,7 +57,7 @@ func TestModuleAutoRunsUpWithoutConsumer(t *testing.T) {
 	t.Parallel()
 	dsn := pgtest.DSN(t)
 	var ups atomic.Int32
-	app := fxtest.New(t, moduleOptions(t, dsn, dbmigrate.Options{Auto: true}.WithFS(testMigrationsFS()), countingLogger(&ups))...)
+	app := fxtest.New(t, moduleOptions(t, dsn, dbmigrate.Options{Auto: true}.WithFS(testMigrationsFS()), upcount.Logger(&ups))...)
 	app.RequireStart()
 	app.RequireStop()
 	require.Equal(t, 2, stepProbeTables(t, dsn))
@@ -87,7 +69,7 @@ func TestModuleAutoWithConsumerSharesOneMigrator(t *testing.T) {
 	dsn := pgtest.DSN(t)
 	var ups atomic.Int32
 	var first, second *dbmigrate.Migrator
-	app := fxtest.New(t, moduleOptions(t, dsn, dbmigrate.Options{Auto: true}.WithFS(testMigrationsFS()), countingLogger(&ups),
+	app := fxtest.New(t, moduleOptions(t, dsn, dbmigrate.Options{Auto: true}.WithFS(testMigrationsFS()), upcount.Logger(&ups),
 		fx.Invoke(func(m *dbmigrate.Migrator) { first = m }),
 		fx.Invoke(func(m *dbmigrate.Migrator) { second = m }),
 	)...)
@@ -112,4 +94,26 @@ func TestModuleAutoWithoutDSNFailsApp(t *testing.T) {
 	app := fx.New(append([]fx.Option{fx.NopLogger},
 		moduleOptions(t, "", dbmigrate.Options{Auto: true}, log.New(log.Options{}))...)...)
 	require.ErrorContains(t, app.Err(), "no DSN")
+}
+
+// A failed Up must close the migrator, since fx runs no OnStop for a hook whose OnStart failed.
+func TestBindClosesMigratorWhenUpFails(t *testing.T) {
+	t.Parallel()
+	dsn := pgtest.DSN(t)
+	bad := fstest.MapFS{"migrations/1_bad.up.sql": {Data: []byte("NOT VALID SQL;")}}
+	logger := log.New(log.Options{})
+	m, err := dbmigrate.New(dbmigrate.Options{}.WithFS(bad), dbpgx.Options{DSN: dsn}, logger)
+	require.NoError(t, err)
+	lc := fxtest.NewLifecycle(t)
+	dbmigrate.Bind(lc, m, dbmigrate.Options{Auto: true}, logger)
+	ctx, cancel := context.WithTimeout(context.Background(), moduleQueryTimeout)
+	defer cancel()
+	require.Error(t, lc.Start(ctx))
+	require.ErrorContains(t, m.Close(), "close db", "Bind must have closed the migrator after the failed Up")
+}
+
+func TestProvideMigratorRefusesNilBuild(t *testing.T) {
+	t.Parallel()
+	app := fx.New(fx.NopLogger, dbmigrate.ProvideMigrator[dbpgx.Options](nil))
+	require.ErrorContains(t, app.Err(), "nil build function")
 }
