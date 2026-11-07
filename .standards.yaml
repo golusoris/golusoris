@@ -66,6 +66,10 @@ exceptions:
     path: .github/workflows/ci.yml
     reason: "Category A, 90 days from 2026-10-18, renewed after re-review: Build owns the all-module Go cache save that lint, gosec, vuln, test, module-sweep, allocation-budget, core-skew, fault-recovery, release-binaries and apidiff restore, so they need it; every job stops a draft in its first step and ci-success, the required aggregate, needs them all under always(). The pinned engine reads no always() (without this entry it reports each of those jobs as skippable on a draft, measured 2026-10-18). Closed by cordanaLLM/praetor#1368."
     expires: "2027-01-16"
+  - rule: HISS-10
+    path: .github/workflows/portability.yml
+    reason: "Category C, 10 days from 2026-11-07: The portability-advisory job (Windows arm64, windows-11-arm) uses continue-on-error true because #1341 (CGO build fails on the runner GCC) prevents this leg from being required. The advisory job runs the same steps as the required matrix via YAML anchor; once #1341 is resolved the continue-on-error is removed and this exception expires."
+    expires: "2026-11-17"
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
 documentation:
