@@ -110,14 +110,16 @@ Install `golusoris` (and `golusoris-mcp`) from a release archive. `go install
 `core` submodule with `./core`; a clone build (`go build ./cmd/golusoris`) works.
 
 One archive per OS and architecture holds both binaries (Windows: a `.zip`). On
-Linux or macOS, each step runs only after the previous check passed:
+Linux or macOS, each step runs only after the previous check passed, in a new
+temporary directory so no file in the current one is overwritten:
 
 ```sh
 v=0.21.0 # x-release-please-version
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 a="golusoris_${v}_${os}_${arch}.tar.gz"
-gh release download "v$v" -R golusoris/golusoris -p "$a" -p checksums.txt -p checksums.txt.sigstore.json &&
+cd "$(mktemp -d)" &&
+  gh release download "v$v" -R golusoris/golusoris -p "$a" -p checksums.txt -p checksums.txt.sigstore.json &&
   cosign verify-blob --bundle checksums.txt.sigstore.json \
     --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt &&
