@@ -189,6 +189,9 @@ amd64_only_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manife
 expect_failure bash -c "printf '%s' '$amd64_only_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
 empty_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
 expect_failure bash -c "printf '%s' '$empty_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+expect_failure python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" --index
+bad_platform_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":"not-a-dict"}]}'
+expect_failure bash -c "printf '%s' '$bad_platform_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
 
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"

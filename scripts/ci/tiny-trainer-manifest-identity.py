@@ -70,7 +70,9 @@ def verify_index(manifest: dict[str, Any]) -> None:
         digest = entry.get("digest")
         if not isinstance(digest, str) or DIGEST.fullmatch(digest) is None:
             raise ValueError(f"manifest list entry has invalid digest: {digest!r}")
-        platform = entry.get("platform", {})
+        platform = entry.get("platform")
+        if not isinstance(platform, dict):
+            raise ValueError("manifest list entry has no valid platform object")
         arch = platform.get("architecture", "")
         os_name = platform.get("os", "")
         platforms_seen.append(f"{os_name}/{arch}")
@@ -85,14 +87,16 @@ def verify_index(manifest: dict[str, Any]) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
+    args = sys.argv[1:]
+    index_mode = "--index" in args
+    positional = [a for a in args if a != "--index"]
+    if len(positional) != 1 or len(args) > 2:
         print(
             f"usage: {sys.argv[0]} EXPECTED_IMAGE_ID [--index]",
             file=sys.stderr,
         )
         return 2
-    index_mode = "--index" in sys.argv
-    expected = sys.argv[1] if sys.argv[1] != "--index" else sys.argv[2]
+    expected = positional[0]
     if DIGEST.fullmatch(expected) is None:
         print("expected image id is not a SHA-256 digest", file=sys.stderr)
         return 1
