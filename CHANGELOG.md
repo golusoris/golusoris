@@ -15,6 +15,15 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.21.1](https://github.com/golusoris/golusoris/compare/v0.21.0...v0.21.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **changelog:** limit 0.21.0 to its own range and refuse re-listed releases ([#1336](https://github.com/golusoris/golusoris/issues/1336)) ([7c0d8f8](https://github.com/golusoris/golusoris/commit/7c0d8f8a74753a35c7e874505c0bdf68b30c281f))
+* **db/migrate:** run Up at start when auto is set, with no consumer ([#1335](https://github.com/golusoris/golusoris/issues/1335)) ([94f3ad0](https://github.com/golusoris/golusoris/commit/94f3ad097cace79cb959111648d7c27b496b6a18)), closes [#1330](https://github.com/golusoris/golusoris/issues/1330)
+* **pdf:** widen post-deadline reap margin for macOS Intel ([#1360](https://github.com/golusoris/golusoris/issues/1360)) ([97756e9](https://github.com/golusoris/golusoris/commit/97756e9ca1c5e870a7706eccb8e607be768c97d0))
+
 ## [0.21.0](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.21.0) (2026-11-06)
 
 
