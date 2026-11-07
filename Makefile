@@ -280,7 +280,7 @@ core-skew: ## build and test the root against the required core version, in-repo
 .PHONY: pulumi-sizing-test
 pulumi-sizing-test: ## measure examples/minimal against the Pulumi Fargate task size (needs Docker; Linux)
 	@bash scripts/ci/pulumi-sizing-budget.sh
-	go test -tags sizing -count=1 -run TestSizing -p 4 ./examples/minimal
+	go test -tags sizing -count=1 -v -run TestSizing -p 4 ./examples/minimal
 
 .PHONY: fault-recovery
 fault-recovery: ## fail when a short test recovers a nil-dereference fault (golang/go#81238)
