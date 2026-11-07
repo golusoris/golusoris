@@ -340,6 +340,7 @@ class PortabilityDriverTest(TestCase):
             ("Linux", "ubuntu-26.04"),
             ("Linux arm64", "ubuntu-26.04-arm"),
             ("macOS", "macos-26"),
+            ("macOS Intel", "macos-15-intel"),
             ("Windows", "windows-2025"),
         )
         for name, runner in pairs:

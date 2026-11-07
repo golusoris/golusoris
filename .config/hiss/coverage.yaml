@@ -744,7 +744,7 @@ rules:
           scripts/ci/portability.py discovers 1..64 Git-visible Go modules, requires the root
           module and 1..512 packages per module, then runs go build, go vet, and go test -short
           without a command shell. make portability-test runs the same driver locally;
-          .github/workflows/portability.yml runs it on Linux (amd64 and arm64), macOS, and Windows with
+          .github/workflows/portability.yml runs it on Linux (amd64 and arm64), macOS (arm64 and Intel), and Windows with
           fail-fast disabled and digest-pinned toolchain actions.
         rationale: >-
           scripts/ci/portability_test.py proves every discovered module receives all three

@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # main requires these matrix contexts, so the merge queue runs them too; each leg had its first hosted green
-# before it became required: Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (Windows).
+# before it became required: Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (macOS Intel), Platform Neutrality (Windows).
 jobs:
   portability:
     name: Platform Neutrality (${{ matrix.name }})
@@ -41,6 +41,9 @@ jobs:
             runner: ubuntu-26.04-arm
           - name: macOS
             runner: macos-26
+          # Release archives ship darwin/amd64 binaries (tools/.goreleaser.yml).
+          - name: macOS Intel
+            runner: macos-15-intel
           - name: Windows
             runner: windows-2025
     steps:
