@@ -39,6 +39,7 @@ import (
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
@@ -272,14 +273,18 @@ func LoadOptions(cfg *config.Config) (Options, error) {
 }
 
 // Bind ties m to the fx lifecycle: Up() on start when opts.Auto is set, and a
-// best-effort Close on stop that never fails the stop.
+// best-effort Close on stop that never fails the stop. A failed Up closes m,
+// because fx runs no OnStop for a hook whose OnStart failed.
 func Bind(lc fx.Lifecycle, m *Migrator, opts Options, logger *slog.Logger) {
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
 			if !opts.Auto {
 				return nil
 			}
-			return m.Up()
+			if err := m.Up(); err != nil {
+				return errors.Join(err, m.Close())
+			}
+			return nil
 		},
 		OnStop: func(ctx context.Context) error {
 			// Best-effort: closing migrate also closes its DB; never fail fx stop on it.
@@ -291,9 +296,63 @@ func Bind(lc fx.Lifecycle, m *Migrator, opts Options, logger *slog.Logger) {
 	})
 }
 
+// lazyMigrator builds the Migrator on first use, so fx never builds it for an app that neither asks for it nor sets Auto.
+type lazyMigrator struct {
+	once  sync.Once
+	build func() (*Migrator, error)
+	auto  bool
+	m     *Migrator
+	err   error
+}
+
+func (l *lazyMigrator) get() (*Migrator, error) {
+	l.once.Do(func() { l.m, l.err = l.build() })
+	return l.m, l.err
+}
+
+// ProvideMigrator provides a *Migrator built by build from Options, the
+// database options D and a *slog.Logger, bound to the fx lifecycle by [Bind].
+// The Migrator is built on first request, or by an invoke during fx.New when
+// Options.Auto is set, so Up() runs at fx start even if no constructor asks for
+// it; a build error therefore fails fx.New. That invoke resolves Options and D
+// in every graph, as fx resolves invoke parameters eagerly. Up() runs in hook
+// order: a constructor that takes *Migrator gets its OnStart after Up(), while
+// a module that needs the schema without taking *Migrator must be listed after
+// the migrate module. Driver modules call it from their fx.Module;
+// applications use [Module] or those modules.
+func ProvideMigrator[D any](build func(Options, D, *slog.Logger) (*Migrator, error)) fx.Option {
+	if build == nil {
+		return fx.Error(errors.New("db/migrate: ProvideMigrator: nil build function"))
+	}
+	return fx.Options(
+		fx.Provide(fx.Annotate(
+			func(lc fx.Lifecycle, opts Options, db D, logger *slog.Logger) *lazyMigrator {
+				return &lazyMigrator{auto: opts.Auto, build: func() (*Migrator, error) {
+					m, err := build(opts, db, logger)
+					if err != nil {
+						return nil, err
+					}
+					Bind(lc, m, opts, logger)
+					return m, nil
+				}}
+			}), fx.Private),
+		fx.Provide(func(l *lazyMigrator) (*Migrator, error) { return l.get() }),
+		fx.Invoke(func(l *lazyMigrator) error {
+			if !l.auto {
+				return nil
+			}
+			if _, err := l.get(); err != nil {
+				return fmt.Errorf("db/migrate: build auto migrator: %w", err)
+			}
+			return nil
+		}),
+	)
+}
+
 // Module provides a *Migrator for PostgreSQL and (when db.migrate.auto=true)
-// runs Up() on fx Start. Requires [config.Module], [log.Module], and
-// [dbpgx.Module] in the same fx graph.
+// runs Up() on fx Start, whether or not anything requests the *Migrator.
+// Requires [config.Module], [log.Module], and [dbpgx.Module] in the same fx
+// graph.
 //
 // Apps embedding migrations should override Options via fx.Replace:
 //
@@ -301,12 +360,5 @@ func Bind(lc fx.Lifecycle, m *Migrator, opts Options, logger *slog.Logger) {
 var Module = fx.Module(
 	"golusoris.db.migrate",
 	fx.Provide(LoadOptions),
-	fx.Provide(func(lc fx.Lifecycle, opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
-		m, err := New(opts, pgxOpts, logger)
-		if err != nil {
-			return nil, err
-		}
-		Bind(lc, m, opts, logger)
-		return m, nil
-	}),
+	ProvideMigrator(New),
 )
