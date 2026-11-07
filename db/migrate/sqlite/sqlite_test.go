@@ -8,9 +8,11 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -21,6 +23,7 @@ import (
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/log"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
+	"github.com/golusoris/golusoris/db/migrate/internal/upcount"
 	migratesqlite "github.com/golusoris/golusoris/db/migrate/sqlite"
 	dbsqlite "github.com/golusoris/golusoris/db/sqlite"
 )
@@ -216,5 +219,84 @@ func TestModuleRunsUpOnStartWhenAuto(t *testing.T) {
 	app.RequireStop()
 	if got := tableCount(t, opts, "widgets", "gadgets"); got != 2 {
 		t.Fatalf("tables after fx start with auto = %d, want 2", got)
+	}
+}
+
+func moduleApp(t *testing.T, opts dbsqlite.Options, mopts dbmigrate.Options, logger *slog.Logger, extra ...fx.Option) *fxtest.App {
+	t.Helper()
+	cfg, err := config.New(config.Options{EnvPrefix: "MIGRATE_SQLITE_TEST_"})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	return fxtest.New(t, append([]fx.Option{
+		fx.Supply(cfg, logger, opts),
+		migratesqlite.Module,
+		fx.Replace(mopts),
+	}, extra...)...)
+}
+
+// #1330: auto must migrate even when nothing requests the *Migrator.
+func TestModuleAutoRunsUpWithoutConsumer(t *testing.T) {
+	t.Parallel()
+	opts := tempDB(t)
+	var ups atomic.Int32
+	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), upcount.Logger(&ups))
+	app.RequireStart()
+	app.RequireStop()
+	if got := tableCount(t, opts, "widgets", "gadgets"); got != 2 {
+		t.Fatalf("tables after fx start with auto and no consumer = %d, want 2", got)
+	}
+	if got := ups.Load(); got != 1 {
+		t.Fatalf("Up calls = %d, want 1", got)
+	}
+}
+
+func TestModuleWithoutAutoBuildsNoMigrator(t *testing.T) {
+	t.Parallel()
+	opts := tempDB(t)
+	app := moduleApp(t, opts, dbmigrate.Options{}, log.New(log.Options{}))
+	app.RequireStart()
+	app.RequireStop()
+	if got := tableCount(t, opts, "widgets", "gadgets"); got != 0 {
+		t.Fatalf("tables without auto = %d, want 0", got)
+	}
+}
+
+func TestModuleAutoWithConsumerSharesOneMigrator(t *testing.T) {
+	t.Parallel()
+	opts := tempDB(t)
+	var ups atomic.Int32
+	var first, second *dbmigrate.Migrator
+	app := moduleApp(t, opts, dbmigrate.Options{Auto: true}.WithFS(twoMigrations()), upcount.Logger(&ups),
+		fx.Invoke(func(m *dbmigrate.Migrator) { first = m }),
+		fx.Invoke(func(m *dbmigrate.Migrator) { second = m }),
+	)
+	app.RequireStart()
+	app.RequireStop()
+	if first == nil || first != second {
+		t.Fatalf("consumers got %p and %p, want one shared Migrator", first, second)
+	}
+	if got := ups.Load(); got != 1 {
+		t.Fatalf("Up calls = %d, want 1", got)
+	}
+	if got := tableCount(t, opts, "widgets", "gadgets"); got != 2 {
+		t.Fatalf("tables = %d, want 2", got)
+	}
+}
+
+func TestModuleAutoWithoutSourceFailsStart(t *testing.T) {
+	t.Parallel()
+	cfg, err := config.New(config.Options{EnvPrefix: "MIGRATE_SQLITE_TEST_"})
+	if err != nil {
+		t.Fatalf("config: %v", err)
+	}
+	app := fx.New(
+		fx.NopLogger,
+		fx.Supply(cfg, log.New(log.Options{}), tempDB(t)),
+		migratesqlite.Module,
+		fx.Replace(dbmigrate.Options{Auto: true, Path: filepath.Join(t.TempDir(), "absent")}),
+	)
+	if err := app.Err(); err == nil {
+		t.Fatal("auto with a missing migrations path must fail the app, got nil")
 	}
 }

@@ -25,6 +25,7 @@ other golang-migrate database URL whose driver program registers.
   Explicit `db.migrate.dsn` = own role: used as given, scheme rewritten only. #810.
   (pool precedence; files read once at construction, no rotation). No other `db.*` option applies.
   Keyword/value DSN refused; `db.ssl.*` file path with space refused (driver re-encodes space as `+`). #771.
+- `Module` / `ProvideMigrator(build)` build `*Migrator` lazily; `auto=true` forces build at fx start (Up runs with no consumer, #1330), one instance, one `Bind`.
 - Driver-specific modules reuse `LoadOptions` (config `db.migrate`) and `Bind`
   (Up on start when `auto`, best-effort Close on stop); never copy them.
 - SQLite lives in `db/migrate/sqlite`, own package, so PostgreSQL-only
