@@ -13,6 +13,7 @@ import hashlib
 import http.client
 import io
 import os
+import re
 import sys
 import tempfile
 import time
@@ -315,9 +316,6 @@ class PortabilityDriverTest(TestCase):
         )
         required = (
             "fail-fast: false",
-            "runner: ubuntu-26.04",
-            "runner: macos-26",
-            "runner: windows-2025",
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             "uses: ./.github/actions/setup-go",
             "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
@@ -336,6 +334,10 @@ class PortabilityDriverTest(TestCase):
         for fragment in required:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
+        # Whole lines: "ubuntu-26.04" is a prefix of "ubuntu-26.04-arm".
+        for runner in ("ubuntu-26.04", "ubuntu-26.04-arm", "macos-26", "windows-2025"):
+            with self.subTest(runner=runner):
+                self.assertRegex(workflow, rf"(?m)^ +runner: {re.escape(runner)}$")
         self.assertNotIn("continue-on-error:", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
