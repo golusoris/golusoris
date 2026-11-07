@@ -156,12 +156,12 @@ check_range() {
 		printf 'CHANGELOG.md has no release entry\n' >&2
 		return 1
 	fi
-	base="$(range_base "$root" "$entries" "$newest")" || return 1
+	base="$(range_base "$root" "$entries" "$newest")" || return 3
 	bullets="$(awk -F'\t' -v v="$newest" '$1 == "L" && $2 == v { print $3 }' <<<"$entries")"
 	breaking="$(awk -F'\t' -v v="$newest" '$1 == "B" && $2 == v { print $3 }' <<<"$entries")"
 	if ! subjects="$(git -C "$root" log --first-parent --format='%H %s' HEAD)"; then
 		printf 'git log failed; the commits of entry %s are unknown\n' "$newest" >&2
-		return 1
+		return 3
 	fi
 	while IFS= read -r text; do
 		count=$((count + 1))
@@ -177,7 +177,7 @@ check_range() {
 		case "$status" in
 			0) ;;
 			1) failed=1 ;;
-			*) return 1 ;;
+			*) return "$status" ;;
 		esac
 	done <<<"$bullets"
 	return "$failed"
