@@ -428,6 +428,17 @@ commit "$repo" 'feat: first'
 tag "$repo" v1.0.0
 expect_failure 'no base for v1.0.0' run "$repo" check v1.0.0
 
+# negative: a core component with no earlier core tag
+repo="$(new_repo core-first)"
+commit "$repo" 'chore: init'
+commit "$repo" 'feat(core): first' core/a.go
+tag "$repo" v0.1.0
+tag "$repo" core/v1.0.0
+printf '{\n  ".": "0.1.0",\n  "core": "1.0.0"\n}\n' >"$repo/.release-please-manifest.json"
+g "$repo" add .release-please-manifest.json
+g "$repo" commit -q -m 'chore: manifest'
+expect_failure 'no base for core/v1.0.0' run "$repo" check core/v1.0.0
+
 # negative: a major release is checked like a minor one
 repo="$(standard major)"
 tag "$repo" v1.0.0
