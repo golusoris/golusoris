@@ -755,5 +755,5 @@ rules:
           negative/portable-path.go delegates separators to filepath. The claim remains
           partial: gap/silent-platform-skip_test.go exits green after skipping its only Windows
           behavior because the driver proves packages and phases, not per-test execution.
-          macOS and Windows remain hosted-only evidence until their first green run; their
-          status contexts are therefore deliberately absent from the active ruleset.
+          All five legs (Linux, Linux arm64, macOS, macOS Intel, Windows) are required
+          status contexts in the active ruleset after their first hosted green run.
