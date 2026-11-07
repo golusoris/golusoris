@@ -19,6 +19,9 @@ readonly max_tags=1000
 
 root=''
 errors=()
+work="$(mktemp -d "${TMPDIR:-/tmp}/release-depth-evidence.XXXXXX")"
+readonly work
+trap 'rm -rf "$work"' EXIT
 
 usage() {
 	printf 'usage: %s [--root DIR] check <tag> [<end-ref>] | [--root DIR] pending\n' \
@@ -77,12 +80,16 @@ is_visible_message() {
 # Commit lines quoted in a body (Renovate release notes) stay out: release-please does not list them.
 is_user_visible() {
 	local subject="$1" body="$2"
-	local release_re='^chore(\(.+\))?!?:[[:space:]]*release'
+	local release_re='^chore(\([^)]+\))?:[[:space:]]*release'
 	local footer_re=$'\n''BREAKING[ -]CHANGE:'
+	if [[ $'\n'"${body//$'\r'/}" =~ $footer_re ]]; then
+		return 0
+	fi
+	# Only a non-breaking release commit is skipped; `chore!:` stays visible through is_visible_message.
 	if [[ "$subject" =~ $release_re ]]; then
 		return 1
 	fi
-	is_visible_message "$subject" || [[ $'\n'"${body//$'\r'/}" =~ $footer_re ]]
+	is_visible_message "$subject"
 }
 
 # list_required fills required_shas and required_subjects with the user-visible commits of base..end.
@@ -118,6 +125,11 @@ list_required() {
 
 # rows_program is the awk pass of check_rows; REQUIRED holds one "<sha>\t<subject>" line per required commit.
 rows_program="$(cat <<'AWK'
+		# The first file holds the required commits, one "sha<TAB>subject" per line.
+		FILENAME == ARGV[1] {
+			need[++count] = $0
+			next
+		}
 		{ sub(/\r$/, "") }
 		/^[[:space:]]*#/ || NF == 0 { next }
 		{
@@ -147,7 +159,6 @@ rows_program="$(cat <<'AWK'
 			if (over) {
 				exit
 			}
-			count = split(ENVIRON["REQUIRED"], need, "\n")
 			for (i = 1; i <= count; i++) {
 				if (need[i] == "") {
 					continue
@@ -176,15 +187,23 @@ readonly rows_program
 # check_rows reads e2e.tsv in one pass: malformed, FAIL and empty-reason SKIP rows, then every
 # required commit whose row (matched by sha prefix) is missing or not PASS.
 check_rows() {
-	local file="$1" label="$2" index required='' message
+	local file="$1" label="$2" index output message
+	# A file, not the environment: one environment string is capped (128 KiB on Linux, 32 KiB on Windows).
+	: >"$work/required"
 	if ((${#required_shas[@]} > 0)); then
 		for index in "${!required_shas[@]}"; do
-			required+="${required_shas[$index]}"$'\t'"${required_subjects[$index]}"$'\n'
+			printf '%s\t%s\n' "${required_shas[$index]}" "${required_subjects[$index]}" >>"$work/required"
 		done
 	fi
-	while IFS= read -r message; do
-		fail "$message"
-	done < <(REQUIRED="$required" LABEL="$label" MAX_ROWS="$max_rows" LC_ALL=C awk -F'\t' "$rows_program" "$file")
+	if ! output="$(LABEL="$label" MAX_ROWS="$max_rows" LC_ALL=C awk -F'\t' "$rows_program" "$work/required" "$file")"; then
+		fail "the row check of $label could not run; no row was checked"
+		return 0
+	fi
+	if [[ -n "$output" ]]; then
+		while IFS= read -r message; do
+			fail "$message"
+		done <<<"$output"
+	fi
 }
 
 header_base() {
@@ -264,13 +283,35 @@ check_evidence() {
 		check_result "$lines" "$relative/upgrade.log"
 	fi
 	if [[ -f "$dir/dogfood.log" ]]; then
-		lines="$(log_lines "$dir/dogfood.log")"
-		# golusoris-mcp reports its own version in the initialize reply, so the log names the binary tested.
-		if [[ $'\n'"$lines" != *$'\n''initialize: '*'"version": "'"${tag##*v}"'"'* ]]; then
-			fail "$relative/dogfood.log lacks an 'initialize:' line with \"version\": \"${tag##*v}\""
-		fi
-		check_result "$lines" "$relative/dogfood.log"
+		check_dogfood "$dir/dogfood.log" "$relative/dogfood.log" "$tag"
 	fi
+}
+
+# check_dogfood requires the golusoris-mcp initialize reply to name the version of the binary tested:
+# the release version, or for a core tag the root version in the manifest at the end of the range,
+# since the binary carries the root version. $end comes from check_release.
+check_dogfood() {
+	local file="$1" relative="$2" tag="$3" lines line expected found=0 tags
+	expected="${tag##*v}"
+	if [[ "$tag" == core/* ]]; then
+		if ! rgit show "$end:.release-please-manifest.json" >"$work/manifest" 2>/dev/null ||
+			! tags="$(manifest_tags "$work/manifest")"; then
+			fail "$relative: no root version in .release-please-manifest.json at $end_name for the golusoris-mcp check"
+			return 0
+		fi
+		expected="${tags%%$'\n'*}"
+		expected="${expected#v}"
+	fi
+	lines="$(log_lines "$file")"
+	while IFS= read -r line; do
+		if [[ "$line" == 'initialize: '*'"version": "'"$expected"'"'* ]]; then
+			found=1
+		fi
+	done <<<"$lines"
+	if ((found == 0)); then
+		fail "$relative lacks an 'initialize:' line with \"version\": \"$expected\""
+	fi
+	check_result "$lines" "$relative"
 }
 
 report_errors() {
@@ -363,12 +404,10 @@ check_release() {
 		"$tag" "$base" "$end_name" "${#required_shas[@]}"
 }
 
-check_pending() {
-	local manifest="$root/.release-please-manifest.json" tags tag status=0
-	if [[ ! -f "$manifest" ]]; then
-		printf 'no .release-please-manifest.json under %s\n' "$root" >&2
-		return 1
-	fi
+# manifest_tags prints the root tag, then the core tag, named by the release-please manifest $1.
+manifest_tags() {
+	local tags
+	[[ -f "$1" ]] || return 1
 	tags="$("${PYTHON:-python3}" -I -c '
 import json
 import sys
@@ -380,12 +419,21 @@ for key, prefix in ((".", ""), ("core", "core/")):
     if not isinstance(version, str):
         sys.exit("manifest has no string version for component " + repr(key))
     print(prefix + "v" + version)
-' "$manifest")" || {
+' "$1")" || return 1
+	# Python on Windows ends its lines with CRLF.
+	printf '%s\n' "${tags//$'\r'/}"
+}
+
+check_pending() {
+	local manifest="$root/.release-please-manifest.json" tags tag status=0
+	if [[ ! -f "$manifest" ]]; then
+		printf 'no .release-please-manifest.json under %s\n' "$root" >&2
+		return 1
+	fi
+	if ! tags="$(manifest_tags "$manifest")"; then
 		printf 'cannot read the component versions of %s\n' "$manifest" >&2
 		return 1
-	}
-	# Python on Windows ends its lines with CRLF.
-	tags="${tags//$'\r'/}"
+	fi
 	while IFS= read -r tag; do
 		if rgit rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
 			printf 'release-depth-evidence: %s already released; skipped\n' "$tag"

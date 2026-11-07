@@ -83,7 +83,8 @@ evidence() {
 		cat
 	} >"$target/e2e.tsv"
 	printf 'from: %s\nto: %s\nresult: PASS\n' "$base" "$tag" >"$target/upgrade.log"
-	dogfood_log "${tag##*v}" >"$target/dogfood.log"
+	# A core release runs the root-versioned golusoris-mcp binary, so its log names DOGFOOD_VERSION.
+	dogfood_log "${DOGFOOD_VERSION:-${tag##*v}}" >"$target/dogfood.log"
 }
 
 dogfood_log() {
@@ -170,6 +171,26 @@ repo="$(standard release-commit)"
 commit "$repo" 'chore: release main (#9)'
 complete_evidence "$repo"
 tag "$repo" v0.2.0
+expect_status 0 'has depth evidence' run "$repo" check v0.2.0
+
+# boundary: a release commit that is breaking stays user-visible
+repo="$(standard release-breaking)"
+commit "$repo" 'chore!: release pipeline rewrite'
+g "$repo" tag bang-release
+g "$repo" commit -q --allow-empty -m 'chore(ci): release x' -m 'BREAKING CHANGE: the release job moved'
+g "$repo" tag footer-release
+commit "$repo" 'chore(main): release 0.2.0'
+complete_evidence "$repo"
+tag "$repo" v0.2.0
+for visible in bang-release footer-release; do
+	expect_failure "user-visible commit $(sha7 "$repo" "$visible")" run "$repo" check v0.2.0
+done
+{
+	row "$repo" feat-commit
+	row "$repo" fix-commit
+	row "$repo" bang-release
+	row "$repo" footer-release
+} | evidence "$repo" v0.2.0 v0.1.0
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
 # boundary: both breaking footer spellings, ! on any type, refactor and deps make a commit user-visible
@@ -347,6 +368,9 @@ dogfood_log 0.1.9 >"$dog"
 expect_failure 'dogfood.log lacks an '"'"'initialize:'"'"' line with "version": "0.2.0"' run "$repo" check v0.2.0
 printf 'result: PASS\n' >"$dog"
 expect_failure 'dogfood.log lacks an '"'"'initialize:'"'"' line' run "$repo" check v0.2.0
+# negative: the target version appears only on a later line, not in the initialize reply
+printf 'initialize: {"name": "golusoris-mcp", "version": "0.1.9"}\ncall: {"version": "0.2.0"}\nresult: PASS\n' >"$dog"
+expect_failure 'dogfood.log lacks an '"'"'initialize:'"'"' line with "version": "0.2.0"' run "$repo" check v0.2.0
 dogfood_log 0.2.0 >"$dog"
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
@@ -366,6 +390,20 @@ STUB
 chmod +x "$stub/git"
 expect_failure 'git log failed for v0.1.0..refs/tags/v0.2.0' \
 	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
+
+# negative: the row check itself fails, so no row was checked
+awk_stub="$suite_root/awk-stub"
+mkdir -p "$awk_stub"
+cat >"$awk_stub/awk" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -F* ]]; then
+	exit 2
+fi
+exec "$REAL_AWK" "$@"
+STUB
+chmod +x "$awk_stub/awk"
+expect_failure 'the row check of .config/release-evidence/v0.2.0/e2e.tsv could not run' \
+	env REAL_AWK="$(command -v awk)" PATH="$awk_stub:$PATH" bash "$script" --root "$repo" check v0.2.0
 
 # negative: all problems are reported, not only the first
 repo="$(standard all-errors)"
@@ -414,16 +452,22 @@ core_repo() {
 	g "$dir" tag root-commit
 	commit "$dir" 'fix(core): core fix' core/a.go
 	g "$dir" tag core-commit
+	printf '{\n  ".": "0.5.0",\n  "core": "0.2.0"\n}\n' >"$dir/.release-please-manifest.json"
+	g "$dir" add .release-please-manifest.json
+	g "$dir" commit -q -m 'chore: manifest'
 	printf '%s\n' "$dir"
 }
 
 repo="$(core_repo core-outside)"
-row "$repo" core-commit | evidence "$repo" core-v0.2.0 core/v0.1.0
+row "$repo" core-commit | DOGFOOD_VERSION=0.5.0 evidence "$repo" core-v0.2.0 core/v0.1.0
 tag "$repo" core/v0.2.0
 expect_status 0 'core/v0.2.0 has depth evidence over core/v0.1.0..' run "$repo" check core/v0.2.0
+# negative: the dogfood log of a core release names the core version, not the root binary version
+dogfood_log 0.2.0 >"$repo/.config/release-evidence/core-v0.2.0/dogfood.log"
+expect_failure 'lacks an '"'"'initialize:'"'"' line with "version": "0.5.0"' run "$repo" check core/v0.2.0
 
 repo="$(core_repo core-inside)"
-row "$repo" root-commit | evidence "$repo" core-v0.2.0 core/v0.1.0
+row "$repo" root-commit | DOGFOOD_VERSION=0.5.0 evidence "$repo" core-v0.2.0 core/v0.1.0
 tag "$repo" core/v0.2.0
 expect_failure "user-visible commit $(sha7 "$repo" core-commit)" run "$repo" check core/v0.2.0
 
@@ -482,8 +526,10 @@ tag "$repo" core/v0.1.0
 commit "$repo" 'fix(core): core change' core/a.go
 tag "$repo" v0.2.0
 manifest "$repo" 0.2.0 0.2.0
+g "$repo" add .release-please-manifest.json
+g "$repo" commit -q -m 'chore(main): release main'
 expect_failure 'evidence directory .config/release-evidence/core-v0.2.0 is missing' run "$repo" pending
-row "$repo" HEAD | evidence "$repo" core-v0.2.0 core/v0.1.0
+row "$repo" 'HEAD~1' | evidence "$repo" core-v0.2.0 core/v0.1.0
 expect_status 0 'core/v0.2.0 has depth evidence over core/v0.1.0..HEAD' run "$repo" pending
 
 printf 'release-depth-evidence_test: ok\n'
