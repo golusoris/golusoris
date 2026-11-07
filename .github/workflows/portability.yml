@@ -36,6 +36,9 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-26.04
+          # Release archives ship linux/arm64 binaries (tools/.goreleaser.yml).
+          - name: Linux arm64
+            runner: ubuntu-26.04-arm
           - name: macOS
             runner: macos-26
           - name: Windows
