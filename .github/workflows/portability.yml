@@ -68,6 +68,13 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -B scripts/ci/portability_test.py
+      - name: Release depth gate on this platform
+        # The release job runs it on Linux; this leg proves it on macOS bash 3.2 and Git Bash too.
+        if: env.CI_GATED != 'skip'
+        shell: bash
+        env:
+          PYTHON: python
+        run: bash scripts/ci/release-depth-evidence_test.sh
       - name: Install cgo system libraries on Linux
         # hw/udev links libudev; media/3d links OpenAL, Vorbis, GL and X11 (go-gl/glfw).
         if: runner.os == 'Linux' && env.CI_GATED != 'skip'

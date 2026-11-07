@@ -74,15 +74,20 @@ sha7() {
 
 # evidence writes a complete evidence set for $2 (directory name) over base $3; rows come from stdin.
 evidence() {
-	local dir="$1" name="$2" base="$3" target
+	local dir="$1" name="$2" base="$3" target tag
+	tag="${name/#core-/core/}"
 	target="$dir/.config/release-evidence/$name"
 	mkdir -p "$target"
 	{
 		printf '# base: %s\n' "$base"
 		cat
 	} >"$target/e2e.tsv"
-	printf 'from: %s\nresult: PASS\n' "$base" >"$target/upgrade.log"
-	printf 'result: PASS\n' >"$target/dogfood.log"
+	printf 'from: %s\nto: %s\nresult: PASS\n' "$base" "$tag" >"$target/upgrade.log"
+	dogfood_log "${tag##*v}" >"$target/dogfood.log"
+}
+
+dogfood_log() {
+	printf 'initialize: {"name": "golusoris-mcp", "version": "%s"}\nresult: PASS\n' "$1"
 }
 
 row() {
@@ -167,24 +172,37 @@ complete_evidence "$repo"
 tag "$repo" v0.2.0
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
-# boundary: a breaking footer makes a docs commit user-visible; a refactor and a ! subject too
+# boundary: both breaking footer spellings, ! on any type, refactor and deps make a commit user-visible
 repo="$(standard breaking)"
 g "$repo" commit -q --allow-empty -m 'docs: reshape' -m 'BREAKING CHANGE: the shape moved'
 g "$repo" tag breaking-commit
+g "$repo" commit -q --allow-empty -m 'chore: rename' -m $'Intro.\n\nBREAKING-CHANGE: the name moved'
+g "$repo" tag hyphen-commit
 commit "$repo" 'refactor!: drop a field'
 g "$repo" tag bang-commit
+commit "$repo" 'docs(api)!: retire a page'
+g "$repo" tag docs-bang-commit
+commit "$repo" 'deps: raise a library floor'
+g "$repo" tag deps-commit
+# not visible: a breaking phrase inside a line, and a feat line quoted in a dependency update body
+g "$repo" commit -q --allow-empty -m 'chore: note' -m 'Mentions BREAKING CHANGE: inline only'
+g "$repo" commit -q --allow-empty -m 'chore(deps): update a tool' -m $'Release notes:\nfeat: upstream feature'
 {
 	row "$repo" feat-commit
 	row "$repo" fix-commit
 } | evidence "$repo" v0.2.0 v0.1.0
 tag "$repo" v0.2.0
-expect_failure "user-visible commit $(sha7 "$repo" breaking-commit)" run "$repo" check v0.2.0
-expect_failure "user-visible commit $(sha7 "$repo" bang-commit)" run "$repo" check v0.2.0
+for visible in breaking-commit hyphen-commit bang-commit docs-bang-commit deps-commit; do
+	expect_failure "user-visible commit $(sha7 "$repo" "$visible")" run "$repo" check v0.2.0
+done
 {
 	row "$repo" feat-commit
 	row "$repo" fix-commit
 	row "$repo" breaking-commit
+	row "$repo" hyphen-commit
 	row "$repo" bang-commit
+	row "$repo" docs-bang-commit
+	row "$repo" deps-commit
 } | evidence "$repo" v0.2.0 v0.1.0
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
@@ -197,7 +215,7 @@ repo="$(standard fail-row)"
 tag "$repo" v0.2.0
 expect_failure 'FAIL' run "$repo" check v0.2.0
 
-# negative and positive: SKIP without and with a reason
+# negative: SKIP without a reason, and SKIP with a reason on a required commit
 repo="$(standard skip-empty)"
 {
 	row "$repo" feat-commit
@@ -208,6 +226,13 @@ expect_failure 'SKIP without a reason' run "$repo" check v0.2.0
 {
 	row "$repo" feat-commit
 	row "$repo" fix-commit SKIP 'covered by the feat test'
+} | evidence "$repo" v0.2.0 v0.1.0
+expect_failure "commit $(sha7 "$repo" fix-commit) (fix(deps): bump a library (#3)) has status SKIP" run "$repo" check v0.2.0
+# boundary: a SKIP row with a reason for a commit that needs no row passes
+{
+	row "$repo" feat-commit
+	row "$repo" fix-commit
+	row "$repo" HEAD SKIP 'test-only commit'
 } | evidence "$repo" v0.2.0 v0.1.0
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
@@ -220,7 +245,8 @@ expect_failure "'# base: v0.1.1' but the release range starts after v0.1.0" run 
 # negative: no base header at all
 repo="$(standard no-base-header)"
 complete_evidence "$repo"
-sed -i '/^# base:/d' "$repo/.config/release-evidence/v0.2.0/e2e.tsv"
+headerless="$(grep -v '^# base:' "$repo/.config/release-evidence/v0.2.0/e2e.tsv")"
+printf '%s\n' "$headerless" >"$repo/.config/release-evidence/v0.2.0/e2e.tsv"
 tag "$repo" v0.2.0
 expect_failure "no '# base:' header" run "$repo" check v0.2.0
 
@@ -278,26 +304,68 @@ expect_status 0 'over v0.1.0..' run "$repo" check v0.2.0
 # negative: the upgrade log and the dogfood log
 repo="$(standard upgrade-from)"
 complete_evidence "$repo"
-printf 'from: v0.0.9\nresult: PASS\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+up="$repo/.config/release-evidence/v0.2.0/upgrade.log"
+printf 'from: v0.0.9\nto: v0.2.0\nresult: PASS\n' >"$up"
 tag "$repo" v0.2.0
 expect_failure "upgrade.log lacks the line 'from: v0.1.0'" run "$repo" check v0.2.0
-printf 'from: v0.1.0\nresult: FAIL\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+printf 'from: v0.1.0\nto: v0.2.0\nresult: FAIL\n' >"$up"
+expect_failure "upgrade.log has the line 'result: FAIL'" run "$repo" check v0.2.0
+printf 'from: v0.1.0\nto: v0.2.0\n' >"$up"
 expect_failure "upgrade.log lacks the line 'result: PASS'" run "$repo" check v0.2.0
-printf 'from: v0.1.0 and more\nresult: PASS\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+# negative: a later failure wins over an earlier pass
+printf 'from: v0.1.0\nto: v0.2.0\nresult: PASS\nresult: FAIL\n' >"$up"
+expect_failure "upgrade.log has the line 'result: FAIL'" run "$repo" check v0.2.0
+# negative: proof copied from another release names another target
+printf 'from: v0.1.0\nto: v0.1.9\nresult: PASS\n' >"$up"
+expect_failure "upgrade.log lacks the line 'to: v0.2.0'" run "$repo" check v0.2.0
+printf 'from: v0.1.0 and more\nto: v0.2.0\nresult: PASS\n' >"$up"
 expect_failure "upgrade.log lacks the line 'from: v0.1.0'" run "$repo" check v0.2.0
 # boundary: one leading `date -Is` stamp is accepted, anything else before the marker is not
-printf '2026-11-07T00:47:22+01:00 from: v0.1.0\n2026-11-07T00:47:22Z result: PASS\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+printf '2026-11-07T00:47:22+01:00 from: v0.1.0\n2026-11-07T00:47:22+01:00 to: v0.2.0\n2026-11-07T00:47:22Z result: PASS\n' >"$up"
 expect_status 0 'has depth evidence' run "$repo" check v0.2.0
-printf 'note from: v0.1.0\nresult: PASS\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+printf 'note from: v0.1.0\nto: v0.2.0\nresult: PASS\n' >"$up"
 expect_failure "upgrade.log lacks the line 'from: v0.1.0'" run "$repo" check v0.2.0
-printf '2026-11-07T00:47:22+01:00 2026-11-07T00:47:22+01:00 from: v0.1.0\nresult: PASS\n' >"$repo/.config/release-evidence/v0.2.0/upgrade.log"
+printf '2026-11-07T00:47:22+01:00 2026-11-07T00:47:22+01:00 from: v0.1.0\nto: v0.2.0\nresult: PASS\n' >"$up"
 expect_failure "upgrade.log lacks the line 'from: v0.1.0'" run "$repo" check v0.2.0
+# boundary: early markers in a long log are found; the whole log is read
+{
+	printf 'from: v0.1.0\nto: v0.2.0\nresult: PASS\n'
+	for ((n = 0; n < 200000; n++)); do
+		printf 'trailing output line %d\n' "$n"
+	done
+} >"$up"
+expect_status 0 'has depth evidence' run "$repo" check v0.2.0
 
 repo="$(standard dogfood)"
 complete_evidence "$repo"
-printf 'result: FAIL\n' >"$repo/.config/release-evidence/v0.2.0/dogfood.log"
+dog="$repo/.config/release-evidence/v0.2.0/dogfood.log"
+printf 'initialize: {"name": "golusoris-mcp", "version": "0.2.0"}\nresult: FAIL\n' >"$dog"
 tag "$repo" v0.2.0
-expect_failure "dogfood.log lacks the line 'result: PASS'" run "$repo" check v0.2.0
+expect_failure "dogfood.log has the line 'result: FAIL'" run "$repo" check v0.2.0
+# negative: the dogfood binary reports another version, or none
+dogfood_log 0.1.9 >"$dog"
+expect_failure 'dogfood.log lacks an '"'"'initialize:'"'"' line with "version": "0.2.0"' run "$repo" check v0.2.0
+printf 'result: PASS\n' >"$dog"
+expect_failure 'dogfood.log lacks an '"'"'initialize:'"'"' line' run "$repo" check v0.2.0
+dogfood_log 0.2.0 >"$dog"
+expect_status 0 'has depth evidence' run "$repo" check v0.2.0
+
+# negative: git log fails after the base and the end resolve
+stub="$suite_root/git-stub"
+mkdir -p "$stub"
+cat >"$stub/git" <<'STUB'
+#!/usr/bin/env bash
+for arg in "$@"; do
+	if [[ "$arg" == log ]]; then
+		echo 'fatal: stub' >&2
+		exit 128
+	fi
+done
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$stub/git"
+expect_failure 'git log failed for v0.1.0..refs/tags/v0.2.0' \
+	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
 
 # negative: all problems are reported, not only the first
 repo="$(standard all-errors)"
@@ -397,10 +465,14 @@ expect_status 0 'v0.2.0 has depth evidence' run "$repo" pending
 expect_status 2 'usage:' run "$repo" pending extra
 expect_failure 'no .release-please-manifest.json' run "$(new_repo pending-none)" pending
 
-# one component released and the other pending: the pending one decides
+# one component released and the other pending: the pending one decides, from its own core base
 repo="$(standard pending-mixed)"
+tag "$repo" core/v0.1.0
+commit "$repo" 'fix(core): core change' core/a.go
 tag "$repo" v0.2.0
 manifest "$repo" 0.2.0 0.2.0
-expect_failure 'core/v0.2.0' run "$repo" pending
+expect_failure 'evidence directory .config/release-evidence/core-v0.2.0 is missing' run "$repo" pending
+row "$repo" HEAD | evidence "$repo" core-v0.2.0 core/v0.1.0
+expect_status 0 'core/v0.2.0 has depth evidence over core/v0.1.0..HEAD' run "$repo" pending
 
 printf 'release-depth-evidence_test: ok\n'

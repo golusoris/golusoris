@@ -10,6 +10,9 @@
 
 set -euo pipefail
 
+# Runs on bash 3.2 (macOS), Git Bash (Windows) and Linux: no associative arrays, no sort -V,
+# and every array expansion guards against an empty array under set -u.
+
 readonly max_commits=5000
 readonly max_rows=5000
 readonly max_tags=1000
@@ -51,24 +54,41 @@ find_base() {
 			printf '%s\n' "$candidate"
 			return 0
 		fi
-	done < <(rgit tag --list "${prefix}v*.*.*" | re="$pattern" LC_ALL=C awk '$0 ~ ENVIRON["re"]' | LC_ALL=C sort -V -r)
+	done < <(rgit tag --list "${prefix}v*.*.*" | re="$pattern" LC_ALL=C awk '
+		$0 ~ ENVIRON["re"] {
+			version = $0
+			sub(/^(core\/)?v/, "", version)
+			split(version, part, ".")
+			print part[1], part[2], part[3], $0
+		}
+	' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr | LC_ALL=C awk '{ print $4 }')
 	return 1
 }
 
+# is_visible_message matches a Conventional Commit header that release-please lists: a
+# changelog-visible type (release-please-config.json changelog-sections) or `!` on any type.
+is_visible_message() {
+	local visible_re='^(feat|fix|perf|refactor|revert|deps)(\([^)]+\))?!?:'
+	local breaking_re='^[a-z]+(\([^)]+\))?!:'
+	[[ "$1" =~ $visible_re ]] || [[ "$1" =~ $breaking_re ]]
+}
+
+# is_user_visible also reads the body for a breaking footer in either spelling. Conventional
+# Commit lines quoted in a body (Renovate release notes) stay out: release-please does not list them.
 is_user_visible() {
 	local subject="$1" body="$2"
 	local release_re='^chore(\(.+\))?!?:[[:space:]]*release'
-	local visible_re='^(feat|fix|perf|refactor|revert)(\(.+\))?!?:'
+	local footer_re=$'\n''BREAKING[ -]CHANGE:'
 	if [[ "$subject" =~ $release_re ]]; then
 		return 1
 	fi
-	[[ "$subject" =~ $visible_re ]] || [[ "$body" == *'BREAKING CHANGE'* ]]
+	is_visible_message "$subject" || [[ $'\n'"${body//$'\r'/}" =~ $footer_re ]]
 }
 
 # list_required fills required_shas and required_subjects with the user-visible commits of base..end.
-# Returns 2 when the range exceeds max_commits.
+# Returns 2 when the range exceeds max_commits and 3 when git log fails.
 list_required() {
-	local base="$1" end="$2" prefix="$3" rec sha subject body count=0
+	local base="$1" end="$2" prefix="$3" rec sha subject body count=0 history
 	local -a args=(log --first-parent "--max-count=$((max_commits + 1))"
 		'--format=%H%x1f%s%x1f%b%x1e' "$base..$end")
 	if [[ -n "$prefix" ]]; then
@@ -76,6 +96,9 @@ list_required() {
 	fi
 	required_shas=()
 	required_subjects=()
+	if ! history="$(rgit "${args[@]}")"; then
+		return 3
+	fi
 	while IFS= read -r -d $'\x1e' rec; do
 		count=$((count + 1))
 		if ((count > max_commits)); then
@@ -90,49 +113,78 @@ list_required() {
 			required_shas+=("$sha")
 			required_subjects+=("$subject")
 		fi
-	done < <(rgit "${args[@]}")
+	done <<<"$history"
 }
 
-# load_rows reads e2e.tsv into row_set (sha prefixes) and reports FAIL, empty-reason SKIP and malformed rows.
-load_rows() {
-	local file="$1" label="$2" sha status reason count=0
-	local sha_re='^[0-9a-f]{7,40}$'
-	declare -gA row_set=()
-	while IFS=$'\x1f' read -r sha _ _ status reason; do
-		count=$((count + 1))
-		if ((count > max_rows)); then
-			fail "$label has more than $max_rows rows"
-			return 0
-		fi
-		if [[ ! "$sha" =~ $sha_re ]]; then
-			fail "$label row $count: '$sha' is not a 7 to 40 digit lowercase hex sha"
-			continue
-		fi
-		row_set["$sha"]=1
-		case "$status" in
-			PASS) ;;
-			SKIP)
-				if [[ -z "${reason//[[:space:]]/}" ]]; then
-					fail "$label row $count ($sha): SKIP without a reason"
-				fi
-				;;
-			FAIL) fail "$label row $count ($sha): FAIL" ;;
-			*) fail "$label row $count ($sha): status '$status' is not PASS, SKIP or FAIL" ;;
-		esac
-	done < <(LC_ALL=C awk -F'\t' '
+# rows_program is the awk pass of check_rows; REQUIRED holds one "<sha>\t<subject>" line per required commit.
+rows_program="$(cat <<'AWK'
+		{ sub(/\r$/, "") }
 		/^[[:space:]]*#/ || NF == 0 { next }
-		{ printf "%s\037%s\037%s\037%s\037%s\n", $1, $2, $3, $4, $5 }
-	' "$file" | tr -d '\r')
-}
+		{
+			rows++
+			if (rows > ENVIRON["MAX_ROWS"] + 0) {
+				print ENVIRON["LABEL"] " has more than " ENVIRON["MAX_ROWS"] " rows"
+				over = 1
+				exit
+			}
+			sha = $1
+			if (sha !~ /^[0-9a-f]+$/ || length(sha) < 7 || length(sha) > 40) {
+				printf "%s row %d: \047%s\047 is not a 7 to 40 digit lowercase hex sha\n", ENVIRON["LABEL"], rows, sha
+				next
+			}
+			status[sha] = $4
+			reason = $5
+			gsub(/[[:space:]]/, "", reason)
+			if ($4 == "SKIP" && reason == "") {
+				printf "%s row %d (%s): SKIP without a reason\n", ENVIRON["LABEL"], rows, sha
+			} else if ($4 == "FAIL") {
+				printf "%s row %d (%s): FAIL\n", ENVIRON["LABEL"], rows, sha
+			} else if ($4 != "PASS" && $4 != "SKIP") {
+				printf "%s row %d (%s): status \047%s\047 is not PASS, SKIP or FAIL\n", ENVIRON["LABEL"], rows, sha, $4
+			}
+		}
+		END {
+			if (over) {
+				exit
+			}
+			count = split(ENVIRON["REQUIRED"], need, "\n")
+			for (i = 1; i <= count; i++) {
+				if (need[i] == "") {
+					continue
+				}
+				tab = index(need[i], "\t")
+				full = substr(need[i], 1, tab - 1)
+				subject = substr(need[i], tab + 1)
+				found = ""
+				for (length_ = 7; length_ <= 40 && found == ""; length_++) {
+					prefix = substr(full, 1, length_)
+					if (prefix in status) {
+						found = status[prefix]
+					}
+				}
+				if (found == "") {
+					printf "user-visible commit %s (%s) has no row in %s\n", substr(full, 1, 7), subject, ENVIRON["LABEL"]
+				} else if (found != "PASS") {
+					printf "user-visible commit %s (%s) has status %s in %s; it needs PASS\n", substr(full, 1, 7), subject, found, ENVIRON["LABEL"]
+				}
+			}
+		}
+AWK
+)"
+readonly rows_program
 
-has_row() {
-	local full="$1" length
-	for ((length = 7; length <= 40; length++)); do
-		if [[ -n "${row_set[${full:0:length}]:-}" ]]; then
-			return 0
-		fi
-	done
-	return 1
+# check_rows reads e2e.tsv in one pass: malformed, FAIL and empty-reason SKIP rows, then every
+# required commit whose row (matched by sha prefix) is missing or not PASS.
+check_rows() {
+	local file="$1" label="$2" index required='' message
+	if ((${#required_shas[@]} > 0)); then
+		for index in "${!required_shas[@]}"; do
+			required+="${required_shas[$index]}"$'\t'"${required_subjects[$index]}"$'\n'
+		done
+	fi
+	while IFS= read -r message; do
+		fail "$message"
+	done < <(REQUIRED="$required" LABEL="$label" MAX_ROWS="$max_rows" LC_ALL=C awk -F'\t' "$rows_program" "$file")
 }
 
 header_base() {
@@ -146,16 +198,42 @@ header_base() {
 	' "$1" | tr -d '\r'
 }
 
-# A marker line may carry one leading `date -Is` stamp, as the proof scripts log it.
-log_has_line() {
-	tr -d '\r' <"$1" |
-		sed -E 's/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}([+-][0-9]{2}:[0-9]{2}|Z) //' |
-		grep -Fxq -- "$2"
+# log_lines prints the log with CR and one leading `date -Is` stamp per line removed, as the
+# proof scripts log markers. It reads the whole file, so no reader exits early on a long log.
+log_lines() {
+	LC_ALL=C awk '
+		{
+			sub(/\r$/, "")
+			sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]([+-][0-9][0-9]:[0-9][0-9]|Z) /, "")
+			print
+		}
+	' "$1"
+}
+
+has_line() {
+	[[ $'\n'"$1"$'\n' == *$'\n'"$2"$'\n'* ]]
+}
+
+# check_result fails unless the log has a `result:` line and every `result:` line is `result: PASS`.
+check_result() {
+	local lines="$1" relative="$2" line seen=0
+	while IFS= read -r line; do
+		case "$line" in
+			'result: PASS') seen=1 ;;
+			result:*)
+				fail "$relative has the line '$line'; every result line must be 'result: PASS'"
+				return 0
+				;;
+		esac
+	done <<<"$lines"
+	if ((seen == 0)); then
+		fail "$relative lacks the line 'result: PASS'"
+	fi
 }
 
 check_evidence() {
-	local base="$1" dir="$2" relative="$3"
-	local declared index
+	local base="$1" dir="$2" relative="$3" tag="$4"
+	local declared lines
 	if [[ ! -d "$dir" ]]; then
 		fail "evidence directory $relative is missing"
 		return 0
@@ -173,23 +251,25 @@ check_evidence() {
 		elif [[ "$declared" != "$base" ]]; then
 			fail "$relative/e2e.tsv names '# base: $declared' but the release range starts after $base"
 		fi
-		load_rows "$dir/e2e.tsv" "$relative/e2e.tsv"
-		for index in "${!required_shas[@]}"; do
-			if ! has_row "${required_shas[$index]}"; then
-				fail "user-visible commit ${required_shas[$index]:0:7} (${required_subjects[$index]}) has no row in $relative/e2e.tsv"
-			fi
-		done
+		check_rows "$dir/e2e.tsv" "$relative/e2e.tsv"
 	fi
 	if [[ -f "$dir/upgrade.log" ]]; then
-		if ! log_has_line "$dir/upgrade.log" "from: $base"; then
+		lines="$(log_lines "$dir/upgrade.log")"
+		if ! has_line "$lines" "from: $base"; then
 			fail "$relative/upgrade.log lacks the line 'from: $base'"
 		fi
-		if ! log_has_line "$dir/upgrade.log" 'result: PASS'; then
-			fail "$relative/upgrade.log lacks the line 'result: PASS'"
+		if ! has_line "$lines" "to: $tag"; then
+			fail "$relative/upgrade.log lacks the line 'to: $tag'"
 		fi
+		check_result "$lines" "$relative/upgrade.log"
 	fi
-	if [[ -f "$dir/dogfood.log" ]] && ! log_has_line "$dir/dogfood.log" 'result: PASS'; then
-		fail "$relative/dogfood.log lacks the line 'result: PASS'"
+	if [[ -f "$dir/dogfood.log" ]]; then
+		lines="$(log_lines "$dir/dogfood.log")"
+		# golusoris-mcp reports its own version in the initialize reply, so the log names the binary tested.
+		if [[ $'\n'"$lines" != *$'\n''initialize: '*'"version": "'"${tag##*v}"'"'* ]]; then
+			fail "$relative/dogfood.log lacks an 'initialize:' line with \"version\": \"${tag##*v}\""
+		fi
+		check_result "$lines" "$relative/dogfood.log"
 	fi
 }
 
@@ -216,6 +296,18 @@ resolve_end() {
 		fail "end-ref $end_name for $tag does not resolve to a commit"
 		return 1
 	fi
+}
+
+# load_range lists the user-visible commits of $1..$2 and records why when it cannot.
+load_range() {
+	local status=0
+	list_required "$1" "$2" "$3" || status=$?
+	case "$status" in
+		0) return 0 ;;
+		2) fail "more than $max_commits commits in $1..$4; range over the cap" ;;
+		*) fail "git log failed for $1..$4; the user-visible commits are unknown" ;;
+	esac
+	return 1
 }
 
 check_release() {
@@ -256,16 +348,13 @@ check_release() {
 			return 1
 			;;
 	esac
-	status=0
-	list_required "$base" "$end" "$prefix" || status=$?
-	if ((status != 0)); then
-		fail "more than $max_commits commits in $base..$end_name; range over the cap"
+	if ! load_range "$base" "$end" "$prefix" "$end_name"; then
 		report_errors
 		return 1
 	fi
 	local name="${tag//\//-}"
 	local relative=".config/release-evidence/$name"
-	check_evidence "$base" "$root/$relative" "$relative"
+	check_evidence "$base" "$root/$relative" "$relative" "$tag"
 	if ((${#errors[@]} > 0)); then
 		report_errors
 		return 1
@@ -280,7 +369,7 @@ check_pending() {
 		printf 'no .release-please-manifest.json under %s\n' "$root" >&2
 		return 1
 	fi
-	tags="$(python3 -I -c '
+	tags="$("${PYTHON:-python3}" -I -c '
 import json
 import sys
 
