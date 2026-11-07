@@ -113,9 +113,43 @@ bullet_commit() {
 	fi
 }
 
+# check_bullet returns 1 when a bullet re-lists a released or unknown commit, 2 when git fails.
+check_bullet() {
+	local root="$1" newest="$2" base="$3" breaking="$4" subjects="$5" text="$6" pr="" sha status=0
+	if [[ "$text" =~ \[#([0-9]+)\] ]] || [[ "$text" =~ \(#([0-9]+)\) ]]; then
+		pr="${BASH_REMATCH[1]}"
+	fi
+	sha="$(bullet_commit "$text" "$pr" "$subjects")"
+	if [[ -z "$sha" ]]; then
+		# A breaking footer note has no link; its commit is linked in its type section.
+		if [[ -z "$pr" && $'\n'"$breaking"$'\n' == *$'\n'"$text"$'\n'* ]]; then
+			return 0
+		fi
+		printf 'CHANGELOG entry %s has a bullet that names no known commit: %s\n' "$newest" "$text" >&2
+		return 1
+	fi
+	if ! git -C "$root" cat-file -e "$sha^{commit}" 2>/dev/null; then
+		printf 'CHANGELOG entry %s lists commit %s, which is not in the repository\n' "$newest" "$sha" >&2
+		return 1
+	fi
+	git -C "$root" merge-base --is-ancestor "$sha" "v$base" || status=$?
+	case "$status" in
+		0)
+			printf 'CHANGELOG entry %s lists %s%s, already released in v%s\n' \
+				"$newest" "${sha:0:7}" "${pr:+ (#$pr)}" "$base" >&2
+			return 1
+			;;
+		1) return 0 ;;
+		*)
+			printf 'git merge-base failed for %s and v%s; the range check is incomplete\n' "${sha:0:7}" "$base" >&2
+			return 2
+			;;
+	esac
+}
+
 # check_range fails when the newest entry lists a change its nearest tagged release already shipped.
 check_range() {
-	local root="$1" entries newest base bullets subjects text pr sha count=0 failed=0
+	local root="$1" entries newest base bullets breaking subjects text count=0 failed=0 status
 	entries="$(changelog_entries "$root/CHANGELOG.md")"
 	newest="$(awk -F'\t' '$1 == "V" { print $2; exit }' <<<"$entries")"
 	if [[ -z "$newest" ]]; then
@@ -124,34 +158,27 @@ check_range() {
 	fi
 	base="$(range_base "$root" "$entries" "$newest")" || return 1
 	bullets="$(awk -F'\t' -v v="$newest" '$1 == "L" && $2 == v { print $3 }' <<<"$entries")"
-	subjects="$(git -C "$root" log --first-parent --format='%H %s' HEAD)"
+	breaking="$(awk -F'\t' -v v="$newest" '$1 == "B" && $2 == v { print $3 }' <<<"$entries")"
+	if ! subjects="$(git -C "$root" log --first-parent --format='%H %s' HEAD)"; then
+		printf 'git log failed; the commits of entry %s are unknown\n' "$newest" >&2
+		return 1
+	fi
 	while IFS= read -r text; do
-		if [[ -z "$text" ]]; then
-			continue
-		fi
 		count=$((count + 1))
 		if ((count > range_max_bullets)); then
 			printf 'CHANGELOG entry %s has more than %d bullets\n' "$newest" "$range_max_bullets" >&2
 			return 1
 		fi
-		pr=""
-		if [[ "$text" =~ \[#([0-9]+)\] ]] || [[ "$text" =~ \(#([0-9]+)\) ]]; then
-			pr="${BASH_REMATCH[1]}"
-		fi
-		sha="$(bullet_commit "$text" "$pr" "$subjects")"
-		if [[ -z "$sha" ]]; then
+		if [[ -z "$text" ]]; then
 			continue
 		fi
-		if ! git -C "$root" cat-file -e "$sha^{commit}" 2>/dev/null; then
-			printf 'CHANGELOG entry %s lists commit %s, which is not in the repository\n' "$newest" "$sha" >&2
-			failed=1
-			continue
-		fi
-		if git -C "$root" merge-base --is-ancestor "$sha" "v$base"; then
-			printf 'CHANGELOG entry %s lists %s%s, already released in v%s\n' \
-				"$newest" "${sha:0:7}" "${pr:+ (#$pr)}" "$base" >&2
-			failed=1
-		fi
+		status=0
+		check_bullet "$root" "$newest" "$base" "$breaking" "$subjects" "$text" || status=$?
+		case "$status" in
+			0) ;;
+			1) failed=1 ;;
+			*) return 1 ;;
+		esac
 	done <<<"$bullets"
 	return "$failed"
 }

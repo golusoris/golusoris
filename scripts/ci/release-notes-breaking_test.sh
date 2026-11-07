@@ -348,6 +348,48 @@ expect_failure 'CHANGELOG entry 0.3.0 has no earlier entry with a release tag' \
 } | range_changelog
 expect_failure "which is not in the repository" bash "$script" --root "$range_repo" range
 
+# Negative: a bullet outside the breaking section, or one with an unknown PR, names no commit.
+{
+	{ release_bullet 3; printf '* **x:** an unlinked fix\n'; } | range_entry 0.2.0
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure 'names no known commit: **x:** an unlinked fix' bash "$script" --root "$range_repo" range
+{
+	printf '## [0.2.0](https://example.test/compare/v0.1.0...v0.2.0) (2026-01-01)\n\n### ⚠ BREAKING CHANGES\n\n'
+	printf '* **x:** a breaking change ([#99](https://example.test/issues/99))\n\n'
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure 'names no known commit: **x:** a breaking change ([#99]' bash "$script" --root "$range_repo" range
+
+# Boundary: blank bullets count toward the cap.
+{
+	{ for _ in $(seq 1 2001); do printf '* \n'; done; release_bullet 3; } | range_entry 0.2.0
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+expect_failure 'has more than 2000 bullets' bash "$script" --root "$range_repo" range
+
+# Negative: a git failure stops the check instead of passing it.
+{
+	release_bullet 3 | range_entry 0.2.0
+	release_bullet 1 | range_entry 0.1.0
+} | range_changelog
+git_stub="$suite_root/git-stub"
+mkdir -p "$git_stub"
+cat >"$git_stub/git" <<'STUB'
+#!/usr/bin/env bash
+for arg in "$@"; do
+	if [[ "$arg" == "$FAIL_ON" ]]; then
+		exit 128
+	fi
+done
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$git_stub/git"
+expect_failure 'git merge-base failed for' env FAIL_ON=merge-base REAL_GIT="$(command -v git)" PATH="$git_stub:$PATH" \
+	bash "$script" --root "$range_repo" range
+expect_failure 'git log failed; the commits of entry 0.2.0 are unknown' \
+	env FAIL_ON=log REAL_GIT="$(command -v git)" PATH="$git_stub:$PATH" bash "$script" --root "$range_repo" range
+
 expect_failure 'usage:' bash "$script" --root "$range_repo" range extra
 
 printf 'Release-notes breaking-change positive, negative and boundary tests passed\n'
