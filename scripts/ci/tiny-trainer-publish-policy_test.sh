@@ -55,7 +55,7 @@ check_workflow() {
 		"TESTED_IMAGE_ID: \${{ steps.tested.outputs.image-id }}"
 		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
-		"docker push \"\$IMAGE:\$VERSION\" 2>&1 | tee \"\$push_log\""
+		"platforms: linux/amd64,linux/arm64"
 		"v?3\\.1\\.4(\\+dirty)?"
 		"Generate SPDX SBOM"
 	)
@@ -68,8 +68,13 @@ check_workflow() {
 		printf '%s must verify trusted supply-chain identity after publication\n' "$path" >&2
 		return 1
 	fi
-	if (( $(grep -Fc "tiny-trainer-manifest-identity.py \"\$TESTED_IMAGE_ID\"" "$path") != 2 )); then
-		printf '%s must bind one image manifest to the tested config before reuse and signing\n' \
+	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 2 )); then
+		printf '%s must verify manifest identity before reuse and signing\n' \
+			"$path" >&2
+		return 1
+	fi
+	if (( $(grep -Fc -- '--index' "$path") < 2 )); then
+		printf '%s must validate multi-arch manifest list in both reuse and push paths\n' \
 			"$path" >&2
 		return 1
 	fi
@@ -176,6 +181,15 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.mani
 	"$config_digest" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
 	"$config_digest" >/dev/null
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[]}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
+
+valid_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}},{"digest":"sha256:'"$(printf 'f%.0s' {1..64})"'","platform":{"architecture":"arm64","os":"linux"}}]}'
+printf '%s' "$valid_index" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	"$config_digest" --index >/dev/null
+amd64_only_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}}]}'
+expect_failure bash -c "printf '%s' '$amd64_only_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+empty_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
+expect_failure bash -c "printf '%s' '$empty_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
+
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 containerd_manifest=$(printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"%s"}}' "$config_digest")

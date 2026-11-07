@@ -47,13 +47,33 @@ check_smoke_before_push() {
 	local path="$1"
 	local smoke_line push_line
 	smoke_line="$(grep -n 'name: Smoke exact publish candidate' "$path" | cut -d: -f1)"
-	push_line="$(grep -n 'name: Push tested image' "$path" | cut -d: -f1)"
+	push_line="$(grep -n 'name: Build and push multi-arch image' "$path" | cut -d: -f1)"
 	if [[ -z "$smoke_line" || -z "$push_line" || "$smoke_line" -ge "$push_line" ]]; then
 		printf '%s must smoke the exact candidate image before pushing to registry\n' "$path" >&2
 		return 1
 	fi
 	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
 		printf '%s must set SIDECAR_SKIP_BUILD=1 when smoking publish candidate\n' "$path" >&2
+		return 1
+	fi
+}
+
+check_manifest_identity() {
+	local path="$1"
+	if (( $(grep -Fc 'bash scripts/ci/tiny-trainer-verify-image.sh' "$path") != 1 )); then
+		printf '%s must verify trusted supply-chain identity after publication\n' "$path" >&2
+		return 1
+	fi
+	if ! grep -Fq 'tiny-litert-sidecar-image.yml tiny-litert-sidecar-' "$path"; then
+		printf '%s must pass workflow filename and tag prefix to verifier script\n' "$path" >&2
+		return 1
+	fi
+	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 2 )); then
+		printf '%s must verify manifest identity before reuse and signing\n' "$path" >&2
+		return 1
+	fi
+	if (( $(grep -Fc -- '--index' "$path") < 2 )); then
+		printf '%s must validate multi-arch manifest list in both reuse and push paths\n' "$path" >&2
 		return 1
 	fi
 }
@@ -79,7 +99,7 @@ check_workflow() {
 		"TESTED_IMAGE_ID: \${{ steps.tested.outputs.image-id }}"
 		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
-		"docker push \"\$IMAGE:\$VERSION\" 2>&1 | tee \"\$push_log\""
+		"platforms: linux/amd64,linux/arm64"
 		"v?3\\.1\\.4(\\+dirty)?"
 		"Generate SPDX SBOM"
 	)
@@ -89,19 +109,7 @@ check_workflow() {
 		fi
 	done
 	check_smoke_before_push "$path" || return 1
-	if (( $(grep -Fc 'bash scripts/ci/tiny-trainer-verify-image.sh' "$path") != 1 )); then
-		printf '%s must verify trusted supply-chain identity after publication\n' "$path" >&2
-		return 1
-	fi
-	if ! grep -Fq 'tiny-litert-sidecar-image.yml tiny-litert-sidecar-' "$path"; then
-		printf '%s must pass workflow filename and tag prefix to verifier script\n' "$path" >&2
-		return 1
-	fi
-	if (( $(grep -Fc "tiny-trainer-manifest-identity.py \"\$TESTED_IMAGE_ID\"" "$path") != 2 )); then
-		printf '%s must bind one image manifest to the tested config before reuse and signing\n' \
-			"$path" >&2
-		return 1
-	fi
+	check_manifest_identity "$path" || return 1
 	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM' 'Verify published supply-chain identity'; do
 		if ! require_unconditional_step "$path" "$step"; then
 			return 1

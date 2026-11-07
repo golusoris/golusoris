@@ -86,12 +86,30 @@ jobs:
         uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
           version: v0.38.1
 
-      - name: Build without pushing
+      - name: Build multi-arch (validation only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/trainers/${{ matrix.trainer }}
+          file: ai/tiny/trainers/${{ matrix.trainer }}/Dockerfile
+          build-contexts: |
+            common=ai/tiny/trainers/common
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: local/tiny-${{ matrix.trainer }}-trainer:multiarch-${{ github.sha }}
+
+      - name: Build amd64 for smoke test
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ai/tiny/trainers/${{ matrix.trainer }}
@@ -205,6 +223,11 @@ jobs:
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
@@ -237,8 +260,8 @@ jobs:
           cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
           syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
 
-      - name: Build exact publish candidate locally
-        id: build
+      - name: Build amd64 publish candidate locally
+        id: build-amd64
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ai/tiny/trainers/${{ matrix.trainer }}
@@ -282,8 +305,6 @@ jobs:
         shell: bash
         env:
           IMAGE: ${{ env.IMAGE_REPO }}
-          SOURCE_SHA: ${{ github.sha }}
-          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
@@ -295,19 +316,7 @@ jobs:
               exit 1
             fi
             docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
-              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
-            docker pull "$IMAGE@$digest"
-            published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
-            revision=$(docker image inspect --format \
-              '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
-            image_version=$(docker image inspect --format \
-              '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
-            if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
-              "$image_version" != "$VERSION" ]]; then
-              printf '%s exists but differs from the tested source image; refusing reuse\n' \
-                "$IMAGE:$VERSION" >&2
-              exit 1
-            fi
+              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
             echo 'exists=true' >> "$GITHUB_OUTPUT"
             echo "digest=$digest" >> "$GITHUB_OUTPUT"
           elif grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
@@ -317,27 +326,24 @@ jobs:
             exit 1
           fi
 
-      - name: Push tested image
+      - name: Build and push multi-arch image
         id: push
         if: steps.existing.outputs.exists != 'true'
-        shell: bash
-        env:
-          IMAGE: ${{ env.IMAGE_REPO }}
-          LOCAL_IMAGE: local/tiny-${{ matrix.trainer }}-publish:${{ github.sha }}
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          set -euo pipefail
-          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
-          push_log="$RUNNER_TEMP/${{ matrix.trainer }}-push.log"
-          docker push "$IMAGE:$VERSION" 2>&1 | tee "$push_log"
-          mapfile -t digests < <(sed -nE \
-            's/^.*digest: (sha256:[a-f0-9]{64}) size:.*$/\1/p' "$push_log")
-          if (( ${#digests[@]} != 1 )); then
-            printf 'docker push returned %d manifest digests, expected one\n' \
-              "${#digests[@]}" >&2
-            exit 1
-          fi
-          echo "digest=${digests[0]}" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/trainers/${{ matrix.trainer }}
+          file: ai/tiny/trainers/${{ matrix.trainer }}/Dockerfile
+          build-contexts: |
+            common=ai/tiny/trainers/common
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_REPO }}:${{ steps.version.outputs.value }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
 
       - name: Verify immutable published image
         id: image
@@ -368,8 +374,8 @@ jobs:
             exit 1
           fi
           docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
-            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
-          docker pull "$IMAGE@$digest"
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
+          docker pull --platform linux/amd64 "$IMAGE@$digest"
           published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
           revision=$(docker image inspect --format \
             '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
