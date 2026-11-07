@@ -114,7 +114,8 @@ Linux or macOS, each step runs only after the previous check passed, in a new
 temporary directory so no file in the current one is overwritten.
 
 Prerequisites: [GitHub CLI (`gh`)](https://cli.github.com/) authenticated with
-`gh auth login`, and [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/).
+`gh auth login`, [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/),
+and `shasum` (ships with Perl; Alpine Linux: `apk add perl-utils`).
 
 ```sh
 v=0.21.0 # x-release-please-version
