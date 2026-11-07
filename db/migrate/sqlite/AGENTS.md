@@ -26,7 +26,7 @@ Config: `db.migrate.path`, `db.migrate.auto` (as `db/migrate`) and
 | --- | --- |
 | `New(opts, sqliteOpts, logger)` | Migrator for `sqliteOpts` database |
 | `URL(sqliteOpts)` | `sqlite://<path>?<db/sqlite pragmas>` |
-| `Module` | provides `*dbmigrate.Migrator`; Up on start when `auto` |
+| `Module` | provides `*dbmigrate.Migrator` via `dbmigrate.ProvideMigrator`; Up on start when `auto`, even with no consumer (#1330) |
 | `ErrMemoryDatabase`, `ErrReadOnlyDatabase` | refused targets; missing path -> `dbsqlite.ErrMissingPath` |
 
 ## Don't
