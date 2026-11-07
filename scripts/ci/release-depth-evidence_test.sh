@@ -448,6 +448,17 @@ tag "$repo" core/v0.2.0
 manifest "$repo" 0.2.0 0.2.0
 expect_status 0 'v0.2.0 already released; skipped' run "$repo" pending
 
+# positive: an interpreter that ends its lines with CRLF, as Python on Windows does
+crlf="$suite_root/crlf-python"
+cat >"$crlf" <<'STUB'
+#!/usr/bin/env bash
+set -o pipefail
+"$REAL_PYTHON" "$@" | awk '{ printf "%s\r\n", $0 }'
+STUB
+chmod +x "$crlf"
+expect_status 0 'v0.2.0 already released; skipped' \
+	env REAL_PYTHON="${PYTHON:-python3}" PYTHON="$crlf" bash "$script" --root "$repo" pending
+
 repo="$(standard pending-patch)"
 manifest "$repo" 0.1.1 0.1.1
 expect_status 0 'v0.1.1 is a patch release' run "$repo" pending

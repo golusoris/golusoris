@@ -384,6 +384,8 @@ for key, prefix in ((".", ""), ("core", "core/")):
 		printf 'cannot read the component versions of %s\n' "$manifest" >&2
 		return 1
 	}
+	# Python on Windows ends its lines with CRLF.
+	tags="${tags//$'\r'/}"
 	while IFS= read -r tag; do
 		if rgit rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
 			printf 'release-depth-evidence: %s already released; skipped\n' "$tag"
