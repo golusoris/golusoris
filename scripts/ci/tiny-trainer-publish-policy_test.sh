@@ -10,6 +10,10 @@ suite_root="$(mktemp -d "${TMPDIR:-/tmp}/tiny-trainer-publish-policy.XXXXXX")"
 readonly repo_root suite_root
 trap 'find "$suite_root" -depth -delete' EXIT
 
+sha256_digest() {
+	python3 -I -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+}
+
 expect_failure() {
 	local status=0
 	"$@" >/dev/null 2>&1 || status=$?
@@ -183,31 +187,31 @@ printf '{"schemaVersion":2,"mediaType":"application/vnd.docker.distribution.mani
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.index.v1+json\",\"manifests\":[]}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 
 valid_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}},{"digest":"sha256:'"$(printf 'f%.0s' {1..64})"'","platform":{"architecture":"arm64","os":"linux"}}]}'
-valid_index_digest="sha256:$(printf '%s' "$valid_index" | sha256sum | awk '{ print $1 }')"
+valid_index_digest="sha256:$(printf '%s' "$valid_index" | sha256_digest)"
 printf '%s' "$valid_index" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
 	"$valid_index_digest" --index >/dev/null
 expect_failure bash -c "printf '%s' '$valid_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest' --index"
 amd64_only_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":{"architecture":"amd64","os":"linux"}}]}'
-amd64_only_digest="sha256:$(printf '%s' "$amd64_only_index" | sha256sum | awk '{ print $1 }')"
+amd64_only_digest="sha256:$(printf '%s' "$amd64_only_index" | sha256_digest)"
 expect_failure bash -c "printf '%s' '$amd64_only_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$amd64_only_digest' --index"
 empty_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
-empty_index_digest="sha256:$(printf '%s' "$empty_index" | sha256sum | awk '{ print $1 }')"
+empty_index_digest="sha256:$(printf '%s' "$empty_index" | sha256_digest)"
 expect_failure bash -c "printf '%s' '$empty_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$empty_index_digest' --index"
 expect_failure python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" --index
 bad_platform_index='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"sha256:'"$(printf 'e%.0s' {1..64})"'","platform":"not-a-dict"}]}'
-bad_platform_digest="sha256:$(printf '%s' "$bad_platform_index" | sha256sum | awk '{ print $1 }')"
+bad_platform_digest="sha256:$(printf '%s' "$bad_platform_index" | sha256_digest)"
 expect_failure bash -c "printf '%s' '$bad_platform_index' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$bad_platform_digest' --index"
 
 wrong_digest="sha256:$(printf 'd%.0s' {1..64})"
 expect_failure bash -c "printf '%s' '{\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",\"config\":{\"digest\":\"$wrong_digest\"}}' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$config_digest'"
 containerd_manifest=$(printf '{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"digest":"%s"}}' "$config_digest")
-containerd_digest="sha256:$(printf '%s' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+containerd_digest="sha256:$(printf '%s' "$containerd_manifest" | sha256_digest)"
 printf '%s' "$containerd_manifest" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
 	"$containerd_digest" >/dev/null
-different_digest="sha256:$(printf '%s ' "$containerd_manifest" | sha256sum | awk '{ print $1 }')"
+different_digest="sha256:$(printf '%s ' "$containerd_manifest" | sha256_digest)"
 expect_failure bash -c "printf '%s' '$containerd_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$different_digest'"
 index_manifest='{"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[]}'
-index_digest="sha256:$(printf '%s' "$index_manifest" | sha256sum | awk '{ print $1 }')"
+index_digest="sha256:$(printf '%s' "$index_manifest" | sha256_digest)"
 expect_failure bash -c "printf '%s' '$index_manifest' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' '$index_digest'"
 if head -c 1048577 /dev/zero | \
 	python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" "$config_digest" \
