@@ -28,6 +28,8 @@ test -f "$repo_root/AGENTS.md"
 rg -qF 'Golusoris social override:' "$repo_root/AGENTS.md"
 rg -qF 'no changelog fragments' "$repo_root/AGENTS.md"
 rg -qF '`release-please` writes `CHANGELOG.md`' "$repo_root/AGENTS.md"
-rg -qF 'under `## Summary`' "$repo_root/AGENTS.md"
+rg -qF 'no receipt fence' "$repo_root/AGENTS.md"
+rg -qF '1-3 bullets under `## Summary`' "$repo_root/AGENTS.md"
+rg -qF 'also `BREAKING CHANGE:` footer' "$repo_root/AGENTS.md"
 
 printf '%s\n' 'text-register policy: 3 canonical skills, projections and AGENTS.md social override verified'
