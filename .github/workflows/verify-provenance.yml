@@ -107,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v gh
-          if ! gh attestation verify --help | grep -Fq -- '--signer-digest'; then
+          if ! { gh_verify_help="$(gh attestation verify --help)" && grep -Fq -- '--signer-digest' <<<"$gh_verify_help"; }; then
             echo '::error::gh lacks immutable signer-digest verification.'
             exit 1
           fi
@@ -152,7 +152,7 @@ jobs:
         run: |
           set -euo pipefail
           command -v cosign
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
+          cosign_version="$(cosign version)"; grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$' <<<"$cosign_version"
 
       - name: Verify cosign signature (keyless)
         if: ${{ inputs.verify-signature }}

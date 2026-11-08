@@ -45,14 +45,14 @@ require_unconditional_step() {
 
 check_smoke_before_push() {
 	local path="$1"
-	local smoke_line push_line
+	local smoke_line push_line candidate_step
 	smoke_line="$(grep -n 'name: Smoke exact publish candidate' "$path" | cut -d: -f1)"
 	push_line="$(grep -n 'name: Push tested image' "$path" | cut -d: -f1)"
 	if [[ -z "$smoke_line" || -z "$push_line" || "$smoke_line" -ge "$push_line" ]]; then
 		printf '%s must smoke the exact candidate image before pushing to registry\n' "$path" >&2
 		return 1
 	fi
-	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
+	if ! { candidate_step="$(grep -A 10 'name: Smoke exact publish candidate' "$path")" && grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'" <<<"$candidate_step"; }; then
 		printf '%s must set SIDECAR_SKIP_BUILD=1 when smoking publish candidate\n' "$path" >&2
 		return 1
 	fi

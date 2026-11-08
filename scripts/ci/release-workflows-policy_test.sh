@@ -116,8 +116,8 @@ check_rebuild() {
 	done
 	# Renovate bumps every Buildx pin together; rebuild must name the release workflow's.
 	local buildx release_buildx
-	buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$path" | head -n 1)"
-	release_buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$repo_root/.github/workflows/release-go.yml" | head -n 1)"
+	buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$path" | sed -n '1p')"
+	release_buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$repo_root/.github/workflows/release-go.yml" | sed -n '1p')"
 	[[ -n "$buildx" && "$buildx" == "$release_buildx" ]] || {
 		printf 'rebuild does not select the pinned Buildx binary\n' >&2
 		return 1
@@ -344,7 +344,7 @@ check_verifier() {
 	for contract in \
 		'at least one verification mode must be enabled' \
 		'--bundle-from-oci' \
-		"gh attestation verify --help | grep -Fq -- '--signer-digest'" \
+		"gh_verify_help=\"\$(gh attestation verify --help)\" && grep -Fq -- '--signer-digest' <<<\"\$gh_verify_help\"" \
 		'GitHub token login is restricted to matching ghcr.io images' \
 		'--signer-workflow' \
 		'--signer-digest' \
@@ -506,9 +506,9 @@ git -C "$tag_repo" push -q --force origin refs/tags/v1.2.3
 expect_failure 'release tag no longer resolves to the event commit' run_tag_binding \
 	"$tag_repo" 'v1.2.3' "$tag_sha" "$tag_binding"
 
-tag_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$release_go" | head -n 1)"
+tag_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$release_go" | sed -n '1p')"
 for publisher in "$release_build" "$sbom" "$rebuild"; do
-	publisher_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$publisher" | head -n 1)"
+	publisher_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$publisher" | sed -n '1p')"
 	[[ "$publisher_pattern" == "$tag_pattern" ]] || {
 		printf 'release tag validators diverge: %s\n' "$publisher" >&2
 		exit 1

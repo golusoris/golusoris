@@ -43,14 +43,26 @@ ENV_TOOL_VARS: dict[str, str] = {
 }
 
 ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
-    "cosign": re.compile(r"cosign\s+version\s*\|\s*grep\s+-Eq"),
-    "syft": re.compile(r"syft\s+version\s*\|\s*grep\s+-Eq"),
-    "goreleaser": re.compile(r"goreleaser\s+--version\s*\|\s*grep\s+-Eq"),
-    "buildx": re.compile(r"docker\s+buildx\s+version\s*\|\s*grep\s+-Eq"),
-    "node": re.compile(r"node\s+--version\s*\|\s*grep\s+-Eq"),
+    "cosign": re.compile(
+        r'cosign_version="\$\(cosign\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$cosign_version"'
+    ),
+    "syft": re.compile(
+        r'syft_version="\$\(syft\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$syft_version"'
+    ),
+    "goreleaser": re.compile(
+        r'goreleaser_version="\$\(goreleaser\s+--version\)";\s*grep\s+-Eq\s+.*<<<"\$goreleaser_version"'
+    ),
+    "buildx": re.compile(
+        r'buildx_version="\$\(docker\s+buildx\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$buildx_version"'
+    ),
+    "node": re.compile(
+        r'node_version="\$\(node\s+--version\)";\s*grep\s+-Eq\s+.*<<<"\$node_version"'
+    ),
 }
 
-NODE_ANCHORED_RE = re.compile(r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1\s*$""")
+NODE_ANCHORED_RE = re.compile(
+    r"""grep\s+-Eq\s+(['"])\^v\d+\\\.\d+\\\.\d+\$\1\s+<<<"\$node_version"\s*$"""
+)
 
 ACTION_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s+([\w/-]+)@[0-9a-f]{40}\b")
 VERSION_RE = re.compile(r"(\d+)\\\.(\d+)\\\.(\d+)")
@@ -378,11 +390,11 @@ VALID_FIXTURE_WORKFLOW = r"""\
           node-version: 24.22.2
       - name: Verify tools
         run: |
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
-          docker buildx version | grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)'
-          node --version | grep -Eq '^v24\.22\.2$'
+          cosign_version="$(cosign version)"; grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$' <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)' <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)' <<<"$goreleaser_version"
+          buildx_version="$(docker buildx version)"; grep -Eq '^github.com/docker/buildx v0\.38\.0([[:space:]]|$)' <<<"$buildx_version"
+          node_version="$(node --version)"; grep -Eq '^v24\.22\.2$' <<<"$node_version"
 """
 
 
@@ -449,7 +461,8 @@ class ReleaseToolPinsTest(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             text = text.replace("actions/setup-node", "actions/setup-other")
             text = text.replace(
-                "node --version | grep -Eq '^v24\\.22\\.2$'", "echo skip"
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                "echo skip",
             )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
@@ -463,7 +476,8 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path = root / ".github/workflows/release-tool-contract.yml"
             text = path.read_text(encoding="utf-8")
             text = text.replace(
-                "node --version | grep -Eq '^v24\\.22\\.2$'", "echo skip"
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                "echo skip",
             )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
@@ -477,8 +491,8 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
             text = text.replace(
-                "node --version | grep -Eq '^v24\\.22\\.2$'",
-                "# node --version | grep -Eq '^v24\\.22\\.2$'",
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                '# node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
             )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
@@ -491,9 +505,12 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
-            text = text.replace("node --version | grep -Eq '^v24\\.22\\.2$'", "echo ok")
+            text = text.replace(
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                "echo ok",
+            )
             text += (
-                "      - name: node --version | grep -Eq '^v24\\.22\\.2$'\n"
+                "      - name: node_version=\"$(node --version)\"; grep -Eq '^v24\\.22\\.2$' <<<\"$node_version\"\n"
                 "        run: echo ok\n"
             )
             path.write_text(text, encoding="utf-8")
@@ -507,10 +524,13 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
-            text = text.replace("node --version | grep -Eq '^v24\\.22\\.2$'", "echo ok")
+            text = text.replace(
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                "echo ok",
+            )
             text += (
                 "      - name: Verify node\n"
-                "        run: node --version | grep -Eq '^v24\\.22\\.2$'\n"
+                "        run: node_version=\"$(node --version)\"; grep -Eq '^v24\\.22\\.2$' <<<\"$node_version\"\n"
             )
             path.write_text(text, encoding="utf-8")
             self.assertEqual(check_release_tool_pins(root), [])
@@ -564,8 +584,8 @@ class ReleaseToolPinsTest(unittest.TestCase):
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
             text = text.replace(
-                "node --version | grep -Eq '^v24\\.22\\.2$'",
-                "node --version | grep -Eq '^v24\\.22\\.2$' || true",
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version"',
+                'node_version="$(node --version)"; grep -Eq \'^v24\\.22\\.2$\' <<<"$node_version" || true',
             )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)

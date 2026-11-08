@@ -246,7 +246,7 @@ elif [[ "$count" -ne 1 ]]; then
 	exit 1
 fi
 
-key="$(printf '%s\n' "$keys" | head -n 1)"
+key="$(sed -n '1p' <<<"$keys")"
 pattern="^appdb-[0-9]{8}T[0-9]{6}Z\\.sql\\.gz$"
 if [[ ! "$key" =~ $pattern ]]; then
 	printf 'helm-backup-restore: object key %s does not match expected pattern %s\n' "$key" "$pattern" >&2

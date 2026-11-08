@@ -132,10 +132,10 @@ jobs:
         run: |
           set -euo pipefail
           for tool in cosign syft goreleaser gh node; do command -v "$tool"; done
-          cosign version | grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-          syft version | grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)'
-          goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
-          node --version | grep -Eq '^v24\.22\.2$'
+          cosign_version="$(cosign version)"; grep -Eq '^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$' <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq 'Version:[[:space:]]+1\.56\.0([[:space:]]|$)' <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)' <<<"$goreleaser_version"
+          node_version="$(node --version)"; grep -Eq '^v24\.22\.2$' <<<"$node_version"
 
       - name: Run GoReleaser
         shell: bash

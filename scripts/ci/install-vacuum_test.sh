@@ -22,6 +22,8 @@ fake_bin="$suite_root/bin"
 mkdir -p "$fake_bin" "$suite_root/repo/scripts/ci" "$suite_root/repo/tools"
 install -m 0755 "$repo_root/scripts/ci/install-vacuum.sh" \
 	"$suite_root/repo/scripts/ci/install-vacuum.sh"
+install -m 0755 "$repo_root/scripts/ci/retry.sh" \
+	"$suite_root/repo/scripts/ci/retry.sh"
 
 cat >"$fake_bin/go" <<'FAKE'
 #!/usr/bin/env bash
