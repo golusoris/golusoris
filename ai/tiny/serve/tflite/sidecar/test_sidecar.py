@@ -47,7 +47,11 @@ def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
     if not isinstance(proc.pid, int) or isinstance(proc.pid, bool) or proc.pid <= 1 or proc.pid == os.getpgrp():
         proc.kill()
         return
-    os.killpg(proc.pid, signal.SIGKILL)
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        # Group exited between TimeoutExpired and killpg.
+        return
 
 
 def run_in_process_group(cmd: list[str], timeout: float) -> None:
@@ -56,14 +60,14 @@ def run_in_process_group(cmd: list[str], timeout: float) -> None:
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
     ) as proc:
         try:
-            _, stderr = proc.communicate(timeout=timeout)
+            stdout, stderr = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             # uv run spawns the converter as a child; killing only uv would orphan it.
             kill_process_group(proc)
             proc.communicate(timeout=60)
             raise
     if proc.returncode != 0:
-        raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=stderr)
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
 
 
 def generate_real_tflite_model(
@@ -155,9 +159,16 @@ def pid_running(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    # Non-Linux platforms lack /proc; os.kill(pid, 0) probe suffices.
+    if not Path("/proc").is_dir():
+        return True
     # An orphan its new parent has not reaped yet is a zombie, so it no longer runs.
-    stat = Path(f"/proc/{pid}/stat")
-    return not (stat.exists() and stat.read_text(encoding="utf-8").rsplit(") ", 1)[-1].startswith("Z"))
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        # Process reaped between os.kill probe and stat read.
+        return False
+    return not stat_text.rsplit(") ", 1)[-1].startswith("Z")
 
 
 @pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX-only")
@@ -167,8 +178,13 @@ class TestRunInProcessGroup:
         # The grandchild drops the pipes, so only a group kill can stop it.
         script = f"sleep 30 >/dev/null 2>&1 & echo $! > {pid_file}; wait"
         with pytest.raises(subprocess.TimeoutExpired):
-            run_in_process_group(["sh", "-c", script], timeout=1)
-        grandchild = int(pid_file.read_text(encoding="utf-8"))
+            run_in_process_group(["sh", "-c", script], timeout=5)
+        if not pid_file.exists():
+            raise AssertionError(f"pid_file race: {pid_file} was not written before timeout fired")
+        try:
+            grandchild = int(pid_file.read_text(encoding="utf-8").strip())
+        except (FileNotFoundError, ValueError) as err:
+            raise AssertionError(f"pid_file race: could not read grandchild pid from {pid_file}: {err}") from err
         for _ in range(50):
             if not pid_running(grandchild):
                 return
@@ -184,12 +200,88 @@ class TestRunInProcessGroup:
 
     def test_nonzero_exit_raises_called_process_error(self) -> None:
         with pytest.raises(subprocess.CalledProcessError) as caught:
-            run_in_process_group(["sh", "-c", "echo boom >&2; exit 3"], timeout=10)
+            run_in_process_group(["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10)
         expect(caught.value.returncode == 3, "exit code must propagate")
-        expect(b"boom" in caught.value.stderr, "stderr must be kept")
+        expect(caught.value.output is not None and b"out" in caught.value.output, "stdout must be kept")
+        expect(caught.value.stderr is not None and b"boom" in caught.value.stderr, "stderr must be kept")
 
     def test_zero_exit_returns(self) -> None:
         run_in_process_group(["sh", "-c", "exit 0"], timeout=10)
+
+
+class _FakeProc:
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.killed = False
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX-only")
+class TestKillProcessGroup:
+    def test_kill_process_group_swallows_process_lookup_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def raise_lookup(pid: int, sig: int) -> None:
+            raise ProcessLookupError
+
+        monkeypatch.setattr(os, "killpg", raise_lookup)
+        fake = _FakeProc(pid=99999)
+        kill_process_group(fake)
+
+    def test_kill_process_group_boundary_pids(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        killpg_called = False
+
+        def fake_killpg(pid: int, sig: int) -> None:
+            nonlocal killpg_called
+            killpg_called = True
+
+        monkeypatch.setattr(os, "killpg", fake_killpg)
+
+        fake_init = _FakeProc(pid=1)
+        kill_process_group(fake_init)
+        expect(fake_init.killed, "proc.kill() must be called for pid 1")
+        expect(not killpg_called, "os.killpg must not be called for pid 1")
+
+        fake_pgrp = _FakeProc(pid=os.getpgrp())
+        kill_process_group(fake_pgrp)
+        expect(fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()")
+        expect(not killpg_called, "os.killpg must not be called when pid matches getpgrp()")
+
+
+class TestPidRunning:
+    def test_pid_running_reaped_toctou(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+        monkeypatch.setattr(Path, "is_dir", lambda self: True)
+
+        def raise_fnf(self_path: Path, encoding: str = "utf-8") -> str:
+            raise FileNotFoundError(f"reaped: {self_path}")
+
+        monkeypatch.setattr(Path, "read_text", raise_fnf)
+        expect(not pid_running(12345), "reaped process must return False on FileNotFoundError")
+
+    def test_pid_running_non_proc_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+        monkeypatch.setattr(Path, "is_dir", lambda self: False)
+        expect(pid_running(12345), "non-/proc platforms must rely on kill(pid, 0)")
+
+    def test_pid_running_process_lookup_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        def raise_lookup(pid: int, sig: int) -> None:
+            raise ProcessLookupError
+
+        monkeypatch.setattr(os, "kill", raise_lookup)
+        expect(not pid_running(12345), "missing process must return False")
+
+    def test_pid_running_reaped_child(self) -> None:
+        cmd = ["sh", "-c", "exit 0"]
+        proc = subprocess.Popen(  # noqa: S603 - fixed argv test process. # nosec B603
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        proc.wait(timeout=5)
+        expect(not pid_running(proc.pid), "reaped child process must not be running")
 
 
 class TestRuntimeLoadAndClassify:
