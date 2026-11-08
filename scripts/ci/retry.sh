@@ -23,15 +23,21 @@ if [[ ! "$RETRY_DELAY_SECONDS" =~ ^[0-9]+$ ]] || ((RETRY_DELAY_SECONDS < 0 || RE
 	exit 2
 fi
 
+# Only the successful attempt's stdout reaches callers that capture it.
+stdout_file="$(mktemp "${TMPDIR:-/tmp}/golusoris-retry.XXXXXX")"
+trap 'rm -f -- "$stdout_file"' EXIT
+
 delay="$RETRY_DELAY_SECONDS"
 status=0
 # Bounded retry loop for network-sensitive tool and module downloads (HISS-02).
 for ((attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++)); do
 	status=0
-	"$@" || status=$?
+	"$@" >"$stdout_file" || status=$?
 	if ((status == 0)); then
+		cat "$stdout_file"
 		exit 0
 	fi
+	cat "$stdout_file" >&2
 	if ((attempt < RETRY_ATTEMPTS)); then
 		printf '::warning::attempt %d/%d failed with exit status %d: %s\n' \
 			"$attempt" "$RETRY_ATTEMPTS" "$status" "$*" >&2

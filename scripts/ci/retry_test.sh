@@ -118,4 +118,61 @@ if ! cmp -s "$expected_stdout" "$actual_stdout"; then
 	exit 1
 fi
 
+# ── test 6: failed attempt stdout diverted to stderr, successful stdout preserved
+counter_file="$temp_dir/test6.counter"
+printf '0' >"$counter_file"
+flaky_stdout_script="$temp_dir/flaky_stdout.sh"
+cat >"$flaky_stdout_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+cnt=$(cat "$1")
+cnt=$((cnt + 1))
+printf '%d' "$cnt" >"$1"
+if ((cnt == 1)); then
+	printf 'bad\n'
+	exit 1
+fi
+printf 'good\n'
+exit 0
+EOF
+chmod +x "$flaky_stdout_script"
+
+stderr_file="$temp_dir/test6.stderr"
+actual_stdout="$(RETRY_ATTEMPTS=2 RETRY_DELAY_SECONDS=0 "$RETRY_SCRIPT" "$flaky_stdout_script" "$counter_file" 2>"$stderr_file")"
+if [[ "$actual_stdout" != 'good' ]]; then
+	printf 'test 6: expected captured stdout to be exactly "good", got: %q\n' "$actual_stdout" >&2
+	exit 1
+fi
+if ! grep -q 'bad' "$stderr_file"; then
+	printf 'test 6: expected stderr to contain "bad", got: %s\n' "$(cat "$stderr_file")" >&2
+	exit 1
+fi
+
+# ── test 7: negative twin: all attempts fail -> stdout empty, exit status propagated
+fail_stdout_script="$temp_dir/fail_stdout.sh"
+cat >"$fail_stdout_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'bad\n'
+exit 5
+EOF
+chmod +x "$fail_stdout_script"
+
+stderr_file="$temp_dir/test7.stderr"
+status=0
+actual_stdout=""
+actual_stdout="$(RETRY_ATTEMPTS=2 RETRY_DELAY_SECONDS=0 "$RETRY_SCRIPT" "$fail_stdout_script" 2>"$stderr_file")" || status=$?
+if ((status != 5)); then
+	printf 'test 7: expected exit status 5, got %d\n' "$status" >&2
+	exit 1
+fi
+if [[ -n "$actual_stdout" ]]; then
+	printf 'test 7: expected empty stdout on total failure, got: %q\n' "$actual_stdout" >&2
+	exit 1
+fi
+if ! grep -q 'bad' "$stderr_file"; then
+	printf 'test 7: expected stderr to contain "bad", got: %s\n' "$(cat "$stderr_file")" >&2
+	exit 1
+fi
+
 printf 'retry_test.sh: all tests passed\n'

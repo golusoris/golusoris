@@ -30,7 +30,22 @@ cat >"$fake_bin/go" <<'FAKE'
 set -euo pipefail
 printf '%s\n' "$*" >>"$GO_LOG"
 case "$1 $2" in
-"mod download") printf '{"Path":"github.com/daveshanley/vacuum","Sum":"%s"}\n' "$FAKE_SUM" ;;
+"mod download")
+	if (("${FAKE_FLAKY:-0}" == 1)); then
+		flaky_count_file="${GO_LOG}.flaky"
+		count=0
+		if [[ -f "$flaky_count_file" ]]; then
+			count="$(cat "$flaky_count_file")"
+		fi
+		count=$((count + 1))
+		printf '%d' "$count" >"$flaky_count_file"
+		if ((count == 1)); then
+			printf '{"Path":"github.com/daveshanley/vacuum","Error":"transient"}\n'
+			exit 1
+		fi
+	fi
+	printf '{"Path":"github.com/daveshanley/vacuum","Sum":"%s"}\n' "$FAKE_SUM"
+	;;
 "install "*)
 	mkdir -p "$GOBIN"
 	printf '#!/bin/sh\nprintf "%%s\\n" "%s"\n' "$FAKE_REPORTED" >"$GOBIN/vacuum"
@@ -49,6 +64,7 @@ write_pins() {
 run_installer() {
 	local sum="$1" reported="$2" target="$3"
 	env PATH="$fake_bin:$PATH" FAKE_SUM="$sum" FAKE_REPORTED="$reported" \
+		FAKE_FLAKY="${FAKE_FLAKY:-0}" RETRY_DELAY_SECONDS="${RETRY_DELAY_SECONDS:-0}" \
 		GO_LOG="$suite_root/go.log" \
 		bash "$suite_root/repo/scripts/ci/install-vacuum.sh" "$target"
 }
@@ -108,5 +124,19 @@ expect_failure 'reports version v0.33.0' "$suite_root/install-version" \
 write_pins '0.33.1' "$good_sum"
 expect_failure 'invalid VACUUM_VERSION' "$suite_root/install-semver" \
 	run_installer "$good_sum" "$version" "$suite_root/install-semver"
+
+# Positive: flaky download succeeds on retry without corrupted stdout.
+: >"$suite_root/go.log"
+rm -f "$suite_root/go.log.flaky"
+write_pins "$version" "$good_sum"
+FAKE_FLAKY=1 run_installer "$good_sum" "$version" "$suite_root/install-flaky" >/dev/null
+[[ "$("$suite_root/install-flaky/vacuum")" == "$version" ]] || {
+	printf 'flaky install: installed vacuum does not report %s\n' "$version" >&2
+	exit 1
+}
+grep -Fxq "install github.com/daveshanley/vacuum@$version" "$suite_root/go.log" || {
+	printf 'flaky install: installer did not build the pinned module version\n' >&2
+	exit 1
+}
 
 printf 'vacuum installer policy tests passed\n'
