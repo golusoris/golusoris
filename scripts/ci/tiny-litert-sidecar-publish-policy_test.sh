@@ -43,13 +43,13 @@ require_unconditional_step() {
 	fi
 }
 
-check_smoke_before_push() {
+check_smoke_before_tag() {
 	local path="$1"
-	local smoke_line push_line
+	local smoke_line tag_line
 	smoke_line="$(grep -n 'name: Smoke exact publish candidate' "$path" | cut -d: -f1)"
-	push_line="$(grep -n 'name: Build and push multi-arch image' "$path" | cut -d: -f1)"
-	if [[ -z "$smoke_line" || -z "$push_line" || "$smoke_line" -ge "$push_line" ]]; then
-		printf '%s must smoke the exact candidate image before pushing to registry\n' "$path" >&2
+	tag_line="$(grep -n 'name: Tag verified candidate' "$path" | cut -d: -f1)"
+	if [[ -z "$smoke_line" || -z "$tag_line" || "$smoke_line" -ge "$tag_line" ]]; then
+		printf '%s must smoke the exact candidate image before tagging\n' "$path" >&2
 		return 1
 	fi
 	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
@@ -68,12 +68,35 @@ check_manifest_identity() {
 		printf '%s must pass workflow filename and tag prefix to verifier script\n' "$path" >&2
 		return 1
 	fi
-	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 2 )); then
+	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 4 )); then
 		printf '%s must verify manifest identity before reuse and signing\n' "$path" >&2
 		return 1
 	fi
 	if (( $(grep -Fc -- '--index' "$path") < 2 )); then
 		printf '%s must validate multi-arch manifest list in both reuse and push paths\n' "$path" >&2
+		return 1
+	fi
+}
+
+check_publish_job_shape() {
+	local path="$1"
+	local publish_job push_step
+	publish_job="$(awk '
+		/^  publish:/ { active = 1; next }
+		active && /^  [a-z0-9_-]+:/ { exit }
+		active { print }
+	' "$path")"
+	if grep -Eq '^[[:space:]]+load:[[:space:]]*true' <<<"$publish_job"; then
+		printf '%s publish job must not retain load: true\n' "$path" >&2
+		return 1
+	fi
+	push_step="$(awk '
+		/^      - name: Build and push multi-arch candidate by digest/ { active = 1; next }
+		active && /^      - name:/ { exit }
+		active { print }
+	' "$path")"
+	if [[ -z "$push_step" ]] || grep -Eq '^[[:space:]]+tags:' <<<"$push_step"; then
+		printf '%s push step must not specify tags: before validation\n' "$path" >&2
 		return 1
 	fi
 }
@@ -96,8 +119,10 @@ check_workflow() {
 		"\"\$REF_TYPE\" != tag"
 		"\"\$FULL_REF\" != \"refs/tags/\$expected_tag\""
 		"checked_out_sha=\$(git rev-parse HEAD)"
-		"TESTED_IMAGE_ID: \${{ steps.tested.outputs.image-id }}"
-		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
+		"push-by-digest=true"
+		"docker buildx imagetools create -t \"\$IMAGE:\$VERSION\" \"\$IMAGE@\$digest\""
+		"--config \"\$platform\""
+		"docker pull --platform linux/amd64 \"\$IMAGE@\$digest\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"platforms: linux/amd64,linux/arm64"
 		"v?3\\.1\\.4(\\+dirty)?"
@@ -108,9 +133,12 @@ check_workflow() {
 			return 1
 		fi
 	done
-	check_smoke_before_push "$path" || return 1
+	check_publish_job_shape "$path" || return 1
+	check_smoke_before_tag "$path" || return 1
 	check_manifest_identity "$path" || return 1
-	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM' 'Verify published supply-chain identity'; do
+	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM' \
+		'Verify published supply-chain identity' \
+		'Smoke exact publish candidate' 'Verify release identity of every platform'; do
 		if ! require_unconditional_step "$path" "$step"; then
 			return 1
 		fi
@@ -210,10 +238,23 @@ without_permission="$suite_root/without-permission.yml"
 sed '/artifact-metadata: write/d' "$workflow" >"$without_permission"
 expect_failure check_workflow "$without_permission"
 
-without_identity="$suite_root/without-identity.yml"
-sed "s/\"\$published_id\" != \"\$TESTED_IMAGE_ID\"/false/" \
-	"$workflow" >"$without_identity"
-expect_failure check_workflow "$without_identity"
+without_config="$suite_root/without-config.yml"
+sed '/--config/d' "$workflow" >"$without_config"
+expect_failure check_workflow "$without_config"
+
+conditional_smoke="$suite_root/conditional-smoke.yml"
+sed '/- name: Smoke exact publish candidate/a\        if: steps.existing.outputs.exists != '\''true'\''' \
+	"$workflow" >"$conditional_smoke"
+expect_failure check_workflow "$conditional_smoke"
+
+with_load_true="$suite_root/with-load-true.yml"
+sed '/name: Build and push multi-arch candidate by digest/a\          load: true' \
+	"$workflow" >"$with_load_true"
+expect_failure check_workflow "$with_load_true"
+
+without_push_by_digest="$suite_root/without-push-by-digest.yml"
+sed 's/push-by-digest=true/push-by-digest=false/' "$workflow" >"$without_push_by_digest"
+expect_failure check_workflow "$without_push_by_digest"
 
 without_smoke="$suite_root/without-smoke.yml"
 sed '/name: Smoke exact publish candidate/,+4d' "$workflow" >"$without_smoke"

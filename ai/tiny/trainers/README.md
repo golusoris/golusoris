@@ -98,14 +98,15 @@ performs a real offline LiteRT train, conversion, and interpreter invocation.
 Publishing remains blocked until the repository has a review-protected
 `tiny-trainer-publish` environment, a protected `tiny-trainers-v*.*.*` tag
 rule, and `TINY_TRAINER_PUBLISH_ENABLED=true`. After that control-plane setup,
-publication requires the exact version tag and event SHA. Every attempt rebuilds
-both platforms and smokes the amd64 candidate (arm64 is built by the same
-buildx invocation but not smoke-tested). A retry reuses an existing tag only
-when its config digest matches that tested amd64 image and its signature, build
-provenance, and SPDX SBOM attestation verify against the exact workflow, source
-tag, and source SHA. A new push records Docker's manifest list digest, resolves
-the tag back to that digest and tested config, then signs and attests the
-manifest list covering both platforms.
+publication requires the exact version tag and event SHA. Every publication
+attempt performs one multi-arch build pushed by digest without a tag. The amd64
+child of that digest is smoke-tested (arm64 is built by the same buildx
+invocation but not smoke-tested), and the source, revision, and version labels of
+both platform children are verified against the event metadata. The release tag
+is created pointing at that verified digest only after all checks pass. A retry
+reuses an existing tag only after the same smoke test and platform label checks
+pass, and its signature, build provenance, and SPDX SBOM attestation verify
+against the exact workflow, source tag, and source SHA.
 
 Dependency locks include hashes for every Python distribution. CI regenerates
 them and audits both complete locks with a pinned `pip-audit`; findings fail

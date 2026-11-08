@@ -47,6 +47,29 @@ require_unconditional_step() {
 	fi
 }
 
+check_publish_job_shape() {
+	local path="$1"
+	local publish_job push_step
+	publish_job="$(awk '
+		/^  publish:/ { active = 1; next }
+		active && /^  [a-z0-9_-]+:/ { exit }
+		active { print }
+	' "$path")"
+	if grep -Eq '^[[:space:]]+load:[[:space:]]*true' <<<"$publish_job"; then
+		printf '%s publish job must not retain load: true\n' "$path" >&2
+		return 1
+	fi
+	push_step="$(awk '
+		/^      - name: Build and push multi-arch candidate by digest/ { active = 1; next }
+		active && /^      - name:/ { exit }
+		active { print }
+	' "$path")"
+	if [[ -z "$push_step" ]] || grep -Eq '^[[:space:]]+tags:' <<<"$push_step"; then
+		printf '%s push step must not specify tags: before validation\n' "$path" >&2
+		return 1
+	fi
+}
+
 check_workflow() {
 	local path="$1"
 	local literal
@@ -56,8 +79,10 @@ check_workflow() {
 		"\"\$REF_TYPE\" != tag"
 		"\"\$FULL_REF\" != \"refs/tags/\$expected_tag\""
 		"checked_out_sha=\$(git rev-parse HEAD)"
-		"TESTED_IMAGE_ID: \${{ steps.tested.outputs.image-id }}"
-		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
+		"push-by-digest=true"
+		"docker buildx imagetools create -t \"\$IMAGE:\$VERSION\" \"\$IMAGE@\$digest\""
+		"--config \"\$platform\""
+		"docker pull --platform linux/amd64 \"\$IMAGE@\$digest\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"platforms: linux/amd64,linux/arm64"
 		"v?3\\.1\\.4(\\+dirty)?"
@@ -68,11 +93,12 @@ check_workflow() {
 			return 1
 		fi
 	done
+	check_publish_job_shape "$path" || return 1
 	if (( $(grep -Fc 'bash scripts/ci/tiny-trainer-verify-image.sh' "$path") != 1 )); then
 		printf '%s must verify trusted supply-chain identity after publication\n' "$path" >&2
 		return 1
 	fi
-	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 2 )); then
+	if (( $(grep -Fc 'tiny-trainer-manifest-identity.py' "$path") != 4 )); then
 		printf '%s must verify manifest identity before reuse and signing\n' \
 			"$path" >&2
 		return 1
@@ -82,7 +108,8 @@ check_workflow() {
 			"$path" >&2
 		return 1
 	fi
-	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM'; do
+	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM' \
+		'Smoke exact publish candidate' 'Verify release identity of every platform'; do
 		if ! require_unconditional_step "$path" "$step"; then
 			return 1
 		fi
@@ -250,14 +277,78 @@ sed 's/^PIP_AUDIT_VERSION=.*/PIP_AUDIT_VERSION=9.9.9/' \
 expect_failure check_audit_toolchain "$unlocked_audit" \
 	"$repo_root/scripts/ci/tiny-trainer-pip-audit.lock"
 
+test_source="https://github.com/golusoris/golusoris"
+test_rev="$(printf 'a%.0s' {1..40})"
+test_ver="v1.2.3"
+valid_amd64_config=$(printf '{"architecture":"amd64","os":"linux","config":{"Labels":{"org.opencontainers.image.source":"%s","org.opencontainers.image.revision":"%s","org.opencontainers.image.version":"%s"}}}' \
+	"$test_source" "$test_rev" "$test_ver")
+valid_arm64_config=$(printf '{"architecture":"arm64","os":"linux","config":{"Labels":{"org.opencontainers.image.source":"%s","org.opencontainers.image.revision":"%s","org.opencontainers.image.version":"%s"}}}' \
+	"$test_source" "$test_rev" "$test_ver")
+
+# Valid amd64 and arm64 configs pass
+printf '%s' "$valid_amd64_config" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	--config linux/amd64 "$test_source" "$test_rev" "$test_ver" >/dev/null
+printf '%s' "$valid_arm64_config" | python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	--config linux/arm64 "$test_source" "$test_rev" "$test_ver" >/dev/null
+
+# arm64 revision mismatch FAIL
+mismatch_rev="$(printf 'b%.0s' {1..40})"
+expect_failure bash -c "printf '%s' '$valid_arm64_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/arm64 '$test_source' '$mismatch_rev' '$test_ver'"
+
+# missing Labels FAIL
+missing_labels_config='{"architecture":"amd64","os":"linux","config":{}}'
+expect_failure bash -c "printf '%s' '$missing_labels_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/amd64 '$test_source' '$test_rev' '$test_ver'"
+
+# Labels not dict FAIL
+labels_not_dict_config='{"architecture":"amd64","os":"linux","config":{"Labels":"not-a-dict"}}'
+expect_failure bash -c "printf '%s' '$labels_not_dict_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/amd64 '$test_source' '$test_rev' '$test_ver'"
+
+# platform mismatch (amd64 config checked as linux/arm64) FAIL
+expect_failure bash -c "printf '%s' '$valid_amd64_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/arm64 '$test_source' '$test_rev' '$test_ver'"
+
+# unknown platform linux/s390x FAIL
+expect_failure bash -c "printf '%s' '$valid_amd64_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/s390x '$test_source' '$test_rev' '$test_ver'"
+
+# 4 or 6 args -> rc 2
+status_4=0
+python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	--config linux/amd64 "$test_source" "$test_rev" >/dev/null 2>&1 || status_4=$?
+if (( status_4 != 2 )); then
+	printf 'expected rc 2 for 4 args, got %d\n' "$status_4" >&2
+	exit 1
+fi
+status_6=0
+python3 -B "$repo_root/scripts/ci/tiny-trainer-manifest-identity.py" \
+	--config linux/amd64 "$test_source" "$test_rev" "$test_ver" "extra" >/dev/null 2>&1 || status_6=$?
+if (( status_6 != 2 )); then
+	printf 'expected rc 2 for 6 args, got %d\n' "$status_6" >&2
+	exit 1
+fi
+
+# revision not 40-hex FAIL
+expect_failure bash -c "printf '%s' '$valid_amd64_config' | python3 -B '$repo_root/scripts/ci/tiny-trainer-manifest-identity.py' --config linux/amd64 '$test_source' 'not-a-40-hex-revision' '$test_ver'"
+
 without_permission="$suite_root/without-permission.yml"
 sed '/artifact-metadata: write/d' "$workflow" >"$without_permission"
 expect_failure check_workflow "$without_permission"
 
-without_identity="$suite_root/without-identity.yml"
-sed "s/\"\$published_id\" != \"\$TESTED_IMAGE_ID\"/false/" \
-	"$workflow" >"$without_identity"
-expect_failure check_workflow "$without_identity"
+without_config="$suite_root/without-config.yml"
+sed '/--config/d' "$workflow" >"$without_config"
+expect_failure check_workflow "$without_config"
+
+conditional_smoke="$suite_root/conditional-smoke.yml"
+sed '/- name: Smoke exact publish candidate/a\        if: steps.existing.outputs.exists != '\''true'\''' \
+	"$workflow" >"$conditional_smoke"
+expect_failure check_workflow "$conditional_smoke"
+
+with_load_true="$suite_root/with-load-true.yml"
+sed '/name: Build and push multi-arch candidate by digest/a\          load: true' \
+	"$workflow" >"$with_load_true"
+expect_failure check_workflow "$with_load_true"
+
+without_push_by_digest="$suite_root/without-push-by-digest.yml"
+sed 's/push-by-digest=true/push-by-digest=false/' "$workflow" >"$without_push_by_digest"
+expect_failure check_workflow "$without_push_by_digest"
 
 deprecated_sbom="$suite_root/deprecated-sbom.yml"
 cp "$workflow" "$deprecated_sbom"
