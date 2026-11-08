@@ -81,9 +81,9 @@ Register follows the audience, then the task label of your brief (`register:` in
 - An internal return carries verdict, changed paths, commands run, evidence pointers and open questions, nothing else.
 <!-- praetor:register:end -->
 
-Golusoris social override: no receipt fence; no changelog fragments.
-`.github/PULL_REQUEST_TEMPLATE.md` uses `## Summary`; `release-please` reads Conventional
-Commits. Generic managed row remains upstream gap `cordanaLLM/praetor#328`.
+Golusoris social override: no receipt fence; no changelog fragments; `release-please` writes `CHANGELOG.md` from Conventional Commits.
+PR body: 1-3 bullets under `## Summary`; other `.github/PULL_REQUEST_TEMPLATE.md` sections kept as shipped.
+Breaking change: also `BREAKING CHANGE:` footer. Generic managed row remains upstream gap `cordanaLLM/praetor#328`.
 
 <!-- praetor:tail -->
 
