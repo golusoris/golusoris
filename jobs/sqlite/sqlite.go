@@ -31,7 +31,9 @@ import (
 	"github.com/golusoris/golusoris/jobs"
 )
 
-// migrateTimeout bounds the River schema migration run at fx Start.
+// migrateTimeout bounds the River schema migration run at fx Start. The app's
+// fx StartTimeout caps it (fx default 15s), so apps on slow disks set
+// fx.StartTimeout above 30s.
 const migrateTimeout = 30 * time.Second
 
 // depthSQL mirrors the Postgres depth query: one grouped read, largest groups

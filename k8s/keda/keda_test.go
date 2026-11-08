@@ -259,6 +259,9 @@ func TestNewScaler_RejectsInvalidInput(t *testing.T) {
 // Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
 const testBusyTimeout = 30 * time.Second
 
+// Windows disk stalls can outlast fx default 15s during River migrations (migrateTimeout 30s + margin; #1222).
+const testStartTimeout = 45 * time.Second
+
 // TestModule_endToEndOverSQLite runs the real chain without Docker: SQLite
 // queue -> jobs.MetricsModule collector -> keda.Module -> gRPC client.
 func TestModule_endToEndOverSQLite(t *testing.T) {
@@ -283,6 +286,7 @@ func TestModule_endToEndOverSQLite(t *testing.T) {
 		scaler   *Scaler
 	)
 	app := fxtest.New(t,
+		fx.StartTimeout(testStartTimeout),
 		fx.Supply(db, cfg, discard(), srv),
 		fx.Provide(func() clock.Clock { return clk }),
 		fx.Replace(jobs.Options{Enabled: true, ProducerOnly: true, Metrics: jobs.MetricsOptions{Queues: []string{"transcode"}}}),

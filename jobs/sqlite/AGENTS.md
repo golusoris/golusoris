@@ -16,6 +16,7 @@ Same `jobs.Options` (`jobs.*` keys), same worker registry, same drain.
  `*jobs.Workers`, `jobs.Inserter`, `jobs.DepthQuerier`.
 - fx Start: `Migrate` (River SQLite migrations, idempotent, 30s bound)
  then client Start; fx Stop: `jobs.Drain` soft -> hard.
+- fx StartTimeout caps Migrate 30s bound (fx default 15s); slow disks set fx.StartTimeout > 30s.
 - App code enqueues via `jobs.Inserter` (Insert/InsertMany) -> same code
  on Postgres (cluster) + SQLite (standalone).
 - Tx inserts stay driver-typed: `(*jobs.ClientSQL).InsertTx(ctx, *sql.Tx, ...)`
