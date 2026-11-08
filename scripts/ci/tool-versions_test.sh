@@ -168,7 +168,7 @@ for workflow in "$repo_root"/.github/workflows/*.yml "$repo_root"/.gitea/workflo
 done
 
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
-cosign_version_guard="cosign version | grep -Eq '$cosign_version_pattern'"
+cosign_version_guard='cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"'
 cosign_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
 	"$repo_root/.github/workflows/release-build.yml"
@@ -188,6 +188,7 @@ done
 if grep -rHnF 'cosign version' \
 	"$repo_root/.github/workflows" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
+	grep -Fv '# renovate:' | \
 	grep -Fv "$cosign_version_guard"; then
 	printf 'Cosign version guard diverges from the exact runner contract\n' >&2
 	exit 1
@@ -219,7 +220,7 @@ installer_inputs() {
 		function flush() { if (active) print (value == "" ? "MISSING" : value) }
 		/^      - / { flush(); active = 0; value = "" }
 		index($0, action) { active = 1 }
-		active && $1 == key { value = $2 }
+		active && $1 == key { sub("^[[:space:]]*" key "[[:space:]]*", ""); value = $0 }
 		END { flush() }
 	' "$workflow"
 }
@@ -250,26 +251,26 @@ check_release_tool_installs() {
 	local name workflow
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
 		require_inputs "$workflows/$name.yml" sigstore/cosign-installer \
-			cosign-release "v$COSIGN_VERSION" || return 1
+			cosign-release 'v${{ env.COSIGN_VERSION }}' || return 1
 	done
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images; do
 		require_inputs "$workflows/$name.yml" anchore/sbom-action/download-syft \
-			syft-version "v$SYFT_VERSION" || return 1
+			syft-version 'v${{ env.SYFT_VERSION }}' || return 1
 	done
 	for name in release-build release-go release-tool-contract; do
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
-			version "v$GORELEASER_VERSION" || return 1
+			version 'v${{ env.GORELEASER_VERSION }}' || return 1
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
 			install-only true || return 1
 	done
 	for workflow in "$workflows"/*.yml; do
 		if grep -Fq 'uses: sigstore/cosign-installer@' "$workflow"; then
 			require_inputs "$workflow" sigstore/cosign-installer \
-				cosign-release "v$COSIGN_VERSION" || return 1
+				cosign-release 'v${{ env.COSIGN_VERSION }}' || return 1
 		fi
 		if grep -Fq 'uses: anchore/sbom-action/download-syft@' "$workflow"; then
 			require_inputs "$workflow" anchore/sbom-action/download-syft \
-				syft-version "v$SYFT_VERSION" || return 1
+				syft-version 'v${{ env.SYFT_VERSION }}' || return 1
 		fi
 	done
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
@@ -381,11 +382,11 @@ expect_install_rejection() {
 	fi
 }
 expect_install_rejection cosign-drift release-build.yml \
-	"s/cosign-release: v$COSIGN_VERSION/cosign-release: v0.0.1/"
+	's/cosign-release: v\${{ env\.COSIGN_VERSION }}/cosign-release: v0.0.1/'
 expect_install_rejection syft-drift tiny-trainer-images.yml \
-	"s/syft-version: v$SYFT_VERSION/syft-version: v0.0.1/"
+	's/syft-version: v\${{ env\.SYFT_VERSION }}/syft-version: v0.0.1/'
 expect_install_rejection goreleaser-drift release-go.yml \
-	"s/version: v$GORELEASER_VERSION/version: v0.0.1/"
+	's/version: v\${{ env\.GORELEASER_VERSION }}/version: v0.0.1/'
 expect_install_rejection goreleaser-runs release-build.yml '/install-only: true/d'
 expect_install_rejection missing-cosign verify-provenance.yml \
 	's/uses: sigstore\/cosign-installer@/uses: example\/cosign-installer@/'
@@ -420,8 +421,8 @@ expect_ci_go_default_rejection golangci-default-missing \
 
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-goreleaser_version_guard="goreleaser --version | grep -Eq '$goreleaser_version_pattern'"
-syft_version_guard="syft version | grep -Eq '$syft_version_pattern'"
+goreleaser_version_guard='goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"'
+syft_version_guard='syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"'
 goreleaser_version_workflows=(
 	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
@@ -458,6 +459,7 @@ fi
 if grep -rHnF 'syft version' \
 	"$repo_root/.github/workflows" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
+	grep -Fv '# renovate:' | \
 	grep -Fv "$syft_version_guard"; then
 	printf 'Syft version guard diverges from the locked runner contract\n' >&2
 	exit 1
