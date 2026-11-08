@@ -146,21 +146,27 @@ class CheckpointTests(TestCase):
     def inspect_with_remote(self, ls_remote, prs=None):
         """Stubs only the network calls so publication logic runs against real local git."""
         original = checkpoint._run
+        calls = []
 
         def fake(argv, root, **kwargs):
             if argv[:2] == ["git", "ls-remote"]:
+                calls.append(list(argv))
                 return ls_remote.encode()
             if argv[:2] == ["gh", "pr"] and prs is not None:
+                calls.append(list(argv))
                 return json.dumps(prs).encode()
             return original(argv, root, **kwargs)
 
         with mock.patch.object(checkpoint, "_run", side_effect=fake):
-            return checkpoint.inspect_checkpoint(self.root, "stop")
+            return checkpoint.inspect_checkpoint(self.root, "stop"), calls
 
     def test_clean_ahead_checks_live_refs_and_requests_push(self):
         _head, base = self.commit_ahead("https://github.com/acme/demo.git",
                                         {**CONFIG, "publish": True, "require_pr": False})
-        result = self.inspect_with_remote(f"{base}\trefs/heads/main\n")
+        result, calls = self.inspect_with_remote(f"{base}\trefs/heads/main\n")
+        self.assertEqual(calls, [
+            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
+        ])
         self.assertEqual(result["publication_status"], "due_push")
         self.assertFalse(result["commit_due"])
         self.assertTrue(result["due"])
@@ -172,9 +178,15 @@ class CheckpointTests(TestCase):
         prs = [{"number": 7, "url": "https://github.com/acme/demo/pull/7",
                 "isDraft": True, "headRefOid": head,
                 "headRefName": "checkpoint/test", "baseRefName": "main"}]
-        result = self.inspect_with_remote(
+        result, calls = self.inspect_with_remote(
             f"{head}\trefs/heads/checkpoint/test\n{base}\trefs/heads/main\n", prs=prs
         )
+        self.assertEqual(calls, [
+            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
+            ["gh", "pr", "list", "--repo", "acme/demo", "--base", "main", "--head", "checkpoint/test",
+             "--state", "open", "--limit", "2", "--json",
+             "number,url,isDraft,headRefOid,headRefName,baseRefName"],
+        ])
         self.assertEqual(result["publication_status"], "present")
         self.assertFalse(result["due"])
         self.assertEqual(result["changed_count"], 0)
