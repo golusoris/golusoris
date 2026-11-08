@@ -23,6 +23,7 @@ resolve_root() {
 	(cd "$2" && pwd)
 }
 
+# Locate an executable Python >= 3.12 interpreter required by repository test suites.
 find_python() {
 	local python_bin="${PYTHON_BIN:-}"
 	if [[ -z "$python_bin" ]] && command -v python3 >/dev/null; then
@@ -37,6 +38,7 @@ find_python() {
 	return 1
 }
 
+# Scope and run required repository Python test suites against the worktree.
 main() {
 	local root
 	root="$(resolve_root "$@")"

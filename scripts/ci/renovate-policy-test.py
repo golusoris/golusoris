@@ -1188,6 +1188,7 @@ def syft_coverage_controls(config: dict[str, object], managers: list[object]) ->
 
 
 def main() -> int:
+    """Run Renovate policy checks; return 0 on pass, 1 on policy violation."""
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
     core_gomod = (ROOT / "core/go.mod").read_text(encoding="utf-8")

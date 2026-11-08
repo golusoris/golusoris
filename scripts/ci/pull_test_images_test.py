@@ -117,6 +117,7 @@ class PullTestImagesTest(TestCase):
         self.assertFalse(self.log.exists())
 
     def test_policy_main_rejects_manifest_digest_drift(self) -> None:
+        """Pin that renovate policy rejects split-image digests drifting from Go authorities."""
         policy = runpy.run_path(str(ROOT / "scripts/ci/renovate-policy-test.py"))
         fixture = self.root / "repository"
         fixture.mkdir()
