@@ -98,6 +98,7 @@ class CheckpointTests(TestCase):
         self.assertIn("protected", result["error"])
 
     def test_publish_false_does_not_query_network(self):
+        """Pins not_due status and zero ls-remote or gh pr queries when publishing is disabled."""
         (self.root / "public.txt").write_text("change\n")
         original = checkpoint._run
         calls = []
@@ -149,6 +150,7 @@ class CheckpointTests(TestCase):
         calls = []
 
         def fake(argv, root, **kwargs):
+            """Answers canned ls-remote refs and PR listings while recording network argv."""
             if argv[:2] == ["git", "ls-remote"]:
                 calls.append(list(argv))
                 return ls_remote.encode()
@@ -161,6 +163,7 @@ class CheckpointTests(TestCase):
             return checkpoint.inspect_checkpoint(self.root, "stop"), calls
 
     def test_clean_ahead_checks_live_refs_and_requests_push(self):
+        """Pins due_push status and exact origin ls-remote queries when commits are ahead of remote."""
         _head, base = self.commit_ahead("https://github.com/acme/demo.git",
                                         {**CONFIG, "publish": True, "require_pr": False})
         result, calls = self.inspect_with_remote(f"{base}\trefs/heads/main\n")
@@ -173,6 +176,7 @@ class CheckpointTests(TestCase):
         self.assertEqual(result["actions"], [checkpoint.PUSH_ACTION])
 
     def test_clean_pushed_exact_pr_is_present(self):
+        """Pins present status and exact ls-remote plus gh pr list queries when a matching PR exists."""
         (self.root / "ahead.txt").write_text("ahead\n")
         head, base = self.commit_ahead("git@github.com:acme/demo.git", {**CONFIG, "publish": True})
         prs = [{"number": 7, "url": "https://github.com/acme/demo/pull/7",
