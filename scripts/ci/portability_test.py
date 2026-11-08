@@ -17,6 +17,7 @@ import re
 import sys
 import tempfile
 import time
+import urllib.error
 from pathlib import Path
 from unittest import TestCase, main, mock, skipUnless
 
@@ -319,12 +320,12 @@ class PortabilityDriverTest(TestCase):
             "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
             "uses: ./.github/actions/setup-go",
             "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
-            'pact_dir="${RUNNER_TEMP}/pact-ffi"',
+            'pact_dir="${GITHUB_WORKSPACE}/.workingdir/cache/pact-ffi"',
             'install -d -m 0700 "$pact_dir"',
-            'python -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"',
+            'python -B scripts/ci/pact_ffi.py --cache --lib-dir "$pact_dir"',
             'PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir',
             'CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir',
-            "python -B scripts/ci/pact_ffi.py --lib-dir $pactDir",
+            "python -B scripts/ci/pact_ffi.py --cache --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
             "python -B scripts/ci/portability_test.py",
             "run: bash scripts/ci/release-depth-evidence_test.sh",
@@ -479,6 +480,166 @@ class PactFFIInstallerTests(TestCase):
                 contextlib.redirect_stderr(io.StringIO()),
             ):
                 self.assertEqual(pact_ffi.main(), 3)
+
+    def test_positive_download_retry_succeeds_after_transient_timeouts(self) -> None:
+        payload = b"verified pact ffi"
+        compressed = gzip.compress(payload)
+        asset = pact_ffi.Asset(
+            filename="fixture.so.gz",
+            sha256=hashlib.sha256(compressed).hexdigest(),
+            library="libpact_ffi.so",
+        )
+        sleeps: list[float] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            responses: list[object] = [
+                TimeoutError("first timeout"),
+                TimeoutError("second timeout"),
+                io.BytesIO(compressed),
+            ]
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request, "urlopen", side_effect=responses
+                ) as urlopen,
+                mock.patch.object(pact_ffi, "SLEEP", side_effect=sleeps.append),
+            ):
+                archive = pact_ffi.download_archive(asset, root)
+            self.assertTrue(archive.is_file())
+            installed = pact_ffi.extract_archive(archive, root, asset)
+            self.assertEqual(installed.read_bytes(), payload)
+            self.assertEqual(urlopen.call_count, 3)
+            self.assertEqual(sleeps, [2.0, 4.0])
+
+    def test_negative_download_retry_exhausted_raises_install_error(self) -> None:
+        asset = pact_ffi.Asset("fixture.so.gz", "0" * 64, "libpact_ffi.so")
+        sleeps: list[float] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request,
+                    "urlopen",
+                    side_effect=TimeoutError("timed out"),
+                ) as urlopen,
+                mock.patch.object(pact_ffi, "SLEEP", side_effect=sleeps.append),
+                self.assertRaisesRegex(
+                    pact_ffi.InstallError,
+                    r"Pact FFI download failed after 3 attempts: timed out",
+                ),
+            ):
+                pact_ffi.download_archive(asset, root)
+            self.assertEqual(urlopen.call_count, 3)
+            self.assertEqual(sleeps, [2.0, 4.0])
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_negative_download_digest_mismatch_fails_at_once_without_retry(self) -> None:
+        asset = pact_ffi.Asset("fixture.so.gz", "0" * 64, "libpact_ffi.so")
+        sleeps: list[float] = []
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request,
+                    "urlopen",
+                    return_value=io.BytesIO(b"wrong bytes"),
+                ) as urlopen,
+                mock.patch.object(pact_ffi, "SLEEP", side_effect=sleeps.append),
+                self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"),
+            ):
+                pact_ffi.download_archive(asset, root)
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertEqual(len(sleeps), 0)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_negative_download_http_404_fails_at_once_without_retry(self) -> None:
+        asset = pact_ffi.Asset("fixture.so.gz", "0" * 64, "libpact_ffi.so")
+        sleeps: list[float] = []
+        http_error = urllib.error.HTTPError(
+            url="https://example.com/asset",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=None,
+        )
+        self.addCleanup(http_error.close)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request, "urlopen", side_effect=http_error
+                ) as urlopen,
+                mock.patch.object(pact_ffi, "SLEEP", side_effect=sleeps.append),
+                self.assertRaisesRegex(
+                    pact_ffi.InstallError,
+                    r"Pact FFI download failed: HTTP Error 404: Not Found",
+                ),
+            ):
+                pact_ffi.download_archive(asset, root)
+            self.assertEqual(urlopen.call_count, 1)
+            self.assertEqual(len(sleeps), 0)
+            self.assertEqual(list(root.iterdir()), [])
+
+    def test_boundary_download_http_503_retries_and_succeeds(self) -> None:
+        payload = b"verified pact ffi"
+        compressed = gzip.compress(payload)
+        asset = pact_ffi.Asset(
+            filename="fixture.so.gz",
+            sha256=hashlib.sha256(compressed).hexdigest(),
+            library="libpact_ffi.so",
+        )
+        sleeps: list[float] = []
+        http_error = urllib.error.HTTPError(
+            url="https://example.com/asset",
+            code=503,
+            msg="Service Unavailable",
+            hdrs={},
+            fp=None,
+        )
+        self.addCleanup(http_error.close)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with (
+                mock.patch.object(
+                    pact_ffi.urllib.request,
+                    "urlopen",
+                    side_effect=[http_error, io.BytesIO(compressed)],
+                ) as urlopen,
+                mock.patch.object(pact_ffi, "SLEEP", side_effect=sleeps.append),
+            ):
+                archive = pact_ffi.download_archive(asset, root)
+            self.assertTrue(archive.is_file())
+            self.assertEqual(archive.read_bytes(), compressed)
+            self.assertEqual(urlopen.call_count, 2)
+            self.assertEqual(sleeps, [2.0])
+
+    def test_workflow_pact_ffi_install_steps_preceded_by_cache(self) -> None:
+        workflows = (
+            ROOT / ".github" / "workflows" / "ci.yml",
+            ROOT / ".github" / "workflows" / "portability.yml",
+        )
+        total_pact_steps = 0
+        cache_action = "actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9"
+        cache_path = ".workingdir/cache/pact-ffi"
+        cache_key = "pact-ffi-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/ci/pact_ffi.py') }}"
+        for path in workflows:
+            text = path.read_text(encoding="utf-8")
+            steps = re.split(r"(?m)^ {6}- ", text)
+            for index, step in enumerate(steps[1:], 1):
+                if not re.search(r"python3? -B scripts/ci/pact_ffi\.py", step):
+                    continue
+                total_pact_steps += 1
+                prev_step = steps[index - 1]
+                with self.subTest(workflow=path.name, step_index=index):
+                    self.assertIn(cache_action, prev_step)
+                    self.assertIn(f"path: {cache_path}", prev_step)
+                    self.assertIn(f"key: {cache_key}", prev_step)
+                    self.assertNotIn("restore-keys", prev_step)
+                    install_if = re.search(r"(?m)^ +if: +(.*)$", step)
+                    cache_if = re.search(r"(?m)^ +if: +(.*)$", prev_step)
+                    if install_if is None or cache_if is None:
+                        self.fail("expected if condition on install and cache steps")
+                    self.assertEqual(cache_if.group(1).strip(), install_if.group(1).strip())
+        self.assertEqual(total_pact_steps, 4)
 
     def test_boundary_pin_change_downloads_new_archive_beside_stale_one(self) -> None:
         old = gzip.compress(b"old pinned ffi")
