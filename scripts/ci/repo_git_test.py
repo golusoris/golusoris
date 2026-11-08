@@ -75,6 +75,27 @@ class WorktreeFilesTest(RepoGitCase):
             self.skipTest(f"symlinks unsupported: {error}")
         self.assertEqual(self.listed(), ["go.mod"])
 
+    def test_inherited_repository_overrides_are_ignored(self) -> None:
+        """Boundary: inherited GIT_DIR and GIT_INDEX_FILE overrides do not redirect the listing."""
+        self.write("go.mod")
+        self.write("ignored/sub/go.mod")
+        repo_git.run_git(["add", "."], self.root)
+        decoy_dir = tempfile.TemporaryDirectory(prefix="golusoris-repo-git-decoy-")
+        self.addCleanup(decoy_dir.cleanup)
+        decoy = Path(decoy_dir.name)
+        repo_git.run_git(["init", "-q"], decoy)
+        decoy_sub = decoy / "ignored" / "sub" / "go.mod"
+        decoy_sub.parent.mkdir(parents=True, exist_ok=True)
+        decoy_sub.write_text("fixture\n", encoding="utf-8")
+        repo_git.run_git(["add", "."], decoy)
+        overrides = {
+            "GIT_DIR": str(decoy / ".git"),
+            "GIT_INDEX_FILE": str(decoy / ".git" / "index"),
+        }
+        for var, value in overrides.items():
+            with self.subTest(var=var), unittest.mock.patch.dict(os.environ, {var: value}):
+                self.assertEqual(self.listed(), ["go.mod"])
+
     def test_non_repository_fails_closed(self) -> None:
         """Negative: a directory outside any repository raises GitError."""
         outside = tempfile.TemporaryDirectory(prefix="golusoris-repo-git-outside-")

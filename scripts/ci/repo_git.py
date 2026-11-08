@@ -19,7 +19,11 @@ class GitError(Exception):
 
 
 def run_git(
-    args: list[str], cwd: Path | None = None, timeout: int = GIT_TIMEOUT_SECONDS
+    args: list[str],
+    cwd: Path | None = None,
+    timeout: int = GIT_TIMEOUT_SECONDS,
+    *,
+    env: dict[str, str] | None = None,
 ) -> str:
     """Run one git command with a timeout and return its stdout."""
     try:
@@ -30,6 +34,7 @@ def run_git(
             text=True,
             timeout=timeout,
             check=False,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GitError(f"git {' '.join(args)} failed to run: {error}") from error
@@ -38,13 +43,22 @@ def run_git(
     return proc.stdout
 
 
+def local_env_names(timeout: int = GIT_TIMEOUT_SECONDS) -> set[str]:
+    """Return environment variable names local to a git repository."""
+    return set(run_git(["rev-parse", "--local-env-vars"], timeout=timeout).split())
+
+
 def worktree_files(root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS) -> list[Path]:
     """List tracked and untracked files called name under root that git does not ignore."""
+    # Local git variables must not redirect the index or working tree.
+    local_vars = local_env_names(timeout=timeout)
+    env = {key: value for key, value in os.environ.items() if key not in local_vars}
     # git skips ignored paths, so linked worktrees under .claude/worktrees/ stay out.
     stdout = run_git(
         ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", name, f"**/{name}"],
         root,
         timeout,
+        env=env,
     )
     # --cached also lists deleted tracked files; dangling symlinks stay so callers report them.
     found = {root / token for token in stdout.split("\0") if token}
@@ -55,7 +69,7 @@ def worktree_files(root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS) ->
 def scratch_environ(timeout: int = GIT_TIMEOUT_SECONDS) -> Generator[None, None, None]:
     """Remove repository-local git variables from os.environ and restore them on exit."""
     # A git hook exports these; inherited, they point fixture commands at the caller's index.
-    names = run_git(["rev-parse", "--local-env-vars"], timeout=timeout).split()
+    names = local_env_names(timeout=timeout)
     saved = {name: os.environ.pop(name) for name in names if name in os.environ}
     try:
         yield
