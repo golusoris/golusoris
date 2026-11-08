@@ -98,15 +98,18 @@ performs a real offline LiteRT train, conversion, and interpreter invocation.
 Publishing remains blocked until the repository has a review-protected
 `tiny-trainer-publish` environment, a protected `tiny-trainers-v*.*.*` tag
 rule, and `TINY_TRAINER_PUBLISH_ENABLED=true`. After that control-plane setup,
-publication requires the exact version tag and event SHA. Every publication
-attempt performs one multi-arch build pushed by digest without a tag. The amd64
-child of that digest is smoke-tested (arm64 is built by the same buildx
-invocation but not smoke-tested), and the source, revision, and version labels of
-both platform children are verified against the event metadata. The release tag
-is created pointing at that verified digest only after all checks pass. A retry
-reuses an existing tag only after the same smoke test and platform label checks
-pass, and its signature, build provenance, and SPDX SBOM attestation verify
-against the exact workflow, source tag, and source SHA.
+publication requires the exact version tag and event SHA. A multi-arch build
+pushed by digest without a tag happens only when the version tag does not
+exist; with an existing tag the run skips the build and reuses that tag's
+digest. The amd64 child of that digest is smoke-tested (arm64 is built by the
+same buildx invocation but not smoke-tested), and the source, revision, and
+version labels of both platform children are verified against the event
+metadata. The release tag is created pointing at that verified digest only
+after all checks pass. A retry runs the same smoke test and platform label
+checks on the existing digest. Every run, new or resumed, then signs the
+digest, attests its build provenance and SPDX SBOM, and verifies the
+signature, provenance, and SBOM against the exact workflow, source tag, and
+source SHA.
 
 Dependency locks include hashes for every Python distribution. CI regenerates
 them and audits both complete locks with a pinned `pip-audit`; findings fail
