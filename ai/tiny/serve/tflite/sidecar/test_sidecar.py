@@ -82,7 +82,7 @@ open("{tmp_path.as_posix()}", "wb").write(converter.convert())
                 script,
             ]
             subprocess.run(  # noqa: S603 - fixed argv, sys.executable
-                cmd, capture_output=True, check=True
+                cmd, capture_output=True, check=True, timeout=900
             )
             payload = tmp_path.read_bytes()
         finally:
@@ -808,6 +808,7 @@ class TestPolicyAndServer:
             text=True,
             check=False,
             env={**os.environ, "PYTHONPATH": str(repo_root)},
+            timeout=60,
         )
         expect(res.returncode != 0)
         expect("ai-edge-litert is required" in res.stderr)
