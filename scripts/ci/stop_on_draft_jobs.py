@@ -6,7 +6,7 @@
 One call elsewhere in a workflow must not mask a job that checks out and builds a draft. A job
 whose job-level if rules out pull_request (merge_group only, or != 'pull_request' &&) with no
 top-level || disjunction is not applicable. Line-based so the CI policy job needs no YAML package.
-Workflows with gated jobs must list ready_for_review in pull_request types to rerun on ready.
+Workflows with gated jobs must list opened, synchronize, reopened and ready_for_review in pull_request types to rerun on ready.
 Exit codes: 0 ok, 1 violation, 3 error (fail closed).
 """
 
@@ -24,13 +24,15 @@ NOT_PR = re.compile(
 REQUIRED = re.compile(
     r"^golusoris/golusoris/\.github/actions/stop-on-draft@[0-9a-f]{40}$"
 )
+REQUIRED_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 ON_KEY = re.compile(r"^(on|'on'|\"on\"):\s*(.*)$")
 PR_KEY = re.compile(r"^  (pull_request|'pull_request'|\"pull_request\")\s*:")
 PR_ITEM = re.compile(
     r"^(  )?-\s+(pull_request|'pull_request'|\"pull_request\")\s*(#.*)?$"
 )
+TYPES_KEY = re.compile(r"^\s*['\"]?types['\"]?\s*:")
 TYPES_FLOW = re.compile(r"['\"]?types['\"]?:\s*\[([^\]]*)\]")
-TYPES_BLOCK = re.compile(r"^\s+['\"]?types['\"]?:\s*(#.*)?$")
+TYPES_BLOCK = re.compile(r"^\s*['\"]?types['\"]?:\s*$")
 TYPES_ITEM = re.compile(r"^\s+-\s+(.+?)\s*$")
 JOB_HEADER = re.compile(r"^  (['\"]?)([A-Za-z0-9_-]+)\1:\s*(#.*)?$")
 JOB_IF = re.compile(r"^    if:\s*(.+?)\s*$")
@@ -51,6 +53,7 @@ class Trigger:
     in_pr: bool = False
     in_types: bool = False
     types: list[str] = field(default_factory=list)
+    unreadable: str = ""
 
 
 @dataclass
@@ -66,9 +69,14 @@ class Job:
     steps_alias: str = ""
 
 
+def strip_comment(line: str) -> str:
+    """Drop a trailing YAML comment starting with # or preceded by whitespace."""
+    return re.sub(r"(^|\s+)#.*$", "", line)
+
+
 def unquote(value: str) -> str:
     """Drop a trailing YAML comment and one pair of matching outer quotes."""
-    value = re.sub(r"(^|\s+)#.*$", "", value).strip()
+    value = strip_comment(value).strip()
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "'\"":
         return value[1:-1]
     return value
@@ -100,18 +108,24 @@ def direct_entries(value: str) -> set[str]:
 
 def read_pr_line(trigger: Trigger, line: str) -> None:
     """Parse a line inside the pull_request block."""
-    flow = TYPES_FLOW.search(line)
+    clean = strip_comment(line)
+    flow = TYPES_FLOW.search(clean)
     if flow:
         trigger.types = [
             unquote(t.strip()) for t in split_top(flow.group(1)) if t.strip()
         ]
         trigger.in_types = False
         return
-    if TYPES_BLOCK.match(line):
+    if TYPES_BLOCK.match(clean):
         trigger.in_types = True
         return
+    if TYPES_KEY.match(clean):
+        if not trigger.unreadable:
+            trigger.unreadable = clean.strip()
+        trigger.in_types = False
+        return
     if trigger.in_types:
-        item = TYPES_ITEM.match(line)
+        item = TYPES_ITEM.match(clean)
         if item:
             trigger.types.append(unquote(item.group(1)))
         else:
@@ -120,21 +134,41 @@ def read_pr_line(trigger: Trigger, line: str) -> None:
 
 def read_trigger_line(trigger: Trigger, line: str) -> None:
     """Apply one line inside the on: block to the trigger state."""
-    stripped = line.strip()
-    if not stripped or stripped.startswith("#"):
+    clean = strip_comment(line)
+    if not clean.strip():
         return
     if trigger.in_pr and len(line) - len(line.lstrip(" ")) <= 2:
         trigger.in_pr = False
         trigger.in_types = False
     if not trigger.in_pr:
-        if PR_ITEM.match(line):
+        if PR_ITEM.match(clean):
             trigger.present = True
-        elif PR_KEY.match(line):
+        elif PR_KEY.match(clean):
             trigger.present = True
             trigger.in_pr = True
-            read_pr_line(trigger, line)
+            read_pr_line(trigger, clean)
         return
-    read_pr_line(trigger, line)
+    read_pr_line(trigger, clean)
+
+
+def read_inline_on(trigger: Trigger, inline: str) -> None:
+    """Parse an inline on: trigger value."""
+    if inline.startswith("{") and inline.endswith("}"):
+        for entry in split_top(inline[1:-1]):
+            # A key with no colon is a null value: default types, still a trigger.
+            key, _, value = entry.partition(":")
+            if unquote(key.strip()) == "pull_request":
+                trigger.present = True
+                flow = TYPES_FLOW.search(value)
+                if flow:
+                    trigger.types = [
+                        unquote(t.strip())
+                        for t in split_top(flow.group(1))
+                        if t.strip()
+                    ]
+                return
+        return
+    trigger.present = "pull_request" in direct_entries(inline)
 
 
 def pr_trigger(lines: list[str]) -> Trigger:
@@ -146,7 +180,7 @@ def pr_trigger(lines: list[str]) -> Trigger:
         if head:
             inline = unquote(head.group(2)) if head.group(2) else ""
             if inline:
-                trigger.present = "pull_request" in direct_entries(inline)
+                read_inline_on(trigger, inline)
                 return trigger
             in_on = True
         elif in_on and top_level(line):
@@ -252,11 +286,21 @@ def violations(path: Path) -> list[str]:
         for job in found
         if not exempt(job) and not gated(job)
     ]
-    if any(gated(job) for job in found) and "ready_for_review" not in trigger.types:
-        messages.append(
-            f"{path.name}: pull_request trigger must list ready_for_review in types"
-            " so a draft gate reruns when the pull request is marked ready"
-        )
+    if any(gated(job) and not exempt(job) for job in found):
+        if trigger.unreadable:
+            messages.append(
+                f"{path.name}: pull_request types form not readable: {trigger.unreadable};"
+                " use a one-line flow list or a block sequence"
+            )
+        else:
+            missing = [t for t in REQUIRED_TYPES if t not in trigger.types]
+            if missing:
+                messages.append(
+                    f"{path.name}: pull_request types must list "
+                    "opened, synchronize, reopened and ready_for_review "
+                    "so a draft gate reruns when the pull request is marked ready; "
+                    f"missing: {', '.join(missing)}"
+                )
     return messages
 
 
