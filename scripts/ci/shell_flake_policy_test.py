@@ -5,9 +5,11 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import shell_flake_policy
 
@@ -60,7 +62,7 @@ class ShellFlakePolicyTest(unittest.TestCase):
             'bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@v1.0.0\n'
             'GOBIN="$tmp" bash "$root/scripts/ci/retry.sh" go install foo\n'
             'bash "$repo_root/scripts/ci/retry.sh" go mod download "$module@$ver"\n'
-            'download="$(GOFLAGS=-mod=mod go mod download -json "$module@$ver")"\n'
+            'download="$(GOFLAGS=-mod=mod bash "$repo_root/scripts/ci/retry.sh" go mod download -json "$module@$ver")"\n'
         )
         path = self.write_fixture("scripts/ci/positive_dl.sh", positive_downloads)
         findings = shell_flake_policy.scan_file(str(path), check_download=True)
@@ -119,6 +121,10 @@ class ShellFlakePolicyTest(unittest.TestCase):
             ("make_go_install", "$(GO) install mvdan.cc/gofumpt@v1.0.0\n"),
             ("subshell_download", 'res="$(go install mvdan.cc/gofumpt@v1.0.0)"\n'),
             ("retry_not_as_command", "echo retry.sh && go install mvdan.cc/gofumpt@v1.0.0\n"),
+            (
+                "warmed_cache_json_bare",
+                'bash scripts/ci/retry.sh go mod download y@v\ngo mod download -json x@v\n',
+            ),
         ]
         for name, content in bare_cases:
             path = self.write_fixture(f"scripts/ci/{name}.sh", content)
@@ -157,6 +163,64 @@ class ShellFlakePolicyTest(unittest.TestCase):
             ".github/workflows/praetor-docs.yml", praetor_files
         )
         self.assertFalse(in_scope)
+
+    def test_negative_escaped_quote_and_pipe_variants(self) -> None:
+        """Verify quote and escape variants correctly detect or ignore pipes."""
+        cases = [
+            ("escaped_single_quote", r"echo \' | grep -q x" + "\n", True),
+            ("escaped_backslash_double_quote", 'echo "a\\\\" | grep -q x\n', True),
+            ("literal_backslash_single_quote", r"echo 'a\' | grep -q x" + "\n", True),
+            ("quoted_pipe", 'echo "a | grep -q x"\n', False),
+        ]
+        for name, content, expect_finding in cases:
+            path = self.write_fixture(f"scripts/ci/{name}.sh", content)
+            findings = shell_flake_policy.scan_file(str(path), check_download=False)
+            if expect_finding:
+                self.assert_has_rule(findings, "early-exit-reader")
+            else:
+                self.assertEqual(findings, [])
+
+    @patch("subprocess.check_output")
+    def test_scan_limit_tracked_files_exceeded(self, mock_ls: MagicMock) -> None:
+        """Verify exceeding MAX_SCAN_FILES triggers scan-limit finding."""
+        mock_ls.return_value = "file1\nfile2\nfile3\n"
+        orig_limit = shell_flake_policy.MAX_SCAN_FILES
+        shell_flake_policy.MAX_SCAN_FILES = 2
+        try:
+            findings = shell_flake_policy.scan_repository(self.temp_root, set())
+            self.assert_has_rule(findings, "scan-limit")
+        finally:
+            shell_flake_policy.MAX_SCAN_FILES = orig_limit
+
+    def test_scan_limit_file_lines_exceeded(self) -> None:
+        """Verify exceeding MAX_FILE_LINES triggers scan-limit finding."""
+        orig_limit = shell_flake_policy.MAX_FILE_LINES
+        shell_flake_policy.MAX_FILE_LINES = 2
+        try:
+            content = "echo 1\necho 2\necho 3\n"
+            path = self.write_fixture("scripts/ci/long.sh", content)
+            findings = shell_flake_policy.scan_file(str(path), check_download=False)
+            self.assert_has_rule(findings, "scan-limit")
+        finally:
+            shell_flake_policy.MAX_FILE_LINES = orig_limit
+
+    @patch("subprocess.check_output")
+    def test_git_ls_files_failure_emits_finding(self, mock_ls: MagicMock) -> None:
+        """Verify git ls-files failure emits scan-limit finding and non-zero exit."""
+        mock_ls.side_effect = subprocess.SubprocessError("mock git error")
+        findings = shell_flake_policy.scan_repository(self.temp_root, set())
+        self.assert_has_rule(findings, "scan-limit")
+
+    @patch("sys.stdout")
+    @patch("subprocess.check_output")
+    @patch("sys.argv", ["shell_flake_policy.py"])
+    def test_main_exits_nonzero_on_ls_files_failure(
+        self, mock_ls: MagicMock, mock_stdout: MagicMock
+    ) -> None:
+        """Verify main() exits nonzero when git ls-files fails."""
+        mock_ls.side_effect = subprocess.SubprocessError("mock git error")
+        rc = shell_flake_policy.main()
+        self.assertEqual(rc, 1)
 
 
 if __name__ == "__main__":

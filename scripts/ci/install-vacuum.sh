@@ -36,8 +36,7 @@ readonly work_dir
 trap 'rm -rf "$work_dir"' EXIT
 cd "$work_dir"
 
-GOFLAGS=-mod=mod GO111MODULE=on bash "$repo_root/scripts/ci/retry.sh" go mod download "$module@$VACUUM_VERSION"
-download="$(GOFLAGS=-mod=mod GO111MODULE=on go mod download -json "$module@$VACUUM_VERSION")"
+download="$(GOFLAGS=-mod=mod GO111MODULE=on bash "$repo_root/scripts/ci/retry.sh" go mod download -json "$module@$VACUUM_VERSION")"
 module_sum="$(jq -r '.Sum // ""' <<<"$download")"
 if [[ "$module_sum" != "$VACUUM_MODULE_SUM" ]]; then
 	printf 'module sum mismatch for %s@%s: got %s, want %s\n' \

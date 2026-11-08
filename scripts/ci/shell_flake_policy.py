@@ -35,7 +35,7 @@ EXCLUDED_EXACT = {
 }
 
 YAML_BLOCK_SCALAR_RE = re.compile(r"^\s*(?:[a-zA-Z0-9_-]+:\s*)?[|>][-+0-9]*\s*$")
-MAX_SCAN_FILES = 2048
+MAX_SCAN_FILES = 20000
 MAX_FILE_LINES = 10000
 
 
@@ -85,27 +85,57 @@ def is_in_download_scope(path_str: str, praetor_files: set[str]) -> bool:
     return is_in_repo_scope(normalized, praetor_files)
 
 
+class QuoteState:
+    """Track shell quote and escape state across characters."""
+
+    def __init__(self) -> None:
+        self.in_single = False
+        self.in_double = False
+        self.escaped = False
+
+    def is_active(self) -> bool:
+        """Check whether current position is outside quotes and unescaped."""
+        return not self.in_single and not self.in_double and not self.escaped
+
+    def step(self, char: str) -> None:
+        """Advance scanner state by one character."""
+        if self.in_single:
+            if char == "'":
+                self.in_single = False
+            return
+        if self.escaped:
+            self.escaped = False
+            return
+        if char == "\\":
+            self.escaped = True
+        elif not self.in_double and char == "'":
+            self.in_single = True
+        elif char == '"':
+            self.in_double = not self.in_double
+
+
 def update_quote_state(
-    char: str, prev_char: str, in_single: bool, in_double: bool
-) -> tuple[bool, bool]:
-    """Toggle single and double quote states for shell parsing."""
-    if char == "'" and not in_double:
-        return not in_single, in_double
-    if char == '"' and not in_single and prev_char != "\\":
-        return in_single, not in_double
-    return in_single, in_double
+    char: str, in_single: bool, in_double: bool, escaped: bool = False
+) -> tuple[bool, bool, bool]:
+    """Advance quote and escape states for shell parsing."""
+    state = QuoteState()
+    state.in_single = in_single
+    state.in_double = in_double
+    state.escaped = escaped
+    state.step(char)
+    return state.in_single, state.in_double, state.escaped
 
 
 def strip_comment(line: str) -> str:
     """Strip shell comment outside quotes."""
     out: list[str] = []
-    in_single, in_double = False, False
+    state = QuoteState()
     for idx, char in enumerate(line):
-        prev = line[idx - 1] if idx > 0 else ""
-        in_single, in_double = update_quote_state(char, prev, in_single, in_double)
-        if not in_single and not in_double and char == "#":
+        if state.is_active() and char == "#":
+            prev = line[idx - 1] if idx > 0 else ""
             if idx == 0 or prev.isspace():
                 break
+        state.step(char)
         out.append(char)
     return "".join(out).rstrip()
 
@@ -114,14 +144,12 @@ def split_pipeline_stages(line: str) -> list[str]:
     """Split line on unquoted pipe operators outside logical OR."""
     stages: list[str] = []
     curr: list[str] = []
-    in_single, in_double = False, False
+    state = QuoteState()
     idx = 0
     total = len(line)
     while idx < total:
         char = line[idx]
-        prev = line[idx - 1] if idx > 0 else ""
-        in_single, in_double = update_quote_state(char, prev, in_single, in_double)
-        if not in_single and not in_double and char == "|":
+        if state.is_active() and char == "|":
             if idx + 1 < total and line[idx + 1] == "|":
                 curr.append("||")
                 idx += 2
@@ -130,6 +158,7 @@ def split_pipeline_stages(line: str) -> list[str]:
             curr = []
             idx += 2 if (idx + 1 < total and line[idx + 1] == "&") else 1
             continue
+        state.step(char)
         curr.append(char)
         idx += 1
     stages.append("".join(curr))
@@ -220,15 +249,10 @@ def check_early_exit_reader(path: str, raw_lines: list[str]) -> list[Finding]:
 def check_bare_module_download(path: str, raw_lines: list[str]) -> list[Finding]:
     """Flag bare go install/get/mod download commands missing retry wrapper."""
     findings: list[Finding] = []
-    has_warmed_cache = False
     for lno, line in enumerate(raw_lines[:MAX_FILE_LINES], 1):
         stripped = strip_comment(line)
-        if "retry.sh" in stripped and "go mod download" in stripped:
-            has_warmed_cache = True
         match = BARE_DOWNLOAD_RE.search(stripped)
         if not match:
-            continue
-        if has_warmed_cache and "go mod download" in stripped and "-json" in stripped:
             continue
         cmd_text = match.group(0).strip()
         findings.append(
@@ -252,13 +276,22 @@ def scan_file(path_str: str, check_download: bool) -> list[Finding]:
     except OSError:
         return []
     findings: list[Finding] = []
+    if len(raw_lines) > MAX_FILE_LINES:
+        findings.append(
+            Finding(
+                path_str,
+                MAX_FILE_LINES,
+                "scan-limit",
+                f"file line count exceeds scan limit {MAX_FILE_LINES}: {len(raw_lines)}",
+            )
+        )
     findings.extend(check_early_exit_reader(path_str, raw_lines))
     if check_download:
         findings.extend(check_bare_module_download(path_str, raw_lines))
     return findings
 
 
-def collect_repo_files(repo_root: Path) -> list[str]:
+def collect_repo_files(repo_root: Path) -> tuple[list[str], list[Finding]]:
     """Collect tracked files via git ls-files."""
     try:
         res = subprocess.check_output(  # noqa: S603 - fixed git command without shell.
@@ -266,9 +299,20 @@ def collect_repo_files(repo_root: Path) -> list[str]:
             text=True,
             timeout=60,
         )
-        return res.splitlines()[:MAX_SCAN_FILES]
-    except (subprocess.SubprocessError, OSError):
-        return []
+    except (subprocess.SubprocessError, OSError) as err:
+        return [], [Finding(".", 0, "scan-limit", f"git ls-files failed: {err}")]
+    all_files = res.splitlines()
+    findings: list[Finding] = []
+    if len(all_files) > MAX_SCAN_FILES:
+        findings.append(
+            Finding(
+                ".",
+                0,
+                "scan-limit",
+                f"tracked file count exceeds scan limit {MAX_SCAN_FILES}: {len(all_files)}",
+            )
+        )
+    return all_files[:MAX_SCAN_FILES], findings
 
 
 def scan_arguments(args: list[str]) -> list[Finding]:
@@ -287,8 +331,8 @@ def scan_arguments(args: list[str]) -> list[Finding]:
 
 def scan_repository(repo_root: Path, praetor_files: set[str]) -> list[Finding]:
     """Scan all in-scope repository files."""
-    findings: list[Finding] = []
-    for rel in collect_repo_files(repo_root):
+    files, findings = collect_repo_files(repo_root)
+    for rel in files:
         reader_ok = is_in_repo_scope(rel, praetor_files)
         dl_ok = is_in_download_scope(rel, praetor_files)
         if reader_ok or dl_ok:
