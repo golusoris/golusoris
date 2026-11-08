@@ -33,7 +33,7 @@ def image_config(dataset: Path) -> dict[str, object]:
 
 
 def write_two_label_folder(root: Path) -> None:
-    """Create a two-label directory structure with four PNG fixtures."""
+    """Both boundary tests need the smallest layout the loader accepts: two labels, two files each."""
     (root / "a").mkdir()
     (root / "b").mkdir()
     for name in ("a/one.png", "a/two.png", "b/one.png", "b/two.png"):
