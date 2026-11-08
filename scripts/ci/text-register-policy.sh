@@ -24,4 +24,10 @@ rg -q '^name: caveman$' "$canonical_root/caveman/SKILL.md"
 rg -q '^name: social-text$' "$canonical_root/social-text/SKILL.md"
 rg -q '`adhd-format`' "$canonical_root/social-text/SKILL.md"
 
-printf '%s\n' 'text-register policy: 3 canonical skills and projections verified'
+test -f "$repo_root/AGENTS.md"
+rg -qF 'Golusoris social override:' "$repo_root/AGENTS.md"
+rg -qF 'no changelog fragments' "$repo_root/AGENTS.md"
+rg -qF '`release-please` writes `CHANGELOG.md`' "$repo_root/AGENTS.md"
+rg -qF 'under `## Summary`' "$repo_root/AGENTS.md"
+
+printf '%s\n' 'text-register policy: 3 canonical skills, projections and AGENTS.md social override verified'
