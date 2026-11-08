@@ -349,7 +349,7 @@ PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
-	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
+	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
 # override keeps the Pact paths when a caller sets these variables on the make command line;
