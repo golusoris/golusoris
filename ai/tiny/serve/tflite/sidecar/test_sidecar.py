@@ -12,9 +12,11 @@ import http.client
 import io
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import threading
+import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Self
@@ -34,6 +36,34 @@ _CACHED_MODEL_BYTES: dict[tuple[int, tuple[int, ...]], bytes] = {}
 def expect(condition: object, message: str = "") -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+    """SIGKILL the session proc leads; fall back to proc alone where groups are unsafe."""
+    if not hasattr(os, "killpg"):
+        proc.kill()
+        return
+    # A pid of 1 or our own group would signal unrelated processes.
+    if not isinstance(proc.pid, int) or isinstance(proc.pid, bool) or proc.pid <= 1 or proc.pid == os.getpgrp():
+        proc.kill()
+        return
+    os.killpg(proc.pid, signal.SIGKILL)
+
+
+def run_in_process_group(cmd: list[str], timeout: float) -> None:
+    """Run cmd in its own session; on timeout kill the whole group, not only cmd."""
+    with subprocess.Popen(  # noqa: S603 - fixed argv from the caller
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+    ) as proc:
+        try:
+            _, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # uv run spawns the converter as a child; killing only uv would orphan it.
+            kill_process_group(proc)
+            proc.communicate(timeout=60)
+            raise
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, stderr=stderr)
 
 
 def generate_real_tflite_model(
@@ -81,9 +111,7 @@ open("{tmp_path.as_posix()}", "wb").write(converter.convert())
                 "-c",
                 script,
             ]
-            subprocess.run(  # noqa: S603 - fixed argv, sys.executable
-                cmd, capture_output=True, check=True, timeout=900
-            )
+            run_in_process_group(cmd, timeout=900)
             payload = tmp_path.read_bytes()
         finally:
             if tmp_path.exists():
@@ -120,6 +148,48 @@ def model_dir(tmp_path: Path) -> Path:
     d = tmp_path / "models"
     d.mkdir()
     return d
+
+
+def pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    # An orphan its new parent has not reaped yet is a zombie, so it no longer runs.
+    stat = Path(f"/proc/{pid}/stat")
+    return not (stat.exists() and stat.read_text(encoding="utf-8").rsplit(") ", 1)[-1].startswith("Z"))
+
+
+@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX-only")
+class TestRunInProcessGroup:
+    def test_timeout_kills_grandchild(self, tmp_path: Path) -> None:
+        pid_file = tmp_path / "grandchild.pid"
+        # The grandchild drops the pipes, so only a group kill can stop it.
+        script = f"sleep 30 >/dev/null 2>&1 & echo $! > {pid_file}; wait"
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_in_process_group(["sh", "-c", script], timeout=1)
+        grandchild = int(pid_file.read_text(encoding="utf-8"))
+        for _ in range(50):
+            if not pid_running(grandchild):
+                return
+            time.sleep(0.1)
+        raise AssertionError(f"grandchild {grandchild} survived the timeout")
+
+    def test_timeout_returns_while_grandchild_holds_pipes(self) -> None:
+        start = time.monotonic()
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_in_process_group(["sh", "-c", "sleep 30 & wait"], timeout=1)
+        elapsed = time.monotonic() - start
+        expect(elapsed < 10, f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open")
+
+    def test_nonzero_exit_raises_called_process_error(self) -> None:
+        with pytest.raises(subprocess.CalledProcessError) as caught:
+            run_in_process_group(["sh", "-c", "echo boom >&2; exit 3"], timeout=10)
+        expect(caught.value.returncode == 3, "exit code must propagate")
+        expect(b"boom" in caught.value.stderr, "stderr must be kept")
+
+    def test_zero_exit_returns(self) -> None:
+        run_in_process_group(["sh", "-c", "exit 0"], timeout=10)
 
 
 class TestRuntimeLoadAndClassify:
