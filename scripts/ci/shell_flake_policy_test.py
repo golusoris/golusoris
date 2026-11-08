@@ -171,6 +171,12 @@ class ShellFlakePolicyTest(unittest.TestCase):
             ("escaped_backslash_double_quote", 'echo "a\\\\" | grep -q x\n', True),
             ("literal_backslash_single_quote", r"echo 'a\' | grep -q x" + "\n", True),
             ("quoted_pipe", 'echo "a | grep -q x"\n', False),
+            ("cmd_sub_in_double_quotes", 'x="$(printf a | grep -q a)"\n', True),
+            ("single_quoted_pipe_in_cmd_sub", "x=\"$(echo 'a|b')\"\n", False),
+            ("ansi_quote_escaped_quote", "echo $'\\'' | grep -q x\n", True),
+            ("double_quoted_pipe_in_cmd_sub", 'echo "$(printf \'%s\' "a | b")"\n', False),
+            ("escaped_space_before_hash", "echo a\\ #x | grep -q y\n", True),
+            ("unescaped_space_before_hash", "echo hi # x | grep -q y\n", False),
         ]
         for name, content, expect_finding in cases:
             path = self.write_fixture(f"scripts/ci/{name}.sh", content)
@@ -180,29 +186,21 @@ class ShellFlakePolicyTest(unittest.TestCase):
             else:
                 self.assertEqual(findings, [])
 
+    @patch.object(shell_flake_policy, "MAX_SCAN_FILES", 2)
     @patch("subprocess.check_output")
     def test_scan_limit_tracked_files_exceeded(self, mock_ls: MagicMock) -> None:
         """Verify exceeding MAX_SCAN_FILES triggers scan-limit finding."""
         mock_ls.return_value = "file1\nfile2\nfile3\n"
-        orig_limit = shell_flake_policy.MAX_SCAN_FILES
-        shell_flake_policy.MAX_SCAN_FILES = 2
-        try:
-            findings = shell_flake_policy.scan_repository(self.temp_root, set())
-            self.assert_has_rule(findings, "scan-limit")
-        finally:
-            shell_flake_policy.MAX_SCAN_FILES = orig_limit
+        findings = shell_flake_policy.scan_repository(self.temp_root, set())
+        self.assert_has_rule(findings, "scan-limit")
 
+    @patch.object(shell_flake_policy, "MAX_FILE_LINES", 2)
     def test_scan_limit_file_lines_exceeded(self) -> None:
         """Verify exceeding MAX_FILE_LINES triggers scan-limit finding."""
-        orig_limit = shell_flake_policy.MAX_FILE_LINES
-        shell_flake_policy.MAX_FILE_LINES = 2
-        try:
-            content = "echo 1\necho 2\necho 3\n"
-            path = self.write_fixture("scripts/ci/long.sh", content)
-            findings = shell_flake_policy.scan_file(str(path), check_download=False)
-            self.assert_has_rule(findings, "scan-limit")
-        finally:
-            shell_flake_policy.MAX_FILE_LINES = orig_limit
+        content = "echo 1\necho 2\necho 3\n"
+        path = self.write_fixture("scripts/ci/long.sh", content)
+        findings = shell_flake_policy.scan_file(str(path), check_download=False)
+        self.assert_has_rule(findings, "scan-limit")
 
     @patch("subprocess.check_output")
     def test_git_ls_files_failure_emits_finding(self, mock_ls: MagicMock) -> None:

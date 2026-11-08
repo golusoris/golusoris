@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
+import subprocess  # Runs only the fixed git ls-files command below. # nosec B404
 import sys
 from fnmatch import fnmatch
 from pathlib import Path
@@ -86,55 +86,112 @@ def is_in_download_scope(path_str: str, praetor_files: set[str]) -> bool:
 
 
 class QuoteState:
-    """Track shell quote and escape state across characters."""
+    """Track shell quote and context stack across characters."""
 
-    def __init__(self) -> None:
-        self.in_single = False
-        self.in_double = False
+    def __init__(self, max_depth: int = 10000) -> None:
+        self.stack: list[str] = ["code"]
         self.escaped = False
+        self.saw_dollar = False
+        self.word_start = True
+        self.max_depth = max_depth
 
     def is_active(self) -> bool:
         """Check whether current position is outside quotes and unescaped."""
-        return not self.in_single and not self.in_double and not self.escaped
+        return self.stack[-1] in ("code", "cmd", "paren") and not self.escaped
 
-    def step(self, char: str) -> None:
-        """Advance scanner state by one character."""
-        if self.in_single:
-            if char == "'":
-                self.in_single = False
-            return
+    def _push(self, context: str) -> None:
+        """Push a new context onto stack if within bounds."""
+        if len(self.stack) < self.max_depth:
+            self.stack.append(context)
+
+    def _step_code(self, char: str) -> None:
+        """Handle unquoted shell code, subshell parens, and command substitution."""
         if self.escaped:
             self.escaped = False
             return
         if char == "\\":
             self.escaped = True
-        elif not self.in_double and char == "'":
-            self.in_single = True
+            self.saw_dollar = False
+            return
+        if self.saw_dollar:
+            self.saw_dollar = False
+            if char == "(":
+                self._push("cmd")
+                return
+            if char == "'":
+                self._push("ansi")
+                return
+        self._step_code_tokens(char)
+
+    def _step_code_tokens(self, char: str) -> None:
+        """Handle syntax tokens in code context outside escapes and dollar sequences."""
+        if char == "'":
+            self._push("single")
         elif char == '"':
-            self.in_double = not self.in_double
+            self._push("double")
+        elif char == "$":
+            self.saw_dollar = True
+        elif char == "(":
+            self._push("paren")
+        elif char == ")" and self.stack[-1] in ("cmd", "paren"):
+            self.stack.pop()
 
+    def _step_double(self, char: str) -> None:
+        """Handle double-quote context tracking escapes, closing quote, and command substitution."""
+        if self.escaped:
+            self.escaped = False
+            return
+        if char == "\\":
+            self.escaped = True
+            self.saw_dollar = False
+            return
+        if self.saw_dollar:
+            self.saw_dollar = False
+            if char == "(":
+                self._push("cmd")
+                return
+        if char == '"':
+            self.stack.pop()
+        elif char == "$":
+            self.saw_dollar = True
 
-def update_quote_state(
-    char: str, in_single: bool, in_double: bool, escaped: bool = False
-) -> tuple[bool, bool, bool]:
-    """Advance quote and escape states for shell parsing."""
-    state = QuoteState()
-    state.in_single = in_single
-    state.in_double = in_double
-    state.escaped = escaped
-    state.step(char)
-    return state.in_single, state.in_double, state.escaped
+    def _step_single(self, char: str) -> None:
+        """Handle single-quote context where only unescaped quote exits."""
+        if char == "'":
+            self.stack.pop()
+
+    def _step_ansi(self, char: str) -> None:
+        """Handle ANSI-C quote context where backslash escapes next char."""
+        if self.escaped:
+            self.escaped = False
+            return
+        if char == "\\":
+            self.escaped = True
+        elif char == "'":
+            self.stack.pop()
+
+    def step(self, char: str) -> None:
+        """Advance scanner state by one character."""
+        was_escaped = self.escaped
+        top = self.stack[-1]
+        if top in ("code", "cmd", "paren"):
+            self._step_code(char)
+        elif top == "double":
+            self._step_double(char)
+        elif top == "single":
+            self._step_single(char)
+        elif top == "ansi":
+            self._step_ansi(char)
+        self.word_start = char.isspace() and not was_escaped and top in ("code", "cmd", "paren")
 
 
 def strip_comment(line: str) -> str:
     """Strip shell comment outside quotes."""
     out: list[str] = []
-    state = QuoteState()
-    for idx, char in enumerate(line):
-        if state.is_active() and char == "#":
-            prev = line[idx - 1] if idx > 0 else ""
-            if idx == 0 or prev.isspace():
-                break
+    state = QuoteState(max_depth=max(1, len(line)))
+    for char in line:
+        if state.is_active() and char == "#" and state.word_start:
+            break
         state.step(char)
         out.append(char)
     return "".join(out).rstrip()
@@ -144,7 +201,7 @@ def split_pipeline_stages(line: str) -> list[str]:
     """Split line on unquoted pipe operators outside logical OR."""
     stages: list[str] = []
     curr: list[str] = []
-    state = QuoteState()
+    state = QuoteState(max_depth=max(1, len(line)))
     idx = 0
     total = len(line)
     while idx < total:
@@ -152,11 +209,18 @@ def split_pipeline_stages(line: str) -> list[str]:
         if state.is_active() and char == "|":
             if idx + 1 < total and line[idx + 1] == "|":
                 curr.append("||")
+                state.step("|")
+                state.step("|")
                 idx += 2
                 continue
             stages.append("".join(curr))
             curr = []
-            idx += 2 if (idx + 1 < total and line[idx + 1] == "&") else 1
+            state.step("|")
+            if idx + 1 < total and line[idx + 1] == "&":
+                state.step("&")
+                idx += 2
+            else:
+                idx += 1
             continue
         state.step(char)
         curr.append(char)
@@ -294,8 +358,8 @@ def scan_file(path_str: str, check_download: bool) -> list[Finding]:
 def collect_repo_files(repo_root: Path) -> tuple[list[str], list[Finding]]:
     """Collect tracked files via git ls-files."""
     try:
-        res = subprocess.check_output(  # noqa: S603 - fixed git command without shell.
-            ["git", "-C", str(repo_root), "ls-files"],  # noqa: S607 - git executable on runner PATH.
+        res = subprocess.check_output(  # noqa: S603 - fixed git command without shell. # nosec B603
+            ["git", "-C", str(repo_root), "ls-files"],  # noqa: S607 - git executable on runner PATH. # nosec B607
             text=True,
             timeout=60,
         )
