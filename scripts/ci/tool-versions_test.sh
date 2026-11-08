@@ -533,13 +533,24 @@ if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	exit 1
 fi
 
+# Gitea workflows may reach the wrapper through the shared security-gates.sh sequence.
+workflow_runs_semgrep() {
+	local workflow="$1"
+	if grep -Fq 'scripts/ci/semgrep-scan.sh' "$workflow"; then
+		return 0
+	fi
+	[[ "$workflow" == "$repo_root/.gitea/"* ]] &&
+		grep -Fq 'scripts/ci/security-gates.sh' "$workflow" &&
+		grep -Fq 'scripts/ci/semgrep-scan.sh' "$repo_root/scripts/ci/security-gates.sh"
+}
+
 custom_semgrep_workflows=(
 	"$repo_root/.github/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/security-scan.yml"
 )
 for workflow in "${custom_semgrep_workflows[@]}"; do
-	if ! grep -Fq 'scripts/ci/semgrep-scan.sh' "$workflow"; then
+	if ! workflow_runs_semgrep "$workflow"; then
 		printf 'workflow bypasses the digest-pinned custom Semgrep wrapper: %s\n' \
 			"$workflow" >&2
 		exit 1
@@ -584,9 +595,15 @@ if ! grep -Fq 'scripts/ci/trivy-scan.sh' "$repo_root/.github/workflows/security-
 	exit 1
 fi
 
+gitea_ci="$repo_root/.gitea/workflows/ci.yml"
 for gate in semgrep-scan shellcheck actionlint terraform-validate mkdocs-build kubeconform reuse-lint; do
+	if [[ "$gate" == semgrep-scan ]]; then
+		gitea_check=(workflow_runs_semgrep "$gitea_ci")
+	else
+		gitea_check=(grep -Fq "scripts/ci/${gate}.sh" "$gitea_ci")
+	fi
 	if ! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.github/workflows/ci.yml" || \
-		! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.gitea/workflows/ci.yml" || \
+		! "${gitea_check[@]}" || \
 		! grep -Fq "$gate" "$repo_root/Makefile"; then
 		printf '%s authority is not consumed by local and hosted gates\n' "$gate" >&2
 		exit 1
