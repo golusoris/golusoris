@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-import subprocess
+import subprocess  # Only for SubprocessError in the mocked git failures below. # nosec B404
 import tempfile
 import unittest
 from pathlib import Path
