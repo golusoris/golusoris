@@ -7,9 +7,10 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
-suite_root="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-template-workflows-policy.XXXXXX")"
-readonly suite_root
-trap 'find "$suite_root" -depth -delete' EXIT
+
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
+policy_suite_init "golusoris-template-workflows-policy"
 
 new_repo() {
 	local name="$1"
@@ -25,22 +26,6 @@ new_repo() {
 	run_git "$root" init -q
 	printf '%s\n' '.workingdir/' >"$root/.gitignore"
 	printf '%s\n' "$root"
-}
-
-expect_failure() {
-	local pattern="$1"
-	shift
-	local output
-	local status=0
-	output="$("$@" 2>&1)" || status=$?
-	if (( status == 0 )); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
-	if [[ "$output" != *"$pattern"* ]]; then
-		printf 'missing failure %q in: %s\n' "$pattern" "$output" >&2
-		return 1
-	fi
 }
 
 run_git() {
@@ -136,22 +121,22 @@ check_pin_cases() {
 
 	# Unknown input case: actionlint detects undeclared inputs on workflow_call.
 	write_template_ci "$template_ci" "$sha_v100" "v1.0.0" "levle"
-	expect_failure 'is not defined' \
+	expect_failure_matching 'is not defined' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 
 	# Missing workflow_call case: actionlint rejects workflows lacking the call trigger.
 	write_template_ci "$template_ci" "$sha_v101" "v1.0.1" "level"
-	expect_failure 'workflow_call' \
+	expect_failure_matching 'workflow_call' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 
 	# Tag mismatch case: comment tag does not resolve to the pinned commit.
 	write_template_ci "$template_ci" "$sha_v101" "v1.0.0" "level"
-	expect_failure 'resolves to' \
+	expect_failure_matching 'resolves to' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 
 	# Missing commit case: pin sha does not exist in local clone history.
 	write_template_ci "$template_ci" "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" "v1.0.0" "level"
-	expect_failure 'is not in this clone' \
+	expect_failure_matching 'is not in this clone' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 }
 
@@ -171,21 +156,21 @@ jobs:
     with:
       level: x
 EOF
-	expect_failure 'template/.github/workflows/ci.yml:7' \
+	expect_failure_matching 'template/.github/workflows/ci.yml:7' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 
 	# Unreadable template case: a grep read error must not pass as a file without pins; root reads any mode.
 	if (( EUID != 0 )); then
 		write_template_ci "$template_ci" "$sha_v100" "v1.0.0" "level"
 		chmod 000 "$template_ci"
-		expect_failure 'grep failed' \
+		expect_failure_matching 'grep failed' \
 			bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 		chmod 644 "$template_ci"
 	fi
 
 	# Empty template case: absence of template workflows triggers fail-closed error.
 	rm -f "$template_ci"
-	expect_failure 'selected no template workflows' \
+	expect_failure_matching 'selected no template workflows' \
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 }
 

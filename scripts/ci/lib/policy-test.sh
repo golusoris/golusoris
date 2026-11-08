@@ -22,19 +22,21 @@ expect_failure() {
 	fi
 }
 
+# Callers with extra output checks read it without re-running the command.
+policy_failure_output=""
+
 # Pattern check so a suite fails for the intended reason, not any error.
 expect_failure_matching() {
 	local pattern="$1"
 	shift
-	local output
 	local status=0
-	output="$("$@" 2>&1)" || status=$?
+	policy_failure_output="$("$@" 2>&1)" || status=$?
 	if (( status == 0 )); then
 		printf 'expected failure: %s\n' "$*" >&2
 		return 1
 	fi
-	if [[ "$output" != *"$pattern"* ]]; then
-		printf 'missing failure %q in: %s\n' "$pattern" "$output" >&2
+	if [[ "$policy_failure_output" != *"$pattern"* ]]; then
+		printf 'missing failure %q in: %s\n' "$pattern" "$policy_failure_output" >&2
 		return 1
 	fi
 }
