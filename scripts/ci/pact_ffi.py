@@ -164,12 +164,13 @@ def archive_digest(archive: Path) -> str:
 
 
 def is_transient_download_error(error: BaseException) -> bool:
-    """Return whether a download exception represents a transient network condition."""
+    """Allow-list transient network errors eligible for download retry."""
     if isinstance(error, urllib.error.HTTPError):
-        return error.code >= 500 or error.code == 429
+        return error.code == 408 or error.code == 429 or error.code >= 500
+    if isinstance(error, urllib.error.URLError):
+        return True
     return isinstance(
-        error,
-        (urllib.error.URLError, TimeoutError, http.client.HTTPException, OSError),
+        error, (TimeoutError, ConnectionError, http.client.HTTPException)
     )
 
 
@@ -214,7 +215,11 @@ def download_archive(asset: Asset, directory: Path) -> Path:
                 raise InstallError(f"Pact FFI download failed: {error}") from error
             last_error = error
             if attempt + 1 < DOWNLOAD_ATTEMPTS:
-                SLEEP(RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)])
+                delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                sys.stderr.write(
+                    f"pact-ffi: download attempt {attempt + 1}/{DOWNLOAD_ATTEMPTS} failed: {error}; retrying in {delay:g}s\n"
+                )
+                SLEEP(delay)
     raise InstallError(
         f"Pact FFI download failed after {DOWNLOAD_ATTEMPTS} attempts: {last_error}"
     )
