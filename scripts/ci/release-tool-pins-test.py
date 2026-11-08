@@ -10,7 +10,6 @@ import json
 import re
 import tempfile
 import unittest
-from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -331,7 +330,6 @@ def parse_workflow_level_env(
     in_env = False
     for idx, raw_line in enumerate(lines):
         line = raw_line.rstrip()
-        stripped = line.strip()
         if not in_env:
             if re.match(r"^env:\s*(?:#.*)?$", line):
                 in_env = True
@@ -388,11 +386,11 @@ def check_group_b_workflow(
     return wf_env, problems
 
 
-def check_group_a_workflow(
+def check_group_a_env_redeclarations(
     rel_path: str,
     lines: list[str],
 ) -> list[str]:
-    # Rule d: group A files do not re-declare env vars and run export script before tool installs.
+    # Rule d: group A files do not re-declare env vars.
     problems: list[str] = []
     in_env = False
     env_indent = -1
@@ -411,10 +409,18 @@ def check_group_a_workflow(
                     problems.append(
                         f"{rel_path}:{idx + 1}: group A workflow re-declares env {m.group(1)}"
                     )
-        if stripped == "env:" or stripped.startswith("env:"):
+        if stripped.startswith("env:"):
             in_env = True
             env_indent = indent
+    return problems
 
+
+def check_group_a_export_before_install(
+    rel_path: str,
+    lines: list[str],
+) -> list[str]:
+    # Rule d: group A workflows run export script before tool installs.
+    problems: list[str] = []
     in_jobs = False
     current_job = ""
     has_exported = False
@@ -446,43 +452,76 @@ def check_group_a_workflow(
     return problems
 
 
+def check_group_a_workflow(
+    rel_path: str,
+    lines: list[str],
+) -> list[str]:
+    # Rule d: group A files do not re-declare env vars and run export script before tool installs.
+    return (
+        check_group_a_env_redeclarations(rel_path, lines)
+        + check_group_a_export_before_install(rel_path, lines)
+    )
+
+
+def load_renovate_custom_managers(
+    root: Path,
+) -> tuple[list[dict[str, object]], list[str]]:
+    # Loads and validates customManagers from renovate.json.
+    renovate_path = root / "renovate.json"
+    if not renovate_path.is_file():
+        return [], ["renovate.json: file does not exist"]
+    try:
+        config = json.loads(renovate_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return [], [f"renovate.json: invalid JSON: {exc}"]
+    custom_managers = config.get("customManagers", [])
+    if not isinstance(custom_managers, list):
+        return [], ["renovate.json: customManagers is not a list"]
+    return custom_managers, []
+
+
+def collect_file_matched_vars(
+    content: str,
+    rel_path: str,
+    env_vars: dict[str, tuple[int, str, str]],
+    custom_managers: list[dict[str, object]],
+) -> set[str]:
+    # Collects environment variables matched by custom regex managers.
+    matched_vars: set[str] = set()
+    for manager in custom_managers:
+        if not isinstance(manager, dict) or manager.get("customType") != "regex":
+            continue
+        file_patterns = manager.get("managerFilePatterns", [])
+        match_strings = manager.get("matchStrings", [])
+        if not any(matches_file(str(p), rel_path) for p in file_patterns):
+            continue
+        for ms in match_strings:
+            rx = compile_js_regex(str(ms))
+            for m in rx.finditer(content):
+                matched_text = m.group(0)
+                for var_name in env_vars:
+                    if f"{var_name}:" in matched_text:
+                        matched_vars.add(var_name)
+    return matched_vars
+
+
 def check_group_b_renovate_coverage(
     root: Path,
     group_b_envs: dict[str, dict[str, tuple[int, str, str]]],
 ) -> list[str]:
     # Rule e: every group B env declaration is matched by a renovate.json customManager.
-    problems: list[str] = []
-    renovate_path = root / "renovate.json"
-    if not renovate_path.is_file():
-        return ["renovate.json: file does not exist"]
-    try:
-        config = json.loads(renovate_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return [f"renovate.json: invalid JSON: {exc}"]
-    custom_managers = config.get("customManagers", [])
-    if not isinstance(custom_managers, list):
-        return ["renovate.json: customManagers is not a list"]
+    custom_managers, problems = load_renovate_custom_managers(root)
+    if problems:
+        return problems
 
     for rel_path, env_vars in group_b_envs.items():
-        matched_vars: set[str] = set()
         file_path = root / rel_path
         if not file_path.is_file():
             continue
         content = file_path.read_text(encoding="utf-8")
-        for manager in custom_managers:
-            if not isinstance(manager, dict) or manager.get("customType") != "regex":
-                continue
-            file_patterns = manager.get("managerFilePatterns", [])
-            match_strings = manager.get("matchStrings", [])
-            if not any(matches_file(str(p), rel_path) for p in file_patterns):
-                continue
-            for ms in match_strings:
-                rx = compile_js_regex(str(ms))
-                for m in rx.finditer(content):
-                    matched_text = m.group(0)
-                    for var_name in env_vars:
-                        if f"{var_name}:" in matched_text:
-                            matched_vars.add(var_name)
+        matched_vars = collect_file_matched_vars(
+            content, rel_path, env_vars, custom_managers
+        )
         for var_name, (line_no, _, _) in env_vars.items():
             if var_name not in matched_vars:
                 problems.append(

@@ -1052,9 +1052,11 @@ def find_syft_literal_inputs(workflows: dict[str, str]) -> list[str]:
     """Return failures for any download-syft step whose syft-version is not the expression form."""
     problems = []
     for path, content in workflows.items():
-        for val in syft_version_inputs(content):
-            if val != SYFT_EXPRESSION:
-                problems.append(f"{path}: download-syft input {val!r} is not expression {SYFT_EXPRESSION!r}")
+        problems.extend(
+            f"{path}: download-syft input {val!r} is not expression {SYFT_EXPRESSION!r}"
+            for val in syft_version_inputs(content)
+            if val != SYFT_EXPRESSION
+        )
     return problems
 
 

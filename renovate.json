@@ -55,7 +55,7 @@
     },
     {
       "customType": "regex",
-      "description": "reusable release workflow env pins move with tools/tool-versions.env in one branch",
+      "description": "Move reusable release workflow env pins with tools/tool-versions.env in one branch.",
       "managerFilePatterns": [
         "/^\\.github/workflows/release-go\\.yml$/",
         "/^\\.github/workflows/rebuild-on-base\\.yml$/",
