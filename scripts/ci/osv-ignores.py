@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import os
 import re
 import subprocess
 import sys
@@ -196,17 +195,29 @@ def render_osv_toml(entries: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def find_existing_osv_scanner_files(root: Path) -> list[Path]:
-    """Find all existing osv-scanner.toml files ignoring internal dirs."""
-    found: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in {".git", ".workingdir", "node_modules"}
-        ]
-        if "osv-scanner.toml" in filenames:
-            found.append(Path(dirpath) / "osv-scanner.toml")
-    return sorted(found)
+def find_existing_osv_scanner_files(
+    root: Path, timeout: int = GIT_TIMEOUT_SECONDS
+) -> list[Path]:
+    """Find tracked and untracked osv-scanner.toml files that git does not ignore."""
+    # git skips ignored paths, so linked worktrees under .claude/worktrees/ stay out.
+    stdout = run_cmd(
+        [
+            "git",
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "osv-scanner.toml",
+            "**/osv-scanner.toml",
+        ],
+        root,
+        timeout,
+    )
+    # --cached also lists tracked files deleted from the working tree.
+    found = {root / token for token in stdout.split("\0") if token}
+    return sorted(path for path in found if path.is_file())
 
 
 def collect_statement_vuln_ids(statement: dict[str, Any]) -> list[str]:
@@ -449,6 +460,10 @@ def setup_selftest_fixture(temp_dir: Path) -> Path:
     run_cmd(["git", "config", "user.email", "test@example.com"], repo)
     setup_fixture_manifests(repo)
     setup_fixture_vex(repo)
+    (repo / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
+    ignored = repo / "ignored" / "sub" / "osv-scanner.toml"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text("# ignored fixture\n", encoding="utf-8")
     run_cmd(["git", "add", "."], repo)
     return repo
 
@@ -530,6 +545,21 @@ def run_selftest_plants_4_to_6(
     return failures, refused
 
 
+def run_selftest_plant_stray(
+    repo: Path, test_today: datetime.date
+) -> tuple[list[str], int]:
+    """Execute plant 8: an untracked, not-ignored stray file is still reported."""
+    stray = repo / "stray" / "osv-scanner.toml"
+    stray.parent.mkdir()
+    stray.write_text("# stray\n", encoding="utf-8")
+    refused = check_drift(repo, today=test_today)
+    stray.unlink()
+    stray.parent.rmdir()
+    if not refused:
+        return ["plant 8 (untracked stray osv-scanner.toml) was accepted"], 0
+    return [], 1
+
+
 def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
     """Execute selftest on a fixture repo with proven negative and positive cases."""
     with tempfile.TemporaryDirectory(prefix="golusoris-osv-selftest-") as tmp:
@@ -544,6 +574,10 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
             failures.append(f"positive write-then-check failed: {fails}")
         else:
             accepted += 1
+        if (repo / "ignored" / "sub" / "osv-scanner.toml").is_file():
+            accepted += 1
+        else:
+            failures.append("write_osv_ignores removed a git-ignored osv-scanner.toml")
 
         fails_1_3, refused_1_3 = run_selftest_plants_1_to_3(repo, test_today)
         failures.extend(fails_1_3)
@@ -551,7 +585,10 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         fails_4_6, refused_4_6 = run_selftest_plants_4_to_6(repo, test_today)
         failures.extend(fails_4_6)
 
-        total_refused = refused_1_3 + refused_4_6
+        fails_8, refused_8 = run_selftest_plant_stray(repo, test_today)
+        failures.extend(fails_8)
+
+        total_refused = refused_1_3 + refused_4_6 + refused_8
         mod_file = repo / "a" / "go.mod"
         mod_file.write_text("module a\nrequire (\n", encoding="utf-8")
         try:
