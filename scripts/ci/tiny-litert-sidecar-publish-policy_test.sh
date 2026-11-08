@@ -19,6 +19,37 @@ expect_failure() {
 	fi
 }
 
+expect_failure_msg() {
+	local want="$1"
+	shift
+	local err status=0
+	err="$("$@" 2>&1 >/dev/null)" || status=$?
+	(( status != 0 )) || {
+		printf 'expected failure: %s\n' "$*" >&2
+		return 1
+	}
+	grep -Fq -- "$want" <<<"$err" || {
+		printf 'wrong failure for %s: %s\n' "$*" "$err" >&2
+		return 1
+	}
+}
+
+check_step_order() {
+	local path="$1"
+	shift
+	local prev_name="workflow" prev_line=0 name line status=0
+	for name in "$@"; do
+		line="$(grep -n -F "      - name: $name" "$path" | head -n 1 | cut -d: -f1)" || status=$?
+		if [[ -z "$line" ]] || (( line <= prev_line )); then
+			printf '%s must order publish steps: %s before %s\n' \
+				"$path" "$prev_name" "$name" >&2
+			return 1
+		fi
+		prev_name="$name"
+		prev_line="$line"
+	done
+}
+
 require_literal() {
 	local path="$1"
 	local literal="$2"
@@ -43,15 +74,8 @@ require_unconditional_step() {
 	fi
 }
 
-check_smoke_before_tag() {
+check_smoke_skips_build() {
 	local path="$1"
-	local smoke_line tag_line
-	smoke_line="$(grep -n 'name: Smoke exact publish candidate' "$path" | cut -d: -f1)"
-	tag_line="$(grep -n 'name: Tag verified candidate' "$path" | cut -d: -f1)"
-	if [[ -z "$smoke_line" || -z "$tag_line" || "$smoke_line" -ge "$tag_line" ]]; then
-		printf '%s must smoke the exact candidate image before tagging\n' "$path" >&2
-		return 1
-	fi
 	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
 		printf '%s must set SIDECAR_SKIP_BUILD=1 when smoking publish candidate\n' "$path" >&2
 		return 1
@@ -125,6 +149,7 @@ check_workflow() {
 		"docker pull --platform linux/amd64 \"\$IMAGE@\$digest\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"platforms: linux/amd64,linux/arm64"
+		"for platform in linux/amd64 linux/arm64; do"
 		"v?3\\.1\\.4(\\+dirty)?"
 		"Generate SPDX SBOM"
 	)
@@ -134,7 +159,11 @@ check_workflow() {
 		fi
 	done
 	check_publish_job_shape "$path" || return 1
-	check_smoke_before_tag "$path" || return 1
+	check_step_order "$path" \
+		"Select candidate digest" "Smoke exact publish candidate" \
+		"Verify release identity of every platform" "Tag verified candidate" \
+		"Verify immutable published image" "Sign image digest" || return 1
+	check_smoke_skips_build "$path" || return 1
 	check_manifest_identity "$path" || return 1
 	for step in 'Sign image digest' 'Attest build provenance' 'Attest SBOM' \
 		'Verify published supply-chain identity' \
@@ -240,21 +269,45 @@ expect_failure check_workflow "$without_permission"
 
 without_config="$suite_root/without-config.yml"
 sed '/--config/d' "$workflow" >"$without_config"
-expect_failure check_workflow "$without_config"
+# shellcheck disable=SC2016 # Flag and variable pattern match literal string.
+expect_failure_msg '--config "$platform"' check_workflow "$without_config"
 
 conditional_smoke="$suite_root/conditional-smoke.yml"
 sed '/- name: Smoke exact publish candidate/a\        if: steps.existing.outputs.exists != '\''true'\''' \
 	"$workflow" >"$conditional_smoke"
-expect_failure check_workflow "$conditional_smoke"
+expect_failure_msg 'must run Smoke exact publish candidate on new and resumed publication' \
+	check_workflow "$conditional_smoke"
 
 with_load_true="$suite_root/with-load-true.yml"
 sed '/name: Build and push multi-arch candidate by digest/a\          load: true' \
 	"$workflow" >"$with_load_true"
-expect_failure check_workflow "$with_load_true"
+expect_failure_msg 'publish job must not retain load: true' check_workflow "$with_load_true"
 
 without_push_by_digest="$suite_root/without-push-by-digest.yml"
 sed 's/push-by-digest=true/push-by-digest=false/' "$workflow" >"$without_push_by_digest"
-expect_failure check_workflow "$without_push_by_digest"
+expect_failure_msg 'push-by-digest=true' check_workflow "$without_push_by_digest"
+
+tag_before_identity="$suite_root/tag-before-identity.yml"
+awk '
+	/^      - name: Tag verified candidate/ { in_tag = 1 }
+	in_tag && /^      - name:/ && !/^      - name: Tag verified candidate/ { in_tag = 0 }
+	in_tag { tag_block = tag_block $0 "\n"; next }
+	{ lines[++n] = $0 }
+	END {
+		for (i = 1; i <= n; i++) {
+			if (lines[i] ~ /^      - name: Verify release identity of every platform/) {
+				printf "%s", tag_block
+			}
+			print lines[i]
+		}
+	}
+' "$workflow" >"$tag_before_identity"
+expect_failure_msg 'must order publish steps' check_workflow "$tag_before_identity"
+
+amd64_only_identity="$suite_root/amd64-only-identity.yml"
+sed 's#for platform in linux/amd64 linux/arm64; do#for platform in linux/amd64; do#' \
+	"$workflow" >"$amd64_only_identity"
+expect_failure_msg 'linux/amd64 linux/arm64' check_workflow "$amd64_only_identity"
 
 without_smoke="$suite_root/without-smoke.yml"
 sed '/name: Smoke exact publish candidate/,+4d' "$workflow" >"$without_smoke"
