@@ -18,6 +18,8 @@ import tempfile
 from pathlib import Path
 from unittest import TestCase, main
 
+import repo_git
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -118,19 +120,22 @@ class PullTestImagesTest(TestCase):
         policy = runpy.run_path(str(ROOT / "scripts/ci/renovate-policy-test.py"))
         fixture = self.root / "repository"
         fixture.mkdir()
-        for name in (".devcontainer", ".gitea", "container", "internal", "scripts", "template", "tools", "core", "ai", "renovate.json"):
-            (fixture / name).symlink_to(ROOT / name)
-        (fixture / ".github").mkdir()
-        for name in ("workflows", "testcontainers-images.txt"):
-            (fixture / ".github" / name).symlink_to(ROOT / ".github" / name)
-        manifest_path = ".github/testcontainers-split-images.txt"
-        content = (ROOT / manifest_path).read_text()
-        (fixture / manifest_path).write_text(re.sub(r"sha256:[a-f0-9]{64}", "sha256:" + "0" * 64, content, count=1))
-        policy["main"].__globals__["ROOT"] = fixture
-        errors = io.StringIO()
-        with contextlib.redirect_stderr(errors):
-            self.assertEqual(policy["main"](), 1)
-        self.assertIn("split test-image manifest differs from Go authorities", errors.getvalue())
+        # own_module_replaced_valid lists go.mod through git, so the fixture must be a repository.
+        with repo_git.scratch_environ():
+            repo_git.run_git(["init", "-q"], fixture)
+            for name in (".devcontainer", ".gitea", "container", "internal", "scripts", "template", "tools", "core", "ai", "renovate.json"):
+                (fixture / name).symlink_to(ROOT / name)
+            (fixture / ".github").mkdir()
+            for name in ("workflows", "testcontainers-images.txt"):
+                (fixture / ".github" / name).symlink_to(ROOT / ".github" / name)
+            manifest_path = ".github/testcontainers-split-images.txt"
+            content = (ROOT / manifest_path).read_text()
+            (fixture / manifest_path).write_text(re.sub(r"sha256:[a-f0-9]{64}", "sha256:" + "0" * 64, content, count=1))
+            policy["main"].__globals__["ROOT"] = fixture
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                self.assertEqual(policy["main"](), 1)
+            self.assertIn("split test-image manifest differs from Go authorities", errors.getvalue())
 
 
 if __name__ == "__main__":
