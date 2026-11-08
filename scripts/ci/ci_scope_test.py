@@ -81,6 +81,7 @@ class CiScopeTest(unittest.TestCase):
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
         return proc.stdout
 
@@ -102,6 +103,7 @@ class CiScopeTest(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+            timeout=60,
         )
 
     def test_positive_one_file_in_nested_module_selects_that_module_only(self) -> None:
