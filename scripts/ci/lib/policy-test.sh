@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 #
-# Policy-test helpers for scripts/ci/*.sh (sourced, never executed; callers set strict mode).
+# Shared copy deduplicates expect_failure across suites (one implementation); sourced so callers own strict mode.
 # shellcheck shell=bash
 
+# Suite root with EXIT cleanup so a failing suite leaves no temp dirs.
 policy_suite_init() {
 	local name="$1"
 	suite_root="$(mktemp -d "${TMPDIR:-/tmp}/$name.XXXXXX")"
@@ -11,6 +12,7 @@ policy_suite_init() {
 	trap 'find "$suite_root" -depth -delete' EXIT
 }
 
+# Output discarded because only the status matters.
 expect_failure() {
 	local status=0
 	"$@" >/dev/null 2>&1 || status=$?
@@ -20,6 +22,7 @@ expect_failure() {
 	fi
 }
 
+# Pattern check so a suite fails for the intended reason, not any error.
 expect_failure_matching() {
 	local pattern="$1"
 	shift

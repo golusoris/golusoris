@@ -50,6 +50,7 @@ class ReleaseSmokeTest(TestCase):
         core: tuple[int, str],
         mcp: tuple[int, str],
     ) -> tuple[int, str, str]:
+        """The four two-binary Linux cases share one artifact list and fake runner."""
         self.write_artifacts([
             {
                 "name": "golusoris",
@@ -70,6 +71,7 @@ class ReleaseSmokeTest(TestCase):
         ])
 
         def fake_runner(path: str) -> tuple[int, str]:
+            """Routes each binary path to its scripted result."""
             if "golusoris-mcp" in path:
                 return mcp
             return core
