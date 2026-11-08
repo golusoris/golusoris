@@ -533,15 +533,20 @@ if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	exit 1
 fi
 
+# Strips comments so commented-out invocations cannot satisfy wrapper execution gates.
+code_lines() {
+	sed -e 's/^[[:space:]]*#.*$//' -e 's/[[:space:]]#.*$//' "$1"
+}
+
 # Gitea workflows may reach the wrapper through the shared security-gates.sh sequence.
 workflow_runs_semgrep() {
 	local workflow="$1"
-	if grep -Fq 'scripts/ci/semgrep-scan.sh' "$workflow"; then
+	if code_lines "$workflow" | grep -Fq 'scripts/ci/semgrep-scan.sh'; then
 		return 0
 	fi
 	[[ "$workflow" == "$repo_root/.gitea/"* ]] &&
-		grep -Fq 'scripts/ci/security-gates.sh' "$workflow" &&
-		grep -Fq 'scripts/ci/semgrep-scan.sh' "$repo_root/scripts/ci/security-gates.sh"
+		code_lines "$workflow" | grep -Fq 'scripts/ci/security-gates.sh' &&
+		code_lines "$repo_root/scripts/ci/security-gates.sh" | grep -Fq 'scripts/ci/semgrep-scan.sh'
 }
 
 custom_semgrep_workflows=(

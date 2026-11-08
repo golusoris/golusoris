@@ -3,13 +3,14 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# One gate sequence for the Gitea CI job and the weekly Gitea security scan.
+# Shared so the Gitea CI job and the weekly scan cannot drift apart.
 set -euo pipefail
 
 usage() {
 	printf 'usage: %s\n' "${0##*/}" >&2
 }
 
+# Takes no arguments because callers are fixed workflow steps.
 main() {
 	if [[ $# -ne 0 ]]; then
 		usage

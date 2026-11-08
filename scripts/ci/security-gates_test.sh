@@ -3,6 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
+# Linux-only by design: security-gates.sh runs only on the Linux Gitea runner (.gitea/workflows/*.yml runs-on).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -81,6 +82,7 @@ done
 export PATH="$bin_all:$PATH"
 
 passed=0
+# Asserts command exit code and expected output pattern so regressions fail fast with diagnostics.
 expect() {
 	local want="$1" label="$2" pattern="$3"
 	shift 3
@@ -104,7 +106,7 @@ expect() {
 	passed=$((passed + 1))
 }
 
-# Positive: all six gates run in order with exact arguments and exit 0.
+# Positive: all six gates must run in sequence so no security check is skipped on green builds.
 : > "$call_log"
 expect 0 'positive all gates' '' bash "$CHECK"
 want_positive=$(printf '%s\n' \
@@ -120,7 +122,7 @@ if [[ "$got_positive" != "$want_positive" ]]; then
 	exit 1
 fi
 
-# Negative: gosec failure aborts pipeline without executing later gates.
+# Negative: a gosec failure must stop the run so no later gate can report green over it.
 : > "$call_log"
 expect 1 'negative gosec exit' '' env STUB_GO_MODULES_GOSEC_EXIT=1 bash "$CHECK"
 want_gosec_fail=$'go-modules.sh gosec'
@@ -130,7 +132,7 @@ if [[ "$got_gosec_fail" != "$want_gosec_fail" ]]; then
 	exit 1
 fi
 
-# Negative: semgrep-scan failure exits non-zero and stops before semgrep-fixtures.
+# Negative: a semgrep-scan failure must stop the run so static-analysis violations block CI.
 : > "$call_log"
 expect 3 'negative semgrep-scan exit' '' env STUB_SEMGREP_SCAN_EXIT=3 bash "$CHECK"
 if ! grep -Fq 'semgrep-scan.sh' "$call_log"; then
@@ -142,7 +144,7 @@ if grep -Fq 'semgrep-fixtures.sh' "$call_log"; then
 	exit 1
 fi
 
-# Negative: missing gitleaks on PATH fails before semgrep runs.
+# Negative: missing gitleaks on PATH must stop the run so uninspected secrets cannot pass.
 : > "$call_log"
 expect nonzero 'negative no gitleaks on PATH' '' env PATH="$bin_no_gitleaks" bash "$CHECK"
 if ! grep -Fq 'go-modules.sh vuln' "$call_log"; then
@@ -154,7 +156,7 @@ if grep -Eq 'semgrep-scan\.sh|semgrep-fixtures\.sh' "$call_log"; then
 	exit 1
 fi
 
-# Boundary: extra CLI argument rejected with usage on stderr and exit 2.
+# Boundary: unexpected arguments must stop the run so misconfigured workflow calls fail fast.
 : > "$call_log"
 expect 2 'boundary extra argument rejected' 'usage: security-gates.sh' bash "$CHECK" unexpected_arg
 if [[ -s "$call_log" ]]; then
@@ -162,7 +164,7 @@ if [[ -s "$call_log" ]]; then
 	exit 1
 fi
 
-# Boundary: missing tools/tool-versions.env fails before running any gate.
+# Boundary: missing tools/tool-versions.env must stop the run so unpinned tooling never runs.
 : > "$call_log"
 mv "$fixture/tools/tool-versions.env" "$fixture/tools/tool-versions.env.bak"
 expect nonzero 'boundary missing tool-versions.env' '' bash "$CHECK"
