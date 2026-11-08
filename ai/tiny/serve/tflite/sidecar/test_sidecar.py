@@ -52,7 +52,7 @@ def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
 
 def run_in_process_group(cmd: list[str], timeout: float) -> None:
     """Run cmd in its own session; on timeout kill the whole group, not only cmd."""
-    with subprocess.Popen(  # noqa: S603 - fixed argv from the caller
+    with subprocess.Popen(  # noqa: S603 - fixed argv from the caller. # nosec B603
         cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
     ) as proc:
         try:
