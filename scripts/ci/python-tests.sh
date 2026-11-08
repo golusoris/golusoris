@@ -23,25 +23,28 @@ resolve_root() {
 	(cd "$2" && pwd)
 }
 
+find_python() {
+	local python_bin="${PYTHON_BIN:-}"
+	if [[ -z "$python_bin" ]] && command -v python3 >/dev/null; then
+		python_bin="$(command -v python3)"
+	fi
+	if [[ -n "$python_bin" && -x "$python_bin" ]] && "$python_bin" -B -c \
+		'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)'; then
+		printf '%s\n' "$python_bin"
+		return
+	fi
+	printf 'Python 3.12 or newer is required for repository Python tests\n' >&2
+	return 1
+}
+
 main() {
 	local root
 	root="$(resolve_root "$@")"
 	readonly root
 	git -C "$root" rev-parse --is-inside-work-tree >/dev/null
 
-	local python_bin="${PYTHON_BIN:-}"
-	if [[ -z "$python_bin" ]] && command -v python3 >/dev/null; then
-		python_bin="$(command -v python3)"
-	fi
-	if [[ -z "$python_bin" || ! -x "$python_bin" ]]; then
-		printf 'Python 3.12 or newer is required for repository Python tests\n' >&2
-		return 1
-	fi
-	if ! "$python_bin" -B -c \
-		'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)'; then
-		printf 'Python 3.12 or newer is required for repository Python tests\n' >&2
-		return 1
-	fi
+	local python_bin
+	python_bin="$(find_python)"
 
 	if [[ -f "$root/scripts/ci/ci_scope.py" ]]; then
 		local rc=0
@@ -62,6 +65,7 @@ main() {
 		'scripts/ci/portability_test.py'
 		'scripts/ci/ci_scope_test.py'
 		'scripts/ci/gomod_test.py'
+		'scripts/ci/repo_git_test.py'
 		'scripts/ci/review_bot_badges_test.py'
 		'scripts/ci/context_size_test.py'
 		'scripts/ci/tiny-litert-sidecar-docs-policy_test.py'

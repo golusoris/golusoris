@@ -12,14 +12,15 @@ import fnmatch
 import io
 import json
 import re
-import subprocess
 import sys
 import tempfile
 from collections import Counter
+from collections.abc import Generator
 from pathlib import Path
 
+import repo_git
+
 ROOT = Path(__file__).resolve().parents[2]
-GIT_TIMEOUT_SECONDS = 30
 INPUTS = (
     ".devcontainer/devcontainer.json",
     ".gitea/workflows/ci.yml",
@@ -573,54 +574,19 @@ def go_mod_own_requires_replaced(content: str) -> bool:
     return True
 
 
-def run_git(
-    args: list[str], cwd: Path, timeout: int = GIT_TIMEOUT_SECONDS
-) -> subprocess.CompletedProcess[str]:
-    """Run git with an explicit timeout and return the completed process."""
-    return subprocess.run(  # noqa: S603 - fixed git arguments from this file.
-        ["git", *args],  # noqa: S607 - git resolves from the runner PATH.
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
-    )
-
-
-def repository_go_mods(root: Path) -> list[Path] | None:
-    """List tracked and untracked go.mod files that git does not ignore."""
-    proc = run_git(
-        [
-            "ls-files",
-            "-z",
-            "--cached",
-            "--others",
-            "--exclude-standard",
-            "--",
-            "go.mod",
-            "**/go.mod",
-        ],
-        cwd=root,
-    )
-    if proc.returncode != 0:
-        print(f"git ls-files failed in {root}: {proc.stderr.strip()}", file=sys.stderr)
-        return None
-    # --cached also lists tracked files deleted from the working tree.
-    found = {root / token for token in proc.stdout.split("\0") if token}
-    return sorted(path for path in found if path.is_file())
-
-
 def own_module_replaced_valid(root: Path = ROOT) -> bool:
     """Require every repository go.mod requiring in-repo modules to replace them locally."""
     # git skips ignored paths, so linked worktrees under .claude/worktrees/ stay out.
-    paths = repository_go_mods(root)
-    if paths is None:
-        return False
-    for path in paths:
+    for path in repo_git.worktree_files(root, "go.mod"):
         if "vendor" in path.parts or "testdata" in path.parts:
             continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as error:
+            print(f"{path} is unreadable: {error}", file=sys.stderr)
+            return False
         # In-repo module pins have no build effect only when replaced by a local path.
-        if not go_mod_own_requires_replaced(path.read_text(encoding="utf-8")):
+        if not go_mod_own_requires_replaced(text):
             print(
                 f"{path} requires in-repo module without a local replace",
                 file=sys.stderr,
@@ -670,18 +636,23 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
     return True
 
 
+@contextlib.contextmanager
+def fixture_repo(prefix: str) -> Generator[Path, None, None]:
+    """Yield a scratch git repository with a root go.mod, isolated from the caller's git."""
+    with tempfile.TemporaryDirectory(prefix=prefix) as tmp_dir, repo_git.scratch_environ():
+        tmp = Path(tmp_dir)
+        repo_git.run_git(["init", "-q"], tmp)
+        (tmp / "go.mod").write_text("module example.com/fixture\n\ngo 1.22\n", encoding="utf-8")
+        yield tmp
+
+
 def test_own_module_worktree_ignored() -> bool:
     """Prove a git-ignored go.mod is skipped and the same file at a tracked path is refused."""
     unreplaced = (
         "module example.com/unreplaced\n\ngo 1.22\n\n"
         "require github.com/golusoris/golusoris/core v0.12.1\n"
     )
-    with tempfile.TemporaryDirectory(prefix="golusoris-renovate-worktree-") as tmp_dir:
-        tmp = Path(tmp_dir)
-        if run_git(["init", "-q"], cwd=tmp).returncode != 0:
-            print(f"git init failed in {tmp}", file=sys.stderr)
-            return False
-        (tmp / "go.mod").write_text("module example.com/fixture\n\ngo 1.22\n", encoding="utf-8")
+    with fixture_repo("golusoris-renovate-worktree-") as tmp:
         (tmp / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
         (tmp / "ignored").mkdir()
         (tmp / "ignored" / "go.mod").write_text(unreplaced, encoding="utf-8")
@@ -690,14 +661,30 @@ def test_own_module_worktree_ignored() -> bool:
             return False
         (tmp / "tracked").mkdir()
         (tmp / "tracked" / "go.mod").write_text(unreplaced, encoding="utf-8")
-        if run_git(["add", "."], cwd=tmp).returncode != 0:
-            print(f"git add failed in {tmp}", file=sys.stderr)
-            return False
+        repo_git.run_git(["add", "."], tmp)
         # The refusal message is expected here; keep it out of the gate output.
         with contextlib.redirect_stderr(io.StringIO()):
             accepted = own_module_replaced_valid(tmp)
     if accepted:
         print("own-module replace check accepted an unreplaced tracked go.mod", file=sys.stderr)
+        return False
+    return True
+
+
+def test_own_module_dangling_symlink() -> bool:
+    """Prove a not-ignored dangling go.mod symlink is refused, not skipped."""
+    with fixture_repo("golusoris-renovate-symlink-") as tmp:
+        (tmp / "linked").mkdir()
+        try:
+            (tmp / "linked" / "go.mod").symlink_to(tmp / "missing" / "go.mod")
+        except OSError as error:
+            print(f"SKIP: dangling go.mod symlink test needs symlink support: {error}", file=sys.stderr)
+            return True
+        # The refusal message is expected here; keep it out of the gate output.
+        with contextlib.redirect_stderr(io.StringIO()):
+            accepted = own_module_replaced_valid(tmp)
+    if accepted:
+        print("own-module replace check skipped a dangling go.mod symlink", file=sys.stderr)
         return False
     return True
 
@@ -1217,6 +1204,7 @@ def main() -> int:
         test_localstack_hold(config),
         test_own_module_rule(config),
         test_own_module_worktree_ignored(),
+        test_own_module_dangling_symlink(),
         test_trainer_python_cap(config),
         test_sidecar_python_cap(config),
         test_chromedp_group(config),
@@ -1234,4 +1222,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except repo_git.GitError as git_error:
+        # scripts/ci convention: 3 means the check could not run, distinct from a policy failure.
+        print(f"ERROR: {git_error}", file=sys.stderr)
+        raise SystemExit(3) from git_error
