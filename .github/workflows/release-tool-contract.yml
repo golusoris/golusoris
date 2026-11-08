@@ -12,6 +12,7 @@ name: Release runner tool contract
 on:
   workflow_dispatch:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - .github/workflows/release-build.yml
       - .github/workflows/release-go.yml

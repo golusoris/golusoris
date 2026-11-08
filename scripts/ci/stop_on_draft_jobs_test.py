@@ -18,7 +18,7 @@ GATE = f"golusoris/golusoris/.github/actions/stop-on-draft@{SHA}"
 
 
 def workflow(
-    on: str = "on:\n  pull_request:",
+    on: str = "on:\n  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]",
     header: str = "build:",
     cond: str = "",
     uses: str = GATE,
@@ -162,6 +162,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
         text = "\n".join([
             "on:",
             "  pull_request:",
+            "    types: [opened, synchronize, reopened, ready_for_review]",
             "jobs:",
             "  build:",
             "    runs-on: ubuntu-26.04",
@@ -177,6 +178,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
         text = "\n".join([
             "on:",
             "  pull_request:",
+            "    types: [opened, synchronize, reopened, ready_for_review]",
             "jobs:",
             "  build:",
             "    runs-on: ubuntu-26.04",
@@ -208,6 +210,55 @@ class StopOnDraftJobsTest(unittest.TestCase):
             "",
         ])
         self.assertEqual(len(self.check(text)), 2)
+
+    def test_flow_types_with_ready_for_review_passes(self) -> None:
+        """Positive: flow types with ready_for_review and a gated job pass."""
+        on = "on:\n  pull_request:\n    types: [opened, synchronize, reopened, ready_for_review]"
+        self.assertEqual(self.check(workflow(on=on, uses=GATE)), [])
+
+    def test_block_types_with_ready_for_review_passes(self) -> None:
+        """Positive: block sequence types with ready_for_review and a gated job pass."""
+        on = "on:\n  pull_request:\n    types:\n      - opened\n      - ready_for_review"
+        self.assertEqual(self.check(workflow(on=on, uses=GATE)), [])
+
+    def test_missing_types_with_gated_job_fails(self) -> None:
+        """Negative: pull_request without types and a gated job reports ready_for_review violation."""
+        messages = self.check(workflow(on="on:\n  pull_request:", uses=GATE))
+        self.assertEqual(len(messages), 1)
+        self.assertIn("ready_for_review", messages[0])
+
+    def test_inline_pr_trigger_with_gated_job_fails(self) -> None:
+        """Negative: inline on: [pull_request] with a gated job reports violation."""
+        messages = self.check(workflow(on="on: [pull_request]", uses=GATE))
+        self.assertEqual(len(messages), 1)
+        self.assertIn("ready_for_review", messages[0])
+
+    def test_explicit_types_without_ready_for_review_fails(self) -> None:
+        """Boundary: explicit types without ready_for_review reports violation."""
+        on = "on:\n  pull_request:\n    types: [opened, synchronize]"
+        messages = self.check(workflow(on=on, uses=GATE))
+        self.assertEqual(len(messages), 1)
+        self.assertIn("ready_for_review", messages[0])
+
+    def test_no_gated_job_without_types_passes(self) -> None:
+        """Boundary: all jobs exempt and no types reports no ready_for_review violation."""
+        text = "\n".join([
+            "on:",
+            "  pull_request:",
+            "jobs:",
+            "  check:",
+            "    runs-on: ubuntu-26.04",
+            "    if: github.event_name != 'pull_request'",
+            "    steps:",
+            "      - run: make test",
+            "",
+        ])
+        self.assertEqual(self.check(text), [])
+
+    def test_flow_mapping_types_before_other_keys_passes(self) -> None:
+        """Boundary: a flow mapping lists types before another flow list."""
+        on = "on:\n  pull_request: {types: [opened, ready_for_review], branches: [main]}"
+        self.assertEqual(self.check(workflow(on=on, uses=GATE)), [])
 
 
 if __name__ == "__main__":

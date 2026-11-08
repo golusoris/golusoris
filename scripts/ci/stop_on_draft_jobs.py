@@ -6,6 +6,7 @@
 One call elsewhere in a workflow must not mask a job that checks out and builds a draft. A job
 whose job-level if rules out pull_request (merge_group only, or != 'pull_request' &&) with no
 top-level || disjunction is not applicable. Line-based so the CI policy job needs no YAML package.
+Workflows with gated jobs must list ready_for_review in pull_request types to rerun on ready.
 Exit codes: 0 ok, 1 violation, 3 error (fail closed).
 """
 
@@ -28,6 +29,9 @@ PR_KEY = re.compile(r"^  (pull_request|'pull_request'|\"pull_request\")\s*:")
 PR_ITEM = re.compile(
     r"^(  )?-\s+(pull_request|'pull_request'|\"pull_request\")\s*(#.*)?$"
 )
+TYPES_FLOW = re.compile(r"['\"]?types['\"]?:\s*\[([^\]]*)\]")
+TYPES_BLOCK = re.compile(r"^\s+['\"]?types['\"]?:\s*(#.*)?$")
+TYPES_ITEM = re.compile(r"^\s+-\s+(.+?)\s*$")
 JOB_HEADER = re.compile(r"^  (['\"]?)([A-Za-z0-9_-]+)\1:\s*(#.*)?$")
 JOB_IF = re.compile(r"^    if:\s*(.+?)\s*$")
 JOB_KEY = re.compile(r"^    [A-Za-z_-]+:")
@@ -37,6 +41,16 @@ STEP_USES = re.compile(r"^      (- |  )uses:\s*(.+?)\s*$")
 
 YAML_ANCHOR = re.compile(r"&(\S+)")
 YAML_ALIAS = re.compile(r"\*(\S+)")
+
+
+@dataclass
+class Trigger:
+    """Pull request trigger fields the check reads."""
+
+    present: bool = False
+    in_pr: bool = False
+    in_types: bool = False
+    types: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -84,21 +98,67 @@ def direct_entries(value: str) -> set[str]:
     return {unquote(item.split(":", 1)[0].strip()) for item in split_top(body)}
 
 
-def pr_triggered(lines: list[str]) -> bool:
-    """Report whether the workflow's on: block lists pull_request."""
+def read_pr_line(trigger: Trigger, line: str) -> None:
+    """Parse a line inside the pull_request block."""
+    flow = TYPES_FLOW.search(line)
+    if flow:
+        trigger.types = [
+            unquote(t.strip()) for t in split_top(flow.group(1)) if t.strip()
+        ]
+        trigger.in_types = False
+        return
+    if TYPES_BLOCK.match(line):
+        trigger.in_types = True
+        return
+    if trigger.in_types:
+        item = TYPES_ITEM.match(line)
+        if item:
+            trigger.types.append(unquote(item.group(1)))
+        else:
+            trigger.in_types = False
+
+
+def read_trigger_line(trigger: Trigger, line: str) -> None:
+    """Apply one line inside the on: block to the trigger state."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return
+    if trigger.in_pr and len(line) - len(line.lstrip(" ")) <= 2:
+        trigger.in_pr = False
+        trigger.in_types = False
+    if not trigger.in_pr:
+        if PR_ITEM.match(line):
+            trigger.present = True
+        elif PR_KEY.match(line):
+            trigger.present = True
+            trigger.in_pr = True
+            read_pr_line(trigger, line)
+        return
+    read_pr_line(trigger, line)
+
+
+def pr_trigger(lines: list[str]) -> Trigger:
+    """Collect pull_request trigger details from the workflow's on: block."""
+    trigger = Trigger()
     in_on = False
     for line in lines:
         head = ON_KEY.match(line)
         if head:
             inline = unquote(head.group(2)) if head.group(2) else ""
             if inline:
-                return "pull_request" in direct_entries(inline)
+                trigger.present = "pull_request" in direct_entries(inline)
+                return trigger
             in_on = True
         elif in_on and top_level(line):
-            return False
-        elif in_on and (PR_KEY.match(line) or PR_ITEM.match(line)):
-            return True
-    return False
+            break
+        elif in_on:
+            read_trigger_line(trigger, line)
+    return trigger
+
+
+def pr_triggered(lines: list[str]) -> bool:
+    """Report whether the workflow's on: block lists pull_request."""
+    return pr_trigger(lines).present
 
 
 def read_job_line(job: Job, line: str) -> None:
@@ -182,15 +242,22 @@ def resolve_aliases(found: list[Job]) -> None:
 def violations(path: Path) -> list[str]:
     """Return one message per applicable job without stop-on-draft first."""
     lines = path.read_text(encoding="utf-8").splitlines()
-    if not pr_triggered(lines):
+    trigger = pr_trigger(lines)
+    if not trigger.present:
         return []
     found = jobs(lines)
     resolve_aliases(found)
-    return [
+    messages = [
         f"{path.name}: job {job.name} must run the stop-on-draft action as its first step"
         for job in found
         if not exempt(job) and not gated(job)
     ]
+    if any(gated(job) for job in found) and "ready_for_review" not in trigger.types:
+        messages.append(
+            f"{path.name}: pull_request trigger must list ready_for_review in types"
+            " so a draft gate reruns when the pull request is marked ready"
+        )
+    return messages
 
 
 def main(argv: list[str]) -> int:
