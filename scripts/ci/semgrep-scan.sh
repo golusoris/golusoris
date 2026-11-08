@@ -9,14 +9,6 @@ readonly max_go_files=16384
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly script_dir
 
-# Exception (one file, parser errors only): Semgrep's Go parser rejects
-# generic type aliases (semgrep/semgrep#11972, fix PR semgrep/semgrep#11977
-# open). jobs/types.go re-exports River's generic types that way. The partial
-# parse still applies rules elsewhere in the file. After the expiry, the
-# validator stops tolerating the parser error and the gate fails until the
-# parser is fixed upstream.
-readonly generic_alias_exception=jobs/types.go
-readonly generic_alias_exception_expires=20261107
 scan_work=''
 
 cleanup() {
@@ -126,15 +118,7 @@ scan_snapshot() {
 		"$report"
 		"$expected"
 		"--scanner-status" "${scan_statuses[1]}"
-		"--stage-dir" "$stage"
 	)
-	if ((${SEMGREP_EXCEPTION_DATE:-$(date -u +%Y%m%d)} <= generic_alias_exception_expires)); then
-		local expires_formatted="${generic_alias_exception_expires:0:4}-${generic_alias_exception_expires:4:2}-${generic_alias_exception_expires:6:2}"
-		validator_args+=(
-			"--tolerate-alias-parse" "$generic_alias_exception"
-			"--alias-parse-expires" "$expires_formatted"
-		)
-	fi
 	if ! validate_report "${validator_args[@]}"; then
 		return 1
 	fi
