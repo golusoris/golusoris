@@ -161,6 +161,8 @@ def pid_running(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
+    except PermissionError:
+        pass  # EPERM: the pid exists but is not ours, so it still counts as alive.
     # Non-Linux platforms lack /proc; os.kill(pid, 0) probe suffices.
     if not Path("/proc").is_dir():
         return True
@@ -256,27 +258,47 @@ class TestKillProcessGroup:
 
 class TestPidRunning:
     @pytest.mark.parametrize(
-        "kill_raises, proc_present, read_text, expected",
+        "kill_error, proc_present, read_text, expected",
         [
-            pytest.param(True, True, "12345 (sleep) S 1", False, id="kill-esrch"),
-            pytest.param(False, False, "12345 (sleep) S 1", True, id="no-proc"),
-            pytest.param(False, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
             pytest.param(
+                ProcessLookupError(errno.ESRCH, "No such process"),
+                True,
+                "12345 (sleep) S 1",
                 False,
+                id="kill-esrch",
+            ),
+            pytest.param(
+                PermissionError(errno.EPERM, "Operation not permitted"),
+                True,
+                "12345 (sleep) S 1 1",
+                True,
+                id="kill-eperm",
+            ),
+            pytest.param(
+                PermissionError(errno.EPERM, "Operation not permitted"),
+                True,
+                "12345 (sleep) Z 1 1",
+                False,
+                id="kill-eperm-zombie",
+            ),
+            pytest.param(None, False, "12345 (sleep) S 1", True, id="no-proc"),
+            pytest.param(None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
+            pytest.param(
+                None,
                 True,
                 ProcessLookupError(errno.ESRCH, "No such process"),
                 False,
                 id="reaped-mid-read",
             ),
-            pytest.param(False, True, "12345 (sleep) Z 1 1", False, id="zombie"),
-            pytest.param(False, True, "12345 (sleep) S 1 1", True, id="running"),
-            pytest.param(False, True, "12345 (a) Z) R 1 1", True, id="paren-in-comm"),
+            pytest.param(None, True, "12345 (sleep) Z 1 1", False, id="zombie"),
+            pytest.param(None, True, "12345 (sleep) S 1 1", True, id="running"),
+            pytest.param(None, True, "12345 (a) Z) R 1 1", True, id="paren-in-comm"),
         ],
     )
     def test_pid_running_probe_outcomes(
         self,
         monkeypatch: pytest.MonkeyPatch,
-        kill_raises: bool,
+        kill_error: BaseException | None,
         proc_present: bool,
         read_text: str | BaseException,
         expected: bool,
@@ -284,9 +306,9 @@ class TestPidRunning:
         """Every probe outcome the timeout tests rely on, including a reap between kill and the /proc read."""
 
         def fake_kill(pid: int, sig: int) -> None:
-            """Stand in for kill(pid, 0) so the case decides whether the pid is already gone."""
-            if kill_raises:
-                raise ProcessLookupError
+            """Stand in for kill(pid, 0) so the case decides whether the probe succeeds or raises an error."""
+            if kill_error is not None:
+                raise kill_error
 
         def fake_read_text(self_path: Path, encoding: str = "utf-8") -> str:
             """Stand in for the /proc/<pid>/stat read so the case can return a state or raise a reap error."""
