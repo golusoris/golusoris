@@ -627,6 +627,7 @@ def fixture_verify(repo: Path) -> subprocess.CompletedProcess[str]:
 
 
 def setup_fixture_repo(repo: Path, source_root: Path) -> str:
+    """Build and commit the multi-module fixture repository; return its HEAD commit sha."""
     run_git(["init"], repo)
     run_git(["config", "user.name", "Golusoris Tester"], repo)
     run_git(["config", "user.email", "test@example.com"], repo)
@@ -635,6 +636,10 @@ def setup_fixture_repo(repo: Path, source_root: Path) -> str:
     script = repo / "scripts" / "ci" / "go-modules.sh"
     script.parent.mkdir(parents=True)
     shutil.copy2(source_root / "scripts" / "ci" / "go-modules.sh", script)
+    shutil.copy2(
+        source_root / "scripts" / "ci" / "retry.sh",
+        repo / "scripts" / "ci" / "retry.sh",
+    )
     for rel, text in FIXTURE_FILES.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text, encoding="utf-8")

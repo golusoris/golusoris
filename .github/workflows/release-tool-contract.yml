@@ -109,10 +109,10 @@ jobs:
           go version
           node --version
           docker info
-          docker buildx version | grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)"
-          cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
-          syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-          goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
+          buildx_version="$(docker buildx version)"; grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)" <<<"$buildx_version"
+          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
           test "$(node --version)" = "v${NODE_VERSION}"
           test "$(gitleaks version)" = "$GITLEAKS_VERSION"
           roundtrip_dir="$(mktemp -d "$RUNNER_TEMP/cosign-roundtrip.XXXXXX")"

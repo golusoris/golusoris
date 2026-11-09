@@ -74,7 +74,7 @@ jobs:
             load_rc=0
             wait "$load_pid" || load_rc=$?
             echo "probe_rc=$probe_rc load_rc=$load_rc"
-            if [[ "$load_rc" != 0 ]]; then grep -E -- '--- FAIL|^FAIL' "$RUNNER_TEMP/load.log" | head -40; fi
+            if [[ "$load_rc" != 0 ]]; then grep -E -- '--- FAIL|^FAIL' "$RUNNER_TEMP/load.log" | sed -n '1,40p'; fi
             [[ "$probe_rc" == 0 && "$load_rc" == 0 ]]
           else
             export STALLPROBE_P=1

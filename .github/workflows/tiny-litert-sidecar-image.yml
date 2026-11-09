@@ -237,8 +237,8 @@ jobs:
           command -v cosign
           command -v gh
           command -v syft
-          cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
-          syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
+          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
 
       - name: Resolve trusted resumable immutable tag
         id: existing

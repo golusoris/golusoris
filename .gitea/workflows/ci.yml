@@ -39,7 +39,7 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           set -euo pipefail
-          echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+'
+          grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+' <<<"$PR_TITLE"
 
       - name: Select the repository-declared Go toolchain
         run: |
@@ -68,13 +68,13 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
-          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
           bash scripts/ci/install-gosec.sh
-          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
-          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
-          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          govulncheck_version="$(govulncheck -version)"; grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}" <<<"$govulncheck_version"
 
       - name: Format and lint every module
         run: |
@@ -136,7 +136,7 @@ jobs:
           fi
 
           . tools/tool-versions.env
-          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
           apidiff_bin="$(go env GOPATH)/bin/go-apidiff"
           test -x "$apidiff_bin"
           GO_APIDIFF_BIN="$apidiff_bin" scripts/ci/go-apidiff.sh "$previous_tag" HEAD

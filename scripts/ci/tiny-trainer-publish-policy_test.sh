@@ -48,7 +48,7 @@ check_step_order() {
 	shift
 	local prev_name="workflow" prev_line=0 name line status=0
 	for name in "$@"; do
-		line="$(grep -n -F "      - name: $name" "$path" | head -n 1 | cut -d: -f1)" || status=$?
+		line="$(grep -n -F "      - name: $name" "$path" | sed -n '1p' | cut -d: -f1)" || status=$?
 		if [[ -z "$line" ]] || (( line <= prev_line )); then
 			printf '%s must order publish steps: %s before %s\n' \
 				"$path" "$prev_name" "$name" >&2
@@ -257,12 +257,12 @@ fi
 # shellcheck source=tools/tool-versions.env
 . "$repo_root/tools/tool-versions.env"
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*$"
-printf 'GitVersion: v%s+dirty\n' "$COSIGN_VERSION" | grep -Eq "$cosign_version_pattern"
-if printf 'GitVersion: v99.99.99\n' | grep -Eq "$cosign_version_pattern"; then
+grep -Eq "$cosign_version_pattern" <<<"GitVersion: v${COSIGN_VERSION}+dirty"
+if grep -Eq "$cosign_version_pattern" <<<"GitVersion: v99.99.99"; then
 	printf 'Cosign version check accepted a foreign release\n' >&2
 	exit 1
 fi
-if printf 'GitVersion: v%s+dirty.untrusted\n' "$COSIGN_VERSION" | grep -Eq "$cosign_version_pattern"; then
+if grep -Eq "$cosign_version_pattern" <<<"GitVersion: v${COSIGN_VERSION}+dirty.untrusted"; then
 	printf 'Cosign version check accepted foreign build metadata\n' >&2
 	exit 1
 fi

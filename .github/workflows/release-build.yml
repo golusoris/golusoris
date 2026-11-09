@@ -84,9 +84,9 @@ jobs:
         run: |
           set -euo pipefail
           for tool in cosign syft goreleaser gh; do command -v "$tool"; done
-          cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
-          syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-          goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
+          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
 
       - name: Compose the breaking-change notes header
         shell: bash

@@ -77,10 +77,18 @@ EXPECTED_INPUTS: dict[str, str] = {
 }
 
 ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
-    "cosign": re.compile(r"cosign\s+version\s*\|\s*grep\s+-Eq"),
-    "syft": re.compile(r"syft\s+version\s*\|\s*grep\s+-Eq"),
-    "goreleaser": re.compile(r"goreleaser\s+--version\s*\|\s*grep\s+-Eq"),
-    "buildx": re.compile(r"docker\s+buildx\s+version\s*\|\s*grep\s+-Eq"),
+    "cosign": re.compile(
+        r'cosign_version="\$\(cosign\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$cosign_version"'
+    ),
+    "syft": re.compile(
+        r'syft_version="\$\(syft\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$syft_version"'
+    ),
+    "goreleaser": re.compile(
+        r'goreleaser_version="\$\(goreleaser\s+--version\)";\s*grep\s+-Eq\s+.*<<<"\$goreleaser_version"'
+    ),
+    "buildx": re.compile(
+        r'buildx_version="\$\(docker\s+buildx\s+version\)";\s*grep\s+-Eq\s+.*<<<"\$buildx_version"'
+    ),
     "node": re.compile(r"test\s+.*node\s+--version|node\s+--version\s*\|"),
 }
 
@@ -641,10 +649,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Verify tools
         run: |
-          docker buildx version | grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)"
-          cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
-          syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-          goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
+          buildx_version="$(docker buildx version)"; grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)" <<<"$buildx_version"
+          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
           test "$(node --version)" = "v${NODE_VERSION}"
 """
 
@@ -694,10 +702,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Verify tools
         run: |
-          docker buildx version | grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)"
-          cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
-          syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-          goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
+          buildx_version="$(docker buildx version)"; grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)" <<<"$buildx_version"
+          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
+          goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
           test "$(node --version)" = "v${NODE_VERSION}"
 """
 

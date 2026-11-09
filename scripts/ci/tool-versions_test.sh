@@ -169,7 +169,7 @@ done
 
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
 # shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
-cosign_version_guard='cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"'
+cosign_version_guard='cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"'
 cosign_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
 	"$repo_root/.github/workflows/release-build.yml"
@@ -195,7 +195,7 @@ if grep -rHnF 'cosign version' \
 	exit 1
 fi
 for version in "v$COSIGN_VERSION" "v$COSIGN_VERSION+dirty"; do
-	if ! printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
+	if ! grep -Eq "$cosign_version_pattern" <<<"GitVersion: $version"; then
 		printf 'Cosign runner contract rejects supported version: %s\n' "$version" >&2
 		exit 1
 	fi
@@ -207,7 +207,7 @@ for version in \
 	"v$COSIGN_VERSION+dirty+other" \
 	"v$COSIGN_VERSION-dirty" \
 	"v${COSIGN_VERSION}0"; do
-	if printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
+	if grep -Eq "$cosign_version_pattern" <<<"GitVersion: $version"; then
 		printf 'Cosign runner contract accepts unsupported version: %s\n' "$version" >&2
 		exit 1
 	fi
@@ -431,9 +431,9 @@ expect_ci_go_default_rejection golangci-default-missing \
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
 # shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
-goreleaser_version_guard='goreleaser --version | grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"'
+goreleaser_version_guard='goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"'
 # shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
-syft_version_guard='syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"'
+syft_version_guard='syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"'
 goreleaser_version_workflows=(
 	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
@@ -476,22 +476,21 @@ if grep -rHnF 'syft version' \
 	exit 1
 fi
 for version in "$GORELEASER_VERSION" "v$GORELEASER_VERSION"; do
-	if ! printf 'GitVersion: %s\n' "$version" | grep -Eq "$goreleaser_version_pattern"; then
+	if ! grep -Eq "$goreleaser_version_pattern" <<<"GitVersion: $version"; then
 		printf 'GoReleaser runner contract rejects supported version: %s\n' \
 			"$version" >&2
 		exit 1
 	fi
 done
-if printf 'GitVersion: %s\n' "${GORELEASER_VERSION}0" | \
-	grep -Eq "$goreleaser_version_pattern"; then
+if grep -Eq "$goreleaser_version_pattern" <<<"GitVersion: ${GORELEASER_VERSION}0"; then
 	printf 'GoReleaser runner contract accepts a version suffix\n' >&2
 	exit 1
 fi
-if ! printf 'Version: %s\n' "$SYFT_VERSION" | grep -Eq "$syft_version_pattern"; then
+if ! grep -Eq "$syft_version_pattern" <<<"Version: $SYFT_VERSION"; then
 	printf 'Syft runner contract rejects the locked version\n' >&2
 	exit 1
 fi
-if printf 'Version: %s\n' "${SYFT_VERSION}0" | grep -Eq "$syft_version_pattern"; then
+if grep -Eq "$syft_version_pattern" <<<"Version: ${SYFT_VERSION}0"; then
 	printf 'Syft runner contract accepts a version suffix\n' >&2
 	exit 1
 fi
@@ -760,7 +759,8 @@ if ! grep -Fq -- "- apidiff" "$repo_root/.github/workflows/ci.yml" || \
 	printf 'GitHub aggregate gate does not require API compatibility execution\n' >&2
 	exit 1
 fi
-if grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml" | grep -Fq "renovate[bot]"; then
+if apidiff_lines="$(grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml")" && \
+	grep -Fq "renovate[bot]" <<<"$apidiff_lines"; then
 	printf 'GitHub API compatibility job is skipped for Renovate\n' >&2
 	exit 1
 fi
@@ -772,8 +772,8 @@ for input in golangci-version gofumpt-version gosec-version gosec-xtools-version
 	fi
 done
 
-if ! grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-versions.env" | \
-	grep -Fxq '# renovate: datasource=go depName=github.com/daveshanley/vacuum versioning=semver'; then
+if ! { vacuum_meta="$(grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-versions.env")" && \
+	grep -Fxq '# renovate: datasource=go depName=github.com/daveshanley/vacuum versioning=semver' <<<"$vacuum_meta"; }; then
 	printf 'vacuum pin is not tracked by the dependency bot\n' >&2
 	exit 1
 fi

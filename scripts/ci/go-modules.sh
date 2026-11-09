@@ -185,7 +185,7 @@ module_files_sum() {
 verify_module() {
 	local before after
 	before="$(module_files_sum "$1")" || return
-	(cd "$1" && go mod download && go mod verify) || return
+	(cd "$1" && bash "$REPO_ROOT/scripts/ci/retry.sh" go mod download && go mod verify) || return
 	after="$(module_files_sum "$1")" || return
 	if [[ "$after" != "$before" ]]; then
 		printf '%s: go mod download rewrote go.mod or go.sum; run go mod tidy and commit the result\n' "$1" >&2

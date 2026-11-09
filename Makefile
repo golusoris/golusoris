@@ -88,22 +88,22 @@ fix-check-all: ## assert go fix would not modernize any Go module
 
 .PHONY: tools-bootstrap
 tools-bootstrap: ## install repository-managed developer tools at exact versions
-	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	bash scripts/ci/install-gosec.sh
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
-	$(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
-	$(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
-	$(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
-	$(GO) install github.com/air-verse/air@$(AIR_VERSION)
-	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
-	$(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
-	$(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
-	$(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-	$(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
-	$(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
-	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
-	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/air-verse/air@$(AIR_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
+	bash scripts/ci/retry.sh $(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
+	bash scripts/ci/retry.sh $(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
 ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
@@ -158,6 +158,9 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/pull_test_images_test.py
 	@python3 -B scripts/ci/windows-panic-rescan_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
+	@python3 -B scripts/ci/shell_flake_policy.py
+	@python3 -B scripts/ci/shell_flake_policy_test.py
+	@bash scripts/ci/retry_test.sh
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/claude-hooks-policy-test.py

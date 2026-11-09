@@ -34,7 +34,7 @@ check_step_order() {
 	shift
 	local prev_name="workflow" prev_line=0 name line status=0
 	for name in "$@"; do
-		line="$(grep -n -F "      - name: $name" "$path" | head -n 1 | cut -d: -f1)" || status=$?
+		line="$(grep -n -F "      - name: $name" "$path" | sed -n '1p' | cut -d: -f1)" || status=$?
 		if [[ -z "$line" ]] || (( line <= prev_line )); then
 			printf '%s must order publish steps: %s before %s\n' \
 				"$path" "$prev_name" "$name" >&2
@@ -74,7 +74,8 @@ require_unconditional_step() {
 # Smoke skip-build check so tests validate the exact pulled candidate without rebuilding.
 check_smoke_skips_build() {
 	local path="$1"
-	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
+	local candidate_step
+	if ! { candidate_step="$(grep -A 10 'name: Smoke exact publish candidate' "$path")" && grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'" <<<"$candidate_step"; }; then
 		printf '%s must set SIDECAR_SKIP_BUILD=1 when smoking publish candidate\n' "$path" >&2
 		return 1
 	fi
