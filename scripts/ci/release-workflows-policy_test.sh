@@ -116,8 +116,8 @@ check_rebuild() {
 	done
 	# Renovate bumps every Buildx pin together; rebuild must name the release workflow's.
 	local buildx release_buildx
-	buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$path" | sed -n '1p')"
-	release_buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$repo_root/.github/workflows/release-go.yml" | sed -n '1p')"
+	buildx="$(grep -oE 'version: v\$\{\{ env\.BUILDX_VERSION \}\}' "$path" | sed -n '1p')"
+	release_buildx="$(grep -oE 'version: v\$\{\{ env\.BUILDX_VERSION \}\}' "$repo_root/.github/workflows/release-go.yml" | sed -n '1p')"
 	[[ -n "$buildx" && "$buildx" == "$release_buildx" ]] || {
 		printf 'rebuild does not select the pinned Buildx binary\n' >&2
 		return 1
@@ -569,7 +569,7 @@ expect_failure 'release caller lacks contract' check_release_caller "$negative_d
 sed '/"$remote_sha" != "$SOURCE_SHA"/d' "$release_go" >"$negative"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 expect_failure '"$remote_sha" != "$SOURCE_SHA"' check_release_go "$negative"
-sed -E 's/version: v[0-9]+[.][0-9]+[.][0-9]+/version: latest/' "$rebuild" >"$negative"
+sed -E 's/version: v\$\{\{ env\.BUILDX_VERSION \}\}/version: latest/' "$rebuild" >"$negative"
 expect_failure 'pinned Buildx binary' check_rebuild "$negative"
 sed 's/@sha256:[0-9a-f]\{64\}//' "$rebuild" >"$negative"
 expect_failure 'QEMU installer image' check_rebuild "$negative"

@@ -46,6 +46,7 @@ require_unconditional_step() {
 check_workflow() {
 	local path="$1"
 	local literal
+	# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 	local -a literals=(
 		"artifact-metadata: write"
 		"ref: \${{ github.sha }}"
@@ -56,7 +57,7 @@ check_workflow() {
 		"\"\$published_id\" != \"\$TESTED_IMAGE_ID\""
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"docker push \"\$IMAGE:\$VERSION\" 2>&1 | tee \"\$push_log\""
-		"v?3\\.1\\.4(\\+dirty)?"
+		'v?${COSIGN_VERSION//./\\.}(\+dirty)?'
 		"Generate SPDX SBOM"
 	)
 	for literal in "${literals[@]}"; do
@@ -157,13 +158,15 @@ if (( $(grep -c '^gh' "$call_log") != 2 )); then
 	exit 1
 fi
 
-cosign_version_pattern='^GitVersion:[[:space:]]+v?3\.1\.4(\+dirty)?[[:space:]]*$'
-grep -Eq "$cosign_version_pattern" <<<'GitVersion: v3.1.4+dirty'
-if grep -Eq "$cosign_version_pattern" <<<'GitVersion: v3.1.5'; then
+# shellcheck source=tools/tool-versions.env
+. "$repo_root/tools/tool-versions.env"
+cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*$"
+grep -Eq "$cosign_version_pattern" <<<"GitVersion: v${COSIGN_VERSION}+dirty"
+if grep -Eq "$cosign_version_pattern" <<<"GitVersion: v99.99.99"; then
 	printf 'Cosign version check accepted a foreign release\n' >&2
 	exit 1
 fi
-if grep -Eq "$cosign_version_pattern" <<<'GitVersion: v3.1.4+dirty.untrusted'; then
+if grep -Eq "$cosign_version_pattern" <<<"GitVersion: v${COSIGN_VERSION}+dirty.untrusted"; then
 	printf 'Cosign version check accepted foreign build metadata\n' >&2
 	exit 1
 fi
