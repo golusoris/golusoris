@@ -40,7 +40,8 @@ fi
 
 # Boundary: command executes exactly once during failure matching.
 count_file="$suite_root/count"
-if ! expect_failure_matching 'ran' bash -c "printf 'tick\n' >> '$count_file'; printf 'ran\n'; exit 1"; then
+# shellcheck disable=SC2016 # $1 expands in the child shell, which gets the path as an argument.
+if ! expect_failure_matching 'ran' bash -c 'printf "tick\n" >> "$1"; printf "ran\n"; exit 1' _ "$count_file"; then
 	printf 'expect_failure_matching rejected single-run command\n' >&2
 	exit 1
 fi
