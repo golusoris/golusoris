@@ -12,6 +12,7 @@ readonly repo_root
 . "$repo_root/scripts/ci/lib/policy-test.sh"
 policy_suite_init "tiny-litert-sidecar-publish-policy"
 
+# Runs "$@"; fails if command succeeds or stderr lacks "$want", printing expected or wrong failure.
 expect_failure_msg() {
 	local want="$1"
 	shift
@@ -27,6 +28,7 @@ expect_failure_msg() {
 	}
 }
 
+# Fails unless steps "$@" appear in order in "$path"; prints '<path> must order publish steps'.
 check_step_order() {
 	local path="$1"
 	shift
@@ -43,6 +45,7 @@ check_step_order() {
 	done
 }
 
+# Fails unless "$path" contains "$literal"; prints '<path> lacks required publication control'.
 require_literal() {
 	local path="$1"
 	local literal="$2"
@@ -52,6 +55,7 @@ require_literal() {
 	fi
 }
 
+# Checks "$step" in "$path" is unconditional; prints '<path> must run <step> on new and resumed'.
 require_unconditional_step() {
 	local path="$1"
 	local step="$2"
@@ -67,6 +71,7 @@ require_unconditional_step() {
 	fi
 }
 
+# Verifies "$path" smoke sets SIDECAR_SKIP_BUILD=1; prints '<path> must set SIDECAR_SKIP_BUILD=1'.
 check_smoke_skips_build() {
 	local path="$1"
 	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
@@ -75,6 +80,7 @@ check_smoke_skips_build() {
 	fi
 }
 
+# Checks verifier steps in "$path"; prints '<path> must verify/validate/pass ...' on failure.
 check_manifest_identity() {
 	local path="$1"
 	if (( $(grep -Fc 'bash scripts/ci/tiny-trainer-verify-image.sh' "$path") != 1 )); then
@@ -95,6 +101,7 @@ check_manifest_identity() {
 	fi
 }
 
+# Checks "$path" publish job lacks load: true and tags:; prints '<path> must not ...' on failure.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
@@ -118,6 +125,7 @@ check_publish_job_shape() {
 	fi
 }
 
+# Validates workflow "$path" publication controls; prints violation or propagates check error.
 check_workflow() {
 	local path="$1"
 	local literal

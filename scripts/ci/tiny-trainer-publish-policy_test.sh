@@ -11,10 +11,12 @@ helper="$repo_root/scripts/ci/tiny-trainer-manifest-identity.py"
 readonly repo_root suite_root helper
 trap 'find "$suite_root" -depth -delete' EXIT
 
+# Computes and returns the SHA-256 hex digest of data read from standard input.
 sha256_digest() {
 	python3 -I -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
 }
 
+# Runs "$@" and fails if it exits 0; prints 'expected failure: <command>' on error.
 expect_failure() {
 	local status=0
 	"$@" >/dev/null 2>&1 || status=$?
@@ -24,6 +26,7 @@ expect_failure() {
 	fi
 }
 
+# Runs "$@"; fails if command succeeds or stderr lacks "$want", printing expected or wrong failure.
 expect_failure_msg() {
 	local want="$1"
 	shift
@@ -39,6 +42,7 @@ expect_failure_msg() {
 	}
 }
 
+# Fails unless steps "$@" appear in order in "$path"; prints '<path> must order publish steps'.
 check_step_order() {
 	local path="$1"
 	shift
@@ -55,18 +59,21 @@ check_step_order() {
 	done
 }
 
+# Validates manifest "$json" via helper with args "$@"; propagates helper output and exit status.
 check_manifest_json() {
 	local json="$1"
 	shift
 	printf '%s' "$json" | python3 -B "$helper" "$@"
 }
 
+# Validates config "$json" via helper --config "$@"; propagates helper output and exit status.
 check_config_json() {
 	local json="$1"
 	shift
 	python3 -B "$helper" --config "$@" <<<"$json"
 }
 
+# Fails unless "$path" contains "$literal"; prints '<path> lacks required publication control'.
 require_literal() {
 	local path="$1"
 	local literal="$2"
@@ -76,6 +83,7 @@ require_literal() {
 	fi
 }
 
+# Checks "$step" in "$path" is unconditional; prints '<path> must run <step> on new and resumed'.
 require_unconditional_step() {
 	local path="$1"
 	local step="$2"
@@ -91,6 +99,7 @@ require_unconditional_step() {
 	fi
 }
 
+# Checks "$path" publish job lacks load: true and tags:; prints '<path> must not ...' on failure.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
@@ -114,6 +123,7 @@ check_publish_job_shape() {
 	fi
 }
 
+# Validates workflow "$path" publication controls; prints violation or propagates check error.
 check_workflow() {
 	local path="$1"
 	local literal
@@ -174,6 +184,7 @@ check_workflow() {
 	fi
 }
 
+# Validates "$path" audit toolchain against "$lock"; prints runtime resolution or pin mismatch.
 check_audit_toolchain() {
 	local path="$1"
 	local lock="$2"
