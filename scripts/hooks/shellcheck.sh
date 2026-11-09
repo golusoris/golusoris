@@ -86,6 +86,40 @@ check_divergence() {
 	fi
 }
 
+# run_without_shellcheck checks workflow suppressions and fails if shell scripts need ShellCheck.
+run_without_shellcheck() {
+	local mode="$1"
+	shift
+	local -a workflow_items=()
+	local -a script_items=()
+	local split_count=0
+	local item
+	for item in "$@"; do
+		((split_count += 1))
+		if (( split_count > max_paths )); then
+			break
+		fi
+		case "$item" in
+			.github/workflows/* | .gitea/workflows/*)
+				workflow_items+=("$item")
+				;;
+			*)
+				script_items+=("$item")
+				;;
+		esac
+	done
+	if (( ${#workflow_items[@]} > 0 )); then
+		check_divergence "$mode" "${workflow_items[@]}"
+		bash "$root/scripts/ci/shellcheck.sh" --root "$root" -- "${workflow_items[@]}" ||
+			fail "ShellCheck reported findings"
+	fi
+	if (( ${#script_items[@]} > 0 )); then
+		fail "ShellCheck ${SHELLCHECK_VERSION} is not on PATH and ${#script_items[@]} changed shell script(s) need it — install with: bash scripts/ci/install-shellcheck.sh <dir>"
+	fi
+	note "${#workflow_items[@]} changed workflow file(s) passed"
+	exit 0
+}
+
 # main coordinates argument validation, selection filtering, and ShellCheck invocation.
 main() {
 	if [[ $# -lt 1 ]]; then
@@ -111,10 +145,10 @@ main() {
 	local -a paths=()
 	normalize_paths "$@"
 
-	check_missing_content "$mode" "${paths[@]}"
+	check_missing_content "$mode" ${paths[@]+"${paths[@]}"}
 
 	local list_output
-	list_output="$(bash "$root/scripts/ci/shellcheck.sh" --root "$root" --list -- "${paths[@]}")"
+	list_output="$(bash "$root/scripts/ci/shellcheck.sh" --root "$root" --list -- ${paths[@]+"${paths[@]}"})"
 
 	local -a selected=()
 	if [[ -n "$list_output" ]]; then
@@ -131,8 +165,8 @@ main() {
 
 	((${#selected[@]} > 0)) || skip "no changed shell scripts or workflows"
 
-	if [ -z "${SHELLCHECK_BIN:-}" ] && ! command -v shellcheck >/dev/null 2>&1; then
-		skip "ShellCheck ${SHELLCHECK_VERSION} is not on PATH — install with: bash scripts/ci/install-shellcheck.sh <dir>"
+	if [[ -z "${SHELLCHECK_BIN:-}" ]] && ! command -v shellcheck >/dev/null 2>&1; then
+		run_without_shellcheck "$mode" "${selected[@]}"
 	fi
 
 	check_divergence "$mode" "${selected[@]}"

@@ -183,6 +183,32 @@ ln -s "$suite_root/outside.sh" "$path_mode_root/symlink.sh"
 expect_failure_matching 'ShellCheck refuses symlink input: symlink.sh' \
 	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- symlink.sh
 
+# F: non-shell symlink only exits 0 without refusal
+touch "$path_mode_root/README.md"
+ln -s README.md "$path_mode_root/notes.md"
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- notes.md 2>&1)" || status=$?
+if (( status != 0 )); then
+	printf 'expected exit 0 for non-shell symlink in path mode, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+
+# G: --list with only a script, then with only a workflow file
+mkdir -p "$path_mode_root/.github/workflows"
+touch "$path_mode_root/.github/workflows/list.yml"
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list -- clean.sh 2>&1)" || status=$?
+if (( status != 0 )) || [[ "$out" != 'clean.sh' ]]; then
+	printf -- 'expected exit 0 and clean.sh from --list, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list -- .github/workflows/list.yml 2>&1)" || status=$?
+if (( status != 0 )) || [[ "$out" != '.github/workflows/list.yml' ]]; then
+	printf -- 'expected exit 0 and .github/workflows/list.yml from --list, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+
 # Path mode: --list prints exactly the selected scripts, then the workflow files
 write_clean_script "$path_mode_root/ok_tool"
 git -C "$path_mode_root" add ok_tool

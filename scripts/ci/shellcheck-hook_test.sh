@@ -140,31 +140,98 @@ if [[ "$out" != *'skip: no changed shell scripts'* ]]; then
 	exit 1
 fi
 
-# Tool absent: PATH with only bash, git, dirname, basename; SHELLCHECK_BIN unset -> exit 0, skip:.
+# Tool absent: PATH without shellcheck; runs workflow checks and fails if shell scripts need ShellCheck.
 absent_root="$(new_repo tool-absent)"
 write_clean_script "$absent_root/clean.sh"
 git -C "$absent_root" add .
 
 tool_bin="$suite_root/tool-absent-bin"
 mkdir -p "$tool_bin"
-for cmd in bash git dirname basename; do
+for cmd in bash git dirname basename grep sed awk cat tr; do
 	ln -s "$(command -v "$cmd")" "$tool_bin/$cmd"
 done
 
-status=0
-out="$(
+run_hook_no_tool() {
+	local target_root="$1"
+	shift
 	(
 		unset SHELLCHECK_BIN
 		export PATH="$tool_bin"
-		run_hook "$absent_root" --staged clean.sh
-	) 2>&1
-)" || status=$?
+		run_hook "$target_root" "$@"
+	)
+}
+
+# A: tool absent + staged script fails because ShellCheck is required.
+expect_failure_matching 'is not on PATH' \
+	run_hook_no_tool "$absent_root" --staged clean.sh
+
+# B: tool absent + workflow only with unexplained suppression fails suppression check.
+mkdir -p "$absent_root/.github/workflows"
+cat >"$absent_root/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+EOF
+printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
+	>>"$absent_root/.github/workflows/ci.yml"
+git -C "$absent_root" add .github/workflows/ci.yml
+expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/ci.yml' \
+	run_hook_no_tool "$absent_root" --staged .github/workflows/ci.yml
+
+# C: tool absent + workflow only with explained suppression passes.
+cat >"$absent_root/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # shellcheck disable=SC2086 # Word splitting is intended.
+      - run: echo test
+EOF
+git -C "$absent_root" add .github/workflows/ci.yml
+status=0
+out="$(run_hook_no_tool "$absent_root" --staged .github/workflows/ci.yml 2>&1)" || status=$?
 if (( status != 0 )); then
-	printf 'expected exit 0 when tool absent, got %d: %s\n' "$status" "$out" >&2
+	printf 'expected exit 0 for explained workflow suppression with tool absent, got %d: %s\n' "$status" "$out" >&2
 	exit 1
 fi
-if [[ "$out" != *'skip:'* ]]; then
-	printf 'expected skip: in output when tool absent, got: %s\n' "$out" >&2
+if [[ "$out" != *'changed workflow file(s) passed'* ]]; then
+	printf 'expected passed workflow message when tool absent, got: %s\n' "$out" >&2
+	exit 1
+fi
+
+# D: tool absent + mixed: unexplained workflow suppression blocks before tool check.
+cat >"$absent_root/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+EOF
+printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
+	>>"$absent_root/.github/workflows/ci.yml"
+git -C "$absent_root" add .github/workflows/ci.yml
+expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/ci.yml' \
+	run_hook_no_tool "$absent_root" --staged .github/workflows/ci.yml clean.sh
+
+# E: non-shell symlink staged alone: hook skips without refusal.
+non_shell_symlink_root="$(new_repo non-shell-symlink)"
+touch "$non_shell_symlink_root/README.md"
+ln -s README.md "$non_shell_symlink_root/link.md"
+git -C "$non_shell_symlink_root" add README.md link.md
+status=0
+out="$(run_hook "$non_shell_symlink_root" --staged link.md 2>&1)" || status=$?
+if (( status != 0 )); then
+	printf 'expected exit 0 for non-shell symlink, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+if [[ "$out" != *'skip: no changed shell scripts or workflows'* ]]; then
+	printf 'expected skip for non-shell symlink, got: %s\n' "$out" >&2
 	exit 1
 fi
 

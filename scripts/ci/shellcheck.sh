@@ -141,22 +141,20 @@ collect_path_mode_files() {
 			printf 'ShellCheck path contains newline: %s\n' "$path" >&2
 			return 1
 		fi
-		if [[ ! -e "$root/$path" && ! -L "$root/$path" ]]; then
-			continue
-		fi
-		if [[ -L "$root/$path" ]]; then
-			printf 'ShellCheck refuses symlink input: %s\n' "$path" >&2
-			return 1
-		fi
-		[[ -f "$root/$path" ]] || continue
 		case "$path" in
 			.github/workflows/* | .gitea/workflows/*)
-				workflow_files+=("$path")
+				if [[ -f "$root/$path" && ! -L "$root/$path" ]]; then
+					workflow_files+=("$path")
+				fi
 				;;
 			*)
-				if is_shell_file "$root" "$path"; then
-					selected_files+=("$path")
+				[[ -f "$root/$path" || -L "$root/$path" ]] || continue
+				is_shell_file "$root" "$path" || continue
+				if [[ -L "$root/$path" ]]; then
+					printf 'ShellCheck refuses symlink input: %s\n' "$path" >&2
+					return 1
 				fi
+				selected_files+=("$path")
 				;;
 		esac
 	done
@@ -201,7 +199,7 @@ run_path_mode() {
 	if (( list_only )); then
 		local out_idx=0
 		local path
-		for path in "${selected_files[@]}" "${workflow_files[@]}"; do
+		for path in ${selected_files[@]+"${selected_files[@]}"} ${workflow_files[@]+"${workflow_files[@]}"}; do
 			((out_idx += 1))
 			if (( out_idx > max_shell_files )); then
 				break
@@ -212,7 +210,7 @@ run_path_mode() {
 	fi
 	local check_idx=0
 	local path
-	for path in "${workflow_files[@]}"; do
+	for path in ${workflow_files[@]+"${workflow_files[@]}"}; do
 		((check_idx += 1))
 		if (( check_idx > max_shell_files )); then
 			break
@@ -306,7 +304,7 @@ main() {
 	git -C "$root" rev-parse --is-inside-work-tree >/dev/null
 
 	if (( is_path_mode )); then
-		run_path_mode "$root" "$list_only" "${path_args[@]}"
+		run_path_mode "$root" "$list_only" ${path_args[@]+"${path_args[@]}"}
 	else
 		local shellcheck_bin
 		shellcheck_bin="$(locate_shellcheck)"
