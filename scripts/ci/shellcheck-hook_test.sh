@@ -436,7 +436,7 @@ expect_failure check_lefthook_wiring "$wiring_tmp"
 
 # Negative wiring: glob re-added
 wiring_glob_tmp="$suite_root/lefthook-glob.yml"
-sed '/bash scripts\/hooks\/shellcheck\.sh --pushed/i \      glob: "*.sh"' \
+awk '/bash scripts\/hooks\/shellcheck\.sh --pushed/ { print "      glob: \"*.sh\"" } { print }' \
 	"$repo_root/lefthook.yml" >"$wiring_glob_tmp"
 expect_failure check_lefthook_wiring "$wiring_glob_tmp"
 
