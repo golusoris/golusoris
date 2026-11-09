@@ -153,6 +153,7 @@ def print_usage() -> None:
 
 
 def main() -> int:
+    """Verify image manifest, index, or config from standard input per CLI arguments."""
     args = sys.argv[1:]
     if "--config" in args:
         if len(args) != 5 or args[0] != "--config":
