@@ -523,7 +523,8 @@ def check_group_b_renovate_coverage(
             content, rel_path, env_vars, custom_managers
         )
         for var_name, (line_no, _, _) in env_vars.items():
-            if var_name not in matched_vars:
+            # Only release tool environment variables require Renovate manager coverage.
+            if var_name in ALL_RELEASE_VARS and var_name not in matched_vars:
                 problems.append(
                     f"{rel_path}:{line_no}: {var_name}: env copy not matched by renovate.json customManager"
                 )
@@ -1173,6 +1174,12 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             config = json.loads((root / "renovate.json").read_text(encoding="utf-8"))
             apply_renovate_bump(root, config, "sigstore/cosign", "3.1.5")
+            env_text = (root / "tools/tool-versions.env").read_text(encoding="utf-8")
+            self.assertIn("COSIGN_VERSION=3.1.5", env_text)
+            for name in GROUP_B_FILES:
+                content = (root / name).read_text(encoding="utf-8")
+                self.assertIn("COSIGN_VERSION: 3.1.5", content)
+                self.assertNotIn("COSIGN_VERSION: 3.1.4", content)
             self.assertEqual(check_release_tool_pins(root), [])
 
     def test_renovate_shaped_bump_partial_coverage_fails(self) -> None:
@@ -1190,6 +1197,18 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(
                 problems, "env copy not matched by renovate.json customManager"
             )
+
+    def test_group_b_unrelated_env_var_passes(self) -> None:
+        """Tests that unrelated workflow-level env declarations in group B workflows pass."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / GROUP_B_FILES[0]
+            text = path.read_text(encoding="utf-8")
+            text = text.replace("env:\n", 'env:\n  CGO_ENABLED: "0"\n', 1)
+            self.assertIn('CGO_ENABLED: "0"', text)
+            path.write_text(text, encoding="utf-8")
+            self.assertEqual(check_release_tool_pins(root), [])
 
 
 if __name__ == "__main__":
