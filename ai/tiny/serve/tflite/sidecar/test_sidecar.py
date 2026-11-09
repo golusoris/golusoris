@@ -162,7 +162,7 @@ def pid_running(pid: int) -> bool:
     except ProcessLookupError:
         return False
     except PermissionError:
-        pass  # EPERM: the pid exists but is not ours, so it still counts as alive.
+        return True  # EPERM: the pid exists but is not ours, and hidepid may hide its /proc entry.
     # Non-Linux platforms lack /proc; os.kill(pid, 0) probe suffices.
     if not Path("/proc").is_dir():
         return True
@@ -270,16 +270,16 @@ class TestPidRunning:
             pytest.param(
                 PermissionError(errno.EPERM, "Operation not permitted"),
                 True,
-                "12345 (sleep) S 1 1",
+                PermissionError(errno.EACCES, "Permission denied"),
                 True,
-                id="kill-eperm",
+                id="kill-eperm-hidepid-noaccess",
             ),
             pytest.param(
                 PermissionError(errno.EPERM, "Operation not permitted"),
                 True,
-                "12345 (sleep) Z 1 1",
-                False,
-                id="kill-eperm-zombie",
+                FileNotFoundError("hidden"),
+                True,
+                id="kill-eperm-hidepid-invisible",
             ),
             pytest.param(None, False, "12345 (sleep) S 1", True, id="no-proc"),
             pytest.param(None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
@@ -304,9 +304,11 @@ class TestPidRunning:
         expected: bool,
     ) -> None:
         """Every probe outcome the timeout tests rely on, including a reap between kill and the /proc read."""
+        kill_calls: list[tuple[int, int]] = []
 
         def fake_kill(pid: int, sig: int) -> None:
             """Stand in for kill(pid, 0) so the case decides whether the probe succeeds or raises an error."""
+            kill_calls.append((pid, sig))
             if kill_error is not None:
                 raise kill_error
 
@@ -323,6 +325,7 @@ class TestPidRunning:
             pid_running(12345) is expected,
             f"pid_running(12345) outcome mismatch: expected {expected}",
         )
+        expect(kill_calls == [(12345, 0)], f"kill probe calls: {kill_calls}")
 
     def test_pid_running_reaped_child(self) -> None:
         cmd = ["sh", "-c", "exit 0"]
