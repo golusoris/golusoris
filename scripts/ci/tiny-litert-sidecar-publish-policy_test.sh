@@ -101,7 +101,7 @@ check_manifest_identity() {
 	fi
 }
 
-# Push step without tags: and no load: true, so nothing is tagged or loaded before validation.
+# Publish job without load: true and push step without tags:, so nothing is loaded or tagged before validation.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
