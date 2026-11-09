@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import datetime
 import json
-import os
 import re
 import subprocess
 import sys
@@ -28,10 +27,12 @@ from pathlib import Path
 from typing import Any
 
 import gomod
+import repo_git
 
 VEX_PATH = Path(".trivy/openvex.json")
 DEFAULT_TIMEOUT_SECONDS = 60
 GIT_TIMEOUT_SECONDS = 60
+IGNORED_FIXTURE_TEXT = "# ignored fixture\n"
 MODULES_DISCOVERY_TIMEOUT_SECONDS = 60
 MAX_MODULES = 64
 
@@ -196,17 +197,14 @@ def render_osv_toml(entries: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def find_existing_osv_scanner_files(root: Path) -> list[Path]:
-    """Find all existing osv-scanner.toml files ignoring internal dirs."""
-    found: list[Path] = []
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in {".git", ".workingdir", "node_modules"}
-        ]
-        if "osv-scanner.toml" in filenames:
-            found.append(Path(dirpath) / "osv-scanner.toml")
-    return sorted(found)
+def find_existing_osv_scanner_files(
+    root: Path, timeout: int = GIT_TIMEOUT_SECONDS
+) -> list[Path]:
+    """Find tracked and untracked osv-scanner.toml files that git does not ignore."""
+    try:
+        return repo_git.worktree_files(root, "osv-scanner.toml", timeout)
+    except repo_git.GitError as error:
+        raise CheckError(str(error)) from error
 
 
 def collect_statement_vuln_ids(statement: dict[str, Any]) -> list[str]:
@@ -337,7 +335,11 @@ def check_drift(root: Path, today: datetime.date | None = None) -> list[str]:
         if rel_path not in existing_files:
             failures.append(f"missing osv-scanner.toml: {rel_path}")
         else:
-            actual = existing_files[rel_path].read_text(encoding="utf-8")
+            try:
+                actual = existing_files[rel_path].read_text(encoding="utf-8")
+            except OSError as error:
+                failures.append(f"unreadable osv-scanner.toml: {rel_path}: {error}")
+                continue
             if actual != expected[rel_path]:
                 failures.append(f"osv-scanner.toml content differs: {rel_path}")
 
@@ -449,6 +451,10 @@ def setup_selftest_fixture(temp_dir: Path) -> Path:
     run_cmd(["git", "config", "user.email", "test@example.com"], repo)
     setup_fixture_manifests(repo)
     setup_fixture_vex(repo)
+    (repo / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
+    ignored = repo / "ignored" / "sub" / "osv-scanner.toml"
+    ignored.parent.mkdir(parents=True)
+    ignored.write_text(IGNORED_FIXTURE_TEXT, encoding="utf-8")
     run_cmd(["git", "add", "."], repo)
     return repo
 
@@ -530,9 +536,60 @@ def run_selftest_plants_4_to_6(
     return failures, refused
 
 
+def run_selftest_plant_stray(
+    repo: Path, test_today: datetime.date
+) -> tuple[list[str], int]:
+    """Execute plant 8: an untracked, not-ignored stray file is still reported."""
+    stray = repo / "stray" / "osv-scanner.toml"
+    stray.parent.mkdir()
+    stray.write_text("# stray\n", encoding="utf-8")
+    refused = check_drift(repo, today=test_today)
+    stray.unlink()
+    stray.parent.rmdir()
+    if not refused:
+        return ["plant 8 (untracked stray osv-scanner.toml) was accepted"], 0
+    return [], 1
+
+
+def run_selftest_plant_symlinks(
+    repo: Path, test_today: datetime.date
+) -> tuple[list[str], int]:
+    """Execute plants 9 and 10: dangling osv-scanner.toml symlinks are reported."""
+    stray = repo / "dangling" / "osv-scanner.toml"
+    target_a = repo / "a" / "osv-scanner.toml"
+    orig_a = target_a.read_text(encoding="utf-8")
+    stray.parent.mkdir()
+    try:
+        stray.symlink_to(repo / "missing-target.toml")
+    except OSError as error:
+        stray.parent.rmdir()
+        print(f"SKIP: plants 9-10 need symlink support: {error}", file=sys.stderr)
+        return [], 0
+    failures: list[str] = []
+    refused = 0
+    if check_drift(repo, today=test_today):
+        refused += 1
+    else:
+        failures.append("plant 9 (dangling stray symlink) was accepted")
+    stray.unlink()
+    stray.parent.rmdir()
+    target_a.unlink()
+    target_a.symlink_to(repo / "missing-target.toml")
+    if check_drift(repo, today=test_today):
+        refused += 1
+    else:
+        failures.append("plant 10 (expected file is a dangling symlink) was accepted")
+    target_a.unlink()
+    target_a.write_text(orig_a, encoding="utf-8")
+    return failures, refused
+
+
 def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
     """Execute selftest on a fixture repo with proven negative and positive cases."""
-    with tempfile.TemporaryDirectory(prefix="golusoris-osv-selftest-") as tmp:
+    with (
+        tempfile.TemporaryDirectory(prefix="golusoris-osv-selftest-") as tmp,
+        repo_git.scratch_environ(),
+    ):
         repo = setup_selftest_fixture(Path(tmp))
         test_today = datetime.date(2026, 10, 18)
 
@@ -544,6 +601,11 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
             failures.append(f"positive write-then-check failed: {fails}")
         else:
             accepted += 1
+        ignored = repo / "ignored" / "sub" / "osv-scanner.toml"
+        if ignored.is_file() and ignored.read_text(encoding="utf-8") == IGNORED_FIXTURE_TEXT:
+            accepted += 1
+        else:
+            failures.append("write_osv_ignores changed a git-ignored osv-scanner.toml")
 
         fails_1_3, refused_1_3 = run_selftest_plants_1_to_3(repo, test_today)
         failures.extend(fails_1_3)
@@ -551,7 +613,13 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         fails_4_6, refused_4_6 = run_selftest_plants_4_to_6(repo, test_today)
         failures.extend(fails_4_6)
 
-        total_refused = refused_1_3 + refused_4_6
+        fails_8, refused_8 = run_selftest_plant_stray(repo, test_today)
+        failures.extend(fails_8)
+
+        fails_9_10, refused_9_10 = run_selftest_plant_symlinks(repo, test_today)
+        failures.extend(fails_9_10)
+
+        total_refused = refused_1_3 + refused_4_6 + refused_8 + refused_9_10
         mod_file = repo / "a" / "go.mod"
         mod_file.write_text("module a\nrequire (\n", encoding="utf-8")
         try:
@@ -621,7 +689,7 @@ def main() -> int:
         if args.command == "check":
             return run_check(root, today)
         return run_write(root)
-    except CheckError as error:
+    except (CheckError, repo_git.GitError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
 
