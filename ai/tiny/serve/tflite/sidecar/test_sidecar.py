@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import http.client
 import io
@@ -155,6 +156,7 @@ def model_dir(tmp_path: Path) -> Path:
 
 
 def pid_running(pid: int) -> bool:
+    """Report whether pid still runs; a zombie or a process reaped mid-check counts as gone."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -165,8 +167,8 @@ def pid_running(pid: int) -> bool:
     # An orphan its new parent has not reaped yet is a zombie, so it no longer runs.
     try:
         stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # Process reaped between os.kill probe and stat read.
+    except (FileNotFoundError, ProcessLookupError):
+        # Process reaped before open, or between open and read.
         return False
     return not stat_text.rsplit(") ", 1)[-1].startswith("Z")
 
@@ -262,6 +264,17 @@ class TestPidRunning:
 
         monkeypatch.setattr(Path, "read_text", raise_fnf)
         expect(not pid_running(12345), "reaped process must return False on FileNotFoundError")
+
+    def test_pid_running_reaped_mid_read(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ESRCH from the /proc read means the process was reaped after open, so it is gone."""
+        monkeypatch.setattr(os, "kill", lambda pid, sig: None)
+        monkeypatch.setattr(Path, "is_dir", lambda self: True)
+
+        def raise_esrch(self_path: Path, encoding: str = "utf-8") -> str:
+            raise ProcessLookupError(errno.ESRCH, "No such process")
+
+        monkeypatch.setattr(Path, "read_text", raise_esrch)
+        expect(not pid_running(12345), "reaped process must return False on ESRCH ProcessLookupError")
 
     def test_pid_running_non_proc_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(os, "kill", lambda pid, sig: None)
