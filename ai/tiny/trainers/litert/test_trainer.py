@@ -32,6 +32,14 @@ def image_config(dataset: Path) -> dict[str, object]:
     }
 
 
+def write_two_label_folder(root: Path) -> None:
+    """Both boundary tests need the smallest layout the loader accepts: two labels, two files each."""
+    (root / "a").mkdir()
+    (root / "b").mkdir()
+    for name in ("a/one.png", "a/two.png", "b/one.png", "b/two.png"):
+        (root / name).write_bytes(PNG_BYTES)
+
+
 class LiteRTTrainerTest(TestCase):
     def test_validation_split_shuffles_with_the_training_seed(self) -> None:
         tensorflow = mock.Mock()
@@ -144,19 +152,13 @@ class LiteRTTrainerTest(TestCase):
     def test_image_folder_boundary_two_labels(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "a").mkdir()
-            (root / "b").mkdir()
-            for name in ("a/one.png", "a/two.png", "b/one.png", "b/two.png"):
-                (root / name).write_bytes(PNG_BYTES)
+            write_two_label_folder(root)
             self.assertEqual(trainer.inspect_image_folder(root), ["a", "b"])
 
     def test_image_folder_file_count_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            (root / "a").mkdir()
-            (root / "b").mkdir()
-            for name in ("a/one.png", "a/two.png", "b/one.png", "b/two.png"):
-                (root / name).write_bytes(PNG_BYTES)
+            write_two_label_folder(root)
             with mock.patch.object(trainer, "MAX_IMAGE_FILES", 4):
                 self.assertEqual(trainer.inspect_image_folder(root), ["a", "b"])
             (root / "b/three.png").write_bytes(PNG_BYTES)
