@@ -46,7 +46,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          if ! echo "$PR_TITLE" | grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+'; then
+          if ! grep -qE '^(feat|fix|docs|chore|refactor|test|perf|ci|build|revert)(\(.+\))?(!)?: .+' <<<"$PR_TITLE"; then
             echo "::error::PR title does not follow Conventional Commits."
             echo "::error::Got: $PR_TITLE"
             echo "::error::Expected: <type>(<scope>): <description>"
@@ -85,9 +85,9 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
-          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
-          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
       - name: Check gofumpt formatting
         run: bash scripts/ci/check-gofumpt.sh
       - name: Check gci pre-commit hook
@@ -159,8 +159,9 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck_version="$(govulncheck -version)"
+          grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}" <<<"$govulncheck_version"
           scripts/ci/go-modules.sh vuln
 
   # ── Tests + coverage ────────────────────────────────────────────────────────
@@ -326,7 +327,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "sigs.k8s.io/controller-runtime/tools/setup-envtest@${SETUP_ENVTEST_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "sigs.k8s.io/controller-runtime/tools/setup-envtest@${SETUP_ENVTEST_VERSION}"
           assets="$(setup-envtest use "${ENVTEST_K8S_VERSION}" --bin-dir "$RUNNER_TEMP/envtest" -p path)"
           export KUBEBUILDER_ASSETS="$assets"
           crd="$RUNNER_TEMP/cnpg-clusters.yaml"
@@ -422,7 +423,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           bash scripts/ci/helm-chart_test.sh
       - name: Restore a chart backup into a fresh database
         run: bash scripts/ci/helm-backup-restore_test.sh
@@ -490,12 +491,26 @@ jobs:
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
+      - name: Resolve Pact FFI asset digest
+        id: pact-ffi-asset
+        if: env.CI_GATED != 'skip'
+        shell: bash
+        run: |
+          digest="$(python3 -B scripts/ci/pact_ffi.py --asset-digest)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad Pact FFI asset digest: $digest" >&2; exit 1; }
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Cache verified Pact FFI
+        if: env.CI_GATED != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .workingdir/cache/pact-ffi
+          key: pact-ffi-${{ runner.os }}-${{ runner.arch }}-${{ steps.pact-ffi-asset.outputs.sha256 }}
       - name: Install verified Pact FFI
         if: env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
-          python3 -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          python3 -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Install pinned analysis tools
@@ -503,10 +518,10 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
           bash scripts/ci/install-gosec.sh
-          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
-          govulncheck -version | grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          govulncheck_version="$(govulncheck -version)"; grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}" <<<"$govulncheck_version"
       - name: Verify module graphs
         if: env.CI_GATED != 'skip'
         run: |
@@ -610,12 +625,26 @@ jobs:
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
       # testutil/pact test binaries link libpact_ffi, which pact-go searches only in fixed system paths.
+      - name: Resolve Pact FFI asset digest
+        id: pact-ffi-asset
+        if: env.CI_GATED != 'skip'
+        shell: bash
+        run: |
+          digest="$(python3 -B scripts/ci/pact_ffi.py --asset-digest)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad Pact FFI asset digest: $digest" >&2; exit 1; }
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Cache verified Pact FFI
+        if: env.CI_GATED != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .workingdir/cache/pact-ffi
+          key: pact-ffi-${{ runner.os }}-${{ runner.arch }}-${{ steps.pact-ffi-asset.outputs.sha256 }}
       - name: Install verified Pact FFI
         if: env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
-          python3 -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          python3 -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
       - name: Fail on any recovered nil-dereference fault
@@ -636,15 +665,18 @@ jobs:
         with:
           # GoReleaser derives the snapshot version from the latest tag.
           fetch-depth: 0
+      - name: Read release tool pins
+        shell: bash
+        run: bash scripts/ci/export-release-tool-pins.sh
       - uses: ./.github/actions/setup-go
       - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
-          version: v2.19.0
+          version: v${{ env.GORELEASER_VERSION }}
           install-only: true
       - name: Verify pinned GoReleaser
         shell: bash
-        run: goreleaser --version | grep -Eq 'GitVersion:[[:space:]]+v?2\.19\.0([[:space:]]|$)'
+        run: goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
       - name: Pin the snapshot base to the root release tag
         shell: bash
         run: |
@@ -758,7 +790,7 @@ jobs:
       - name: Install pinned actionlint
         run: |
           . tools/tool-versions.env
-          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
       - id: verified-download
         uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
       - name: Install pinned ShellCheck
@@ -789,9 +821,9 @@ jobs:
       - name: Install pinned actionlint, Helm and buf
         run: |
           . tools/tool-versions.env
-          go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
-          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
-          go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - id: verified-download
         uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5
@@ -838,7 +870,7 @@ jobs:
       - name: Install pinned Helm renderer
         run: |
           . tools/tool-versions.env
-          go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
       - name: Pull Docker Hub images through mirror.gcr.io
         uses: ./.github/actions/docker-hub-mirror
       - name: Verify Docker daemon
@@ -939,7 +971,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
       - name: Run apidiff vs previous tag (informational pre-1.0)
         if: env.CI_GATED != 'skip'
         run: |

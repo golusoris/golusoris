@@ -22,9 +22,9 @@ case "$subject" in
 esac
 
 types='feat|fix|docs|chore|refactor|test|perf|ci|build|revert'
-printf '%s\n' "$subject" | grep -qE "^($types)(\([^)]+\))?!?: .+" ||
+grep -qE "^($types)(\([^)]+\))?!?: .+" <<<"$subject" ||
   fail "subject is not a Conventional Commit: '$subject'
 expected: <type>(<scope>): <description>   types: ${types//|/ }"
 
-printf '%s\n' "$body" | grep -qE '^Signed-off-by: .+ <.+@.+>$' ||
+grep -qE '^Signed-off-by: .+ <.+@.+>$' <<<"$body" ||
   fail "missing Signed-off-by trailer — commit with: git commit -s (Developer Certificate of Origin)"

@@ -24,7 +24,7 @@ payload=$(cat)
 if command -v jq >/dev/null 2>&1; then
   cmd=$(printf '%s' "$payload" | jq -r '.tool_input.command // ""')
 else
-  cmd=$(printf '%s' "$payload" | grep -oE '"command":"[^"]*"' | head -n1 | sed 's/^"command":"//; s/"$//')
+  cmd=$(printf '%s' "$payload" | grep -oE '"command":"[^"]*"' | sed -n '1p' | sed 's/^"command":"//; s/"$//')
 fi
 
 [ -z "$cmd" ] && exit 0
@@ -46,22 +46,22 @@ esac
 
 # Force-push to main/master — the one push that can rewrite shipped tags.
 # force-with-lease is still force in spirit when the target is main.
-if printf '%s' "$cmd" | grep -Eq 'git[[:space:]]+push[[:space:]].*--force(-with-lease)?\b.*\b(origin[[:space:]]+)?(main|master)\b'; then
+if grep -Eq 'git[[:space:]]+push[[:space:]].*--force(-with-lease)?\b.*\b(origin[[:space:]]+)?(main|master)\b' <<<"$cmd"; then
   deny "force-push to main/master is blocked. Create a PR or revert-commit instead."
 fi
 
 # Destructive resets of shipped refs.
-if printf '%s' "$cmd" | grep -Eq 'git[[:space:]]+reset[[:space:]].*--hard[[:space:]]+(origin/)?(main|master)\b'; then
+if grep -Eq 'git[[:space:]]+reset[[:space:]].*--hard[[:space:]]+(origin/)?(main|master)\b' <<<"$cmd"; then
   deny "'git reset --hard' on main/master will drop commits. Confirm with the user first."
 fi
 
 # ── filesystem safety ──────────────────────────────────────────────────
 # rm -rf against repo-critical paths. Matches standalone tokens only so
 # 'rm -rf ./coverage.out' stays allowed.
-if printf '%s' "$cmd" | grep -Eq '\brm[[:space:]]+-[A-Za-z]*r[A-Za-z]*f?[A-Za-z]*[[:space:]]+(\./)?\.git(/[^[:space:]]*)?(\s|$)'; then
+if grep -Eq '\brm[[:space:]]+-[A-Za-z]*r[A-Za-z]*f?[A-Za-z]*[[:space:]]+(\./)?\.git(/[^[:space:]]*)?(\s|$)' <<<"$cmd"; then
   deny "'rm -rf .git*' nukes the repo. Not allowed."
 fi
-if printf '%s' "$cmd" | grep -Eq '\brm[[:space:]]+-[A-Za-z]*r[A-Za-z]*f?[A-Za-z]*[[:space:]]+(\./)?\.workingdir(/|\s|$)'; then
+if grep -Eq '\brm[[:space:]]+-[A-Za-z]*r[A-Za-z]*f?[A-Za-z]*[[:space:]]+(\./)?\.workingdir(/|\s|$)' <<<"$cmd"; then
   deny "'rm -rf .workingdir' destroys plan + state. Not allowed."
 fi
 

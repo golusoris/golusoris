@@ -82,7 +82,7 @@ expect_failure 'repeat-count mismatch' \
 	--check-output "$suite_root/duplicate.txt" \
 	--budgets "$suite_root/under/budgets.tsv"
 
-grep '^BenchmarkAllocationBudgetProbe' "$suite_root/under/benchmark.txt" | head -n 4 \
+grep '^BenchmarkAllocationBudgetProbe' "$suite_root/under/benchmark.txt" | sed -n '1,4p' \
 	>"$suite_root/short.txt"
 expect_failure 'repeat-count mismatch' \
 	bash "$repo_root/scripts/ci/allocation-budget.sh" \
@@ -91,7 +91,7 @@ expect_failure 'repeat-count mismatch' \
 
 # One run inflated by host load must not fail when the other runs meet the budget (#717).
 {
-	repeat_line 'BenchmarkAllocationBudgetProbe-32 1000 1 ns/op 8 B/op 1 allocs/op' | head -n 4
+	repeat_line 'BenchmarkAllocationBudgetProbe-32 1000 1 ns/op 8 B/op 1 allocs/op' | sed -n '1,4p'
 	printf '%s\n' 'BenchmarkAllocationBudgetProbe-32 1000 1 ns/op 64 B/op 3 allocs/op'
 } >"$suite_root/noisy.txt"
 noisy_output="$(bash "$repo_root/scripts/ci/allocation-budget.sh" \

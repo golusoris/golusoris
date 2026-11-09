@@ -62,13 +62,13 @@ esac
 if [[ "$file_path" != */clock/* && "$file_path" != clock/* ]]; then
   # Match `time.Now(` (call). Allow start-of-line or a non-identifier
   # char before `time` so we don't match e.g. `somepkgtime.Now`.
-  if printf '%s' "$content" | grep -En '(^|[^a-zA-Z_.])time\.Now[[:space:]]*\(' >/dev/null; then
+  if grep -Eq '(^|[^a-zA-Z_.])time\.Now[[:space:]]*\(' <<<"$content"; then
     deny "time.Now() outside clock/ is banned. Use clock.Now(ctx) or inject clockwork.Clock via fx.In. See clock/ for the API."
   fi
 fi
 
 # ── rule 2: fmt.Print / Println / Printf in production code ────────────
-if printf '%s' "$content" | grep -En '(^|[^a-zA-Z_.])fmt\.(Print|Println|Printf)[[:space:]]*\(' >/dev/null; then
+if grep -Eq '(^|[^a-zA-Z_.])fmt\.(Print|Println|Printf)[[:space:]]*\(' <<<"$content"; then
   deny "fmt.Print* is banned outside tests and examples. Use *slog.Logger from the log/ module (inject via fx.In)."
 fi
 
@@ -76,7 +76,7 @@ fi
 # Look for //nolint or //nolint:X,Y that ends the line (no "//" explainer
 # after). golangci-lint's nolintlint enforces this in CI; catching it
 # here saves the round trip.
-if printf '%s' "$content" | grep -En '//\s*nolint(:[[:alnum:],_-]+)?\s*$' >/dev/null; then
+if grep -Eq '//\s*nolint(:[[:alnum:],_-]+)?\s*$' <<<"$content"; then
   deny "//nolint needs a justification comment on the same line, e.g. '//nolint:errcheck // defer-close, error already surfaced'."
 fi
 

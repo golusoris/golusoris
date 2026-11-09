@@ -44,6 +44,8 @@ pre-commit:
       run: bash scripts/hooks/reuse.sh
     gitleaks:
       run: bash scripts/hooks/gitleaks.sh
+    shellcheck:
+      run: bash scripts/hooks/shellcheck.sh --staged {staged_files}
 
 commit-msg:
   commands:
@@ -66,3 +68,5 @@ pre-push:
       run: if command -v govulncheck >/dev/null 2>&1; then GO_MODULE_GROUP=primary scripts/ci/go-modules.sh vuln; else echo govulncheck is not installed, skipping >&2; fi
     audit:
       run: sh .config/lefthook/engine.sh audit
+    shellcheck:
+      run: bash scripts/hooks/shellcheck.sh --pushed {push_files}
