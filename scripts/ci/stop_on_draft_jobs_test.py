@@ -373,6 +373,26 @@ class StopOnDraftJobsTest(unittest.TestCase):
                 )
                 self.assertIn(expected, messages[0])
 
+    def test_inline_unreadable_types_forms_fail(self) -> None:
+        """Negative: an inline mapping whose types value is an alias, anchor or scalar reports unreadable form."""
+        cases = (
+            ("types: *events", "on: {pull_request: {types: *events}}"),
+            ("types: &t [opened]", "on: {pull_request: {types: &t [opened]}}"),
+            (
+                "types: opened",
+                "on: {pull_request: {branches: [main], types: opened}}",
+            ),
+        )
+        for expected_stripped, on in cases:
+            with self.subTest(stripped=expected_stripped):
+                messages = self.check(workflow(on=on, uses=GATE))
+                self.assertEqual(len(messages), 1)
+                expected = (
+                    f"pull_request types form not readable: {expected_stripped};"
+                    " use a one-line flow list or a block sequence"
+                )
+                self.assertIn(expected, messages[0])
+
 
 if __name__ == "__main__":
     unittest.main()

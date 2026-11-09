@@ -151,6 +151,24 @@ def read_trigger_line(trigger: Trigger, line: str) -> None:
     read_pr_line(trigger, clean)
 
 
+def read_inline_types(trigger: Trigger, value: str) -> None:
+    """Extract types from an inline pull_request value or mark unreadable."""
+    flow = TYPES_FLOW.search(value)
+    if flow:
+        trigger.types = [
+            unquote(t.strip()) for t in split_top(flow.group(1)) if t.strip()
+        ]
+        return
+    trimmed = value.strip()
+    if trimmed.startswith("{") and trimmed.endswith("}"):
+        for entry in split_top(trimmed[1:-1]):
+            key = unquote(entry.partition(":")[0].strip())
+            if key == "types":
+                if not trigger.unreadable:
+                    trigger.unreadable = entry.strip()
+                return
+
+
 def read_inline_on(trigger: Trigger, inline: str) -> None:
     """Parse an inline on: trigger value."""
     if inline.startswith("{") and inline.endswith("}"):
@@ -159,13 +177,7 @@ def read_inline_on(trigger: Trigger, inline: str) -> None:
             key, _, value = entry.partition(":")
             if unquote(key.strip()) == "pull_request":
                 trigger.present = True
-                flow = TYPES_FLOW.search(value)
-                if flow:
-                    trigger.types = [
-                        unquote(t.strip())
-                        for t in split_top(flow.group(1))
-                        if t.strip()
-                    ]
+                read_inline_types(trigger, value)
                 return
         return
     trigger.present = "pull_request" in direct_entries(inline)
