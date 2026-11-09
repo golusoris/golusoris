@@ -599,6 +599,8 @@ check_code_lines() {
 		'no:    # bash scripts/ci/semgrep-scan.sh'
 		'no:run: true # bash scripts/ci/semgrep-scan.sh'
 		'no:echo "a" # bash scripts/ci/semgrep-scan.sh'
+		'no:echo "a\" b" # bash scripts/ci/semgrep-scan.sh'
+		'yes:echo "a\" #b"; bash scripts/ci/semgrep-scan.sh'
 	)
 	local entry want line out has
 	for entry in "${cases[@]}"; do
