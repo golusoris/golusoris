@@ -98,6 +98,7 @@ resolve_headers() {
 	(cd "$module_dir/examples/headers" && pwd)
 }
 
+# Compile and clang-tidy one C or BPF source in a networkless, read-only container pinned to CLANG_VERSION.
 run_clang() {
 	local source="$1"
 	local output="$2"
@@ -121,7 +122,7 @@ run_clang() {
 		"$image" -euo pipefail -c '
 			source=$1
 			output=$2
-			clang --version | grep -Fq "clang version ${EXPECTED_CLANG_VERSION}"
+			clang_version="$(clang --version)"; grep -Fq "clang version ${EXPECTED_CLANG_VERSION}" <<<"$clang_version"
 			common=(-Wall -Wextra -Werror -isystem /tool/include -isystem /usr/include/x86_64-linux-gnu)
 			if [[ $source == *.bpf.c ]]; then
 				compile=(-O2 -g -target bpf -D__TARGET_ARCH_x86 -ffile-prefix-map=/repo=. -fdebug-prefix-map=/repo=. "${common[@]}")

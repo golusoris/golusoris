@@ -7,14 +7,17 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import http.client
 import io
 import json
 import os
+import signal
 import subprocess
 import tempfile
 import threading
+import time
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Self
@@ -34,6 +37,38 @@ _CACHED_MODEL_BYTES: dict[tuple[int, tuple[int, ...]], bytes] = {}
 def expect(condition: object, message: str = "") -> None:
     if not condition:
         raise AssertionError(message)
+
+
+def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
+    """SIGKILL the session proc leads; fall back to proc alone where groups are unsafe."""
+    if not hasattr(os, "killpg"):
+        proc.kill()
+        return
+    # A pid of 1 or our own group would signal unrelated processes.
+    if not isinstance(proc.pid, int) or isinstance(proc.pid, bool) or proc.pid <= 1 or proc.pid == os.getpgrp():
+        proc.kill()
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        # Group exited between TimeoutExpired and killpg.
+        return
+
+
+def run_in_process_group(cmd: list[str], timeout: float) -> None:
+    """Run cmd in its own session; on timeout kill the whole group, not only cmd."""
+    with subprocess.Popen(  # noqa: S603 - fixed argv from the caller. # nosec B603
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True
+    ) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            # uv run spawns the converter as a child; killing only uv would orphan it.
+            kill_process_group(proc)
+            proc.communicate(timeout=60)
+            raise
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
 
 
 def generate_real_tflite_model(
@@ -81,9 +116,7 @@ open("{tmp_path.as_posix()}", "wb").write(converter.convert())
                 "-c",
                 script,
             ]
-            subprocess.run(  # noqa: S603 - fixed argv, sys.executable
-                cmd, capture_output=True, check=True
-            )
+            run_in_process_group(cmd, timeout=900)
             payload = tmp_path.read_bytes()
         finally:
             if tmp_path.exists():
@@ -120,6 +153,187 @@ def model_dir(tmp_path: Path) -> Path:
     d = tmp_path / "models"
     d.mkdir()
     return d
+
+
+def pid_running(pid: int) -> bool:
+    """Tell a killed grandchild from a live one: kill(pid, 0) still succeeds for an unreaped zombie."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # EPERM: the pid exists but is not ours, and hidepid may hide its /proc entry.
+    # Non-Linux platforms lack /proc; os.kill(pid, 0) probe suffices.
+    if not Path("/proc").is_dir():
+        return True
+    # An orphan its new parent has not reaped yet is a zombie, so it no longer runs.
+    try:
+        stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except (FileNotFoundError, ProcessLookupError):
+        # Process reaped before open, or between open and read.
+        return False
+    return not stat_text.rsplit(") ", 1)[-1].startswith("Z")
+
+
+@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX-only")
+class TestRunInProcessGroup:
+    def test_timeout_kills_grandchild(self, tmp_path: Path) -> None:
+        pid_file = tmp_path / "grandchild.pid"
+        # The grandchild drops the pipes, so only a group kill can stop it.
+        script = f"sleep 30 >/dev/null 2>&1 & echo $! > {pid_file}; wait"
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_in_process_group(["sh", "-c", script], timeout=5)
+        if not pid_file.exists():
+            raise AssertionError(f"pid_file race: {pid_file} was not written before timeout fired")
+        try:
+            grandchild = int(pid_file.read_text(encoding="utf-8").strip())
+        except (FileNotFoundError, ValueError) as err:
+            raise AssertionError(f"pid_file race: could not read grandchild pid from {pid_file}: {err}") from err
+        for _ in range(50):
+            if not pid_running(grandchild):
+                return
+            time.sleep(0.1)
+        raise AssertionError(f"grandchild {grandchild} survived the timeout")
+
+    def test_timeout_returns_while_grandchild_holds_pipes(self) -> None:
+        start = time.monotonic()
+        with pytest.raises(subprocess.TimeoutExpired):
+            run_in_process_group(["sh", "-c", "sleep 30 & wait"], timeout=1)
+        elapsed = time.monotonic() - start
+        expect(elapsed < 10, f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open")
+
+    def test_nonzero_exit_raises_called_process_error(self) -> None:
+        with pytest.raises(subprocess.CalledProcessError) as caught:
+            run_in_process_group(["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10)
+        expect(caught.value.returncode == 3, "exit code must propagate")
+        expect(caught.value.output is not None and b"out" in caught.value.output, "stdout must be kept")
+        expect(caught.value.stderr is not None and b"boom" in caught.value.stderr, "stderr must be kept")
+
+    def test_zero_exit_returns(self) -> None:
+        run_in_process_group(["sh", "-c", "exit 0"], timeout=10)
+
+
+class _FakeProc:
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.killed = False
+
+    def kill(self) -> None:
+        self.killed = True
+
+
+@pytest.mark.skipif(not hasattr(os, "killpg"), reason="process groups are POSIX-only")
+class TestKillProcessGroup:
+    def test_kill_process_group_swallows_process_lookup_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def raise_lookup(pid: int, sig: int) -> None:
+            raise ProcessLookupError
+
+        monkeypatch.setattr(os, "killpg", raise_lookup)
+        fake = _FakeProc(pid=99999)
+        kill_process_group(fake)
+
+    def test_kill_process_group_boundary_pids(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        killpg_called = False
+
+        def fake_killpg(pid: int, sig: int) -> None:
+            nonlocal killpg_called
+            killpg_called = True
+
+        monkeypatch.setattr(os, "killpg", fake_killpg)
+
+        fake_init = _FakeProc(pid=1)
+        kill_process_group(fake_init)
+        expect(fake_init.killed, "proc.kill() must be called for pid 1")
+        expect(not killpg_called, "os.killpg must not be called for pid 1")
+
+        fake_pgrp = _FakeProc(pid=os.getpgrp())
+        kill_process_group(fake_pgrp)
+        expect(fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()")
+        expect(not killpg_called, "os.killpg must not be called when pid matches getpgrp()")
+
+
+class TestPidRunning:
+    @pytest.mark.parametrize(
+        "kill_error, proc_present, read_text, expected",
+        [
+            pytest.param(
+                ProcessLookupError(errno.ESRCH, "No such process"),
+                True,
+                "12345 (sleep) S 1",
+                False,
+                id="kill-esrch",
+            ),
+            pytest.param(
+                PermissionError(errno.EPERM, "Operation not permitted"),
+                True,
+                PermissionError(errno.EACCES, "Permission denied"),
+                True,
+                id="kill-eperm-hidepid-noaccess",
+            ),
+            pytest.param(
+                PermissionError(errno.EPERM, "Operation not permitted"),
+                True,
+                FileNotFoundError("hidden"),
+                True,
+                id="kill-eperm-hidepid-invisible",
+            ),
+            pytest.param(None, False, "12345 (sleep) S 1", True, id="no-proc"),
+            pytest.param(None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
+            pytest.param(
+                None,
+                True,
+                ProcessLookupError(errno.ESRCH, "No such process"),
+                False,
+                id="reaped-mid-read",
+            ),
+            pytest.param(None, True, "12345 (sleep) Z 1 1", False, id="zombie"),
+            pytest.param(None, True, "12345 (sleep) S 1 1", True, id="running"),
+            pytest.param(None, True, "12345 (a) Z) R 1 1", True, id="paren-in-comm"),
+        ],
+    )
+    def test_pid_running_probe_outcomes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        kill_error: BaseException | None,
+        proc_present: bool,
+        read_text: str | BaseException,
+        expected: bool,
+    ) -> None:
+        """Every probe outcome the timeout tests rely on, including a reap between kill and the /proc read."""
+        kill_calls: list[tuple[int, int]] = []
+
+        def fake_kill(pid: int, sig: int) -> None:
+            """Stand in for kill(pid, 0) so the case decides whether the probe succeeds or raises an error."""
+            kill_calls.append((pid, sig))
+            if kill_error is not None:
+                raise kill_error
+
+        def fake_read_text(self_path: Path, encoding: str = "utf-8") -> str:
+            """Stand in for the /proc/<pid>/stat read so the case can return a state or raise a reap error."""
+            if isinstance(read_text, BaseException):
+                raise read_text
+            return read_text
+
+        monkeypatch.setattr(os, "kill", fake_kill)
+        monkeypatch.setattr(Path, "is_dir", lambda self: proc_present)
+        monkeypatch.setattr(Path, "read_text", fake_read_text)
+        expect(
+            pid_running(12345) is expected,
+            f"pid_running(12345) outcome mismatch: expected {expected}",
+        )
+        expect(kill_calls == [(12345, 0)], f"kill probe calls: {kill_calls}")
+
+    def test_pid_running_reaped_child(self) -> None:
+        cmd = ["sh", "-c", "exit 0"]
+        proc = subprocess.Popen(  # noqa: S603 - fixed argv test process. # nosec B603
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        proc.wait(timeout=5)
+        expect(not pid_running(proc.pid), "reaped child process must not be running")
 
 
 class TestRuntimeLoadAndClassify:
@@ -808,6 +1022,7 @@ class TestPolicyAndServer:
             text=True,
             check=False,
             env={**os.environ, "PYTHONPATH": str(repo_root)},
+            timeout=60,
         )
         expect(res.returncode != 0)
         expect("ai-edge-litert is required" in res.stderr)

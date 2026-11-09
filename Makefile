@@ -88,22 +88,22 @@ fix-check-all: ## assert go fix would not modernize any Go module
 
 .PHONY: tools-bootstrap
 tools-bootstrap: ## install repository-managed developer tools at exact versions
-	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	bash scripts/ci/install-gosec.sh
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
-	$(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
-	$(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
-	$(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
-	$(GO) install github.com/air-verse/air@$(AIR_VERSION)
-	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
-	$(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
-	$(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
-	$(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-	$(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
-	$(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
-	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
-	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/air-verse/air@$(AIR_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
+	bash scripts/ci/retry.sh $(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
+	bash scripts/ci/retry.sh $(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
 ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
@@ -112,6 +112,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/check-dco_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
+	@bash scripts/ci/export-release-tool-pins_test.sh
 	@bash scripts/ci/release-pr-ci_test.sh
 	@bash scripts/ci/readme-badges_test.sh
 	@bash scripts/ci/require-green-ci_test.sh
@@ -129,10 +130,13 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
 	@bash scripts/ci/gosec-scan_test.sh
+	@bash scripts/ci/security-gates_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
+	@bash scripts/ci/shellcheck-hook_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
+	@bash scripts/ci/lib/policy-test_test.sh
 	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
@@ -154,6 +158,9 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/pull_test_images_test.py
 	@python3 -B scripts/ci/windows-panic-rescan_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
+	@python3 -B scripts/ci/shell_flake_policy.py
+	@python3 -B scripts/ci/shell_flake_policy_test.py
+	@bash scripts/ci/retry_test.sh
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
@@ -346,7 +353,7 @@ PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
-	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
+	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
 # override keeps the Pact paths when a caller sets these variables on the make command line;

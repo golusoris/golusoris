@@ -91,19 +91,25 @@ docker buildx build --load --platform linux/amd64 \
   -t local/tiny-gemma-trainer ai/tiny/trainers/gemma
 ```
 
-The separate Python ABI and ML-wheel constraints currently limit both release
-images to `linux/amd64`. `.github/workflows/tiny-trainer-images.yml` runs on
-every pull request and performs a real offline LiteRT train, conversion, and
-interpreter invocation. Publishing remains blocked until the repository has a
-review-protected `tiny-trainer-publish` environment, a protected
-`tiny-trainers-v*.*.*` tag rule, and `TINY_TRAINER_PUBLISH_ENABLED=true`.
-After that control-plane setup, publication requires the exact version tag and
-event SHA. Every attempt rebuilds and smokes the candidate. A retry reuses an
-existing tag only when its config digest matches that tested image and its
-signature, build provenance, and SPDX SBOM attestation verify against the exact
-workflow, source tag, and source SHA. A new push records Docker's manifest
-digest, resolves the tag back to that digest and tested config, then signs and
-attests it.
+New releases publish multi-arch manifest lists covering `linux/amd64` and
+`linux/arm64`; existing single-arch images are not retroactively updated.
+`.github/workflows/tiny-trainer-images.yml` runs on every pull request and
+performs a real offline LiteRT train, conversion, and interpreter invocation.
+Publishing remains blocked until the repository has a review-protected
+`tiny-trainer-publish` environment, a protected `tiny-trainers-v*.*.*` tag
+rule, and `TINY_TRAINER_PUBLISH_ENABLED=true`. After that control-plane setup,
+publication requires the exact version tag and event SHA. A multi-arch build
+pushed by digest without a tag happens only when the version tag does not
+exist; with an existing tag the run skips the build and reuses that tag's
+digest. The amd64 child of that digest is smoke-tested (arm64 is built by the
+same buildx invocation but not smoke-tested), and the source, revision, and
+version labels of both platform children are verified against the event
+metadata. The release tag is created pointing at that verified digest only
+after all checks pass. A retry runs the same smoke test and platform label
+checks on the existing digest. Every run, new or resumed, then signs the
+digest, attests its build provenance and SPDX SBOM, and verifies the
+signature, provenance, and SBOM against the exact workflow, source tag, and
+source SHA.
 
 Dependency locks include hashes for every Python distribution. CI regenerates
 them and audits both complete locks with a pinned `pip-audit`; findings fail

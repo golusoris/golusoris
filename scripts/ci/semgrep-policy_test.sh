@@ -7,9 +7,10 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
-suite_root="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-semgrep-policy.XXXXXX")"
-readonly suite_root
-trap 'find "$suite_root" -depth -delete' EXIT
+
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
+policy_suite_init "golusoris-semgrep-policy"
 
 new_repo() {
 	local name="$1"
@@ -27,21 +28,10 @@ new_repo() {
 	printf '%s\n' "$root"
 }
 
-expect_failure() {
-	local pattern="$1"
-	shift
-	local output
-	local status=0
-	output="$("$@" 2>&1)" || status=$?
-	if (( status == 0 )); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
-	if [[ "$output" != *"$pattern"* ]]; then
-		printf 'missing failure %q in: %s\n' "$pattern" "$output" >&2
-		return 1
-	fi
-	if [[ "$output" == *'unbound variable'* ]]; then
+# Callers assert failure while rejecting unbound cleanup variables in error paths.
+expect_semgrep_failure() {
+	expect_failure_matching "$@" || return
+	if [[ "$policy_failure_output" == *'unbound variable'* ]]; then
 		printf 'Semgrep failure path leaked an unbound cleanup variable\n' >&2
 		return 1
 	fi
@@ -67,7 +57,7 @@ import "net/http"
 var client = http.DefaultClient
 EOF
 git -C "$positive_root" add .
-expect_failure 'no-http-default-client' \
+expect_semgrep_failure 'no-http-default-client' \
 	bash "$positive_root/scripts/ci/semgrep-scan.sh" --root "$positive_root"
 
 untracked_root="$(new_repo untracked)"
@@ -80,7 +70,7 @@ import "net/http"
 
 var client = http.DefaultClient
 EOF
-expect_failure 'untracked.go' \
+expect_semgrep_failure 'untracked.go' \
 	bash "$untracked_root/scripts/ci/semgrep-scan.sh" --root "$untracked_root"
 
 fixture_root="$(new_repo fixtures)"
@@ -95,16 +85,10 @@ parse_root="$(new_repo parse-error)"
 cat >"$parse_root/broken.go" <<'EOF'
 package broken
 
-import "github.com/riverqueue/river"
-
-type Args struct{}
-
-type Broken struct {
-	river.WorkerDefaults[Args]
-}
+func Unterminated() {
 EOF
 git -C "$parse_root" add .
-expect_failure 'Semgrep error:' \
+expect_semgrep_failure 'Semgrep error:' \
 	bash "$parse_root/scripts/ci/semgrep-scan.sh" --root "$parse_root"
 
 write_generic_alias() {
@@ -118,21 +102,7 @@ alias_root="$(new_repo generic-alias)"
 write_clean_go "$alias_root"
 write_generic_alias "$alias_root/jobs/types.go"
 git -C "$alias_root" add .
-alias_output="$(SEMGREP_EXCEPTION_DATE=20261008 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root")"
-if [[ "$alias_output" != *'tolerates'* ]]; then
-	printf 'generic alias output missing "tolerates": %s\n' "$alias_output" >&2
-	exit 1
-fi
-
-boundary_output="$(SEMGREP_EXCEPTION_DATE=20261107 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root")"
-if [[ "$boundary_output" != *'tolerates'* ]]; then
-	printf 'expiry boundary output missing "tolerates": %s\n' "$boundary_output" >&2
-	exit 1
-fi
-expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261108 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root"
+bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root" >/dev/null
 
 alias_finding_root="$(new_repo generic-alias-finding)"
 write_clean_go "$alias_finding_root"
@@ -140,22 +110,15 @@ mkdir -p "$alias_finding_root/jobs"
 printf '%s\n' 'package jobs' '' 'import "time"' '' 'type Box[T any] struct{ V T }' '' \
 	'type Job[T any] = Box[T]' '' 'func F() { time.Sleep(1) }' >"$alias_finding_root/jobs/types.go"
 git -C "$alias_finding_root" add .
-expect_failure 'no-time-sleep-in-library' env SEMGREP_EXCEPTION_DATE=20261008 \
+expect_semgrep_failure 'no-time-sleep-in-library' \
 	bash "$alias_finding_root/scripts/ci/semgrep-scan.sh" --root "$alias_finding_root"
-
-alias_elsewhere_root="$(new_repo generic-alias-elsewhere)"
-write_clean_go "$alias_elsewhere_root"
-write_generic_alias "$alias_elsewhere_root/other/types.go"
-git -C "$alias_elsewhere_root" add .
-expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261008 \
-	bash "$alias_elsewhere_root/scripts/ci/semgrep-scan.sh" --root "$alias_elsewhere_root"
 
 symlink_root="$(new_repo symlink)"
 mkdir -p "$suite_root/outside"
 write_clean_go "$suite_root/outside"
 ln -s "$suite_root/outside/clean.go" "$symlink_root/external.go"
 git -C "$symlink_root" add .
-expect_failure 'Semgrep refuses symlink input' \
+expect_semgrep_failure 'Semgrep refuses symlink input' \
 	bash "$symlink_root/scripts/ci/semgrep-scan.sh" --root "$symlink_root"
 
 failure_root="$(new_repo scanner-failure)"
@@ -167,7 +130,7 @@ cat >/dev/null
 exit 9
 EOF
 chmod +x "$suite_root/docker-failure"
-expect_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-failure" \
+expect_semgrep_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-failure" \
 	bash "$failure_root/scripts/ci/semgrep-scan.sh" --root "$failure_root"
 
 # xargs splits a long file list over several scanner runs; the report then holds one JSON document per run.
@@ -212,13 +175,13 @@ if [[ "$split_output" != *'2 repository Go files passed'* ]]; then
 	exit 1
 fi
 write_fake_docker docker-split-finding "$split_first" "$split_finding"
-expect_failure 'second.go:3: planted.rule: planted' env DOCKER_BIN="$suite_root/docker-split-finding" \
+expect_semgrep_failure 'second.go:3: planted.rule: planted' env DOCKER_BIN="$suite_root/docker-split-finding" \
 	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
 write_fake_docker docker-split-unscanned "$split_first" "$split_unscanned"
-expect_failure 'Semgrep did not scan selected file: second.go' env DOCKER_BIN="$suite_root/docker-split-unscanned" \
+expect_semgrep_failure 'Semgrep did not scan selected file: second.go' env DOCKER_BIN="$suite_root/docker-split-unscanned" \
 	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
 write_fake_docker docker-split-garbage "$split_first" 'not json'
-expect_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-split-garbage" \
+expect_semgrep_failure 'Semgrep report is unreadable' env DOCKER_BIN="$suite_root/docker-split-garbage" \
 	bash "$split_root/scripts/ci/semgrep-scan.sh" --root "$split_root"
 
 fake_alias_root="$(new_repo fake-alias)"
@@ -226,22 +189,28 @@ write_clean_go "$fake_alias_root"
 write_generic_alias "$fake_alias_root/jobs/types.go"
 git -C "$fake_alias_root" add .
 
-# Negative (fake docker): PartialParsing error in jobs/types.go whose span points at a non-alias line -> fails.
-readonly fake_non_alias_span='{"errors":[{"code":3,"level":"warn","type":["PartialParsing",[{"path":"jobs/types.go","start":{"line":1}}]],"message":"bad span","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":1}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
-write_fake_docker_exit 123 docker-non-alias-span "$fake_non_alias_span"
-expect_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-non-alias-span" \
+# Negative (fake docker): any PartialParsing error in jobs/types.go -> fails (no tolerance left).
+readonly fake_alias_partial_parse='{"errors":[{"code":3,"level":"warn","type":["PartialParsing",[{"path":"jobs/types.go","start":{"line":4}}]],"message":"Syntax error","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":4}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
+write_fake_docker_exit 123 docker-alias-partial-parse "$fake_alias_partial_parse"
+expect_semgrep_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-alias-partial-parse" \
 	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
 
-# Negative (fake docker): non-PartialParsing error in jobs/types.go -> fails.
-readonly fake_non_partial_parse='{"errors":[{"code":3,"level":"warn","type":["SyntaxError",[{"path":"jobs/types.go","start":{"line":5}}]],"message":"bad type","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":5}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
-write_fake_docker_exit 123 docker-non-partial-parse "$fake_non_partial_parse"
-expect_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-non-partial-parse" \
-	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
-
-# Negative (fake docker): scanner status that is neither 0 nor the tolerated status -> fails.
+# Negative (fake docker): scanner status that is non-zero -> fails.
 readonly fake_clean_report='{"errors":[],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
 write_fake_docker_exit 9 docker-bad-status "$fake_clean_report"
-expect_failure 'Semgrep scanner failed with exit status 9' env DOCKER_BIN="$suite_root/docker-bad-status" \
+expect_semgrep_failure 'Semgrep scanner failed with exit status 9' env DOCKER_BIN="$suite_root/docker-bad-status" \
 	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
+
+# Boundary (fake docker): status 123, once tolerated for the alias exception, now fails on a clean report.
+write_fake_docker_exit 123 docker-former-tolerated-status "$fake_clean_report"
+expect_semgrep_failure 'Semgrep scanner failed with exit status 123' env DOCKER_BIN="$suite_root/docker-former-tolerated-status" \
+	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
+
+# Proves expect_semgrep_failure rejects unbound variable leaks and accepts clean failures.
+if expect_semgrep_failure 'planted' bash -c "printf 'planted\nline 1: x: unbound variable\n'; exit 1" 2>/dev/null; then
+	printf 'expect_semgrep_failure accepted unbound variable leak\n' >&2
+	exit 1
+fi
+expect_semgrep_failure 'planted' bash -c "printf 'planted\n'; exit 1"
 
 printf 'Semgrep full-tree policy tests passed\n'

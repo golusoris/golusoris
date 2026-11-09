@@ -16,7 +16,10 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
@@ -30,6 +33,9 @@ RELEASE_BASE = (
 MAX_ARCHIVE_BYTES = 16 << 20
 MAX_LIBRARY_BYTES = 64 << 20
 CHUNK_BYTES = 64 << 10
+DOWNLOAD_ATTEMPTS = 3
+RETRY_DELAYS = (2.0, 4.0)
+SLEEP: Callable[[float], None] = time.sleep
 
 
 # scripts/ci exit-code contract: 3 = error, fail closed.
@@ -157,15 +163,25 @@ def archive_digest(archive: Path) -> str:
     raise InstallError("Pact FFI archive exceeded bounded hash iterations")
 
 
-def download_archive(asset: Asset, directory: Path) -> Path:
-    """Download one bounded archive and reject bytes outside the lock."""
-    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+def is_transient_download_error(error: BaseException) -> bool:
+    """Allow-list transient network errors eligible for download retry."""
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code == 408 or error.code == 429 or error.code >= 500
+    if isinstance(error, urllib.error.URLError):
+        return True
+    return isinstance(
+        error, (TimeoutError, ConnectionError, http.client.HTTPException)
+    )
+
+
+def download_attempt(asset: Asset, directory: Path) -> Path:
+    """Execute one bounded download attempt and verify the asset digest."""
     temporary = tempfile.NamedTemporaryFile(
         mode="wb", prefix=".pact-ffi-", suffix=".gz", dir=directory, delete=False
     )
     archive = Path(temporary.name)
     complete = False
-    failure: InstallError | None = None
+    failure: Exception | None = None
     try:
         url = f"{RELEASE_BASE}/{asset.filename}"
         with urllib.request.urlopen(url, timeout=60) as response:  # noqa: S310 - fixed HTTPS release origin and locked asset names.  # nosemgrep: python.lang.security.audit.dynamic-urllib-use-detected.dynamic-urllib-use-detected -- RELEASE_BASE is a fixed HTTPS origin and asset names come from the lock
@@ -177,16 +193,36 @@ def download_archive(asset: Asset, directory: Path) -> Path:
                 f"Pact FFI digest mismatch: expected {asset.sha256}, got {actual}"
             )
         complete = True
-    except InstallError as error:
+    except (InstallError, OSError, http.client.HTTPException) as error:
         failure = error
-    except (OSError, http.client.HTTPException) as error:
-        failure = InstallError(f"Pact FFI download failed: {error}")
     except BaseException:
         cleanup_temporary(temporary, archive, remove=True)
         raise
     cleanup_error = cleanup_temporary(temporary, archive, remove=not complete)
     raise_install_failure(failure, cleanup_error)
     return archive
+
+
+def download_archive(asset: Asset, directory: Path) -> Path:
+    """Download one bounded archive with bounded retries for transient failures."""
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    last_error: Exception | None = None
+    for attempt in range(DOWNLOAD_ATTEMPTS):
+        try:
+            return download_attempt(asset, directory)
+        except (OSError, http.client.HTTPException) as error:
+            if not is_transient_download_error(error):
+                raise InstallError(f"Pact FFI download failed: {error}") from error
+            last_error = error
+            if attempt + 1 < DOWNLOAD_ATTEMPTS:
+                delay = RETRY_DELAYS[min(attempt, len(RETRY_DELAYS) - 1)]
+                sys.stderr.write(
+                    f"pact-ffi: download attempt {attempt + 1}/{DOWNLOAD_ATTEMPTS} failed: {error}; retrying in {delay:g}s\n"
+                )
+                SLEEP(delay)
+    raise InstallError(
+        f"Pact FFI download failed after {DOWNLOAD_ATTEMPTS} attempts: {last_error}"
+    )
 
 
 def extract_archive(
@@ -252,7 +288,7 @@ def cleanup_temporary(
 
 
 def raise_install_failure(
-    failure: InstallError | None,
+    failure: Exception | None,
     cleanup_error: InstallError | None,
 ) -> None:
     """Raise one primary or cleanup failure without discarding either."""
@@ -278,17 +314,17 @@ def fix_macos_install_name(system_name: str, library: Path) -> None:
         raise InstallError(f"failed to set Pact FFI install name: {error}") from error
 
 
-def cached_archive_path(asset: Asset, library_dir: Path) -> Path:
+def cached_archive_path(asset: Asset, cache_dir: Path) -> Path:
     """Key the kept archive by its pinned digest so a pin change downloads the new asset."""
-    return library_dir / f"{asset.sha256}-{asset.filename}"
+    return cache_dir / f"{asset.sha256}-{asset.filename}"
 
 
-def cached_archive(asset: Asset, library_dir: Path) -> Path:
+def cached_archive(asset: Asset, cache_dir: Path) -> Path:
     """Return the kept archive, downloading it once; extract_archive re-verifies its digest."""
-    archive = cached_archive_path(asset, library_dir)
+    archive = cached_archive_path(asset, cache_dir)
     if archive.exists():
         return archive
-    downloaded = download_archive(asset, library_dir)
+    downloaded = download_archive(asset, cache_dir)
     try:
         os.replace(downloaded, archive)
     except OSError as error:
@@ -301,24 +337,34 @@ def cached_archive(asset: Asset, library_dir: Path) -> Path:
     return archive
 
 
-def require_contained(library_dir: Path, cache_root: Path) -> None:
-    """Refuse a cache directory that a symlinked component moves outside cache_root."""
-    if not library_dir.resolve().is_relative_to(cache_root.resolve()):
-        raise InstallError(f"Pact FFI cache directory resolves outside {cache_root}: {library_dir}")
+def require_contained(cache_dir: Path, cache_root: Path | None) -> None:
+    """Refuse a cache directory that resolves outside cache_root or lacks cache_root."""
+    if cache_root is None:
+        raise InstallError(f"cache_dir requires cache_root: {cache_dir}")
+    if not cache_dir.resolve().is_relative_to(cache_root.resolve()):
+        raise InstallError(f"Pact FFI cache directory resolves outside {cache_root}: {cache_dir}")
 
 
-def install(module: Path, library_dir: Path, *, cache_root: Path | None = None) -> Path:
+def install(
+    module: Path,
+    library_dir: Path,
+    *,
+    cache_dir: Path | None = None,
+    cache_root: Path | None = None,
+) -> Path:
     """Verify the dependency pin, then install the matching locked asset.
 
-    With cache_root, library_dir must resolve beneath it; the verified archive stays there
-    and later runs re-verify it against the pinned digest instead of downloading.
+    With cache_dir, cache_dir must resolve beneath cache_root; the verified archive stays
+    there and later runs re-verify it against the pinned digest instead of downloading.
     """
     verify_pact_go_pin(module)
     system_name = platform.system()
     asset = select_asset(system_name, platform.machine())
-    if cache_root is not None:
-        require_contained(library_dir, cache_root)
-        library = extract_archive(cached_archive(asset, library_dir), library_dir, asset)
+    if cache_dir is not None:
+        require_contained(cache_dir, cache_root)
+        cache_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        archive = cached_archive(asset, cache_dir)
+        library = extract_archive(archive, library_dir, asset)
     else:
         archive = download_archive(asset, library_dir)
         try:
@@ -329,22 +375,44 @@ def install(module: Path, library_dir: Path, *, cache_root: Path | None = None) 
     return library
 
 
+def print_asset_digest() -> int:
+    """Print the pinned digest of the selected asset or fail on an unsupported host."""
+    try:
+        asset = select_asset(platform.system(), platform.machine())
+    except InstallError as error:
+        print(f"Pact FFI install failed: {error}", file=sys.stderr)
+        return EXIT_ERROR
+    print(asset.sha256)
+    return 0
+
+
 def main() -> int:
     """Parse bounded CI inputs and install the locked FFI artifact."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--lib-dir", required=True, type=Path)
+    parser.add_argument(
+        "--asset-digest",
+        action="store_true",
+        help="print the pinned asset digest for the current platform and exit",
+    )
+    parser.add_argument("--lib-dir", type=Path)
     parser.add_argument("--module", type=Path, default=Path("testutil/pact/go.mod"))
     parser.add_argument(
-        "--cache",
-        action="store_true",
-        help="keep the archive beneath the working directory and re-verify it on later runs",
+        "--cache-dir",
+        type=Path,
+        metavar="DIR",
+        help="keep the verified archive in DIR, which must resolve under the working directory; later runs re-verify it",
     )
     arguments = parser.parse_args()
+    if arguments.asset_digest:
+        return print_asset_digest()
+    if arguments.lib_dir is None:
+        parser.error("the following arguments are required: --lib-dir")
     try:
         library = install(
             arguments.module,
             arguments.lib_dir,
-            cache_root=Path.cwd() if arguments.cache else None,
+            cache_dir=arguments.cache_dir,
+            cache_root=Path.cwd() if arguments.cache_dir is not None else None,
         )
     except InstallError as error:
         print(f"Pact FFI install failed: {error}", file=sys.stderr)

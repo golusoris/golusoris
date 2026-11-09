@@ -12,8 +12,9 @@ set -euo pipefail
 # work is script-level so the EXIT trap still sees it after main returns.
 work=""
 
+# Build gosec against the pinned golang.org/x/tools and refuse a binary linked to any other version.
 main() {
-	local root pinned_gosec pinned_xtools dest
+	local root pinned_gosec pinned_xtools dest gosec_version
 	root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 	pinned_gosec="${GOSEC_VERSION:-}"
 	pinned_xtools="${GOSEC_XTOOLS_VERSION:-}"
@@ -27,13 +28,13 @@ main() {
 	(
 		cd "$work"
 		go mod init golusoris.invalid/gosec-build >/dev/null 2>&1
-		GOFLAGS=-mod=mod go get \
+		GOFLAGS=-mod=mod bash "$root/scripts/ci/retry.sh" go get \
 			"github.com/securego/gosec/v2@${GOSEC_VERSION}" \
 			"golang.org/x/tools@${GOSEC_XTOOLS_VERSION}"
 		mkdir -p "$dest"
 		GOFLAGS=-mod=mod go build -o "$dest/gosec" github.com/securego/gosec/v2/cmd/gosec
 	)
-	go version -m "$dest/gosec" | grep -Fq "golang.org/x/tools	${GOSEC_XTOOLS_VERSION}" || {
+	{ gosec_version="$(go version -m "$dest/gosec")" && grep -Fq "golang.org/x/tools	${GOSEC_XTOOLS_VERSION}" <<<"$gosec_version"; } || {
 		printf 'gosec was not built against golang.org/x/tools %s\n' "$GOSEC_XTOOLS_VERSION" >&2
 		return 1
 	}

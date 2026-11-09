@@ -73,11 +73,13 @@ resolve_smoke_port() {
 	printf '%s\n' "$port"
 }
 
+# Poll /healthz until it answers 200 or 503, bounded at 30 retries; dump container logs before failing.
 wait_sidecar_ready() {
 	local port="$1"
 	local cid="$2"
 	local attempts=0
-	until curl --connect-timeout 2 --max-time 3 -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/healthz" | grep -E '200|503' >/dev/null; do
+	local http_code
+	until http_code="$(curl --connect-timeout 2 --max-time 3 -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${port}/healthz")" && grep -Eq '200|503' <<<"$http_code"; do
 		attempts=$((attempts + 1))
 		if (( attempts > 30 )); then
 			printf 'FAIL: sidecar did not become responsive on port %d\n' "$port" >&2

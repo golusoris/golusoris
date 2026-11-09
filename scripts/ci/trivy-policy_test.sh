@@ -49,7 +49,7 @@ check_go_package_exception() {
 		return 1
 	fi
 	local imported
-	imported="$(awk -v p="$package" '$0 == p || index($0, p "/") == 1' <<<"$dependencies" | head -n 1)"
+	imported="$(awk -v p="$package" '$0 == p || index($0, p "/") == 1' <<<"$dependencies" | sed -n '1p')"
 	if [[ -n "$imported" ]]; then
 		printf 'OpenVEX exception is stale: %s is in the import graph\n' "$imported" >&2
 		return 1

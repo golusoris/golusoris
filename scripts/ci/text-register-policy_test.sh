@@ -20,6 +20,7 @@ for skill in adhd-format caveman social-text; do
   install -m 0644 "$repo_root/.agents/skills/$skill/SKILL.md" \
     "$fixture/.agents/plugins/praetor/skills/$skill/SKILL.md"
 done
+install -m 0644 "$repo_root/AGENTS.md" "$fixture/AGENTS.md"
 
 bash "$repo_root/scripts/ci/text-register-policy.sh" "$fixture" >/dev/null
 
@@ -50,5 +51,29 @@ if bash "$repo_root/scripts/ci/text-register-policy.sh" "$fixture" >/dev/null 2>
   printf '%s\n' 'missing ADHD dependency passed policy' >&2
   exit 1
 fi
+install -m 0644 "$repo_root/.agents/skills/social-text/SKILL.md" \
+  "$fixture/.agents/skills/social-text/SKILL.md"
+install -m 0644 "$repo_root/.agents/skills/social-text/SKILL.md" \
+  "$fixture/.agents/plugins/praetor/skills/social-text/SKILL.md"
+
+# Cut one phrase at a time so each override check has its own negative control.
+overrides=('Golusoris social override:' 'no receipt fence' 'no changelog fragments'
+  $'\x60release-please\x60 writes \x60CHANGELOG.md\x60' $'1-3 bullets under \x60## Summary\x60'
+  $'also \x60BREAKING CHANGE:\x60 footer')
+for override in "${overrides[@]}"; do
+  awk -v needle="$override" '{ i = index($0, needle); if (i > 0) $0 = substr($0, 1, i - 1) substr($0, i + length(needle)); print }' \
+    "$repo_root/AGENTS.md" >"$fixture/AGENTS.md"
+  if bash "$repo_root/scripts/ci/text-register-policy.sh" "$fixture" >/dev/null 2>&1; then
+    printf 'missing AGENTS.md social override %s passed policy\n' "$override" >&2
+    exit 1
+  fi
+done
+# A wider bullet limit must fail too, not only a removed phrase.
+sed 's/1-3 bullets under/10 bullets under/' "$repo_root/AGENTS.md" >"$fixture/AGENTS.md"
+if bash "$repo_root/scripts/ci/text-register-policy.sh" "$fixture" >/dev/null 2>&1; then
+  printf '%s\n' 'AGENTS.md PR bullet limit of 10 passed policy' >&2
+  exit 1
+fi
+install -m 0644 "$repo_root/AGENTS.md" "$fixture/AGENTS.md"
 
 printf '%s\n' 'text-register policy negative controls: pass'

@@ -98,6 +98,7 @@ class CheckpointTests(TestCase):
         self.assertIn("protected", result["error"])
 
     def test_publish_false_does_not_query_network(self):
+        """Pins not_due status and zero ls-remote or gh pr queries when publishing is disabled."""
         (self.root / "public.txt").write_text("change\n")
         original = checkpoint._run
         calls = []
@@ -106,11 +107,8 @@ class CheckpointTests(TestCase):
             calls.append(argv)
             return original(argv, root, **kwargs)
 
-        checkpoint._run = capture
-        try:
+        with mock.patch.object(checkpoint, "_run", side_effect=capture):
             result = checkpoint.inspect_checkpoint(self.root, "stop")
-        finally:
-            checkpoint._run = original
         self.assertEqual(result["publication_status"], "not_due")
         self.assertFalse(any(argv[:2] == ["gh", "pr"] for argv in calls))
         self.assertFalse(any("ls-remote" in argv for argv in calls))
@@ -136,53 +134,63 @@ class CheckpointTests(TestCase):
             with self.assertRaises(checkpoint.CheckpointError):
                 checkpoint._validate_remote(url, "acme/demo")
 
-    def test_clean_ahead_checks_live_refs_and_requests_push(self):
-        git(self.root, "remote", "add", "origin", "https://github.com/acme/demo.git")
-        self.write_config({**CONFIG, "publish": True, "require_pr": False})
+    def commit_ahead(self, url, config):
+        """Both publication tests need one local commit above a GitHub-shaped origin."""
+        git(self.root, "remote", "add", "origin", url)
+        self.write_config(config)
         git(self.root, "add", ".")
         git(self.root, "commit", "-q", "-m", "ahead")
+        head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
         base = git(self.root, "rev-parse", "HEAD~1").stdout.decode().strip()
+        return head, base
+
+    def inspect_with_remote(self, ls_remote, prs=None):
+        """Stubs only the network calls so publication logic runs against real local git."""
         original = checkpoint._run
+        calls = []
 
         def fake(argv, root, **kwargs):
+            """Answers canned ls-remote refs and PR listings while recording network argv."""
             if argv[:2] == ["git", "ls-remote"]:
-                return f"{base}\trefs/heads/main\n".encode()
+                calls.append(list(argv))
+                return ls_remote.encode()
+            if argv[:2] == ["gh", "pr"] and prs is not None:
+                calls.append(list(argv))
+                return json.dumps(prs).encode()
             return original(argv, root, **kwargs)
 
-        checkpoint._run = fake
-        try:
-            result = checkpoint.inspect_checkpoint(self.root, "stop")
-        finally:
-            checkpoint._run = original
+        with mock.patch.object(checkpoint, "_run", side_effect=fake):
+            return checkpoint.inspect_checkpoint(self.root, "stop"), calls
+
+    def test_clean_ahead_checks_live_refs_and_requests_push(self):
+        """Pins due_push status and exact origin ls-remote queries when commits are ahead of remote."""
+        _head, base = self.commit_ahead("https://github.com/acme/demo.git",
+                                        {**CONFIG, "publish": True, "require_pr": False})
+        result, calls = self.inspect_with_remote(f"{base}\trefs/heads/main\n")
+        self.assertEqual(calls, [
+            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
+        ])
         self.assertEqual(result["publication_status"], "due_push")
         self.assertFalse(result["commit_due"])
         self.assertTrue(result["due"])
         self.assertEqual(result["actions"], [checkpoint.PUSH_ACTION])
 
     def test_clean_pushed_exact_pr_is_present(self):
-        git(self.root, "remote", "add", "origin", "git@github.com:acme/demo.git")
-        self.write_config({**CONFIG, "publish": True})
+        """Pins present status and exact ls-remote plus gh pr list queries when a matching PR exists."""
         (self.root / "ahead.txt").write_text("ahead\n")
-        git(self.root, "add", ".")
-        git(self.root, "commit", "-q", "-m", "ahead")
-        head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
-        base = git(self.root, "rev-parse", "HEAD~1").stdout.decode().strip()
-        original = checkpoint._run
-
-        def fake(argv, root, **kwargs):
-            if argv[:2] == ["git", "ls-remote"]:
-                return f"{head}\trefs/heads/checkpoint/test\n{base}\trefs/heads/main\n".encode()
-            if argv[:2] == ["gh", "pr"]:
-                return json.dumps([{"number": 7, "url": "https://github.com/acme/demo/pull/7",
-                                     "isDraft": True, "headRefOid": head,
-                                     "headRefName": "checkpoint/test", "baseRefName": "main"}]).encode()
-            return original(argv, root, **kwargs)
-
-        checkpoint._run = fake
-        try:
-            result = checkpoint.inspect_checkpoint(self.root, "stop")
-        finally:
-            checkpoint._run = original
+        head, base = self.commit_ahead("git@github.com:acme/demo.git", {**CONFIG, "publish": True})
+        prs = [{"number": 7, "url": "https://github.com/acme/demo/pull/7",
+                "isDraft": True, "headRefOid": head,
+                "headRefName": "checkpoint/test", "baseRefName": "main"}]
+        result, calls = self.inspect_with_remote(
+            f"{head}\trefs/heads/checkpoint/test\n{base}\trefs/heads/main\n", prs=prs
+        )
+        self.assertEqual(calls, [
+            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
+            ["gh", "pr", "list", "--repo", "acme/demo", "--base", "main", "--head", "checkpoint/test",
+             "--state", "open", "--limit", "2", "--json",
+             "number,url,isDraft,headRefOid,headRefName,baseRefName"],
+        ])
         self.assertEqual(result["publication_status"], "present")
         self.assertFalse(result["due"])
         self.assertEqual(result["changed_count"], 0)
