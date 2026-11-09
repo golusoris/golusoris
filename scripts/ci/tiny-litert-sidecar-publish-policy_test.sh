@@ -12,6 +12,7 @@ readonly repo_root
 . "$repo_root/scripts/ci/lib/policy-test.sh"
 policy_suite_init "tiny-litert-sidecar-publish-policy"
 
+# Failure message check so negative tests fail for the intended reason, not an unrelated error.
 expect_failure_msg() {
 	local want="$1"
 	shift
@@ -27,6 +28,7 @@ expect_failure_msg() {
 	}
 }
 
+# Step order check so unverified candidates are never tagged or signed before validation.
 check_step_order() {
 	local path="$1"
 	shift
@@ -43,6 +45,7 @@ check_step_order() {
 	done
 }
 
+# Literal string check so required publication controls and flags cannot be omitted.
 require_literal() {
 	local path="$1"
 	local literal="$2"
@@ -52,6 +55,7 @@ require_literal() {
 	fi
 }
 
+# Unconditional step guard so validation and signing cannot be skipped on new or resumed runs.
 require_unconditional_step() {
 	local path="$1"
 	local step="$2"
@@ -67,6 +71,7 @@ require_unconditional_step() {
 	fi
 }
 
+# Smoke skip-build check so tests validate the exact pulled candidate without rebuilding.
 check_smoke_skips_build() {
 	local path="$1"
 	if ! grep -A 10 'name: Smoke exact publish candidate' "$path" | grep -Fq 'SIDECAR_SKIP_BUILD: '"'1'"; then
@@ -75,6 +80,7 @@ check_smoke_skips_build() {
 	fi
 }
 
+# Manifest verification guard so image identity is proven before reuse, signing, and release.
 check_manifest_identity() {
 	local path="$1"
 	if (( $(grep -Fc 'bash scripts/ci/tiny-trainer-verify-image.sh' "$path") != 1 )); then
@@ -95,6 +101,7 @@ check_manifest_identity() {
 	fi
 }
 
+# Publish job without load: true and push step without tags:, so nothing is loaded or tagged before validation.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
@@ -118,6 +125,7 @@ check_publish_job_shape() {
 	fi
 }
 
+# Workflow policy check so release pipelines cannot bypass required supply-chain controls.
 check_workflow() {
 	local path="$1"
 	local literal
