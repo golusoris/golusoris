@@ -11,12 +11,12 @@ helper="$repo_root/scripts/ci/tiny-trainer-manifest-identity.py"
 readonly repo_root suite_root helper
 trap 'find "$suite_root" -depth -delete' EXIT
 
-# Computes and returns the SHA-256 hex digest of data read from standard input.
+# Stdin SHA-256 helper so synthetic test manifests produce exact payload digests.
 sha256_digest() {
 	python3 -I -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
 }
 
-# Runs "$@" and fails if it exits 0; prints 'expected failure: <command>' on error.
+# Command failure check so negative cases and invalid inputs do not succeed silently.
 expect_failure() {
 	local status=0
 	"$@" >/dev/null 2>&1 || status=$?
@@ -26,7 +26,7 @@ expect_failure() {
 	fi
 }
 
-# Runs "$@"; fails if command succeeds or stderr lacks "$want", printing expected or wrong failure.
+# Failure message check so negative tests fail for the intended reason, not an unrelated error.
 expect_failure_msg() {
 	local want="$1"
 	shift
@@ -42,7 +42,7 @@ expect_failure_msg() {
 	}
 }
 
-# Fails unless steps "$@" appear in order in "$path"; prints '<path> must order publish steps'.
+# Step order check so unverified candidates are never tagged or signed before validation.
 check_step_order() {
 	local path="$1"
 	shift
@@ -59,21 +59,21 @@ check_step_order() {
 	done
 }
 
-# Validates manifest "$json" via helper with args "$@"; propagates helper output and exit status.
+# Manifest JSON check so malformed, mismatched, or untrusted manifests are rejected.
 check_manifest_json() {
 	local json="$1"
 	shift
 	printf '%s' "$json" | python3 -B "$helper" "$@"
 }
 
-# Validates config "$json" via helper --config "$@"; propagates helper output and exit status.
+# Image config check so mismatched platforms, revisions, or release labels are rejected.
 check_config_json() {
 	local json="$1"
 	shift
 	python3 -B "$helper" --config "$@" <<<"$json"
 }
 
-# Fails unless "$path" contains "$literal"; prints '<path> lacks required publication control'.
+# Literal string check so required publication controls and flags cannot be omitted.
 require_literal() {
 	local path="$1"
 	local literal="$2"
@@ -83,7 +83,7 @@ require_literal() {
 	fi
 }
 
-# Checks "$step" in "$path" is unconditional; prints '<path> must run <step> on new and resumed'.
+# Unconditional step guard so validation and signing cannot be skipped on new or resumed runs.
 require_unconditional_step() {
 	local path="$1"
 	local step="$2"
@@ -99,7 +99,7 @@ require_unconditional_step() {
 	fi
 }
 
-# Checks "$path" publish job lacks load: true and has a build-and-push step without tags:; prints the violation on failure.
+# Push step without tags: and no load: true, so nothing is tagged or loaded before validation.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
@@ -123,7 +123,7 @@ check_publish_job_shape() {
 	fi
 }
 
-# Validates workflow "$path" publication controls; prints violation or propagates check error.
+# Workflow policy check so release pipelines cannot bypass required supply-chain controls.
 check_workflow() {
 	local path="$1"
 	local literal
@@ -184,7 +184,7 @@ check_workflow() {
 	fi
 }
 
-# Validates "$path" audit toolchain against "$lock"; prints runtime resolution or pin mismatch.
+# Audit toolchain check so vulnerability scanners cannot resolve unpinned tools at runtime.
 check_audit_toolchain() {
 	local path="$1"
 	local lock="$2"
