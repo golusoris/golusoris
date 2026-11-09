@@ -150,4 +150,93 @@ expect_failure_matching 'SC2086' shellcheck \
 	"$repo_root/.config/hiss/testdata/HISS-10/shell/positive/unquoted-expansion.sh"
 shellcheck "$repo_root/.config/hiss/testdata/HISS-10/shell/negative/clean-script.sh"
 
+path_mode_root="$(new_repo path-mode)"
+write_clean_script "$path_mode_root/clean.sh"
+write_bad_script "$path_mode_root/tool"
+git -C "$path_mode_root" add .
+
+# Path mode: selects an extensionless shebang script
+expect_failure_matching 'SC2086' \
+	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- tool
+
+# Path mode: ignores a deleted path
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- deleted.sh clean.sh 2>&1)" || status=$?
+if (( status != 0 )) || [[ "$out" != *'1 changed shell scripts passed'* ]]; then
+	printf 'expected exit 0 ignoring deleted path, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+
+# Path mode: excludes .config/hiss/testdata/x.sh
+mkdir -p "$path_mode_root/.config/hiss/testdata"
+write_bad_script "$path_mode_root/.config/hiss/testdata/x.sh"
+git -C "$path_mode_root" add .
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- .config/hiss/testdata/x.sh clean.sh 2>&1)" || status=$?
+if (( status != 0 )) || [[ "$out" != *'1 changed shell scripts passed'* ]]; then
+	printf 'expected exit 0 excluding testdata, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+
+# Path mode: refuses a symlink
+ln -s "$suite_root/outside.sh" "$path_mode_root/symlink.sh"
+expect_failure_matching 'ShellCheck refuses symlink input: symlink.sh' \
+	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- symlink.sh
+
+# Path mode: --list prints exactly the selected scripts
+write_clean_script "$path_mode_root/ok_tool"
+git -C "$path_mode_root" add ok_tool
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list -- clean.sh ok_tool README.md deleted.sh .config/hiss/testdata/x.sh)"
+if [[ "$out" != $'clean.sh\nok_tool' ]]; then
+	printf '--list did not print exactly the selected scripts: %q\n' "$out" >&2
+	exit 1
+fi
+
+# Path mode: no shell scripts -> exit 0 with message
+touch "$path_mode_root/README.md" "$path_mode_root/main.go"
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- README.md main.go 2>&1)" || status=$?
+if (( status != 0 )); then
+	printf 'expected exit 0 for no shell scripts, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+if [[ "$out" != 'ShellCheck: no shell scripts among 2 paths' ]]; then
+	printf 'unexpected output for no shell scripts: %s\n' "$out" >&2
+	exit 1
+fi
+
+# Path mode: max_shell_files + 1 paths -> exit 1
+declare -a policy_over_paths=()
+for ((i = 1; i <= 4097; i++)); do
+	policy_over_paths+=("f$i.sh")
+done
+expect_failure_matching 'ShellCheck file bound exceeded: 4097 > 4096' \
+	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- "${policy_over_paths[@]}"
+
+# Path mode: --list without -- -> exit 2 with usage
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list 2>&1)" || status=$?
+if (( status != 2 )); then
+	printf 'expected exit 2 for --list without --, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+if [[ "$out" != *'usage:'* ]]; then
+	printf 'expected usage in output for --list without --, got: %s\n' "$out" >&2
+	exit 1
+fi
+
+# Path mode: a workflow-only path list still gets the suppression WHY check.
+mkdir -p "$path_mode_root/.github/workflows"
+printf '%s\n' '# shellcheck disable=SC2016' >"$path_mode_root/.github/workflows/check.yml"
+expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/check.yml:1' \
+	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- .github/workflows/check.yml
+
+# Options: more than three option words -> exit 2 with usage.
+status=0
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --list --list --list --list -- clean.sh 2>&1)" || status=$?
+if (( status != 2 )) || [[ "$out" != *'usage:'* ]]; then
+	printf 'expected exit 2 with usage for repeated options, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+
 printf 'ShellCheck full-tree policy tests passed\n'

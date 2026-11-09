@@ -45,8 +45,7 @@ pre-commit:
     gitleaks:
       run: bash scripts/hooks/gitleaks.sh
     shellcheck:
-      glob: "*.{sh,bash,ksh}"
-      run: bash scripts/hooks/shellcheck.sh {staged_files}
+      run: bash scripts/hooks/shellcheck.sh --staged {staged_files}
 
 commit-msg:
   commands:
@@ -70,5 +69,4 @@ pre-push:
     audit:
       run: sh .config/lefthook/engine.sh audit
     shellcheck:
-      glob: "*.{sh,bash,ksh}"
-      run: bash scripts/hooks/shellcheck.sh {push_files}
+      run: bash scripts/hooks/shellcheck.sh --pushed {push_files}
