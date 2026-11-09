@@ -16,10 +16,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-import ci_scope
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CI_SCOPE_SCRIPT = REPO_ROOT / "scripts" / "ci" / "ci_scope.py"
+
+# WHY: Path insert allows importing ci_scope directly when tests run outside scripts/ci.
+sys.path.insert(0, str(CI_SCOPE_SCRIPT.parent))
+import ci_scope  # noqa: E402 - path insert required before importing script module.
+
+SCOPE_RUN_TIMEOUT_SECONDS = ci_scope.COMMAND_TIMEOUT_SECONDS + 60
 
 
 class CiScopeTest(unittest.TestCase):
@@ -81,6 +85,7 @@ class CiScopeTest(unittest.TestCase):
             capture_output=True,
             text=True,
             check=True,
+            timeout=30,
         )
         return proc.stdout
 
@@ -102,6 +107,8 @@ class CiScopeTest(unittest.TestCase):
             capture_output=True,
             text=True,
             check=False,
+            # WHY: Outer bound exceeds ci_scope's own git timeout so git is killed and reaped by ci_scope first.
+            timeout=SCOPE_RUN_TIMEOUT_SECONDS,
         )
 
     def test_positive_one_file_in_nested_module_selects_that_module_only(self) -> None:
@@ -238,6 +245,13 @@ class CiScopeTest(unittest.TestCase):
         lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
         self.assertIn(".", lines)
         self.assertNotIn("k8s/nri", lines)
+
+    def test_boundary_scope_run_timeout_exceeds_inner_git_timeout(self) -> None:
+        """Outer scope timeout must exceed inner git timeout so git child is reaped first."""
+        self.assertGreater(
+            SCOPE_RUN_TIMEOUT_SECONDS,
+            ci_scope.COMMAND_TIMEOUT_SECONDS,
+        )
 
 
     def _write(self, rel: str, text: str = "x\n") -> None:
