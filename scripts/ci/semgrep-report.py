@@ -17,15 +17,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
 MAX_REPORTS = 64
 MAX_PRINTED_ERRORS = 5
 MAX_PRINTED_FINDINGS = 10
-TOLERATED_SCANNER_STATUS = 123
-GENERIC_ALIAS_RE = re.compile(r"^\s*(?:type\s+)?[A-Za-z_]\w*\[[^\]]+\]\s*=\s*\S")
 
 
 def load_reports(text: str) -> list[dict[str, object]]:
@@ -85,81 +82,13 @@ def print_finding(result: object) -> None:
     print(f"{path}:{line}: {check}: {message}", file=sys.stderr)
 
 
-def is_span_on_generic_alias(
-    span: object,
-    exception_path: str,
-    source_lines: list[str],
-) -> bool:
-    """Verify that a span targets the exception file and an alias declaration."""
-    if not isinstance(span, dict):
-        return False
-    target = span.get("file") or span.get("path")
-    if Path(str(target or "")).as_posix() != Path(exception_path).as_posix():
-        return False
-    start = span.get("start")
-    line_no = start.get("line") if isinstance(start, dict) else None
-    if not isinstance(line_no, int) or not (1 <= line_no <= len(source_lines)):
-        return False
-    return bool(GENERIC_ALIAS_RE.match(source_lines[line_no - 1]))
-
-
-def is_tolerated_error(
-    error: dict[str, object],
-    exception_path: str,
-    stage_dir: Path | None,
-) -> bool:
-    """Check if a Semgrep error matches the tolerated generic alias parse failure."""
-    if stage_dir is None:
-        return False
-    err_type = error.get("type")
-    if not (isinstance(err_type, list) and err_type and err_type[0] == "PartialParsing"):
-        return False
-    err_path = error.get("path")
-    if Path(str(err_path or "")).as_posix() != Path(exception_path).as_posix():
-        return False
-    spans = error.get("spans")
-    if not isinstance(spans, list) or not spans:
-        return False
-    source_file = stage_dir / exception_path
-    if not source_file.is_file():
-        return False
-    try:
-        source_lines = source_file.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return False
-    return all(
-        is_span_on_generic_alias(span, exception_path, source_lines)
-        for span in spans
-    )
-
-
-def partition_errors(
-    errors: list[object],
-    exception_path: str | None,
-    stage_dir: Path | None,
-) -> tuple[list[dict[str, object]], list[object]]:
-    """Split errors into tolerated generic alias failures and active errors."""
-    tolerated: list[dict[str, object]] = []
-    active: list[object] = []
-    for err in errors:
-        if (
-            isinstance(err, dict)
-            and exception_path is not None
-            and is_tolerated_error(err, exception_path, stage_dir)
-        ):
-            tolerated.append(err)
-        else:
-            active.append(err)
-    return tolerated, active
-
-
 def print_diagnostics(
-    active_errors: list[object],
+    errors: list[object],
     results: list[object],
     missing: list[str],
 ) -> None:
-    """Print the first few active errors, findings, and unscanned files."""
-    for error in active_errors[:MAX_PRINTED_ERRORS]:
+    """Print the first few errors, findings, and unscanned files."""
+    for error in errors[:MAX_PRINTED_ERRORS]:
         print(f"Semgrep error: {error}", file=sys.stderr)
     for result in results[:MAX_PRINTED_FINDINGS]:
         print_finding(result)
@@ -188,34 +117,11 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     parser.add_argument(
         "--scanner-status", type=int, default=0, help="Scanner exit status"
     )
-    parser.add_argument(
-        "--stage-dir", type=Path, default=None, help="Stage directory with sources"
-    )
-    parser.add_argument(
-        "--tolerate-alias-parse",
-        type=str,
-        default=None,
-        help="Path where generic alias parse errors are tolerated",
-    )
-    parser.add_argument(
-        "--alias-parse-expires",
-        type=str,
-        default=None,
-        help="Expiry date (YYYY-MM-DD) for generic alias tolerance",
-    )
     return parser.parse_args(argv[1:])
 
 
-def validate_scanner_status(status: int, tolerated_count: int) -> bool:
-    """Verify that the scanner exit status matches the tolerated error count."""
-    if status == TOLERATED_SCANNER_STATUS:
-        if tolerated_count == 0:
-            print(
-                f"Semgrep scanner exited with status {status} without errors",
-                file=sys.stderr,
-            )
-            return False
-        return True
+def validate_scanner_status(status: int) -> bool:
+    """Verify that the scanner exit status was zero."""
     if status != 0:
         print(f"Semgrep scanner failed with exit status {status}", file=sys.stderr)
         return False
@@ -243,22 +149,13 @@ def main(argv: list[str]) -> int:
     scanned = scanned_paths(reports)
     missing = sorted(expected - scanned)
 
-    tolerated, active = partition_errors(
-        errors, args.tolerate_alias_parse, args.stage_dir
-    )
-    print_diagnostics(active, results, missing)
+    print_diagnostics(errors, results, missing)
 
-    if active or results or missing:
+    if errors or results or missing:
         return 1
-    if not validate_scanner_status(args.scanner_status, len(tolerated)):
+    if not validate_scanner_status(args.scanner_status):
         return 1
 
-    if tolerated:
-        expires = args.alias_parse_expires or "expiry"
-        print(
-            f"Semgrep tolerates {len(tolerated)} parse error(s) in "
-            f"{args.tolerate_alias_parse} until {expires} (semgrep/semgrep#11972)"
-        )
     print(f"Semgrep custom rules: {len(scanned)} repository Go files passed")
     return 0
 
