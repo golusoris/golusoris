@@ -5,6 +5,7 @@ name: SQLite Stall Probe
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'db/sqlite/stallprobe_test.go'
       - '.github/workflows/sqlite-stall-probe.yml'

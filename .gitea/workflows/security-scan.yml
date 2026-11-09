@@ -42,10 +42,5 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
           govulncheck_version="$(govulncheck -version)"; grep -Fq "Scanner: govulncheck@${GOVULNCHECK_VERSION}" <<<"$govulncheck_version"
           scripts/ci/go-modules.sh verify
-          scripts/ci/go-modules.sh gosec
-          scripts/ci/go-modules.sh vuln
-          gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
-          docker info
-          bash scripts/ci/semgrep-scan.sh
-          bash scripts/hiss/semgrep-fixtures.sh
+          bash scripts/ci/security-gates.sh
           bash scripts/ci/trivy-scan.sh

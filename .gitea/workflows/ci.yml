@@ -86,13 +86,7 @@ jobs:
       - name: Security and vulnerability gates
         run: |
           set -euo pipefail
-          . tools/tool-versions.env
-          scripts/ci/go-modules.sh gosec
-          scripts/ci/go-modules.sh vuln
-          gitleaks git . -c .gitleaks.toml --redact --no-banner --verbose
-          docker info
-          bash scripts/ci/semgrep-scan.sh
-          bash scripts/hiss/semgrep-fixtures.sh
+          bash scripts/ci/security-gates.sh
 
       - name: Shell and workflow policy gates
         run: |
