@@ -284,10 +284,12 @@ class TestPidRunning:
         """Every probe outcome the timeout tests rely on, including a reap between kill and the /proc read."""
 
         def fake_kill(pid: int, sig: int) -> None:
+            """Stand in for kill(pid, 0) so the case decides whether the pid is already gone."""
             if kill_raises:
                 raise ProcessLookupError
 
         def fake_read_text(self_path: Path, encoding: str = "utf-8") -> str:
+            """Stand in for the /proc/<pid>/stat read so the case can return a state or raise a reap error."""
             if isinstance(read_text, BaseException):
                 raise read_text
             return read_text
