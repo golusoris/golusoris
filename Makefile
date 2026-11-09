@@ -130,6 +130,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
 	@bash scripts/ci/gosec-scan_test.sh
+	@bash scripts/ci/security-gates_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
 	@bash scripts/ci/shellcheck-hook_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
