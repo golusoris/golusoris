@@ -7,12 +7,18 @@
 
 from __future__ import annotations
 
+import contextlib
 import fnmatch
+import io
 import json
 import re
 import sys
+import tempfile
 from collections import Counter
+from collections.abc import Generator
 from pathlib import Path
+
+import repo_git
 
 ROOT = Path(__file__).resolve().parents[2]
 INPUTS = (
@@ -573,11 +579,17 @@ def go_mod_own_requires_replaced(content: str) -> bool:
 
 def own_module_replaced_valid(root: Path = ROOT) -> bool:
     """Require every repository go.mod requiring in-repo modules to replace them locally."""
-    for path in sorted(root.rglob("go.mod")):
+    # git skips ignored paths, so linked worktrees under .claude/worktrees/ stay out.
+    for path in repo_git.worktree_files(root, "go.mod"):
         if "vendor" in path.parts or "testdata" in path.parts:
             continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as error:
+            print(f"{path} is unreadable: {error}", file=sys.stderr)
+            return False
         # In-repo module pins have no build effect only when replaced by a local path.
-        if not go_mod_own_requires_replaced(path.read_text(encoding="utf-8")):
+        if not go_mod_own_requires_replaced(text):
             print(
                 f"{path} requires in-repo module without a local replace",
                 file=sys.stderr,
@@ -623,6 +635,59 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
     )
     if go_mod_own_requires_replaced(synthetic_unreplaced):
         print("synthetic go.mod without replace negative control was accepted", file=sys.stderr)
+        return False
+    return True
+
+
+@contextlib.contextmanager
+def fixture_repo(prefix: str) -> Generator[Path, None, None]:
+    """Yield a scratch git repository with a root go.mod, isolated from the caller's git."""
+    with tempfile.TemporaryDirectory(prefix=prefix) as tmp_dir, repo_git.scratch_environ():
+        tmp = Path(tmp_dir)
+        repo_git.run_git(["init", "-q"], tmp)
+        (tmp / "go.mod").write_text("module example.com/fixture\n\ngo 1.22\n", encoding="utf-8")
+        yield tmp
+
+
+def test_own_module_worktree_ignored() -> bool:
+    """Prove a git-ignored go.mod is skipped and the same file at a tracked path is refused."""
+    unreplaced = (
+        "module example.com/unreplaced\n\ngo 1.22\n\n"
+        "require github.com/golusoris/golusoris/core v0.12.1\n"
+    )
+    with fixture_repo("golusoris-renovate-worktree-") as tmp:
+        (tmp / ".gitignore").write_text("/ignored/\n", encoding="utf-8")
+        (tmp / "ignored").mkdir()
+        (tmp / "ignored" / "go.mod").write_text(unreplaced, encoding="utf-8")
+        if not own_module_replaced_valid(tmp):
+            print("own-module replace check read a git-ignored go.mod", file=sys.stderr)
+            return False
+        (tmp / "tracked").mkdir()
+        (tmp / "tracked" / "go.mod").write_text(unreplaced, encoding="utf-8")
+        repo_git.run_git(["add", "."], tmp)
+        # The refusal message is expected here; keep it out of the gate output.
+        with contextlib.redirect_stderr(io.StringIO()):
+            accepted = own_module_replaced_valid(tmp)
+    if accepted:
+        print("own-module replace check accepted an unreplaced tracked go.mod", file=sys.stderr)
+        return False
+    return True
+
+
+def test_own_module_dangling_symlink() -> bool:
+    """Prove a not-ignored dangling go.mod symlink is refused, not skipped."""
+    with fixture_repo("golusoris-renovate-symlink-") as tmp:
+        (tmp / "linked").mkdir()
+        try:
+            (tmp / "linked" / "go.mod").symlink_to(tmp / "missing" / "go.mod")
+        except OSError as error:
+            print(f"SKIP: dangling go.mod symlink test needs symlink support: {error}", file=sys.stderr)
+            return True
+        # The refusal message is expected here; keep it out of the gate output.
+        with contextlib.redirect_stderr(io.StringIO()):
+            accepted = own_module_replaced_valid(tmp)
+    if accepted:
+        print("own-module replace check skipped a dangling go.mod symlink", file=sys.stderr)
         return False
     return True
 
@@ -1086,6 +1151,7 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
 
 
 def main() -> int:
+    """Run Renovate policy checks; return 0 on pass, 1 on policy violation."""
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
     core_gomod = (ROOT / "core/go.mod").read_text(encoding="utf-8")
@@ -1101,6 +1167,8 @@ def main() -> int:
         test_core_indirect_rule(config, core_gomod),
         test_localstack_hold(config),
         test_own_module_rule(config),
+        test_own_module_worktree_ignored(),
+        test_own_module_dangling_symlink(),
         test_trainer_python_cap(config),
         test_sidecar_python_cap(config),
         test_chromedp_group(config),
@@ -1118,4 +1186,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except repo_git.GitError as git_error:
+        # scripts/ci convention: 3 means the check could not run, distinct from a policy failure.
+        print(f"ERROR: {git_error}", file=sys.stderr)
+        raise SystemExit(3) from git_error
