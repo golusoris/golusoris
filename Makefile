@@ -112,6 +112,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/check-dco_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
+	@bash scripts/ci/export-release-tool-pins_test.sh
 	@bash scripts/ci/release-pr-ci_test.sh
 	@bash scripts/ci/readme-badges_test.sh
 	@bash scripts/ci/require-green-ci_test.sh
@@ -133,6 +134,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
+	@bash scripts/ci/lib/policy-test_test.sh
 	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
@@ -346,7 +348,7 @@ PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
-	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
+	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
 # override keeps the Pact paths when a caller sets these variables on the make command line;
