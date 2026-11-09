@@ -68,7 +68,7 @@ write_clean_script "$positive_root/sub/win.sh"
 git -C "$positive_root" add .
 status=0
 out="$(run_hook "$positive_root" --staged 'sub\win.sh' 2>&1)" || status=$?
-if (( status != 0 )) || [[ "$out" != *'1 changed shell script(s) passed'* ]]; then
+if (( status != 0 )) || [[ "$out" != *'1 changed shell script or workflow file(s) passed'* ]]; then
 	printf 'backslash path was not kept (exit %d): %s\n' "$status" "$out" >&2
 	exit 1
 fi
@@ -226,6 +226,65 @@ write_clean_script "$removed_root/gone.sh"
 git -C "$removed_root" add gone.sh
 rm "$removed_root/gone.sh"
 expect_failure_matching 'gone.sh' run_hook "$removed_root" --staged gone.sh
+
+# Workflow only: a staged workflow with an unexplained suppression fails the hook.
+workflow_root="$(new_repo workflow-only)"
+mkdir -p "$workflow_root/.github/workflows"
+cat >"$workflow_root/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+EOF
+printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
+	>>"$workflow_root/.github/workflows/ci.yml"
+git -C "$workflow_root" add .github/workflows/ci.yml
+expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/ci.yml' \
+	run_hook "$workflow_root" --staged .github/workflows/ci.yml
+
+# Workflow only, explained: the same suppression with an inline WHY passes.
+cat >"$workflow_root/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      # shellcheck disable=SC2086 # Word splitting is intended.
+      - run: echo test
+EOF
+git -C "$workflow_root" add .github/workflows/ci.yml
+status=0
+out="$(run_hook "$workflow_root" --staged .github/workflows/ci.yml 2>&1)" || status=$?
+if (( status != 0 )); then
+	printf 'expected exit 0 for explained workflow suppression, got %d: %s\n' "$status" "$out" >&2
+	exit 1
+fi
+if [[ "$out" != *'passed'* ]]; then
+	printf 'explained workflow suppression did not pass: %s\n' "$out" >&2
+	exit 1
+fi
+
+# Lookup error: a corrupt index fails the hook instead of reading as absent.
+lookup_root="$(new_repo lookup-error)"
+write_clean_script "$lookup_root/gone.sh"
+git -C "$lookup_root" add gone.sh
+rm "$lookup_root/gone.sh"
+mkdir -p "$lookup_root/.workingdir"
+printf '%s\n' 'garbage' >"$lookup_root/.workingdir/bad-index"
+run_hook_bad_index() {
+	local target_root="$1"
+	shift
+	(
+		cd "$target_root"
+		env GIT_INDEX_FILE="$target_root/.workingdir/bad-index" \
+			bash scripts/hooks/shellcheck.sh "$@"
+	)
+}
+expect_failure_matching 'git lookup failed' \
+	run_hook_bad_index "$lookup_root" --staged gone.sh
 
 # Mode validation: missing mode and invalid mode fail with usage.
 expect_failure_matching 'usage:' run_hook "$positive_root"

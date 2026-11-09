@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# pre-commit / pre-push: run the pinned ShellCheck gate on the staged or pushed shell scripts.
+# pre-commit / pre-push: run the pinned ShellCheck gate on the staged or pushed shell scripts and workflow files.
 
 set -euo pipefail
 
@@ -43,12 +43,20 @@ check_missing_content() {
 			break
 		fi
 		if [[ ! -e "$root/$path" && ! -L "$root/$path" ]]; then
+			local lookup_out=''
+			local lookup_status=0
 			if [[ "$mode" == "--staged" ]]; then
-				if git -C "$root" cat-file -e ":$path" 2>/dev/null; then
-					fail "$path: staged but removed from the worktree"
-				fi
+				lookup_out="$(git -C "$root" --literal-pathspecs ls-files -s -- "$path")" || lookup_status=$?
 			elif [[ "$mode" == "--pushed" ]]; then
-				if git -C "$root" cat-file -e "HEAD:$path" 2>/dev/null; then
+				lookup_out="$(git -C "$root" --literal-pathspecs ls-tree HEAD -- "$path")" || lookup_status=$?
+			fi
+			if (( lookup_status != 0 )); then
+				fail "$path: git lookup failed (exit $lookup_status)"
+			fi
+			if [[ -n "$lookup_out" ]]; then
+				if [[ "$mode" == "--staged" ]]; then
+					fail "$path: staged but removed from the worktree"
+				elif [[ "$mode" == "--pushed" ]]; then
 					fail "$path: committed in HEAD but removed from the worktree"
 				fi
 			fi
@@ -121,7 +129,7 @@ main() {
 		done <<<"$list_output"
 	fi
 
-	((${#selected[@]} > 0)) || skip "no changed shell scripts"
+	((${#selected[@]} > 0)) || skip "no changed shell scripts or workflows"
 
 	if [ -z "${SHELLCHECK_BIN:-}" ] && ! command -v shellcheck >/dev/null 2>&1; then
 		skip "ShellCheck ${SHELLCHECK_VERSION} is not on PATH — install with: bash scripts/ci/install-shellcheck.sh <dir>"
@@ -132,7 +140,7 @@ main() {
 	bash "$root/scripts/ci/shellcheck.sh" --root "$root" -- "${selected[@]}" ||
 		fail "ShellCheck reported findings"
 
-	note "${#selected[@]} changed shell script(s) passed"
+	note "${#selected[@]} changed shell script or workflow file(s) passed"
 }
 
 main "$@"

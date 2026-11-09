@@ -185,7 +185,7 @@ run_repo_mode() {
 	printf 'ShellCheck: %d repository shell scripts passed\n' "${#files[@]}"
 }
 
-# run_path_mode filters given paths, runs ShellCheck when needed, or lists selected files.
+# run_path_mode filters given paths, runs ShellCheck when needed, or with --list prints the scripts and workflow files the gate would read.
 run_path_mode() {
 	local root="$1"
 	local list_only="$2"
@@ -201,7 +201,7 @@ run_path_mode() {
 	if (( list_only )); then
 		local out_idx=0
 		local path
-		for path in "${selected_files[@]}"; do
+		for path in "${selected_files[@]}" "${workflow_files[@]}"; do
 			((out_idx += 1))
 			if (( out_idx > max_shell_files )); then
 				break

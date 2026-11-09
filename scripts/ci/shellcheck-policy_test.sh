@@ -183,12 +183,14 @@ ln -s "$suite_root/outside.sh" "$path_mode_root/symlink.sh"
 expect_failure_matching 'ShellCheck refuses symlink input: symlink.sh' \
 	bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" -- symlink.sh
 
-# Path mode: --list prints exactly the selected scripts
+# Path mode: --list prints exactly the selected scripts, then the workflow files
 write_clean_script "$path_mode_root/ok_tool"
 git -C "$path_mode_root" add ok_tool
-out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list -- clean.sh ok_tool README.md deleted.sh .config/hiss/testdata/x.sh)"
-if [[ "$out" != $'clean.sh\nok_tool' ]]; then
-	printf '--list did not print exactly the selected scripts: %q\n' "$out" >&2
+mkdir -p "$path_mode_root/.github/workflows"
+touch "$path_mode_root/.github/workflows/list.yml"
+out="$(bash "$path_mode_root/scripts/ci/shellcheck.sh" --root "$path_mode_root" --list -- clean.sh ok_tool README.md deleted.sh .config/hiss/testdata/x.sh .github/workflows/list.yml)"
+if [[ "$out" != $'clean.sh\nok_tool\n.github/workflows/list.yml' ]]; then
+	printf -- '--list did not print exactly the selected scripts and workflow files: %q\n' "$out" >&2
 	exit 1
 fi
 
