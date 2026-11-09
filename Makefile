@@ -134,6 +134,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
+	@bash scripts/ci/lib/policy-test_test.sh
 	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
