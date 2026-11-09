@@ -535,18 +535,86 @@ fi
 
 # Strips comments so commented-out invocations cannot satisfy wrapper execution gates.
 code_lines() {
-	sed -e 's/^[[:space:]]*#.*$//' -e 's/[[:space:]]#.*$//' "$1"
+	awk -v q="'" '
+	{
+		sq = 0
+		dq = 0
+		cut = 0
+		len = length($0)
+		for (i = 1; i <= len; i++) {
+			c = substr($0, i, 1)
+			if (!sq && c == "\\") {
+				i++
+				continue
+			}
+			if (!dq && c == q) {
+				sq = !sq
+				continue
+			}
+			if (!sq && c == "\"") {
+				dq = !dq
+				continue
+			}
+			if (!sq && !dq && c == "#") {
+				if (i == 1) {
+					cut = i
+					break
+				}
+				prev = substr($0, i - 1, 1)
+				if (prev == " " || prev == "\t") {
+					cut = i
+					break
+				}
+			}
+		}
+		if (cut > 0) {
+			print substr($0, 1, cut - 1)
+		} else {
+			print $0
+		}
+	}' "$1"
 }
+
+# Asserts comment stripping preserves inline hashes and cuts real comments.
+check_code_lines() {
+	local cases=(
+		'yes:echo "a #b"; bash scripts/ci/semgrep-scan.sh'
+		'yes:echo '"'"'a #b'"'"'; bash scripts/ci/semgrep-scan.sh'
+		"yes:echo \"it's #1\" && bash scripts/ci/semgrep-scan.sh"
+		"yes:echo \${x##*/} && bash scripts/ci/semgrep-scan.sh"
+		'no:# bash scripts/ci/semgrep-scan.sh'
+		'no:    # bash scripts/ci/semgrep-scan.sh'
+		'no:run: true # bash scripts/ci/semgrep-scan.sh'
+		'no:echo "a" # bash scripts/ci/semgrep-scan.sh'
+	)
+	local entry want line out has
+	for entry in "${cases[@]}"; do
+		want="${entry%%:*}"
+		line="${entry#*:}"
+		out="$(code_lines - <<<"$line")"
+		has=no
+		if grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$out"; then
+			has=yes
+		fi
+		if [[ "$has" != "$want" ]]; then
+			printf 'code_lines case failed (%s): %s\n' "$want" "$line" >&2
+			exit 1
+		fi
+	done
+}
+check_code_lines
 
 # Gitea workflows may reach the wrapper through the shared security-gates.sh sequence.
 workflow_runs_semgrep() {
-	local workflow="$1"
-	if code_lines "$workflow" | grep -Fq 'scripts/ci/semgrep-scan.sh'; then
+	local workflow="$1" code gates
+	code="$(code_lines "$workflow")"
+	if grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$code"; then
 		return 0
 	fi
-	[[ "$workflow" == "$repo_root/.gitea/"* ]] &&
-		code_lines "$workflow" | grep -Fq 'scripts/ci/security-gates.sh' &&
-		code_lines "$repo_root/scripts/ci/security-gates.sh" | grep -Fq 'scripts/ci/semgrep-scan.sh'
+	[[ "$workflow" == "$repo_root/.gitea/"* ]] || return 1
+	gates="$(code_lines "$repo_root/scripts/ci/security-gates.sh")"
+	grep -Fq 'scripts/ci/security-gates.sh' <<<"$code" &&
+		grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$gates"
 }
 
 custom_semgrep_workflows=(
