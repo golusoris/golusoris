@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
 import http.client
 import io
@@ -155,6 +156,7 @@ def model_dir(tmp_path: Path) -> Path:
 
 
 def pid_running(pid: int) -> bool:
+    """Tell a killed grandchild from a live one: kill(pid, 0) still succeeds for an unreaped zombie."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -165,8 +167,8 @@ def pid_running(pid: int) -> bool:
     # An orphan its new parent has not reaped yet is a zombie, so it no longer runs.
     try:
         stat_text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # Process reaped between os.kill probe and stat read.
+    except (FileNotFoundError, ProcessLookupError):
+        # Process reaped before open, or between open and read.
         return False
     return not stat_text.rsplit(") ", 1)[-1].startswith("Z")
 
@@ -253,27 +255,50 @@ class TestKillProcessGroup:
 
 
 class TestPidRunning:
-    def test_pid_running_reaped_toctou(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(os, "kill", lambda pid, sig: None)
-        monkeypatch.setattr(Path, "is_dir", lambda self: True)
+    @pytest.mark.parametrize(
+        "kill_raises, proc_present, read_text, expected",
+        [
+            pytest.param(True, True, "12345 (sleep) S 1", False, id="kill-esrch"),
+            pytest.param(False, False, "12345 (sleep) S 1", True, id="no-proc"),
+            pytest.param(False, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
+            pytest.param(
+                False,
+                True,
+                ProcessLookupError(errno.ESRCH, "No such process"),
+                False,
+                id="reaped-mid-read",
+            ),
+            pytest.param(False, True, "12345 (sleep) Z 1 1", False, id="zombie"),
+            pytest.param(False, True, "12345 (sleep) S 1 1", True, id="running"),
+            pytest.param(False, True, "12345 (a) Z) R 1 1", True, id="paren-in-comm"),
+        ],
+    )
+    def test_pid_running_probe_outcomes(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        kill_raises: bool,
+        proc_present: bool,
+        read_text: str | BaseException,
+        expected: bool,
+    ) -> None:
+        """Every probe outcome the timeout tests rely on, including a reap between kill and the /proc read."""
 
-        def raise_fnf(self_path: Path, encoding: str = "utf-8") -> str:
-            raise FileNotFoundError(f"reaped: {self_path}")
+        def fake_kill(pid: int, sig: int) -> None:
+            if kill_raises:
+                raise ProcessLookupError
 
-        monkeypatch.setattr(Path, "read_text", raise_fnf)
-        expect(not pid_running(12345), "reaped process must return False on FileNotFoundError")
+        def fake_read_text(self_path: Path, encoding: str = "utf-8") -> str:
+            if isinstance(read_text, BaseException):
+                raise read_text
+            return read_text
 
-    def test_pid_running_non_proc_fallback(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(os, "kill", lambda pid, sig: None)
-        monkeypatch.setattr(Path, "is_dir", lambda self: False)
-        expect(pid_running(12345), "non-/proc platforms must rely on kill(pid, 0)")
-
-    def test_pid_running_process_lookup_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        def raise_lookup(pid: int, sig: int) -> None:
-            raise ProcessLookupError
-
-        monkeypatch.setattr(os, "kill", raise_lookup)
-        expect(not pid_running(12345), "missing process must return False")
+        monkeypatch.setattr(os, "kill", fake_kill)
+        monkeypatch.setattr(Path, "is_dir", lambda self: proc_present)
+        monkeypatch.setattr(Path, "read_text", fake_read_text)
+        expect(
+            pid_running(12345) is expected,
+            f"pid_running(12345) outcome mismatch: expected {expected}",
+        )
 
     def test_pid_running_reaped_child(self) -> None:
         cmd = ["sh", "-c", "exit 0"]
