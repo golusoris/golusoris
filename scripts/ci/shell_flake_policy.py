@@ -34,7 +34,7 @@ EXCLUDED_EXACT = {
     "tools/.pre-commit-config.yaml",
 }
 
-YAML_BLOCK_SCALAR_RE = re.compile(r"^\s*(?:[a-zA-Z0-9_-]+:\s*)?[|>][-+0-9]*\s*$")
+YAML_BLOCK_SCALAR_RE = re.compile(r"^\s*(?:-\s+)?(?:[a-zA-Z0-9_-]+:\s*)?[|>][-+0-9]*\s*$")
 MAX_SCAN_FILES = 20000
 MAX_FILE_LINES = 10000
 
@@ -231,7 +231,7 @@ def split_pipeline_stages(line: str) -> list[str]:
 
 def has_early_exit_grep_flag(rest: str) -> bool:
     """Check whether grep arguments contain early-exit options."""
-    if re.search(r">\s*/dev/null", rest):
+    if re.search(r"(?:^|[\s&])1?>>?\s*/dev/null", rest):
         return True
     long_flags = ("--quiet", "--silent", "--files-with-matches")
     for tok in rest.split():
@@ -330,9 +330,11 @@ def check_bare_module_download(path: str, raw_lines: list[str]) -> list[Finding]
     return findings
 
 
-def scan_file(path_str: str, check_download: bool) -> list[Finding]:
+def scan_file(
+    path_str: str, check_download: bool, root: Path | None = None
+) -> list[Finding]:
     """Run applicable rules on one file path."""
-    target = Path(path_str)
+    target = root / path_str if root is not None else Path(path_str)
     if not target.is_file():
         return []
     try:
@@ -400,7 +402,7 @@ def scan_repository(repo_root: Path, praetor_files: set[str]) -> list[Finding]:
         reader_ok = is_in_repo_scope(rel, praetor_files)
         dl_ok = is_in_download_scope(rel, praetor_files)
         if reader_ok or dl_ok:
-            findings.extend(scan_file(rel, dl_ok))
+            findings.extend(scan_file(rel, dl_ok, repo_root))
     return findings
 
 

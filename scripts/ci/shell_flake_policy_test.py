@@ -238,6 +238,43 @@ class ShellFlakePolicyTest(unittest.TestCase):
             rc = shell_flake_policy.main()
         self.assertEqual(rc, 1)
 
+    def test_boundary_yaml_list_item_block_scalar(self) -> None:
+        """Verify list-item YAML block scalar headers are not joined with script lines."""
+        content = "jobs:\n  a:\n    steps:\n      - run: |\n          grep -q PAT file.txt\n"
+        path = self.write_fixture(".github/workflows/list_item.yml", content)
+        findings = shell_flake_policy.scan_file(str(path), check_download=False)
+        self.assertEqual(findings, [])
+
+    def test_boundary_grep_stderr_dev_null(self) -> None:
+        """Verify 2>/dev/null stderr redirection is not flagged as early exit."""
+        content = "echo hello | grep x 2>/dev/null\n"
+        path = self.write_fixture("scripts/ci/grep_stderr.sh", content)
+        findings = shell_flake_policy.scan_file(str(path), check_download=False)
+        self.assertEqual(findings, [])
+
+    def test_negative_grep_stdout_dev_null_forms(self) -> None:
+        """Verify stdout dev-null redirection forms are flagged as early exit."""
+        cases = [
+            ("stdout_1", "echo hello | grep x 1>/dev/null\n"),
+            ("stdout_amp", "echo hello | grep x &>/dev/null\n"),
+            ("stdout_append", "echo hello | grep x >>/dev/null\n"),
+        ]
+        for name, content in cases:
+            path = self.write_fixture(f"scripts/ci/{name}.sh", content)
+            findings = shell_flake_policy.scan_file(str(path), check_download=False)
+            self.assert_has_rule(findings, "early-exit-reader")
+
+    @patch("subprocess.check_output")
+    def test_scan_repository_resolves_paths_against_root(
+        self, mock_ls: MagicMock
+    ) -> None:
+        """Verify scan_repository resolves relative paths against repo_root."""
+        self.write_fixture("scripts/ci/root_probe.sh", "echo hello | head -1\n")
+        mock_ls.return_value = "scripts/ci/root_probe.sh\n"
+        findings = shell_flake_policy.scan_repository(self.temp_root, set())
+        self.assert_has_rule(findings, "early-exit-reader")
+        self.assertEqual(findings[0].path, "scripts/ci/root_probe.sh")
+
 
 if __name__ == "__main__":
     unittest.main()
