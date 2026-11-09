@@ -105,6 +105,7 @@ run_oci_tag_validator() {
 	RELEASE_REF_NAME="$1" bash -euo pipefail "$2"
 }
 
+# Rebuild workflow must drop dead inputs, share the release Buildx pin, digest-pin QEMU, and keep immutable tag contracts.
 check_rebuild() {
 	local path="$1"
 	local qemu_image
@@ -116,8 +117,8 @@ check_rebuild() {
 	done
 	# Renovate bumps every Buildx pin together; rebuild must name the release workflow's.
 	local buildx release_buildx
-	buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$path" | head -n 1)"
-	release_buildx="$(grep -oE 'version: v[0-9]+[.][0-9]+[.][0-9]+' "$repo_root/.github/workflows/release-go.yml" | head -n 1)"
+	buildx="$(grep -oE 'version: v\$\{\{ env\.BUILDX_VERSION \}\}' "$path" | sed -n '1p')"
+	release_buildx="$(grep -oE 'version: v\$\{\{ env\.BUILDX_VERSION \}\}' "$repo_root/.github/workflows/release-go.yml" | sed -n '1p')"
 	[[ -n "$buildx" && "$buildx" == "$release_buildx" ]] || {
 		printf 'rebuild does not select the pinned Buildx binary\n' >&2
 		return 1
@@ -338,13 +339,14 @@ if problems:
 PY
 }
 
+# Provenance verifier must keep its verification contracts, mint no OIDC tokens, and require a fixed signer digest.
 check_verifier() {
 	local path="$1"
 	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 	for contract in \
 		'at least one verification mode must be enabled' \
 		'--bundle-from-oci' \
-		"gh attestation verify --help | grep -Fq -- '--signer-digest'" \
+		"gh_verify_help=\"\$(gh attestation verify --help)\" && grep -Fq -- '--signer-digest' <<<\"\$gh_verify_help\"" \
 		'GitHub token login is restricted to matching ghcr.io images' \
 		'--signer-workflow' \
 		'--signer-digest' \
@@ -506,9 +508,9 @@ git -C "$tag_repo" push -q --force origin refs/tags/v1.2.3
 expect_failure 'release tag no longer resolves to the event commit' run_tag_binding \
 	"$tag_repo" 'v1.2.3' "$tag_sha" "$tag_binding"
 
-tag_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$release_go" | head -n 1)"
+tag_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$release_go" | sed -n '1p')"
 for publisher in "$release_build" "$sbom" "$rebuild"; do
-	publisher_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$publisher" | head -n 1)"
+	publisher_pattern="$(sed -n "s/.*TAG_PATTERN='\(.*\)'/\1/p" "$publisher" | sed -n '1p')"
 	[[ "$publisher_pattern" == "$tag_pattern" ]] || {
 		printf 'release tag validators diverge: %s\n' "$publisher" >&2
 		exit 1
@@ -569,7 +571,7 @@ expect_failure 'release caller lacks contract' check_release_caller "$negative_d
 sed '/"$remote_sha" != "$SOURCE_SHA"/d' "$release_go" >"$negative"
 # shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
 expect_failure '"$remote_sha" != "$SOURCE_SHA"' check_release_go "$negative"
-sed -E 's/version: v[0-9]+[.][0-9]+[.][0-9]+/version: latest/' "$rebuild" >"$negative"
+sed -E 's/version: v\$\{\{ env\.BUILDX_VERSION \}\}/version: latest/' "$rebuild" >"$negative"
 expect_failure 'pinned Buildx binary' check_rebuild "$negative"
 sed 's/@sha256:[0-9a-f]\{64\}//' "$rebuild" >"$negative"
 expect_failure 'QEMU installer image' check_rebuild "$negative"

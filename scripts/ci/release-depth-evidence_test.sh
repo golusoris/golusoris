@@ -161,7 +161,11 @@ row "$repo" feat-commit | evidence "$repo" v0.2.0 v0.1.0
 tag "$repo" v0.2.0
 missing="$(sha7 "$repo" fix-commit)"
 expect_failure "user-visible commit $missing" run "$repo" check v0.2.0
-if run "$repo" check v0.2.0 2>&1 | grep -q "$(sha7 "$repo" feat-commit)"; then
+if check_output="$(run "$repo" check v0.2.0 2>&1)"; then
+	printf 'expected failure: check v0.2.0\n' >&2
+	exit 1
+fi
+if grep -q "$(sha7 "$repo" feat-commit)" <<<"$check_output"; then
 	printf 'a covered commit was reported as missing\n' >&2
 	exit 1
 fi

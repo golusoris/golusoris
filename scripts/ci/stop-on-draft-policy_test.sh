@@ -101,12 +101,12 @@ expect_failure 'lacks step summary append' check_stop_on_draft_action "$neg_no_s
 
 # Workflows call the composite at a full commit SHA instead of inlining the step.
 check_stop_on_draft_usage() {
-	local workflow="$1" status=0
+	local workflow="$1" status=0 stop_on_draft_lines
 	if grep -Fq 'Gate not run on a draft' "$workflow"; then
 		printf '%s must use the stop-on-draft composite action instead of an inline draft block\n' "${workflow##*/}" >&2
 		status=1
 	fi
-	if grep -E 'stop-on-draft@' "$workflow" | grep -Evq 'stop-on-draft@[0-9a-f]{40}([[:space:]"'"'"']|$)'; then
+	if stop_on_draft_lines="$(grep -E 'stop-on-draft@' "$workflow")" && grep -Evq 'stop-on-draft@[0-9a-f]{40}([[:space:]"'"'"']|$)' <<<"$stop_on_draft_lines"; then
 		printf '%s: stop-on-draft must be pinned to a full 40-character SHA\n' "${workflow##*/}" >&2
 		status=1
 	fi

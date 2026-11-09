@@ -135,7 +135,7 @@ fake_cache="$suite_root/fake-cache"
 APT_ARCHIVE_DIR="$fake_cache" run_verifier --install libbar-dev >/dev/null
 require_log 'update -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30'
 require_log "install -y --no-install-recommends -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::Archives=$fake_cache -o APT::Keep-Downloaded-Packages=true libbar-dev"
-if grep '^update ' "$suite_root/apt.log" | grep -E -q 'Dir::Cache::Archives|APT::Keep-Downloaded-Packages'; then
+if update_log="$(grep '^update ' "$suite_root/apt.log")" && grep -Eq 'Dir::Cache::Archives|APT::Keep-Downloaded-Packages' <<<"$update_log"; then
 	printf 'apt-get update unexpectedly received archive options: %s\n' "$(cat "$suite_root/apt.log")" >&2
 	exit 1
 fi

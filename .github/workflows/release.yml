@@ -75,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
 
       - name: Compose the API compatibility section
         id: section
