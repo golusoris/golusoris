@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Buffers each attempt's stdout in a temp file; use only for commands with small stdout (tool installs, module downloads).
+# Buffers each attempt's stdout in a temp file and closes stdin; use only for commands with small stdout and no stdin (tool installs, module downloads).
 set -euo pipefail
 
 if (($# == 0)); then

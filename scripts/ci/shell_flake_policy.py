@@ -337,8 +337,8 @@ def scan_file(path_str: str, check_download: bool) -> list[Finding]:
         return []
     try:
         raw_lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
-    except OSError:
-        return []
+    except OSError as err:
+        return [Finding(path_str, 0, "read-error", f"cannot read file: {err}")]
     findings: list[Finding] = []
     if len(raw_lines) > MAX_FILE_LINES:
         findings.append(

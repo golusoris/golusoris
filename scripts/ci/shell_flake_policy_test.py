@@ -220,6 +220,24 @@ class ShellFlakePolicyTest(unittest.TestCase):
         rc = shell_flake_policy.main()
         self.assertEqual(rc, 1)
 
+    @patch.object(Path, "read_text", side_effect=OSError("mock read error"))
+    def test_read_error_emits_finding(self, mock_read: MagicMock) -> None:
+        """Verify OSError during read_text emits a read-error finding."""
+        path = self.write_fixture("scripts/ci/unreadable.sh", "echo ok\n")
+        findings = shell_flake_policy.scan_file(str(path), check_download=False)
+        self.assert_has_rule(findings, "read-error")
+
+    @patch("sys.stdout")
+    @patch.object(Path, "read_text", side_effect=OSError("mock read error"))
+    def test_main_exits_nonzero_on_read_error(
+        self, mock_read: MagicMock, mock_stdout: MagicMock
+    ) -> None:
+        """Verify main() exits nonzero when a scanned file raises OSError."""
+        path = self.write_fixture("scripts/ci/unreadable.sh", "echo ok\n")
+        with patch("sys.argv", ["shell_flake_policy.py", str(path)]):
+            rc = shell_flake_policy.main()
+        self.assertEqual(rc, 1)
+
 
 if __name__ == "__main__":
     unittest.main()
