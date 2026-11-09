@@ -99,7 +99,7 @@ require_unconditional_step() {
 	fi
 }
 
-# Checks "$path" publish job lacks load: true and tags:; prints '<path> must not ...' on failure.
+# Checks "$path" publish job lacks load: true and has a build-and-push step without tags:; prints the violation on failure.
 check_publish_job_shape() {
 	local path="$1"
 	local publish_job push_step
