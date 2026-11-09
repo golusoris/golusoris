@@ -6,18 +6,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-suite_root="$(mktemp -d "${TMPDIR:-/tmp}/tiny-litert-sidecar-publish-policy.XXXXXX")"
-readonly repo_root suite_root
-trap 'find "$suite_root" -depth -delete' EXIT
+readonly repo_root
 
-expect_failure() {
-	local status=0
-	"$@" >/dev/null 2>&1 || status=$?
-	if (( status == 0 )); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
-}
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
+policy_suite_init "tiny-litert-sidecar-publish-policy"
 
 expect_failure_msg() {
 	local want="$1"
@@ -128,6 +121,7 @@ check_publish_job_shape() {
 check_workflow() {
 	local path="$1"
 	local literal
+	# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 	local -a literals=(
 		"environment: tiny-litert-sidecar-publish"
 		"vars.TINY_LITERT_SIDECAR_PUBLISH_ENABLED"
@@ -150,7 +144,7 @@ check_workflow() {
 		"PUSHED_DIGEST: \${{ steps.push.outputs.digest }}"
 		"platforms: linux/amd64,linux/arm64"
 		"for platform in linux/amd64 linux/arm64; do"
-		"v?3\\.1\\.4(\\+dirty)?"
+		'v?${COSIGN_VERSION//./\\.}(\+dirty)?'
 		"Generate SPDX SBOM"
 	)
 	for literal in "${literals[@]}"; do

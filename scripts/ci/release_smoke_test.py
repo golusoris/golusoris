@@ -45,7 +45,12 @@ class ReleaseSmokeTest(TestCase):
             code = release_smoke.main(argv, runner=runner or release_smoke.run_binary)
         return code, stdout.getvalue(), stderr.getvalue()
 
-    def test_positive_linux_amd64(self) -> None:
+    def run_two_binaries(
+        self,
+        core: tuple[int, str],
+        mcp: tuple[int, str],
+    ) -> tuple[int, str, str]:
+        """The four two-binary Linux cases share one artifact list and fake runner."""
         self.write_artifacts([
             {
                 "name": "golusoris",
@@ -64,18 +69,22 @@ class ReleaseSmokeTest(TestCase):
                 "extra": {"ID": "golusoris-mcp"},
             },
         ])
-        core_out = "golusoris version 1.2.3 (commit abc1234, built 2026-10-13T00:00:00Z)"
-        mcp_out = "golusoris-mcp version 1.2.3"
 
         def fake_runner(path: str) -> tuple[int, str]:
+            """Routes each binary path to its scripted result."""
             if "golusoris-mcp" in path:
-                return 0, mcp_out
-            return 0, core_out
+                return mcp
+            return core
 
-        code, out, err = self.run_smoke(
+        return self.run_smoke(
             ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
             runner=fake_runner,
         )
+
+    def test_positive_linux_amd64(self) -> None:
+        core_out = "golusoris version 1.2.3 (commit abc1234, built 2026-10-13T00:00:00Z)"
+        mcp_out = "golusoris-mcp version 1.2.3"
+        code, out, err = self.run_two_binaries((0, core_out), (0, mcp_out))
         self.assertEqual(code, 0)
         self.assertIn(f"release-smoke: {core_out}\n", out)
         self.assertIn(f"release-smoke: {mcp_out}\n", out)
@@ -148,99 +157,27 @@ class ReleaseSmokeTest(TestCase):
         self.assertEqual(err, "")
 
     def test_dev_version(self) -> None:
-        self.write_artifacts([
-            {
-                "name": "golusoris",
-                "path": "dist/golusoris_linux_amd64_v1/golusoris",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris"},
-            },
-            {
-                "name": "golusoris-mcp",
-                "path": "dist/golusoris-mcp_linux_amd64_v1/golusoris-mcp",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris-mcp"},
-            },
-        ])
-
-        def fake_runner(path: str) -> tuple[int, str]:
-            if "golusoris-mcp" in path:
-                return 0, "golusoris-mcp version 1.2.3"
-            return 0, "golusoris version dev (commit none, built unknown)"
-
-        code, _, err = self.run_smoke(
-            ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
-            runner=fake_runner,
+        code, _, err = self.run_two_binaries(
+            (0, "golusoris version dev (commit none, built unknown)"),
+            (0, "golusoris-mcp version 1.2.3"),
         )
         self.assertEqual(code, 1)
         self.assertIn('want "golusoris version 1.2.3"', err)
         self.assertIn("1 of 2 binaries failed", err)
 
     def test_prefix_collision(self) -> None:
-        self.write_artifacts([
-            {
-                "name": "golusoris",
-                "path": "dist/golusoris_linux_amd64_v1/golusoris",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris"},
-            },
-            {
-                "name": "golusoris-mcp",
-                "path": "dist/golusoris-mcp_linux_amd64_v1/golusoris-mcp",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris-mcp"},
-            },
-        ])
-
-        def fake_runner(path: str) -> tuple[int, str]:
-            if "golusoris-mcp" in path:
-                return 0, "golusoris-mcp version 1.2.30"
-            return 0, "golusoris version 1.2.3"
-
-        code, _, err = self.run_smoke(
-            ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
-            runner=fake_runner,
+        code, _, err = self.run_two_binaries(
+            (0, "golusoris version 1.2.3"),
+            (0, "golusoris-mcp version 1.2.30"),
         )
         self.assertEqual(code, 1)
         self.assertIn('want "golusoris-mcp version 1.2.3"', err)
         self.assertIn("1 of 2 binaries failed", err)
 
     def test_runner_exit_1(self) -> None:
-        self.write_artifacts([
-            {
-                "name": "golusoris",
-                "path": "dist/golusoris_linux_amd64_v1/golusoris",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris"},
-            },
-            {
-                "name": "golusoris-mcp",
-                "path": "dist/golusoris-mcp_linux_amd64_v1/golusoris-mcp",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris-mcp"},
-            },
-        ])
-
-        def fake_runner(path: str) -> tuple[int, str]:
-            if "golusoris-mcp" in path:
-                return 1, "Error: unknown flag: --version"
-            return 0, "golusoris version 1.2.3"
-
-        code, _, err = self.run_smoke(
-            ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
-            runner=fake_runner,
+        code, _, err = self.run_two_binaries(
+            (0, "golusoris version 1.2.3"),
+            (1, "Error: unknown flag: --version"),
         )
         self.assertEqual(code, 1)
         self.assertIn("golusoris-mcp --version failed: Error: unknown flag: --version", err)

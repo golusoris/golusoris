@@ -95,13 +95,7 @@ parse_root="$(new_repo parse-error)"
 cat >"$parse_root/broken.go" <<'EOF'
 package broken
 
-import "github.com/riverqueue/river"
-
-type Args struct{}
-
-type Broken struct {
-	river.WorkerDefaults[Args]
-}
+func Unterminated() {
 EOF
 git -C "$parse_root" add .
 expect_failure 'Semgrep error:' \
@@ -118,21 +112,7 @@ alias_root="$(new_repo generic-alias)"
 write_clean_go "$alias_root"
 write_generic_alias "$alias_root/jobs/types.go"
 git -C "$alias_root" add .
-alias_output="$(SEMGREP_EXCEPTION_DATE=20261008 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root")"
-if [[ "$alias_output" != *'tolerates'* ]]; then
-	printf 'generic alias output missing "tolerates": %s\n' "$alias_output" >&2
-	exit 1
-fi
-
-boundary_output="$(SEMGREP_EXCEPTION_DATE=20261107 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root")"
-if [[ "$boundary_output" != *'tolerates'* ]]; then
-	printf 'expiry boundary output missing "tolerates": %s\n' "$boundary_output" >&2
-	exit 1
-fi
-expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261108 \
-	bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root"
+bash "$alias_root/scripts/ci/semgrep-scan.sh" --root "$alias_root" >/dev/null
 
 alias_finding_root="$(new_repo generic-alias-finding)"
 write_clean_go "$alias_finding_root"
@@ -140,15 +120,8 @@ mkdir -p "$alias_finding_root/jobs"
 printf '%s\n' 'package jobs' '' 'import "time"' '' 'type Box[T any] struct{ V T }' '' \
 	'type Job[T any] = Box[T]' '' 'func F() { time.Sleep(1) }' >"$alias_finding_root/jobs/types.go"
 git -C "$alias_finding_root" add .
-expect_failure 'no-time-sleep-in-library' env SEMGREP_EXCEPTION_DATE=20261008 \
+expect_failure 'no-time-sleep-in-library' \
 	bash "$alias_finding_root/scripts/ci/semgrep-scan.sh" --root "$alias_finding_root"
-
-alias_elsewhere_root="$(new_repo generic-alias-elsewhere)"
-write_clean_go "$alias_elsewhere_root"
-write_generic_alias "$alias_elsewhere_root/other/types.go"
-git -C "$alias_elsewhere_root" add .
-expect_failure 'Semgrep error:' env SEMGREP_EXCEPTION_DATE=20261008 \
-	bash "$alias_elsewhere_root/scripts/ci/semgrep-scan.sh" --root "$alias_elsewhere_root"
 
 symlink_root="$(new_repo symlink)"
 mkdir -p "$suite_root/outside"
@@ -226,22 +199,21 @@ write_clean_go "$fake_alias_root"
 write_generic_alias "$fake_alias_root/jobs/types.go"
 git -C "$fake_alias_root" add .
 
-# Negative (fake docker): PartialParsing error in jobs/types.go whose span points at a non-alias line -> fails.
-readonly fake_non_alias_span='{"errors":[{"code":3,"level":"warn","type":["PartialParsing",[{"path":"jobs/types.go","start":{"line":1}}]],"message":"bad span","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":1}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
-write_fake_docker_exit 123 docker-non-alias-span "$fake_non_alias_span"
-expect_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-non-alias-span" \
+# Negative (fake docker): any PartialParsing error in jobs/types.go -> fails (no tolerance left).
+readonly fake_alias_partial_parse='{"errors":[{"code":3,"level":"warn","type":["PartialParsing",[{"path":"jobs/types.go","start":{"line":4}}]],"message":"Syntax error","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":4}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
+write_fake_docker_exit 123 docker-alias-partial-parse "$fake_alias_partial_parse"
+expect_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-alias-partial-parse" \
 	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
 
-# Negative (fake docker): non-PartialParsing error in jobs/types.go -> fails.
-readonly fake_non_partial_parse='{"errors":[{"code":3,"level":"warn","type":["SyntaxError",[{"path":"jobs/types.go","start":{"line":5}}]],"message":"bad type","path":"jobs/types.go","spans":[{"file":"jobs/types.go","start":{"line":5}}]}],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
-write_fake_docker_exit 123 docker-non-partial-parse "$fake_non_partial_parse"
-expect_failure 'Semgrep error:' env DOCKER_BIN="$suite_root/docker-non-partial-parse" \
-	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
-
-# Negative (fake docker): scanner status that is neither 0 nor the tolerated status -> fails.
+# Negative (fake docker): scanner status that is non-zero -> fails.
 readonly fake_clean_report='{"errors":[],"results":[],"paths":{"scanned":["clean.go","jobs/types.go"]}}'
 write_fake_docker_exit 9 docker-bad-status "$fake_clean_report"
 expect_failure 'Semgrep scanner failed with exit status 9' env DOCKER_BIN="$suite_root/docker-bad-status" \
+	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
+
+# Boundary (fake docker): status 123, once tolerated for the alias exception, now fails on a clean report.
+write_fake_docker_exit 123 docker-former-tolerated-status "$fake_clean_report"
+expect_failure 'Semgrep scanner failed with exit status 123' env DOCKER_BIN="$suite_root/docker-former-tolerated-status" \
 	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
 
 printf 'Semgrep full-tree policy tests passed\n'
