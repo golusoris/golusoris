@@ -29,7 +29,8 @@ fi
 
 # shellcheck source=/dev/null
 . "$tool_versions_file"
-read -r NODE_VERSION < "$node_version_file"
+# File substitution preserves values without a trailing newline and passes empty input to the semver check.
+NODE_VERSION="$(<"$node_version_file")"
 
 semver_pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
 for var_name in COSIGN_VERSION SYFT_VERSION GORELEASER_VERSION BUILDX_VERSION NODE_VERSION; do

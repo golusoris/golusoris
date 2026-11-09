@@ -130,12 +130,12 @@ def read_bounded_lines(path: Path) -> list[str]:
 
 
 def compile_js_regex(pattern: str) -> re.Pattern[str]:
-    # Converts JS named capture syntax (?<name>...) to Python syntax (?P<name>...).
+    """Converts JS named capture syntax (?<name>...) to Python syntax (?P<name>...)."""
     return re.compile(re.sub(r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", pattern))
 
 
 def matches_file(pattern: str, path: str) -> bool:
-    # Evaluates Renovate slash-regex against file path.
+    """Evaluates Renovate slash-regex against file path."""
     if len(pattern) < 2 or pattern[0] != "/" or pattern[-1] != "/":
         return False
     return compile_js_regex(pattern[1:-1]).search(path) is not None
@@ -150,7 +150,7 @@ def parse_action_line(
     pins: list[Pin],
     problems: list[str],
 ) -> None:
-    # Extracts action version pin within bounded lookahead window and verifies expression.
+    """Extracts action version pin within bounded lookahead window and verifies expression."""
     if is_comment_line(line):
         return
     match = ACTION_LINE_RE.search(line)
@@ -186,7 +186,7 @@ def parse_assertion_line(
     assertions: list[Assertion],
     problems: list[str],
 ) -> None:
-    # Validates assertion line against literal version and variable expression requirements.
+    """Validates assertion line against literal version and variable expression requirements."""
     if is_comment_line(line):
         return
     line = line.rstrip()
@@ -245,7 +245,7 @@ def collect_run_lines(lines: list[str]) -> list[tuple[int, str]]:
 def parse_workflow_file(
     path: Path, rel_path: str
 ) -> tuple[list[Pin], list[Assertion], list[str], list[str]]:
-    # Parses action pins and assertions in single workflow pass.
+    """Parses action pins and assertions in single workflow pass."""
     if not path.is_file():
         return [], [], [], [f"{rel_path}:1: tool: file does not exist"]
     lines = read_bounded_lines(path)
@@ -264,7 +264,7 @@ def check_scope_coverage(
     workflow_files: tuple[str, ...],
     pins_by_file: dict[str, list[Pin]],
 ) -> list[str]:
-    # Rule d: every file in scope yields at least one install pin.
+    """Rule d: every file in scope yields at least one install pin."""
     return [
         f"{rel_path}:1: tool: file yielded no install pins"
         for rel_path in workflow_files[:MAX_FILES]
@@ -277,7 +277,7 @@ def check_workflow_node_and_required_tools(
     pins: list[Pin],
     assertions: list[Assertion],
 ) -> list[str]:
-    # Enforces required tool pins/assertions and node pin-assertion pairing.
+    """Enforces required tool pins/assertions and node pin-assertion pairing."""
     problems: list[str] = []
     pin_tools = {p.tool for p in pins}
     assertion_tools = {a.tool for a in assertions}
@@ -296,7 +296,7 @@ def check_workflow_node_and_required_tools(
 def parse_env_file(
     path: Path, rel_path: str
 ) -> tuple[dict[str, tuple[int, str, str]], list[str]]:
-    # Parses NAME=value lines and preceding renovate comment from authority env file.
+    """Parses NAME=value lines and preceding renovate comment from authority env file."""
     if not path.is_file():
         return {}, [f"{rel_path}:1: env: file does not exist"]
     env_vars: dict[str, tuple[int, str, str]] = {}
@@ -325,7 +325,7 @@ def parse_env_file(
 def parse_workflow_level_env(
     lines: list[str],
 ) -> dict[str, tuple[int, str, str]]:
-    # Extracts workflow-level env block declarations and preceding comments.
+    """Extracts workflow-level env block declarations and preceding comments."""
     env_vars: dict[str, tuple[int, str, str]] = {}
     in_env = False
     for idx, raw_line in enumerate(lines):
@@ -354,7 +354,7 @@ def check_group_b_workflow(
     authority_env: dict[str, tuple[int, str, str]],
     node_authority: str,
 ) -> tuple[dict[str, tuple[int, str, str]], list[str]]:
-    # Rule c: group B files declare matching workflow-level env with renovate comments.
+    """Rule c: group B files declare matching workflow-level env with renovate comments."""
     problems: list[str] = []
     wf_env = parse_workflow_level_env(lines)
     installed_tools = {p.tool for p in pins}
@@ -390,7 +390,7 @@ def check_group_a_env_redeclarations(
     rel_path: str,
     lines: list[str],
 ) -> list[str]:
-    # Rule d: group A files do not re-declare env vars.
+    """Rule d: group A files do not re-declare env vars."""
     problems: list[str] = []
     in_env = False
     env_indent = -1
@@ -419,7 +419,7 @@ def check_group_a_export_before_install(
     rel_path: str,
     lines: list[str],
 ) -> list[str]:
-    # Rule d: group A workflows run export script before tool installs.
+    """Rule d: group A workflows run export script before tool installs."""
     problems: list[str] = []
     in_jobs = False
     current_job = ""
@@ -456,7 +456,7 @@ def check_group_a_workflow(
     rel_path: str,
     lines: list[str],
 ) -> list[str]:
-    # Rule d: group A files do not re-declare env vars and run export script before tool installs.
+    """Rule d: group A files do not re-declare env vars and run export script before tool installs."""
     return (
         check_group_a_env_redeclarations(rel_path, lines)
         + check_group_a_export_before_install(rel_path, lines)
@@ -466,7 +466,7 @@ def check_group_a_workflow(
 def load_renovate_custom_managers(
     root: Path,
 ) -> tuple[list[dict[str, object]], list[str]]:
-    # Loads and validates customManagers from renovate.json.
+    """Loads and validates customManagers from renovate.json."""
     renovate_path = root / "renovate.json"
     if not renovate_path.is_file():
         return [], ["renovate.json: file does not exist"]
@@ -486,7 +486,7 @@ def collect_file_matched_vars(
     env_vars: dict[str, tuple[int, str, str]],
     custom_managers: list[dict[str, object]],
 ) -> set[str]:
-    # Collects environment variables matched by custom regex managers.
+    """Collects environment variables matched by custom regex managers."""
     matched_vars: set[str] = set()
     for manager in custom_managers:
         if not isinstance(manager, dict) or manager.get("customType") != "regex":
@@ -509,7 +509,7 @@ def check_group_b_renovate_coverage(
     root: Path,
     group_b_envs: dict[str, dict[str, tuple[int, str, str]]],
 ) -> list[str]:
-    # Rule e: every group B env declaration is matched by a renovate.json customManager.
+    """Rule e: every group B env declaration is matched by a renovate.json customManager."""
     custom_managers, problems = load_renovate_custom_managers(root)
     if problems:
         return problems
@@ -535,7 +535,7 @@ def check_env_pins(
     authority_env: dict[str, tuple[int, str, str]],
     all_pins: list[Pin],
 ) -> list[str]:
-    # Verifies that every tool declared in authority env has install pins in workflows.
+    """Verifies that every tool declared in authority env has install pins in workflows."""
     problems: list[str] = []
     rel_env = "tools/tool-versions.env"
     pins_by_tool: dict[str, list[Pin]] = {}
@@ -555,7 +555,7 @@ def check_env_pins(
 
 
 def check_release_tool_pins(root: Path) -> list[str]:
-    # Coordinates validation across workflows, authority env, node version, and renovate.json.
+    """Coordinates validation across workflows, authority env, node version, and renovate.json."""
     problems: list[str] = []
     all_pins: list[Pin] = []
     pins_by_file: dict[str, list[Pin]] = {}
@@ -702,7 +702,7 @@ jobs:
 
 
 def create_valid_fixture(root: Path) -> None:
-    # Populates temporary directory with valid release workflows, env file, and Renovate config.
+    """Populates temporary directory with valid release workflows, env file, and Renovate config."""
     workflows_dir = root / ".github/workflows"
     workflows_dir.mkdir(parents=True, exist_ok=True)
     tools_dir = root / "tools"
@@ -721,7 +721,7 @@ def create_valid_fixture(root: Path) -> None:
 
 
 def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str) -> None:
-    # Emulates Renovate regex manager execution across matching files.
+    """Emulates Renovate regex manager execution across matching files."""
     for m in config.get("customManagers", []):
         file_pats = m.get("managerFilePatterns", [])
         match_strings = m.get("matchStrings", [])
@@ -740,6 +740,7 @@ def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str)
             for ms in match_strings:
                 rx = compile_js_regex(ms)
                 def replace_match(match: re.Match[str]) -> str:
+                    """Replaces current value with new value when depName matches target."""
                     if match.groupdict().get("depName") == target_dep:
                         cur = match.groupdict().get("currentValue")
                         if cur:
@@ -763,7 +764,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
         self.assertEqual(problems, [])
 
     def test_planted_assertion_mismatch_same_file(self) -> None:
-        # Tests detection of literal assertion in workflow.
+        """Tests detection of literal assertion in workflow."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -777,7 +778,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
 
     def test_planted_node_assertion_mismatch(self) -> None:
-        # Tests detection of node assertion with literal version.
+        """Tests detection of node assertion with literal version."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -791,7 +792,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
 
     def test_planted_required_tool_missing_pin_and_assertion(self) -> None:
-        # Tests detection when required tool install pin and assertion are missing.
+        """Tests detection when required tool install pin and assertion are missing."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -804,7 +805,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "missing install pin")
 
     def test_planted_missing_node_version_assertion(self) -> None:
-        # Tests detection when node version assertion is missing despite install pin.
+        """Tests detection when node version assertion is missing despite install pin."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -816,7 +817,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "missing version assertion")
 
     def test_planted_commented_node_assertion(self) -> None:
-        # Tests detection when node version assertion in release-go.yml is commented out.
+        """Tests detection when node version assertion in release-go.yml is commented out."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -828,7 +829,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "missing version assertion")
 
     def test_planted_node_assertion_outside_run(self) -> None:
-        # Tests that a step name carrying the assertion text does not satisfy it.
+        """Tests that a step name carrying the assertion text does not satisfy it."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -841,7 +842,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "missing version assertion")
 
     def test_inline_run_node_assertion_valid(self) -> None:
-        # Positive: an inline run value carries the assertion.
+        """Positive: an inline run value carries the assertion."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -853,7 +854,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assertEqual(check_release_tool_pins(root), [])
 
     def test_planted_commented_node_install_pin(self) -> None:
-        # Tests detection when setup-node uses action line in release-go.yml is commented out.
+        """Tests detection when setup-node uses action line in release-go.yml is commented out."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -879,7 +880,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "missing install pin")
 
     def test_planted_node_assertion_unanchored(self) -> None:
-        # Tests detection of unanchored or invalid node version assertion.
+        """Tests detection of unanchored or invalid node version assertion."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -891,7 +892,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "node: assertion must equal")
 
     def test_planted_node_assertion_trailing_or_true(self) -> None:
-        # Tests detection of node assertion with trailing command bypass.
+        """Tests detection of node assertion with trailing command bypass."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -903,7 +904,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "node: assertion must equal")
 
     def test_planted_pins_differ_across_files(self) -> None:
-        # Tests detection of literal pin inputs differing from expected variable expression.
+        """Tests detection of literal pin inputs differing from expected variable expression."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -917,7 +918,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "syft: literal pin v1.55.0")
 
     def test_planted_env_differs(self) -> None:
-        # Tests detection of tools/tool-versions.env differing from workflow env pin.
+        """Tests detection of tools/tool-versions.env differing from workflow env pin."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -947,7 +948,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "duplicate assignment")
 
     def test_planted_action_without_version_key(self) -> None:
-        # Tests detection of installer action lacking required version key.
+        """Tests detection of installer action lacking required version key."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -965,7 +966,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
 
     def test_planted_assertion_without_version(self) -> None:
-        # Tests detection of assertion regex without variable reference.
+        """Tests detection of assertion regex without variable reference."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1022,7 +1023,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
                 read_bounded_lines(path)
 
     def test_planted_input_only_bump_fails(self) -> None:
-        # Tests detection of literal pin input edit bumping tool version directly.
+        """Tests detection of literal pin input edit bumping tool version directly."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1037,7 +1038,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assert_planted_defect(problems, "literal pin v0.38.2")
 
     def test_planted_group_b_env_drift_fails(self) -> None:
-        # Tests detection when Group B workflow env pin drifts from authority.
+        """Tests detection when Group B workflow env pin drifts from authority."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1054,7 +1055,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
 
     def test_planted_group_b_env_missing_renovate_comment_fails(self) -> None:
-        # Tests detection when Group B workflow env pin lacks authority renovate comment.
+        """Tests detection when Group B workflow env pin lacks authority renovate comment."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1071,7 +1072,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             )
 
     def test_planted_assertion_literal_fails(self) -> None:
-        # Tests detection when an assertion contains a literal version.
+        """Tests detection when an assertion contains a literal version."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1085,8 +1086,88 @@ class ReleaseToolPinsTest(unittest.TestCase):
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "assertion contains literal version")
 
+    def test_planted_group_a_env_redeclaration_fails(self) -> None:
+        """Tests that re-declaring release env vars in a group A workflow fails."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-build.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "    steps:\n",
+                "    env:\n      COSIGN_VERSION: 3.1.4\n    steps:\n",
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "group A workflow re-declares env")
+
+    def test_planted_group_b_missing_env_fails(self) -> None:
+        """Tests that missing workflow-level env in a group B workflow fails."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-go.yml"
+            text = path.read_text(encoding="utf-8")
+            text = text.replace(
+                "  # renovate: datasource=github-releases depName=sigstore/cosign versioning=semver\n  COSIGN_VERSION: 3.1.4\n",
+                "",
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "missing workflow-level env")
+
+    def test_planted_export_after_install_fails(self) -> None:
+        """Tests that installing tools before export script in a group A workflow fails."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            path = root / ".github/workflows/release-build.yml"
+            text = path.read_text(encoding="utf-8")
+            export_step = (
+                "      - name: Read release tool pins\n"
+                "        shell: bash\n"
+                "        run: bash scripts/ci/export-release-tool-pins.sh\n"
+            )
+            install_step = (
+                "      - name: Install cosign\n"
+                "        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2\n"
+                "        with:\n"
+                "          cosign-release: v${{ env.COSIGN_VERSION }}\n"
+            )
+            text = text.replace(export_step, "").replace(
+                install_step, install_step + export_step
+            )
+            path.write_text(text, encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(
+                problems,
+                "installs cosign before running scripts/ci/export-release-tool-pins.sh",
+            )
+
+    def test_planted_renovate_invalid_json_fails(self) -> None:
+        """Tests that invalid JSON in renovate.json fails validation."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            (root / "renovate.json").write_text("{ invalid json", encoding="utf-8")
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(problems, "renovate.json: invalid JSON:")
+
+    def test_planted_renovate_custom_managers_not_list_fails(self) -> None:
+        """Tests that non-list customManagers in renovate.json fails validation."""
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            (root / "renovate.json").write_text(
+                json.dumps({"customManagers": "not-a-list"}), encoding="utf-8"
+            )
+            problems = check_release_tool_pins(root)
+            self.assert_planted_defect(
+                problems, "renovate.json: customManagers is not a list"
+            )
+
     def test_renovate_shaped_bump_passes(self) -> None:
-        # Tests that a coordinated Renovate bump across authority and group B workflows succeeds.
+        """Tests that a coordinated Renovate bump across authority and group B workflows succeeds."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1095,7 +1176,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
             self.assertEqual(check_release_tool_pins(root), [])
 
     def test_renovate_shaped_bump_partial_coverage_fails(self) -> None:
-        # Tests that excluding a group B file from Renovate patterns leaves copy behind and fails.
+        """Tests that excluding a group B file from Renovate patterns leaves copy behind and fails."""
         with tempfile.TemporaryDirectory() as tmp_str:
             root = Path(tmp_str)
             create_valid_fixture(root)
@@ -1106,7 +1187,9 @@ class ReleaseToolPinsTest(unittest.TestCase):
             (root / "renovate.json").write_text(json.dumps(config), encoding="utf-8")
             apply_renovate_bump(root, config, "sigstore/cosign", "3.1.5")
             problems = check_release_tool_pins(root)
-            self.assertTrue(len(problems) > 0)
+            self.assert_planted_defect(
+                problems, "env copy not matched by renovate.json customManager"
+            )
 
 
 if __name__ == "__main__":

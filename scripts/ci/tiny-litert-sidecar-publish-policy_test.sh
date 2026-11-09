@@ -54,6 +54,7 @@ check_smoke_before_push() {
 check_workflow() {
 	local path="$1"
 	local literal
+	# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 	local -a literals=(
 		"environment: tiny-litert-sidecar-publish"
 		"vars.TINY_LITERT_SIDECAR_PUBLISH_ENABLED"

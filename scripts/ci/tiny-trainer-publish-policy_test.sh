@@ -46,6 +46,7 @@ require_unconditional_step() {
 check_workflow() {
 	local path="$1"
 	local literal
+	# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 	local -a literals=(
 		"artifact-metadata: write"
 		"ref: \${{ github.sha }}"

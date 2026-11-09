@@ -51,4 +51,18 @@ printf '24.22\n' > "$bad_node"
 GITHUB_ENV="$suite_root/github_env_bad" NODE_VERSION_FILE="$bad_node" \
 	expect_failure_matching "NODE_VERSION" bash "$repo_root/scripts/ci/export-release-tool-pins.sh"
 
+# Boundary test: .node-version without trailing newline succeeds and exports NODE_VERSION.
+no_newline_node="$suite_root/no_newline.node"
+no_newline_env="$suite_root/github_env_no_newline"
+printf '24.22.2' > "$no_newline_node"
+GITHUB_ENV="$no_newline_env" NODE_VERSION_FILE="$no_newline_node" \
+	bash "$repo_root/scripts/ci/export-release-tool-pins.sh"
+grep -Fqx 'NODE_VERSION=24.22.2' "$no_newline_env"
+
+# Boundary test: empty .node-version fails naming NODE_VERSION.
+empty_node="$suite_root/empty.node"
+printf '' > "$empty_node"
+GITHUB_ENV="$suite_root/github_env_empty" NODE_VERSION_FILE="$empty_node" \
+	expect_failure_matching "NODE_VERSION" bash "$repo_root/scripts/ci/export-release-tool-pins.sh"
+
 printf 'export-release-tool-pins policy tests passed\n'
