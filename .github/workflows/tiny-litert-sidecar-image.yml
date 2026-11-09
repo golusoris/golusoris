@@ -72,8 +72,33 @@ jobs:
         with:
           version: '0.13.7'
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
+      - name: Read release tool pins
+        shell: bash
+        run: bash scripts/ci/export-release-tool-pins.sh
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        with:
+          version: v${{ env.BUILDX_VERSION }}
+
       - name: Configure Docker Hub mirror
         uses: ./.github/actions/docker-hub-mirror
+
+      - name: Build multi-arch (validation only)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/serve/tflite/sidecar
+          file: ai/tiny/serve/tflite/sidecar/Dockerfile
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          push: false
+          tags: local/tiny-litert-sidecar:multiarch-${{ github.sha }}
 
       - name: Smoke sidecar container image
         shell: bash
@@ -178,6 +203,11 @@ jobs:
           fi
           echo "value=$version" >> "$GITHUB_OUTPUT"
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
+        with:
+          image: docker.io/tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
@@ -210,51 +240,11 @@ jobs:
           cosign version | grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$"
           syft version | grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
 
-      - name: Build exact publish candidate locally
-        id: build
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: ai/tiny/serve/tflite/sidecar
-          file: ai/tiny/serve/tflite/sidecar/Dockerfile
-          build-args: |
-            VCS_REF=${{ github.sha }}
-          platforms: linux/amd64
-          load: true
-          push: false
-          tags: local/tiny-litert-sidecar-publish:${{ github.sha }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.version.outputs.value }}
-
-      - name: Smoke exact publish candidate
-        shell: bash
-        env:
-          IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
-          SIDECAR_SKIP_BUILD: '1'
-        run: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-litert-sidecar-smoke.sh "$IMAGE"
-
-      - name: Record tested local image identity
-        id: tested
-        shell: bash
-        env:
-          LOCAL_IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
-        run: |
-          set -euo pipefail
-          image_id=$(docker image inspect --format '{{.Id}}' "$LOCAL_IMAGE")
-          if [[ ! "$image_id" =~ ^sha256:[a-f0-9]{64}$ ]]; then
-            printf 'local image returned invalid image id: %q\n' "$image_id" >&2
-            exit 1
-          fi
-          echo "image-id=$image_id" >> "$GITHUB_OUTPUT"
-
       - name: Resolve trusted resumable immutable tag
         id: existing
         shell: bash
         env:
           IMAGE: ${{ env.IMAGE_REPO }}
-          SOURCE_SHA: ${{ github.sha }}
-          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
@@ -266,19 +256,7 @@ jobs:
               exit 1
             fi
             docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
-              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
-            docker pull "$IMAGE@$digest"
-            published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
-            revision=$(docker image inspect --format \
-              '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
-            image_version=$(docker image inspect --format \
-              '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
-            if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
-              "$image_version" != "$VERSION" ]]; then
-              printf '%s exists but differs from the tested source image; refusing reuse\n' \
-                "$IMAGE:$VERSION" >&2
-              exit 1
-            fi
+              python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
             echo 'exists=true' >> "$GITHUB_OUTPUT"
             echo "digest=$digest" >> "$GITHUB_OUTPUT"
           elif grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
@@ -288,41 +266,102 @@ jobs:
             exit 1
           fi
 
-      - name: Push tested image
+      - name: Build and push multi-arch candidate by digest
         id: push
         if: steps.existing.outputs.exists != 'true'
-        shell: bash
-        env:
-          IMAGE: ${{ env.IMAGE_REPO }}
-          LOCAL_IMAGE: local/tiny-litert-sidecar-publish:${{ github.sha }}
-          VERSION: ${{ steps.version.outputs.value }}
-        run: |
-          set -euo pipefail
-          docker tag "$LOCAL_IMAGE" "$IMAGE:$VERSION"
-          push_log="$RUNNER_TEMP/sidecar-push.log"
-          docker push "$IMAGE:$VERSION" 2>&1 | tee "$push_log"
-          mapfile -t digests < <(sed -nE \
-            's/^.*digest: (sha256:[a-f0-9]{64}) size:.*$/\1/p' "$push_log")
-          if (( ${#digests[@]} != 1 )); then
-            printf 'docker push returned %d manifest digests, expected one\n' \
-              "${#digests[@]}" >&2
-            exit 1
-          fi
-          echo "digest=${digests[0]}" >> "$GITHUB_OUTPUT"
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: ai/tiny/serve/tflite/sidecar
+          file: ai/tiny/serve/tflite/sidecar/Dockerfile
+          build-args: |
+            VCS_REF=${{ github.sha }}
+          platforms: linux/amd64,linux/arm64
+          outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
 
-      - name: Verify immutable published image
-        id: image
+      - name: Select candidate digest
+        id: candidate
         shell: bash
         env:
           EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
           IMAGE: ${{ env.IMAGE_REPO }}
           PUSHED_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          candidate=${EXISTING_DIGEST:-$PUSHED_DIGEST}
+          if [[ ! "$candidate" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'publish path did not produce one expected digest: %q\n' \
+              "$candidate" >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect "$IMAGE@$candidate" --raw | \
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$candidate" --index
+          echo "digest=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke exact publish candidate
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          IMAGE: ${{ env.IMAGE_REPO }}
+          SIDECAR_SKIP_BUILD: '1'
+        run: |
+          set -euo pipefail
+          digest="$DIGEST"
+          docker pull --platform linux/amd64 "$IMAGE@$digest"
+          TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-litert-sidecar-smoke.sh "$IMAGE@$digest"
+
+      - name: Verify release identity of every platform
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          IMAGE: ${{ env.IMAGE_REPO }}
           SOURCE_SHA: ${{ github.sha }}
-          TESTED_IMAGE_ID: ${{ steps.tested.outputs.image-id }}
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
           VERSION: ${{ steps.version.outputs.value }}
         run: |
           set -euo pipefail
-          expected_digest=${EXISTING_DIGEST:-$PUSHED_DIGEST}
+          digest="$DIGEST"
+          for platform in linux/amd64 linux/arm64; do
+            docker buildx imagetools inspect "$IMAGE@$digest" \
+              --format "{{json (index .Image \"$platform\")}}" | \
+              python3 -B scripts/ci/tiny-trainer-manifest-identity.py \
+              --config "$platform" "$SOURCE_URL" "$SOURCE_SHA" "$VERSION"
+          done
+
+      - name: Tag verified candidate
+        if: steps.existing.outputs.exists != 'true'
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          IMAGE: ${{ env.IMAGE_REPO }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          digest="$DIGEST"
+          error_file="$RUNNER_TEMP/sidecar-tag-check-error"
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" \
+            --format '{{json .Manifest.Digest}}' 2>"$error_file"; then
+            printf 'tag appeared concurrently: %s:%s\n' "$IMAGE" "$VERSION" >&2
+            exit 1
+          elif ! grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
+            cat "$error_file" >&2
+            exit 1
+          fi
+          docker buildx imagetools create -t "$IMAGE:$VERSION" "$IMAGE@$digest"
+
+      - name: Verify immutable published image
+        id: image
+        shell: bash
+        env:
+          CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
+          IMAGE: ${{ env.IMAGE_REPO }}
+          VERSION: ${{ steps.version.outputs.value }}
+        run: |
+          set -euo pipefail
+          expected_digest="$CANDIDATE_DIGEST"
           if [[ ! "$expected_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
             printf 'publish path did not produce one expected digest: %q\n' \
               "$expected_digest" >&2
@@ -339,18 +378,7 @@ jobs:
             exit 1
           fi
           docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
-            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$TESTED_IMAGE_ID"
-          docker pull "$IMAGE@$digest"
-          published_id=$(docker image inspect --format '{{.Id}}' "$IMAGE@$digest")
-          revision=$(docker image inspect --format \
-            '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE@$digest")
-          image_version=$(docker image inspect --format \
-            '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE@$digest")
-          if [[ "$published_id" != "$TESTED_IMAGE_ID" || "$revision" != "$SOURCE_SHA" || \
-            "$image_version" != "$VERSION" ]]; then
-            printf 'published image does not match tested image id and source labels\n' >&2
-            exit 1
-          fi
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
 
       - name: Sign image digest
