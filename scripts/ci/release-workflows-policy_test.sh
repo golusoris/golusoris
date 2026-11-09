@@ -105,6 +105,7 @@ run_oci_tag_validator() {
 	RELEASE_REF_NAME="$1" bash -euo pipefail "$2"
 }
 
+# Rebuild workflow must drop dead inputs, share the release Buildx pin, digest-pin QEMU, and keep immutable tag contracts.
 check_rebuild() {
 	local path="$1"
 	local qemu_image
@@ -338,6 +339,7 @@ if problems:
 PY
 }
 
+# Provenance verifier must keep its verification contracts, mint no OIDC tokens, and require a fixed signer digest.
 check_verifier() {
 	local path="$1"
 	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.

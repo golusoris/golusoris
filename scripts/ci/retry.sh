@@ -32,7 +32,8 @@ status=0
 # Bounded retry loop for network-sensitive tool and module downloads (HISS-02).
 for ((attempt = 1; attempt <= RETRY_ATTEMPTS; attempt++)); do
 	status=0
-	"$@" >"$stdout_file" || status=$?
+	# Closed stdin keeps attempts identical: a failed attempt cannot consume input a retry needs.
+	"$@" </dev/null >"$stdout_file" || status=$?
 	if ((status == 0)); then
 		cat "$stdout_file"
 		exit 0

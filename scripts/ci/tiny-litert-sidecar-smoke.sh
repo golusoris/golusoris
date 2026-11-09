@@ -73,6 +73,7 @@ resolve_smoke_port() {
 	printf '%s\n' "$port"
 }
 
+# Poll /healthz until it answers 200 or 503, bounded at 30 retries; dump container logs before failing.
 wait_sidecar_ready() {
 	local port="$1"
 	local cid="$2"

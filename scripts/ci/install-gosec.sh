@@ -12,6 +12,7 @@ set -euo pipefail
 # work is script-level so the EXIT trap still sees it after main returns.
 work=""
 
+# Build gosec against the pinned golang.org/x/tools and refuse a binary linked to any other version.
 main() {
 	local root pinned_gosec pinned_xtools dest gosec_version
 	root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

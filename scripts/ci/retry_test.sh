@@ -175,4 +175,28 @@ if ! grep -q 'bad' "$stderr_file"; then
 	exit 1
 fi
 
+# ── test 8: attempts read /dev/null, so a retry cannot inherit consumed stdin ─
+stdin_script="$temp_dir/stdin.sh"
+cat >"$stdin_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if IFS= read -r line; then
+	printf 'read:%s\n' "$line"
+	exit 1
+fi
+printf 'eof\n'
+EOF
+chmod +x "$stdin_script"
+
+stderr_file="$temp_dir/test8.stderr"
+actual_stdout="$(printf 'payload\n' | RETRY_ATTEMPTS=2 RETRY_DELAY_SECONDS=0 "$RETRY_SCRIPT" "$stdin_script" 2>"$stderr_file")"
+if [[ "$actual_stdout" != 'eof' ]]; then
+	printf 'test 8: expected stdout "eof" from closed stdin, got: %q\n' "$actual_stdout" >&2
+	exit 1
+fi
+if grep -q '::warning::attempt' "$stderr_file"; then
+	printf 'test 8: expected no retry with closed stdin, got: %s\n' "$(cat "$stderr_file")" >&2
+	exit 1
+fi
+
 printf 'retry_test.sh: all tests passed\n'

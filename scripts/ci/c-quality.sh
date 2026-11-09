@@ -98,6 +98,7 @@ resolve_headers() {
 	(cd "$module_dir/examples/headers" && pwd)
 }
 
+# Compile and clang-tidy one C or BPF source in a networkless, read-only container pinned to CLANG_VERSION.
 run_clang() {
 	local source="$1"
 	local output="$2"

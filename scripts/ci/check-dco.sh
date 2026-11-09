@@ -11,6 +11,7 @@ set -euo pipefail
 
 readonly bot_author_suffix='[bot]@users.noreply.github.com'
 
+# Fail when a human commit in BASE..HEAD lacks a Signed-off-by trailer; bot-authored commits are reported and skipped.
 main() {
 	local base="${1:?usage: check-dco.sh BASE HEAD}"
 	local head="${2:?usage: check-dco.sh BASE HEAD}"
