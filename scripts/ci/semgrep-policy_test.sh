@@ -206,4 +206,11 @@ write_fake_docker_exit 123 docker-former-tolerated-status "$fake_clean_report"
 expect_semgrep_failure 'Semgrep scanner failed with exit status 123' env DOCKER_BIN="$suite_root/docker-former-tolerated-status" \
 	bash "$fake_alias_root/scripts/ci/semgrep-scan.sh" --root "$fake_alias_root"
 
+# Proves expect_semgrep_failure rejects unbound variable leaks and accepts clean failures.
+if expect_semgrep_failure 'planted' bash -c "printf 'planted\nline 1: x: unbound variable\n'; exit 1" 2>/dev/null; then
+	printf 'expect_semgrep_failure accepted unbound variable leak\n' >&2
+	exit 1
+fi
+expect_semgrep_failure 'planted' bash -c "printf 'planted\n'; exit 1"
+
 printf 'Semgrep full-tree policy tests passed\n'

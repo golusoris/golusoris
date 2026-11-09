@@ -111,6 +111,7 @@ commit_fixture() {
 	sha_v101="$(run_git "$root" rev-parse HEAD)"
 }
 
+# Proves template-workflows.sh checks commit pins, tag comments, declared inputs and the workflow_call trigger.
 check_pin_cases() {
 	local root="$1"
 	local template_ci="$root/template/.github/workflows/ci.yml"
@@ -140,6 +141,7 @@ check_pin_cases() {
 		bash "$root/scripts/ci/template-workflows.sh" --root "$root"
 }
 
+# Proves template-workflows.sh rejects unpinned refs, unreadable templates and an empty selection.
 check_selection_cases() {
 	local root="$1"
 	local template_ci="$root/template/.github/workflows/ci.yml"
