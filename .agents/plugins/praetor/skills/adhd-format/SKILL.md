@@ -1,46 +1,79 @@
 ---
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+#
+# SPDX-License-Identifier: EUPL-1.2
 name: adhd-format
-description: Format dense technical reports, architecture reviews, and diagnostics for high cognitive focus. Use when human-facing output needs BLUF, visual anchors, short chunks, or progressive disclosure.
+description: Format complex technical reports, architectural reviews, and diagnostic outputs for high cognitive focus, executive clarity, and ADHD readability using visual hierarchy, bionic bolding, chunked lists, and alert callouts.
+metadata:
+  derived_from: "https://github.com/ayghri/i-have-adhd (MIT)"
 ---
 
-# High-focus technical formatting (`adhd-format`)
+# High-Focus Technical Formatting (`adhd-format`)
 
-Dense engineering output -> fast human comprehension. Forge prose uses `social-text`,
-which inherits BLUF, scannability, and progressive disclosure from this skill.
+Adapted from [i-have-adhd](https://github.com/ayghri/i-have-adhd) by Ayoub
+Ghriss and
+[contributors](https://github.com/ayghri/i-have-adhd/graphs/contributors); MIT
+licence.
 
-## Rules
+Transform dense engineering outputs, audit findings, and architecture
+documentation into high-bandwidth, ADHD-optimized visual deliverables.
 
-1. **Lead with bottom line.** First sentence = decision, status, or required action. Cut
-   filler preambles such as "Here is the report" and "Based on my analysis".
-2. **Make scanning cheap.** Start every bullet with bold 2-4 word anchor or operative
-   action. Keep paragraphs at 2-3 sentences. Use tables for multi-attribute comparison.
-3. **Use alerts sparingly.** `> [!IMPORTANT]` = blocker or invariant;
-   `> [!WARNING]` = deprecation or breaking risk; `> [!TIP]` = shortcut or command.
-4. **Show state changes.** Sequence, state transition, or lattice explanation -> compact
-   Mermaid diagram with <= 6 nodes.
-5. **Disclose progressively.** Summary matrix first; actionable commands second; deep
-   implementation detail linked or collapsed.
+## Core Formatting Principles
 
-## Transformation pattern
+Forge-facing prose (issues, PR bodies, review comments, commit bodies) uses
+social-text skill, which inherits this one.
 
-### Weak
+1. **Lead with Bottom Line (BLUF)**:
+   - State decision, status, or actionable conclusion in very first sentence.
+   - Eliminate filler preambles (`Here is the report`, `Based on my analysis`).
 
-HISS-04 review found `compileAstNode` at cyclomatic 14 and 92 lines against limits 10 and
-75. Refactor required.
+2. **Visual Scannability & Anchor Bolding**:
+   - Bold **first 2-4 words** or operative action of every bullet point.
+   - Restrict paragraphs to **at most 2-3 sentences**.
+   - Use high-contrast Markdown tables for multi-attribute comparisons.
 
-### Focused
+3. **Strategic Alert Callouts**:
+   - Use GitHub-style alerts sparingly for immediate cognitive anchoring:
+     - `> [!IMPORTANT]` for blocking requirements or invariants.
+     - `> [!WARNING]` for deprecations or breaking risks.
+     - `> [!TIP]` for operational shortcuts and command patterns.
 
-#### HISS-04 complexity infraction
+4. **Diagrammatic Synthesis**:
+   - When explaining state transition, sequence, or lattice relationship,
+     include compact Mermaid diagram ($\le 6$ nodes).
 
-| Function | Cyclomatic | Limit | Func LOC | Limit | Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `compiler.compileAstNode` | **14** | <= 10 | **92** | <= 75 | blocked |
+5. **Progressive Disclosure**:
+   - Provide summary matrices first, actionable CLI commands second, and deep
+     implementation details collapsed or linked below.
 
-- **Extract node visits** into `visitExpression()` and `visitStatement()`.
-- **Target complexity** <= 8.
+## Transformation Pattern
 
-```mermaid
-flowchart LR
-    NODE["compileAstNode (LOC 92)"] --> EXPR["visitExpression (LOC 35)"]
-    NODE --> STMT["visitStatement (LOC 40)"]
-```
+<!-- caveman:off -->
+### ❌ Anti-Pattern (Cognitive Fatigue)
+
+> "In evaluating the repository against HISS-04, we noticed that several
+> functions in the compiler package have cyclomatic complexity values exceeding
+> the threshold of 10. Specifically, `compileAstNode` has a complexity of 14,
+> and its length is 92 lines which also violates the 60 line limit. We should
+> refactor this into sub-functions."
+
+### ✅ ADHD-Optimized Pattern
+
+> ### 🚨 HISS-04 Complexity Infraction
+>
+> | Function | Cyclomatic | Limit | Func LOC | Limit | Status |
+> | :--- | :--- | :--- | :--- | :--- | :--- |
+> | `compileAstNode` | **14** | $\le 10$ | **92** | $\le 60$ | ❌ Blocked |
+>
+> **Immediate Action Required**:
+>
+> - **Extract node visit logic** into `visitExpression()` and
+>   `visitStatement()`.
+> - **Target reduction**: Reduce cyclomatic complexity from 14 to $\le 8$.
+>
+> ```mermaid
+> flowchart LR
+>     NODE["compileAstNode (LOC 92)"] --> EXPR["visitExpression (LOC 35)"]
+>     NODE --> STMT["visitStatement (LOC 40)"]
+> ```
+<!-- caveman:on -->
