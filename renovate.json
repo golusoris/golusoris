@@ -55,16 +55,15 @@
     },
     {
       "customType": "regex",
-      "description": "Move every workflow download-syft input with the SYFT_VERSION pin, so one update branch carries both.",
+      "description": "Move reusable release workflow env pins with tools/tool-versions.env in one branch.",
       "managerFilePatterns": [
-        "/^\\.github/workflows/[^/]+\\.ya?ml$/"
+        "/^\\.github/workflows/release-go\\.yml$/",
+        "/^\\.github/workflows/rebuild-on-base\\.yml$/",
+        "/^\\.github/workflows/verify-provenance\\.yml$/"
       ],
       "matchStrings": [
-        "uses: anchore/sbom-action/download-syft@\\S+[^\\n]*\\n\\s+with:\\n\\s+syft-version: (?<currentValue>v\\S+)"
-      ],
-      "datasourceTemplate": "github-releases",
-      "depNameTemplate": "anchore/syft",
-      "versioningTemplate": "semver"
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+) versioning=(?<versioning>\\S+)\\n\\s+[A-Z][A-Z0-9_]*_VERSION: (?<currentValue>\\S+)"
+      ]
     },
     {
       "customType": "regex",
