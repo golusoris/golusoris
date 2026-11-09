@@ -15,6 +15,7 @@ on:
     - cron: '23 5 * * 1'   # Mondays 05:23 UTC
   workflow_dispatch: {}
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
       - .github/workflows/windows-panic-rescan.yml
