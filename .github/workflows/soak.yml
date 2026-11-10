@@ -58,7 +58,35 @@ jobs:
             ./realtime/pubsub \
             ./cache/twotier \
             ./outbox
-      - name: Measure the Pulumi task sizing against examples/minimal
+
+  sizing:
+    name: Measure the Pulumi task sizing (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Pull Docker Hub images through mirror.gcr.io
+        uses: ./.github/actions/docker-hub-mirror
+      - uses: ./.github/actions/setup-go
+      - name: Verify Docker daemon is reachable
+        run: docker info
+      - name: Measure examples/minimal against the Pulumi Fargate task size
+        shell: bash
         env:
           RYUK_RECONNECTION_TIMEOUT: 30m
-        run: make pulumi-sizing-test
+        run: |
+          make pulumi-sizing-test 2>&1 | tee sizing.log
+          {
+            printf '## Pulumi task sizing (%s, %s)\n\n' "${{ matrix.arch }}" "${{ matrix.runner }}"
+            grep -o 'sizing: peak RSS.*' sizing.log
+          } >> "$GITHUB_STEP_SUMMARY"

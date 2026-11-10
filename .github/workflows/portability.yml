@@ -24,7 +24,8 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # main requires these matrix contexts, so the merge queue runs them too; each leg had its first hosted green
-# before it became required: Platform Neutrality (Linux), Platform Neutrality (macOS), Platform Neutrality (Windows).
+# before it became required: Platform Neutrality (Linux), Platform Neutrality (Linux arm64), Platform Neutrality (macOS), Platform Neutrality (macOS Intel), Platform Neutrality (Windows).
+# Platform Neutrality (Windows arm64) is advisory (continue-on-error) until #1341 is fixed.
 jobs:
   portability:
     name: Platform Neutrality (${{ matrix.name }})
@@ -36,11 +37,17 @@ jobs:
         include:
           - name: Linux
             runner: ubuntu-26.04
+          # Release archives ship linux/arm64 binaries (tools/.goreleaser.yml).
+          - name: Linux arm64
+            runner: ubuntu-26.04-arm
           - name: macOS
             runner: macos-26
+          # Release archives ship darwin/amd64 binaries (tools/.goreleaser.yml).
+          - name: macOS Intel
+            runner: macos-15-intel
           - name: Windows
             runner: windows-2025
-    steps:
+    steps: &portability-steps
       - name: Stop on a draft pull request
         uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212
       - name: Checkout source
@@ -68,27 +75,54 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -B scripts/ci/portability_test.py
+      - name: Release depth gate on this platform
+        # The release job runs it on Linux; this leg proves it on macOS bash 3.2 and Git Bash too.
+        if: env.CI_GATED != 'skip'
+        shell: bash
+        env:
+          PYTHON: python
+        run: bash scripts/ci/release-depth-evidence_test.sh
       - name: Install cgo system libraries on Linux
         # hw/udev links libudev; media/3d links OpenAL, Vorbis, GL and X11 (go-gl/glfw).
         if: runner.os == 'Linux' && env.CI_GATED != 'skip'
         timeout-minutes: 15
         uses: ./.github/actions/install-cgo-libs
+      - name: Resolve Pact FFI asset digest
+        id: pact-ffi-asset
+        if: env.CI_GATED != 'skip'
+        shell: bash
+        run: |
+          digest="$(python -B scripts/ci/pact_ffi.py --asset-digest)"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || { echo "::error::bad Pact FFI asset digest: $digest" >&2; exit 1; }
+          printf 'sha256=%s\n' "$digest" >> "$GITHUB_OUTPUT"
+      - name: Cache verified Pact FFI on Unix
+        if: runner.os != 'Windows' && env.CI_GATED != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .workingdir/cache/pact-ffi
+          key: pact-ffi-${{ runner.os }}-${{ runner.arch }}-${{ steps.pact-ffi-asset.outputs.sha256 }}
       - name: Install verified Pact FFI on Unix
         if: runner.os != 'Windows' && env.CI_GATED != 'skip'
         run: |
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
-          python -B scripts/ci/pact_ffi.py --lib-dir "$pact_dir"
+          python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"
           echo "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir" >> "$GITHUB_ENV"
           # pact-go's cgo flags search only /tmp, /opt/pact/lib and /usr/local/lib.
           echo "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir" >> "$GITHUB_ENV"
+      - name: Cache verified Pact FFI on Windows
+        if: runner.os == 'Windows' && env.CI_GATED != 'skip'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .workingdir/cache/pact-ffi
+          key: pact-ffi-${{ runner.os }}-${{ runner.arch }}-${{ steps.pact-ffi-asset.outputs.sha256 }}
       - name: Install verified Pact FFI on Windows
         if: runner.os == 'Windows' && env.CI_GATED != 'skip'
         shell: pwsh
         run: |
           $pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'
           New-Item -ItemType Directory -Force -Path $pactDir | Out-Null
-          python -B scripts/ci/pact_ffi.py --lib-dir $pactDir
+          python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir $pactDir
           $pactDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "PACT_GO_LIB_DOWNLOAD_PATH=$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
@@ -105,3 +139,10 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
           CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: python -B scripts/ci/portability.py
+
+  portability-advisory:
+    name: Platform Neutrality (Windows arm64)
+    runs-on: windows-11-arm
+    timeout-minutes: 90
+    continue-on-error: true
+    steps: *portability-steps

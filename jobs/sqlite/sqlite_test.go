@@ -45,6 +45,9 @@ func discard() *slog.Logger { return slog.New(slog.DiscardHandler) }
 // Windows CI runners outlast the 5s default on a cold open (#778); applications keep the default.
 const testBusyTimeout = 30 * time.Second
 
+// Windows disk stalls can outlast fx default 15s during River migrations (migrateTimeout 30s + margin; #1222).
+const testStartTimeout = 45 * time.Second
+
 func openDB(t *testing.T, maxConns int) *sql.DB {
 	t.Helper()
 	db, err := dbsqlite.Open(context.Background(), dbsqlite.Options{
@@ -192,6 +195,7 @@ func TestModule_fxLifecycle(t *testing.T) {
 		collector *jobs.DepthCollector
 	)
 	app := fxtest.New(t,
+		fx.StartTimeout(testStartTimeout),
 		fx.Supply(db, cfg, discard(), prometheus.NewRegistry()),
 		sqlite.Module,
 		jobs.MetricsModule,

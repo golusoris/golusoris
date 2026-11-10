@@ -6,18 +6,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-suite_root="$(mktemp -d "${TMPDIR:-/tmp}/tiny-trainer-locks-policy.XXXXXX")"
-readonly repo_root suite_root
-trap 'find "$suite_root" -depth -delete' EXIT
+readonly repo_root
 
-expect_failure() {
-	local status=0
-	"$@" >/dev/null 2>&1 || status=$?
-	if ((status == 0)); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
-}
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
+policy_suite_init "tiny-trainer-locks-policy"
 
 require_error_matches() {
 	local path="$1"

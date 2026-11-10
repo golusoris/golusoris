@@ -88,22 +88,22 @@ fix-check-all: ## assert go fix would not modernize any Go module
 
 .PHONY: tools-bootstrap
 tools-bootstrap: ## install repository-managed developer tools at exact versions
-	$(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 	bash scripts/ci/install-gosec.sh
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
-	$(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
-	$(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
-	$(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
-	$(GO) install github.com/air-verse/air@$(AIR_VERSION)
-	$(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
-	$(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
-	$(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
-	$(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-	$(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
-	$(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
-	$(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
-	$(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
+	bash scripts/ci/retry.sh $(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/joelanford/go-apidiff@$(GO_COMPAT_TOOL_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/evilmartians/lefthook/v2@$(LEFTHOOK_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/vektra/mockery/v3@$(MOCKERY_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/air-verse/air@$(AIR_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/ogen-go/ogen/cmd/ogen@$(OGEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/golang-migrate/migrate/v4/cmd/migrate@$(MIGRATE_VERSION)
+	bash scripts/ci/retry.sh $(GO) install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/avito-tech/go-mutesting/cmd/go-mutesting@$(GO_MUTESTING_VERSION)
+	bash scripts/ci/retry.sh $(GO) install helm.sh/helm/v4/cmd/helm@$(HELM_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
+	bash scripts/ci/retry.sh $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
 .PHONY: ci-policy-test
 ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
@@ -112,6 +112,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/check-dco_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
+	@bash scripts/ci/export-release-tool-pins_test.sh
 	@bash scripts/ci/release-pr-ci_test.sh
 	@bash scripts/ci/readme-badges_test.sh
 	@bash scripts/ci/require-green-ci_test.sh
@@ -122,16 +123,20 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/release_smoke_test.py
 	@bash scripts/ci/scalar-bundle-update_test.sh
 	@bash scripts/ci/release-notes-breaking_test.sh
+	@bash scripts/ci/release-depth-evidence_test.sh
 	@bash scripts/ci/generation-policy_test.sh
 	@bash scripts/ci/helm-chart_test.sh
 	@bash scripts/ci/trivy-policy_test.sh
 	@bash scripts/ci/govulncheck-policy_test.sh
 	@bash scripts/ci/semgrep-policy_test.sh
 	@bash scripts/ci/gosec-scan_test.sh
+	@bash scripts/ci/security-gates_test.sh
 	@bash scripts/ci/shellcheck-policy_test.sh
+	@bash scripts/ci/shellcheck-hook_test.sh
 	@bash scripts/ci/actionlint-policy_test.sh
 	@bash scripts/ci/composite-actions-policy_test.sh
 	@bash scripts/ci/template-workflows-policy_test.sh
+	@bash scripts/ci/lib/policy-test_test.sh
 	@bash scripts/ci/stop-on-draft-policy_test.sh
 	@bash scripts/ci/terraform-policy_test.sh
 	@bash scripts/ci/mkdocs-build-policy_test.sh
@@ -153,6 +158,9 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/pull_test_images_test.py
 	@python3 -B scripts/ci/windows-panic-rescan_test.py
 	@python3 -B scripts/ci/release-tool-pins-test.py
+	@python3 -B scripts/ci/shell_flake_policy.py
+	@python3 -B scripts/ci/shell_flake_policy_test.py
+	@bash scripts/ci/retry_test.sh
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
@@ -164,8 +172,13 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/osv-ignores.py check
 
 .PHONY: release-notes-check
-release-notes-check: ## require a migration guide when the newest CHANGELOG entry is breaking
+release-notes-check: ## require a migration guide for a breaking newest CHANGELOG entry and no change an earlier tagged release shipped
 	@bash scripts/ci/release-notes-breaking.sh check
+	@bash scripts/ci/release-notes-breaking.sh range
+
+.PHONY: release-depth-check
+release-depth-check: ## refuse a minor/major release-please PR without depth evidence
+	@bash scripts/ci/release-depth-evidence.sh pending
 
 .PHONY: python-lint
 python-lint: ## lint every repository-owned Python source with immutable Ruff
@@ -280,7 +293,7 @@ core-skew: ## build and test the root against the required core version, in-repo
 .PHONY: pulumi-sizing-test
 pulumi-sizing-test: ## measure examples/minimal against the Pulumi Fargate task size (needs Docker; Linux)
 	@bash scripts/ci/pulumi-sizing-budget.sh
-	go test -tags sizing -count=1 -run TestSizing -p 4 ./examples/minimal
+	go test -tags sizing -count=1 -v -run TestSizing -p 4 ./examples/minimal
 
 .PHONY: fault-recovery
 fault-recovery: ## fail when a short test recovers a nil-dereference fault (golang/go#81238)
@@ -340,7 +353,7 @@ PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
-	@python3 -B scripts/ci/pact_ffi.py --cache --lib-dir "$(PACT_FFI_DIR)"
+	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
 # override keeps the Pact paths when a caller sets these variables on the make command line;
@@ -356,7 +369,7 @@ $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(
 endif
 
 .PHONY: verify-all
-verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check release-depth-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate

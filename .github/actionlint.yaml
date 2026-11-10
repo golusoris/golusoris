@@ -14,3 +14,4 @@ self-hosted-runner:
     - cauda-k8s-office-canary
     - ubuntu-26.04
     - ubuntu-26.04-arm
+    - windows-11-arm

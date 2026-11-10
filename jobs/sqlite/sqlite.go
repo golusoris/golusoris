@@ -31,7 +31,7 @@ import (
 	"github.com/golusoris/golusoris/jobs"
 )
 
-// migrateTimeout bounds the River schema migration run at fx Start.
+// Start ctx deadline caps this (App.Run/fxtest: fx.StartTimeout, default 15s; direct App.Start: caller ctx).
 const migrateTimeout = 30 * time.Second
 
 // depthSQL mirrors the Postgres depth query: one grouped read, largest groups

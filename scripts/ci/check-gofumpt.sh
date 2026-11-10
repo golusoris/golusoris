@@ -27,7 +27,7 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ -z "$tool" ]] || [[ "$($tool -version)" != "$GOFUMPT_VERSION "* ]]; then
-	GOBIN="$temp_dir" go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
+	GOBIN="$temp_dir" bash "$REPO_ROOT/scripts/ci/retry.sh" go install "mvdan.cc/gofumpt@${GOFUMPT_VERSION}"
 	tool="$temp_dir/gofumpt"
 fi
 

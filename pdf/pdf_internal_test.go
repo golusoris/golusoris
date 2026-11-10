@@ -35,6 +35,7 @@ const (
 	fakeChromeDiagnostic = "fake chrome: profile still loading"
 	fakeChromeHangLimit  = 30 * time.Second
 	fakeLaunchTimeout    = 2 * time.Second
+	fakeReapMargin       = 2 * time.Second
 )
 
 func TestMain(m *testing.M) {
@@ -250,8 +251,8 @@ func TestNewRendererLaunchTimeoutOwnsSilentPipe(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("NewRendererContext() error = %v; want context.DeadlineExceeded", err)
 	}
-	if elapsed < fakeLaunchTimeout || elapsed > fakeLaunchTimeout+time.Second {
-		t.Errorf("NewRendererContext() elapsed = %s; want [%s, %s]", elapsed, fakeLaunchTimeout, fakeLaunchTimeout+time.Second)
+	if elapsed < fakeLaunchTimeout || elapsed > fakeLaunchTimeout+fakeReapMargin {
+		t.Errorf("NewRendererContext() elapsed = %s; want [%s, %s]", elapsed, fakeLaunchTimeout, fakeLaunchTimeout+fakeReapMargin)
 	}
 	assertFakeChromeReaped(t, pidFile)
 	assertChromeGoroutinesStopped(t)

@@ -7,6 +7,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
+
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
 suite_root="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-actionlint-policy.XXXXXX")"
 readonly suite_root
 trap 'find "$suite_root" -depth -delete' EXIT
@@ -25,22 +28,6 @@ new_repo() {
 	git -C "$root" init -q
 	printf '%s\n' '.workingdir/' >"$root/.gitignore"
 	printf '%s\n' "$root"
-}
-
-expect_failure() {
-	local pattern="$1"
-	shift
-	local output
-	local status=0
-	output="$("$@" 2>&1)" || status=$?
-	if (( status == 0 )); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
-	if [[ "$output" != *"$pattern"* ]]; then
-		printf 'missing failure %q in: %s\n' "$pattern" "$output" >&2
-		return 1
-	fi
 }
 
 check_rebuild_trigger_contract() {
@@ -397,27 +384,27 @@ bash "$clean_root/scripts/ci/actionlint.sh" --root "$clean_root" >/dev/null
 github_root="$(new_repo github-negative)"
 write_bad_workflow "$github_root/.github/workflows/bad.yml"
 git -C "$github_root" add .
-expect_failure 'undefined variable "unknown"' \
+expect_failure_matching 'undefined variable "unknown"' \
 	bash "$github_root/scripts/ci/actionlint.sh" --root "$github_root"
 
 gitea_root="$(new_repo gitea-negative)"
 write_bad_workflow "$gitea_root/.gitea/workflows/bad.yml"
 git -C "$gitea_root" add .
-expect_failure '.gitea/workflows/bad.yml' \
+expect_failure_matching '.gitea/workflows/bad.yml' \
 	bash "$gitea_root/scripts/ci/actionlint.sh" --root "$gitea_root"
 
 untracked_root="$(new_repo untracked)"
 write_clean_workflow "$untracked_root/.github/workflows/clean.yml"
 git -C "$untracked_root" add .
 write_bad_workflow "$untracked_root/.gitea/workflows/untracked.yml"
-expect_failure '.gitea/workflows/untracked.yml' \
+expect_failure_matching '.gitea/workflows/untracked.yml' \
 	bash "$untracked_root/scripts/ci/actionlint.sh" --root "$untracked_root"
 
 symlink_root="$(new_repo symlink)"
 write_clean_workflow "$suite_root/outside.yml"
 ln -s "$suite_root/outside.yml" "$symlink_root/.github/workflows/external.yml"
 git -C "$symlink_root" add .
-expect_failure 'actionlint refuses symlink input' \
+expect_failure_matching 'actionlint refuses symlink input' \
 	bash "$symlink_root/scripts/ci/actionlint.sh" --root "$symlink_root"
 
 wrong_version_root="$(new_repo wrong-version)"
@@ -428,7 +415,7 @@ cat >"$suite_root/actionlint-wrong" <<'EOF'
 printf 'v0.0.0\n'
 EOF
 chmod +x "$suite_root/actionlint-wrong"
-expect_failure 'actionlint version is v0.0.0' env ACTIONLINT_BIN="$suite_root/actionlint-wrong" \
+expect_failure_matching 'actionlint version is v0.0.0' env ACTIONLINT_BIN="$suite_root/actionlint-wrong" \
 	bash "$wrong_version_root/scripts/ci/actionlint.sh" --root "$wrong_version_root"
 
 failure_root="$(new_repo scanner-failure)"
@@ -444,10 +431,10 @@ printf '.github/workflows/clean.yml: scanner failure\n' >&2
 exit 9
 EOF
 chmod +x "$suite_root/actionlint-failure"
-expect_failure '.github/workflows/clean.yml' env ACTIONLINT_BIN="$suite_root/actionlint-failure" \
+expect_failure_matching '.github/workflows/clean.yml' env ACTIONLINT_BIN="$suite_root/actionlint-failure" \
 	bash "$failure_root/scripts/ci/actionlint.sh" --root "$failure_root"
 
-expect_failure 'undefined variable "unknown"' actionlint -no-color \
+expect_failure_matching 'undefined variable "unknown"' actionlint -no-color \
 	-config-file "$repo_root/.github/actionlint.yaml" \
 	"$repo_root/.config/hiss/testdata/HISS-10/workflow-yaml/positive/undefined-expression.yml"
 actionlint -no-color -config-file "$repo_root/.github/actionlint.yaml" \
@@ -459,7 +446,7 @@ check_rebuild_trigger_contract "$rebuild_workflow"
 rebuild_dispatch_negative="$suite_root/rebuild-dispatch.yml"
 sed '/^on:$/a\  repository_dispatch:\n    types: [base-image-updated]' \
 	"$rebuild_workflow" >"$rebuild_dispatch_negative"
-expect_failure 'must only expose workflow_call inputs' \
+expect_failure_matching 'must only expose workflow_call inputs' \
 	check_rebuild_trigger_contract "$rebuild_dispatch_negative"
 
 check_scorecard_policy_contract "$repo_root/.github/workflows/scorecard.yml" \
@@ -480,7 +467,7 @@ pathlib.Path(sys.argv[2]).write_text(
     encoding="utf-8",
 )
 PY
-expect_failure 'required context contains runner label' \
+expect_failure_matching 'required context contains runner label' \
 	check_required_contexts_label_free "$required_label_negative"
 
 scorecard_pr_negative="$suite_root/scorecard-no-pr.yml"
@@ -500,14 +487,14 @@ if count != 1:
     raise SystemExit("scorecard pull_request mutation failed")
 pathlib.Path(sys.argv[2]).write_text(mutated, encoding="utf-8")
 PY
-expect_failure 'scorecard workflow lacks pull_request main trigger' \
+expect_failure_matching 'scorecard workflow lacks pull_request main trigger' \
 	check_scorecard_policy_contract "$scorecard_pr_negative" \
 	"$repo_root/.github/rulesets/main.json"
 
 scorecard_name_negative="$suite_root/scorecard-renamed-job.yml"
 sed 's/^    name: Scorecard Analysis$/    name: Scorecard Security/' \
 	"$repo_root/.github/workflows/scorecard.yml" >"$scorecard_name_negative"
-expect_failure 'scorecard workflow must emit Scorecard Analysis' \
+expect_failure_matching 'scorecard workflow must emit Scorecard Analysis' \
 	check_scorecard_policy_contract "$scorecard_name_negative" \
 	"$repo_root/.github/rulesets/main.json"
 
@@ -528,7 +515,7 @@ for rule in ruleset["rules"]:
     ]
 pathlib.Path(sys.argv[2]).write_text(json.dumps(ruleset), encoding="utf-8")
 PY
-expect_failure 'ruleset must require Scorecard Analysis exactly once' \
+expect_failure_matching 'ruleset must require Scorecard Analysis exactly once' \
 	check_scorecard_policy_contract "$repo_root/.github/workflows/scorecard.yml" \
 	"$scorecard_ruleset_negative"
 
@@ -542,7 +529,7 @@ timeout_negative_root="$(new_repo timeout-negative)"
 write_clean_workflow "$timeout_negative_root/.github/workflows/no-timeout.yml"
 sed -i '/^[[:space:]]*timeout-minutes:/d' \
 	"$timeout_negative_root/.github/workflows/no-timeout.yml"
-expect_failure 'workflow jobs lack timeout-minutes' \
+expect_failure_matching 'workflow jobs lack timeout-minutes' \
 	check_workflow_job_timeouts "$timeout_negative_root"
 
 cache_reader_negative="$suite_root/ci-cache-reader-without-writer.yml"
@@ -556,34 +543,34 @@ if marker not in source:
     raise SystemExit("cache-reader dependency mutation failed")
 pathlib.Path(sys.argv[2]).write_text(source.replace(marker, "", 1), encoding="utf-8")
 PY
-expect_failure 'cache reader lint does not depend on build' \
+expect_failure_matching 'cache reader lint does not depend on build' \
 	check_go_cache_writer_contract "$cache_reader_negative"
 
 cache_action="$repo_root/.github/actions/setup-go/action.yml"
 cache_key_negative="$suite_root/setup-go-cache-key-drift.yml"
 sed '/cache-dependency-path:/d' "$cache_action" >"$cache_key_negative"
-expect_failure 'setup-go composite does not use the all-module key' \
+expect_failure_matching 'setup-go composite does not use the all-module key' \
 	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_key_negative"
 
 cache_input_negative="$suite_root/setup-go-cache-input-drift.yml"
 sed 's/cache: ${{ inputs.cache }}/cache: true/' "$cache_action" >"$cache_input_negative"
-expect_failure 'setup-go composite does not forward the cache input' \
+expect_failure_matching 'setup-go composite does not forward the cache input' \
 	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_input_negative"
 
 cache_default_negative="$suite_root/setup-go-cache-default-drift.yml"
 sed "s/default: 'true'/default: 'false'/" "$cache_action" >"$cache_default_negative"
-expect_failure 'build must be the sole setup-go cache writer' \
+expect_failure_matching 'build must be the sole setup-go cache writer' \
 	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_default_negative"
 
 cache_missing_default="$suite_root/setup-go-cache-default-missing.yml"
 sed '/default:/d' "$cache_action" >"$cache_missing_default"
-expect_failure 'setup-go composite lacks a cache default' \
+expect_failure_matching 'setup-go composite lacks a cache default' \
 	check_go_cache_writer_contract "$repo_root/.github/workflows/ci.yml" "$cache_missing_default"
 
 cache_warm_negative="$suite_root/ci-cache-without-module-warm.yml"
 sed '/run: scripts\/ci\/go-modules.sh verify/d' \
 	"$repo_root/.github/workflows/ci.yml" >"$cache_warm_negative"
-expect_failure 'cache writer build does not verify every module before saving' \
+expect_failure_matching 'cache writer build does not verify every module before saving' \
 	check_go_cache_writer_contract "$cache_warm_negative"
 
 reusable_cache_reader_negative="$suite_root/ci-go-cache-reader-without-writer.yml"
@@ -597,7 +584,7 @@ if marker not in source:
     raise SystemExit("reusable cache-reader dependency mutation failed")
 pathlib.Path(sys.argv[2]).write_text(source.replace(marker, "", 1), encoding="utf-8")
 PY
-expect_failure 'reusable cache reader lint does not depend on build' \
+expect_failure_matching 'reusable cache reader lint does not depend on build' \
 	check_reusable_go_cache_writer_contract "$reusable_cache_reader_negative"
 
 reusable_cache_key_negative="$suite_root/ci-go-cache-key-drift.yml"
@@ -614,7 +601,7 @@ pathlib.Path(sys.argv[2]).write_text(
     encoding="utf-8",
 )
 PY
-expect_failure 'reusable setup-go cache users do not share one cache key' \
+expect_failure_matching 'reusable setup-go cache users do not share one cache key' \
 	check_reusable_go_cache_writer_contract "$reusable_cache_key_negative"
 
 reusable_cache_duplicate_negative="$suite_root/ci-go-cache-duplicate-setup.yml"
@@ -641,7 +628,7 @@ pathlib.Path(sys.argv[2]).write_text(
     source[:setup_start] + duplicate + source[setup_start:], encoding="utf-8"
 )
 PY
-expect_failure 'reusable setup-go cache user build is duplicated' \
+expect_failure_matching 'reusable setup-go cache user build is duplicated' \
 	check_reusable_go_cache_writer_contract "$reusable_cache_duplicate_negative"
 
 reusable_cache_timeout_negative="$suite_root/ci-go-cache-writer-short-timeout.yml"
@@ -665,7 +652,7 @@ pathlib.Path(sys.argv[2]).write_text(
     encoding="utf-8",
 )
 PY
-expect_failure 'reusable cache writer build timeout must cover cache upload' \
+expect_failure_matching 'reusable cache writer build timeout must cover cache upload' \
 	check_reusable_go_cache_writer_contract "$reusable_cache_timeout_negative"
 
 ryuk_timeout_negative="$suite_root/ci-go-ryuk-timeout-drift.yml"
@@ -682,7 +669,7 @@ pathlib.Path(sys.argv[2]).write_text(
     encoding="utf-8",
 )
 PY
-expect_failure 'Ryuk reconnection timeout must be 30m' \
+expect_failure_matching 'Ryuk reconnection timeout must be 30m' \
 	check_ryuk_reconnection_contract "$repo_root/.github/workflows/ci.yml" \
 	"$ryuk_timeout_negative"
 

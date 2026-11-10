@@ -20,6 +20,8 @@ on:
   push:
     tags:
       - 'v*.*.*'
+      # A core tag publishes the core module on push; only depth-evidence runs for it, so a core minor or major without evidence turns red.
+      - 'core/v*.*.*'
 
 permissions:
   contents: read
@@ -33,6 +35,7 @@ jobs:
   # `CI success`. release-please tags the merge commit seconds after the merge,
   # while main's CI on that commit is still running.
   require-green-ci:
+    if: ${{ startsWith(github.ref_name, 'v') }}
     uses: ./.github/workflows/require-green-ci.yml
     # A called workflow gets no more than its caller grants; the gate reads
     # check runs and CI workflow runs, so without checks: read and actions: read
@@ -47,6 +50,7 @@ jobs:
   # Unprivileged on purpose: it runs the tagged code and hands only text to the release job.
   apidiff:
     name: API compatibility summary
+    if: ${{ startsWith(github.ref_name, 'v') }}
     runs-on: ubuntu-26.04
     timeout-minutes: 30
     permissions:
@@ -71,7 +75,7 @@ jobs:
         run: |
           set -euo pipefail
           . tools/tool-versions.env
-          go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/joelanford/go-apidiff@${GO_COMPAT_TOOL_VERSION}"
 
       - name: Compose the API compatibility section
         id: section
@@ -99,11 +103,31 @@ jobs:
           cat "$RUNNER_TEMP/api-section.md"
           echo "section=$(base64 -w0 <"$RUNNER_TEMP/api-section.md")" >>"$GITHUB_OUTPUT"
 
+  # Unprivileged: it reads the tagged commit range and hands only a pass or fail to the release job.
+  depth-evidence:
+    name: Depth evidence for a minor or major release
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require e2e, upgrade and dogfood evidence for the released range
+        shell: bash
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: bash scripts/ci/release-depth-evidence.sh check "${GITHUB_REF_NAME}"
+
   release-build:
     name: GoReleaser
-    needs: [require-green-ci, apidiff]
+    needs: [require-green-ci, apidiff, depth-evidence]
     # The API summary is informational: when its job fails, the notes say so and the release goes on.
-    if: ${{ !cancelled() && needs.require-green-ci.result == 'success' }}
+    if: ${{ !cancelled() && needs.require-green-ci.result == 'success' && needs.depth-evidence.result == 'success' }}
     uses: ./.github/workflows/release-build.yml
     permissions:
       contents: write

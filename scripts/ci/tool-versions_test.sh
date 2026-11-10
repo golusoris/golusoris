@@ -168,7 +168,8 @@ for workflow in "$repo_root"/.github/workflows/*.yml "$repo_root"/.gitea/workflo
 done
 
 cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+dirty)?[[:space:]]*\$"
-cosign_version_guard="cosign version | grep -Eq '$cosign_version_pattern'"
+# shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
+cosign_version_guard='cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"'
 cosign_version_workflows=(
 	"$repo_root/.github/workflows/rebuild-on-base.yml"
 	"$repo_root/.github/workflows/release-build.yml"
@@ -188,12 +189,13 @@ done
 if grep -rHnF 'cosign version' \
 	"$repo_root/.github/workflows" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
+	grep -Fv '# renovate:' | \
 	grep -Fv "$cosign_version_guard"; then
 	printf 'Cosign version guard diverges from the exact runner contract\n' >&2
 	exit 1
 fi
 for version in "v$COSIGN_VERSION" "v$COSIGN_VERSION+dirty"; do
-	if ! printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
+	if ! grep -Eq "$cosign_version_pattern" <<<"GitVersion: $version"; then
 		printf 'Cosign runner contract rejects supported version: %s\n' "$version" >&2
 		exit 1
 	fi
@@ -205,7 +207,7 @@ for version in \
 	"v$COSIGN_VERSION+dirty+other" \
 	"v$COSIGN_VERSION-dirty" \
 	"v${COSIGN_VERSION}0"; do
-	if printf 'GitVersion: %s\n' "$version" | grep -Eq "$cosign_version_pattern"; then
+	if grep -Eq "$cosign_version_pattern" <<<"GitVersion: $version"; then
 		printf 'Cosign runner contract accepts unsupported version: %s\n' "$version" >&2
 		exit 1
 	fi
@@ -219,7 +221,7 @@ installer_inputs() {
 		function flush() { if (active) print (value == "" ? "MISSING" : value) }
 		/^      - / { flush(); active = 0; value = "" }
 		index($0, action) { active = 1 }
-		active && $1 == key { value = $2 }
+		active && $1 == key { sub("^[[:space:]]*" key "[[:space:]]*", ""); value = $0 }
 		END { flush() }
 	' "$workflow"
 }
@@ -249,27 +251,32 @@ check_release_tool_installs() {
 	local workflows="$1"
 	local name workflow
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
+		# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 		require_inputs "$workflows/$name.yml" sigstore/cosign-installer \
-			cosign-release "v$COSIGN_VERSION" || return 1
+			cosign-release 'v${{ env.COSIGN_VERSION }}' || return 1
 	done
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images; do
+		# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 		require_inputs "$workflows/$name.yml" anchore/sbom-action/download-syft \
-			syft-version "v$SYFT_VERSION" || return 1
+			syft-version 'v${{ env.SYFT_VERSION }}' || return 1
 	done
 	for name in release-build release-go release-tool-contract; do
+		# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
-			version "v$GORELEASER_VERSION" || return 1
+			version 'v${{ env.GORELEASER_VERSION }}' || return 1
 		require_inputs "$workflows/$name.yml" goreleaser/goreleaser-action \
 			install-only true || return 1
 	done
 	for workflow in "$workflows"/*.yml; do
 		if grep -Fq 'uses: sigstore/cosign-installer@' "$workflow"; then
+			# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 			require_inputs "$workflow" sigstore/cosign-installer \
-				cosign-release "v$COSIGN_VERSION" || return 1
+				cosign-release 'v${{ env.COSIGN_VERSION }}' || return 1
 		fi
 		if grep -Fq 'uses: anchore/sbom-action/download-syft@' "$workflow"; then
+			# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 			require_inputs "$workflow" anchore/sbom-action/download-syft \
-				syft-version "v$SYFT_VERSION" || return 1
+				syft-version 'v${{ env.SYFT_VERSION }}' || return 1
 		fi
 	done
 	for name in rebuild-on-base release-build release-go release-tool-contract tiny-litert-sidecar-image tiny-trainer-images verify-provenance; do
@@ -380,12 +387,15 @@ expect_install_rejection() {
 		exit 1
 	fi
 }
+# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 expect_install_rejection cosign-drift release-build.yml \
-	"s/cosign-release: v$COSIGN_VERSION/cosign-release: v0.0.1/"
+	's/cosign-release: v\${{ env\.COSIGN_VERSION }}/cosign-release: v0.0.1/'
+# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 expect_install_rejection syft-drift tiny-trainer-images.yml \
-	"s/syft-version: v$SYFT_VERSION/syft-version: v0.0.1/"
+	's/syft-version: v\${{ env\.SYFT_VERSION }}/syft-version: v0.0.1/'
+# shellcheck disable=SC2016 # Match the literal workflow expression; it must not expand here.
 expect_install_rejection goreleaser-drift release-go.yml \
-	"s/version: v$GORELEASER_VERSION/version: v0.0.1/"
+	's/version: v\${{ env\.GORELEASER_VERSION }}/version: v0.0.1/'
 expect_install_rejection goreleaser-runs release-build.yml '/install-only: true/d'
 expect_install_rejection missing-cosign verify-provenance.yml \
 	's/uses: sigstore\/cosign-installer@/uses: example\/cosign-installer@/'
@@ -420,8 +430,10 @@ expect_ci_go_default_rejection golangci-default-missing \
 
 goreleaser_version_pattern="GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)"
 syft_version_pattern="Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)"
-goreleaser_version_guard="goreleaser --version | grep -Eq '$goreleaser_version_pattern'"
-syft_version_guard="syft version | grep -Eq '$syft_version_pattern'"
+# shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
+goreleaser_version_guard='goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"'
+# shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
+syft_version_guard='syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"'
 goreleaser_version_workflows=(
 	"$repo_root/.github/workflows/release-build.yml"
 	"$repo_root/.github/workflows/release-go.yml"
@@ -458,27 +470,27 @@ fi
 if grep -rHnF 'syft version' \
 	"$repo_root/.github/workflows" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
+	grep -Fv '# renovate:' | \
 	grep -Fv "$syft_version_guard"; then
 	printf 'Syft version guard diverges from the locked runner contract\n' >&2
 	exit 1
 fi
 for version in "$GORELEASER_VERSION" "v$GORELEASER_VERSION"; do
-	if ! printf 'GitVersion: %s\n' "$version" | grep -Eq "$goreleaser_version_pattern"; then
+	if ! grep -Eq "$goreleaser_version_pattern" <<<"GitVersion: $version"; then
 		printf 'GoReleaser runner contract rejects supported version: %s\n' \
 			"$version" >&2
 		exit 1
 	fi
 done
-if printf 'GitVersion: %s\n' "${GORELEASER_VERSION}0" | \
-	grep -Eq "$goreleaser_version_pattern"; then
+if grep -Eq "$goreleaser_version_pattern" <<<"GitVersion: ${GORELEASER_VERSION}0"; then
 	printf 'GoReleaser runner contract accepts a version suffix\n' >&2
 	exit 1
 fi
-if ! printf 'Version: %s\n' "$SYFT_VERSION" | grep -Eq "$syft_version_pattern"; then
+if ! grep -Eq "$syft_version_pattern" <<<"Version: $SYFT_VERSION"; then
 	printf 'Syft runner contract rejects the locked version\n' >&2
 	exit 1
 fi
-if printf 'Version: %s\n' "${SYFT_VERSION}0" | grep -Eq "$syft_version_pattern"; then
+if grep -Eq "$syft_version_pattern" <<<"Version: ${SYFT_VERSION}0"; then
 	printf 'Syft runner contract accepts a version suffix\n' >&2
 	exit 1
 fi
@@ -533,13 +545,99 @@ if git -C "$repo_root" grep -nF 'cosign attach sbom' -- \
 	exit 1
 fi
 
+# Strips comments so commented-out invocations cannot satisfy wrapper execution gates.
+code_lines() {
+	awk -v q="'" '
+	{
+		sq = 0
+		dq = 0
+		cut = 0
+		len = length($0)
+		for (i = 1; i <= len; i++) {
+			c = substr($0, i, 1)
+			if (!sq && c == "\\") {
+				i++
+				continue
+			}
+			if (!dq && c == q) {
+				sq = !sq
+				continue
+			}
+			if (!sq && c == "\"") {
+				dq = !dq
+				continue
+			}
+			if (!sq && !dq && c == "#") {
+				if (i == 1) {
+					cut = i
+					break
+				}
+				prev = substr($0, i - 1, 1)
+				if (prev == " " || prev == "\t") {
+					cut = i
+					break
+				}
+			}
+		}
+		if (cut > 0) {
+			print substr($0, 1, cut - 1)
+		} else {
+			print $0
+		}
+	}' "$1"
+}
+
+# Asserts comment stripping preserves inline hashes and cuts real comments.
+check_code_lines() {
+	local cases=(
+		'yes:echo "a #b"; bash scripts/ci/semgrep-scan.sh'
+		'yes:echo '"'"'a #b'"'"'; bash scripts/ci/semgrep-scan.sh'
+		"yes:echo \"it's #1\" && bash scripts/ci/semgrep-scan.sh"
+		"yes:echo \${x##*/} && bash scripts/ci/semgrep-scan.sh"
+		'no:# bash scripts/ci/semgrep-scan.sh'
+		'no:    # bash scripts/ci/semgrep-scan.sh'
+		'no:run: true # bash scripts/ci/semgrep-scan.sh'
+		'no:echo "a" # bash scripts/ci/semgrep-scan.sh'
+		'no:echo "a\" b" # bash scripts/ci/semgrep-scan.sh'
+		'yes:echo "a\" #b"; bash scripts/ci/semgrep-scan.sh'
+	)
+	local entry want line out has
+	for entry in "${cases[@]}"; do
+		want="${entry%%:*}"
+		line="${entry#*:}"
+		out="$(code_lines - <<<"$line")"
+		has=no
+		if grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$out"; then
+			has=yes
+		fi
+		if [[ "$has" != "$want" ]]; then
+			printf 'code_lines case failed (%s): %s\n' "$want" "$line" >&2
+			exit 1
+		fi
+	done
+}
+check_code_lines
+
+# Gitea workflows may reach the wrapper through the shared security-gates.sh sequence.
+workflow_runs_semgrep() {
+	local workflow="$1" code gates
+	code="$(code_lines "$workflow")"
+	if grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$code"; then
+		return 0
+	fi
+	[[ "$workflow" == "$repo_root/.gitea/"* ]] || return 1
+	gates="$(code_lines "$repo_root/scripts/ci/security-gates.sh")"
+	grep -Fq 'scripts/ci/security-gates.sh' <<<"$code" &&
+		grep -Fq 'scripts/ci/semgrep-scan.sh' <<<"$gates"
+}
+
 custom_semgrep_workflows=(
 	"$repo_root/.github/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/security-scan.yml"
 )
 for workflow in "${custom_semgrep_workflows[@]}"; do
-	if ! grep -Fq 'scripts/ci/semgrep-scan.sh' "$workflow"; then
+	if ! workflow_runs_semgrep "$workflow"; then
 		printf 'workflow bypasses the digest-pinned custom Semgrep wrapper: %s\n' \
 			"$workflow" >&2
 		exit 1
@@ -584,9 +682,15 @@ if ! grep -Fq 'scripts/ci/trivy-scan.sh' "$repo_root/.github/workflows/security-
 	exit 1
 fi
 
+gitea_ci="$repo_root/.gitea/workflows/ci.yml"
 for gate in semgrep-scan shellcheck actionlint terraform-validate mkdocs-build kubeconform reuse-lint; do
+	if [[ "$gate" == semgrep-scan ]]; then
+		gitea_check=(workflow_runs_semgrep "$gitea_ci")
+	else
+		gitea_check=(grep -Fq "scripts/ci/${gate}.sh" "$gitea_ci")
+	fi
 	if ! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.github/workflows/ci.yml" || \
-		! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.gitea/workflows/ci.yml" || \
+		! "${gitea_check[@]}" || \
 		! grep -Fq "$gate" "$repo_root/Makefile"; then
 		printf '%s authority is not consumed by local and hosted gates\n' "$gate" >&2
 		exit 1
@@ -655,7 +759,8 @@ if ! grep -Fq -- "- apidiff" "$repo_root/.github/workflows/ci.yml" || \
 	printf 'GitHub aggregate gate does not require API compatibility execution\n' >&2
 	exit 1
 fi
-if grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml" | grep -Fq "renovate[bot]"; then
+if apidiff_lines="$(grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml")" && \
+	grep -Fq "renovate[bot]" <<<"$apidiff_lines"; then
 	printf 'GitHub API compatibility job is skipped for Renovate\n' >&2
 	exit 1
 fi
@@ -667,8 +772,8 @@ for input in golangci-version gofumpt-version gosec-version gosec-xtools-version
 	fi
 done
 
-if ! grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-versions.env" | \
-	grep -Fxq '# renovate: datasource=go depName=github.com/daveshanley/vacuum versioning=semver'; then
+if ! { vacuum_meta="$(grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-versions.env")" && \
+	grep -Fxq '# renovate: datasource=go depName=github.com/daveshanley/vacuum versioning=semver' <<<"$vacuum_meta"; }; then
 	printf 'vacuum pin is not tracked by the dependency bot\n' >&2
 	exit 1
 fi
