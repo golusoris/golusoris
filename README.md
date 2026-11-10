@@ -105,6 +105,36 @@ configuration expose constructors or options directly.
 
 ### Scaffolding
 
+Install `golusoris` (and `golusoris-mcp`) from a release archive. `go install
+…/cmd/golusoris@<version>` is refused while the root `go.mod` replaces the
+`core` submodule with `./core`; a clone build (`go build ./cmd/golusoris`) works.
+
+One archive per OS and architecture holds both binaries (Windows: a `.zip`). On
+Linux or macOS, each step runs only after the previous check passed, in a new
+temporary directory so no file in the current one is overwritten.
+
+Prerequisites: [GitHub CLI (`gh`)](https://cli.github.com/) authenticated with
+`gh auth login`, [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/),
+and `shasum` (ships with Perl; Alpine Linux: `apk add perl-utils`).
+
+```sh
+v=0.21.0 # x-release-please-version
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+a="golusoris_${v}_${os}_${arch}.tar.gz"
+(tmpdir=$(mktemp -d) && cd "$tmpdir" &&
+  gh release download "v$v" -R golusoris/golusoris -p "$a" -p checksums.txt -p checksums.txt.sigstore.json &&
+  cosign verify-blob --bundle checksums.txt.sigstore.json \
+    --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
+    --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt &&
+  awk -v f="$a" '$2 == f' checksums.txt | shasum -a 256 -c - &&
+  tar -xzf "$a" golusoris golusoris-mcp &&
+  mkdir -p "$HOME/.local/bin" && install -m 0755 golusoris golusoris-mcp "$HOME/.local/bin/")
+```
+
+`$HOME/.local/bin` must be on `PATH`. Releases up to v0.17.0 are signed by
+another workflow; `SECURITY.md` has that identity.
+
 ```sh
 golusoris init my-service          # generate a minimal new app
 golusoris add grpc                 # wire grpc module into existing app
