@@ -48,7 +48,7 @@ const (
 	// StripeMock is the Stripe API emulator image for payments/stripe integration tests.
 	StripeMock = "stripe/stripe-mock:v0.206.0@sha256:aeb96b83e87a893d2ac005e363ac01ffa6e59a5ad85b49c155dfc9129de02e78"
 	// Bugsink is the Sentry-compatible error reporting server image for observability tests.
-	Bugsink = "bugsink/bugsink:2.6.2@sha256:a013fe0da745b753d65f9816020d36f91620e6d1c62ac22d82463b3a6ec2d71e"
+	Bugsink = "bugsink/bugsink:2.6.3@sha256:d19378dc3ad8fac46b2d554019540e84d607c176b3e0774a10c55458f1288fa0"
 )
 
 var errMutableImage = errors.New("test image must use tag@sha256:<64 lowercase hex characters>")
