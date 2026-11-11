@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import errno
 import hashlib
 import http.client
@@ -18,6 +19,7 @@ import subprocess
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Self
@@ -39,13 +41,53 @@ def expect(condition: object, message: str = "") -> None:
         raise AssertionError(message)
 
 
+@contextlib.contextmanager
+def running_server(runtime: Runtime, **kwargs: Any) -> Iterator[SidecarServer]:
+    server = SidecarServer(("127.0.0.1", 0), runtime, **kwargs)
+    server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    try:
+        yield server
+    finally:
+        try:
+            server.shutdown()
+        finally:
+            try:
+                server.server_close()
+            finally:
+                server_thread.join()
+
+
+def write_model(model_dir: Path, model_bytes: bytes, name: str) -> tuple[Path, str]:
+    model_file = model_dir / name
+    model_file.write_bytes(model_bytes)
+    return model_file, hashlib.sha256(model_bytes).hexdigest()
+
+
+def loaded_runtime(
+    model_dir: Path,
+    model_bytes: bytes,
+    labels: list[str],
+    name: str = "model.tflite",
+) -> Runtime:
+    model_file, sha = write_model(model_dir, model_bytes, name)
+    runtime = Runtime(model_dir=model_dir)
+    runtime.load(f"file://{model_file}", sha, labels)
+    return runtime
+
+
 def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
     """SIGKILL the session proc leads; fall back to proc alone where groups are unsafe."""
     if not hasattr(os, "killpg"):
         proc.kill()
         return
     # A pid of 1 or our own group would signal unrelated processes.
-    if not isinstance(proc.pid, int) or isinstance(proc.pid, bool) or proc.pid <= 1 or proc.pid == os.getpgrp():
+    if (
+        not isinstance(proc.pid, int)
+        or isinstance(proc.pid, bool)
+        or proc.pid <= 1
+        or proc.pid == os.getpgrp()
+    ):
         proc.kill()
         return
     try:
@@ -68,7 +110,9 @@ def run_in_process_group(cmd: list[str], timeout: float) -> None:
             proc.communicate(timeout=60)
             raise
     if proc.returncode != 0:
-        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
+        raise subprocess.CalledProcessError(
+            proc.returncode, cmd, output=stdout, stderr=stderr
+        )
 
 
 def generate_real_tflite_model(
@@ -184,11 +228,15 @@ class TestRunInProcessGroup:
         with pytest.raises(subprocess.TimeoutExpired):
             run_in_process_group(["sh", "-c", script], timeout=5)
         if not pid_file.exists():
-            raise AssertionError(f"pid_file race: {pid_file} was not written before timeout fired")
+            raise AssertionError(
+                f"pid_file race: {pid_file} was not written before timeout fired"
+            )
         try:
             grandchild = int(pid_file.read_text(encoding="utf-8").strip())
         except (FileNotFoundError, ValueError) as err:
-            raise AssertionError(f"pid_file race: could not read grandchild pid from {pid_file}: {err}") from err
+            raise AssertionError(
+                f"pid_file race: could not read grandchild pid from {pid_file}: {err}"
+            ) from err
         for _ in range(50):
             if not pid_running(grandchild):
                 return
@@ -200,14 +248,25 @@ class TestRunInProcessGroup:
         with pytest.raises(subprocess.TimeoutExpired):
             run_in_process_group(["sh", "-c", "sleep 30 & wait"], timeout=1)
         elapsed = time.monotonic() - start
-        expect(elapsed < 10, f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open")
+        expect(
+            elapsed < 10,
+            f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open",
+        )
 
     def test_nonzero_exit_raises_called_process_error(self) -> None:
         with pytest.raises(subprocess.CalledProcessError) as caught:
-            run_in_process_group(["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10)
+            run_in_process_group(
+                ["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10
+            )
         expect(caught.value.returncode == 3, "exit code must propagate")
-        expect(caught.value.output is not None and b"out" in caught.value.output, "stdout must be kept")
-        expect(caught.value.stderr is not None and b"boom" in caught.value.stderr, "stderr must be kept")
+        expect(
+            caught.value.output is not None and b"out" in caught.value.output,
+            "stdout must be kept",
+        )
+        expect(
+            caught.value.stderr is not None and b"boom" in caught.value.stderr,
+            "stderr must be kept",
+        )
 
     def test_zero_exit_returns(self) -> None:
         run_in_process_group(["sh", "-c", "exit 0"], timeout=10)
@@ -252,8 +311,12 @@ class TestKillProcessGroup:
 
         fake_pgrp = _FakeProc(pid=os.getpgrp())
         kill_process_group(fake_pgrp)
-        expect(fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()")
-        expect(not killpg_called, "os.killpg must not be called when pid matches getpgrp()")
+        expect(
+            fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()"
+        )
+        expect(
+            not killpg_called, "os.killpg must not be called when pid matches getpgrp()"
+        )
 
 
 class TestPidRunning:
@@ -282,7 +345,9 @@ class TestPidRunning:
                 id="kill-eperm-hidepid-invisible",
             ),
             pytest.param(None, False, "12345 (sleep) S 1", True, id="no-proc"),
-            pytest.param(None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
+            pytest.param(
+                None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"
+            ),
             pytest.param(
                 None,
                 True,
@@ -342,9 +407,7 @@ class TestRuntimeLoadAndClassify:
     def test_load_file_and_classify_happy_path(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, valid_tflite_bytes, "model.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         expect(not runtime.is_ready)
@@ -377,9 +440,7 @@ class TestRuntimeLoadAndClassify:
     def test_file_outside_model_dir_rejected(
         self, tmp_path: Path, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        outside_file = tmp_path / "outside.tflite"
-        outside_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        outside_file, sha = write_model(tmp_path, valid_tflite_bytes, "outside.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         with pytest.raises(ValueError, match="outside mounted model directory"):
@@ -403,10 +464,8 @@ class TestRuntimeLoadAndClassify:
             runtime.load(f"file://{model_file}", bad_sha, ["a", "b"])
 
     def test_malformed_model_rejected(self, model_dir: Path) -> None:
-        model_file = model_dir / "bad.tflite"
         bad_bytes = b"NOT_TFLITE_BYTES"
-        model_file.write_bytes(bad_bytes)
-        sha = hashlib.sha256(bad_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, bad_bytes, "bad.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         with pytest.raises(ValueError, match="malformed model"):
@@ -416,9 +475,9 @@ class TestRuntimeLoadAndClassify:
         wrong_input_bytes = generate_real_tflite_model(
             num_classes=2, input_shape=(224, 224, 3)
         )
-        model_file = model_dir / "wrong_input.tflite"
-        model_file.write_bytes(wrong_input_bytes)
-        sha = hashlib.sha256(wrong_input_bytes).hexdigest()
+        model_file, sha = write_model(
+            model_dir, wrong_input_bytes, "wrong_input.tflite"
+        )
 
         runtime = Runtime(model_dir=model_dir)
         with pytest.raises(ValueError, match="input/output shape mismatch"):
@@ -428,9 +487,7 @@ class TestRuntimeLoadAndClassify:
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
         # valid_tflite_bytes has 2 outputs, provide 3 labels
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, valid_tflite_bytes, "model.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         with pytest.raises(ValueError, match="input/output shape mismatch"):
@@ -439,9 +496,7 @@ class TestRuntimeLoadAndClassify:
     def test_invalid_labels_rejected(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, valid_tflite_bytes, "model.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         # Empty list
@@ -460,14 +515,10 @@ class TestRuntimeLoadAndClassify:
     def test_failed_reload_preserves_last_valid_model(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        good_file = model_dir / "good.tflite"
-        good_file.write_bytes(valid_tflite_bytes)
-        good_sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        good_file, good_sha = write_model(model_dir, valid_tflite_bytes, "good.tflite")
 
-        bad_file = model_dir / "bad.tflite"
         bad_bytes = b"TFL3_corrupted_content"
-        bad_file.write_bytes(bad_bytes)
-        bad_sha = hashlib.sha256(bad_bytes).hexdigest()
+        bad_file, bad_sha = write_model(model_dir, bad_bytes, "bad.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         runtime.load(f"file://{good_file}", good_sha, ["good_a", "good_b"])
@@ -494,12 +545,7 @@ class TestRuntimeLoadAndClassify:
     def test_image_dimension_limits(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
-
-        runtime = Runtime(model_dir=model_dir)
-        runtime.load(f"file://{model_file}", sha, ["cat", "dog"])
+        runtime = loaded_runtime(model_dir, valid_tflite_bytes, ["cat", "dog"])
 
         oversized_dim_img = make_test_image(dimensions=(MAX_IMAGE_DIMENSION + 1, 10))
         with pytest.raises(ValueError, match="oversized image dimensions"):
@@ -530,21 +576,14 @@ class TestRuntimeLoadAndClassify:
     def test_image_unsupported_format(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
-
-        runtime = Runtime(model_dir=model_dir)
-        runtime.load(f"file://{model_file}", sha, ["cat", "dog"])
+        runtime = loaded_runtime(model_dir, valid_tflite_bytes, ["cat", "dog"])
 
         gif_img = make_test_image("GIF")
         with pytest.raises(ValueError, match="unsupported image format"):
             runtime.classify(gif_img)
 
     def test_concurrent_calls(self, model_dir: Path, valid_tflite_bytes: bytes) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, valid_tflite_bytes, "model.tflite")
 
         runtime = Runtime(model_dir=model_dir)
         runtime.load(f"file://{model_file}", sha, ["cat", "dog"])
@@ -658,10 +697,17 @@ class TestPolicyAndServer:
 
     @staticmethod
     def _request(
-        host: str, port: int, method: str, path: str, body: object = None
+        host: str,
+        port: int,
+        method: str,
+        path: str,
+        body: object = None,
+        *,
+        timeout: float = 5.0,
     ) -> tuple[int, dict]:
-        conn = http.client.HTTPConnection(host, port, timeout=5.0)
-        try:
+        with contextlib.closing(
+            http.client.HTTPConnection(host, port, timeout=timeout)
+        ) as conn:
             headers = {}
             payload = None
             if body is not None:
@@ -671,8 +717,35 @@ class TestPolicyAndServer:
             resp = conn.getresponse()
             raw = resp.read().decode()
             return resp.status, json.loads(raw) if raw else {}
-        finally:
-            conn.close()
+
+    @staticmethod
+    def _content_length_status(
+        host: str,
+        port: int,
+        path: str,
+        content_length: str | None,
+        timeout: float,
+    ) -> int:
+        with contextlib.closing(
+            http.client.HTTPConnection(host, port, timeout=timeout)
+        ) as conn:
+            conn.putrequest("POST", path)
+            conn.putheader("Content-Type", "application/json")
+            if content_length is not None:
+                conn.putheader("Content-Length", content_length)
+            conn.endheaders()
+            return conn.getresponse().status
+
+    @classmethod
+    def _fake_model_classify_status(cls, image: str) -> int:
+        runtime = Runtime()
+        runtime._active_model = object()  # type: ignore
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status, _ = cls._request(
+                host, port, "POST", "/classify", {"image": image}, timeout=2.0
+            )
+            return status
 
     @classmethod
     def _assert_pre_load_endpoints(cls, host: str, port: int) -> None:
@@ -721,14 +794,10 @@ class TestPolicyAndServer:
     @classmethod
     def _assert_edge_endpoints(cls, host: str, port: int) -> None:
         # 6. POST /load with oversized request body -> 413
-        oversized_conn = http.client.HTTPConnection(host, port, timeout=5.0)
-        oversized_conn.putrequest("POST", "/load")
-        oversized_conn.putheader("Content-Type", "application/json")
-        oversized_conn.putheader("Content-Length", str((1 << 20) + 1024))
-        oversized_conn.endheaders()
-        oversized_resp = oversized_conn.getresponse()
-        expect(oversized_resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        oversized_conn.close()
+        status = cls._content_length_status(
+            host, port, "/load", str((1 << 20) + 1024), timeout=5.0
+        )
+        expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
         # 7. GET /unknown -> 404
         status, _ = cls._request(host, port, "GET", "/unknown")
@@ -737,46 +806,21 @@ class TestPolicyAndServer:
     def test_server_healthz_load_classify_cycle(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        model_file, sha = write_model(model_dir, valid_tflite_bytes, "model.tflite")
 
         runtime = Runtime(model_dir=model_dir)
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever)
-        server_thread.daemon = True
-        server_thread.start()
-
-        host, port = server.server_address
-
-        try:
+        with running_server(runtime) as server:
+            host, port = server.server_address
             self._assert_pre_load_endpoints(host, port)
             self._assert_load_and_classify(host, port, model_file, sha)
             self._assert_edge_endpoints(host, port)
-        finally:
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
 
     def test_content_length_negative_rejected(self, model_dir: Path) -> None:
         runtime = Runtime(model_dir=model_dir)
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.putrequest("POST", "/load")
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", "-1")
-            conn.endheaders()
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status = self._content_length_status(host, port, "/load", "-1", timeout=2.0)
+            expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_socket_timeout_stalling_client_releases_slot(
         self, model_dir: Path
@@ -784,57 +828,42 @@ class TestPolicyAndServer:
         import socket
 
         runtime = Runtime(model_dir=model_dir)
-        server = SidecarServer(
-            ("127.0.0.1", 0), runtime, max_concurrency=1, socket_timeout=1.0
-        )
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(3.0)
-            s.connect((host, port))
-            req_data = (
-                b"POST /load HTTP/1.1\r\n"
-                b"Host: 127.0.0.1\r\n"
-                b"Content-Type: application/json\r\n"
-                b"Content-Length: 100\r\n"
-                b"\r\n"
-                b'{"partial": 1'
-            )
-            s.sendall(req_data)
-            resp_bytes = b""
-            try:
-                for _ in range(64):
-                    chunk = s.recv(1024)
-                    if not chunk:
-                        break
-                    resp_bytes += chunk
-                else:
-                    pytest.fail("stalled client read loop exceeded maximum iterations")
-            except TimeoutError:
-                pytest.fail(
-                    "stalled client timed out: server did not close or answer within ~3s"
+        with running_server(runtime, max_concurrency=1, socket_timeout=1.0) as server:
+            host, port = server.server_address
+            with contextlib.closing(
+                socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            ) as s:
+                s.settimeout(3.0)
+                s.connect((host, port))
+                req_data = (
+                    b"POST /load HTTP/1.1\r\n"
+                    b"Host: 127.0.0.1\r\n"
+                    b"Content-Type: application/json\r\n"
+                    b"Content-Length: 100\r\n"
+                    b"\r\n"
+                    b'{"partial": 1'
                 )
-            finally:
-                s.close()
+                s.sendall(req_data)
+                resp_bytes = b""
+                try:
+                    for _ in range(64):
+                        chunk = s.recv(1024)
+                        if not chunk:
+                            break
+                        resp_bytes += chunk
+                    else:
+                        pytest.fail(
+                            "stalled client read loop exceeded maximum iterations"
+                        )
+                except TimeoutError:
+                    pytest.fail(
+                        "stalled client timed out: server did not close or answer within ~3s"
+                    )
 
             expect(resp_bytes == b"" or b"408" in resp_bytes)
 
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request(
-                "POST",
-                "/load",
-                body=b"{}",
-                headers={"Content-Type": "application/json"},
-            )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-            conn.close()
-        finally:
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            status, _ = self._request(host, port, "POST", "/load", {}, timeout=2.0)
+            expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_server_maps_oversized_error_to_413_without_string_match(self) -> None:
         from ai.tiny.serve.tflite.sidecar.runtime import OversizedError
@@ -847,65 +876,30 @@ class TestPolicyAndServer:
 
         runtime.classify = mock_classify  # type: ignore
 
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=b'{"image": "abc"}',
-                headers={"Content-Type": "application/json"},
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status, _ = self._request(
+                host, port, "POST", "/classify", {"image": "abc"}, timeout=2.0
             )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
     def test_healthz_exposes_backend(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request("GET", "/healthz")
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.SERVICE_UNAVAILABLE)
-            data = json.loads(resp.read().decode())
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status, data = self._request(host, port, "GET", "/healthz", timeout=2.0)
+            expect(status == HTTPStatus.SERVICE_UNAVAILABLE)
             expect("backend" in data)
             expect(data["backend"].startswith("ai-edge-litert "))
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
 
     def test_server_oversized_classify_body_returns_413(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=5.0)
-            conn.putrequest("POST", "/classify")
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", str((20 << 20) + 1024))
-            conn.endheaders()
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status = self._content_length_status(
+                host, port, "/classify", str((20 << 20) + 1024), timeout=5.0
+            )
+            expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
     def test_server_oversized_base64_payload_returns_413(
         self, monkeypatch: pytest.MonkeyPatch
@@ -916,83 +910,49 @@ class TestPolicyAndServer:
 
         runtime = Runtime()
         runtime._active_model = object()  # type: ignore
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=5.0)
-            payload = json.dumps({"image": "A" * 150}).encode("utf-8")
-            conn.request(
-                "POST",
-                "/classify",
-                body=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Content-Length": str(len(payload)),
-                },
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status, _ = self._request(
+                host, port, "POST", "/classify", {"image": "A" * 150}, timeout=5.0
             )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
     def test_server_concurrency_cap_exceeded_returns_429(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime, max_concurrency=1)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        expect(server.acquire_concurrency(timeout=1.0))
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=b'{"image": "abc"}',
-                headers={"Content-Type": "application/json"},
-            )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.TOO_MANY_REQUESTS)
-            conn.close()
-        finally:
-            server.release_concurrency()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime, max_concurrency=1) as server:
+            host, port = server.server_address
+            expect(server.acquire_concurrency(timeout=1.0))
+            try:
+                status, _ = self._request(
+                    host, port, "POST", "/classify", {"image": "abc"}, timeout=2.0
+                )
+                expect(status == HTTPStatus.TOO_MANY_REQUESTS)
+            finally:
+                server.release_concurrency()
 
     def test_healthz_does_not_leak_model_uri(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "secret_confidential_weights.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        runtime = loaded_runtime(
+            model_dir,
+            valid_tflite_bytes,
+            ["c1", "c2"],
+            "secret_confidential_weights.tflite",
+        )
 
-        runtime = Runtime(model_dir=model_dir)
-        runtime.load(f"file://{model_file}", sha, ["c1", "c2"])
-
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request("GET", "/healthz")
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.OK)
-            body_text = resp.read().decode("utf-8")
-            data = json.loads(body_text)
-            expect(set(data.keys()) == {"status", "backend"})
-            expect("secret_confidential_weights" not in body_text)
-            expect("file://" not in body_text)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            with contextlib.closing(
+                http.client.HTTPConnection(host, port, timeout=2.0)
+            ) as conn:
+                conn.request("GET", "/healthz")
+                resp = conn.getresponse()
+                expect(resp.status == HTTPStatus.OK)
+                body_text = resp.read().decode("utf-8")
+                data = json.loads(body_text)
+                expect(set(data.keys()) == {"status", "backend"})
+                expect("secret_confidential_weights" not in body_text)
+                expect("file://" not in body_text)
 
     def test_strict_redirect_policy_same_host_allowed(self) -> None:
         import urllib.request
@@ -1029,203 +989,83 @@ class TestPolicyAndServer:
 
     def test_content_length_non_int_returns_400(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.putrequest("POST", "/load")
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", "invalid_not_an_int")
-            conn.endheaders()
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status = self._content_length_status(
+                host, port, "/load", "invalid_not_an_int", timeout=2.0
+            )
+            expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_content_length_missing_returns_411(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.putrequest("POST", "/load")
-            conn.putheader("Content-Type", "application/json")
-            conn.endheaders()
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.LENGTH_REQUIRED)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status = self._content_length_status(host, port, "/load", None, timeout=2.0)
+            expect(status == HTTPStatus.LENGTH_REQUIRED)
 
     def test_server_oversized_load_body_returns_413(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=5.0)
-            conn.putrequest("POST", "/load")
-            conn.putheader("Content-Type", "application/json")
-            conn.putheader("Content-Length", str((1 << 20) + 1024))
-            conn.endheaders()
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        with running_server(runtime) as server:
+            host, port = server.server_address
+            status = self._content_length_status(
+                host, port, "/load", str((1 << 20) + 1024), timeout=5.0
+            )
+            expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
     def test_classify_empty_image_field_returns_400(self) -> None:
-        runtime = Runtime()
-        runtime._active_model = object()  # type: ignore
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=b'{"image": ""}',
-                headers={"Content-Type": "application/json"},
-            )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        status = self._fake_model_classify_status("")
+        expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_classify_invalid_base64_returns_400(self) -> None:
-        runtime = Runtime()
-        runtime._active_model = object()  # type: ignore
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=b'{"image": "???not_valid_b64???"}',
-                headers={"Content-Type": "application/json"},
-            )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+        status = self._fake_model_classify_status("???not_valid_b64???")
+        expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_classify_oversized_image_dimensions_returns_413(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        runtime = loaded_runtime(model_dir, valid_tflite_bytes, ["c1", "c2"])
 
-        runtime = Runtime(model_dir=model_dir)
-        runtime.load(f"file://{model_file}", sha, ["c1", "c2"])
-
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
+        with running_server(runtime) as server:
+            host, port = server.server_address
             oversized_img = make_test_image(dimensions=(MAX_IMAGE_DIMENSION + 1, 10))
-            payload = json.dumps({"image": oversized_img}).encode("utf-8")
-            conn = http.client.HTTPConnection(host, port, timeout=5.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=payload,
-                headers={"Content-Type": "application/json"},
+            status, _ = self._request(
+                host, port, "POST", "/classify", {"image": oversized_img}, timeout=5.0
             )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            expect(status == HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
 
     def test_classify_unsupported_image_format_returns_400(
         self, model_dir: Path, valid_tflite_bytes: bytes
     ) -> None:
-        model_file = model_dir / "model.tflite"
-        model_file.write_bytes(valid_tflite_bytes)
-        sha = hashlib.sha256(valid_tflite_bytes).hexdigest()
+        runtime = loaded_runtime(model_dir, valid_tflite_bytes, ["c1", "c2"])
 
-        runtime = Runtime(model_dir=model_dir)
-        runtime.load(f"file://{model_file}", sha, ["c1", "c2"])
-
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
+        with running_server(runtime) as server:
+            host, port = server.server_address
             gif_img = make_test_image(format_name="GIF")
-            payload = json.dumps({"image": gif_img}).encode("utf-8")
-            conn = http.client.HTTPConnection(host, port, timeout=5.0)
-            conn.request(
-                "POST",
-                "/classify",
-                body=payload,
-                headers={"Content-Type": "application/json"},
+            status, _ = self._request(
+                host, port, "POST", "/classify", {"image": gif_img}, timeout=5.0
             )
-            resp = conn.getresponse()
-            expect(resp.status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_load_missing_required_fields_returns_400(self) -> None:
         runtime = Runtime()
-        server = SidecarServer(("127.0.0.1", 0), runtime)
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        host, port = server.server_address
-        try:
-            conn = http.client.HTTPConnection(host, port, timeout=2.0)
+        with running_server(runtime) as server:
+            host, port = server.server_address
             # missing uri
-            conn.request(
+            status, _ = self._request(
+                host,
+                port,
                 "POST",
                 "/load",
-                body=b'{"sha256": "abc", "labels": ["a", "b"]}',
-                headers={"Content-Type": "application/json"},
+                {"sha256": "abc", "labels": ["a", "b"]},
+                timeout=2.0,
             )
-            expect(conn.getresponse().status == HTTPStatus.BAD_REQUEST)
+            expect(status == HTTPStatus.BAD_REQUEST)
 
             # non-dict body
-            conn.request(
-                "POST",
-                "/load",
-                body=b'["not_a_dict"]',
-                headers={"Content-Type": "application/json"},
+            status, _ = self._request(
+                host, port, "POST", "/load", ["not_a_dict"], timeout=2.0
             )
-            expect(conn.getresponse().status == HTTPStatus.BAD_REQUEST)
-        finally:
-            conn.close()
-            server.shutdown()
-            server.server_close()
-            server_thread.join()
+            expect(status == HTTPStatus.BAD_REQUEST)
 
     def test_fetch_https_artifact_chunked_exceeds_max_bytes(
         self, monkeypatch: pytest.MonkeyPatch

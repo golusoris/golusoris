@@ -33,6 +33,16 @@ DEFAULT_SOCKET_TIMEOUT = 10.0
 MIN_SOCKET_TIMEOUT = 0.5
 MAX_SOCKET_TIMEOUT = 300.0
 
+_LOAD_ERRORS = (
+    (FileNotFoundError, HTTPStatus.NOT_FOUND),
+    (TimeoutError, HTTPStatus.GATEWAY_TIMEOUT),
+)
+_CLASSIFY_ERRORS = ((ModelNotLoadedError, HTTPStatus.CONFLICT),)
+_SHARED_ERRORS = (
+    (OversizedError, HTTPStatus.REQUEST_ENTITY_TOO_LARGE),
+    (ValueError, HTTPStatus.BAD_REQUEST),
+)
+
 
 class SidecarHandler(BaseHTTPRequestHandler):
     """HTTP request handler for LiteRT sidecar endpoints."""
@@ -121,19 +131,8 @@ class SidecarHandler(BaseHTTPRequestHandler):
             uri, sha256, labels = params
             self.server.runtime.load(uri, sha256, labels)
             self._send_json(HTTPStatus.OK, {"status": "loaded"})
-        except FileNotFoundError as exc:
-            self._send_json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
-        except TimeoutError as exc:
-            self._send_json(HTTPStatus.GATEWAY_TIMEOUT, {"error": str(exc)})
-        except OversizedError as exc:
-            self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": str(exc)})
-        except ValueError as exc:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:
-            logger.exception("unexpected error in /load")
-            self._send_json(
-                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"load failed: {exc}"}
-            )
+            self._send_operation_error(exc, "load", _LOAD_ERRORS)
         finally:
             self.server.release_concurrency()
 
@@ -164,20 +163,25 @@ class SidecarHandler(BaseHTTPRequestHandler):
 
             scores = self.server.runtime.classify(image)
             self._send_json(HTTPStatus.OK, {"scores": scores})
-        except ModelNotLoadedError as exc:
-            # classify-before-load
-            self._send_json(HTTPStatus.CONFLICT, {"error": str(exc)})
-        except OversizedError as exc:
-            self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": str(exc)})
-        except ValueError as exc:
-            self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
         except Exception as exc:
-            logger.exception("unexpected error in /classify")
-            self._send_json(
-                HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"classify failed: {exc}"}
-            )
+            self._send_operation_error(exc, "classify", _CLASSIFY_ERRORS)
         finally:
             self.server.release_concurrency()
+
+    def _send_operation_error(
+        self,
+        exc: Exception,
+        operation: str,
+        specific_errors: tuple[tuple[type[Exception], HTTPStatus], ...],
+    ) -> None:
+        for error_type, status in (*specific_errors, *_SHARED_ERRORS):
+            if isinstance(exc, error_type):
+                self._send_json(status, {"error": str(exc)})
+                return
+        logger.exception("unexpected error in /%s", operation)
+        self._send_json(
+            HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"{operation} failed: {exc}"}
+        )
 
     def _read_json_body(self, max_bytes: int) -> Any | None:
         content_length_hdr = self.headers.get("Content-Length")
@@ -212,7 +216,9 @@ class SidecarHandler(BaseHTTPRequestHandler):
                     HTTPStatus.REQUEST_TIMEOUT, {"error": "request read timed out"}
                 )
             except OSError as exc:
-                logger.debug("client left before the timeout response was sent: %s", exc)
+                logger.debug(
+                    "client left before the timeout response was sent: %s", exc
+                )
             self.close_connection = True
             return None
 
