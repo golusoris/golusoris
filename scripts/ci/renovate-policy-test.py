@@ -1129,7 +1129,12 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
     """Every workflow download-syft step must read the pinned environment variable."""
     workflows = {
         path.relative_to(ROOT).as_posix(): path.read_text(encoding="utf-8")
-        for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+        for path in sorted(
+            [
+                *(ROOT / ".github/workflows").glob("*.y*ml"),
+                *(ROOT / ".github/actions").glob("*/action.y*ml"),
+            ]
+        )
     }
     if not any(SYFT_USE in content for content in workflows.values()):
         print("no download-syft workflow found; syft coverage check has nothing to prove", file=sys.stderr)

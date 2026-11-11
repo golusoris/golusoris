@@ -8,6 +8,13 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
 
+expanded_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-expanded-workflows.XXXXXX")"
+workflow_root="$expanded_suite/workflows"
+readonly expanded_suite workflow_root
+trap 'rm -rf "$expanded_suite"' EXIT
+python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflows \
+	"$repo_root/.github/workflows" "$workflow_root"
+
 duplicate_pins="$(awk -F= '/^[A-Za-z0-9_]+=/ { print $1 }' "$repo_root/tools/tool-versions.env" | sort | uniq -d)"
 if [[ -n "$duplicate_pins" ]]; then
 	printf 'duplicate tool pin in tools/tool-versions.env: %s\n' "$duplicate_pins" >&2
@@ -145,7 +152,7 @@ if grep -Eq '^[[:space:]]*-\$\((SQLC|OGEN)\)|\|\| true' "$repo_root/tools/Makefi
 fi
 
 direct_workflows=(
-	"$repo_root/.github/workflows/ci.yml"
+	"$workflow_root/ci.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/security-scan.yml"
 )
@@ -171,13 +178,13 @@ cosign_version_pattern="^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\\+di
 # shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
 cosign_version_guard='cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"'
 cosign_version_workflows=(
-	"$repo_root/.github/workflows/rebuild-on-base.yml"
-	"$repo_root/.github/workflows/release-build.yml"
-	"$repo_root/.github/workflows/release-go.yml"
-	"$repo_root/.github/workflows/release-tool-contract.yml"
-	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
-	"$repo_root/.github/workflows/tiny-trainer-images.yml"
-	"$repo_root/.github/workflows/verify-provenance.yml"
+	"$workflow_root/rebuild-on-base.yml"
+	"$workflow_root/release-build.yml"
+	"$workflow_root/release-go.yml"
+	"$workflow_root/release-tool-contract.yml"
+	"$workflow_root/tiny-litert-sidecar-image.yml"
+	"$workflow_root/tiny-trainer-images.yml"
+	"$workflow_root/verify-provenance.yml"
 )
 for workflow in "${cosign_version_workflows[@]}"; do
 	if ! grep -Fq "$cosign_version_guard" "$workflow"; then
@@ -187,7 +194,7 @@ for workflow in "${cosign_version_workflows[@]}"; do
 	fi
 done
 if grep -rHnF 'cosign version' \
-	"$repo_root/.github/workflows" "$repo_root/scripts" | \
+	"$workflow_root" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
 	grep -Fv '# renovate:' | \
 	grep -Fv "$cosign_version_guard"; then
@@ -368,17 +375,17 @@ check_ci_go_defaults() {
 	done
 }
 
-check_release_tool_installs "$repo_root/.github/workflows"
-check_ci_go_defaults "$repo_root/.github/workflows/ci-go.yml"
+check_release_tool_installs "$workflow_root"
+check_ci_go_defaults "$workflow_root/ci-go.yml"
 install_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-tool-installs.XXXXXX")"
-trap 'rm -rf "$install_suite"' EXIT
+trap 'rm -rf "$install_suite" "$expanded_suite"' EXIT
 # expect_install_rejection <mutation-name> <file> <sed-expression>
 expect_install_rejection() {
 	local name="$1" file="$2" expression="$3"
 	rm -rf "${install_suite:?}/${name:?}"
-	cp -R "$repo_root/.github/workflows" "$install_suite/$name"
+	cp -R "$workflow_root" "$install_suite/$name"
 	sed -i "$expression" "$install_suite/$name/$file"
-	if cmp -s "$repo_root/.github/workflows/$file" "$install_suite/$name/$file"; then
+	if cmp -s "$workflow_root/$file" "$install_suite/$name/$file"; then
 		printf 'negative control %s did not mutate %s\n' "$name" "$file" >&2
 		exit 1
 	fi
@@ -412,9 +419,9 @@ expect_ci_go_default_rejection() {
 	local name="$1" expression="$2"
 	rm -rf "${install_suite:?}/${name:?}"
 	mkdir -p "$install_suite/$name"
-	cp "$repo_root/.github/workflows/ci-go.yml" "$install_suite/$name/ci-go.yml"
+	cp "$workflow_root/ci-go.yml" "$install_suite/$name/ci-go.yml"
 	sed -i "$expression" "$install_suite/$name/ci-go.yml"
-	if cmp -s "$repo_root/.github/workflows/ci-go.yml" "$install_suite/$name/ci-go.yml"; then
+	if cmp -s "$workflow_root/ci-go.yml" "$install_suite/$name/ci-go.yml"; then
 		printf 'negative control %s did not mutate ci-go.yml\n' "$name" >&2
 		exit 1
 	fi
@@ -435,16 +442,16 @@ goreleaser_version_guard='goreleaser_version="$(goreleaser --version)"; grep -Eq
 # shellcheck disable=SC2016 # Literal workflow guard text; the workflow shell expands it, not this test.
 syft_version_guard='syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"'
 goreleaser_version_workflows=(
-	"$repo_root/.github/workflows/release-build.yml"
-	"$repo_root/.github/workflows/release-go.yml"
-	"$repo_root/.github/workflows/release-tool-contract.yml"
+	"$workflow_root/release-build.yml"
+	"$workflow_root/release-go.yml"
+	"$workflow_root/release-tool-contract.yml"
 )
 syft_version_workflows=(
-	"$repo_root/.github/workflows/rebuild-on-base.yml"
-	"$repo_root/.github/workflows/release-build.yml"
-	"$repo_root/.github/workflows/release-go.yml"
-	"$repo_root/.github/workflows/release-tool-contract.yml"
-	"$repo_root/.github/workflows/tiny-trainer-images.yml"
+	"$workflow_root/rebuild-on-base.yml"
+	"$workflow_root/release-build.yml"
+	"$workflow_root/release-go.yml"
+	"$workflow_root/release-tool-contract.yml"
+	"$workflow_root/tiny-trainer-images.yml"
 )
 for workflow in "${goreleaser_version_workflows[@]}"; do
 	if ! grep -Fq "$goreleaser_version_guard" "$workflow"; then
@@ -461,14 +468,14 @@ for workflow in "${syft_version_workflows[@]}"; do
 	fi
 done
 if grep -rHnF 'goreleaser --version' \
-	"$repo_root/.github/workflows" "$repo_root/scripts" | \
+	"$workflow_root" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
 	grep -Fv "$goreleaser_version_guard"; then
 	printf 'GoReleaser version guard diverges from the locked runner contract\n' >&2
 	exit 1
 fi
 if grep -rHnF 'syft version' \
-	"$repo_root/.github/workflows" "$repo_root/scripts" | \
+	"$workflow_root" "$repo_root/scripts" | \
 	grep -Fv "$repo_root/scripts/ci/tool-versions_test.sh:" | \
 	grep -Fv '# renovate:' | \
 	grep -Fv "$syft_version_guard"; then
@@ -496,10 +503,10 @@ if grep -Eq "$syft_version_pattern" <<<"Version: ${SYFT_VERSION}0"; then
 fi
 
 sbom_attestation_workflows=(
-	"$repo_root/.github/workflows/rebuild-on-base.yml"
-	"$repo_root/.github/workflows/release-go.yml"
-	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
-	"$repo_root/.github/workflows/tiny-trainer-images.yml"
+	"$workflow_root/rebuild-on-base.yml"
+	"$workflow_root/release-go.yml"
+	"$workflow_root/tiny-litert-sidecar-image.yml"
+	"$workflow_root/tiny-trainer-images.yml"
 )
 for workflow in "${sbom_attestation_workflows[@]}"; do
 	if ! grep -Fq 'artifact-metadata: write' "$workflow" || \
@@ -528,8 +535,8 @@ for relative_workflow in "${attestation_workflow_paths[@]}"; do
 	fi
 done
 mapfile -t discovered_attestation_workflows < <(
-	cd "$repo_root"
-	grep -lE 'uses:[[:space:]]+actions/attest(-build-provenance)?@' .github/workflows/*.yml | sort
+	cd "$expanded_suite"
+	grep -lE 'uses:[[:space:]]+actions/attest(-build-provenance)?@' workflows/*.yml | sed 's#^workflows/#.github/workflows/#' | sort
 )
 if [[ "${discovered_attestation_workflows[*]}" != "${attestation_workflow_paths[*]}" ]]; then
 	printf 'attestation workflow inventory changed: found %s, expected %s\n' \
@@ -632,7 +639,7 @@ workflow_runs_semgrep() {
 }
 
 custom_semgrep_workflows=(
-	"$repo_root/.github/workflows/ci.yml"
+	"$workflow_root/ci.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 	"$repo_root/.gitea/workflows/security-scan.yml"
 )
@@ -643,7 +650,7 @@ for workflow in "${custom_semgrep_workflows[@]}"; do
 		exit 1
 	fi
 done
-if ! grep -Fq 'SEMGREP_IMAGE_DIGEST' "$repo_root/.github/workflows/security-scan.yml"; then
+if ! grep -Fq 'SEMGREP_IMAGE_DIGEST' "$workflow_root/security-scan.yml"; then
 	printf 'registry Semgrep workflow does not consume the image digest authority\n' >&2
 	exit 1
 fi
@@ -670,12 +677,12 @@ if git -C "$repo_root" grep -nE 'pip(3)?[[:space:]]+install[^[:cntrl:]]+mkdocs-m
 	exit 1
 fi
 if ! grep -Fq 'scripts/ci/mkdocs-build.sh --site-dir site' \
-	"$repo_root/.github/workflows/docs.yml"; then
+	"$workflow_root/docs.yml"; then
 	printf 'Pages workflow bypasses the immutable MkDocs authority\n' >&2
 	exit 1
 fi
 
-if ! grep -Fq 'scripts/ci/trivy-scan.sh' "$repo_root/.github/workflows/security-scan.yml" || \
+if ! grep -Fq 'scripts/ci/trivy-scan.sh' "$workflow_root/security-scan.yml" || \
 	! grep -Fq 'scripts/ci/trivy-scan.sh' "$repo_root/.gitea/workflows/security-scan.yml" || \
 	! grep -Fq 'trivy-scan' "$repo_root/Makefile"; then
 	printf 'Trivy authority is not consumed by local and hosted security gates\n' >&2
@@ -689,7 +696,7 @@ for gate in semgrep-scan shellcheck actionlint terraform-validate mkdocs-build k
 	else
 		gitea_check=(grep -Fq "scripts/ci/${gate}.sh" "$gitea_ci")
 	fi
-	if ! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.github/workflows/ci.yml" || \
+	if ! grep -Fq "scripts/ci/${gate}.sh" "$workflow_root/ci.yml" || \
 		! "${gitea_check[@]}" || \
 		! grep -Fq "$gate" "$repo_root/Makefile"; then
 		printf '%s authority is not consumed by local and hosted gates\n' "$gate" >&2
@@ -698,7 +705,7 @@ for gate in semgrep-scan shellcheck actionlint terraform-validate mkdocs-build k
 done
 
 for gate in python-lint python-tests c-quality; do
-	if ! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.github/workflows/ci.yml" || \
+	if ! grep -Fq "scripts/ci/${gate}.sh" "$workflow_root/ci.yml" || \
 		! grep -Fq "scripts/ci/${gate}.sh" "$repo_root/.gitea/workflows/ci.yml" || \
 		! grep -Fq "$gate" "$repo_root/Makefile"; then
 		printf '%s authority is not consumed by local and hosted gates\n' "$gate" >&2
@@ -724,8 +731,8 @@ if git -C "$repo_root" grep -nE '(pip(x|3)?[^[:cntrl:]]+(install|run)[^[:cntrl:]
 fi
 
 apidiff_workflows=(
-	"$repo_root/.github/workflows/ci.yml"
-	"$repo_root/.github/workflows/ci-go.yml"
+	"$workflow_root/ci.yml"
+	"$workflow_root/ci-go.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 )
 if grep -Fq 'golang.org/x/exp/cmd/apidiff' "${apidiff_workflows[@]}"; then
@@ -740,7 +747,7 @@ for workflow in "${apidiff_workflows[@]}"; do
 done
 
 direct_apidiff_workflows=(
-	"$repo_root/.github/workflows/ci.yml"
+	"$workflow_root/ci.yml"
 	"$repo_root/.gitea/workflows/ci.yml"
 )
 for workflow in "${direct_apidiff_workflows[@]}"; do
@@ -750,23 +757,23 @@ for workflow in "${direct_apidiff_workflows[@]}"; do
 	fi
 done
 
-if ! grep -Fq "exit \"\$status\"" "$repo_root/.github/workflows/ci-go.yml"; then
+if ! grep -Fq "exit \"\$status\"" "$workflow_root/ci-go.yml"; then
 	printf 'reusable workflow does not fail closed on API checker errors\n' >&2
 	exit 1
 fi
-if ! grep -Fq -- "- apidiff" "$repo_root/.github/workflows/ci.yml" || \
-	! grep -Fq "APIDIFF: \${{ needs.apidiff.result }}" "$repo_root/.github/workflows/ci.yml"; then
+if ! grep -Fq -- "- apidiff" "$workflow_root/ci.yml" || \
+	! grep -Fq "APIDIFF: \${{ needs.apidiff.result }}" "$workflow_root/ci.yml"; then
 	printf 'GitHub aggregate gate does not require API compatibility execution\n' >&2
 	exit 1
 fi
-if apidiff_lines="$(grep -A3 '^  apidiff:' "$repo_root/.github/workflows/ci.yml")" && \
+if apidiff_lines="$(grep -A3 '^  apidiff:' "$workflow_root/ci.yml")" && \
 	grep -Fq "renovate[bot]" <<<"$apidiff_lines"; then
 	printf 'GitHub API compatibility job is skipped for Renovate\n' >&2
 	exit 1
 fi
 
 for input in golangci-version gofumpt-version gosec-version gosec-xtools-version govulncheck-version apidiff-version apidiff-base-ref; do
-	if ! grep -Fq "inputs.${input}" "$repo_root/.github/workflows/ci-go.yml"; then
+	if ! grep -Fq "inputs.${input}" "$workflow_root/ci-go.yml"; then
 		printf 'reusable CI input is not consumed: %s\n' "$input" >&2
 		exit 1
 	fi
@@ -777,7 +784,7 @@ if ! { vacuum_meta="$(grep -B1 '^VACUUM_VERSION=' "$repo_root/tools/tool-version
 	printf 'vacuum pin is not tracked by the dependency bot\n' >&2
 	exit 1
 fi
-reusable_workflow="$repo_root/.github/workflows/ci-go.yml"
+reusable_workflow="$workflow_root/ci-go.yml"
 # shellcheck disable=SC2016 # Match literal GitHub expressions in workflow YAML.
 for marker in \
 	'JOB_CONTEXT: ${{ toJSON(job) }}' \
@@ -804,7 +811,7 @@ if [[ "$(sed -n '/^extends:/p' "$repo_root/tools/spectral/oas.yaml")" != \
 fi
 for workflow in \
 	"$reusable_workflow" \
-	"$repo_root/.github/workflows/ci.yml" \
+	"$workflow_root/ci.yml" \
 	"$repo_root/.gitea/workflows/ci.yml"; do
 	if ! grep -Fq 'scripts/ci/install-vacuum.sh' "$workflow"; then
 		printf 'OpenAPI lint skips the module-sum verified vacuum install: %s\n' "$workflow" >&2

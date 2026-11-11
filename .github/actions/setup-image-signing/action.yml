@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Set up image signing
+description: Install and verify the pinned Cosign and Syft tools
+
+runs:
+  using: composite
+  steps:
+    - name: Install pinned cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v${{ env.COSIGN_VERSION }}
+
+    - name: Install pinned Syft
+      uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      with:
+        syft-version: v${{ env.SYFT_VERSION }}
+
+    - name: Verify supply-chain tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        command -v cosign
+        command -v gh
+        command -v syft
+        cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
+        syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"

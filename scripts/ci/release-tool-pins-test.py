@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -137,6 +138,140 @@ def read_bounded_lines(path: Path) -> list[str]:
     return lines
 
 
+COMPOSITE_ACTIONS = frozenset(
+    {"setup-oci-publish", "setup-image-signing", "publish-tiny-image"}
+)
+INPUT_EXPRESSION = re.compile(r"\$\{\{ inputs\.([a-z][a-z0-9-]*) \}\}")
+
+
+def scalar_block(lines: list[str], start: int, indent: int) -> str:
+    """Stop at the next scalar instead of consuming adjacent caller inputs."""
+    block = []
+    for follow in lines[start:]:
+        if follow.strip() and not follow.startswith(" " * (indent + 2)):
+            break
+        block.append(follow[indent + 2 :])
+    return "\n".join(block).rstrip() + "\n"
+
+
+def scalar_values(text: str, indent: int) -> dict[str, str]:
+    """Read the bounded literal scalar subset used by local composite callers."""
+    lines = text.splitlines()
+    values: dict[str, str] = {}
+    pattern = re.compile(r"^" + " " * indent + r"([a-z][a-z0-9-]*): (.*)$")
+    for index, line in enumerate(lines):
+        match = pattern.fullmatch(line)
+        if match is None:
+            continue
+        key, value = match.groups()
+        if value == "|":
+            value = scalar_block(lines, index + 1, indent)
+        elif value.startswith("'") and value.endswith("'"):
+            value = value[1:-1].replace("''", "'")
+        if key in values:
+            raise ValueError(f"duplicate composite scalar: {key}")
+        values[key] = value
+    return values
+
+
+def composite_defaults(text: str) -> dict[str, str]:
+    """Read optional defaults without interpreting workflow expressions."""
+    values: dict[str, str] = {}
+    name = ""
+    for line in text.splitlines():
+        match = re.fullmatch(r"  ([a-z][a-z0-9-]*):", line)
+        if match:
+            name = match.group(1)
+        if line.startswith("    default: "):
+            values[name] = scalar_values("  value: " + line[13:], 2)["value"]
+    return values
+
+
+def substitute_inputs(text: str, values: dict[str, str]) -> str:
+    """Substitute literal inputs while retaining YAML block indentation."""
+    result = []
+    for line in text.splitlines():
+        match = re.fullmatch(
+            r"(\s*[^:]+): \$\{\{ inputs\.([a-z][a-z0-9-]*) \}\}", line
+        )
+        if match and "\n" in values[match.group(2)]:
+            prefix, key = match.groups()
+            indent = len(line) - len(line.lstrip()) + 2
+            result.append(prefix + ": |")
+            result.extend(" " * indent + part for part in values[key].splitlines())
+            continue
+        result.append(INPUT_EXPRESSION.sub(lambda m: values[m.group(1)], line))
+    return "\n".join(result) + "\n"
+
+
+def composite_outputs(action: str, chunk: str) -> dict[str, str]:
+    """Expose declared outputs so caller references retain their original meaning."""
+    caller_id = re.search(r"(?m)^        id: ([a-z][a-z0-9_-]*)$", chunk)
+    outputs = re.search(r"(?ms)^outputs:\n(.*?)^runs:", action)
+    if caller_id is None or outputs is None:
+        return {}
+    aliases: dict[str, str] = {}
+    name = ""
+    for line in outputs.group(1).splitlines():
+        if re.fullmatch(r"  [a-z][a-z0-9-]*:", line):
+            name = line.strip()[:-1]
+        value = re.fullmatch(r"    value: \$\{\{ (steps\.[^ ]+) \}\}", line)
+        if value:
+            aliases[f"steps.{caller_id.group(1)}.outputs.{name}"] = value.group(1)
+    return aliases
+
+
+def expand_composite_step(chunk: str, root: Path) -> tuple[str, dict[str, str]] | None:
+    """Leave unrelated actions intact and reject guards that hide skipped checks."""
+    match = re.search(
+        r"(?m)^      (?:  |- )uses: \./\.github/actions/([a-z-]+)$", chunk
+    )
+    if match is None or match.group(1) not in COMPOSITE_ACTIONS:
+        return None
+    if re.search(r"(?m)^        (?:if|continue-on-error):", chunk):
+        raise ValueError("conditional composite call cannot satisfy publication policy")
+    path = root / ".github/actions" / match.group(1) / "action.yml"
+    action = "".join(read_bounded_lines(path))
+    values = composite_defaults(action)
+    values.update(scalar_values(chunk, 10))
+    expanded = substitute_inputs(action.split("  steps:\n", 1)[1], values)
+    body = "\n".join("  " + line if line else "" for line in expanded.splitlines())
+    return body + "\n", composite_outputs(action, chunk)
+
+
+def expand_workflow(path: Path, root: Path) -> str:
+    """Inline only the reviewed local composites; bound nesting and input syntax."""
+    text = "".join(read_bounded_lines(path))
+    output_aliases: dict[str, str] = {}
+    for _ in range(4):
+        changed = False
+        chunks = re.split(r"(?m)(?=^      - |^  [a-z][a-z0-9_-]*:)", text)
+        for index, chunk in enumerate(chunks):
+            result = expand_composite_step(chunk, root)
+            if result is not None:
+                changed = True
+                chunks[index], aliases = result
+                output_aliases.update(aliases)
+        text = "".join(chunks)
+        if not changed:
+            for alias, value in output_aliases.items():
+                text = text.replace(alias, value)
+            return text
+    raise ValueError("composite expansion exceeds four levels")
+
+
+def write_expanded_workflows(source: Path, target: Path) -> None:
+    """Keep a complete snapshot for shell policy readers and their negative fixtures."""
+    workflows = sorted(source.glob("*.yml"))
+    if len(workflows) > 128:
+        raise ValueError("workflow expansion exceeds 128 files")
+    target.mkdir(parents=True, exist_ok=True)
+    for workflow in workflows:
+        (target / workflow.name).write_text(
+            expand_workflow(workflow, REPO_ROOT), encoding="utf-8"
+        )
+
+
 def compile_js_regex(pattern: str) -> re.Pattern[str]:
     """Converts JS named capture syntax (?<name>...) to Python syntax (?P<name>...)."""
     return re.compile(re.sub(r"\(\?<([A-Za-z][A-Za-z0-9_]*)>", r"(?P<\1>", pattern))
@@ -256,7 +391,7 @@ def parse_workflow_file(
     """Parses action pins and assertions in single workflow pass."""
     if not path.is_file():
         return [], [], [], [f"{rel_path}:1: tool: file does not exist"]
-    lines = read_bounded_lines(path)
+    lines = expand_workflow(path, path.parents[2]).splitlines(keepends=True)
     pins: list[Pin] = []
     assertions: list[Assertion] = []
     problems: list[str] = []
@@ -760,6 +895,105 @@ def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str)
 
 
 class ReleaseToolPinsTest(unittest.TestCase):
+    def test_planted_composite_pin_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            create_valid_fixture(root)
+            for name in COMPOSITE_ACTIONS:
+                action = root / ".github/actions" / name / "action.yml"
+                action.parent.mkdir(parents=True)
+                action.write_text(
+                    (REPO_ROOT / action.relative_to(root)).read_text(encoding="utf-8"),
+                    encoding="utf-8",
+                )
+            relative = Path(".github/workflows/tiny-trainer-images.yml")
+            (root / relative).write_text(
+                (REPO_ROOT / relative).read_text(encoding="utf-8"), encoding="utf-8"
+            )
+            self.assertEqual(check_release_tool_pins(root), [])
+            action = root / ".github/actions/setup-image-signing/action.yml"
+            action.write_text(
+                action.read_text(encoding="utf-8").replace(
+                    "cosign-release: v${{ env.COSIGN_VERSION }}",
+                    "cosign-release: v0.0.0",
+                ),
+                encoding="utf-8",
+            )
+            self.assert_planted_defect(
+                check_release_tool_pins(root), "cosign: literal pin v0.0.0"
+            )
+
+    def test_composite_expansion_keeps_next_job(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            workflow = Path(tmp_str) / "workflow.yml"
+            following = "  next:\n    steps:\n      - run: echo next\n"
+            workflow.write_text(
+                "jobs:\n  publish:\n    steps:\n"
+                "      - uses: ./.github/actions/setup-image-signing\n" + following,
+                encoding="utf-8",
+            )
+            self.assertTrue(expand_workflow(workflow, REPO_ROOT).endswith(following))
+
+    def test_planted_expansion_inventory_overflow(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            for index in range(129):
+                (root / f"{index}.yml").touch()
+            with self.assertRaisesRegex(ValueError, "exceeds 128 files"):
+                write_expanded_workflows(root, root / "expanded")
+
+    def test_composite_scalar_inputs(self) -> None:
+        self.assertEqual(scalar_values("  value: ''\n", 2), {"value": ""})
+        self.assertEqual(
+            scalar_values("  contexts: |\n    common=shared\n  next: value\n", 2),
+            {"contexts": "common=shared\n", "next": "value"},
+        )
+        with self.assertRaisesRegex(ValueError, "duplicate composite scalar"):
+            scalar_values("  pin: v1\n  pin: v2\n", 2)
+
+    def test_composite_input_substitution(self) -> None:
+        self.assertEqual(
+            substitute_inputs(
+                "      contexts: ${{ inputs.contexts }}\n",
+                {"contexts": "common=shared\n"},
+            ),
+            "      contexts: |\n        common=shared\n",
+        )
+        with self.assertRaises(KeyError):
+            substitute_inputs("      version: ${{ inputs.missing }}\n", {})
+
+    def test_planted_conditional_composite_call(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            workflow = root / "workflow.yml"
+            workflow.write_text(
+                "jobs:\n  publish:\n    steps:\n"
+                "      - uses: ./.github/actions/setup-image-signing\n"
+                "        if: false\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "conditional composite call"):
+                expand_workflow(workflow, REPO_ROOT)
+
+    def test_planted_recursive_composite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            root = Path(tmp_str)
+            action = root / ".github/actions/setup-image-signing/action.yml"
+            action.parent.mkdir(parents=True)
+            action.write_text(
+                "runs:\n  using: composite\n  steps:\n"
+                "    - uses: ./.github/actions/setup-image-signing\n",
+                encoding="utf-8",
+            )
+            workflow = root / "workflow.yml"
+            workflow.write_text(
+                "jobs:\n  publish:\n    steps:\n"
+                "      - uses: ./.github/actions/setup-image-signing\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "exceeds four levels"):
+                expand_workflow(workflow, root)
+
     def assert_planted_defect(self, problems: list[str], expected: str) -> None:
         # The exact rule message must appear, so another rule's finding cannot satisfy the case.
         self.assertTrue(
@@ -1220,4 +1454,9 @@ class ReleaseToolPinsTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
+    if len(sys.argv) == 3 and sys.argv[1] == "--expand-workflow":
+        print(expand_workflow(Path(sys.argv[2]), REPO_ROOT), end="")
+    elif len(sys.argv) == 4 and sys.argv[1] == "--expand-workflows":
+        write_expanded_workflows(Path(sys.argv[2]), Path(sys.argv[3]))
+    else:
+        unittest.main()

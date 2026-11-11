@@ -1,0 +1,295 @@
+# SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
+# SPDX-License-Identifier: EUPL-1.2
+
+name: Publish a tiny image
+description: Validate an immutable tiny image candidate before tagging and attesting it
+
+inputs:
+  version:
+    description: Requested immutable vX.Y.Z version
+    required: false
+    default: ''
+  tag-prefix:
+    description: Release tag prefix including the trailing hyphen
+    required: true
+  error-prefix:
+    description: Runner temporary error file prefix
+    required: true
+  context:
+    description: Docker build context
+    required: true
+  dockerfile:
+    description: Dockerfile path
+    required: true
+  build-contexts:
+    description: Additional named Docker build contexts
+    required: false
+    default: ''
+  trainer:
+    description: Trainer name for smoke tests and SBOM generation
+    required: false
+    default: ''
+  sidecar-skip-build:
+    description: Skip rebuilding the exact sidecar smoke candidate
+    required: false
+    default: ''
+  smoke-command:
+    description: Command to smoke the pulled candidate
+    required: true
+  sbom-command:
+    description: Command to write the SPDX SBOM
+    required: true
+  sbom-path:
+    description: Generated SPDX SBOM path
+    required: true
+  token:
+    description: GitHub token with package write permission
+    required: true
+  verify-arguments:
+    description: Caller workflow filename and trusted tag prefix for verification
+    required: true
+
+outputs:
+  version:
+    description: Validated immutable image version
+    value: ${{ steps.version.outputs.value }}
+  digest:
+    description: Verified published image digest
+    value: ${{ steps.image.outputs.digest }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve and validate immutable version
+      id: version
+      shell: bash
+      env:
+        DISPATCH_VERSION: ${{ inputs.version }}
+        EVENT_NAME: ${{ github.event_name }}
+        FULL_REF: ${{ github.ref }}
+        REF_NAME: ${{ github.ref_name }}
+        REF_TYPE: ${{ github.ref_type }}
+        SOURCE_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        if [[ "$EVENT_NAME" == push ]]; then
+          version=${REF_NAME#${{ inputs.tag-prefix }}}
+        else
+          version=$DISPATCH_VERSION
+        fi
+        if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          printf 'version must match vX.Y.Z, got %q\n' "$version" >&2
+          exit 1
+        fi
+        expected_tag="${{ inputs.tag-prefix }}$version"
+        if [[ "$REF_TYPE" != tag || "$REF_NAME" != "$expected_tag" || \
+          "$FULL_REF" != "refs/tags/$expected_tag" ]]; then
+          printf 'publication requires exact tag refs/tags/%s, got %q\n' \
+            "$expected_tag" "$FULL_REF" >&2
+          exit 1
+        fi
+        checked_out_sha=$(git rev-parse HEAD)
+        if [[ "$checked_out_sha" != "$SOURCE_SHA" ]]; then
+          printf 'checked-out SHA %s differs from event SHA %s\n' \
+            "$checked_out_sha" "$SOURCE_SHA" >&2
+          exit 1
+        fi
+        echo "value=$version" >> "$GITHUB_OUTPUT"
+
+    - uses: ./.github/actions/setup-oci-publish
+
+    - name: Log in to GHCR
+      uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ inputs.token }}
+
+    - uses: ./.github/actions/setup-image-signing
+
+    - name: Resolve trusted resumable immutable tag
+      id: existing
+      shell: bash
+      env:
+        IMAGE: ${{ env.IMAGE_REPO }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        set -euo pipefail
+        error_file="$RUNNER_TEMP/${{ inputs.error-prefix }}-inspect-error"
+        if digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" \
+          --format '{{json .Manifest.Digest}}' 2>"$error_file" | tr -d '"'); then
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            printf 'registry returned invalid digest: %q\n' "$digest" >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
+          echo 'exists=true' >> "$GITHUB_OUTPUT"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+        elif grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
+          echo 'exists=false' >> "$GITHUB_OUTPUT"
+        else
+          cat "$error_file" >&2
+          exit 1
+        fi
+
+    - name: Build and push multi-arch candidate by digest
+      id: push
+      if: steps.existing.outputs.exists != 'true'
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+      with:
+        context: ${{ inputs.context }}
+        file: ${{ inputs.dockerfile }}
+        build-contexts: ${{ inputs.build-contexts }}
+        build-args: |
+          VCS_REF=${{ github.sha }}
+        platforms: linux/amd64,linux/arm64
+        outputs: type=image,name=${{ env.IMAGE_REPO }},push-by-digest=true,name-canonical=true,push=true
+        labels: |
+          org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.version=${{ steps.version.outputs.value }}
+
+    - name: Select candidate digest
+      id: candidate
+      shell: bash
+      env:
+        EXISTING_DIGEST: ${{ steps.existing.outputs.digest }}
+        IMAGE: ${{ env.IMAGE_REPO }}
+        PUSHED_DIGEST: ${{ steps.push.outputs.digest }}
+      run: |
+        set -euo pipefail
+        candidate=${EXISTING_DIGEST:-$PUSHED_DIGEST}
+        if [[ ! "$candidate" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+          printf 'publish path did not produce one expected digest: %q\n' \
+            "$candidate" >&2
+          exit 1
+        fi
+        docker buildx imagetools inspect "$IMAGE@$candidate" --raw | \
+          python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$candidate" --index
+        echo "digest=$candidate" >> "$GITHUB_OUTPUT"
+
+    - name: Smoke exact publish candidate
+      shell: bash
+      env:
+        DIGEST: ${{ steps.candidate.outputs.digest }}
+        IMAGE: ${{ env.IMAGE_REPO }}
+        SIDECAR_SKIP_BUILD: '${{ inputs.sidecar-skip-build }}'
+        TRAINER: ${{ inputs.trainer }}
+      run: |
+        set -euo pipefail
+        digest="$DIGEST"
+        docker pull --platform linux/amd64 "$IMAGE@$digest"
+        ${{ inputs.smoke-command }}
+
+    - name: Verify release identity of every platform
+      shell: bash
+      env:
+        DIGEST: ${{ steps.candidate.outputs.digest }}
+        IMAGE: ${{ env.IMAGE_REPO }}
+        SOURCE_SHA: ${{ github.sha }}
+        SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        set -euo pipefail
+        digest="$DIGEST"
+        for platform in linux/amd64 linux/arm64; do
+          docker buildx imagetools inspect "$IMAGE@$digest" \
+            --format "{{json (index .Image \"$platform\")}}" | \
+            python3 -B scripts/ci/tiny-trainer-manifest-identity.py \
+            --config "$platform" "$SOURCE_URL" "$SOURCE_SHA" "$VERSION"
+        done
+
+    - name: Tag verified candidate
+      if: steps.existing.outputs.exists != 'true'
+      shell: bash
+      env:
+        DIGEST: ${{ steps.candidate.outputs.digest }}
+        IMAGE: ${{ env.IMAGE_REPO }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        set -euo pipefail
+        digest="$DIGEST"
+        error_file="$RUNNER_TEMP/${{ inputs.error-prefix }}-tag-check-error"
+        if docker buildx imagetools inspect "$IMAGE:$VERSION" \
+          --format '{{json .Manifest.Digest}}' 2>"$error_file"; then
+          printf 'tag appeared concurrently: %s:%s\n' "$IMAGE" "$VERSION" >&2
+          exit 1
+        elif ! grep -Eqi '404 Not Found|manifest unknown|not found' "$error_file"; then
+          cat "$error_file" >&2
+          exit 1
+        fi
+        docker buildx imagetools create -t "$IMAGE:$VERSION" "$IMAGE@$digest"
+
+    - name: Verify immutable published image
+      id: image
+      shell: bash
+      env:
+        CANDIDATE_DIGEST: ${{ steps.candidate.outputs.digest }}
+        IMAGE: ${{ env.IMAGE_REPO }}
+        VERSION: ${{ steps.version.outputs.value }}
+      run: |
+        set -euo pipefail
+        expected_digest="$CANDIDATE_DIGEST"
+        if [[ ! "$expected_digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+          printf 'publish path did not produce one expected digest: %q\n' \
+            "$expected_digest" >&2
+          exit 1
+        fi
+        digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" --format '{{json .Manifest.Digest}}' | tr -d '"')
+        if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+          printf 'registry returned invalid digest: %q\n' "$digest" >&2
+          exit 1
+        fi
+        if [[ "$digest" != "$expected_digest" ]]; then
+          printf 'published digest differs from tested push: %s != %s\n' \
+            "$digest" "$expected_digest" >&2
+          exit 1
+        fi
+        docker buildx imagetools inspect "$IMAGE@$digest" --raw | \
+          python3 -B scripts/ci/tiny-trainer-manifest-identity.py "$digest" --index
+        echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+    - name: Sign image digest
+      shell: bash
+      env:
+        IMAGE: ${{ env.IMAGE_REPO }}@${{ steps.image.outputs.digest }}
+      run: cosign sign --yes "$IMAGE"
+
+    - name: Attest build provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
+      with:
+        subject-name: ${{ env.IMAGE_REPO }}
+        subject-digest: ${{ steps.image.outputs.digest }}
+        push-to-registry: true
+
+    - name: Generate SPDX SBOM
+      shell: bash
+      env:
+        IMAGE: ${{ env.IMAGE_REPO }}@${{ steps.image.outputs.digest }}
+        TRAINER: ${{ inputs.trainer }}
+      run: |
+        set -euo pipefail
+        ${{ inputs.sbom-command }}
+
+    - name: Attest SBOM
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-name: ${{ env.IMAGE_REPO }}
+        subject-digest: ${{ steps.image.outputs.digest }}
+        sbom-path: ${{ inputs.sbom-path }}
+        push-to-registry: true
+
+    - name: Verify published supply-chain identity
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        IMAGE: ${{ env.IMAGE_REPO }}@${{ steps.image.outputs.digest }}
+        SOURCE_REF: ${{ github.ref }}
+        SOURCE_REPOSITORY: ${{ github.repository }}
+        SOURCE_SHA: ${{ github.sha }}
+      run: |
+        set -euo pipefail
+        bash scripts/ci/tiny-trainer-verify-image.sh \
+          "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF" \
+          ${{ inputs.verify-arguments }}

@@ -321,7 +321,9 @@ expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=g
 	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 
-workflow="$repo_root/.github/workflows/tiny-trainer-images.yml"
+workflow="$suite_root/expanded-workflow.yml"
+python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflow \
+	"$repo_root/.github/workflows/tiny-trainer-images.yml" >"$workflow"
 check_workflow "$workflow"
 check_audit_toolchain "$repo_root/scripts/ci/tiny-trainer-locks.sh" \
 	"$repo_root/scripts/ci/tiny-trainer-pip-audit.lock"

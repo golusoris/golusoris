@@ -249,7 +249,9 @@ expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=g
 	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 
-workflow="$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
+workflow="$suite_root/expanded-workflow.yml"
+python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflow \
+	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml" >"$workflow"
 check_workflow "$workflow"
 
 # Planted negatives on mutated workflow copies
