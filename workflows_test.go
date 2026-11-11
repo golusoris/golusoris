@@ -91,13 +91,17 @@ func effectivePerms(job, workflow any, fallback tokenPerms) (tokenPerms, error) 
 }
 
 func loadWorkflow(path string) (workflowFile, error) {
+	return loadWorkflowAs[workflowFile](path)
+}
+
+func loadWorkflowAs[T any](path string) (T, error) {
+	var wf T
 	data, err := os.ReadFile(path) //nolint:gosec // G304: test reads the repository's own workflow files
 	if err != nil {
-		return workflowFile{}, fmt.Errorf("read %s: %w", path, err)
+		return wf, fmt.Errorf("read %s: %w", path, err)
 	}
-	var wf workflowFile
 	if err := yaml.Unmarshal(data, &wf); err != nil {
-		return workflowFile{}, fmt.Errorf("parse %s: %w", path, err)
+		return wf, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return wf, nil
 }

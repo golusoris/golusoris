@@ -252,66 +252,10 @@ PY
 
 check_reusable_go_cache_writer_contract() {
 	local workflow="$1"
-	check_reusable_go_cache_users "$workflow" || return
 	check_reusable_go_cache_writer_timeout "$workflow"
 }
 
-# check_reusable_go_cache_users requires every setup-go cache user to share one key and to read
-# only after the build job wrote it.
-check_reusable_go_cache_users() {
-	local workflow="$1"
-	python3 - "$workflow" <<'PY'
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-job_pattern = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
-starts = [index for index, line in enumerate(lines) if job_pattern.match(line)]
-jobs = {}
-for position, start in enumerate(starts):
-    end = starts[position + 1] if position + 1 < len(starts) else len(lines)
-    jobs[job_pattern.match(lines[start]).group(1)] = lines[start:end]
-
-cache_jobs = {}
-for name, block in jobs.items():
-    for index, line in enumerate(block):
-        if "uses: actions/setup-go@" not in line:
-            continue
-        end = index + 1
-        while end < len(block) and not block[end].startswith("      - "):
-            end += 1
-        step = block[index:end]
-        if "          cache: true" not in step:
-            continue
-        dependency_path = next(
-            (
-                line
-                for line in step
-                if line.startswith("          cache-dependency-path:")
-            ),
-            "",
-        )
-        if not dependency_path:
-            raise SystemExit(f"setup-go cache user {name} lacks a dependency path")
-        if name in cache_jobs:
-            raise SystemExit(f"reusable setup-go cache user {name} is duplicated")
-        cache_jobs[name] = dependency_path
-
-expected = {"build", "lint", "gosec", "vuln", "test", "apidiff"}
-if set(cache_jobs) != expected:
-    raise SystemExit(
-        f"reusable setup-go cache users changed: {sorted(cache_jobs)}, expected {sorted(expected)}"
-    )
-if len(set(cache_jobs.values())) != 1:
-    raise SystemExit("reusable setup-go cache users do not share one cache key")
-for name in sorted(expected - {"build"}):
-    if "    needs: build" not in jobs[name]:
-        raise SystemExit(f"reusable cache reader {name} does not depend on build")
-PY
-}
-
+# Alias-resolved cache-user checks and negatives live in workflows_ci_go_test.go.
 check_reusable_go_cache_writer_timeout() {
 	local workflow="$1"
 	python3 - "$workflow" <<'PY'
@@ -641,64 +585,7 @@ sed '/run: scripts\/ci\/go-modules.sh verify/d' \
 expect_failure_matching 'cache writer build does not verify every module before saving' \
 	check_go_cache_writer_contract "$cache_warm_negative"
 
-reusable_cache_reader_negative="$suite_root/ci-go-cache-reader-without-writer.yml"
-python3 - "$repo_root/.github/workflows/ci-go.yml" "$reusable_cache_reader_negative" <<'PY'
-import pathlib
-import sys
-
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "    needs: build\n"
-if marker not in source:
-    raise SystemExit("reusable cache-reader dependency mutation failed")
-pathlib.Path(sys.argv[2]).write_text(source.replace(marker, "", 1), encoding="utf-8")
-PY
-expect_failure_matching 'reusable cache reader lint does not depend on build' \
-	check_reusable_go_cache_writer_contract "$reusable_cache_reader_negative"
-
-reusable_cache_key_negative="$suite_root/ci-go-cache-key-drift.yml"
-python3 - "$repo_root/.github/workflows/ci-go.yml" "$reusable_cache_key_negative" <<'PY'
-import pathlib
-import sys
-
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "          cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}"
-if source.count(marker) != 6:
-    raise SystemExit("reusable cache-key mutation requires six exact markers")
-pathlib.Path(sys.argv[2]).write_text(
-    source.replace(marker, "          cache-dependency-path: go.sum", 1),
-    encoding="utf-8",
-)
-PY
-expect_failure_matching 'reusable setup-go cache users do not share one cache key' \
-	check_reusable_go_cache_writer_contract "$reusable_cache_key_negative"
-
-reusable_cache_duplicate_negative="$suite_root/ci-go-cache-duplicate-setup.yml"
-python3 - "$repo_root/.github/workflows/ci-go.yml" "$reusable_cache_duplicate_negative" <<'PY'
-import pathlib
-import sys
-
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-build_marker = "  build:\n"
-build_start = source.find(build_marker)
-if build_start < 0:
-    raise SystemExit("reusable cache duplicate mutation lacks build job")
-setup_marker = "      - uses: actions/setup-go@"
-setup_start = source.find(setup_marker, build_start)
-if setup_start < 0:
-    raise SystemExit("reusable cache duplicate mutation lacks build setup-go")
-duplicate = (
-    "      - uses: actions/setup-go@duplicate-cache-fixture\n"
-    "        with:\n"
-    "          cache: true\n"
-    "          cache-dependency-path: divergent-go.sum\n"
-)
-pathlib.Path(sys.argv[2]).write_text(
-    source[:setup_start] + duplicate + source[setup_start:], encoding="utf-8"
-)
-PY
-expect_failure_matching 'reusable setup-go cache user build is duplicated' \
-	check_reusable_go_cache_writer_contract "$reusable_cache_duplicate_negative"
-
+# Alias-resolved cache-user negatives live in workflows_ci_go_test.go.
 reusable_cache_timeout_negative="$suite_root/ci-go-cache-writer-short-timeout.yml"
 python3 - "$repo_root/.github/workflows/ci-go.yml" "$reusable_cache_timeout_negative" <<'PY'
 import pathlib

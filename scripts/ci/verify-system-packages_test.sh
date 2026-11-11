@@ -264,17 +264,7 @@ check_wiring() {
 		printf 'ci-go.yml runs a script from the caller workspace\n' >&2
 		return 1
 	fi
-	local users checkouts runners
-	# shellcheck disable=SC2016 # Match literal expressions and runtime variables in workflow YAML.
-	users="$(grep -Fc 'if: ${{ inputs.system-packages' "$reusable")"
-	checkouts="$(grep -Fc 'name: Check out golusoris system-package script' "$reusable")"
-	# shellcheck disable=SC2016 # Match literal runtime variables in workflow YAML.
-	runners="$(grep -Fc 'bash "$ci_root/scripts/ci/verify-system-packages.sh" "${mode[@]}" "${packages[@]}"' "$reusable")"
-	if ((users != 12 || checkouts != 6 || runners != 6)); then
-		printf 'ci-go.yml system-package steps drifted: %d guards, %d checkouts, %d runs\n' \
-			"$users" "$checkouts" "$runners" >&2
-		return 1
-	fi
+	# Alias-resolved system-package job sets and guards live in workflows_ci_go_test.go.
 	# shellcheck disable=SC2016 # Match the literal runtime variable in workflow YAML.
 	if ! grep -Fq 'if [[ "$INSTALL_SYSTEM_PACKAGES" == true ]]; then' "$reusable"; then
 		printf 'ci-go.yml does not gate installation on install-system-packages\n' >&2
