@@ -496,10 +496,12 @@ rules:
           cache manifest; policy tests require their parity except the declared split-module emulators.
           .standards.yaml declares
           supply_chain.slsa_level 3, enforce_cosign and require_sbom, which praetorctl audit
-          checks as configuration. scripts/ci/govulncheck.sh parses pinned govulncheck v1.8.0
-          symbol JSON for every module and rejects every reachable finding with no exception
-          list; it also rejects invalid or unexpected scanner configuration and any finding
-          that lacks an OSV id or trace.
+          checks as configuration. scripts/ci/govulncheck.sh parses the symbol JSON of
+          govulncheck (pinned by GOVULNCHECK_VERSION in tools/tool-versions.env) for every
+          module and rejects every reachable finding with no exception list; it also rejects invalid or
+          unexpected scanner configuration, a Go version the scanner cannot parse (which
+          would skip every standard-library advisory), and any finding that lacks an OSV id
+          or trace.
         rationale: >-
           No positive fixture exists because every mechanism above decides a repository-global
           property -- the lockfile, the pinned digest, the signed attestation -- that no single
