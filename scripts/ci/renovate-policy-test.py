@@ -1026,6 +1026,51 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def vulnerability_gomod_range_valid(config: dict[str, object]) -> bool:
+    """Require gomod.vulnerabilityAlerts.rangeStrategy auto, the manager config Renovate copies into its OSV rules."""
+    manager = config.get("gomod")
+    alerts = manager.get("vulnerabilityAlerts") if isinstance(manager, dict) else None
+    return isinstance(alerts, dict) and alerts.get("rangeStrategy") == "auto"
+
+
+def with_manager_alerts(config: dict[str, object], manager: str, alerts: dict[str, object] | None) -> dict[str, object]:
+    """Copy the configuration with gomod vulnerabilityAlerts moved to the named manager block, or dropped."""
+    mutated = json.loads(json.dumps(config))
+    gomod = mutated.setdefault("gomod", {})
+    gomod.pop("vulnerabilityAlerts", None)
+    if alerts is not None:
+        mutated.setdefault(manager, {})["vulnerabilityAlerts"] = alerts
+    return mutated
+
+
+def vulnerability_gomod_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Build the configurations the gomod vulnerability check must refuse."""
+    ignored = with_manager_alerts(config, "gomod", None)
+    ignored["vulnerabilityAlerts"] = {"packageRules": [{"matchManagers": ["gomod"], "rangeStrategy": "auto"}]}
+    return {
+        "gomod vulnerabilityAlerts removed": with_manager_alerts(config, "gomod", None),
+        "gomod keeps update-lockfile": with_manager_alerts(config, "gomod", {"rangeStrategy": "update-lockfile"}),
+        "setting on another manager": with_manager_alerts(config, "npm", {"rangeStrategy": "auto"}),
+        "nested packageRules form the OSV rule ignores": ignored,
+    }
+
+
+def test_vulnerability_gomod_range(config: dict[str, object]) -> bool:
+    """Keep Go security fixes for pseudo-version requirements (Dependabot alert 59) and prove the check refuses."""
+    if not vulnerability_gomod_range_valid(config):
+        print(
+            "renovate.json gomod.vulnerabilityAlerts must set rangeStrategy auto: the default update-lockfile "
+            "finds no Go lock file version and skips pseudo-version security fixes as invalid-value",
+            file=sys.stderr,
+        )
+        return False
+    for label, mutated in vulnerability_gomod_mutants(config).items():
+        if vulnerability_gomod_range_valid(mutated):
+            print(f"gomod vulnerability range negative control was accepted: {label}", file=sys.stderr)
+            return False
+    return True
+
+
 def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
     """Require Renovate ownership and digest pins for the backup-restore Dockerfile."""
     manager = config.get("dockerfile")
@@ -1174,6 +1219,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_vulnerability_gomod_range(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
         test_current_value_template(),
