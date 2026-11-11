@@ -349,10 +349,12 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 # testutil/pact links libpact_ffi; CI installs it per job, local gates use the same
 # digest-pinned installer into an ignored repository directory, never a host path.
 PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi
+PACT_FFI_TMPDIR := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/golusoris/tmp
 PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln-all portability-test fault-recovery
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
+	@mkdir -p "$(PACT_FFI_TMPDIR)"
 	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
@@ -365,6 +367,10 @@ PACT_PATH_SEP := $(if $(findstring ;,$(PATH)),;,:)
 $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)')
 $(PACT_FFI_TARGETS): override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)
 else
+# go1.27.4 scans pact-go's -L/tmp when it is os.TempDir(); use a cache directory outside the checkout.
+ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)
+$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)
+endif
 $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
 endif
 

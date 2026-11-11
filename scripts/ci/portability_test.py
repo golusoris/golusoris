@@ -828,6 +828,47 @@ class PactFFIInstallerTests(TestCase):
                     self.assertEqual(cache_if.group(1).strip(), install_if.group(1).strip())
         self.assertEqual(total_pact_steps, 4)
 
+    def _assert_pact_step_exports_tmpdir(self, step: str) -> None:
+        """Require Unix Pact installs to create and export temp storage under RUNNER_TEMP."""
+        self.assertIn('install -d -m 0700 "$RUNNER_TEMP/tmp"', step)
+        self.assertRegex(
+            step,
+            r'(?m)^\s*echo "TMPDIR=\$RUNNER_TEMP/tmp" >> "\$GITHUB_ENV"$',
+        )
+
+    def test_workflow_pact_ffi_install_steps_export_safe_tmpdir(self) -> None:
+        """Keep every Unix Pact install's Go temp storage outside the scanned /tmp tree."""
+        install_steps = 0
+        for name in ("ci.yml", "portability.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            for job in re.split(r"(?m)^  (?=[\w-]+:\s*$)", text):
+                for step in re.split(r"(?m)^ {6}- ", job)[1:]:
+                    if "scripts/ci/pact_ffi.py" not in step or "--lib-dir" not in step:
+                        continue
+                    if "shell: pwsh" in step:
+                        continue
+                    install_steps += 1
+                    with self.subTest(workflow=name, job=job.splitlines()[0], step=step.splitlines()[0]):
+                        self._assert_pact_step_exports_tmpdir(step)
+        self.assertEqual(install_steps, 3)
+
+    def test_positive_workflow_pact_tmpdir_export(self) -> None:
+        """Accept a synthetic Unix step creating and exporting RUNNER_TEMP/tmp."""
+        step = (
+            'name: Install synthetic Pact FFI\nrun: |\n'
+            '  install -d -m 0700 "$RUNNER_TEMP/tmp"\n'
+            '  echo "TMPDIR=$RUNNER_TEMP/tmp" >> "$GITHUB_ENV"\n'
+        )
+        self._assert_pact_step_exports_tmpdir(step)
+
+    def test_negative_workflow_pact_tmpdir_missing_or_under_tmp(self) -> None:
+        """Reject synthetic steps missing TMPDIR or placing it in the scanned /tmp tree."""
+        step = 'name: Install synthetic Pact FFI\nrun: |\n  install -d -m 0700 "$RUNNER_TEMP/tmp"\n'
+        for value in (None, "/tmp", "/tmp/", "/tmp/go-build"):  # noqa: S108 - refused TMPDIR values, never opened.
+            with self.subTest(value=value), self.assertRaisesRegex(AssertionError, "TMPDIR"):
+                export = "" if value is None else f'  echo "TMPDIR={value}" >> "$GITHUB_ENV"\n'
+                self._assert_pact_step_exports_tmpdir(step + export)
+
     def test_boundary_pin_change_downloads_new_archive_beside_stale_one(self) -> None:
         """Download new asset when pin changes while keeping stale archive alongside."""
         old = gzip.compress(b"old pinned ffi")
@@ -941,6 +982,30 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn("override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)", makefile)
         ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".workingdir/", ignored)
+
+    def _assert_makefile_pact_tmpdir(self, makefile: str) -> None:
+        """Require Unix Pact targets to export safe temp storage created before installation."""
+        self.assertIn(
+            "PACT_FFI_TMPDIR := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/golusoris/tmp",
+            makefile,
+        )
+        unix = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)[1].split("\nelse\n", 1)[1].split("\nendif", 1)[0]
+        self.assertIn("ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)", unix)
+        self.assertIn("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)", unix)
+        recipe = makefile.split("\npact-ffi:", 1)[1].split("\n\n", 1)[0]
+        self.assertIn('\t@mkdir -p "$(PACT_FFI_TMPDIR)"', recipe)
+        self.assertLess(recipe.index("mkdir -p"), recipe.index("scripts/ci/pact_ffi.py"))
+
+    def test_local_pact_targets_export_safe_tmpdir(self) -> None:
+        """Require local Unix Pact targets to preserve custom TMPDIR and create the fallback."""
+        self._assert_makefile_pact_tmpdir((ROOT / "Makefile").read_text(encoding="utf-8"))
+
+    def test_negative_local_pact_tmpdir_export_missing(self) -> None:
+        """Reject Makefile text with the target-specific TMPDIR export removed."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        mutant = makefile.replace("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)\n", "")
+        with self.assertRaisesRegex(AssertionError, "override export TMPDIR"):
+            self._assert_makefile_pact_tmpdir(mutant)
 
     def test_truncated_download_is_wrapped_and_removed(self) -> None:
         """Capture sleep backoff and stderr during transient truncated download failures."""
