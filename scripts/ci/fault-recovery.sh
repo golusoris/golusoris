@@ -19,6 +19,13 @@ readonly TEST_TIMEOUT="${GO_TEST_TIMEOUT:-10m}"
 readonly TEST_PARALLELISM="${GO_TEST_PARALLELISM:-4}"
 readonly MAX_MODULES=64
 
+# Go 1.27.4 validates every object under cgo -L directories; pact-go's -L/tmp makes a GOROOT copy there fail the testutil/pact build.
+make_scratch() {
+	local base="$REPO_ROOT/.workingdir/cache"
+	mkdir -p "$base"
+	mktemp -d "$base/fault-recovery.XXXXXX"
+}
+
 # Makes the directories under $1 writable; a module-cache GOROOT is read-only.
 # Files keep their mode: they may be hard links into the source GOROOT.
 writable_dirs() {
@@ -99,7 +106,7 @@ run_modules() {
 
 main() {
 	local scratch
-	scratch="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-fault-recovery.XXXXXX")"
+	scratch="$(make_scratch)"
 	# shellcheck disable=SC2064 # expand now: scratch is local to main
 	trap "find '$scratch' -type d -exec chmod u+w {} + && find '$scratch' -depth -delete" EXIT
 	mark_goroot "$scratch/goroot"

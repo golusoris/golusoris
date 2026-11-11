@@ -100,6 +100,19 @@ main() {
 		fail "mark_goroot changed source panic.go content"
 	mode="$(stat -c %a "$ro_panic" 2>/dev/null || stat -f %Lp "$ro_panic")"
 	[[ "$mode" == 444 ]] || fail "mark_goroot changed source panic.go mode: $mode"
+
+	local scratch_tmp scratch_unset scratch invalid_scratch='' system_tmp=/tmp
+	scratch_tmp="$(export TMPDIR=/tmp; make_scratch)"
+	scratch_unset="$(unset TMPDIR; make_scratch)"
+	for scratch in "$scratch_tmp" "$scratch_unset"; do
+		if [[ ! -d "$scratch" ||
+			"$scratch" != "$REPO_ROOT/.workingdir/cache/fault-recovery."* ||
+			"$scratch" == "$system_tmp/"* ]]; then
+			invalid_scratch="$scratch"
+		fi
+	done
+	rmdir "$scratch_tmp" "$scratch_unset"
+	[[ -z "$invalid_scratch" ]] || fail "make_scratch used an unsafe directory: $invalid_scratch"
 	printf 'fault-recovery policy: ok\n'
 }
 
