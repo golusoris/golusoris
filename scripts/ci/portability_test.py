@@ -864,7 +864,7 @@ class PactFFIInstallerTests(TestCase):
     def test_negative_workflow_pact_tmpdir_missing_or_under_tmp(self) -> None:
         """Reject synthetic steps missing TMPDIR or placing it in the scanned /tmp tree."""
         step = 'name: Install synthetic Pact FFI\nrun: |\n  install -d -m 0700 "$RUNNER_TEMP/tmp"\n'
-        for value in (None, "/tmp", "/tmp/", "/tmp/go-build"):  # noqa: S108 - refused TMPDIR values, never opened.
+        for value in (None, "/tmp", "/tmp/", "/tmp/go-build"):  # noqa: S108 - refused TMPDIR values, never opened. # nosec B108
             with self.subTest(value=value), self.assertRaisesRegex(AssertionError, "TMPDIR"):
                 export = "" if value is None else f'  echo "TMPDIR={value}" >> "$GITHUB_ENV"\n'
                 self._assert_pact_step_exports_tmpdir(step + export)
