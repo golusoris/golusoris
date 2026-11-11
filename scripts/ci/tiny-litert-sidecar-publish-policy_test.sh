@@ -88,7 +88,10 @@ check_manifest_identity() {
 		printf '%s must verify trusted supply-chain identity after publication\n' "$path" >&2
 		return 1
 	fi
-	if ! grep -Fq 'tiny-litert-sidecar-image.yml tiny-litert-sidecar-' "$path"; then
+	# shellcheck disable=SC2016 # Match literal shell variables in the expanded workflow.
+	if ! grep -Fq 'WORKFLOW_FILE: tiny-litert-sidecar-image.yml' "$path" || \
+		! grep -Fq 'TAG_PREFIX: tiny-litert-sidecar-' "$path" || \
+		! grep -Fq '"$WORKFLOW_FILE" "$TAG_PREFIX"' "$path"; then
 		printf '%s must pass workflow filename and tag prefix to verifier script\n' "$path" >&2
 		return 1
 	fi
@@ -141,8 +144,8 @@ check_workflow() {
 		"packages: write"
 		"ref: \${{ github.sha }}"
 		"- 'tiny-litert-sidecar-v*.*.*'"
-		"version=\${REF_NAME#tiny-litert-sidecar-}"
-		"expected_tag=\"tiny-litert-sidecar-\$version\""
+		'version=${REF_NAME#"$TAG_PREFIX"}'
+		'expected_tag="$TAG_PREFIX$version"'
 		"\"\$REF_TYPE\" != tag"
 		"\"\$FULL_REF\" != \"refs/tags/\$expected_tag\""
 		"checked_out_sha=\$(git rev-parse HEAD)"
@@ -250,7 +253,7 @@ expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=g
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 
 workflow="$suite_root/expanded-workflow.yml"
-python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflow \
+python3 "$repo_root/scripts/ci/composite_expand.py" --expand-workflow \
 	"$repo_root/.github/workflows/tiny-litert-sidecar-image.yml" >"$workflow"
 check_workflow "$workflow"
 
@@ -264,7 +267,7 @@ sed '/name: Sign image digest/a \        if: always()' "$workflow" >"$conditiona
 expect_failure check_workflow "$conditional_sign"
 
 bad_verifier_prefix="$suite_root/bad-verifier-prefix.yml"
-sed 's/tiny-litert-sidecar-image.yml tiny-litert-sidecar-/tiny-litert-sidecar-image.yml bad-prefix-/' \
+sed 's/TAG_PREFIX: tiny-litert-sidecar-/TAG_PREFIX: bad-prefix-/' \
 	"$workflow" >"$bad_verifier_prefix"
 expect_failure check_workflow "$bad_verifier_prefix"
 

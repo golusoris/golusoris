@@ -30,6 +30,43 @@ new_repo() {
 	printf '%s\n' "$root"
 }
 
+check_composite_run_inputs() {
+	local root="$1"
+	python3 - "$root" <<'PY'
+import pathlib
+import re
+import sys
+
+root = pathlib.Path(sys.argv[1])
+paths = sorted((root / ".github/actions").glob("*/action.yml"))
+if not paths or len(paths) > 128:
+    raise SystemExit("composite input scan requires 1..128 action files")
+run_key = re.compile(r"^(?P<prefix> *(?:- )?)run:\s*(?P<value>.*)$")
+input_expression = re.compile(r"\$\{\{\s*inputs\.")
+problems = []
+for path in paths:
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if len(lines) > 4096:
+        raise SystemExit(f"{path}: composite input scan exceeds 4096 lines")
+    run_indent = None
+    for number, line in enumerate(lines, 1):
+        indent = len(line) - len(line.lstrip())
+        if run_indent is not None and line.strip() and indent <= run_indent:
+            run_indent = None
+        if run_indent is None:
+            match = run_key.fullmatch(line)
+            if match is None:
+                continue
+            run_indent = len(match.group("prefix"))
+        if input_expression.search(line):
+            problems.append(
+                f"{path.relative_to(root)}:{number}: composite run interpolates inputs"
+            )
+if problems:
+    raise SystemExit("\n".join(problems))
+PY
+}
+
 check_rebuild_trigger_contract() {
 	local path="$1"
 	if ! grep -Fq '  workflow_call:' "$path" || \
@@ -374,6 +411,37 @@ jobs:
       - run: echo '${{ unknown }}'
 EOF
 }
+
+check_composite_run_inputs "$repo_root"
+composite_root="$suite_root/composite-inputs"
+mkdir -p "$composite_root/.github/actions/sample"
+composite_fixture="$composite_root/.github/actions/sample/action.yml"
+composite_clean="$suite_root/composite-clean.yml"
+cat >"$composite_clean" <<'EOF'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        VALUE: ${{ inputs.x }}
+      run: echo "$VALUE"
+EOF
+install -m 0644 "$composite_clean" "$composite_fixture"
+check_composite_run_inputs "$composite_root"
+# shellcheck disable=SC2016 # Plant literal workflow expressions, never shell substitutions.
+sed 's/run: echo "$VALUE"/run: echo ${{ inputs.x }}/' "$composite_clean" >"$composite_fixture"
+expect_failure_matching '.github/actions/sample/action.yml:7: composite run interpolates inputs' \
+	check_composite_run_inputs "$composite_root"
+cat >"$composite_fixture" <<'EOF'
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        echo ${{ inputs.x }}
+EOF
+expect_failure_matching '.github/actions/sample/action.yml:6: composite run interpolates inputs' \
+	check_composite_run_inputs "$composite_root"
 
 clean_root="$(new_repo clean)"
 write_clean_workflow "$clean_root/.github/workflows/clean.yml"

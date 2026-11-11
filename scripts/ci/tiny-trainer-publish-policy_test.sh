@@ -322,7 +322,7 @@ expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=g
 	tiny-trainer-images.yml tiny-trainers-
 
 workflow="$suite_root/expanded-workflow.yml"
-python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflow \
+python3 "$repo_root/scripts/ci/composite_expand.py" --expand-workflow \
 	"$repo_root/.github/workflows/tiny-trainer-images.yml" >"$workflow"
 check_workflow "$workflow"
 check_audit_toolchain "$repo_root/scripts/ci/tiny-trainer-locks.sh" \

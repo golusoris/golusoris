@@ -198,11 +198,10 @@ jobs:
           dockerfile: ai/tiny/trainers/${{ matrix.trainer }}/Dockerfile
           build-contexts: common=ai/tiny/trainers/common
           trainer: ${{ matrix.trainer }}
-          smoke-command: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-trainer-smoke.sh "$TRAINER" "$IMAGE@$digest"
-          sbom-command: syft packages "$IMAGE" -o spdx-json > "$TRAINER.spdx.json"
+          smoke-script: scripts/ci/tiny-trainer-smoke.sh
           sbom-path: ${{ matrix.trainer }}.spdx.json
           token: ${{ secrets.GITHUB_TOKEN }}
-          verify-arguments: tiny-trainer-images.yml tiny-trainers-
+          workflow-file: tiny-trainer-images.yml
 
       - name: Record immutable digest
         shell: bash

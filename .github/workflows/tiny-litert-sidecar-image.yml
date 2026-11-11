@@ -177,11 +177,10 @@ jobs:
           context: ai/tiny/serve/tflite/sidecar
           dockerfile: ai/tiny/serve/tflite/sidecar/Dockerfile
           sidecar-skip-build: '1'
-          smoke-command: TMPDIR="$RUNNER_TEMP" bash scripts/ci/tiny-litert-sidecar-smoke.sh "$IMAGE@$digest"
-          sbom-command: syft packages "$IMAGE" -o spdx-json > tiny-litert-sidecar.spdx.json
+          smoke-script: scripts/ci/tiny-litert-sidecar-smoke.sh
           sbom-path: tiny-litert-sidecar.spdx.json
           token: ${{ secrets.GITHUB_TOKEN }}
-          verify-arguments: tiny-litert-sidecar-image.yml tiny-litert-sidecar-
+          workflow-file: tiny-litert-sidecar-image.yml
 
       - name: Record immutable digest
         shell: bash

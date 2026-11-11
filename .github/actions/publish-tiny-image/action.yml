@@ -33,11 +33,8 @@ inputs:
     description: Skip rebuilding the exact sidecar smoke candidate
     required: false
     default: ''
-  smoke-command:
-    description: Command to smoke the pulled candidate
-    required: true
-  sbom-command:
-    description: Command to write the SPDX SBOM
+  smoke-script:
+    description: Allow-listed repository script to smoke the pulled candidate
     required: true
   sbom-path:
     description: Generated SPDX SBOM path
@@ -45,8 +42,8 @@ inputs:
   token:
     description: GitHub token with package write permission
     required: true
-  verify-arguments:
-    description: Caller workflow filename and trusted tag prefix for verification
+  workflow-file:
+    description: Caller workflow filename for verification
     required: true
 
 outputs:
@@ -70,10 +67,11 @@ runs:
         REF_NAME: ${{ github.ref_name }}
         REF_TYPE: ${{ github.ref_type }}
         SOURCE_SHA: ${{ github.sha }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
       run: |
         set -euo pipefail
         if [[ "$EVENT_NAME" == push ]]; then
-          version=${REF_NAME#${{ inputs.tag-prefix }}}
+          version=${REF_NAME#"$TAG_PREFIX"}
         else
           version=$DISPATCH_VERSION
         fi
@@ -81,7 +79,7 @@ runs:
           printf 'version must match vX.Y.Z, got %q\n' "$version" >&2
           exit 1
         fi
-        expected_tag="${{ inputs.tag-prefix }}$version"
+        expected_tag="$TAG_PREFIX$version"
         if [[ "$REF_TYPE" != tag || "$REF_NAME" != "$expected_tag" || \
           "$FULL_REF" != "refs/tags/$expected_tag" ]]; then
           printf 'publication requires exact tag refs/tags/%s, got %q\n' \
@@ -113,9 +111,10 @@ runs:
       env:
         IMAGE: ${{ env.IMAGE_REPO }}
         VERSION: ${{ steps.version.outputs.value }}
+        ERROR_PREFIX: ${{ inputs.error-prefix }}
       run: |
         set -euo pipefail
-        error_file="$RUNNER_TEMP/${{ inputs.error-prefix }}-inspect-error"
+        error_file="$RUNNER_TEMP/$ERROR_PREFIX-inspect-error"
         if digest=$(docker buildx imagetools inspect "$IMAGE:$VERSION" \
           --format '{{json .Manifest.Digest}}' 2>"$error_file" | tr -d '"'); then
           if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
@@ -176,11 +175,16 @@ runs:
         IMAGE: ${{ env.IMAGE_REPO }}
         SIDECAR_SKIP_BUILD: '${{ inputs.sidecar-skip-build }}'
         TRAINER: ${{ inputs.trainer }}
+        SMOKE_SCRIPT: ${{ inputs.smoke-script }}
       run: |
         set -euo pipefail
         digest="$DIGEST"
         docker pull --platform linux/amd64 "$IMAGE@$digest"
-        ${{ inputs.smoke-command }}
+        case "$SMOKE_SCRIPT" in
+          scripts/ci/tiny-litert-sidecar-smoke.sh|scripts/ci/tiny-trainer-smoke.sh) ;;
+          *) printf 'unsupported smoke script: %q\n' "$SMOKE_SCRIPT" >&2; exit 1 ;;
+        esac
+        TMPDIR="$RUNNER_TEMP" bash "$SMOKE_SCRIPT" ${TRAINER:+"$TRAINER"} "$IMAGE@$digest"
 
     - name: Verify release identity of every platform
       shell: bash
@@ -207,10 +211,11 @@ runs:
         DIGEST: ${{ steps.candidate.outputs.digest }}
         IMAGE: ${{ env.IMAGE_REPO }}
         VERSION: ${{ steps.version.outputs.value }}
+        ERROR_PREFIX: ${{ inputs.error-prefix }}
       run: |
         set -euo pipefail
         digest="$DIGEST"
-        error_file="$RUNNER_TEMP/${{ inputs.error-prefix }}-tag-check-error"
+        error_file="$RUNNER_TEMP/$ERROR_PREFIX-tag-check-error"
         if docker buildx imagetools inspect "$IMAGE:$VERSION" \
           --format '{{json .Manifest.Digest}}' 2>"$error_file"; then
           printf 'tag appeared concurrently: %s:%s\n' "$IMAGE" "$VERSION" >&2
@@ -268,9 +273,10 @@ runs:
       env:
         IMAGE: ${{ env.IMAGE_REPO }}@${{ steps.image.outputs.digest }}
         TRAINER: ${{ inputs.trainer }}
+        SBOM_PATH: ${{ inputs.sbom-path }}
       run: |
         set -euo pipefail
-        ${{ inputs.sbom-command }}
+        syft packages "$IMAGE" -o spdx-json > "$SBOM_PATH"
 
     - name: Attest SBOM
       uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -288,8 +294,10 @@ runs:
         SOURCE_REF: ${{ github.ref }}
         SOURCE_REPOSITORY: ${{ github.repository }}
         SOURCE_SHA: ${{ github.sha }}
+        WORKFLOW_FILE: ${{ inputs.workflow-file }}
+        TAG_PREFIX: ${{ inputs.tag-prefix }}
       run: |
         set -euo pipefail
         bash scripts/ci/tiny-trainer-verify-image.sh \
           "$IMAGE" "$SOURCE_REPOSITORY" "$SOURCE_SHA" "$SOURCE_REF" \
-          ${{ inputs.verify-arguments }}
+          "$WORKFLOW_FILE" "$TAG_PREFIX"

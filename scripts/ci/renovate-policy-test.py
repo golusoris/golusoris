@@ -50,6 +50,9 @@ PRIVATE_JOB_WORKFLOWS = (
 
 EXPECTED = {
     (".github/workflows/rebuild-on-base.yml", "tonistiigi/binfmt", "docker"),
+    (".github/workflows/release-go.yml", "tonistiigi/binfmt", "docker"),
+    (".github/workflows/tiny-litert-sidecar-image.yml", "tonistiigi/binfmt", "docker"),
+    (".github/actions/setup-oci-publish/action.yml", "tonistiigi/binfmt", "docker"),
     (".github/workflows/rebuild-on-base.yml", "docker/buildx", "github-releases"),
     (".github/workflows/rebuild-on-base.yml", "sigstore/cosign", "github-releases"),
     (".github/workflows/rebuild-on-base.yml", "anchore/syft", "github-releases"),
@@ -846,7 +849,7 @@ def test_negative_controls(config: dict[str, object], contents: dict[str, str]) 
         "# missing Renovate metadata",
         1,
     )
-    if identities(extract(config, mutated)) == EXPECTED:
+    if identities(extract(config, mutated)) == identities(extract(config, contents)):
         print("negative control did not detect missing tool metadata", file=sys.stderr)
         return False
 
@@ -1155,12 +1158,81 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
     return True
 
 
+def binfmt_contents(root: Path) -> dict[str, str]:
+    """Discover pins independently of the configured Renovate inventory."""
+    paths = sorted(
+        [
+            *(root / ".github/workflows").glob("*.yml"),
+            *(root / ".github/actions").glob("*/action.yml"),
+        ]
+    )
+    if len(paths) > 256:
+        raise ValueError("binfmt scan exceeds 256 files")
+    contents = {}
+    for path in paths:
+        content = path.read_text(encoding="utf-8")
+        if len(content.splitlines()) > 4096:
+            raise ValueError(f"{path}: binfmt scan exceeds 4096 lines")
+        if "tonistiigi/binfmt:" in content:
+            contents[path.relative_to(root).as_posix()] = content
+    return contents
+
+
+def binfmt_coverage_problems(
+    config: dict[str, object],
+    contents: dict[str, str],
+) -> list[str]:
+    """Require each installer pin to be extracted by a binfmt manager."""
+    problems = []
+    for path, content in contents.items():
+        for number, line in enumerate(content.splitlines(), 1):
+            if "tonistiigi/binfmt:" not in line or line.lstrip().startswith("#"):
+                continue
+            pins = extract(config, {path: line})
+            if not any(pin["dep_name"] == "tonistiigi/binfmt" for pin in pins):
+                problems.append(f"{path}:{number}: binfmt pin not matched by Renovate manager")
+    return problems
+
+
+def test_binfmt_manager_coverage(
+    config: dict[str, object],
+    contents: dict[str, str],
+) -> bool:
+    """Reject uncovered pins and prove discovery includes new workflow files."""
+    if not contents:
+        print("binfmt coverage check found no pins", file=sys.stderr)
+        return False
+    problems = binfmt_coverage_problems(config, contents)
+    if problems:
+        print("\n".join(problems), file=sys.stderr)
+        return False
+    with tempfile.TemporaryDirectory(prefix="binfmt-coverage-") as temporary:
+        root = Path(temporary)
+        relative = ".github/workflows/untracked-binfmt.yml"
+        path = root / relative
+        path.parent.mkdir(parents=True)
+        path.write_text(
+            "image: docker.io/tonistiigi/binfmt:qemu-v1.2.3@sha256:" + "a" * 64 + "\n",
+            encoding="utf-8",
+        )
+        negative = binfmt_coverage_problems(config, binfmt_contents(root))
+        if not any(problem.startswith(relative + ":1:") for problem in negative):
+            print("binfmt negative control accepted an unmatched workflow pin", file=sys.stderr)
+            return False
+    return True
+
+
 def main() -> int:
     """Run Renovate policy checks; return 0 on pass, 1 on policy violation."""
     config = json.loads((ROOT / "renovate.json").read_text(encoding="utf-8"))
     contents = {path: (ROOT / path).read_text(encoding="utf-8") for path in INPUTS}
     core_gomod = (ROOT / "core/go.mod").read_text(encoding="utf-8")
     found = extract(config, contents)
+    binfmt = binfmt_contents(ROOT)
+    found.extend(
+        pin for pin in extract(config, binfmt)
+        if pin["dep_name"] == "tonistiigi/binfmt" and pin["path"] not in contents
+    )
     checks = (
         test_pin_inventory(found),
         test_digest_inventory(found),
@@ -1181,6 +1253,7 @@ def main() -> int:
         test_runner_hold(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
+        test_binfmt_manager_coverage(config, binfmt),
         test_current_value_template(),
     )
     if not all(checks):

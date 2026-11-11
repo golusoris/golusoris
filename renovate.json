@@ -67,9 +67,12 @@
     },
     {
       "customType": "regex",
-      "description": "Update the rebuild QEMU installer tag and immutable digest as one pair.",
+      "description": "Update every QEMU installer tag and immutable digest as one pair.",
       "managerFilePatterns": [
-        "/^\\.github/workflows/rebuild-on-base\\.yml$/"
+        "/^\\.github/workflows/rebuild-on-base\\.yml$/",
+        "/^\\.github/actions/setup-oci-publish/action\\.yml$/",
+        "/^\\.github/workflows/release-go\\.yml$/",
+        "/^\\.github/workflows/tiny-litert-sidecar-image\\.yml$/"
       ],
       "matchStrings": [
         "image: docker\\.io/tonistiigi/binfmt:(?<currentValue>qemu-v[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"

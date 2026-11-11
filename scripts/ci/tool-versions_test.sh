@@ -12,7 +12,7 @@ expanded_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-expanded-workflows.XXXXXX
 workflow_root="$expanded_suite/workflows"
 readonly expanded_suite workflow_root
 trap 'rm -rf "$expanded_suite"' EXIT
-python3 "$repo_root/scripts/ci/release-tool-pins-test.py" --expand-workflows \
+python3 "$repo_root/scripts/ci/composite_expand.py" --expand-workflows \
 	"$repo_root/.github/workflows" "$workflow_root"
 
 duplicate_pins="$(awk -F= '/^[A-Za-z0-9_]+=/ { print $1 }' "$repo_root/tools/tool-versions.env" | sort | uniq -d)"
