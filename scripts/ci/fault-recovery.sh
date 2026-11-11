@@ -18,12 +18,22 @@ readonly MARKER=GOLUSORIS_RECOVERED_FAULT
 readonly TEST_TIMEOUT="${GO_TEST_TIMEOUT:-10m}"
 readonly TEST_PARALLELISM="${GO_TEST_PARALLELISM:-4}"
 readonly MAX_MODULES=64
+readonly SCRATCH_BASES=("$REPO_ROOT/.workingdir/cache" /var/tmp)
 
-# Go 1.27.4 validates every object under cgo -L directories; pact-go's -L/tmp makes a GOROOT copy there fail the testutil/pact build.
+# Creates scratch outside /tmp, where pact-go's -L/tmp makes Go 1.27.4 reject copied GOROOT testdata.
 make_scratch() {
-	local base="$REPO_ROOT/.workingdir/cache"
-	mkdir -p "$base"
-	mktemp -d "$base/fault-recovery.XXXXXX"
+	local base physical_base system_tmp
+	system_tmp="$(cd -P /tmp && pwd)" || return 1
+	for base in "$@"; do
+		[[ "$base" == /* ]] || continue
+		[[ "$base" != /tmp && "$base" != /tmp/* ]] || continue
+		mkdir -p "$base" || continue
+		physical_base="$(cd -P "$base" && pwd)" || continue
+		[[ "$physical_base" != "$system_tmp" && "$physical_base" != "$system_tmp/"* ]] || continue
+		mktemp -d "$base/fault-recovery.XXXXXX" && return 0
+	done
+	printf 'fault-recovery: no scratch directory outside /tmp: %s\n' "$*" >&2
+	return 1
 }
 
 # Makes the directories under $1 writable; a module-cache GOROOT is read-only.
@@ -31,6 +41,17 @@ make_scratch() {
 writable_dirs() {
 	[[ -e "$1" ]] || return 0
 	find "$1" -type d -exec chmod u+w {} +
+}
+
+# Removes scratch after making its directories writable; missing paths need no cleanup.
+remove_scratch() {
+	[[ -e "$1" ]] || return 0
+	writable_dirs "$1" && find "$1" -depth -delete
+}
+
+# Prints a cleanup command with the scratch path escaped for the shell.
+scratch_trap() {
+	printf 'remove_scratch %q\n' "$1"
 }
 
 # Copies GOROOT to $1 with a marked runtime.
@@ -104,11 +125,12 @@ run_modules() {
 	return "$status"
 }
 
+# Runs module tests with the marked runtime and reports recovered faults.
 main() {
 	local scratch
-	scratch="$(make_scratch)"
+	scratch="$(make_scratch "${SCRATCH_BASES[@]}")" || return 1
 	# shellcheck disable=SC2064 # expand now: scratch is local to main
-	trap "find '$scratch' -type d -exec chmod u+w {} + && find '$scratch' -depth -delete" EXIT
+	trap "$(scratch_trap "$scratch")" EXIT
 	mark_goroot "$scratch/goroot"
 	export GOROOT="$scratch/goroot" GOTOOLCHAIN=local
 	export PATH="$GOROOT/bin:$PATH"
