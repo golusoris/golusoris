@@ -508,6 +508,9 @@ jobs:
       - name: Install verified Pact FFI
         if: env.CI_GATED != 'skip'
         run: |
+          # go1.27.4 walks pact-go's -L/tmp while /tmp is os.TempDir(); move temp files outside that scan.
+          install -d -m 0700 "$RUNNER_TEMP/tmp"
+          echo "TMPDIR=$RUNNER_TEMP/tmp" >> "$GITHUB_ENV"
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
           python3 -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"
@@ -642,6 +645,9 @@ jobs:
       - name: Install verified Pact FFI
         if: env.CI_GATED != 'skip'
         run: |
+          # go1.27.4 walks pact-go's -L/tmp while /tmp is os.TempDir(); move temp files outside that scan.
+          install -d -m 0700 "$RUNNER_TEMP/tmp"
+          echo "TMPDIR=$RUNNER_TEMP/tmp" >> "$GITHUB_ENV"
           pact_dir="${RUNNER_TEMP}/pact-ffi"
           install -d -m 0700 "$pact_dir"
           python3 -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"
