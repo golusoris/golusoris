@@ -16,7 +16,7 @@ import io
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # Runs only resolved make dry runs of fixed repository goals. # nosec B404
 import sys
 import tempfile
 import time
@@ -1050,7 +1050,7 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn('$(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")', creation)
         self.assertRegex(
             creation,
-            r"(?m)^ifeq \(\$\(wildcard \$\(PACT_FFI_TMPDIR\)/\.\),\)\n"
+            r'(?m)^ifneq \(\$\(shell test -d "\$\(PACT_FFI_TMPDIR\)" && echo ok\),ok\)\n'
             r"\$\(error [^\n]*\$\(PACT_FFI_TMPDIR\)[^\n]*\)$",
         )
         recipe = makefile.split("\npact-ffi:", 1)[1].split("\n\n", 1)[0]
@@ -1071,12 +1071,14 @@ class PactFFIInstallerTests(TestCase):
         """Dry-run a named goal with isolated home and cache directories."""
         environment = os.environ.copy()
         environment.pop("TMPDIR", None)
+        environment.pop("MAKEFLAGS", None)
+        environment.pop("MAKEOVERRIDES", None)
         environment.update(HOME=directory, XDG_CACHE_HOME=directory)
         if tmpdir is not None:
             environment["TMPDIR"] = tmpdir
         make = shutil.which("make")
         self.assertIsNotNone(make)
-        result = subprocess.run(  # noqa: S603 - resolved make, dry run of a fixed repository goal.
+        result = subprocess.run(  # noqa: S603 - resolved make, dry run of a fixed repository goal. # nosec B603
             [str(make), "-n", "-j2", goal],
             cwd=ROOT,
             env=environment,
@@ -1092,6 +1094,14 @@ class PactFFIInstallerTests(TestCase):
     def test_positive_local_pact_tmpdir_created_before_recipes(self) -> None:
         """Create private fallback storage while parsing a Pact target dry run."""
         with tempfile.TemporaryDirectory() as directory:
+            path = self._make_tmpdir_dry_run("portability-test", directory)
+            self.assertTrue(path.is_dir(), str(path))
+            self.assertEqual(path.stat().st_mode & 0o777, 0o700)
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_positive_local_pact_tmpdir_cache_path_with_space(self) -> None:
+        """Create private fallback storage when home and cache paths contain a space."""
+        with tempfile.TemporaryDirectory(prefix="golusoris-home with-space-") as directory:
             path = self._make_tmpdir_dry_run("portability-test", directory)
             self.assertTrue(path.is_dir(), str(path))
             self.assertEqual(path.stat().st_mode & 0o777, 0o700)

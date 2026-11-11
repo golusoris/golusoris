@@ -14,16 +14,12 @@ export GOFLAGS='' GOWORK=off GOTOOLCHAIN=local
 source "$TEST_DIR/fault-recovery.sh"
 
 scratch_dirs=()
-empty_dirs=()
 
-# Removes registered artifacts in reverse order, then their newly created empty bases.
+# Removes registered artifacts in reverse order.
 cleanup() {
-	local index dir
+	local index
 	for ((index = ${#scratch_dirs[@]} - 1; index >= 0; index--)); do
 		remove_scratch "${scratch_dirs[index]}"
-	done
-	for dir in "${empty_dirs[@]}"; do
-		[[ ! -d "$dir" ]] || rmdir "$dir"
 	done
 }
 trap cleanup EXIT
@@ -163,12 +159,13 @@ check_tmp_checkout() {
 
 # Checks rejection of a scratch base symlinked into /tmp.
 check_symlink_base() {
-	local scratch system_tmp=/tmp
+	local scratch system_tmp=/tmp link_target
 	local outside error_file="$suite_root/scratch-error" accepted=0
 	outside="$(mktemp -d /var/tmp/golusoris-scratch-policy.XXXXXX)"
 	scratch_dirs+=("$outside")
-	ln -s "$system_tmp" "$outside/link"
-	[[ -e "$outside/link/cache" ]] || empty_dirs+=("$system_tmp/cache")
+	link_target="$(mktemp -d "$system_tmp/golusoris-scratch-link.XXXXXX")"
+	scratch_dirs+=("$link_target")
+	ln -s "$link_target" "$outside/link"
 	if scratch="$(make_scratch "$outside/link/cache" 2>"$error_file")"; then
 		accepted=1
 		scratch_dirs+=("$scratch")

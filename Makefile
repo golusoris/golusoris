@@ -374,7 +374,7 @@ $(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)
 ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)
 # Prerequisites inherit TMPDIR and run before pact-ffi; create it before any recipe.
 $(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")
-ifeq ($(wildcard $(PACT_FFI_TMPDIR)/.),)
+ifneq ($(shell test -d "$(PACT_FFI_TMPDIR)" && echo ok),ok)
 $(error Cannot create Pact temporary directory "$(PACT_FFI_TMPDIR)")
 endif
 endif
