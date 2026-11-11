@@ -33,10 +33,14 @@ jobs:
       SOAK_DURATION: ${{ inputs.duration || '2m' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Pull Docker Hub images through mirror.gcr.io
+      # Anchors fold repeated steps; GitHub Actions resolves aliases, no merge keys.
+      - &configure-docker-hub-mirror
+        name: Pull Docker Hub images through mirror.gcr.io
         uses: ./.github/actions/docker-hub-mirror
-      - uses: ./.github/actions/setup-go
-      - name: Verify Docker daemon is reachable
+      - &setup-go
+        uses: ./.github/actions/setup-go
+      - &verify-docker-daemon
+        name: Verify Docker daemon is reachable
         run: docker info
       - name: Initialize summary table
         shell: bash
@@ -75,11 +79,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Pull Docker Hub images through mirror.gcr.io
-        uses: ./.github/actions/docker-hub-mirror
-      - uses: ./.github/actions/setup-go
-      - name: Verify Docker daemon is reachable
-        run: docker info
+      - *configure-docker-hub-mirror
+      - *setup-go
+      - *verify-docker-daemon
       - name: Measure examples/minimal against the Pulumi Fargate task size
         shell: bash
         env:

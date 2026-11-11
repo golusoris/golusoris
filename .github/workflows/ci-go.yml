@@ -157,11 +157,13 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
-    defaults:
+    # Anchors fold repeated steps; GitHub Actions resolves aliases, no merge keys.
+    defaults: &job-working-directory
       run:
         working-directory: ${{ inputs.working-directory }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - &checkout-source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Check out golusoris system-package script
         if: ${{ inputs.system-packages != '' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -203,7 +205,8 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
-      - name: Check out golusoris retry helper
+      - &checkout-retry-helper
+        name: Check out golusoris retry helper
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
         with:
@@ -253,11 +256,9 @@ jobs:
     permissions:
       contents: read
       security-events: write
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
+    defaults: *job-working-directory
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - *checkout-source
       - name: Check out golusoris system-package script
         if: ${{ inputs.system-packages != '' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -358,11 +359,9 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
+    defaults: *job-working-directory
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - *checkout-source
       - name: Check out golusoris system-package script
         if: ${{ inputs.system-packages != '' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -404,16 +403,7 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
-      - name: Check out golusoris retry helper
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
-        with:
-          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
-          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
-          sparse-checkout: scripts/ci/retry.sh
-          sparse-checkout-cone-mode: false
-          path: .golusoris-retry
-          persist-credentials: false
+      - *checkout-retry-helper
       - name: govulncheck
         env:
           GOVULNCHECK_VERSION: ${{ inputs.govulncheck-version }}
@@ -451,11 +441,9 @@ jobs:
           - os: ${{ inputs.runs-on }}
             toolchain: module
             primary: true
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
+    defaults: *job-working-directory
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - *checkout-source
       - name: Check out golusoris system-package script
         if: ${{ inputs.system-packages != '' && runner.os == 'Linux' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -575,11 +563,9 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 60
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
+    defaults: *job-working-directory
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - *checkout-source
       - name: Check out golusoris system-package script
         if: ${{ inputs.system-packages != '' }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -640,7 +626,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - *checkout-source
       - name: Resolve called workflow source
         id: workflow-source
         env:
@@ -699,9 +685,7 @@ jobs:
     runs-on: ${{ inputs.runs-on }}
     container: ${{ inputs.container }}
     timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: ${{ inputs.working-directory }}
+    defaults: *job-working-directory
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -747,16 +731,7 @@ jobs:
           go-version-file: ${{ inputs.go-version-file }}
           cache: true
           cache-dependency-path: ${{ inputs.working-directory != '.' && format('{0}/go.sum', inputs.working-directory) || '' }}
-      - name: Check out golusoris retry helper
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        # toJSON round trip: actionlint 1.7.12 does not type job.workflow_* yet.
-        with:
-          repository: ${{ fromJSON(toJSON(job)).workflow_repository }}
-          ref: ${{ fromJSON(toJSON(job)).workflow_sha }}
-          sparse-checkout: scripts/ci/retry.sh
-          sparse-checkout-cone-mode: false
-          path: .golusoris-retry
-          persist-credentials: false
+      - *checkout-retry-helper
       - name: Install apidiff
         env:
           GO_COMPAT_TOOL_VERSION: ${{ inputs.apidiff-version }}
