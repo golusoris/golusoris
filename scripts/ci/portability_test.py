@@ -15,6 +15,8 @@ import http.client
 import io
 import os
 import re
+import shutil
+import subprocess
 import sys
 import tempfile
 import time
@@ -992,9 +994,17 @@ class PactFFIInstallerTests(TestCase):
         unix = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)[1].split("\nelse\n", 1)[1].split("\nendif", 1)[0]
         self.assertIn("ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)", unix)
         self.assertIn("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)", unix)
+        goal_guard = "ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)"
+        self.assertIn(goal_guard, unix)
+        creation = unix.split(goal_guard + "\n", 1)[1]
+        self.assertIn('$(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")', creation)
+        self.assertRegex(
+            creation,
+            r"(?m)^ifeq \(\$\(wildcard \$\(PACT_FFI_TMPDIR\)/\.\),\)\n"
+            r"\$\(error [^\n]*\$\(PACT_FFI_TMPDIR\)[^\n]*\)$",
+        )
         recipe = makefile.split("\npact-ffi:", 1)[1].split("\n\n", 1)[0]
-        self.assertIn('\t@mkdir -p "$(PACT_FFI_TMPDIR)"', recipe)
-        self.assertLess(recipe.index("mkdir -p"), recipe.index("scripts/ci/pact_ffi.py"))
+        self.assertNotIn("mkdir", recipe)
 
     def test_local_pact_targets_export_safe_tmpdir(self) -> None:
         """Require local Unix Pact targets to preserve custom TMPDIR and create the fallback."""
@@ -1006,6 +1016,49 @@ class PactFFIInstallerTests(TestCase):
         mutant = makefile.replace("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)\n", "")
         with self.assertRaisesRegex(AssertionError, "override export TMPDIR"):
             self._assert_makefile_pact_tmpdir(mutant)
+
+    def _make_tmpdir_dry_run(self, goal: str, directory: str, *, tmpdir: str | None = None) -> Path:
+        """Dry-run a named goal with isolated home and cache directories."""
+        environment = os.environ.copy()
+        environment.pop("TMPDIR", None)
+        environment.update(HOME=directory, XDG_CACHE_HOME=directory)
+        if tmpdir is not None:
+            environment["TMPDIR"] = tmpdir
+        make = shutil.which("make")
+        self.assertIsNotNone(make)
+        result = subprocess.run(  # noqa: S603 - resolved make, dry run of a fixed repository goal.
+            [str(make), "-n", "-j2", goal],
+            cwd=ROOT,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return Path(directory) / "golusoris" / "tmp"
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_positive_local_pact_tmpdir_created_before_recipes(self) -> None:
+        """Create private fallback storage while parsing a Pact target dry run."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._make_tmpdir_dry_run("portability-test", directory)
+            self.assertTrue(path.is_dir(), str(path))
+            self.assertEqual(path.stat().st_mode & 0o777, 0o700)
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_negative_local_pact_tmpdir_unrelated_goal(self) -> None:
+        """Leave fallback storage absent when parsing an unrelated goal."""
+        with tempfile.TemporaryDirectory() as directory:
+            path = self._make_tmpdir_dry_run("modules-list", directory)
+            self.assertFalse(path.exists(), str(path))
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_negative_local_pact_tmpdir_custom_directory(self) -> None:
+        """Preserve an existing caller TMPDIR without creating fallback storage."""
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as custom:
+            path = self._make_tmpdir_dry_run("portability-test", directory, tmpdir=custom)
+            self.assertFalse(path.exists(), str(path))
 
     def test_truncated_download_is_wrapped_and_removed(self) -> None:
         """Capture sleep backoff and stderr during transient truncated download failures."""

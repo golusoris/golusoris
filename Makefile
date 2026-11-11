@@ -354,7 +354,6 @@ PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln
 
 .PHONY: pact-ffi
 pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/pact-ffi
-	@mkdir -p "$(PACT_FFI_TMPDIR)"
 	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
@@ -370,6 +369,13 @@ else
 # go1.27.4 scans pact-go's -L/tmp when it is os.TempDir(); use a cache directory outside the checkout.
 ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)
 $(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)
+ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)
+# Prerequisites inherit TMPDIR and run before pact-ffi; create it before any recipe.
+$(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")
+ifeq ($(wildcard $(PACT_FFI_TMPDIR)/.),)
+$(error Cannot create Pact temporary directory "$(PACT_FFI_TMPDIR)")
+endif
+endif
 endif
 $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
 endif
