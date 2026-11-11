@@ -5,9 +5,11 @@
 package golusoris_test
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -73,6 +75,79 @@ func TestCapabilitiesContract(t *testing.T) {
 	verifyPackagesInTree(t, idx, tree)
 	verifyTreePackagesListed(t, idx, tree)
 	verifyDeclaredModules(t, idx)
+}
+
+func capabilitiesReplacementProblems(idx *capabilities.Index) []string {
+	wrappers := make(map[string][]string)
+	for _, p := range idx.Packages {
+		for _, module := range p.Wraps {
+			wrappers[module] = append(wrappers[module], p.Import)
+		}
+	}
+	var problems []string
+	for module, claimants := range idx.ReplacementCandidates() {
+		if len(claimants) > 1 {
+			problems = append(problems, fmt.Sprintf("%s: multiple replaces claimants: %s", module, strings.Join(claimants, ", ")))
+		}
+		if wrappedBy := wrappers[module]; len(wrappedBy) > 0 {
+			slices.Sort(wrappedBy)
+			problems = append(problems, fmt.Sprintf("%s: replaces claimants: %s; wraps claimants: %s", module, strings.Join(claimants, ", "), strings.Join(wrappedBy, ", ")))
+		}
+	}
+	slices.Sort(problems)
+	return problems
+}
+
+func TestCapabilitiesReplacements(t *testing.T) {
+	t.Parallel()
+	idx, err := capabilities.Load(capabilities.FileName)
+	if err != nil {
+		t.Fatalf("load %s: %v", capabilities.FileName, err)
+	}
+	for _, problem := range capabilitiesReplacementProblems(idx) {
+		t.Error(problem)
+	}
+}
+
+func TestCapabilitiesReplacementProblems(t *testing.T) {
+	t.Parallel()
+	const module = "example.org/library"
+	const first = "github.com/golusoris/golusoris/a"
+	const second = "github.com/golusoris/golusoris/b"
+	tests := []struct {
+		name     string
+		packages []capabilities.Package
+		want     []string
+	}{
+		{"single claimant", []capabilities.Package{{Import: first, Replaces: []string{module}}}, nil},
+		{"two wrappers", []capabilities.Package{{Import: first, Wraps: []string{module}}, {Import: second, Wraps: []string{module}}}, nil},
+		{
+			"second claimant",
+			[]capabilities.Package{{Import: second, Replaces: []string{module}}, {Import: first, Replaces: []string{module}}},
+			[]string{module + ": multiple replaces claimants: " + first + ", " + second},
+		},
+		{
+			"replaced and wrapped",
+			[]capabilities.Package{{Import: first, Replaces: []string{module}}, {Import: second, Wraps: []string{module}}},
+			[]string{module + ": replaces claimants: " + first + "; wraps claimants: " + second},
+		},
+		{"no packages", nil, nil},
+		{"no lists", []capabilities.Package{{Import: first}, {Import: second}}, nil},
+		{
+			"sorted problems",
+			[]capabilities.Package{{Import: second, Replaces: []string{"z.example/lib", module}}, {Import: first, Replaces: []string{module, "z.example/lib"}}},
+			[]string{module + ": multiple replaces claimants: " + first + ", " + second, "z.example/lib: multiple replaces claimants: " + first + ", " + second},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := capabilitiesReplacementProblems(&capabilities.Index{Packages: tc.packages})
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("problems = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }
 
 func shouldSkipDir(rel, name string) bool {

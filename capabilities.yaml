@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: EUPL-1.2
 #
 # Capability contract: every importable golusoris package, the capability keys
-# it satisfies, and the third-party modules it supersedes. Downstream governance
+# it satisfies, modules it supersedes (replaces), and ones it wraps and keeps
+# (wraps). Downstream governance
 # (cordanallm/praetor: needs scan | report | migrate) resolves .needs.yaml demands
 # against this file; capabilities_test.go keeps it in sync with the tree.
 # Schema: core/capabilities (version 1). Keys: domain.name[.sub], lowercase.
@@ -185,7 +186,6 @@ packages:
     domain: ai
     capabilities: [ai.tiny]
     description: "Package tiny is a framework for training and serving small task-specific models — text/image/audio classifiers, embedding extractors, and tiny generative LMs (e"
-    replaces: [github.com/jackc/pgx/v5, github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/ai/tiny/gemma
     domain: ai
     capabilities: [ai.tiny_gemma]
@@ -198,7 +198,6 @@ packages:
     domain: ai
     capabilities: [ai.tiny_serve_fleet]
     description: "Package fleet is the distributed-inference recipe for ai/tiny: it serves a [tiny.Predictor] across a replica set using the framework's own [jobs] (river) queue "
-    replaces: [github.com/riverqueue/river, github.com/riverqueue/river/rivertype]
   - import: github.com/golusoris/golusoris/ai/tiny/serve/ollama
     domain: ai
     capabilities: [ai.tiny_serve_ollama]
@@ -219,12 +218,12 @@ packages:
     domain: ai
     capabilities: [ai.embeddings, ai.vector_search]
     description: "Package vector provides helpers for storing and querying vector embeddings using pgvector (the PostgreSQL vector extension)."
-    replaces: [github.com/jackc/pgx/v5, github.com/pgvector/pgvector-go, github.com/pgvector/pgvector-go/pgx]
+    replaces: [github.com/pgvector/pgvector-go, github.com/pgvector/pgvector-go/pgx]
   - import: github.com/golusoris/golusoris/apidocs
     domain: apidocs
     capabilities: [http.openapi, mcp.openapi]
     description: "Package apidocs mounts an OpenAPI-driven docs UI (Scalar) and an MCP server (Model Context Protocol over HTTP) so AI agents can call the app's operations as too"
-    replaces: [github.com/getkin/kin-openapi, github.com/go-chi/chi/v5, github.com/modelcontextprotocol/go-sdk, github.com/swaggo/gin-swagger, github.com/swaggo/swag]
+    replaces: [github.com/getkin/kin-openapi, github.com/swaggo/gin-swagger, github.com/swaggo/swag]
   - import: github.com/golusoris/golusoris/archive
     domain: files
     capabilities: [files.archive, files.dircopy]
@@ -234,12 +233,10 @@ packages:
     domain: saas
     capabilities: [saas.audit]
     description: "Package audit provides an append-only structured audit log."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/apikey
     domain: auth
     capabilities: [auth.apikey]
     description: "Package apikey issues, rotates, and verifies API keys."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/captcha
     domain: auth
     capabilities: [auth.captcha]
@@ -257,22 +254,18 @@ packages:
     domain: auth
     capabilities: [auth.linking]
     description: "Package linking maps external identity-provider subjects (OIDC, OAuth) to local user IDs."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/lockout
     domain: auth
     capabilities: [auth.lockout]
     description: "Package lockout implements per-identity login lockout: after N failed attempts within a window the identity is locked for a cooldown."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/magiclink
     domain: auth
     capabilities: [auth.magiclink]
     description: "Package magiclink implements passwordless sign-in via single-use email links."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/oauth2server
     domain: auth
     capabilities: [auth.oauth2_server]
     description: "Package oauth2server is a minimal OAuth 2.1 / OIDC issuer implementing the authorization-code-with-PKCE grant."
-    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/oidc
     domain: auth
     capabilities: [auth.oidc]
@@ -292,7 +285,6 @@ packages:
     domain: auth
     capabilities: [auth.recovery]
     description: "Package recovery provides backup recovery codes and password-reset tokens."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/auth/scim
     domain: auth
     capabilities: [auth.scim]
@@ -301,7 +293,6 @@ packages:
     domain: auth
     capabilities: [auth.session]
     description: "Package session manages server-side sessions stored in Redis or Postgres."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/authz
     domain: authz
     capabilities: [authz.casbin]
@@ -329,7 +320,6 @@ packages:
     domain: cache
     capabilities: [cache.twotier]
     description: "Package twotier composes the L1 in-process cache (cache/memory, otter) and the L2 distributed cache (cache/redis, rueidis) into a single read-through, write-thr"
-    replaces: [github.com/redis/rueidis]
   - import: github.com/golusoris/golusoris/clikit/tui
     domain: clikit
     capabilities: [clikit.tui]
@@ -406,12 +396,12 @@ packages:
     domain: db
     capabilities: [db.orm]
     description: "Package bun wires a [*bun.DB] ORM over the pool provided by db/pgx, as an opt-in alternative to hand-written sqlc queries."
-    replaces: [github.com/jackc/pgx/v5, github.com/uptrace/bun, github.com/uptrace/bun/dialect/pgdialect, github.com/uptrace/bun/extra/bundebug, gorm.io/gorm]
+    replaces: [github.com/uptrace/bun, github.com/uptrace/bun/dialect/pgdialect, github.com/uptrace/bun/extra/bundebug, gorm.io/gorm]
   - import: github.com/golusoris/golusoris/db/cdc
     domain: db
     capabilities: [db.cdc]
     description: "Package cdc implements a PostgreSQL logical-replication (WAL) consumer using the pglogrepl library."
-    replaces: [github.com/jackc/pglogrepl, github.com/jackc/pgx/v5]
+    replaces: [github.com/jackc/pglogrepl]
   - import: github.com/golusoris/golusoris/db/clickhouse
     domain: db
     capabilities: [db.clickhouse]
@@ -421,7 +411,6 @@ packages:
     domain: db
     capabilities: [db.postgis]
     description: "Package geo provides PostGIS geometry helpers for pgx/v5."
-    replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/db/migrate
     domain: db
     capabilities: [db.migrate]
@@ -431,7 +420,6 @@ packages:
     domain: db
     capabilities: [db.migrate.sqlite]
     description: "Package sqlite runs db/migrate migrations against a SQLite database through golang-migrate's pure-Go sqlite driver (modernc.org/sqlite, the driver db/sqlite use"
-    replaces: [github.com/golang-migrate/migrate/v4]
   - import: github.com/golusoris/golusoris/db/pgx
     domain: db
     capabilities: [db.postgres]
@@ -441,7 +429,6 @@ packages:
     domain: db
     capabilities: [db.sqlc]
     description: "Package sqlc holds runtime helpers that complement sqlc-generated code: transaction wrappers, pgx-error → golusoris-error mapping, and a shared sqlc.yaml fragme"
-    replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/db/sqlite
     domain: db
     capabilities: [db.sqlite]
@@ -451,13 +438,11 @@ packages:
     domain: db
     capabilities: [db.timescale]
     description: "Package timescale provides TimescaleDB hypertable helpers for pgx/v5."
-    replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/deploy/multiregion
     module: github.com/golusoris/golusoris/deploy
     domain: deploy
     capabilities: [deploy.multiregion]
     description: "Command golusoris-multiregion is a reference Pulumi (Go) program for an active/passive two-region golusoris deployment: Aurora Global Database (writer in the pr"
-    replaces: [github.com/pulumi/pulumi-aws/sdk/v7, github.com/pulumi/pulumi/sdk/v3]
   - import: github.com/golusoris/golusoris/deploy/pulumi
     module: github.com/golusoris/golusoris/deploy
     domain: deploy
@@ -502,7 +487,7 @@ packages:
     domain: graphql
     capabilities: [graphql.server]
     description: "Package graphql wires a gqlgen [*handler.Server] as an fx dependency."
-    replaces: [github.com/99designs/gqlgen, github.com/go-chi/chi/v5, github.com/graph-gophers/graphql-go]
+    replaces: [github.com/99designs/gqlgen, github.com/graph-gophers/graphql-go]
   - import: github.com/golusoris/golusoris/graphql/client
     domain: graphql
     capabilities: [graphql.client]
@@ -539,7 +524,8 @@ packages:
     domain: http
     capabilities: [http.client]
     description: "Package client builds outbound [*http.Client] instances with retry, circuit-breaker, and OTel instrumentation."
-    replaces: [github.com/hashicorp/go-retryablehttp, github.com/sony/gobreaker, github.com/sony/gobreaker/v2, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp, go.opentelemetry.io/otel, go.opentelemetry.io/otel/trace]
+    replaces: [github.com/hashicorp/go-retryablehttp, github.com/sony/gobreaker, github.com/sony/gobreaker/v2]
+    wraps: [go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp]
   - import: github.com/golusoris/golusoris/httpx/cors
     domain: http
     capabilities: [http.cors]
@@ -563,7 +549,6 @@ packages:
     domain: http
     capabilities: [http.geofence]
     description: "Package geofence provides country-level allow/deny middleware backed by a MaxMind mmdb file (e.g."
-    replaces: [github.com/oschwald/maxminddb-golang/v2]
   - import: github.com/golusoris/golusoris/httpx/htmx
     domain: http
     capabilities: [http.htmx]
@@ -577,7 +562,8 @@ packages:
     domain: http
     capabilities: [http.middleware]
     description: "Package middleware collects golusoris's opinionated HTTP middleware: request-ID injection, panic recovery, structured access logs, OpenTelemetry instrumentation"
-    replaces: [github.com/CAFxX/httpcompression, go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp, go.opentelemetry.io/otel, go.opentelemetry.io/otel/trace]
+    replaces: [github.com/CAFxX/httpcompression]
+    wraps: [go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp]
   - import: github.com/golusoris/golusoris/httpx/rangeserve
     domain: http
     capabilities: [http.range]
@@ -646,7 +632,6 @@ packages:
     domain: http
     capabilities: [http.idempotency, grpc.idempotency]
     description: "Package idempotency provides HTTP middleware and a gRPC unary interceptor that enforce idempotency keys (draft-ietf-httpapi-idempotency-key-header)."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/idempotency/postgres
     domain: http
     capabilities: [http.idempotency.postgres]
@@ -667,17 +652,16 @@ packages:
     domain: integrations
     capabilities: [integrations.goenvoy]
     description: "Package goenvoy wires opt-in goenvoy service clients (Sonarr, TMDb, AniList, Trakt, ...) onto the framework's resilient outbound *http.Client."
-    replaces: [github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/jobs
     domain: jobs
     capabilities: [jobs.queue, jobs.metrics]
     description: "Package jobs wires a [river] client as an fx dependency so apps can enqueue + process background jobs backed by Postgres."
-    replaces: [github.com/hibiken/asynq, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype, github.com/riverqueue/rivercontrib/otelriver]
+    replaces: [github.com/hibiken/asynq, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver, github.com/riverqueue/river/riverdriver/riverpgxv5, github.com/riverqueue/river/rivertype, github.com/riverqueue/rivercontrib/otelriver]
   - import: github.com/golusoris/golusoris/jobs/cron
     domain: jobs
     capabilities: [jobs.cron]
     description: "Package cron parses cron expressions (robfig/cron/v3) and registers them as river periodic jobs."
-    replaces: [github.com/go-co-op/gocron, github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/robfig/cron, github.com/robfig/cron/v3]
+    replaces: [github.com/go-co-op/gocron, github.com/robfig/cron, github.com/robfig/cron/v3]
   - import: github.com/golusoris/golusoris/jobs/sqlite
     domain: jobs
     capabilities: [jobs.queue_sqlite]
@@ -687,7 +671,7 @@ packages:
     domain: jobs
     capabilities: [jobs.ui]
     description: "Package ui mounts the River UI (queue dashboard) at a configurable prefix with optional basic-auth."
-    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river, riverqueue.com/riverui]
+    replaces: [riverqueue.com/riverui]
   - import: github.com/golusoris/golusoris/jobs/workflow
     domain: jobs
     capabilities: [jobs.workflow]
@@ -706,7 +690,7 @@ packages:
     domain: k8s
     capabilities: [k8s.client]
     description: "Package client builds a *rest.Config + Kubernetes clientset with graceful fallback across deployment modes:"
-    replaces: [k8s.io/api, k8s.io/apimachinery, k8s.io/client-go]
+    replaces: [k8s.io/api, k8s.io/client-go]
   - import: github.com/golusoris/golusoris/k8s/cnpg
     domain: k8s
     capabilities: [k8s.cnpg]
@@ -720,7 +704,6 @@ packages:
     domain: k8s
     capabilities: [k8s.health]
     description: "Package health serves the canonical Kubernetes probe endpoints — /livez, /readyz, /startupz — backed by a [statuspage.Registry]."
-    replaces: [github.com/go-chi/chi/v5]
   - import: github.com/golusoris/golusoris/k8s/keda
     domain: k8s
     capabilities: [k8s.keda_scaler]
@@ -730,7 +713,7 @@ packages:
     domain: k8s
     capabilities: [telemetry.prometheus]
     description: "Package prom mounts a Prometheus /metrics endpoint and exposes the check registry's per-check status as Gauges so Prometheus alerting can fire on individual dep"
-    replaces: [github.com/go-chi/chi/v5, github.com/prometheus/client_golang, github.com/prometheus/client_model]
+    replaces: [github.com/prometheus/client_golang, github.com/prometheus/client_model]
   - import: github.com/golusoris/golusoris/k8s/nfd
     domain: k8s
     capabilities: [k8s.nfd]
@@ -745,7 +728,8 @@ packages:
     domain: k8s
     capabilities: [k8s.operator, telemetry.logr]
     description: "Package operator provides an opt-in fx module wrapping a controller-runtime [manager.Manager], so apps can ship Kubernetes CRDs + reconcilers the way they ship "
-    replaces: [github.com/go-logr/logr, k8s.io/apimachinery, k8s.io/client-go, sigs.k8s.io/controller-runtime]
+    replaces: [github.com/go-logr/logr, sigs.k8s.io/controller-runtime]
+    wraps: [k8s.io/apimachinery]
   - import: github.com/golusoris/golusoris/k8s/podinfo
     domain: k8s
     capabilities: [k8s.podinfo]
@@ -766,12 +750,10 @@ packages:
     domain: leader
     capabilities: [leader.k8s]
     description: "Package k8s elects a single leader via the Kubernetes Lease API (client-go)."
-    replaces: [k8s.io/client-go]
   - import: github.com/golusoris/golusoris/leader/pg
     domain: leader
     capabilities: [leader.pg]
     description: "Package pg elects a single leader via a PostgreSQL session-scoped advisory lock."
-    replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/markdown
     domain: docs
     capabilities: [docs.markdown]
@@ -845,7 +827,6 @@ packages:
     domain: notify
     capabilities: [notify.apns2]
     description: "Package apns2 sends Apple push notifications via APNs HTTP/2 with token-based auth (.p8 key + team ID + key ID)."
-    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/notify/bounce
     domain: notify
     capabilities: [notify.bounce]
@@ -862,7 +843,6 @@ packages:
     domain: notify
     capabilities: [notify.fcm]
     description: "Package fcm sends push notifications via Firebase Cloud Messaging HTTP v1 API."
-    replaces: [github.com/golang-jwt/jwt/v5, github.com/jonboulle/clockwork]
   - import: github.com/golusoris/golusoris/notify/gotify
     domain: notify
     capabilities: [notify.gotify]
@@ -933,7 +913,6 @@ packages:
     domain: telemetry
     capabilities: [telemetry.pprof]
     description: "Package pprof mounts stdlib net/http/pprof handlers under /debug/pprof with optional basic-auth gating."
-    replaces: [github.com/go-chi/chi/v5]
   - import: github.com/golusoris/golusoris/observability/profiling
     domain: telemetry
     capabilities: [telemetry.profiling]
@@ -968,12 +947,11 @@ packages:
     domain: telemetry
     capabilities: [telemetry.otel]
     description: "Package otel wires OpenTelemetry — tracer, meter, and logger — with an OTLP gRPC exporter."
-    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/exporters/prometheus, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric]
+    replaces: [go.opentelemetry.io/contrib, go.opentelemetry.io/contrib/bridges/otelslog, go.opentelemetry.io/otel, go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc, go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc, go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc, go.opentelemetry.io/otel/exporters/prometheus, go.opentelemetry.io/otel/log, go.opentelemetry.io/otel/sdk, go.opentelemetry.io/otel/sdk/log, go.opentelemetry.io/otel/sdk/metric, go.opentelemetry.io/otel/trace]
   - import: github.com/golusoris/golusoris/outbox
     domain: outbox
     capabilities: [jobs.outbox]
     description: "Package outbox implements the transactional-outbox pattern."
-    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river]
   - import: github.com/golusoris/golusoris/outbox/cdc
     domain: outbox
     capabilities: [jobs.outbox_cdc]
@@ -1015,7 +993,6 @@ packages:
     domain: kernel
     capabilities: [kernel.sockmap]
     description: "Package sockmap is an opt-in fx module for colocated, zero-TCP-stack IPC via an eBPF SK_MSG / SOCK_OPS sockmap redirect."
-    replaces: [github.com/prometheus/client_golang]
   - import: github.com/golusoris/golusoris/plugin
     domain: plugin
     capabilities: [plugin.registry]
@@ -1048,7 +1025,6 @@ packages:
     domain: realtime
     capabilities: [realtime.pubsub_redis]
     description: "Package redis provides a cross-replica pub/sub Bus backed by Redis PUBLISH/SUBSCRIBE (rueidis), implementing [pubsub.Bus]."
-    replaces: [github.com/redis/rueidis]
   - import: github.com/golusoris/golusoris/realtime/sse
     domain: realtime
     capabilities: [realtime.sse]
@@ -1087,7 +1063,6 @@ packages:
     domain: search
     capabilities: [search.pgfts]
     description: "Package pgfts implements the [search.Searcher] interface against Postgres full-text search (tsvector + tsquery)."
-    replaces: [github.com/jackc/pgx/v5]
   - import: github.com/golusoris/golusoris/search/typesense
     domain: search
     capabilities: [search.typesense]
@@ -1137,7 +1112,7 @@ packages:
     domain: storage
     capabilities: [storage.tus]
     description: "Package tus mounts a tus 1.0 resumable-upload endpoint backed by a storage.Bucket."
-    replaces: [github.com/go-chi/chi/v5, github.com/tus/tusd/v2]
+    replaces: [github.com/tus/tusd/v2]
   - import: github.com/golusoris/golusoris/systemd
     domain: runtime
     capabilities: [runtime.systemd]
@@ -1150,7 +1125,7 @@ packages:
     domain: test
     capabilities: [test.clickhouse]
     description: "Package clickhouse boots a real ClickHouse container via testcontainers-go and returns a connected [chgo.Conn]."
-    replaces: [github.com/ClickHouse/clickhouse-go/v2, github.com/testcontainers/testcontainers-go]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/configfile
     domain: test
     capabilities: [test.configfile]
@@ -1189,7 +1164,8 @@ packages:
     domain: test
     capabilities: [test.kafka]
     description: "Package kafka boots a Kafka-compatible broker via testcontainers-go and returns a broker address suitable for use with twmb/franz-go."
-    replaces: [github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/redpanda]
+    replaces: [github.com/testcontainers/testcontainers-go/modules/redpanda]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/load
     domain: test
     capabilities: [test.load]
@@ -1203,12 +1179,12 @@ packages:
     domain: test
     capabilities: [test.nats]
     description: "Package nats boots a real NATS container via testcontainers-go and returns its URL."
-    replaces: [github.com/testcontainers/testcontainers-go]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/objstore
     domain: test
     capabilities: [test.objstore, test.storage_conformance]
     description: "Package objstore boots object-storage emulators via testcontainers-go and holds the conformance suite every storage.Bucket backend runs."
-    replaces: [github.com/testcontainers/testcontainers-go]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/pact
     module: github.com/golusoris/golusoris/testutil/pact
     domain: test
@@ -1225,7 +1201,8 @@ packages:
     domain: test
     capabilities: [test.pg, test.pg.template]
     description: "Package pg starts a real PostgreSQL container via testcontainers-go and returns a connected [*pgxpool.Pool]."
-    replaces: [github.com/jackc/pgx/v5, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/postgres]
+    replaces: [github.com/testcontainers/testcontainers-go/modules/postgres]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/prop
     domain: test
     capabilities: [test.prop]
@@ -1235,12 +1212,12 @@ packages:
     domain: test
     capabilities: [test.redis]
     description: "Package redis boots a real Redis container via testcontainers-go and returns a connected [rueidis.Client]."
-    replaces: [github.com/redis/rueidis, github.com/testcontainers/testcontainers-go, github.com/testcontainers/testcontainers-go/modules/redis]
+    replaces: [github.com/testcontainers/testcontainers-go/modules/redis]
+    wraps: [github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/river
     domain: test
     capabilities: [test.river]
     description: "Package river boots a [jobs.Client] backed by a real Postgres container (via testutil/pg) and the river migrations applied."
-    replaces: [github.com/jackc/pgx/v5, github.com/riverqueue/river, github.com/riverqueue/river/riverdriver/riverpgxv5]
   - import: github.com/golusoris/golusoris/testutil/snapshot
     domain: test
     capabilities: [test.snapshot]
