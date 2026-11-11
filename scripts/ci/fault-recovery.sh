@@ -40,6 +40,7 @@ mark_goroot() {
 	local panic_go="$target/src/runtime/panic.go"
 	# Replace the hard link before editing so the source GOROOT stays untouched.
 	cp --remove-destination "$source/src/runtime/panic.go" "$panic_go"
+	chmod u+w "$panic_go"
 	mark_panic_go "$panic_go"
 }
 

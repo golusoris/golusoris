@@ -77,6 +77,29 @@ main() {
 	if mark_panic_go "$suite_root/bare_panic.go" 2>/dev/null; then
 		fail "mark_panic_go accepted a runtime without panicmem"
 	fi
+
+	local ro_goroot="$suite_root/ro-goroot" mode
+	local ro_panic="$ro_goroot/src/runtime/panic.go"
+	mkdir -p "$ro_goroot/src/runtime"
+	printf 'func panicmem() {\n}\nfunc panicmemAddr(addr uintptr) {\n}\n' >"$suite_root/ro-panic.go"
+	cp "$suite_root/ro-panic.go" "$ro_panic"
+	chmod 0444 "$ro_panic"
+	chmod 0555 "$ro_goroot" "$ro_goroot/src" "$ro_goroot/src/runtime"
+	if ! (
+		go() {
+			[[ "$#" -eq 2 && "$1" == env && "$2" == GOROOT ]] || return 1
+			printf '%s\n' "$ro_goroot"
+		}
+		mark_goroot "$suite_root/ro-marked"
+	); then
+		fail "mark_goroot rejected a read-only GOROOT"
+	fi
+	grep -q "$MARKER" "$suite_root/ro-marked/src/runtime/panic.go" ||
+		fail "read-only GOROOT copy missing recovered-fault marker"
+	cmp -s "$suite_root/ro-panic.go" "$ro_panic" ||
+		fail "mark_goroot changed source panic.go content"
+	mode="$(stat -c %a "$ro_panic" 2>/dev/null || stat -f %Lp "$ro_panic")"
+	[[ "$mode" == 444 ]] || fail "mark_goroot changed source panic.go mode: $mode"
 	printf 'fault-recovery policy: ok\n'
 }
 
