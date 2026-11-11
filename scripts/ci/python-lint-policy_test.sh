@@ -34,6 +34,14 @@ install -m 0644 "$repo_root/.config/hiss/testdata/HISS-10/python/negative/clean-
 git -C "$clean_root" add .
 bash "$clean_root/scripts/ci/python-lint.sh" --root "$clean_root" >/dev/null
 
+format_root="$(new_repo format)"
+printf '%s\n' "x = {'a':1}" >"$format_root/format.py"
+git -C "$format_root" add .
+expect_failure_matching 'unformatted: File would be reformatted' \
+	bash "$format_root/scripts/ci/python-lint.sh" --root "$format_root"
+printf '%s\n' 'x = {"a": 1}' >"$format_root/format.py"
+bash "$format_root/scripts/ci/python-lint.sh" --root "$format_root" >/dev/null
+
 positive_root="$(new_repo positive)"
 install -m 0644 "$repo_root/.config/hiss/testdata/HISS-10/python/positive/unused-import.py" \
 	"$positive_root/bad.py"

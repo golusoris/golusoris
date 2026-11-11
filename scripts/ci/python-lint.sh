@@ -75,6 +75,23 @@ check_noqa_explanations() {
 	done
 }
 
+run_ruff() {
+	local root="$1"
+	local docker_bin="$2"
+	local image="$3"
+	shift 3
+	"$docker_bin" run --rm \
+		--network none \
+		--read-only \
+		--cap-drop ALL \
+		--security-opt no-new-privileges \
+		-u "$(id -u):$(id -g)" \
+		--tmpfs /tmp:rw,noexec,nosuid,size=32m \
+		-v "$root:/repo:ro" \
+		-w /repo \
+		"$image" "$@"
+}
+
 main() {
 	local root
 	root="$(resolve_root "$@")"
@@ -111,19 +128,14 @@ main() {
 	check_noqa_explanations "$root" "${files[@]}"
 
 	local image="ghcr.io/astral-sh/ruff:${RUFF_VERSION}@${RUFF_IMAGE_DIGEST}"
-	"$docker_bin" run --rm \
-		--network none \
-		--read-only \
-		--cap-drop ALL \
-		--security-opt no-new-privileges \
-		-u "$(id -u):$(id -g)" \
-		--tmpfs /tmp:rw,noexec,nosuid,size=32m \
-		-v "$root:/repo:ro" \
-		-w /repo \
-		"$image" check \
+	run_ruff "$root" "$docker_bin" "$image" check \
 		--config ruff.toml \
 		--no-cache \
 		--output-format concise \
+		-- "${files[@]}"
+	run_ruff "$root" "$docker_bin" "$image" format --check \
+		--config ruff.toml \
+		--no-cache \
 		-- "${files[@]}"
 	printf 'Ruff: %d repository Python files passed\n' "${#files[@]}"
 }
