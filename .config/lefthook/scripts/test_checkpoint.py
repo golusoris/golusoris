@@ -18,10 +18,17 @@ import checkpoint
 import common
 
 CONFIG = {
-    "version": 1, "enabled": True, "commit_after_minutes": 1440,
-    "commit_after_files": 1, "on_stop": True, "publish": False, "remote": "origin",
-    "base": "main", "repository": "acme/demo",
-    "branch_prefixes": ["checkpoint/"], "require_pr": True,
+    "version": 1,
+    "enabled": True,
+    "commit_after_minutes": 1440,
+    "commit_after_files": 1,
+    "on_stop": True,
+    "publish": False,
+    "remote": "origin",
+    "base": "main",
+    "repository": "acme/demo",
+    "branch_prefixes": ["checkpoint/"],
+    "require_pr": True,
 }
 
 
@@ -30,9 +37,13 @@ def git(root, *args, check=True):
     for key in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"):
         env.pop(key, None)
     result = subprocess.run(  # noqa: S603 - fixed Git command in an isolated test repository.
-                            ["git", *args],  # noqa: S607 - test helper resolves Git through PATH.
-                            cwd=root, env=env,
-                            capture_output=True, timeout=20, check=False)
+        ["git", *args],  # noqa: S607 - test helper resolves Git through PATH.
+        cwd=root,
+        env=env,
+        capture_output=True,
+        timeout=20,
+        check=False,
+    )
     if check and result.returncode:
         raise AssertionError(result.stderr.decode())
     return result
@@ -122,12 +133,21 @@ class CheckpointTests(TestCase):
         self.assertIn("detached", result["error"])
 
     def test_remote_parser_accepts_only_exact_github_forms(self):
-        accepted = ("https://github.com/acme/demo", "https://github.com/acme/demo.git",
-                    "git@github.com:acme/demo", "git@github.com:acme/demo.git",
-                    "ssh://git@github.com/acme/demo", "ssh://git@github.com/acme/demo.git")
-        rejected = ("https://evilgithub.com/acme/demo", "https://github.com/acme/demo/extra",
-                    "https://user:pass@github.com/acme/demo", "ssh://git@github.com:22/acme/demo",
-                    "https://github.com/acme/demo?token=x")
+        accepted = (
+            "https://github.com/acme/demo",
+            "https://github.com/acme/demo.git",
+            "git@github.com:acme/demo",
+            "git@github.com:acme/demo.git",
+            "ssh://git@github.com/acme/demo",
+            "ssh://git@github.com/acme/demo.git",
+        )
+        rejected = (
+            "https://evilgithub.com/acme/demo",
+            "https://github.com/acme/demo/extra",
+            "https://user:pass@github.com/acme/demo",
+            "ssh://git@github.com:22/acme/demo",
+            "https://github.com/acme/demo?token=x",
+        )
         for url in accepted:
             checkpoint._validate_remote(url, "acme/demo")
         for url in rejected:
@@ -164,12 +184,24 @@ class CheckpointTests(TestCase):
 
     def test_clean_ahead_checks_live_refs_and_requests_push(self):
         """Pins due_push status and exact origin ls-remote queries when commits are ahead of remote."""
-        _head, base = self.commit_ahead("https://github.com/acme/demo.git",
-                                        {**CONFIG, "publish": True, "require_pr": False})
+        _head, base = self.commit_ahead(
+            "https://github.com/acme/demo.git",
+            {**CONFIG, "publish": True, "require_pr": False},
+        )
         result, calls = self.inspect_with_remote(f"{base}\trefs/heads/main\n")
-        self.assertEqual(calls, [
-            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
-        ])
+        self.assertEqual(
+            calls,
+            [
+                [
+                    "git",
+                    "ls-remote",
+                    "--heads",
+                    "origin",
+                    "refs/heads/checkpoint/test",
+                    "refs/heads/main",
+                ],
+            ],
+        )
         self.assertEqual(result["publication_status"], "due_push")
         self.assertFalse(result["commit_due"])
         self.assertTrue(result["due"])
@@ -178,19 +210,52 @@ class CheckpointTests(TestCase):
     def test_clean_pushed_exact_pr_is_present(self):
         """Pins present status and exact ls-remote plus gh pr list queries when a matching PR exists."""
         (self.root / "ahead.txt").write_text("ahead\n")
-        head, base = self.commit_ahead("git@github.com:acme/demo.git", {**CONFIG, "publish": True})
-        prs = [{"number": 7, "url": "https://github.com/acme/demo/pull/7",
-                "isDraft": True, "headRefOid": head,
-                "headRefName": "checkpoint/test", "baseRefName": "main"}]
+        head, base = self.commit_ahead(
+            "git@github.com:acme/demo.git", {**CONFIG, "publish": True}
+        )
+        prs = [
+            {
+                "number": 7,
+                "url": "https://github.com/acme/demo/pull/7",
+                "isDraft": True,
+                "headRefOid": head,
+                "headRefName": "checkpoint/test",
+                "baseRefName": "main",
+            }
+        ]
         result, calls = self.inspect_with_remote(
             f"{head}\trefs/heads/checkpoint/test\n{base}\trefs/heads/main\n", prs=prs
         )
-        self.assertEqual(calls, [
-            ["git", "ls-remote", "--heads", "origin", "refs/heads/checkpoint/test", "refs/heads/main"],
-            ["gh", "pr", "list", "--repo", "acme/demo", "--base", "main", "--head", "checkpoint/test",
-             "--state", "open", "--limit", "2", "--json",
-             "number,url,isDraft,headRefOid,headRefName,baseRefName"],
-        ])
+        self.assertEqual(
+            calls,
+            [
+                [
+                    "git",
+                    "ls-remote",
+                    "--heads",
+                    "origin",
+                    "refs/heads/checkpoint/test",
+                    "refs/heads/main",
+                ],
+                [
+                    "gh",
+                    "pr",
+                    "list",
+                    "--repo",
+                    "acme/demo",
+                    "--base",
+                    "main",
+                    "--head",
+                    "checkpoint/test",
+                    "--state",
+                    "open",
+                    "--limit",
+                    "2",
+                    "--json",
+                    "number,url,isDraft,headRefOid,headRefName,baseRefName",
+                ],
+            ],
+        )
         self.assertEqual(result["publication_status"], "present")
         self.assertFalse(result["due"])
         self.assertEqual(result["changed_count"], 0)
@@ -218,7 +283,9 @@ class CheckpointTests(TestCase):
 
         def fake(argv, root, **kwargs):
             if argv[:2] == ["git", "ls-remote"]:
-                branch_line = f"{remote}\trefs/heads/checkpoint/test\n" if remote else ""
+                branch_line = (
+                    f"{remote}\trefs/heads/checkpoint/test\n" if remote else ""
+                )
                 return f"{base}\trefs/heads/main\n{branch_line}".encode()
             if argv[:2] == ["gh", "pr"]:
                 self.fail("PR lookup is disabled in this fixture")
@@ -234,14 +301,21 @@ class CheckpointTests(TestCase):
         head, base = self.publication_fixture()
         ahead = self.remote_commit("remote-future", head)
         fork = self.remote_commit("remote-fork", base)
-        cases = ((None, "due_push"), (base, "due_push"), (head, "pushed"),
-                 (ahead, "remote_ahead"), (fork, "diverged"))
+        cases = (
+            (None, "due_push"),
+            (base, "due_push"),
+            (head, "pushed"),
+            (ahead, "remote_ahead"),
+            (fork, "diverged"),
+        )
         for remote, status in cases:
             with self.subTest(status=status, remote=remote):
                 result = self.observe_remote(base, remote)
                 self.assertEqual(result["publication_status"], status, result)
                 self.assertEqual(result["due"], status != "pushed")
-                self.assertEqual(checkpoint.PUSH_ACTION in result["actions"], status == "due_push")
+                self.assertEqual(
+                    checkpoint.PUSH_ACTION in result["actions"], status == "due_push"
+                )
                 if status in {"remote_ahead", "diverged"}:
                     self.assertIn("reconcile", " ".join(result["actions"]))
 
@@ -252,8 +326,12 @@ class CheckpointTests(TestCase):
         self.assertEqual(result["publication_status"], "remote_ahead", result)
         self.assertTrue(result["due"])
         self.assertNotIn(checkpoint.PUSH_ACTION, result["actions"])
-        self.assertEqual(self.observe_remote(head, None)["publication_status"], "not_ahead")
-        self.assertEqual(self.observe_remote(head, head)["publication_status"], "not_ahead")
+        self.assertEqual(
+            self.observe_remote(head, None)["publication_status"], "not_ahead"
+        )
+        self.assertEqual(
+            self.observe_remote(head, head)["publication_status"], "not_ahead"
+        )
 
     def test_missing_remote_object_and_shallow_history_require_review(self):
         head, base = self.publication_fixture()
@@ -307,13 +385,17 @@ class CheckpointTests(TestCase):
     def test_policy_duplicate_keys_symlink_and_size_are_rejected(self):
         path = self.root / ".config/agent/checkpoint.json"
         path.write_text(json.dumps(CONFIG)[:-1] + ', "enabled": false}')
-        self.assertIn("duplicate keys", checkpoint.inspect_checkpoint(self.root, "tool")["error"])
+        self.assertIn(
+            "duplicate keys", checkpoint.inspect_checkpoint(self.root, "tool")["error"]
+        )
         path.unlink()
         path.symlink_to(self.root / "README.md")
         self.assertIn("error", checkpoint.inspect_checkpoint(self.root, "tool"))
         path.unlink()
         path.write_bytes(b" " * (checkpoint.MAX_OUTPUT + 1))
-        self.assertIn("regular file", checkpoint.inspect_checkpoint(self.root, "tool")["error"])
+        self.assertIn(
+            "regular file", checkpoint.inspect_checkpoint(self.root, "tool")["error"]
+        )
 
     def test_policy_parent_symlink_is_rejected(self):
         directory = self.root / ".config/agent"
@@ -330,31 +412,51 @@ class CheckpointTests(TestCase):
         head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
         base = git(self.root, "rev-parse", "HEAD~1").stdout.decode().strip()
         original = checkpoint._run
-        valid = {"number": 7, "url": "https://github.com/acme/demo/pull/7", "isDraft": True,
-                 "headRefOid": head, "headRefName": "checkpoint/test", "baseRefName": "main"}
-        cases = [([], "due_draft_pr"), ([{**valid, "headRefOid": base}], "error"),
-                 ([valid, valid], "error"), ({}, "error"),
-                 ([{**valid, "url": "https://example.test/pull/7"}], "error"),
-                 ([{**valid, "baseRefName": "wrong"}], "error")]
+        valid = {
+            "number": 7,
+            "url": "https://github.com/acme/demo/pull/7",
+            "isDraft": True,
+            "headRefOid": head,
+            "headRefName": "checkpoint/test",
+            "baseRefName": "main",
+        }
+        cases = [
+            ([], "due_draft_pr"),
+            ([{**valid, "headRefOid": base}], "error"),
+            ([valid, valid], "error"),
+            ({}, "error"),
+            ([{**valid, "url": "https://example.test/pull/7"}], "error"),
+            ([{**valid, "baseRefName": "wrong"}], "error"),
+        ]
         for prs, status in cases:
+
             def fake(argv, root, prs=prs, **kwargs):
                 if argv[:2] == ["git", "ls-remote"]:
                     return f"{head}\trefs/heads/checkpoint/test\n{base}\trefs/heads/main\n".encode()
                 if argv[:2] == ["gh", "pr"]:
                     return json.dumps(prs).encode()
                 return original(argv, root, **kwargs)
-            with self.subTest(prs=prs), mock.patch.object(checkpoint, "_run", side_effect=fake):
+
+            with (
+                self.subTest(prs=prs),
+                mock.patch.object(checkpoint, "_run", side_effect=fake),
+            ):
                 result = checkpoint.inspect_checkpoint(self.root, "stop")
                 self.assertEqual(result["publication_status"], status)
                 if status == "due_draft_pr":
                     self.assertTrue(result["due"])
                     self.assertEqual(result["actions"], [checkpoint.PR_ACTION])
+
         def denied(argv, root, **kwargs):
             if "ls-remote" in argv:
                 raise checkpoint.CheckpointError("authentication failed")
             return original(argv, root, **kwargs)
+
         with mock.patch.object(checkpoint, "_run", side_effect=denied):
-            self.assertIn("authentication failed", checkpoint.inspect_checkpoint(self.root, "stop")["error"])
+            self.assertIn(
+                "authentication failed",
+                checkpoint.inspect_checkpoint(self.root, "stop")["error"],
+            )
 
     def test_remote_ref_and_object_validation(self):
         head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
@@ -362,18 +464,37 @@ class CheckpointTests(TestCase):
             with mock.patch.object(checkpoint, "_git", return_value=raw):
                 with self.assertRaises(checkpoint.CheckpointError):
                     checkpoint._remote_refs(self.root, CONFIG, "checkpoint/test")
-        with mock.patch.object(checkpoint, "_remote_url", return_value="https://github.com/acme/demo"), \
-                mock.patch.object(checkpoint, "_remote_refs", return_value=(
-                    {"refs/heads/main": "f" * 40}, "refs/heads/checkpoint/test", "refs/heads/main")):
-            with self.assertRaisesRegex(checkpoint.CheckpointError, "fetch the configured remote"):
+        with (
+            mock.patch.object(
+                checkpoint, "_remote_url", return_value="https://github.com/acme/demo"
+            ),
+            mock.patch.object(
+                checkpoint,
+                "_remote_refs",
+                return_value=(
+                    {"refs/heads/main": "f" * 40},
+                    "refs/heads/checkpoint/test",
+                    "refs/heads/main",
+                ),
+            ),
+        ):
+            with self.assertRaisesRegex(
+                checkpoint.CheckpointError, "fetch the configured remote"
+            ):
                 checkpoint._publication(self.root, CONFIG, "checkpoint/test", head)
         self.assertIsNotNone(checkpoint.OID.fullmatch("a" * 64))
         self.assertIsNone(checkpoint.OID.fullmatch("a" * 41))
 
     def review_fixture(self):
         head, base = self.publication_fixture()
-        self.write_config({**CONFIG, "publish": True, "require_checks": True,
-                           "required_checks": ["gate"]})
+        self.write_config(
+            {
+                **CONFIG,
+                "publish": True,
+                "require_checks": True,
+                "required_checks": ["gate"],
+            }
+        )
         git(self.root, "add", ".")
         git(self.root, "commit", "-q", "-m", "require hosted checks")
         head = git(self.root, "rev-parse", "HEAD").stdout.decode().strip()
@@ -381,9 +502,16 @@ class CheckpointTests(TestCase):
 
     def observe_review(self, head, base, checks, **overrides):
         original = checkpoint._run
-        pr = {"number": 7, "url": "https://github.com/acme/demo/pull/7", "isDraft": True,
-              "headRefOid": head, "headRefName": "checkpoint/test", "baseRefName": "main",
-              "statusCheckRollup": checks, **overrides}
+        pr = {
+            "number": 7,
+            "url": "https://github.com/acme/demo/pull/7",
+            "isDraft": True,
+            "headRefOid": head,
+            "headRefName": "checkpoint/test",
+            "baseRefName": "main",
+            "statusCheckRollup": checks,
+            **overrides,
+        }
 
         def fake(argv, root, **kwargs):
             if argv[:2] == ["git", "ls-remote"]:
@@ -399,26 +527,48 @@ class CheckpointTests(TestCase):
     def test_present_pr_requires_exact_head_checks_when_configured(self):
         head, base = self.review_fixture()
         check = {"__typename": "CheckRun", "name": "gate", "status": "COMPLETED"}
-        cases = (("SUCCESS", "passed"), ("FAILURE", "failed"), ("CANCELLED", "failed"),
-                 ("SKIPPED", "missing"), ("NEUTRAL", "missing"))
+        cases = (
+            ("SUCCESS", "passed"),
+            ("FAILURE", "failed"),
+            ("CANCELLED", "failed"),
+            ("SKIPPED", "missing"),
+            ("NEUTRAL", "missing"),
+        )
         for conclusion, status in cases:
             with self.subTest(conclusion=conclusion):
-                result = self.observe_review(head, base, [{**check, "conclusion": conclusion}])
+                result = self.observe_review(
+                    head, base, [{**check, "conclusion": conclusion}]
+                )
                 self.assertEqual(result["publication_status"], "present", result)
                 self.assertEqual(result["review_status"], status)
                 self.assertEqual(result["review_head"], head)
                 self.assertEqual(result["due"], status != "passed")
                 self.assertFalse(result["commit_due"])
                 self.assertNotIn(checkpoint.PUSH_ACTION, result["actions"])
-        result = self.observe_review(head, base, [{**check, "conclusion": "SUCCESS"}], headRefOid=base)
+        result = self.observe_review(
+            head, base, [{**check, "conclusion": "SUCCESS"}], headRefOid=base
+        )
         self.assertEqual(result["publication_status"], "error")
         self.assertNotEqual(result["review_status"], "passed")
 
     def test_review_empty_pending_and_missing_required_are_not_complete(self):
         head, base = self.review_fixture()
-        pending = {"__typename": "CheckRun", "name": "gate", "status": "QUEUED", "conclusion": ""}
-        success = {"__typename": "StatusContext", "context": "unrelated", "state": "SUCCESS"}
-        for checks, status in (([], "missing"), ([pending], "pending"), ([success], "missing")):
+        pending = {
+            "__typename": "CheckRun",
+            "name": "gate",
+            "status": "QUEUED",
+            "conclusion": "",
+        }
+        success = {
+            "__typename": "StatusContext",
+            "context": "unrelated",
+            "state": "SUCCESS",
+        }
+        for checks, status in (
+            ([], "missing"),
+            ([pending], "pending"),
+            ([success], "missing"),
+        ):
             with self.subTest(status=status):
                 result = self.observe_review(head, base, checks)
                 self.assertEqual(result["review_status"], status, result)
@@ -439,11 +589,23 @@ class CheckpointTests(TestCase):
         passed = {"__typename": "StatusContext", "context": "gate", "state": "SUCCESS"}
         valid = self.observe_review(head, base, [passed] * (checkpoint.MAX_CHECKS - 1))
         self.assertEqual(valid["review_status"], "passed", valid)
-        invalid = (None, {}, [passed] * checkpoint.MAX_CHECKS, [None],
-                   [{**passed, "state": []}], [{**passed, "state": "NEW_UNKNOWN"}],
-                   [{"__typename": "CheckRun", "name": "gate", "status": []}],
-                   [{"__typename": "CheckRun", "name": "gate", "status": "IN_PROGRESS",
-                     "conclusion": "SUCCESS"}])
+        invalid = (
+            None,
+            {},
+            [passed] * checkpoint.MAX_CHECKS,
+            [None],
+            [{**passed, "state": []}],
+            [{**passed, "state": "NEW_UNKNOWN"}],
+            [{"__typename": "CheckRun", "name": "gate", "status": []}],
+            [
+                {
+                    "__typename": "CheckRun",
+                    "name": "gate",
+                    "status": "IN_PROGRESS",
+                    "conclusion": "SUCCESS",
+                }
+            ],
+        )
         for checks in invalid:
             with self.subTest(checks=checks):
                 result = self.observe_review(head, base, checks)
@@ -451,12 +613,24 @@ class CheckpointTests(TestCase):
                 self.assertIn("error", result)
 
     def test_review_policy_is_strict_and_optional(self):
-        invalid = ({"require_checks": "true"}, {"require_checks": True},
-                   {"publish": True, "require_checks": True, "required_checks": []},
-                   {"required_checks": ["gate"]}, {"required_checks": None},
-                   {"publish": True, "require_checks": True, "required_checks": ["gate", "gate"]},
-                   {"publish": True, "require_checks": True, "required_checks": ["gate\n"]},
-                   {"publish": True, "require_checks": True, "required_checks": [str(i) for i in range(65)]})
+        invalid = (
+            {"require_checks": "true"},
+            {"require_checks": True},
+            {"publish": True, "require_checks": True, "required_checks": []},
+            {"required_checks": ["gate"]},
+            {"required_checks": None},
+            {
+                "publish": True,
+                "require_checks": True,
+                "required_checks": ["gate", "gate"],
+            },
+            {"publish": True, "require_checks": True, "required_checks": ["gate\n"]},
+            {
+                "publish": True,
+                "require_checks": True,
+                "required_checks": [str(i) for i in range(65)],
+            },
+        )
         for extra in invalid:
             with self.subTest(extra=extra):
                 self.write_config({**CONFIG, **extra})
@@ -472,16 +646,25 @@ class CheckpointTests(TestCase):
         git(self.root, "switch", "-q", "main")
         git(self.root, "merge", "--ff-only", "checkpoint/test")
         original = checkpoint._run
-        cases = ((head, "base_current"), (base, "base_local_ahead"),
-                 (future, "base_remote_ahead"), (fork, "base_diverged"))
+        cases = (
+            (head, "base_current"),
+            (base, "base_local_ahead"),
+            (future, "base_remote_ahead"),
+            (fork, "base_diverged"),
+        )
         for remote, status in cases:
+
             def fake(argv, root, remote=remote, **kwargs):
                 if argv[:2] == ["git", "ls-remote"]:
                     return f"{remote}\trefs/heads/main\n".encode()
                 if argv[:2] == ["gh", "pr"]:
                     self.fail("base reconciliation must not query or create a PR")
                 return original(argv, root, **kwargs)
-            with self.subTest(status=status), mock.patch.object(checkpoint, "_run", side_effect=fake):
+
+            with (
+                self.subTest(status=status),
+                mock.patch.object(checkpoint, "_run", side_effect=fake),
+            ):
                 result = checkpoint.inspect_checkpoint(self.root, "stop")
                 self.assertEqual(result["publication_status"], status, result)
                 self.assertEqual(result["due"], status != "base_current")
@@ -507,7 +690,9 @@ class CheckedPolicyRead(TestCase):
         self.temp.cleanup()
 
     def test_positive_reads_the_policy_bytes(self):
-        self.assertEqual(checkpoint._policy_bytes_checked(self.root), json.dumps(CONFIG).encode())
+        self.assertEqual(
+            checkpoint._policy_bytes_checked(self.root), json.dumps(CONFIG).encode()
+        )
 
     def test_negative_links_and_misplaced_components_are_refused(self):
         outside = self.root / "outside.json"
@@ -529,7 +714,9 @@ class CheckedPolicyRead(TestCase):
 
     def test_boundary_absence_size_and_replacement(self):
         self.policy.write_bytes(b" " * checkpoint.MAX_OUTPUT)
-        self.assertEqual(len(checkpoint._policy_bytes_checked(self.root)), checkpoint.MAX_OUTPUT)
+        self.assertEqual(
+            len(checkpoint._policy_bytes_checked(self.root)), checkpoint.MAX_OUTPUT
+        )
         self.policy.write_bytes(b" " * (checkpoint.MAX_OUTPUT + 1))
         with self.assertRaisesRegex(checkpoint.CheckpointError, "regular file"):
             checkpoint._policy_bytes_checked(self.root)
@@ -547,8 +734,11 @@ class ThreadedBoundedOutput(TestCase):
 
     def start(self, code):
         process = subprocess.Popen(  # noqa: S603 - fixed interpreter with test-controlled code.
-                                   [sys.executable, "-c", code], stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            [sys.executable, "-c", code],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         self.addCleanup(self.stop, process)
         return process
 
@@ -565,7 +755,9 @@ class ThreadedBoundedOutput(TestCase):
         self.assertEqual(common._bounded_output_threaded(process, 10, 8), b"pass")
 
     def test_negative_limit_and_deadline_are_raised_while_running(self):
-        process = self.start("import os, time; os.write(1, b'x' * 4096); time.sleep(30)")
+        process = self.start(
+            "import os, time; os.write(1, b'x' * 4096); time.sleep(30)"
+        )
         with self.assertRaisesRegex(common.HookError, "byte limit"):
             common._bounded_output_threaded(process, 10, 1024)
         process = self.start("import time; time.sleep(30)")
@@ -573,7 +765,9 @@ class ThreadedBoundedOutput(TestCase):
             common._bounded_output_threaded(process, 0.2, 1024)
 
     def test_boundary_output_exactly_at_the_limit_is_accepted(self):
-        process = self.start("import os; os.write(1, b'x' * 512); os.write(2, b'y' * 512)")
+        process = self.start(
+            "import os; os.write(1, b'x' * 512); os.write(2, b'y' * 512)"
+        )
         self.assertEqual(common._bounded_output_threaded(process, 10, 1024), b"x" * 512)
 
 

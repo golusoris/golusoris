@@ -56,10 +56,10 @@ class ShellFlakePolicyTest(unittest.TestCase):
     def test_positive_retry_wrapped_downloads(self) -> None:
         """Verify that retry-wrapped go module download forms pass cleanly."""
         positive_downloads = (
-            'bash scripts/ci/retry.sh go install mvdan.cc/gofumpt@v1.0.0\n'
+            "bash scripts/ci/retry.sh go install mvdan.cc/gofumpt@v1.0.0\n"
             'GOFLAGS=-mod=mod bash "$root/scripts/ci/retry.sh" go get foo bar\n'
-            'bash scripts/ci/retry.sh go mod download foo@v1.0.0\n'
-            'bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@v1.0.0\n'
+            "bash scripts/ci/retry.sh go mod download foo@v1.0.0\n"
+            "bash scripts/ci/retry.sh $(GO) install mvdan.cc/gofumpt@v1.0.0\n"
             'GOBIN="$tmp" bash "$root/scripts/ci/retry.sh" go install foo\n'
             'bash "$repo_root/scripts/ci/retry.sh" go mod download "$module@$ver"\n'
             'download="$(GOFLAGS=-mod=mod bash "$repo_root/scripts/ci/retry.sh" go mod download -json "$module@$ver")"\n'
@@ -83,7 +83,9 @@ class ShellFlakePolicyTest(unittest.TestCase):
         ]
         for flag in flag_cases:
             content = f"echo hello | grep {flag} hello\n"
-            path = self.write_fixture(f"scripts/ci/reader_{flag.replace(' ', '_')}.sh", content)
+            path = self.write_fixture(
+                f"scripts/ci/reader_{flag.replace(' ', '_')}.sh", content
+            )
             findings = shell_flake_policy.scan_file(str(path), check_download=False)
             self.assert_has_rule(findings, "early-exit-reader")
 
@@ -120,10 +122,13 @@ class ShellFlakePolicyTest(unittest.TestCase):
             ("mod_download_json", 'go mod download -json "$module@$ver"\n'),
             ("make_go_install", "$(GO) install mvdan.cc/gofumpt@v1.0.0\n"),
             ("subshell_download", 'res="$(go install mvdan.cc/gofumpt@v1.0.0)"\n'),
-            ("retry_not_as_command", "echo retry.sh && go install mvdan.cc/gofumpt@v1.0.0\n"),
+            (
+                "retry_not_as_command",
+                "echo retry.sh && go install mvdan.cc/gofumpt@v1.0.0\n",
+            ),
             (
                 "warmed_cache_json_bare",
-                'bash scripts/ci/retry.sh go mod download y@v\ngo mod download -json x@v\n',
+                "bash scripts/ci/retry.sh go mod download y@v\ngo mod download -json x@v\n",
             ),
         ]
         for name, content in bare_cases:
@@ -174,7 +179,11 @@ class ShellFlakePolicyTest(unittest.TestCase):
             ("cmd_sub_in_double_quotes", 'x="$(printf a | grep -q a)"\n', True),
             ("single_quoted_pipe_in_cmd_sub", "x=\"$(echo 'a|b')\"\n", False),
             ("ansi_quote_escaped_quote", "echo $'\\'' | grep -q x\n", True),
-            ("double_quoted_pipe_in_cmd_sub", 'echo "$(printf \'%s\' "a | b")"\n', False),
+            (
+                "double_quoted_pipe_in_cmd_sub",
+                'echo "$(printf \'%s\' "a | b")"\n',
+                False,
+            ),
             ("escaped_space_before_hash", "echo a\\ #x | grep -q y\n", True),
             ("unescaped_space_before_hash", "echo hi # x | grep -q y\n", False),
         ]
@@ -240,7 +249,9 @@ class ShellFlakePolicyTest(unittest.TestCase):
 
     def test_boundary_yaml_list_item_block_scalar(self) -> None:
         """Verify list-item YAML block scalar headers are not joined with script lines."""
-        content = "jobs:\n  a:\n    steps:\n      - run: |\n          grep -q PAT file.txt\n"
+        content = (
+            "jobs:\n  a:\n    steps:\n      - run: |\n          grep -q PAT file.txt\n"
+        )
         path = self.write_fixture(".github/workflows/list_item.yml", content)
         findings = shell_flake_policy.scan_file(str(path), check_download=False)
         self.assertEqual(findings, [])

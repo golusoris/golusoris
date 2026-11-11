@@ -169,9 +169,7 @@ def is_transient_download_error(error: BaseException) -> bool:
         return error.code == 408 or error.code == 429 or error.code >= 500
     if isinstance(error, urllib.error.URLError):
         return True
-    return isinstance(
-        error, (TimeoutError, ConnectionError, http.client.HTTPException)
-    )
+    return isinstance(error, (TimeoutError, ConnectionError, http.client.HTTPException))
 
 
 def download_attempt(asset: Asset, directory: Path) -> Path:
@@ -260,7 +258,9 @@ def extract_archive(
     except BaseException:
         cleanup_temporary(temporary, temporary_path, remove=True)
         raise
-    cleanup_error = cleanup_temporary(temporary, temporary_path, remove=failure is not None)
+    cleanup_error = cleanup_temporary(
+        temporary, temporary_path, remove=failure is not None
+    )
     raise_install_failure(failure, cleanup_error)
     return destination
 
@@ -332,7 +332,9 @@ def cached_archive(asset: Asset, cache_dir: Path) -> Path:
         try:
             downloaded.unlink(missing_ok=True)
         except OSError as cleanup:
-            raise InstallError(f"{failure}; unlink {downloaded.name}: {cleanup}") from error
+            raise InstallError(
+                f"{failure}; unlink {downloaded.name}: {cleanup}"
+            ) from error
         raise failure from error
     return archive
 
@@ -342,7 +344,9 @@ def require_contained(cache_dir: Path, cache_root: Path | None) -> None:
     if cache_root is None:
         raise InstallError(f"cache_dir requires cache_root: {cache_dir}")
     if not cache_dir.resolve().is_relative_to(cache_root.resolve()):
-        raise InstallError(f"Pact FFI cache directory resolves outside {cache_root}: {cache_dir}")
+        raise InstallError(
+            f"Pact FFI cache directory resolves outside {cache_root}: {cache_dir}"
+        )
 
 
 def install(

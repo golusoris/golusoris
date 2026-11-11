@@ -50,7 +50,9 @@ class GoModTest(unittest.TestCase):
         )
         self.assertEqual(
             parsed.requires,
-            frozenset({"example.com/single", "example.com/quoted", "example.com/block/v2"}),
+            frozenset(
+                {"example.com/single", "example.com/quoted", "example.com/block/v2"}
+            ),
         )
         self.assertEqual(
             parsed.replace_targets,
@@ -79,7 +81,11 @@ class GoModTest(unittest.TestCase):
 
     def test_boundary_no_dependencies(self) -> None:
         """Files without requires or replaces yield an empty GoMod."""
-        for fixture in ("", "module example.com/fixture\n", "require (\n)\nreplace (\n)\n"):
+        for fixture in (
+            "",
+            "module example.com/fixture\n",
+            "require (\n)\nreplace (\n)\n",
+        ):
             with self.subTest(fixture=fixture):
                 self.assertEqual(self._read(fixture), gomod.GoMod(frozenset(), ()))
 
@@ -109,9 +115,11 @@ class GoModTest(unittest.TestCase):
         other = self.path.with_name("other.mod")
         other.write_text("module example.com/fixture\n", encoding="utf-8")
         for target in (self.path.parent, other):
-            with self.subTest(target=target), unittest.mock.patch.object(
-                gomod.subprocess, "run"
-            ) as run, self.assertRaisesRegex(gomod.GoModError, "regular go.mod"):
+            with (
+                self.subTest(target=target),
+                unittest.mock.patch.object(gomod.subprocess, "run") as run,
+                self.assertRaisesRegex(gomod.GoModError, "regular go.mod"),
+            ):
                 gomod.read_go_mod(target)
             run.assert_not_called()
 
@@ -119,7 +127,9 @@ class GoModTest(unittest.TestCase):
         """A go command past its 30 s timeout raises GoModError."""
         self.path.write_text("module example.com/fixture\n", encoding="utf-8")
         with unittest.mock.patch.object(
-            gomod.subprocess, "run", side_effect=gomod.subprocess.TimeoutExpired("go", 30)
+            gomod.subprocess,
+            "run",
+            side_effect=gomod.subprocess.TimeoutExpired("go", 30),
         ) as run:
             with self.assertRaises(gomod.GoModError):
                 gomod.read_go_mod(self.path)
@@ -129,10 +139,16 @@ class GoModTest(unittest.TestCase):
         """JSON output of the wrong shape raises GoModError."""
         self.path.write_text("module example.com/fixture\n", encoding="utf-8")
         for output in ("not json", "[]", '{"Require": [1]}', '{"Replace": "bad"}'):
-            result = gomod.subprocess.CompletedProcess(["go"], 0, stdout=output, stderr="")
-            with self.subTest(output=output), unittest.mock.patch.object(
-                gomod.subprocess, "run", return_value=result
-            ), self.assertRaises(gomod.GoModError):
+            result = gomod.subprocess.CompletedProcess(
+                ["go"], 0, stdout=output, stderr=""
+            )
+            with (
+                self.subTest(output=output),
+                unittest.mock.patch.object(
+                    gomod.subprocess, "run", return_value=result
+                ),
+                self.assertRaises(gomod.GoModError),
+            ):
                 gomod.read_go_mod(self.path)
 
 

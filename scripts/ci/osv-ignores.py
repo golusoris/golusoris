@@ -86,9 +86,7 @@ def parse_npm_package_name(purl: str) -> str:
     return rest.split("@", 1)[0]
 
 
-def run_cmd(
-    cmd: list[str], cwd: Path, timeout: int = DEFAULT_TIMEOUT_SECONDS
-) -> str:
+def run_cmd(cmd: list[str], cwd: Path, timeout: int = DEFAULT_TIMEOUT_SECONDS) -> str:
     """Execute a subprocess and return stripped stdout or raise CheckError."""
     try:
         proc = subprocess.run(  # noqa: S603 - fixed command on repository scripts and tools.
@@ -190,7 +188,7 @@ def render_osv_toml(entries: list[dict[str, Any]]) -> str:
         lines.append("")
         lines.append("[[IgnoredVulns]]")
         lines.append(f'id = "{escape_toml_string(entry["id"])}"')
-        lines.append(f'ignoreUntil = {entry["ignoreUntil"]}')
+        lines.append(f"ignoreUntil = {entry['ignoreUntil']}")
         reason = f"See .trivy/openvex.json: {first_sentence(entry['impact'])}"
         lines.append(f'reason = "{escape_toml_string(reason)}"')
     lines.append("")
@@ -245,9 +243,7 @@ def record_dir_entry(
 ) -> None:
     """Record an IgnoredVulns entry if not already present."""
     if not any(e["id"] == vuln_id for e in existing):
-        existing.append(
-            {"id": vuln_id, "ignoreUntil": expiry_iso, "impact": impact}
-        )
+        existing.append({"id": vuln_id, "ignoreUntil": expiry_iso, "impact": impact})
 
 
 def add_statement_entries(
@@ -327,8 +323,7 @@ def check_drift(root: Path, today: datetime.date | None = None) -> list[str]:
     failures: list[str] = check_vex_expiry(root, ref_today)
     expected = build_expected_files(root)
     existing_files = {
-        p.relative_to(root).as_posix(): p
-        for p in find_existing_osv_scanner_files(root)
+        p.relative_to(root).as_posix(): p for p in find_existing_osv_scanner_files(root)
     }
 
     for rel_path in sorted(expected):
@@ -356,8 +351,7 @@ def write_osv_ignores(root: Path) -> tuple[int, int]:
     """Write expected osv-scanner.toml files and delete obsolete ones."""
     expected = build_expected_files(root)
     existing_files = {
-        p.relative_to(root).as_posix(): p
-        for p in find_existing_osv_scanner_files(root)
+        p.relative_to(root).as_posix(): p for p in find_existing_osv_scanner_files(root)
     }
     deleted = 0
     written = 0
@@ -602,7 +596,10 @@ def selftest(root: Path | None = None) -> tuple[list[str], int, int]:
         else:
             accepted += 1
         ignored = repo / "ignored" / "sub" / "osv-scanner.toml"
-        if ignored.is_file() and ignored.read_text(encoding="utf-8") == IGNORED_FIXTURE_TEXT:
+        if (
+            ignored.is_file()
+            and ignored.read_text(encoding="utf-8") == IGNORED_FIXTURE_TEXT
+        ):
             accepted += 1
         else:
             failures.append("write_osv_ignores changed a git-ignored osv-scanner.toml")

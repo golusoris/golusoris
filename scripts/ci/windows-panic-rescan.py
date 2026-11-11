@@ -30,27 +30,41 @@ GH_TIMEOUT_SECONDS = 300
 def gh(args: list[str]) -> str:
     out = subprocess.run(  # noqa: S603 - fixed gh subcommands built in this file.
         ["gh", *args],  # noqa: S607 - gh CLI on runner PATH.
-        capture_output=True, text=True, timeout=GH_TIMEOUT_SECONDS, check=False,
+        capture_output=True,
+        text=True,
+        timeout=GH_TIMEOUT_SECONDS,
+        check=False,
     )
     if out.returncode != 0:
-        raise RuntimeError(f"gh {' '.join(args[:3])}: rc={out.returncode}: {out.stderr.strip()[:300]}")
+        raise RuntimeError(
+            f"gh {' '.join(args[:3])}: rc={out.returncode}: {out.stderr.strip()[:300]}"
+        )
     return out.stdout
 
 
 def failed_runs(since: str) -> list[str]:
-    raw = gh([
-        "api", "--paginate",
-        f"repos/{REPO}/actions/workflows/portability.yml/runs?created=%3E%3D{since}&status=failure&per_page=100",
-        "-q", ".workflow_runs[].id",
-    ])
+    raw = gh(
+        [
+            "api",
+            "--paginate",
+            f"repos/{REPO}/actions/workflows/portability.yml/runs?created=%3E%3D{since}&status=failure&per_page=100",
+            "-q",
+            ".workflow_runs[].id",
+        ]
+    )
     return raw.split()
 
 
 def windows_jobs(run_id: str) -> list[dict[str, object]]:
-    raw = gh([
-        "api", "--paginate", f"repos/{REPO}/actions/runs/{run_id}/jobs?filter=all&per_page=100",
-        "-q", '.jobs[]|select(.conclusion=="failure" and (.name|test("Windows")))|{id,html_url}',
-    ])
+    raw = gh(
+        [
+            "api",
+            "--paginate",
+            f"repos/{REPO}/actions/runs/{run_id}/jobs?filter=all&per_page=100",
+            "-q",
+            '.jobs[]|select(.conclusion=="failure" and (.name|test("Windows")))|{id,html_url}',
+        ]
+    )
     return [json.loads(line) for line in raw.splitlines() if line.strip()]
 
 
@@ -65,36 +79,66 @@ def scan(since: str, run_ids: list[str]) -> tuple[int, int, list[str]]:
     for run in runs:
         for job in windows_jobs(run):
             jobs += 1
-            if is_hit(gh(["api", "--allow-escape-sequences", f"repos/{REPO}/actions/jobs/{job['id']}/logs"])):
+            if is_hit(
+                gh(
+                    [
+                        "api",
+                        "--allow-escape-sequences",
+                        f"repos/{REPO}/actions/jobs/{job['id']}/logs",
+                    ]
+                )
+            ):
                 hits.append(str(job["html_url"]))
     return len(runs), jobs, hits
 
 
 def reopen(hits: list[str]) -> None:
-    state = gh(["issue", "view", ISSUE, "-R", REPO, "--json", "state", "-q", ".state"]).strip()
+    state = gh(
+        ["issue", "view", ISSUE, "-R", REPO, "--json", "state", "-q", ".state"]
+    ).strip()
     if state != "CLOSED":
         print(f"windows-panic-rescan: #{ISSUE} is {state}, not reopened")
         return
-    gh(["issue", "reopen", ISSUE, "-R", REPO, "--comment",
-        "Reopened by the weekly Portability rescan: db/bun nil-pointer panic in " + ", ".join(hits)])
+    gh(
+        [
+            "issue",
+            "reopen",
+            ISSUE,
+            "-R",
+            REPO,
+            "--comment",
+            "Reopened by the weekly Portability rescan: db/bun nil-pointer panic in "
+            + ", ".join(hits),
+        ]
+    )
     print(f"windows-panic-rescan: reopened #{ISSUE}")
 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--since", default=(datetime.date.today() - datetime.timedelta(days=8)).isoformat())
+    ap.add_argument(
+        "--since",
+        default=(datetime.date.today() - datetime.timedelta(days=8)).isoformat(),
+    )
     ap.add_argument("--run-id", action="append", default=[])
     ap.add_argument("--reopen", action="store_true")
     a = ap.parse_args(argv)
     since = max(a.since, FIX_FLOOR)
     try:
         runs, jobs, hits = scan(since, a.run_id)
-        print(f"windows-panic-rescan: since={since} runs={runs} windows_failed_jobs={jobs} hits={len(hits)}")
+        print(
+            f"windows-panic-rescan: since={since} runs={runs} windows_failed_jobs={jobs} hits={len(hits)}"
+        )
         for url in hits:
             print(f"hit {url}")
         if hits and a.reopen:
             reopen(hits)
-    except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError, KeyError) as err:
+    except (
+        RuntimeError,
+        subprocess.TimeoutExpired,
+        json.JSONDecodeError,
+        KeyError,
+    ) as err:
         print(f"windows-panic-rescan: error: {err}", file=sys.stderr)
         return 2
     return 1 if hits else 0

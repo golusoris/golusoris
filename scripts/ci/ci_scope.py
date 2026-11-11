@@ -115,25 +115,17 @@ def _matches_any_pattern(path: str, patterns: Sequence[str]) -> bool:
     return False
 
 
-def resolve_scope(repo_root: Path | None = None) -> Scope:
-    """Determine whether the run is diff-aware or full, printing to stderr."""
-    root = find_repo_root(repo_root)
-    base_sha = os.environ.get("CI_SCOPE_BASE", "").strip()
-    if not base_sha:
-        sys.stderr.write("ci-scope: full (CI_SCOPE_BASE unset)\n")
-        return Scope(
-            mode="full",
-            reason="CI_SCOPE_BASE unset",
-            base="",
-            changed_files=(),
-            repo_root=root,
-        )
-
+def _changed_files(root: Path, base_sha: str) -> tuple[str, ...]:
+    """Collect unique normalized committed and worktree diff paths in order."""
     # Base SHA is set: run git diff against HEAD (fail closed on invalid base)
     # --no-renames lists both sides of a rename, so moving code under docs/ still selects it.
-    raw_output = _run_git(["diff", "--name-only", "--no-renames", "-z", f"{base_sha}...HEAD"], cwd=root)
+    raw_output = _run_git(
+        ["diff", "--name-only", "--no-renames", "-z", f"{base_sha}...HEAD"], cwd=root
+    )
     # Also include uncommitted working tree changes (for local worktree testing)
-    worktree_output = _run_git(["diff", "--name-only", "--no-renames", "-z", "HEAD"], cwd=root)
+    worktree_output = _run_git(
+        ["diff", "--name-only", "--no-renames", "-z", "HEAD"], cwd=root
+    )
 
     combined_raw = raw_output + b"\0" + worktree_output
     entries = []
@@ -148,7 +140,24 @@ def resolve_scope(repo_root: Path | None = None) -> Scope:
     if len(entries) > MAX_FILES:
         raise ScopeError(f"diff file bound exceeded: {len(entries)} > {MAX_FILES}")
 
-    changed_files = tuple(entries)
+    return tuple(entries)
+
+
+def resolve_scope(repo_root: Path | None = None) -> Scope:
+    """Determine whether the run is diff-aware or full, printing to stderr."""
+    root = find_repo_root(repo_root)
+    base_sha = os.environ.get("CI_SCOPE_BASE", "").strip()
+    if not base_sha:
+        sys.stderr.write("ci-scope: full (CI_SCOPE_BASE unset)\n")
+        return Scope(
+            mode="full",
+            reason="CI_SCOPE_BASE unset",
+            base="",
+            changed_files=(),
+            repo_root=root,
+        )
+
+    changed_files = _changed_files(root, base_sha)
 
     # Check for global triggers
     for path in changed_files[:MAX_FILES]:
@@ -179,7 +188,16 @@ def resolve_scope(repo_root: Path | None = None) -> Scope:
 def discover_modules(repo_root: Path) -> tuple[str, ...]:
     """Discover all Go module directories in repo_root (root = '.')."""
     raw_output = _run_git(
-        ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "go.mod", "*/go.mod"],
+        [
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "go.mod",
+            "*/go.mod",
+        ],
         cwd=repo_root,
     )
     entries = [
@@ -189,7 +207,15 @@ def discover_modules(repo_root: Path) -> tuple[str, ...]:
     ]
     # Also support nested modules further down
     raw_output_all = _run_git(
-        ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "**/go.mod"],
+        [
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            "**/go.mod",
+        ],
         cwd=repo_root,
     )
     all_entries = [
@@ -199,7 +225,9 @@ def discover_modules(repo_root: Path) -> tuple[str, ...]:
     ]
     combined_modfiles = sorted(set(entries + all_entries))
     if len(combined_modfiles) > MAX_MODULES:
-        raise ScopeError(f"discovered {len(combined_modfiles)} modules; max {MAX_MODULES}")
+        raise ScopeError(
+            f"discovered {len(combined_modfiles)} modules; max {MAX_MODULES}"
+        )
 
     modules: list[str] = []
     has_root = False
@@ -217,7 +245,9 @@ def discover_modules(repo_root: Path) -> tuple[str, ...]:
     return tuple(sorted(modules, key=lambda m: (m != ".", m)))
 
 
-def parse_module_replaces(repo_root: Path, known_modules: Sequence[str]) -> dict[str, list[str]]:
+def parse_module_replaces(
+    repo_root: Path, known_modules: Sequence[str]
+) -> dict[str, list[str]]:
     """Build reverse dependency map: target_module -> list of modules that replace it."""
     dependents: dict[str, list[str]] = {m: [] for m in known_modules}
     known_set = set(known_modules)
@@ -238,7 +268,9 @@ def parse_module_replaces(repo_root: Path, known_modules: Sequence[str]) -> dict
             if target.startswith(("./", "../")) or target in (".", ".."):
                 try:
                     resolved_target = (mod_dir / target).resolve()
-                    dep_mod = os.path.relpath(resolved_target, repo_root).replace("\\", "/")
+                    dep_mod = os.path.relpath(resolved_target, repo_root).replace(
+                        "\\", "/"
+                    )
                 except (ValueError, OSError):
                     continue
                 if dep_mod in known_set and mod not in dependents.get(dep_mod, []):
@@ -271,7 +303,9 @@ def selected_modules(repo_root: Path | None = None) -> tuple[str, ...]:
         return ()
 
     # Order modules by descending length of directory prefix for longest-prefix match
-    descending_mods = sorted(all_mods, key=lambda m: (len(m) if m != "." else 0), reverse=True)
+    descending_mods = sorted(
+        all_mods, key=lambda m: len(m) if m != "." else 0, reverse=True
+    )
     try:
         dependents = parse_module_replaces(root, all_mods)
     except gomod.GoModError as error:
@@ -297,7 +331,9 @@ def selected_modules(repo_root: Path | None = None) -> tuple[str, ...]:
     return tuple(sorted(selected, key=lambda m: (m != ".", m)))
 
 
-def matching_files(globs: Sequence[str], repo_root: Path | None = None) -> tuple[str, ...]:
+def matching_files(
+    globs: Sequence[str], repo_root: Path | None = None
+) -> tuple[str, ...]:
     """Return changed tracked files matching globs (diff) or all ls-files (full)."""
     root = find_repo_root(repo_root)
     scope = resolve_scope(root)
@@ -313,15 +349,9 @@ def matching_files(globs: Sequence[str], repo_root: Path | None = None) -> tuple
             if p
         ]
     else:
-        candidates = [
-            f for f in scope.changed_files
-            if (root / f).is_file()
-        ]
+        candidates = [f for f in scope.changed_files if (root / f).is_file()]
 
-    matched = [
-        f for f in candidates[:MAX_FILES]
-        if _matches_any_pattern(f, globs)
-    ]
+    matched = [f for f in candidates[:MAX_FILES] if _matches_any_pattern(f, globs)]
     return tuple(sorted(set(matched)))
 
 

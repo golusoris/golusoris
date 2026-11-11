@@ -46,7 +46,9 @@ def preset_for(base_model: str) -> str:
     try:
         return PRESETS[base_model]
     except KeyError as exc:
-        raise contract.ContractError(f"unsupported Gemma base_model: {base_model}") from exc
+        raise contract.ContractError(
+            f"unsupported Gemma base_model: {base_model}"
+        ) from exc
 
 
 def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -68,11 +70,21 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "learning_rate": contract.number_field(raw, "learning_rate", 5e-5, 1e-8, 1.0),
         "weight_decay": contract.number_field(raw, "weight_decay", 0.01, 0.0, 1.0),
         "lora_rank": contract.integer_field(raw, "lora_rank", 4, 1, 256),
-        "sequence_length": contract.integer_field(raw, "sequence_length", 512, 8, 32_768),
-        "max_examples": contract.integer_field(raw, "max_examples", 100_000, 1, MAX_EXAMPLES),
+        "sequence_length": contract.integer_field(
+            raw, "sequence_length", 512, 8, 32_768
+        ),
+        "max_examples": contract.integer_field(
+            raw, "max_examples", 100_000, 1, MAX_EXAMPLES
+        ),
     }
     dtype_policy = raw.get("dtype_policy", "bfloat16")
-    if dtype_policy not in {"float32", "float16", "bfloat16", "mixed_float16", "mixed_bfloat16"}:
+    if dtype_policy not in {
+        "float32",
+        "float16",
+        "bfloat16",
+        "mixed_float16",
+        "mixed_bfloat16",
+    }:
         raise contract.ContractError("dtype_policy is not supported")
     values["dtype_policy"] = dtype_policy
     return values
@@ -97,7 +109,9 @@ def load_examples(
                     f"JSONL row {row_index} exceeds {MAX_RECORD_BYTES} bytes"
                 )
             if row_index > max_examples:
-                raise contract.ContractError(f"dataset exceeds max_examples={max_examples}")
+                raise contract.ContractError(
+                    f"dataset exceeds max_examples={max_examples}"
+                )
             try:
                 line = encoded.decode("utf-8")
             except UnicodeError as exc:
@@ -122,7 +136,9 @@ def _schema_column(schema_hint: Mapping[str, Any], name: str, default: str) -> s
     return value
 
 
-def _parse_example(line: str, row_index: int, prompt_key: str, response_key: str) -> tuple[str, str]:
+def _parse_example(
+    line: str, row_index: int, prompt_key: str, response_key: str
+) -> tuple[str, str]:
     try:
         row = json.loads(line)
     except ValueError as exc:
@@ -142,7 +158,9 @@ def train(config: Mapping[str, Any], dataset: Path, output: Path) -> None:
     """Fine-tune one exact KerasHub preset and export its LoRA weights."""
     hyperparams = validate_config(config)
     prompts, responses = load_examples(
-        dataset, contract.object_field(config, "schema_hint"), hyperparams["max_examples"]
+        dataset,
+        contract.object_field(config, "schema_hint"),
+        hyperparams["max_examples"],
     )
     keras = importlib.import_module("keras")
     keras_hub = importlib.import_module("keras_hub")
@@ -180,7 +198,9 @@ def contract_smoke(config: Mapping[str, Any], dataset: Path, output: Path) -> No
     """Validate wiring without importing ML frameworks or training a model."""
     hyperparams = validate_config(config)
     prompts, _ = load_examples(
-        dataset, contract.object_field(config, "schema_hint"), hyperparams["max_examples"]
+        dataset,
+        contract.object_field(config, "schema_hint"),
+        hyperparams["max_examples"],
     )
     output.mkdir(mode=0o755, parents=True, exist_ok=True)
     (output / ARTIFACT_NAME).write_bytes(b"GOLUSORIS-CONTRACT-SMOKE\n")
@@ -189,13 +209,15 @@ def contract_smoke(config: Mapping[str, Any], dataset: Path, output: Path) -> No
     )
 
 
-
-
 def _final_metrics(history: Mapping[str, Any]) -> dict[str, float]:
     metrics: dict[str, float] = {}
     for name in sorted(history):
         values = history[name]
-        if not isinstance(name, str) or not isinstance(values, (list, tuple)) or not values:
+        if (
+            not isinstance(name, str)
+            or not isinstance(values, (list, tuple))
+            or not values
+        ):
             continue
         value = float(values[-1])
         if math.isfinite(value):

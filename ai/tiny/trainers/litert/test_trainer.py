@@ -101,16 +101,24 @@ class LiteRTTrainerTest(TestCase):
 
             with (
                 mock.patch.object(contract, "OUTPUT_ROOT", output),
-                mock.patch.object(contract, "load_config", return_value=image_config(dataset)),
-                mock.patch.object(contract, "materialize_dataset", return_value=dataset),
-                mock.patch.object(trainer, "contract_smoke", side_effect=capture_workspace),
+                mock.patch.object(
+                    contract, "load_config", return_value=image_config(dataset)
+                ),
+                mock.patch.object(
+                    contract, "materialize_dataset", return_value=dataset
+                ),
+                mock.patch.object(
+                    trainer, "contract_smoke", side_effect=capture_workspace
+                ),
             ):
                 self.assertEqual(trainer.main(["--contract-smoke"]), 0)
 
             self.assertEqual(len(observed), 1)
             self.assertEqual(observed[0].parent, output)
 
-    def test_config_accepts_exact_image_mapping_and_rejects_other_modalities(self) -> None:
+    def test_config_accepts_exact_image_mapping_and_rejects_other_modalities(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             dataset = Path(temporary) / "images.tar"
             config = image_config(dataset)
@@ -143,7 +151,9 @@ class LiteRTTrainerTest(TestCase):
             dataset = Path(temporary) / "images.tar"
             config = image_config(dataset)
             config["hyperparams"] = {"pretrained": True}
-            with self.assertRaisesRegex(contract.ContractError, "digest-pinned weights"):
+            with self.assertRaisesRegex(
+                contract.ContractError, "digest-pinned weights"
+            ):
                 trainer.validate_config(config)
             config["hyperparams"] = {"do_fine_tuning": True}
             with self.assertRaisesRegex(contract.ContractError, "pretrained weights"):
@@ -212,7 +222,9 @@ class LiteRTTrainerTest(TestCase):
             (root / "a/one.txt").write_bytes(PNG_BYTES)
             (root / "b/one.png").write_bytes(PNG_BYTES)
             (root / "b/two.png").write_bytes(PNG_BYTES)
-            with self.assertRaisesRegex(contract.ContractError, "unsupported image extension"):
+            with self.assertRaisesRegex(
+                contract.ContractError, "unsupported image extension"
+            ):
                 trainer.inspect_image_folder(root)
             (root / "a/one.txt").unlink()
             (root / "a/one.png").write_bytes(b"not-an-image")
@@ -225,14 +237,25 @@ class LiteRTTrainerTest(TestCase):
             root = Path(temporary)
             archive = root / "images.tar"
             with tarfile.open(archive, "w") as writer:
-                for name in ("cat/one.png", "cat/two.png", "dog/one.png", "dog/two.png"):
+                for name in (
+                    "cat/one.png",
+                    "cat/two.png",
+                    "dog/one.png",
+                    "dog/two.png",
+                ):
                     member = tarfile.TarInfo(name)
                     member.size = len(PNG_BYTES)
                     writer.addfile(member, io.BytesIO(PNG_BYTES))
             output = root / "output"
-            trainer.contract_smoke(image_config(archive), archive, output, root / "work")
-            self.assertEqual((output / trainer.ARTIFACT_NAME).read_bytes()[4:8], b"TFL3")
-            metrics = json.loads((output / trainer.METRICS_NAME).read_text(encoding="utf-8"))
+            trainer.contract_smoke(
+                image_config(archive), archive, output, root / "work"
+            )
+            self.assertEqual(
+                (output / trainer.ARTIFACT_NAME).read_bytes()[4:8], b"TFL3"
+            )
+            metrics = json.loads(
+                (output / trainer.METRICS_NAME).read_text(encoding="utf-8")
+            )
             self.assertEqual(metrics["labels"], ["cat", "dog"])
 
 

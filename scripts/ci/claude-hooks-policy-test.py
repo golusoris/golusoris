@@ -203,9 +203,7 @@ class ClaudeHooksPolicyTest(unittest.TestCase):
                 else:
                     payload = {"tool_name": matcher, "cwd": str(tmp_path)}
 
-                with self.subTest(
-                    event=event_name, matcher=matcher, command=command
-                ):
+                with self.subTest(event=event_name, matcher=matcher, command=command):
                     result = subprocess.run(  # noqa: S603 - fixed system shell on runner PATH.
                         ["sh", "-c", command],  # noqa: S607 - sh executable on runner PATH.
                         cwd=str(tmp_path),

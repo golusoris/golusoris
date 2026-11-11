@@ -72,7 +72,11 @@ EXPECTED = {
     ("tools/tool-versions.env", "github.com/ogen-go/ogen", "go"),
     ("tools/tool-versions.env", "github.com/golang-migrate/migrate/v4", "go"),
     ("tools/tool-versions.env", "sigs.k8s.io/controller-tools", "go"),
-    ("tools/tool-versions.env", "sigs.k8s.io/controller-runtime/tools/setup-envtest", "go"),
+    (
+        "tools/tool-versions.env",
+        "sigs.k8s.io/controller-runtime/tools/setup-envtest",
+        "go",
+    ),
     ("tools/tool-versions.env", "github.com/avito-tech/go-mutesting", "go"),
     ("tools/tool-versions.env", "helm.sh/helm/v4", "go"),
     ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),
@@ -97,21 +101,65 @@ EXPECTED = {
     ("internal/testimages/images.go", "versity/versitygw", "docker"),
     ("internal/testimages/images.go", "testcontainers/ryuk", "docker"),
     ("internal/testimages/images.go", "clamav/clamav", "docker"),
-    ("internal/testimages/images.go", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
+    (
+        "internal/testimages/images.go",
+        "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+        "docker",
+    ),
     ("internal/testimages/images.go", "axllent/mailpit", "docker"),
     ("internal/testimages/images.go", "stripe/stripe-mock", "docker"),
     ("internal/testimages/images.go", "bugsink/bugsink", "docker"),
     ("internal/testimages/images.go", "fsouza/fake-gcs-server", "docker"),
-    ("internal/testimages/images.go", "mcr.microsoft.com/azure-storage/azurite", "docker"),
-    ("container/registry/credentials/ecr/internal/motodev/images.go", "motoserver/moto", "docker"),
-    ("container/registry/credentials/ecr/internal/motodev/images.go", "testcontainers/ryuk", "docker"),
-    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "hashicorp/vault", "docker"),
-    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "openbao/openbao", "docker"),
-    ("container/registry/sign/kms/vault/internal/vaultdev/images.go", "testcontainers/ryuk", "docker"),
-    ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "localstack/localstack", "docker"),
-    ("container/registry/sign/kms/aws/internal/localstackdev/images.go", "testcontainers/ryuk", "docker"),
-    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "nagyesta/lowkey-vault", "docker"),
-    ("container/registry/sign/kms/azure/internal/lowkeydev/images.go", "testcontainers/ryuk", "docker"),
+    (
+        "internal/testimages/images.go",
+        "mcr.microsoft.com/azure-storage/azurite",
+        "docker",
+    ),
+    (
+        "container/registry/credentials/ecr/internal/motodev/images.go",
+        "motoserver/moto",
+        "docker",
+    ),
+    (
+        "container/registry/credentials/ecr/internal/motodev/images.go",
+        "testcontainers/ryuk",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go",
+        "hashicorp/vault",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go",
+        "openbao/openbao",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go",
+        "testcontainers/ryuk",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+        "localstack/localstack",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+        "testcontainers/ryuk",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
+        "nagyesta/lowkey-vault",
+        "docker",
+    ),
+    (
+        "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
+        "testcontainers/ryuk",
+        "docker",
+    ),
     ("scripts/ci/tiny-trainer-locks.sh", "ghcr.io/astral-sh/uv", "docker"),
     ("scripts/ci/tiny-trainer-locks.sh", "pip-audit", "pypi"),
     (".github/testcontainers-images.txt", "postgres", "docker"),
@@ -125,7 +173,11 @@ EXPECTED = {
     (".github/testcontainers-images.txt", "versity/versitygw", "docker"),
     (".github/testcontainers-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-images.txt", "clamav/clamav", "docker"),
-    (".github/testcontainers-images.txt", "gcr.io/google.com/cloudsdktool/google-cloud-cli", "docker"),
+    (
+        ".github/testcontainers-images.txt",
+        "gcr.io/google.com/cloudsdktool/google-cloud-cli",
+        "docker",
+    ),
     (".github/testcontainers-images.txt", "axllent/mailpit", "docker"),
     (".github/testcontainers-images.txt", "stripe/stripe-mock", "docker"),
     (".github/testcontainers-images.txt", "bugsink/bugsink", "docker"),
@@ -135,7 +187,11 @@ EXPECTED = {
     (".github/testcontainers-split-images.txt", "openbao/openbao", "docker"),
     (".github/testcontainers-split-images.txt", "testcontainers/ryuk", "docker"),
     (".github/testcontainers-split-images.txt", "fsouza/fake-gcs-server", "docker"),
-    (".github/testcontainers-split-images.txt", "mcr.microsoft.com/azure-storage/azurite", "docker"),
+    (
+        ".github/testcontainers-split-images.txt",
+        "mcr.microsoft.com/azure-storage/azurite",
+        "docker",
+    ),
     (".github/testcontainers-split-images.txt", "nagyesta/lowkey-vault", "docker"),
     ("tools/tool-versions.env", "fsfe/reuse", "docker"),
     ("tools/tool-versions.env", "ghcr.io/yannh/kubeconform", "docker"),
@@ -236,7 +292,9 @@ def matches_file(pattern: str, path: str) -> bool:
     return compile_js_regex(pattern[1:-1]).search(path) is not None
 
 
-def extract(config: dict[str, object], contents: dict[str, str]) -> list[dict[str, str]]:
+def extract(
+    config: dict[str, object], contents: dict[str, str]
+) -> list[dict[str, str]]:
     found: list[dict[str, str]] = []
     managers = config.get("customManagers")
     if not isinstance(managers, list):
@@ -253,12 +311,23 @@ def extract(config: dict[str, object], contents: dict[str, str]) -> list[dict[st
                 continue
             for match_string in match_strings:
                 for match in compile_js_regex(str(match_string)).finditer(content):
-                    captures = {key: value for key, value in match.groupdict().items() if value}
+                    captures = {
+                        key: value for key, value in match.groupdict().items() if value
+                    }
                     dep_name = captures.get("depName") or manager.get("depNameTemplate")
-                    datasource = captures.get("datasource") or manager.get("datasourceTemplate")
-                    current_value = captures.get("currentValue") or manager.get("currentValueTemplate")
-                    if not all(isinstance(value, str) and value for value in (dep_name, datasource, current_value)):
-                        raise ValueError(f"incomplete extraction in {path}: {manager.get('description')}")
+                    datasource = captures.get("datasource") or manager.get(
+                        "datasourceTemplate"
+                    )
+                    current_value = captures.get("currentValue") or manager.get(
+                        "currentValueTemplate"
+                    )
+                    if not all(
+                        isinstance(value, str) and value
+                        for value in (dep_name, datasource, current_value)
+                    ):
+                        raise ValueError(
+                            f"incomplete extraction in {path}: {manager.get('description')}"
+                        )
                     found.append(
                         {
                             "path": path,
@@ -266,7 +335,11 @@ def extract(config: dict[str, object], contents: dict[str, str]) -> list[dict[st
                             "datasource": str(datasource),
                             "current_value": str(current_value),
                             "current_digest": captures.get("currentDigest", ""),
-                            "versioning": str(captures.get("versioning") or manager.get("versioningTemplate") or ""),
+                            "versioning": str(
+                                captures.get("versioning")
+                                or manager.get("versioningTemplate")
+                                or ""
+                            ),
                         }
                     )
     return found
@@ -297,8 +370,13 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
     cache_images = image_pins[paths[1]]
     go_only = {name for name, _, _ in go_images - cache_images}
     if go_only != CACHE_EXEMPT_IMAGES or cache_images - go_images:
-        drift = sorted(map(str, cache_images - go_images)) + sorted(go_only ^ CACHE_EXEMPT_IMAGES)
-        print(f"test-image authorities differ beyond the declared cache exemptions: {drift[0]}", file=sys.stderr)
+        drift = sorted(map(str, cache_images - go_images)) + sorted(
+            go_only ^ CACHE_EXEMPT_IMAGES
+        )
+        print(
+            f"test-image authorities differ beyond the declared cache exemptions: {drift[0]}",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -306,22 +384,28 @@ def test_image_authorities_match(found: list[dict[str, str]]) -> bool:
 SPLIT_IMAGES_PATH = ".github/testcontainers-split-images.txt"
 SPLIT_IMAGE_AUTHORITIES = {
     "container/registry": (
-        "container/registry/credentials/ecr/internal/motodev/images.go", None,
+        "container/registry/credentials/ecr/internal/motodev/images.go",
+        None,
     ),
     "container/registry/sign/kms/aws": (
-        "container/registry/sign/kms/aws/internal/localstackdev/images.go", None,
+        "container/registry/sign/kms/aws/internal/localstackdev/images.go",
+        None,
     ),
     "container/registry/sign/kms/azure": (
-        "container/registry/sign/kms/azure/internal/lowkeydev/images.go", None,
+        "container/registry/sign/kms/azure/internal/lowkeydev/images.go",
+        None,
     ),
     "container/registry/sign/kms/vault": (
-        "container/registry/sign/kms/vault/internal/vaultdev/images.go", None,
+        "container/registry/sign/kms/vault/internal/vaultdev/images.go",
+        None,
     ),
     "storage/gcs": (
-        "internal/testimages/images.go", {"fsouza/fake-gcs-server", "testcontainers/ryuk"},
+        "internal/testimages/images.go",
+        {"fsouza/fake-gcs-server", "testcontainers/ryuk"},
     ),
     "storage/azblob": (
-        "internal/testimages/images.go", {"mcr.microsoft.com/azure-storage/azurite", "testcontainers/ryuk"},
+        "internal/testimages/images.go",
+        {"mcr.microsoft.com/azure-storage/azurite", "testcontainers/ryuk"},
     ),
 }
 
@@ -352,7 +436,10 @@ def test_split_image_authorities(found: list[dict[str, str]], content: str) -> b
     """Report split-module pre-pull drift before tests reach Docker."""
     if split_image_authorities_valid(found, content):
         return True
-    print("split test-image manifest differs from Go authorities (module/name/tag/digest)", file=sys.stderr)
+    print(
+        "split test-image manifest differs from Go authorities (module/name/tag/digest)",
+        file=sys.stderr,
+    )
     return False
 
 
@@ -383,9 +470,14 @@ def test_trainer_manager_coverage(config: dict[str, object]) -> bool:
                 return False
     for relative in expected["pip_requirements"]:
         content = (ROOT / relative).read_text(encoding="utf-8")
-        pins = [line for line in content.splitlines() if line and not line.startswith("#")]
+        pins = [
+            line for line in content.splitlines() if line and not line.startswith("#")
+        ]
         if not pins or any("==" not in line for line in pins):
-            print(f"trainer direct requirement is not exactly pinned: {relative}", file=sys.stderr)
+            print(
+                f"trainer direct requirement is not exactly pinned: {relative}",
+                file=sys.stderr,
+            )
             return False
     return test_trainer_frontend_pins(expected["dockerfile"])
 
@@ -399,7 +491,10 @@ def test_trainer_frontend_pins(paths: tuple[str, ...]) -> bool:
             r"# syntax=docker/dockerfile:([^@]+)@(sha256:[a-f0-9]{64})", first_line
         )
         if match is None:
-            print(f"trainer Dockerfile frontend is not digest-pinned: {relative}", file=sys.stderr)
+            print(
+                f"trainer Dockerfile frontend is not digest-pinned: {relative}",
+                file=sys.stderr,
+            )
             return False
         frontends.add((match.group(1), match.group(2)))
     if len(frontends) != 1:
@@ -472,7 +567,10 @@ def localstack_hold_valid(config: dict[str, object]) -> bool:
 def test_localstack_hold(config: dict[str, object]) -> bool:
     """Report a missing LocalStack hold and prove the check refuses its removal."""
     if not localstack_hold_valid(config):
-        print("renovate.json must hold localstack/localstack below 2026 (auth token)", file=sys.stderr)
+        print(
+            "renovate.json must hold localstack/localstack below 2026 (auth token)",
+            file=sys.stderr,
+        )
         return False
     mutated = json.loads(json.dumps(config))
     mutated["packageRules"] = [
@@ -604,19 +702,28 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
     mutated_removed = json.loads(json.dumps(config))
     mutated_removed["packageRules"].pop()
     if own_module_rule_valid(mutated_removed):
-        print("own module rule negative control (removed) was accepted", file=sys.stderr)
+        print(
+            "own module rule negative control (removed) was accepted", file=sys.stderr
+        )
         return False
     # Negative control (b): rule with enabled true -> refused.
     mutated_enabled = json.loads(json.dumps(config))
     mutated_enabled["packageRules"][-1]["enabled"] = True
     if own_module_rule_valid(mutated_enabled):
-        print("own module rule negative control (enabled: true) was accepted", file=sys.stderr)
+        print(
+            "own module rule negative control (enabled: true) was accepted",
+            file=sys.stderr,
+        )
         return False
     # Negative control (c): rule moved before the automerge rule -> refused.
     mutated_moved = json.loads(json.dumps(config))
     rules = mutated_moved["packageRules"]
     automerge_idx = next(
-        (i for i, r in enumerate(rules) if isinstance(r, dict) and r.get("automerge") is True),
+        (
+            i
+            for i, r in enumerate(rules)
+            if isinstance(r, dict) and r.get("automerge") is True
+        ),
         None,
     )
     if automerge_idx is None:
@@ -625,7 +732,10 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
     rule = rules.pop()
     rules.insert(automerge_idx, rule)
     if own_module_rule_valid(mutated_moved):
-        print("own module rule negative control (moved before automerge) was accepted", file=sys.stderr)
+        print(
+            "own module rule negative control (moved before automerge) was accepted",
+            file=sys.stderr,
+        )
         return False
     # Negative control (d): synthetic go.mod text requiring a golusoris module without replace -> refused.
     synthetic_unreplaced = (
@@ -634,7 +744,10 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
         "require github.com/golusoris/golusoris/core v0.12.1\n"
     )
     if go_mod_own_requires_replaced(synthetic_unreplaced):
-        print("synthetic go.mod without replace negative control was accepted", file=sys.stderr)
+        print(
+            "synthetic go.mod without replace negative control was accepted",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -642,10 +755,15 @@ def own_module_negative_controls(config: dict[str, object]) -> bool:
 @contextlib.contextmanager
 def fixture_repo(prefix: str) -> Generator[Path, None, None]:
     """Yield a scratch git repository with a root go.mod, isolated from the caller's git."""
-    with tempfile.TemporaryDirectory(prefix=prefix) as tmp_dir, repo_git.scratch_environ():
+    with (
+        tempfile.TemporaryDirectory(prefix=prefix) as tmp_dir,
+        repo_git.scratch_environ(),
+    ):
         tmp = Path(tmp_dir)
         repo_git.run_git(["init", "-q"], tmp)
-        (tmp / "go.mod").write_text("module example.com/fixture\n\ngo 1.22\n", encoding="utf-8")
+        (tmp / "go.mod").write_text(
+            "module example.com/fixture\n\ngo 1.22\n", encoding="utf-8"
+        )
         yield tmp
 
 
@@ -669,7 +787,10 @@ def test_own_module_worktree_ignored() -> bool:
         with contextlib.redirect_stderr(io.StringIO()):
             accepted = own_module_replaced_valid(tmp)
     if accepted:
-        print("own-module replace check accepted an unreplaced tracked go.mod", file=sys.stderr)
+        print(
+            "own-module replace check accepted an unreplaced tracked go.mod",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -681,13 +802,19 @@ def test_own_module_dangling_symlink() -> bool:
         try:
             (tmp / "linked" / "go.mod").symlink_to(tmp / "missing" / "go.mod")
         except OSError as error:
-            print(f"SKIP: dangling go.mod symlink test needs symlink support: {error}", file=sys.stderr)
+            print(
+                f"SKIP: dangling go.mod symlink test needs symlink support: {error}",
+                file=sys.stderr,
+            )
             return True
         # The refusal message is expected here; keep it out of the gate output.
         with contextlib.redirect_stderr(io.StringIO()):
             accepted = own_module_replaced_valid(tmp)
     if accepted:
-        print("own-module replace check skipped a dangling go.mod symlink", file=sys.stderr)
+        print(
+            "own-module replace check skipped a dangling go.mod symlink",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -740,7 +867,9 @@ def without_python_rules(config: dict[str, object]) -> dict[str, object]:
     """Return a copy of config with every Python package rule removed."""
     mutated = json.loads(json.dumps(config))
     mutated["packageRules"] = [
-        rule for rule in mutated["packageRules"] if rule.get("matchPackageNames") != ["python"]
+        rule
+        for rule in mutated["packageRules"]
+        if rule.get("matchPackageNames") != ["python"]
     ]
     return mutated
 
@@ -748,7 +877,10 @@ def without_python_rules(config: dict[str, object]) -> dict[str, object]:
 def test_trainer_python_cap(config: dict[str, object]) -> bool:
     """Report a missing trainer Python cap and prove its removal is refused."""
     if not trainer_python_cap_valid(config):
-        print("renovate.json must hold both trainer Python bases below 3.14", file=sys.stderr)
+        print(
+            "renovate.json must hold both trainer Python bases below 3.14",
+            file=sys.stderr,
+        )
         return False
     if trainer_python_cap_valid(without_python_rules(config)):
         print("trainer Python cap negative control was accepted", file=sys.stderr)
@@ -759,7 +891,10 @@ def test_trainer_python_cap(config: dict[str, object]) -> bool:
 def test_sidecar_python_cap(config: dict[str, object]) -> bool:
     """Report a missing sidecar Python cap and prove its removal is refused."""
     if not sidecar_python_cap_valid(config):
-        print("renovate.json must hold the TFLite sidecar Python base below 3.15", file=sys.stderr)
+        print(
+            "renovate.json must hold the TFLite sidecar Python base below 3.15",
+            file=sys.stderr,
+        )
         return False
     if sidecar_python_cap_valid(without_python_rules(config)):
         print("sidecar Python cap negative control was accepted", file=sys.stderr)
@@ -777,7 +912,8 @@ def chromedp_group_valid(config: dict[str, object]) -> bool:
         for rule in rules
         if isinstance(rule, dict)
         and rule.get("matchDatasources") == ["go"]
-        and rule.get("matchPackageNames") == [
+        and rule.get("matchPackageNames")
+        == [
             "github.com/chromedp/chromedp",
             "github.com/chromedp/cdproto",
         ]
@@ -790,7 +926,10 @@ def chromedp_group_valid(config: dict[str, object]) -> bool:
 def test_chromedp_group(config: dict[str, object]) -> bool:
     """Report a missing chromedp group and prove its removal is refused."""
     if not chromedp_group_valid(config):
-        print("renovate.json must group chromedp and cdproto with automerge off", file=sys.stderr)
+        print(
+            "renovate.json must group chromedp and cdproto with automerge off",
+            file=sys.stderr,
+        )
         return False
     mutated = json.loads(json.dumps(config))
     mutated["packageRules"] = [
@@ -805,13 +944,19 @@ def test_chromedp_group(config: dict[str, object]) -> bool:
 def test_pin_inventory(found: list[dict[str, str]]) -> bool:
     """Require the exact declared nonstandard dependency inventory."""
     actual = identities(found)
-    counts = Counter((item["path"], item["dep_name"], item["datasource"]) for item in found)
-    expected_counts = {identity: EXPECTED_MULTIPLICITY.get(identity, 1) for identity in EXPECTED}
+    counts = Counter(
+        (item["path"], item["dep_name"], item["datasource"]) for item in found
+    )
+    expected_counts = {
+        identity: EXPECTED_MULTIPLICITY.get(identity, 1) for identity in EXPECTED
+    }
     if actual != EXPECTED or counts != expected_counts:
         expected_total = sum(expected_counts.values())
         print(f"missing Renovate pins: {sorted(EXPECTED - actual)}", file=sys.stderr)
         print(f"unexpected Renovate pins: {sorted(actual - EXPECTED)}", file=sys.stderr)
-        print(f"extracted {len(found)} pins; expected {expected_total}", file=sys.stderr)
+        print(
+            f"extracted {len(found)} pins; expected {expected_total}", file=sys.stderr
+        )
         return False
     return True
 
@@ -825,54 +970,96 @@ def test_digest_inventory(found: list[dict[str, str]]) -> bool:
     return True
 
 
-def test_negative_controls(config: dict[str, object], contents: dict[str, str]) -> bool:
-    """Prove stale template and missing tool metadata are rejected."""
-    template_path = "template/.devcontainer/docker-compose.yml"
-    if not template_compose_authority_valid(contents[template_path]):
-        print("template compose Renovate authority differs from its one declared image", file=sys.stderr)
-        return False
-
-    extra_template_dependency = (
-        contents[template_path]
+def _stale_template_dependency(template_content: str) -> str:
+    """Append the stale uv Renovate dependency to a template fixture."""
+    return (
+        template_content
         + "\n# renovate: datasource=docker depName=ghcr.io/astral-sh/uv\n"
     )
-    if template_compose_authority_valid(extra_template_dependency):
-        print("template compose negative control accepted a stale uv dependency", file=sys.stderr)
-        return False
 
+
+def _missing_tool_metadata(contents: dict[str, str]) -> dict[str, str]:
+    """Copy fixture contents with the gofumpt Renovate metadata removed."""
     mutated = dict(contents)
     mutated["tools/tool-versions.env"] = mutated["tools/tool-versions.env"].replace(
         "# renovate: datasource=go depName=mvdan.cc/gofumpt versioning=semver",
         "# missing Renovate metadata",
         1,
     )
-    if identities(extract(config, mutated)) == EXPECTED:
-        print("negative control did not detect missing tool metadata", file=sys.stderr)
-        return False
+    return mutated
 
+
+def _private_image_owned_config(config: dict[str, object]) -> dict[str, object]:
+    """Copy fixture configuration with private image updates reenabled."""
     mutated_config = json.loads(json.dumps(config))
     for rule in mutated_config["packageRules"]:
         if rule.get("matchPackageNames") == [PRIVATE_JOB_IMAGE]:
             rule["enabled"] = True
-    if private_job_image_authority_valid(mutated_config, contents):
-        print("negative control accepted Renovate ownership of the private image", file=sys.stderr)
-        return False
+    return mutated_config
 
+
+def _drifted_private_job_image(contents: dict[str, str]) -> dict[str, str]:
+    """Copy fixture contents with the first private job image digest changed."""
     drifted = dict(contents)
     drifted[PRIVATE_JOB_WORKFLOWS[0]] = drifted[PRIVATE_JOB_WORKFLOWS[0]].replace(
         "sha256:ca08d1bee54628ae8713133ae4bf2fe7f06a20a6db6ffd1d184f6ac63660297b",
         "sha256:" + "0" * 64,
         1,
     )
-    if private_job_image_authority_valid(config, drifted):
-        print("negative control accepted a drifting private job-image digest", file=sys.stderr)
-        return False
+    return drifted
+
+
+def _drifted_split_images(contents: dict[str, str]) -> dict[str, str]:
+    """Copy fixture contents with the first split test image digest changed."""
     split_drift = dict(contents)
     split_drift[SPLIT_IMAGES_PATH] = re.sub(
-        r"@sha256:[a-f0-9]{64}", "@sha256:" + "0" * 64, contents[SPLIT_IMAGES_PATH], count=1,
+        r"@sha256:[a-f0-9]{64}",
+        "@sha256:" + "0" * 64,
+        contents[SPLIT_IMAGES_PATH],
+        count=1,
     )
-    if split_image_authorities_valid(extract(config, split_drift), split_drift[SPLIT_IMAGES_PATH]):
-        print("negative control accepted a drifting split test-image digest", file=sys.stderr)
+    return split_drift
+
+
+def test_negative_controls(config: dict[str, object], contents: dict[str, str]) -> bool:
+    """Prove stale template and missing tool metadata are rejected."""
+    template_path = "template/.devcontainer/docker-compose.yml"
+    if not template_compose_authority_valid(contents[template_path]):
+        print(
+            "template compose Renovate authority differs from its one declared image",
+            file=sys.stderr,
+        )
+        return False
+    extra_template_dependency = _stale_template_dependency(contents[template_path])
+    if template_compose_authority_valid(extra_template_dependency):
+        print(
+            "template compose negative control accepted a stale uv dependency",
+            file=sys.stderr,
+        )
+        return False
+    if identities(extract(config, _missing_tool_metadata(contents))) == EXPECTED:
+        print("negative control did not detect missing tool metadata", file=sys.stderr)
+        return False
+    if private_job_image_authority_valid(_private_image_owned_config(config), contents):
+        print(
+            "negative control accepted Renovate ownership of the private image",
+            file=sys.stderr,
+        )
+        return False
+    if private_job_image_authority_valid(config, _drifted_private_job_image(contents)):
+        print(
+            "negative control accepted a drifting private job-image digest",
+            file=sys.stderr,
+        )
+        return False
+    split_drift = _drifted_split_images(contents)
+    if split_image_authorities_valid(
+        extract(config, split_drift), split_drift[SPLIT_IMAGES_PATH]
+    ):
+        print(
+            "negative control accepted a drifting split test-image digest",
+            file=sys.stderr,
+        )
         return False
     return True
 
@@ -903,24 +1090,35 @@ def core_indirect_rule_valid(config: dict[str, object], core_gomod: str) -> bool
     rules = [
         rule
         for rule in config.get("packageRules", [])
-        if rule.get("matchDepTypes") == ["indirect"] and "core/" in rule.get("description", "")
+        if rule.get("matchDepTypes") == ["indirect"]
+        and "core/" in rule.get("description", "")
     ]
     if len(rules) != 1 or rules[0].get("enabled") is not True:
         return False
     if "gomodTidy" not in config.get("postUpdateOptions", []):
         return False
-    return sorted(rules[0].get("matchPackageNames", [])) == sorted(core_direct_requires(core_gomod))
+    return sorted(rules[0].get("matchPackageNames", [])) == sorted(
+        core_direct_requires(core_gomod)
+    )
 
 
 def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     """Report drift between the core-indirect rule and core/go.mod, with negative controls."""
     if not core_indirect_rule_valid(config, core_gomod):
-        print("renovate core-indirect rule differs from core/go.mod direct requirements "
-              "or gomodTidy is missing", file=sys.stderr)
+        print(
+            "renovate core-indirect rule differs from core/go.mod direct requirements "
+            "or gomodTidy is missing",
+            file=sys.stderr,
+        )
         return False
-    added_dependency = core_gomod.replace("require (\n", "require (\n\texample.com/new v1.0.0\n", 1)
+    added_dependency = core_gomod.replace(
+        "require (\n", "require (\n\texample.com/new v1.0.0\n", 1
+    )
     if core_indirect_rule_valid(config, added_dependency):
-        print("negative control accepted a core dependency the rule does not name", file=sys.stderr)
+        print(
+            "negative control accepted a core dependency the rule does not name",
+            file=sys.stderr,
+        )
         return False
     without_tidy = json.loads(json.dumps(config))
     without_tidy["postUpdateOptions"] = []
@@ -952,7 +1150,9 @@ def minimum_age_valid(config: dict[str, object]) -> bool:
     rules = config.get("packageRules")
     if not isinstance(rules, list):
         return False
-    return not any(isinstance(rule, dict) and "minimumReleaseAge" in rule for rule in rules)
+    return not any(
+        isinstance(rule, dict) and "minimumReleaseAge" in rule for rule in rules
+    )
 
 
 def without_preset(config: dict[str, object]) -> dict[str, object]:
@@ -969,7 +1169,9 @@ def minimum_age_mutants(config: dict[str, object]) -> dict[str, dict[str, object
     unfiltered = json.loads(json.dumps(config))
     unfiltered["internalChecksFilter"] = "none"
     overridden = json.loads(json.dumps(config))
-    overridden["packageRules"].append({"matchManagers": ["gomod"], "minimumReleaseAge": "0 days"})
+    overridden["packageRules"].append(
+        {"matchManagers": ["gomod"], "minimumReleaseAge": "0 days"}
+    )
     return {
         "preset removed": without_preset(config),
         "age shortened": shortened,
@@ -989,7 +1191,10 @@ def test_minimum_age(config: dict[str, object]) -> bool:
         return False
     for label, mutated in minimum_age_mutants(config).items():
         if minimum_age_valid(mutated):
-            print(f"minimum release age negative control was accepted: {label}", file=sys.stderr)
+            print(
+                f"minimum release age negative control was accepted: {label}",
+                file=sys.stderr,
+            )
             return False
     return True
 
@@ -1002,7 +1207,8 @@ def runner_rules_off(config: dict[str, object]) -> bool:
     if not isinstance(rules, list):
         return False
     return not any(
-        isinstance(rule, dict) and "github-runner" in rule.get("matchDepTypes", []) for rule in rules
+        isinstance(rule, dict) and "github-runner" in rule.get("matchDepTypes", [])
+        for rule in rules
     )
 
 
@@ -1017,11 +1223,20 @@ def test_runner_hold(config: dict[str, object]) -> bool:
         return False
     reenabled = json.loads(json.dumps(config))
     reenabled["packageRules"].append(
-        {"matchManagers": ["github-actions"], "matchDepTypes": ["github-runner"], "enabled": True}
+        {
+            "matchManagers": ["github-actions"],
+            "matchDepTypes": ["github-runner"],
+            "enabled": True,
+        }
     )
-    for label, mutated in {"preset removed": without_preset(config), "runner re-enabled": reenabled}.items():
+    for label, mutated in {
+        "preset removed": without_preset(config),
+        "runner re-enabled": reenabled,
+    }.items():
         if runner_rules_off(mutated):
-            print(f"runner hold negative control was accepted: {label}", file=sys.stderr)
+            print(
+                f"runner hold negative control was accepted: {label}", file=sys.stderr
+            )
             return False
     return True
 
@@ -1082,12 +1297,17 @@ def test_current_value_template() -> bool:
     if [item["current_value"] for item in found] != ["HEAD"]:
         print(f"currentValueTemplate was not used: {found}", file=sys.stderr)
         return False
-    bare = {key: value for key, value in manager.items() if key != "currentValueTemplate"}
+    bare = {
+        key: value for key, value in manager.items() if key != "currentValueTemplate"
+    }
     try:
         extract({"customManagers": [bare]}, contents)
     except ValueError:
         return True
-    print("extraction without currentValue or currentValueTemplate was accepted", file=sys.stderr)
+    print(
+        "extraction without currentValue or currentValueTemplate was accepted",
+        file=sys.stderr,
+    )
     return False
 
 
@@ -1105,7 +1325,9 @@ def syft_version_inputs(content: str) -> list[str]:
         indent = len(line) - len(line.lstrip())
         for follow in lines[index + 1 :]:
             stripped = follow.strip()
-            if stripped and (len(follow) - len(follow.lstrip()) < indent or stripped.startswith("- ")):
+            if stripped and (
+                len(follow) - len(follow.lstrip()) < indent or stripped.startswith("- ")
+            ):
                 break
             if stripped.startswith("syft-version:"):
                 values.append(stripped.removeprefix("syft-version:").strip())
@@ -1132,7 +1354,10 @@ def test_syft_workflow_pins(config: dict[str, object]) -> bool:
         for path in sorted((ROOT / ".github/workflows").glob("*.y*ml"))
     }
     if not any(SYFT_USE in content for content in workflows.values()):
-        print("no download-syft workflow found; syft coverage check has nothing to prove", file=sys.stderr)
+        print(
+            "no download-syft workflow found; syft coverage check has nothing to prove",
+            file=sys.stderr,
+        )
         return False
     problems = find_syft_literal_inputs(workflows)
     if problems:
@@ -1181,7 +1406,9 @@ def main() -> int:
     if not all(checks):
         return 1
 
-    print(f"Renovate policy extracted {len(found)} nonstandard pins; negative control passed")
+    print(
+        f"Renovate policy extracted {len(found)} nonstandard pins; negative control passed"
+    )
     return 0
 
 

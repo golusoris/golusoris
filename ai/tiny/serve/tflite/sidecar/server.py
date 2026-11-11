@@ -212,7 +212,9 @@ class SidecarHandler(BaseHTTPRequestHandler):
                     HTTPStatus.REQUEST_TIMEOUT, {"error": "request read timed out"}
                 )
             except OSError as exc:
-                logger.debug("client left before the timeout response was sent: %s", exc)
+                logger.debug(
+                    "client left before the timeout response was sent: %s", exc
+                )
             self.close_connection = True
             return None
 

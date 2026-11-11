@@ -93,7 +93,9 @@ ASSERTION_PATTERNS: dict[str, re.Pattern[str]] = {
 }
 
 NODE_ASSERTION_EXACT = 'test "$(node --version)" = "v${NODE_VERSION}"'
-NODE_RENOVATE_COMMENT = "# renovate: datasource=node-version depName=node versioning=node"
+NODE_RENOVATE_COMMENT = (
+    "# renovate: datasource=node-version depName=node versioning=node"
+)
 
 ALL_RELEASE_VARS = frozenset(TOOL_ENV_VARS.values())
 
@@ -177,7 +179,7 @@ def parse_action_line(
             continue
         stripped = lines[look_idx].strip()
         if stripped.startswith(prefix):
-            val = stripped[len(prefix):].strip().strip("'\"")
+            val = stripped[len(prefix) :].strip().strip("'\"")
             if val != expected_expr:
                 problems.append(
                     f"{rel_path}:{look_idx + 1}: {tool}: literal pin {val}; read ${{{{ env.{var_name} }}}}"
@@ -465,10 +467,9 @@ def check_group_a_workflow(
     lines: list[str],
 ) -> list[str]:
     """Rule d: group A files do not re-declare env vars and run export script before tool installs."""
-    return (
-        check_group_a_env_redeclarations(rel_path, lines)
-        + check_group_a_export_before_install(rel_path, lines)
-    )
+    return check_group_a_env_redeclarations(
+        rel_path, lines
+    ) + check_group_a_export_before_install(rel_path, lines)
 
 
 def load_renovate_custom_managers(
@@ -729,7 +730,9 @@ def create_valid_fixture(root: Path) -> None:
             target.write_text(VALID_FIXTURE_GROUP_A, encoding="utf-8")
 
 
-def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str) -> None:
+def apply_renovate_bump(
+    root: Path, config: dict, target_dep: str, new_val: str
+) -> None:
     """Emulates Renovate regex manager execution across matching files."""
     for m in config.get("customManagers", []):
         file_pats = m.get("managerFilePatterns", [])
@@ -748,6 +751,7 @@ def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str)
             content = file_path.read_text(encoding="utf-8")
             for ms in match_strings:
                 rx = compile_js_regex(ms)
+
                 def replace_match(match: re.Match[str]) -> str:
                     """Replaces current value with new value when depName matches target."""
                     if match.groupdict().get("depName") == target_dep:
@@ -755,6 +759,7 @@ def apply_renovate_bump(root: Path, config: dict, target_dep: str, new_val: str)
                         if cur:
                             return match.group(0).replace(cur, new_val)
                     return match.group(0)
+
                 content = rx.sub(replace_match, content)
             file_path.write_text(content, encoding="utf-8")
 
@@ -869,7 +874,9 @@ class ReleaseToolPinsTest(unittest.TestCase):
             create_valid_fixture(root)
             path = root / ".github/workflows/release-go.yml"
             text = path.read_text(encoding="utf-8")
-            text = text.replace("uses: actions/setup-node", "# uses: actions/setup-node")
+            text = text.replace(
+                "uses: actions/setup-node", "# uses: actions/setup-node"
+            )
             path.write_text(text, encoding="utf-8")
             problems = check_release_tool_pins(root)
             self.assert_planted_defect(problems, "missing install pin")
@@ -987,9 +994,7 @@ class ReleaseToolPinsTest(unittest.TestCase):
                 encoding="utf-8",
             )
             problems = check_release_tool_pins(root)
-            self.assert_planted_defect(
-                problems, "cosign: assertion does not reference"
-            )
+            self.assert_planted_defect(problems, "cosign: assertion does not reference")
 
     def test_planted_empty_file(self) -> None:
         # Tests refusal of workflow file lacking any install pins.
@@ -1198,7 +1203,9 @@ class ReleaseToolPinsTest(unittest.TestCase):
             config = json.loads((root / "renovate.json").read_text(encoding="utf-8"))
             for m in config.get("customManagers", []):
                 pats = m.get("managerFilePatterns", [])
-                m["managerFilePatterns"] = [p for p in pats if "verify-provenance" not in p]
+                m["managerFilePatterns"] = [
+                    p for p in pats if "verify-provenance" not in p
+                ]
             (root / "renovate.json").write_text(json.dumps(config), encoding="utf-8")
             apply_renovate_bump(root, config, "sigstore/cosign", "3.1.5")
             problems = check_release_tool_pins(root)

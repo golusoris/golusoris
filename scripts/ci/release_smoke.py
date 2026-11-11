@@ -81,7 +81,10 @@ def select_binary(
                 matches.append(path_val)
 
     if len(matches) != 1:
-        return None, f"release-smoke: {name}: expected one {goos}/{goarch} binary, found {len(matches)}"
+        return (
+            None,
+            f"release-smoke: {name}: expected one {goos}/{goarch} binary, found {len(matches)}",
+        )
 
     path_str = matches[0]
     path_obj = Path(path_str)

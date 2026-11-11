@@ -66,8 +66,9 @@ class ContractTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             for uri in ("https://example.com/data.csv", "s3://tenant-bucket/data.csv"):
-                with self.subTest(uri=uri), self.assertRaisesRegex(
-                    contract.ContractError, "stage remote data"
+                with (
+                    self.subTest(uri=uri),
+                    self.assertRaisesRegex(contract.ContractError, "stage remote data"),
                 ):
                     contract.materialize_dataset(
                         {"dataset_uri": uri, "max_dataset_bytes": 4},

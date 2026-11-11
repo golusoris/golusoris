@@ -56,7 +56,11 @@ class ContextSizeTest(unittest.TestCase):
         git = shutil.which("git")
         self.assertIsNotNone(git)
         subprocess.run(  # noqa: S603 - fixed git command on runner PATH. # nosec B603
-            [str(git), *args], cwd=self.root, check=True, capture_output=True, timeout=60
+            [str(git), *args],
+            cwd=self.root,
+            check=True,
+            capture_output=True,
+            timeout=60,
         )
 
     def write(self, name: str, text: str, *, stage: bool = True) -> None:
@@ -155,7 +159,9 @@ class ContextSizeTest(unittest.TestCase):
         self.write("user guide/AGENTS.md", "a" * (CAP + 1))
         self.assertIn("user guide/AGENTS.md", self.check()[0])
 
-    @unittest.skipIf(sys.platform == "win32", "Windows file names cannot hold a newline")
+    @unittest.skipIf(
+        sys.platform == "win32", "Windows file names cannot hold a newline"
+    )
     def test_tracked_path_with_newline_is_checked(self) -> None:
         """A tracked path with a newline is read by object ID."""
         self.write("odd\ndir/AGENTS.md", "a" * (CAP + 1))
@@ -163,7 +169,9 @@ class ContextSizeTest(unittest.TestCase):
 
     def test_missing_root_exits_with_error_status(self) -> None:
         """A missing root is a check error, exit 3."""
-        self.assertEqual(context_size.main(["context_size", str(self.root / "absent")]), 3)
+        self.assertEqual(
+            context_size.main(["context_size", str(self.root / "absent")]), 3
+        )
 
     def test_git_failure_exits_with_error_status(self) -> None:
         """A failing git command is a check error, exit 3."""

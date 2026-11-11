@@ -46,8 +46,13 @@ def violations(path: Path) -> list[str]:
             continue
         for line in body:
             key, _, value = line.strip().partition(":")
-            if key == "continue-on-error" and value.split("#")[0].strip() not in ALLOWED:
-                found.append(f"{path}:{start}: SARIF upload has continue-on-error {value.strip()}")
+            if (
+                key == "continue-on-error"
+                and value.split("#")[0].strip() not in ALLOWED
+            ):
+                found.append(
+                    f"{path}:{start}: SARIF upload has continue-on-error {value.strip()}"
+                )
     return found
 
 
@@ -64,7 +69,9 @@ def main(argv: list[str]) -> int:
         return 1
     uploads = sum(path.read_text(encoding="utf-8").count(UPLOAD) for path in files)
     if uploads == 0:
-        print(f"sarif upload policy: no upload-sarif step under {root}", file=sys.stderr)
+        print(
+            f"sarif upload policy: no upload-sarif step under {root}", file=sys.stderr
+        )
         return 1
     print(f"sarif upload policy: {uploads} upload steps fail closed")
     return 0

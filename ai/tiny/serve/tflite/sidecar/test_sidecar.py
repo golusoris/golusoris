@@ -45,7 +45,12 @@ def kill_process_group(proc: subprocess.Popen[bytes]) -> None:
         proc.kill()
         return
     # A pid of 1 or our own group would signal unrelated processes.
-    if not isinstance(proc.pid, int) or isinstance(proc.pid, bool) or proc.pid <= 1 or proc.pid == os.getpgrp():
+    if (
+        not isinstance(proc.pid, int)
+        or isinstance(proc.pid, bool)
+        or proc.pid <= 1
+        or proc.pid == os.getpgrp()
+    ):
         proc.kill()
         return
     try:
@@ -68,7 +73,9 @@ def run_in_process_group(cmd: list[str], timeout: float) -> None:
             proc.communicate(timeout=60)
             raise
     if proc.returncode != 0:
-        raise subprocess.CalledProcessError(proc.returncode, cmd, output=stdout, stderr=stderr)
+        raise subprocess.CalledProcessError(
+            proc.returncode, cmd, output=stdout, stderr=stderr
+        )
 
 
 def generate_real_tflite_model(
@@ -184,11 +191,15 @@ class TestRunInProcessGroup:
         with pytest.raises(subprocess.TimeoutExpired):
             run_in_process_group(["sh", "-c", script], timeout=5)
         if not pid_file.exists():
-            raise AssertionError(f"pid_file race: {pid_file} was not written before timeout fired")
+            raise AssertionError(
+                f"pid_file race: {pid_file} was not written before timeout fired"
+            )
         try:
             grandchild = int(pid_file.read_text(encoding="utf-8").strip())
         except (FileNotFoundError, ValueError) as err:
-            raise AssertionError(f"pid_file race: could not read grandchild pid from {pid_file}: {err}") from err
+            raise AssertionError(
+                f"pid_file race: could not read grandchild pid from {pid_file}: {err}"
+            ) from err
         for _ in range(50):
             if not pid_running(grandchild):
                 return
@@ -200,14 +211,25 @@ class TestRunInProcessGroup:
         with pytest.raises(subprocess.TimeoutExpired):
             run_in_process_group(["sh", "-c", "sleep 30 & wait"], timeout=1)
         elapsed = time.monotonic() - start
-        expect(elapsed < 10, f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open")
+        expect(
+            elapsed < 10,
+            f"timeout took {elapsed:.1f}s; a grandchild kept the pipes open",
+        )
 
     def test_nonzero_exit_raises_called_process_error(self) -> None:
         with pytest.raises(subprocess.CalledProcessError) as caught:
-            run_in_process_group(["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10)
+            run_in_process_group(
+                ["sh", "-c", "echo out; echo boom >&2; exit 3"], timeout=10
+            )
         expect(caught.value.returncode == 3, "exit code must propagate")
-        expect(caught.value.output is not None and b"out" in caught.value.output, "stdout must be kept")
-        expect(caught.value.stderr is not None and b"boom" in caught.value.stderr, "stderr must be kept")
+        expect(
+            caught.value.output is not None and b"out" in caught.value.output,
+            "stdout must be kept",
+        )
+        expect(
+            caught.value.stderr is not None and b"boom" in caught.value.stderr,
+            "stderr must be kept",
+        )
 
     def test_zero_exit_returns(self) -> None:
         run_in_process_group(["sh", "-c", "exit 0"], timeout=10)
@@ -252,8 +274,12 @@ class TestKillProcessGroup:
 
         fake_pgrp = _FakeProc(pid=os.getpgrp())
         kill_process_group(fake_pgrp)
-        expect(fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()")
-        expect(not killpg_called, "os.killpg must not be called when pid matches getpgrp()")
+        expect(
+            fake_pgrp.killed, "proc.kill() must be called when pid matches getpgrp()"
+        )
+        expect(
+            not killpg_called, "os.killpg must not be called when pid matches getpgrp()"
+        )
 
 
 class TestPidRunning:
@@ -282,7 +308,9 @@ class TestPidRunning:
                 id="kill-eperm-hidepid-invisible",
             ),
             pytest.param(None, False, "12345 (sleep) S 1", True, id="no-proc"),
-            pytest.param(None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"),
+            pytest.param(
+                None, True, FileNotFoundError("reaped"), False, id="reaped-before-open"
+            ),
             pytest.param(
                 None,
                 True,

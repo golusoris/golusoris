@@ -60,7 +60,9 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         if base_model not in IMAGE_MODELS:
             raise contract.ContractError(f"unsupported image base_model: {base_model}")
         if dataset_fmt not in {"tar", "tar.gz", "tgz", "zip"}:
-            raise contract.ContractError("image dataset_fmt must be tar, tar.gz, tgz, or zip")
+            raise contract.ContractError(
+                "image dataset_fmt must be tar, tar.gz, tgz, or zip"
+            )
         allowed = IMAGE_HYPERPARAMS
     else:
         raise contract.ContractError("LiteRT modality must be image")
@@ -72,13 +74,17 @@ def validate_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "epochs": contract.integer_field(raw, "epochs", 10, 1, 1000),
         "batch_size": contract.integer_field(raw, "batch_size", 8, 1, 4096),
         "learning_rate": contract.number_field(raw, "learning_rate", 0.001, 1e-8, 1.0),
-        "validation_fraction": contract.number_field(raw, "validation_fraction", 0.2, 0.01, 0.5),
+        "validation_fraction": contract.number_field(
+            raw, "validation_fraction", 0.2, 0.01, 0.5
+        ),
     }
     values["do_data_augmentation"] = _boolean(raw, "do_data_augmentation", True)
     values["do_fine_tuning"] = _boolean(raw, "do_fine_tuning", False)
     values["pretrained"] = _boolean(raw, "pretrained", False)
     if values["pretrained"]:
-        raise contract.ContractError("pretrained=true requires staged digest-pinned weights")
+        raise contract.ContractError(
+            "pretrained=true requires staged digest-pinned weights"
+        )
     if values["do_fine_tuning"]:
         raise contract.ContractError("do_fine_tuning=true requires pretrained weights")
     return values
@@ -96,11 +102,15 @@ def inspect_image_folder(root: Path) -> list[str]:
         label_files = _inspect_label_folder(child, MAX_IMAGE_FILES - file_count)
         file_count += label_files
         if label_files == 1:
-            raise contract.ContractError("each image label must contain at least two images")
+            raise contract.ContractError(
+                "each image label must contain at least two images"
+            )
         if label_files >= 2:
             labels.append(child.name)
     if len(labels) < 2:
-        raise contract.ContractError("image folder must contain at least two non-empty label directories")
+        raise contract.ContractError(
+            "image folder must contain at least two non-empty label directories"
+        )
     return labels
 
 
@@ -112,7 +122,9 @@ def _inspect_label_folder(root: Path, max_files: int) -> int:
         if candidate.is_file():
             file_count += 1
             if file_count > max_files:
-                raise contract.ContractError(f"image folder exceeds {MAX_IMAGE_FILES} files")
+                raise contract.ContractError(
+                    f"image folder exceeds {MAX_IMAGE_FILES} files"
+                )
             _validate_image_file(candidate)
     return file_count
 
@@ -120,10 +132,14 @@ def _inspect_label_folder(root: Path, max_files: int) -> int:
 def _validate_image_file(path: Path) -> None:
     suffix = path.suffix.lower()
     if suffix not in IMAGE_SUFFIXES:
-        raise contract.ContractError(f"unsupported image extension: {path.suffix or '<none>'}")
+        raise contract.ContractError(
+            f"unsupported image extension: {path.suffix or '<none>'}"
+        )
     size = path.stat().st_size
     if size <= 0 or size > MAX_IMAGE_BYTES:
-        raise contract.ContractError(f"image file exceeds {MAX_IMAGE_BYTES} encoded bytes")
+        raise contract.ContractError(
+            f"image file exceeds {MAX_IMAGE_BYTES} encoded bytes"
+        )
     if suffix == ".png":
         geometry = _png_geometry(path)
     elif suffix == ".gif":
@@ -164,20 +180,28 @@ def _gif_geometry(path: Path) -> tuple[int, int, int]:
 def _bmp_geometry(path: Path) -> tuple[int, int, int]:
     with path.open("rb") as handle:
         header = handle.read(34)
-    if len(header) != 34 or header[:2] != b"BM" or struct.unpack("<I", header[14:18])[0] < 40:
+    if (
+        len(header) != 34
+        or header[:2] != b"BM"
+        or struct.unpack("<I", header[14:18])[0] < 40
+    ):
         raise contract.ContractError(f"image file has invalid BMP header: {path.name}")
     width, height = struct.unpack("<ii", header[18:26])
     bits_per_pixel = struct.unpack("<H", header[28:30])[0]
     compression = struct.unpack("<I", header[30:34])[0]
     if compression != 0 or bits_per_pixel not in {24, 32}:
-        raise contract.ContractError(f"image file uses unsupported BMP encoding: {path.name}")
+        raise contract.ContractError(
+            f"image file uses unsupported BMP encoding: {path.name}"
+        )
     return width, abs(height), bits_per_pixel // 8
 
 
 def _jpeg_geometry(path: Path) -> tuple[int, int, int]:
     with path.open("rb") as handle:
         if handle.read(2) != b"\xff\xd8":
-            raise contract.ContractError(f"image file has invalid JPEG header: {path.name}")
+            raise contract.ContractError(
+                f"image file has invalid JPEG header: {path.name}"
+            )
         scanned = 2
         for _ in range(MAX_JPEG_SEGMENTS):
             marker, scanned = _next_jpeg_marker(handle, scanned, path.name)
@@ -190,7 +214,21 @@ def _jpeg_geometry(path: Path) -> tuple[int, int, int]:
             segment_size = int.from_bytes(length_bytes, "big")
             if segment_size < 2 or scanned + segment_size - 2 > MAX_JPEG_HEADER_BYTES:
                 break
-            if marker in {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}:
+            if marker in {
+                0xC0,
+                0xC1,
+                0xC2,
+                0xC3,
+                0xC5,
+                0xC6,
+                0xC7,
+                0xC9,
+                0xCA,
+                0xCB,
+                0xCD,
+                0xCE,
+                0xCF,
+            }:
                 payload = handle.read(6)
                 if segment_size < 8 or len(payload) != 6:
                     break
@@ -201,7 +239,9 @@ def _jpeg_geometry(path: Path) -> tuple[int, int, int]:
                 )
             handle.seek(segment_size - 2, 1)
             scanned += segment_size - 2
-    raise contract.ContractError(f"image file lacks bounded JPEG dimensions: {path.name}")
+    raise contract.ContractError(
+        f"image file lacks bounded JPEG dimensions: {path.name}"
+    )
 
 
 def _next_jpeg_marker(handle: Any, scanned: int, name: str) -> tuple[int, int]:
@@ -223,7 +263,12 @@ def _next_jpeg_marker(handle: Any, scanned: int, name: str) -> tuple[int, int]:
 
 
 def _validate_geometry(width: int, height: int, channels: int) -> None:
-    if width <= 0 or height <= 0 or width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
+    if (
+        width <= 0
+        or height <= 0
+        or width > MAX_IMAGE_DIMENSION
+        or height > MAX_IMAGE_DIMENSION
+    ):
         raise contract.ContractError("image dimensions exceed the supported boundary")
     if width * height > MAX_IMAGE_PIXELS:
         raise contract.ContractError(f"decoded image exceeds {MAX_IMAGE_PIXELS} pixels")
@@ -231,7 +276,9 @@ def _validate_geometry(width: int, height: int, channels: int) -> None:
         raise contract.ContractError("decoded image channel count must be in [1, 4]")
 
 
-def train(config: Mapping[str, Any], dataset: Path, output: Path, workspace: Path) -> None:
+def train(
+    config: Mapping[str, Any], dataset: Path, output: Path, workspace: Path
+) -> None:
     """Train one supported image classifier and export a `.tflite` model."""
     hyperparams = validate_config(config)
     output.mkdir(mode=0o755, parents=True, exist_ok=True)
@@ -239,7 +286,9 @@ def train(config: Mapping[str, Any], dataset: Path, output: Path, workspace: Pat
     artifact = output / ARTIFACT_NAME
     if not artifact.is_file() or artifact.stat().st_size == 0:
         raise RuntimeError("TensorFlow did not write a non-empty LiteRT artifact")
-    contract.atomic_write_json(output / METRICS_NAME, {"metrics": metrics, "labels": labels})
+    contract.atomic_write_json(
+        output / METRICS_NAME, {"metrics": metrics, "labels": labels}
+    )
 
 
 def contract_smoke(
@@ -256,7 +305,9 @@ def contract_smoke(
     )
     labels = inspect_image_folder(images)
     output.mkdir(mode=0o755, parents=True, exist_ok=True)
-    (output / ARTIFACT_NAME).write_bytes(b"\x08\x00\x00\x00TFL3GOLUSORIS-CONTRACT-SMOKE\n")
+    (output / ARTIFACT_NAME).write_bytes(
+        b"\x08\x00\x00\x00TFL3GOLUSORIS-CONTRACT-SMOKE\n"
+    )
     contract.atomic_write_json(
         output / METRICS_NAME,
         {"metrics": {"contract_smoke": 1.0}, "labels": labels},
@@ -371,7 +422,9 @@ def _export_tflite(tensorflow: Any, model: Any, artifact: Path) -> None:
     interpreter.set_tensor(input_detail["index"], sample)
     interpreter.invoke()
     for output_detail in interpreter.get_output_details():
-        result = tensorflow.convert_to_tensor(interpreter.get_tensor(output_detail["index"]))
+        result = tensorflow.convert_to_tensor(
+            interpreter.get_tensor(output_detail["index"])
+        )
         if not bool(tensorflow.reduce_all(tensorflow.math.is_finite(result)).numpy()):
             raise RuntimeError("LiteRT interpreter produced non-finite output")
     artifact.write_bytes(payload)
@@ -392,8 +445,6 @@ def _evaluation_metrics(evaluation: Any) -> dict[str, float]:
         if math.isfinite(value):
             metrics[names[index]] = value
     return metrics
-
-
 
 
 def _boolean(values: Mapping[str, Any], name: str, default: bool) -> bool:

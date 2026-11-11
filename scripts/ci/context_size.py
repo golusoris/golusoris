@@ -61,7 +61,9 @@ def _staged_blobs(root: Path) -> dict[str, str]:
 
 def _read_blobs(root: Path, oids: list[str]) -> list[bytes]:
     """Read blobs by object ID; IDs are hex, so newline-separated batch input is safe."""
-    batch = _git(root, "cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in oids).encode())
+    batch = _git(
+        root, "cat-file", "--batch", stdin="".join(f"{oid}\n" for oid in oids).encode()
+    )
     blobs = []
     for oid in oids:
         header, _, batch = batch.partition(b"\n")
@@ -87,7 +89,9 @@ def agents_contents(root: Path, *, worktree: bool = False) -> dict[str, bytes]:
     else:
         blobs = _read_blobs(root, [staged[p] for p in paths]) if paths else []
         contents = dict(zip(paths, blobs, strict=True))
-    new = _git(root, "ls-files", "-z", "--others", "--exclude-standard", "--", f"*{NAME}")
+    new = _git(
+        root, "ls-files", "-z", "--others", "--exclude-standard", "--", f"*{NAME}"
+    )
     for path in sorted({p.decode("utf-8") for p in new.split(b"\0") if p}):
         if _is_agents(path):
             raw = (root / path).read_bytes()
@@ -98,7 +102,10 @@ def agents_contents(root: Path, *, worktree: bool = False) -> dict[str, bytes]:
 def _chain(path: str) -> list[str]:
     """Return the AGENTS.md candidates from the root down to the directory holding path."""
     parts = PurePosixPath(path).parent.parts
-    return [PurePosixPath(*parts[:depth], NAME).as_posix() for depth in range(len(parts) + 1)]
+    return [
+        PurePosixPath(*parts[:depth], NAME).as_posix()
+        for depth in range(len(parts) + 1)
+    ]
 
 
 def _near_cap(size: int, cap: int) -> bool:
@@ -112,10 +119,14 @@ def oversized(contents: dict[str, bytes]) -> list[str]:
     for name in sorted(contents):
         chars = len(contents[name].decode("utf-8"))
         if _near_cap(chars, WINDSURF_CHARS_PER_FILE):
-            problems.append(f"{name}: {chars} chars >= 95% of Windsurf cap {WINDSURF_CHARS_PER_FILE}")
+            problems.append(
+                f"{name}: {chars} chars >= 95% of Windsurf cap {WINDSURF_CHARS_PER_FILE}"
+            )
         chain_bytes = sum(len(contents[c]) for c in _chain(name) if c in contents)
         if _near_cap(chain_bytes, CODEX_BYTES_PER_CHAIN):
-            problems.append(f"{name}: chain {chain_bytes} B >= 95% of Codex cap {CODEX_BYTES_PER_CHAIN}")
+            problems.append(
+                f"{name}: chain {chain_bytes} B >= 95% of Codex cap {CODEX_BYTES_PER_CHAIN}"
+            )
     return problems
 
 
@@ -128,7 +139,9 @@ def main(argv: list[str]) -> int:
     worktree = "--worktree" in args
     rest = [a for a in args if a != "--worktree"]
     if len(rest) > 1:
-        sys.stderr.write("context-size: error: usage: context_size.py [--worktree] [root]\n")
+        sys.stderr.write(
+            "context-size: error: usage: context_size.py [--worktree] [root]\n"
+        )
         return 3
     root = Path(rest[0] if rest else ".").resolve()
     try:

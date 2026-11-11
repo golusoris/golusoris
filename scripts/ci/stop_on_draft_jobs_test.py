@@ -159,56 +159,62 @@ class StopOnDraftJobsTest(unittest.TestCase):
 
     def test_yaml_anchor_steps_are_gated(self) -> None:
         """Positive: steps with a YAML anchor are parsed correctly."""
-        text = "\n".join([
-            "on:",
-            "  pull_request:",
-            "    types: [opened, synchronize, reopened, ready_for_review]",
-            "jobs:",
-            "  build:",
-            "    runs-on: ubuntu-26.04",
-            "    steps: &build-steps",
-            f"      - uses: {GATE}",
-            "      - run: make test",
-            "",
-        ])
+        text = "\n".join(
+            [
+                "on:",
+                "  pull_request:",
+                "    types: [opened, synchronize, reopened, ready_for_review]",
+                "jobs:",
+                "  build:",
+                "    runs-on: ubuntu-26.04",
+                "    steps: &build-steps",
+                f"      - uses: {GATE}",
+                "      - run: make test",
+                "",
+            ]
+        )
         self.assertEqual(self.check(text), [])
 
     def test_yaml_alias_steps_resolve_to_anchor(self) -> None:
         """Positive: a job whose steps are a YAML alias inherits the anchor's gate."""
-        text = "\n".join([
-            "on:",
-            "  pull_request:",
-            "    types: [opened, synchronize, reopened, ready_for_review]",
-            "jobs:",
-            "  build:",
-            "    runs-on: ubuntu-26.04",
-            "    steps: &build-steps",
-            f"      - uses: {GATE}",
-            "      - run: make test",
-            "  advisory:",
-            "    runs-on: windows-11-arm",
-            "    continue-on-error: true",
-            "    steps: *build-steps",
-            "",
-        ])
+        text = "\n".join(
+            [
+                "on:",
+                "  pull_request:",
+                "    types: [opened, synchronize, reopened, ready_for_review]",
+                "jobs:",
+                "  build:",
+                "    runs-on: ubuntu-26.04",
+                "    steps: &build-steps",
+                f"      - uses: {GATE}",
+                "      - run: make test",
+                "  advisory:",
+                "    runs-on: windows-11-arm",
+                "    continue-on-error: true",
+                "    steps: *build-steps",
+                "",
+            ]
+        )
         self.assertEqual(self.check(text), [])
 
     def test_yaml_alias_without_gate_still_fails(self) -> None:
         """Negative: an alias to ungated steps does not pass."""
-        text = "\n".join([
-            "on:",
-            "  pull_request:",
-            "jobs:",
-            "  build:",
-            "    runs-on: ubuntu-26.04",
-            "    steps: &build-steps",
-            "      - uses: actions/checkout@v7",
-            "      - run: make test",
-            "  advisory:",
-            "    runs-on: windows-11-arm",
-            "    steps: *build-steps",
-            "",
-        ])
+        text = "\n".join(
+            [
+                "on:",
+                "  pull_request:",
+                "jobs:",
+                "  build:",
+                "    runs-on: ubuntu-26.04",
+                "    steps: &build-steps",
+                "      - uses: actions/checkout@v7",
+                "      - run: make test",
+                "  advisory:",
+                "    runs-on: windows-11-arm",
+                "    steps: *build-steps",
+                "",
+            ]
+        )
         self.assertEqual(len(self.check(text)), 2)
 
     def test_flow_types_with_ready_for_review_passes(self) -> None:
@@ -250,17 +256,19 @@ class StopOnDraftJobsTest(unittest.TestCase):
 
     def test_no_gated_job_without_types_passes(self) -> None:
         """Boundary: all jobs exempt and no types reports no ready_for_review violation."""
-        text = "\n".join([
-            "on:",
-            "  pull_request:",
-            "jobs:",
-            "  check:",
-            "    runs-on: ubuntu-26.04",
-            "    if: github.event_name != 'pull_request'",
-            "    steps:",
-            "      - run: make test",
-            "",
-        ])
+        text = "\n".join(
+            [
+                "on:",
+                "  pull_request:",
+                "jobs:",
+                "  check:",
+                "    runs-on: ubuntu-26.04",
+                "    if: github.event_name != 'pull_request'",
+                "    steps:",
+                "      - run: make test",
+                "",
+            ]
+        )
         self.assertEqual(self.check(text), [])
 
     def test_flow_mapping_types_before_other_keys_passes(self) -> None:
@@ -314,17 +322,19 @@ class StopOnDraftJobsTest(unittest.TestCase):
 
     def test_exempt_gated_job_needs_no_types(self) -> None:
         """Boundary: when the only gated job is exempt, types are not required."""
-        text = "\n".join([
-            "on:",
-            "  pull_request:",
-            "jobs:",
-            "  merge-group:",
-            "    runs-on: ubuntu-26.04",
-            "    if: github.event_name == 'merge_group'",
-            "    steps:",
-            f"      - uses: {GATE}",
-            "",
-        ])
+        text = "\n".join(
+            [
+                "on:",
+                "  pull_request:",
+                "jobs:",
+                "  merge-group:",
+                "    runs-on: ubuntu-26.04",
+                "    if: github.event_name == 'merge_group'",
+                "    steps:",
+                f"      - uses: {GATE}",
+                "",
+            ]
+        )
         self.assertEqual(self.check(text), [])
 
     def test_inline_on_mapping_with_required_types_passes(self) -> None:

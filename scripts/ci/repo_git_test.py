@@ -37,7 +37,10 @@ class RepoGitCase(unittest.TestCase):
 
     def listed(self, name: str = "go.mod") -> list[str]:
         """Return worktree_files results relative to the scratch directory."""
-        return [p.relative_to(self.root).as_posix() for p in repo_git.worktree_files(self.root, name)]
+        return [
+            p.relative_to(self.root).as_posix()
+            for p in repo_git.worktree_files(self.root, name)
+        ]
 
 
 class WorktreeFilesTest(RepoGitCase):
@@ -93,14 +96,19 @@ class WorktreeFilesTest(RepoGitCase):
             "GIT_INDEX_FILE": str(decoy / ".git" / "index"),
         }
         for var, value in overrides.items():
-            with self.subTest(var=var), unittest.mock.patch.dict(os.environ, {var: value}):
+            with (
+                self.subTest(var=var),
+                unittest.mock.patch.dict(os.environ, {var: value}),
+            ):
                 self.assertEqual(self.listed(), ["go.mod"])
 
     def test_non_repository_fails_closed(self) -> None:
         """Negative: a directory outside any repository raises GitError."""
         outside = tempfile.TemporaryDirectory(prefix="golusoris-repo-git-outside-")
         self.addCleanup(outside.cleanup)
-        with unittest.mock.patch.dict(os.environ, {"GIT_CEILING_DIRECTORIES": outside.name}):
+        with unittest.mock.patch.dict(
+            os.environ, {"GIT_CEILING_DIRECTORIES": outside.name}
+        ):
             with self.assertRaises(repo_git.GitError):
                 repo_git.worktree_files(Path(outside.name), "go.mod")
 
@@ -148,7 +156,9 @@ class ScratchEnvironTest(unittest.TestCase):
 
     def test_missing_git_fails_closed(self) -> None:
         """Negative: without git on PATH the lookup raises and the environment is unchanged."""
-        with unittest.mock.patch.dict(os.environ, {"PATH": "", "GIT_INDEX_FILE": str(self.decoy)}):
+        with unittest.mock.patch.dict(
+            os.environ, {"PATH": "", "GIT_INDEX_FILE": str(self.decoy)}
+        ):
             with self.assertRaises(repo_git.GitError), repo_git.scratch_environ():
                 self.fail("scratch_environ entered without git")
             self.assertEqual(os.environ["GIT_INDEX_FILE"], str(self.decoy))

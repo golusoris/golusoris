@@ -3,6 +3,7 @@
 PreToolUse & Local Git Hook Evasion Blocker
 Enforces HISS by intercepting attempts to bypass Git hooks, linters, or verification gates.
 """
+
 import json
 import os
 import re
@@ -22,6 +23,7 @@ BLOCKED_PATTERNS = [
 TOPOLOGY_PATTERNS = [
     r"(standardsctl|praetorctl)\s+(adopt|conform|bootstrap|needs\s+(scan|report|migrate|epic))\b.*(\bdev/?(\s|$)|/dev/(cordanaLLM|lusoris|vmafx|golusoris|upstream|local|stacks|worktrees|scratch)/?(\s|$))",
 ]
+
 
 def audit_command(command_str: str) -> bool:
     for pattern in BLOCKED_PATTERNS:
@@ -45,9 +47,12 @@ def audit_command(command_str: str) -> bool:
 
     return True
 
+
 def audit_environment() -> bool:
     if os.environ.get("LEFTHOOK") == "0":
-        sys.stderr.write("[BLOCKED BY HISS] LEFTHOOK=0 detected in environment. Evasion prohibited.\n")
+        sys.stderr.write(
+            "[BLOCKED BY HISS] LEFTHOOK=0 detected in environment. Evasion prohibited.\n"
+        )
         return False
     if os.environ.get("LEFTHOOK_EXCLUDE") or os.environ.get("LEFTHOOK_SKIP"):
         sys.stderr.write("[BLOCKED BY HISS] Hook exclusions are prohibited.\n")
@@ -99,6 +104,7 @@ def main():
         sys.stdout.buffer.flush()
 
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()

@@ -54,7 +54,9 @@ def check_fixtures() -> None:
             check(pinned + "\n" + mutable)
         except ValueError:
             continue
-        raise AssertionError(f"planted mutable reference hidden by a valid digest: {mutable!r}")
+        raise AssertionError(
+            f"planted mutable reference hidden by a valid digest: {mutable!r}"
+        )
 
 
 def main() -> int:

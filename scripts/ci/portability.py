@@ -23,9 +23,9 @@ import ci_scope
 import windows_job
 
 # Windows job objects that own each running child tree, keyed by its Popen.
-_WINDOWS_JOBS: weakref.WeakKeyDictionary[subprocess.Popen[bytes], windows_job.ProcessJob] = (
-    weakref.WeakKeyDictionary()
-)
+_WINDOWS_JOBS: weakref.WeakKeyDictionary[
+    subprocess.Popen[bytes], windows_job.ProcessJob
+] = weakref.WeakKeyDictionary()
 
 MAX_MODULES = 64
 MAX_PACKAGES_PER_MODULE = 512
@@ -83,9 +83,7 @@ class ProcessRunner:
         max_output_bytes: int = MAX_PROCESS_OUTPUT_BYTES,
     ) -> bytes:
         if not 1 <= max_output_bytes <= MAX_PROCESS_OUTPUT_BYTES:
-            raise PortabilityError(
-                f"invalid command-output bound: {max_output_bytes}"
-            )
+            raise PortabilityError(f"invalid command-output bound: {max_output_bytes}")
         try:
             options: dict[str, object] = {
                 "cwd": cwd,
@@ -106,7 +104,9 @@ class ProcessRunner:
                 **options,
             )
         except OSError as error:
-            raise PortabilityError(f"command failed to start {argv!r}: {error}") from error
+            raise PortabilityError(
+                f"command failed to start {argv!r}: {error}"
+            ) from error
 
         if os.name == "nt":
             _adopt_windows_process(process, argv)
@@ -140,9 +140,13 @@ class ProcessRunner:
                 timeout=timeout,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise PortabilityError(f"command failed to start {argv!r}: {error}") from error
+            raise PortabilityError(
+                f"command failed to start {argv!r}: {error}"
+            ) from error
         if result.returncode != 0:
-            raise PortabilityError(f"command failed with exit {result.returncode}: {argv!r}")
+            raise PortabilityError(
+                f"command failed with exit {result.returncode}: {argv!r}"
+            )
 
 
 def _read_process_pipe(
@@ -162,7 +166,7 @@ def _read_process_pipe(
     try:
         for _ in range(limit + 2):
             remaining = limit - len(output)
-            read_size = min(PROCESS_READ_BYTES, max(remaining+1, 1))
+            read_size = min(PROCESS_READ_BYTES, max(remaining + 1, 1))
             chunk = os.read(stream.fileno(), read_size)
             if not chunk:
                 return
@@ -193,7 +197,15 @@ def _collect_process_output(
     threads = [
         threading.Thread(
             target=_read_process_pipe,
-            args=(stream, buffers[index], limit, overflow, read_errors, index, failure_event),
+            args=(
+                stream,
+                buffers[index],
+                limit,
+                overflow,
+                read_errors,
+                index,
+                failure_event,
+            ),
             daemon=True,
         )
         for index, stream in enumerate(streams)
@@ -260,7 +272,12 @@ def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> list[str
     """Signal the isolated POSIX process group with bounded TERM then KILL."""
     pgid = process.pid
     # killpg(1) is kill(-1) and killpg(0) is the caller's group; a test double's pid can index to 1.
-    if not isinstance(pgid, int) or isinstance(pgid, bool) or pgid <= 1 or pgid == os.getpgrp():
+    if (
+        not isinstance(pgid, int)
+        or isinstance(pgid, bool)
+        or pgid <= 1
+        or pgid == os.getpgrp()
+    ):
         return [f"refused to signal process group {pgid!r}"]
     failures: list[str] = []
     try:
@@ -279,7 +296,9 @@ def _terminate_posix_process_group(process: subprocess.Popen[bytes]) -> list[str
     return failures
 
 
-def _adopt_windows_process(process: subprocess.Popen[bytes], argv: tuple[str, ...]) -> None:
+def _adopt_windows_process(
+    process: subprocess.Popen[bytes], argv: tuple[str, ...]
+) -> None:
     """Place the suspended child in a kill-on-close job, then let it run."""
     try:
         _WINDOWS_JOBS[process] = windows_job.ProcessJob(process.pid)
@@ -492,7 +511,9 @@ def discover_modules(root: Path, runner: ProcessRunner) -> tuple[Path, ...]:
         timeout=DISCOVERY_TIMEOUT_SECONDS,
     )
     discovered_paths = decode_manifest_output(output, "Go module discovery")
-    deleted_paths = set(decode_manifest_output(deleted_output, "deleted Go module discovery"))
+    deleted_paths = set(
+        decode_manifest_output(deleted_output, "deleted Go module discovery")
+    )
     if not deleted_paths.issubset(discovered_paths):
         raise PortabilityError("deleted Go module discovery returned an unknown path")
     raw_paths = [path for path in discovered_paths if path not in deleted_paths]
@@ -521,7 +542,9 @@ def list_packages(
     try:
         packages = tuple(line for line in output.decode("utf-8").splitlines() if line)
     except UnicodeDecodeError as error:
-        raise PortabilityError(f"go list returned non-UTF-8 output in {module}") from error
+        raise PortabilityError(
+            f"go list returned non-UTF-8 output in {module}"
+        ) from error
     if not 1 <= len(packages) <= MAX_PACKAGES_PER_MODULE:
         raise PortabilityError(
             f"discovered {len(packages)} packages in {module}; "

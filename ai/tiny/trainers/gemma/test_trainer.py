@@ -91,11 +91,15 @@ class GemmaTrainerTest(TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             dataset = root / "data.jsonl"
-            dataset.write_text('{"prompt":"one","response":"first"}\n', encoding="utf-8")
+            dataset.write_text(
+                '{"prompt":"one","response":"first"}\n', encoding="utf-8"
+            )
             output = root / "output"
             trainer.contract_smoke(valid_config(dataset), dataset, output)
             self.assertGreater((output / trainer.ARTIFACT_NAME).stat().st_size, 0)
-            metrics = json.loads((output / trainer.METRICS_NAME).read_text(encoding="utf-8"))
+            metrics = json.loads(
+                (output / trainer.METRICS_NAME).read_text(encoding="utf-8")
+            )
             self.assertEqual(metrics, {"contract_smoke": 1.0, "examples": 1.0})
 
 

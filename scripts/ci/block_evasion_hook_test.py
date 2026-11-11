@@ -72,10 +72,16 @@ class BlockEvasionHookTest(unittest.TestCase):
                 self.assertEqual(result.stdout, b"")
 
     def test_hook_exclusion_environment_fails_closed(self) -> None:
-        for variable in ("LEFTHOOK=0", "LEFTHOOK_EXCLUDE=lint", "LEFTHOOK_SKIP=pre-push"):
+        for variable in (
+            "LEFTHOOK=0",
+            "LEFTHOOK_EXCLUDE=lint",
+            "LEFTHOOK_SKIP=pre-push",
+        ):
             key, value = variable.split("=", 1)
             with self.subTest(variable=variable):
-                result = self.run_hook(arguments=("--environment",), environment={key: value})
+                result = self.run_hook(
+                    arguments=("--environment",), environment={key: value}
+                )
                 self.assertNotEqual(result.returncode, 0)
 
     def test_benign_argv_is_allowed_without_json_marker(self) -> None:

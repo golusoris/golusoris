@@ -40,8 +40,15 @@ TEARDOWN_BUDGET_SECONDS = (
 
 def _is_pure_number(node: ast.expr) -> bool:
     """Report whether an expression is built from numeric literals only."""
-    leaves = [n for n in ast.walk(node) if isinstance(n, (ast.Name, ast.Attribute, ast.Call, ast.Constant))]
-    return all(isinstance(n, ast.Constant) and isinstance(n.value, (int, float)) for n in leaves)
+    leaves = [
+        n
+        for n in ast.walk(node)
+        if isinstance(n, (ast.Name, ast.Attribute, ast.Call, ast.Constant))
+    ]
+    return all(
+        isinstance(n, ast.Constant) and isinstance(n.value, (int, float))
+        for n in leaves
+    )
 
 
 def literal_wall_clock_bounds(source: str) -> list[int]:
@@ -56,6 +63,7 @@ def literal_wall_clock_bounds(source: str) -> list[int]:
         if timed and any(_is_pure_number(arg) for arg in node.args):
             lines.append(node.lineno)
     return lines
+
 
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
@@ -85,7 +93,9 @@ class FakeRunner:
         del environment, timeout
         self.commands.append((cwd, argv))
         if argv[0] == "git":
-            manifests = self.deleted_manifests if "--deleted" in argv else self.manifests
+            manifests = (
+                self.deleted_manifests if "--deleted" in argv else self.manifests
+            )
             return b"\0".join(path.encode() for path in manifests) + b"\0"
         if argv == ("go", "list", "./..."):
             return self.packages
@@ -221,11 +231,15 @@ class PortabilityDriverTest(TestCase):
         ):
             for pid in refused:
                 with self.subTest(pid=pid):
-                    failures = portability._terminate_posix_process_group(mock.Mock(pid=pid))
+                    failures = portability._terminate_posix_process_group(
+                        mock.Mock(pid=pid)
+                    )
                     self.assertEqual(len(failures), 1)
             killpg.assert_not_called()
             # pid 2 is never signalled for real: os.killpg is the mock above.
-            self.assertEqual(portability._terminate_posix_process_group(mock.Mock(pid=2)), [])
+            self.assertEqual(
+                portability._terminate_posix_process_group(mock.Mock(pid=2)), []
+            )
         self.assertEqual([call.args[0] for call in killpg.call_args_list], [2, 2])
 
     def test_positive_every_module_runs_all_three_phases(self) -> None:
@@ -236,8 +250,12 @@ class PortabilityDriverTest(TestCase):
             runner = FakeRunner(manifests)
             summary = verify_quiet(root, runner)
         self.assertEqual(summary, portability.Summary(modules=2, packages=2, phases=6))
-        phase_commands = [argv for _, argv in runner.commands if argv[0] == "go" and argv[1] != "list"]
-        self.assertEqual(phase_commands, [argv for _ in manifests for _, argv in portability.PHASES])
+        phase_commands = [
+            argv for _, argv in runner.commands if argv[0] == "go" and argv[1] != "list"
+        ]
+        self.assertEqual(
+            phase_commands, [argv for _ in manifests for _, argv in portability.PHASES]
+        )
 
     def test_negative_empty_discovery_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -278,7 +296,9 @@ class PortabilityDriverTest(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             create_repository(root, manifests)
-            with self.assertRaisesRegex(portability.PortabilityError, "lacks root go.mod"):
+            with self.assertRaisesRegex(
+                portability.PortabilityError, "lacks root go.mod"
+            ):
                 verify_quiet(root, FakeRunner(manifests))
 
     def test_negative_zero_packages_cannot_report_green(self) -> None:
@@ -287,9 +307,13 @@ class PortabilityDriverTest(TestCase):
             root = Path(directory)
             create_repository(root, manifests)
             runner = FakeRunner(manifests, packages=b"")
-            with self.assertRaisesRegex(portability.PortabilityError, "expected 1..512"):
+            with self.assertRaisesRegex(
+                portability.PortabilityError, "expected 1..512"
+            ):
                 verify_quiet(root, runner)
-        phase_commands = [argv for _, argv in runner.commands if argv[0] == "go" and argv[1] != "list"]
+        phase_commands = [
+            argv for _, argv in runner.commands if argv[0] == "go" and argv[1] != "list"
+        ]
         self.assertEqual(phase_commands, [])
 
     def test_negative_phase_failure_is_not_hidden(self) -> None:
@@ -297,7 +321,9 @@ class PortabilityDriverTest(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             create_repository(root, manifests)
-            with self.assertRaisesRegex(portability.PortabilityError, "injected vet failure"):
+            with self.assertRaisesRegex(
+                portability.PortabilityError, "injected vet failure"
+            ):
                 verify_quiet(root, FakeRunner(manifests, fail_phase="vet"))
 
     def test_negative_ambiguous_windows_paths_are_rejected(self) -> None:
@@ -325,8 +351,8 @@ class PortabilityDriverTest(TestCase):
             'pact_dir="${RUNNER_TEMP}/pact-ffi"',
             'install -d -m 0700 "$pact_dir"',
             'python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir "$pact_dir"',
-            'PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir',
-            'CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir',
+            "PACT_GO_LIB_DOWNLOAD_PATH=$pact_dir",
+            "CGO_LDFLAGS=-L$pact_dir -Wl,-rpath,$pact_dir",
             "$pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'",
             "python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
@@ -505,7 +531,9 @@ class PactFFIInstallerTests(TestCase):
             root = Path(directory)
             cache_dir = root / "cache"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(gzip.compress(b"planted bytes"))
+            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(
+                gzip.compress(b"planted bytes")
+            )
             with self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"):
                 self._cache_install(root, asset, good, cache_dir=cache_dir)
             self.assertFalse((root / "lib" / asset.library).exists())
@@ -527,13 +555,23 @@ class PactFFIInstallerTests(TestCase):
     def test_negative_rejected_cache_exits_with_error_code_three(self) -> None:
         """Return EXIT_ERROR when cached archive verification fails in main."""
         good = gzip.compress(b"verified pact ffi")
-        asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(good).hexdigest(), "libpact_ffi.so")
+        asset = pact_ffi.Asset(
+            "fixture.so.gz", hashlib.sha256(good).hexdigest(), "libpact_ffi.so"
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             cache_dir = root / "cache"
             cache_dir.mkdir(parents=True, exist_ok=True)
-            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(gzip.compress(b"planted bytes"))
-            argv = ["pact_ffi.py", "--cache-dir", str(cache_dir), "--lib-dir", str(root / "lib")]
+            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(
+                gzip.compress(b"planted bytes")
+            )
+            argv = [
+                "pact_ffi.py",
+                "--cache-dir",
+                str(cache_dir),
+                "--lib-dir",
+                str(root / "lib"),
+            ]
             argv += ["--module", str(ROOT / "testutil/pact/go.mod")]
             with (
                 mock.patch.object(pact_ffi.sys, "argv", argv),
@@ -606,7 +644,9 @@ class PactFFIInstallerTests(TestCase):
             self.assertEqual(sleeps, [2.0, 4.0])
             self.assertEqual(list(root.iterdir()), [])
 
-    def test_negative_download_digest_mismatch_fails_at_once_without_retry(self) -> None:
+    def test_negative_download_digest_mismatch_fails_at_once_without_retry(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, _stderr, outcome = self._retry_download(
@@ -708,7 +748,9 @@ class PactFFIInstallerTests(TestCase):
             self.assertEqual(len(sleeps), 0)
             self.assertEqual(list(root.iterdir()), [])
 
-    def test_negative_download_named_temporary_file_permission_error_fails_at_once(self) -> None:
+    def test_negative_download_named_temporary_file_permission_error_fails_at_once(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with mock.patch.object(
@@ -716,7 +758,9 @@ class PactFFIInstallerTests(TestCase):
                 "NamedTemporaryFile",
                 side_effect=PermissionError("permission denied"),
             ) as mock_tempfile:
-                calls, sleeps, _stderr, outcome = self._retry_download([], directory=root)
+                calls, sleeps, _stderr, outcome = self._retry_download(
+                    [], directory=root
+                )
             self.assertIsInstance(outcome, (pact_ffi.InstallError, OSError))
             self.assertEqual(mock_tempfile.call_count, 1)
             self.assertEqual(len(sleeps), 0)
@@ -738,12 +782,18 @@ class PactFFIInstallerTests(TestCase):
             self.assertIsInstance(outcome, Path)
             lines = [line for line in stderr_text.splitlines() if line]
             self.assertEqual(len(lines), 2)
-            self.assertTrue(lines[0].startswith("pact-ffi: download attempt 1/3 failed:"))
-            self.assertTrue(lines[1].startswith("pact-ffi: download attempt 2/3 failed:"))
+            self.assertTrue(
+                lines[0].startswith("pact-ffi: download attempt 1/3 failed:")
+            )
+            self.assertTrue(
+                lines[1].startswith("pact-ffi: download attempt 2/3 failed:")
+            )
             self.assertEqual(calls, 3)
             self.assertEqual(sleeps, [2.0, 4.0])
 
-    def test_negative_download_retry_exhausted_stderr_has_no_warning_after_last_attempt(self) -> None:
+    def test_negative_download_retry_exhausted_stderr_has_no_warning_after_last_attempt(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, stderr_text, outcome = self._retry_download(
@@ -752,14 +802,19 @@ class PactFFIInstallerTests(TestCase):
             self.assertIsInstance(outcome, pact_ffi.InstallError)
             lines = [line for line in stderr_text.splitlines() if line]
             self.assertEqual(len(lines), 2)
-            self.assertTrue(lines[0].startswith("pact-ffi: download attempt 1/3 failed:"))
-            self.assertTrue(lines[1].startswith("pact-ffi: download attempt 2/3 failed:"))
+            self.assertTrue(
+                lines[0].startswith("pact-ffi: download attempt 1/3 failed:")
+            )
+            self.assertTrue(
+                lines[1].startswith("pact-ffi: download attempt 2/3 failed:")
+            )
             self.assertEqual(calls, 3)
             self.assertEqual(sleeps, [2.0, 4.0])
             self.assertEqual(list(root.iterdir()), [])
 
     def test_unit_is_transient_download_error_table(self) -> None:
         """Classify each error class and HTTP status against the retry allow-list."""
+
         def make_http_error(code: int) -> urllib.error.HTTPError:
             err = urllib.error.HTTPError(
                 url="https://example.com/asset",
@@ -825,19 +880,28 @@ class PactFFIInstallerTests(TestCase):
                     cache_if = re.search(r"(?m)^ +if: +(.*)$", prev_step)
                     if install_if is None or cache_if is None:
                         self.fail("expected if condition on install and cache steps")
-                    self.assertEqual(cache_if.group(1).strip(), install_if.group(1).strip())
+                    self.assertEqual(
+                        cache_if.group(1).strip(), install_if.group(1).strip()
+                    )
         self.assertEqual(total_pact_steps, 4)
 
     def test_boundary_pin_change_downloads_new_archive_beside_stale_one(self) -> None:
         """Download new asset when pin changes while keeping stale archive alongside."""
         old = gzip.compress(b"old pinned ffi")
         new = gzip.compress(b"new pinned ffi")
-        old_asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(old).hexdigest(), "libpact_ffi.so")
-        new_asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(new).hexdigest(), "libpact_ffi.so")
+        old_asset = pact_ffi.Asset(
+            "fixture.so.gz", hashlib.sha256(old).hexdigest(), "libpact_ffi.so"
+        )
+        new_asset = pact_ffi.Asset(
+            "fixture.so.gz", hashlib.sha256(new).hexdigest(), "libpact_ffi.so"
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._cache_install(root, old_asset, old)
-            self.assertEqual(self._cache_install(root, new_asset, new).read_bytes(), b"new pinned ffi")
+            self.assertEqual(
+                self._cache_install(root, new_asset, new).read_bytes(),
+                b"new pinned ffi",
+            )
             self.assertEqual(self.download_calls, 1)
 
     def test_boundary_cache_dir_equals_library_dir_works(self) -> None:
@@ -860,7 +924,10 @@ class PactFFIInstallerTests(TestCase):
 
     def test_negative_symlinked_cache_directory_outside_root_is_refused(self) -> None:
         """Refuse a cache directory whose symlink resolves outside cache_root."""
-        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as outside:
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            tempfile.TemporaryDirectory() as outside,
+        ):
             root = Path(directory)
             try:
                 (root / "cache").symlink_to(outside, target_is_directory=True)
@@ -869,7 +936,10 @@ class PactFFIInstallerTests(TestCase):
                 self.skipTest(f"symlink creation unavailable on this host: {error}")
             with self.assertRaisesRegex(pact_ffi.InstallError, "resolves outside"):
                 pact_ffi.install(
-                    ROOT / "testutil/pact/go.mod", root / "lib", cache_dir=root / "cache", cache_root=root
+                    ROOT / "testutil/pact/go.mod",
+                    root / "lib",
+                    cache_dir=root / "cache",
+                    cache_root=root,
                 )
             self.assertEqual(list(Path(outside).iterdir()), [])
 
@@ -900,20 +970,30 @@ class PactFFIInstallerTests(TestCase):
 
     def test_negative_keep_and_cleanup_failures_raise_one_install_error(self) -> None:
         compressed = gzip.compress(b"verified pact ffi")
-        asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(compressed).hexdigest(), "libpact_ffi.so")
+        asset = pact_ffi.Asset(
+            "fixture.so.gz", hashlib.sha256(compressed).hexdigest(), "libpact_ffi.so"
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             with (
                 mock.patch.object(
-                    pact_ffi.urllib.request, "urlopen", return_value=io.BytesIO(compressed)
+                    pact_ffi.urllib.request,
+                    "urlopen",
+                    return_value=io.BytesIO(compressed),
                 ),
-                mock.patch.object(pact_ffi.os, "replace", side_effect=OSError("replace denied")),
+                mock.patch.object(
+                    pact_ffi.os, "replace", side_effect=OSError("replace denied")
+                ),
                 mock.patch.object(Path, "unlink", side_effect=OSError("unlink denied")),
-                self.assertRaisesRegex(pact_ffi.InstallError, "replace denied; unlink .*unlink denied"),
+                self.assertRaisesRegex(
+                    pact_ffi.InstallError, "replace denied; unlink .*unlink denied"
+                ),
             ):
                 pact_ffi.cached_archive(asset, root)
 
-    def test_local_gates_install_pact_ffi_into_ignored_repository_directory(self) -> None:
+    def test_local_gates_install_pact_ffi_into_ignored_repository_directory(
+        self,
+    ) -> None:
         """Verify the Makefile targets install Pact FFI into .workingdir/cache/pact-ffi."""
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         targets = next(
@@ -938,12 +1018,15 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn("$(PACT_FFI_TARGETS): pact-ffi", makefile)
         self.assertIn("override export PACT_GO_LIB_DOWNLOAD_PATH", makefile)
         self.assertIn("'-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)'", makefile)
-        self.assertIn("override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)", makefile)
+        self.assertIn(
+            "override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)", makefile
+        )
         ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".workingdir/", ignored)
 
     def test_truncated_download_is_wrapped_and_removed(self) -> None:
         """Capture sleep backoff and stderr during transient truncated download failures."""
+
         class TruncatedResponse:
             def __enter__(self) -> TruncatedResponse:
                 return self
@@ -1069,9 +1152,15 @@ class PactFFIInstallerTests(TestCase):
             with self.subTest(system=system_name, machine=machine):
                 stdout = io.StringIO()
                 with (
-                    mock.patch.object(pact_ffi.sys, "argv", ["pact_ffi.py", "--asset-digest"]),
-                    mock.patch.object(pact_ffi.platform, "system", return_value=system_name),
-                    mock.patch.object(pact_ffi.platform, "machine", return_value=machine),
+                    mock.patch.object(
+                        pact_ffi.sys, "argv", ["pact_ffi.py", "--asset-digest"]
+                    ),
+                    mock.patch.object(
+                        pact_ffi.platform, "system", return_value=system_name
+                    ),
+                    mock.patch.object(
+                        pact_ffi.platform, "machine", return_value=machine
+                    ),
                     contextlib.redirect_stdout(stdout),
                 ):
                     exit_code = pact_ffi.main()
@@ -1079,7 +1168,9 @@ class PactFFIInstallerTests(TestCase):
                 self.assertEqual(stdout.getvalue().strip(), expected_digest)
                 self.assertRegex(stdout.getvalue().strip(), r"^[0-9a-f]{64}$")
 
-    def test_asset_digest_unsupported_platform_reports_error_and_exits_code_three(self) -> None:
+    def test_asset_digest_unsupported_platform_reports_error_and_exits_code_three(
+        self,
+    ) -> None:
         """Report failure on stderr and return EXIT_ERROR when the platform is unsupported."""
         stderr = io.StringIO()
         with (
@@ -1090,7 +1181,9 @@ class PactFFIInstallerTests(TestCase):
         ):
             exit_code = pact_ffi.main()
         self.assertEqual(exit_code, pact_ffi.EXIT_ERROR)
-        self.assertIn("Pact FFI install failed: unsupported Pact FFI host", stderr.getvalue())
+        self.assertIn(
+            "Pact FFI install failed: unsupported Pact FFI host", stderr.getvalue()
+        )
 
     def test_main_without_lib_dir_and_without_asset_digest_exits_code_two(self) -> None:
         """Exit with code 2 via argparse error when neither --lib-dir nor --asset-digest is given."""

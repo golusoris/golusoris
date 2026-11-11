@@ -34,7 +34,9 @@ EXCLUDED_EXACT = {
     "tools/.pre-commit-config.yaml",
 }
 
-YAML_BLOCK_SCALAR_RE = re.compile(r"^\s*(?:-\s+)?(?:[a-zA-Z0-9_-]+:\s*)?[|>][-+0-9]*\s*$")
+YAML_BLOCK_SCALAR_RE = re.compile(
+    r"^\s*(?:-\s+)?(?:[a-zA-Z0-9_-]+:\s*)?[|>][-+0-9]*\s*$"
+)
 MAX_SCAN_FILES = 20000
 MAX_FILE_LINES = 10000
 
@@ -182,7 +184,9 @@ class QuoteState:
             self._step_single(char)
         elif top == "ansi":
             self._step_ansi(char)
-        self.word_start = char.isspace() and not was_escaped and top in ("code", "cmd", "paren")
+        self.word_start = (
+            char.isspace() and not was_escaped and top in ("code", "cmd", "paren")
+        )
 
 
 def strip_comment(line: str) -> str:

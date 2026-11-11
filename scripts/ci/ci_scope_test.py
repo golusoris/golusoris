@@ -66,11 +66,19 @@ class CiScopeTest(unittest.TestCase):
             encoding="utf-8",
         )
 
-        (self.repo / "main.go").write_text("package main\nfunc main() {}\n", encoding="utf-8")
+        (self.repo / "main.go").write_text(
+            "package main\nfunc main() {}\n", encoding="utf-8"
+        )
         (self.repo / "core" / "core.go").write_text("package core\n", encoding="utf-8")
-        (self.repo / "k8s" / "nri" / "nri.go").write_text("package nri\n", encoding="utf-8")
-        (self.repo / "container" / "registry" / "reg.go").write_text("package registry\n", encoding="utf-8")
-        (self.repo / "container" / "registry" / "sign" / "sign.go").write_text("package sign\n", encoding="utf-8")
+        (self.repo / "k8s" / "nri" / "nri.go").write_text(
+            "package nri\n", encoding="utf-8"
+        )
+        (self.repo / "container" / "registry" / "reg.go").write_text(
+            "package registry\n", encoding="utf-8"
+        )
+        (self.repo / "container" / "registry" / "sign" / "sign.go").write_text(
+            "package sign\n", encoding="utf-8"
+        )
 
         self._git("add", ".")
         self._git("commit", "-m", "initial commit")
@@ -113,7 +121,9 @@ class CiScopeTest(unittest.TestCase):
 
     def test_positive_one_file_in_nested_module_selects_that_module_only(self) -> None:
         """Touching one file in nested module selects only that module."""
-        (self.repo / "k8s" / "nri" / "new.go").write_text("package nri\n", encoding="utf-8")
+        (self.repo / "k8s" / "nri" / "new.go").write_text(
+            "package nri\n", encoding="utf-8"
+        )
         self._git("add", ".")
         self._git("commit", "-m", "touch k8s/nri")
 
@@ -125,7 +135,9 @@ class CiScopeTest(unittest.TestCase):
 
     def test_positive_core_file_selects_dependents(self) -> None:
         """Touching a core file selects core plus all its transitive dependents."""
-        (self.repo / "core" / "core.go").write_text("package core\n// modified\n", encoding="utf-8")
+        (self.repo / "core" / "core.go").write_text(
+            "package core\n// modified\n", encoding="utf-8"
+        )
         self._git("commit", "-am", "touch core")
 
         proc = self._run_scope("modules", base=self.base_sha)
@@ -147,7 +159,9 @@ class CiScopeTest(unittest.TestCase):
     def test_positive_files_subcommand(self) -> None:
         """Files subcommand returns changed files matching glob."""
         (self.repo / "k8s" / "nri" / "file.py").write_text("# py\n", encoding="utf-8")
-        (self.repo / "k8s" / "nri" / "file.go").write_text("package nri\n", encoding="utf-8")
+        (self.repo / "k8s" / "nri" / "file.go").write_text(
+            "package nri\n", encoding="utf-8"
+        )
         self._git("add", ".")
         self._git("commit", "-m", "add py and go")
 
@@ -172,12 +186,16 @@ class CiScopeTest(unittest.TestCase):
 
     def test_negative_bad_sha_exits_nonzero(self) -> None:
         """Invalid base commit SHA fails closed with non-zero exit."""
-        proc = self._run_scope("modules", base="deadbeefbadsha00000000000000000000000000")
+        proc = self._run_scope(
+            "modules", base="deadbeefbadsha00000000000000000000000000"
+        )
         self.assertEqual(proc.returncode, 3)
 
     def test_negative_bad_sha_any_is_error_not_no_match(self) -> None:
         """A git error under `any` exits 3, never the no-match code 1."""
-        proc = self._run_scope("any", "*.go", base="deadbeefbadsha00000000000000000000000000")
+        proc = self._run_scope(
+            "any", "*.go", base="deadbeefbadsha00000000000000000000000000"
+        )
         self.assertEqual(proc.returncode, 3)
         self.assertIn("ci-scope: git error", proc.stderr)
 
@@ -208,7 +226,9 @@ class CiScopeTest(unittest.TestCase):
 
         proc = self._run_scope("modules", base=self.base_sha)
         self.assertEqual(proc.returncode, 0)
-        self.assertIn("global trigger: .github/actions/setup-go/action.yml", proc.stderr)
+        self.assertIn(
+            "global trigger: .github/actions/setup-go/action.yml", proc.stderr
+        )
         self.assertIn("k8s/nri", proc.stdout.splitlines())
 
     def test_negative_ruff_config_change_lints_every_python_file(self) -> None:
@@ -217,7 +237,9 @@ class CiScopeTest(unittest.TestCase):
         self._git("add", ".")
         self._git("commit", "-m", "add python")
         base = self._git("rev-parse", "HEAD").strip()
-        (self.repo / "ruff.toml").write_text('[lint]\nselect = ["S"]\n', encoding="utf-8")
+        (self.repo / "ruff.toml").write_text(
+            '[lint]\nselect = ["S"]\n', encoding="utf-8"
+        )
         self._git("add", ".")
         self._git("commit", "-m", "change ruff rules")
 
@@ -236,7 +258,9 @@ class CiScopeTest(unittest.TestCase):
 
     def test_boundary_root_file_selects_root(self) -> None:
         """Changing a file in root module directory selects '.'."""
-        (self.repo / "main.go").write_text("package main\n// update\n", encoding="utf-8")
+        (self.repo / "main.go").write_text(
+            "package main\n// update\n", encoding="utf-8"
+        )
         self._git("commit", "-am", "update main.go")
 
         proc = self._run_scope("modules", base=self.base_sha)
@@ -252,7 +276,6 @@ class CiScopeTest(unittest.TestCase):
             SCOPE_RUN_TIMEOUT_SECONDS,
             ci_scope.COMMAND_TIMEOUT_SECONDS,
         )
-
 
     def _write(self, rel: str, text: str = "x\n") -> None:
         path = self.repo / rel
@@ -290,8 +313,13 @@ class CiScopeTest(unittest.TestCase):
         self._write("docs/guide.md")
         self._git("add", ".")
         self._git("commit", "-m", "docs")
-        with mock.patch.dict(os.environ, {"CI_SCOPE_BASE": self.base_sha}), mock.patch.object(
-            ci_scope.gomod, "read_go_mod", side_effect=AssertionError("gate must not invoke Go")
+        with (
+            mock.patch.dict(os.environ, {"CI_SCOPE_BASE": self.base_sha}),
+            mock.patch.object(
+                ci_scope.gomod,
+                "read_go_mod",
+                side_effect=AssertionError("gate must not invoke Go"),
+            ),
         ):
             decision, reason = ci_scope.evaluate_gate(self.repo)
         self.assertEqual(decision, "skip")
@@ -390,10 +418,16 @@ class SkipSafeEmbedTest(unittest.TestCase):
             for match in directive.finditer(text):
                 for pattern in match.group(1).split():
                     target = REPO_ROOT / Path(rel).parent / pattern
-                    files = [p for p in target.rglob("*") if p.is_file()] if target.is_dir() else [target]
+                    files = (
+                        [p for p in target.rglob("*") if p.is_file()]
+                        if target.is_dir()
+                        else [target]
+                    )
                     embedded += [p.relative_to(REPO_ROOT).as_posix() for p in files]
         self.assertTrue(embedded, "expected //go:embed directives")
-        clashes = [f for f in embedded if ci_scope._matches_any_pattern(f, ci_scope.SKIP_SAFE)]
+        clashes = [
+            f for f in embedded if ci_scope._matches_any_pattern(f, ci_scope.SKIP_SAFE)
+        ]
         self.assertEqual(clashes, [])
 
 

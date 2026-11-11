@@ -118,7 +118,9 @@ def materialize_dataset(
     return _validated_local_path(parsed, input_root, max_bytes)
 
 
-def safe_extract_archive(source: Path, destination: Path, fmt: str, max_bytes: int) -> None:
+def safe_extract_archive(
+    source: Path, destination: Path, fmt: str, max_bytes: int
+) -> None:
     """Extract an image-folder archive without links, traversal, or expansion bombs."""
     destination.mkdir(mode=0o700, parents=True, exist_ok=False)
     if fmt == "zip":
@@ -135,7 +137,11 @@ def atomic_write_json(path: Path, value: Mapping[str, Any]) -> None:
     path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
     payload = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     handle = tempfile.NamedTemporaryFile(
-        mode="w", encoding="utf-8", dir=path.parent, prefix=f".{path.name}.", delete=False
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        delete=False,
     )
     temporary = Path(handle.name)
     try:
@@ -167,12 +173,18 @@ def _read_bounded(path: Path, max_bytes: int) -> bytes:
 
 def _validate_uri(parsed: SplitResult) -> None:
     if parsed.username or parsed.password or parsed.fragment or parsed.query:
-        raise ContractError("dataset_uri must not contain credentials, query, or fragment")
+        raise ContractError(
+            "dataset_uri must not contain credentials, query, or fragment"
+        )
     if parsed.scheme != "file":
-        raise ContractError("dataset_uri scheme must be file; stage remote data before training")
+        raise ContractError(
+            "dataset_uri scheme must be file; stage remote data before training"
+        )
 
 
-def _validated_local_path(parsed: SplitResult, input_root: Path, max_bytes: int) -> Path:
+def _validated_local_path(
+    parsed: SplitResult, input_root: Path, max_bytes: int
+) -> Path:
     if parsed.netloc not in {"", "localhost"}:
         raise ContractError("file dataset_uri host must be empty or localhost")
     path = Path(os.path.abspath(unquote(parsed.path)))
@@ -257,7 +269,9 @@ def _extract_tar(source: Path, destination: Path, fmt: str, max_bytes: int) -> N
                 target.mkdir(mode=0o755, parents=True, exist_ok=True)
                 continue
             if not member.isfile():
-                raise ContractError(f"archive links and special files are not allowed: {member.name}")
+                raise ContractError(
+                    f"archive links and special files are not allowed: {member.name}"
+                )
             expanded += member.size
             if expanded > max_bytes:
                 raise ContractError(f"archive expands beyond {max_bytes} bytes")

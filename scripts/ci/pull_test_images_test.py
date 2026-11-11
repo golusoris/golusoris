@@ -33,47 +33,70 @@ class PullTestImagesTest(TestCase):
         self.assertIsNotNone(self.bash)
         docker = self.root / "docker"
         docker.write_text(
-            '#!/usr/bin/env bash\n'
-            'set -euo pipefail\n'
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
             'printf "%s\\n" "$*" >> "$DOCKER_LOG"\n'
             '[[ "$#" == 3 && "$1" == pull && "$2" == --quiet ]] || exit 97\n'
             '[[ "$3" != *:nonexistent ]] || exit 1\n',
             encoding="utf-8",
         )
         docker.chmod(0o755)
-        self.environment = dict(os.environ, PATH=f"{self.root}{os.pathsep}{os.environ['PATH']}",
-                                DOCKER_LOG=str(self.log), CI_SCOPE_BASE="")  # fixture is no git repository
+        self.environment = dict(
+            os.environ,
+            PATH=f"{self.root}{os.pathsep}{os.environ['PATH']}",
+            DOCKER_LOG=str(self.log),
+            CI_SCOPE_BASE="",
+        )  # fixture is no git repository
 
     def run_pulls(self, *images: str) -> subprocess.CompletedProcess[str]:
         return self.run_script("pull-test-images.sh", *images)
 
     def run_script(
-        self, script: str, *args: str, environment: dict[str, str] | None = None,
+        self,
+        script: str,
+        *args: str,
+        environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603 - Repository scripts and fixture arguments only, without a shell.
             [self.bash, str(ROOT / "scripts/ci" / script), *args],
-            cwd=self.root, env=environment or self.environment,
-            capture_output=True, text=True, timeout=10, check=False,
+            cwd=self.root,
+            env=environment or self.environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
 
     def test_nonexistent_tag_exhausts_retries_and_emits_error(self) -> None:
         image = "example.invalid/emulator:nonexistent"
         result = self.run_pulls(image)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn(f"::error::docker pull failed after 3 attempts: {image}", result.stdout)
-        self.assertEqual(self.log.read_text().splitlines(), [f"pull --quiet {image}"] * 3)
+        self.assertIn(
+            f"::error::docker pull failed after 3 attempts: {image}", result.stdout
+        )
+        self.assertEqual(
+            self.log.read_text().splitlines(), [f"pull --quiet {image}"] * 3
+        )
 
     def test_failure_in_first_batch_survives_later_success(self) -> None:
-        result = self.run_pulls("emulator:nonexistent", "emulator:good", "emulator:later")
+        result = self.run_pulls(
+            "emulator:nonexistent", "emulator:good", "emulator:later"
+        )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("::error::docker pull failed after 3 attempts: emulator:nonexistent", result.stdout)
+        self.assertIn(
+            "::error::docker pull failed after 3 attempts: emulator:nonexistent",
+            result.stdout,
+        )
         self.assertIn("pull --quiet emulator:later", self.log.read_text())
 
     def test_success_pulls_all_batches(self) -> None:
         images = tuple(f"emulator:good-{index}" for index in range(5))
         result = self.run_pulls(*images)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertCountEqual(self.log.read_text().splitlines(), [f"pull --quiet {image}" for image in images])
+        self.assertCountEqual(
+            self.log.read_text().splitlines(),
+            [f"pull --quiet {image}" for image in images],
+        )
 
     def test_empty_shard_never_calls_docker(self) -> None:
         result = self.run_pulls()
@@ -94,24 +117,41 @@ class PullTestImagesTest(TestCase):
 
     def test_each_shard_pulls_only_its_deduplicated_images(self) -> None:
         manifest = (ROOT / ".github/testcontainers-split-images.txt").read_text()
-        entries = [line.split() for line in manifest.splitlines() if line and not line.startswith("#")]
+        entries = [
+            line.split()
+            for line in manifest.splitlines()
+            if line and not line.startswith("#")
+        ]
         for shard in range(4):
             with self.subTest(shard=shard):
-                environment = dict(self.environment, GO_MODULE_GROUP="split",
-                                   GO_MODULE_SHARD_COUNT="4", GO_MODULE_SHARD_INDEX=str(shard))
-                selection = self.run_script("go-modules.sh", "list", environment=environment)
+                environment = dict(
+                    self.environment,
+                    GO_MODULE_GROUP="split",
+                    GO_MODULE_SHARD_COUNT="4",
+                    GO_MODULE_SHARD_INDEX=str(shard),
+                )
+                selection = self.run_script(
+                    "go-modules.sh", "list", environment=environment
+                )
                 self.assertEqual(selection.returncode, 0, selection.stderr)
                 selected = selection.stdout.splitlines()
                 expected = {image for module, image in entries if module in selected}
                 self.log.write_text("")
-                result = self.run_script("pull-split-test-images.sh", environment=environment)
+                result = self.run_script(
+                    "pull-split-test-images.sh", environment=environment
+                )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertCountEqual(self.log.read_text().splitlines(), [f"pull --quiet {image}" for image in expected])
+                self.assertCountEqual(
+                    self.log.read_text().splitlines(),
+                    [f"pull --quiet {image}" for image in expected],
+                )
 
     def test_invalid_shard_fails_before_docker(self) -> None:
         result = self.run_script(
             "pull-split-test-images.sh",
-            environment=dict(self.environment, GO_MODULE_SHARD_COUNT="4", GO_MODULE_SHARD_INDEX="4"),
+            environment=dict(
+                self.environment, GO_MODULE_SHARD_COUNT="4", GO_MODULE_SHARD_INDEX="4"
+            ),
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse(self.log.exists())
@@ -124,19 +164,35 @@ class PullTestImagesTest(TestCase):
         # own_module_replaced_valid lists go.mod through git, so the fixture must be a repository.
         with repo_git.scratch_environ():
             repo_git.run_git(["init", "-q"], fixture)
-            for name in (".devcontainer", ".gitea", "container", "internal", "scripts", "template", "tools", "core", "ai", "renovate.json"):
+            for name in (
+                ".devcontainer",
+                ".gitea",
+                "container",
+                "internal",
+                "scripts",
+                "template",
+                "tools",
+                "core",
+                "ai",
+                "renovate.json",
+            ):
                 (fixture / name).symlink_to(ROOT / name)
             (fixture / ".github").mkdir()
             for name in ("workflows", "testcontainers-images.txt"):
                 (fixture / ".github" / name).symlink_to(ROOT / ".github" / name)
             manifest_path = ".github/testcontainers-split-images.txt"
             content = (ROOT / manifest_path).read_text()
-            (fixture / manifest_path).write_text(re.sub(r"sha256:[a-f0-9]{64}", "sha256:" + "0" * 64, content, count=1))
+            (fixture / manifest_path).write_text(
+                re.sub(r"sha256:[a-f0-9]{64}", "sha256:" + "0" * 64, content, count=1)
+            )
             policy["main"].__globals__["ROOT"] = fixture
             errors = io.StringIO()
             with contextlib.redirect_stderr(errors):
                 self.assertEqual(policy["main"](), 1)
-            self.assertIn("split test-image manifest differs from Go authorities", errors.getvalue())
+            self.assertIn(
+                "split test-image manifest differs from Go authorities",
+                errors.getvalue(),
+            )
 
 
 if __name__ == "__main__":

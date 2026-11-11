@@ -46,7 +46,9 @@ class WindowsPanicRescanTest(TestCase):
         self.calls = self.root / "calls.log"
         self.log = self.root / "job.log"
 
-    def run_scan(self, log: str, *args: str, state: str = "CLOSED", fail: bool = False) -> tuple[int, str]:
+    def run_scan(
+        self, log: str, *args: str, state: str = "CLOSED", fail: bool = False
+    ) -> tuple[int, str]:
         self.log.write_text(log, encoding="utf-8")
         env = {
             "PATH": f"{self.root}{os.pathsep}{os.environ['PATH']}",
@@ -59,7 +61,11 @@ class WindowsPanicRescanTest(TestCase):
             env["STUB_FAIL"] = "1"
         out = subprocess.run(  # noqa: S603 - fixed interpreter and repository script.
             [sys.executable, "-B", str(SCRIPT), *args],
-            capture_output=True, text=True, env=env, timeout=60, check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+            timeout=60,
+            check=False,
         )
         return out.returncode, out.stdout + out.stderr
 
@@ -89,7 +95,10 @@ class WindowsPanicRescanTest(TestCase):
         self.assertNotIn("issue reopen", self.calls_text())
 
     def test_bun_failure_without_nil_panic_is_no_hit(self) -> None:
-        rc, out = self.run_scan("--- FAIL: TestX\nFAIL\tgithub.com/golusoris/golusoris/db/bun\t1.2s\n", "--reopen")
+        rc, out = self.run_scan(
+            "--- FAIL: TestX\nFAIL\tgithub.com/golusoris/golusoris/db/bun\t1.2s\n",
+            "--reopen",
+        )
         self.assertEqual(rc, 0, out)
 
     def test_bun_subpackage_is_no_hit(self) -> None:

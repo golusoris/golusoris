@@ -65,14 +65,27 @@ def _kernel32() -> ctypes.WinDLL:
     kernel32.CreateJobObjectW.argtypes = (ctypes.c_void_p, ctypes.wintypes.LPCWSTR)
     kernel32.CreateJobObjectW.restype = ctypes.wintypes.HANDLE
     kernel32.SetInformationJobObject.argtypes = (
-        ctypes.wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, ctypes.wintypes.DWORD,
+        ctypes.wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.wintypes.DWORD,
     )
     kernel32.SetInformationJobObject.restype = ctypes.wintypes.BOOL
-    kernel32.OpenProcess.argtypes = (ctypes.wintypes.DWORD, ctypes.wintypes.BOOL, ctypes.wintypes.DWORD)
+    kernel32.OpenProcess.argtypes = (
+        ctypes.wintypes.DWORD,
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.DWORD,
+    )
     kernel32.OpenProcess.restype = ctypes.wintypes.HANDLE
-    kernel32.AssignProcessToJobObject.argtypes = (ctypes.wintypes.HANDLE, ctypes.wintypes.HANDLE)
+    kernel32.AssignProcessToJobObject.argtypes = (
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.HANDLE,
+    )
     kernel32.AssignProcessToJobObject.restype = ctypes.wintypes.BOOL
-    kernel32.TerminateJobObject.argtypes = (ctypes.wintypes.HANDLE, ctypes.wintypes.UINT)
+    kernel32.TerminateJobObject.argtypes = (
+        ctypes.wintypes.HANDLE,
+        ctypes.wintypes.UINT,
+    )
     kernel32.TerminateJobObject.restype = ctypes.wintypes.BOOL
     kernel32.CloseHandle.argtypes = (ctypes.wintypes.HANDLE,)
     kernel32.CloseHandle.restype = ctypes.wintypes.BOOL
@@ -104,7 +117,10 @@ class ProcessJob:
         info = _ExtendedLimitInformation()
         info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
         if not self._kernel32.SetInformationJobObject(
-            job, _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION, ctypes.byref(info), ctypes.sizeof(info),
+            job,
+            _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION,
+            ctypes.byref(info),
+            ctypes.sizeof(info),
         ):
             error = _last_error("SetInformationJobObject")
             self._kernel32.CloseHandle(job)
@@ -124,7 +140,9 @@ class ProcessJob:
             ntdll.NtResumeProcess.restype = ctypes.c_long
             status = ntdll.NtResumeProcess(process)
             if status != 0:
-                raise OSError(status, f"NtResumeProcess failed with NTSTATUS {status:#x}")
+                raise OSError(
+                    status, f"NtResumeProcess failed with NTSTATUS {status:#x}"
+                )
         finally:
             self._kernel32.CloseHandle(process)
 

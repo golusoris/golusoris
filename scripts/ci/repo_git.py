@@ -39,7 +39,9 @@ def run_git(
     except (OSError, subprocess.TimeoutExpired) as error:
         raise GitError(f"git {' '.join(args)} failed to run: {error}") from error
     if proc.returncode != 0:
-        raise GitError(f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}")
+        raise GitError(
+            f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}"
+        )
     return proc.stdout
 
 
@@ -48,14 +50,25 @@ def local_env_names(timeout: int = GIT_TIMEOUT_SECONDS) -> set[str]:
     return set(run_git(["rev-parse", "--local-env-vars"], timeout=timeout).split())
 
 
-def worktree_files(root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS) -> list[Path]:
+def worktree_files(
+    root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS
+) -> list[Path]:
     """List tracked and untracked files called name under root that git does not ignore."""
     # Local git variables must not redirect the index or working tree.
     local_vars = local_env_names(timeout=timeout)
     env = {key: value for key, value in os.environ.items() if key not in local_vars}
     # git skips ignored paths, so linked worktrees under .claude/worktrees/ stay out.
     stdout = run_git(
-        ["ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", name, f"**/{name}"],
+        [
+            "ls-files",
+            "-z",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "--",
+            name,
+            f"**/{name}",
+        ],
         root,
         timeout,
         env=env,
