@@ -57,6 +57,17 @@ outputs:
 runs:
   using: composite
   steps:
+    - name: Compute image repository
+      shell: bash
+      run: |
+        set -euo pipefail
+        image_repo="$IMAGE_REGISTRY/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME"
+        echo "IMAGE_REPO=$image_repo" >> "$GITHUB_ENV"
+
+    - name: Read release tool pins
+      shell: bash
+      run: bash scripts/ci/export-release-tool-pins.sh
+
     - name: Resolve and validate immutable version
       id: version
       shell: bash

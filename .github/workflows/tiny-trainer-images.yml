@@ -172,20 +172,9 @@ jobs:
       IMAGE_NAME: ${{ matrix.image }}
       IMAGE_REGISTRY: ghcr.io
     steps:
-      - name: Compute image repository
-        shell: bash
-        run: |
-          set -euo pipefail
-          image_repo="$IMAGE_REGISTRY/${GITHUB_REPOSITORY_OWNER,,}/$IMAGE_NAME"
-          echo "IMAGE_REPO=$image_repo" >> "$GITHUB_ENV"
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
-
-      - name: Read release tool pins
-        shell: bash
-        run: bash scripts/ci/export-release-tool-pins.sh
 
       - name: Publish verified tiny image
         id: image
