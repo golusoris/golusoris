@@ -226,25 +226,20 @@ class ReleaseSmokeTest(TestCase):
         self.assertEqual(code, 1)
         self.assertIn("missing or empty", err)
 
-    def test_path_with_parent_reference(self) -> None:
-        self.write_artifacts(two_binary_artifacts(
-            "dist/../golusoris",
-        ))
+    def _assert_invalid_artifact_path(self, path: str) -> None:
+        """Check that the smoke driver rejects an unsafe artifact path."""
+        self.write_artifacts(two_binary_artifacts(path))
         code, _, err = self.run_smoke(
             ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
         )
         self.assertEqual(code, 1)
         self.assertIn("must be relative and contain no '..'", err)
 
+    def test_path_with_parent_reference(self) -> None:
+        self._assert_invalid_artifact_path("dist/../golusoris")
+
     def test_absolute_path(self) -> None:
-        self.write_artifacts(two_binary_artifacts(
-            "/usr/local/bin/golusoris",
-        ))
-        code, _, err = self.run_smoke(
-            ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
-        )
-        self.assertEqual(code, 1)
-        self.assertIn("must be relative and contain no '..'", err)
+        self._assert_invalid_artifact_path("/usr/local/bin/golusoris")
 
     def test_bad_target(self) -> None:
         code, _, err = self.run_smoke(

@@ -10,6 +10,7 @@ import json
 import re
 import tempfile
 import unittest
+from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
@@ -394,6 +395,17 @@ def check_group_b_workflow(
     return wf_env, problems
 
 
+def iter_significant_lines(lines: list[str]) -> Iterator[tuple[int, str, str, int]]:
+    """Yield line indices, text, stripped text and indentation for significant lines."""
+    for idx, raw_line in enumerate(lines):
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        yield idx, line, stripped, indent
+
+
 def check_group_a_env_redeclarations(
     rel_path: str,
     lines: list[str],
@@ -402,12 +414,7 @@ def check_group_a_env_redeclarations(
     problems: list[str] = []
     in_env = False
     env_indent = -1
-    for idx, raw_line in enumerate(lines):
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        indent = len(line) - len(line.lstrip())
+    for idx, _line, stripped, indent in iter_significant_lines(lines):
         if in_env:
             if indent <= env_indent and not stripped.startswith("-"):
                 in_env = False
@@ -432,12 +439,7 @@ def check_group_a_export_before_install(
     in_jobs = False
     current_job = ""
     has_exported = False
-    for idx, raw_line in enumerate(lines):
-        line = raw_line.rstrip()
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        indent = len(line) - len(line.lstrip())
+    for idx, line, stripped, indent in iter_significant_lines(lines):
         if not in_jobs:
             if re.match(r"^jobs:\s*$", line):
                 in_jobs = True

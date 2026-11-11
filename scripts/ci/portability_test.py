@@ -19,6 +19,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+from collections.abc import Iterator
 from pathlib import Path
 from unittest import TestCase, main, mock, skipUnless
 
@@ -657,9 +658,13 @@ class PactFFIInstallerTests(TestCase):
             self.assertEqual(len(sleeps), 0)
             self.assertEqual(list(root.iterdir()), [])
 
-    def test_boundary_download_http_503_retries_and_succeeds(self) -> None:
+    @contextlib.contextmanager
+    def _check_http_retry_success(
+        self, code: int, message: str,
+    ) -> Iterator[tuple[Path | Exception, bytes]]:
+        """Check HTTP retry success around any case-specific archive assertion."""
         _, compressed, asset = retry_fixture()
-        http_error = self._http_error(503, "Service Unavailable")
+        http_error = self._http_error(code, message)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, _stderr, outcome = self._retry_download(
@@ -667,22 +672,17 @@ class PactFFIInstallerTests(TestCase):
             )
             self.assertIsInstance(outcome, Path)
             self.assertTrue(outcome.is_file())
-            self.assertEqual(outcome.read_bytes(), compressed)
+            yield outcome, compressed
             self.assertEqual(calls, 2)
             self.assertEqual(sleeps, [2.0])
 
+    def test_boundary_download_http_503_retries_and_succeeds(self) -> None:
+        with self._check_http_retry_success(503, "Service Unavailable") as (outcome, compressed):
+            self.assertEqual(outcome.read_bytes(), compressed)
+
     def test_boundary_download_http_408_retries_and_succeeds(self) -> None:
-        _, compressed, asset = retry_fixture()
-        http_error = self._http_error(408, "Request Timeout")
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            calls, sleeps, _stderr, outcome = self._retry_download(
-                [http_error, io.BytesIO(compressed)], directory=root, asset=asset
-            )
-            self.assertIsInstance(outcome, Path)
-            self.assertTrue(outcome.is_file())
-            self.assertEqual(calls, 2)
-            self.assertEqual(sleeps, [2.0])
+        with self._check_http_retry_success(408, "Request Timeout"):
+            pass
 
     def test_positive_download_connection_reset_retries_and_succeeds(self) -> None:
         _, compressed, asset = retry_fixture()
@@ -725,6 +725,15 @@ class PactFFIInstallerTests(TestCase):
             self.assertEqual(calls, 0)
             self.assertEqual(list(root.iterdir()), [])
 
+    def _assert_retry_stderr(self, stderr_text: str, calls: int, sleeps: list[float]) -> None:
+        """Check both intermediate retry warnings and their attempt timing."""
+        lines = [line for line in stderr_text.splitlines() if line]
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("pact-ffi: download attempt 1/3 failed:"))
+        self.assertTrue(lines[1].startswith("pact-ffi: download attempt 2/3 failed:"))
+        self.assertEqual(calls, 3)
+        self.assertEqual(sleeps, [2.0, 4.0])
+
     def test_positive_download_retry_stderr_reports_intermediate_attempts(self) -> None:
         _, compressed, asset = retry_fixture()
         with tempfile.TemporaryDirectory() as directory:
@@ -734,12 +743,7 @@ class PactFFIInstallerTests(TestCase):
                 responses, directory=root, asset=asset
             )
             self.assertIsInstance(outcome, Path)
-            lines = [line for line in stderr_text.splitlines() if line]
-            self.assertEqual(len(lines), 2)
-            self.assertTrue(lines[0].startswith("pact-ffi: download attempt 1/3 failed:"))
-            self.assertTrue(lines[1].startswith("pact-ffi: download attempt 2/3 failed:"))
-            self.assertEqual(calls, 3)
-            self.assertEqual(sleeps, [2.0, 4.0])
+            self._assert_retry_stderr(stderr_text, calls, sleeps)
 
     def test_negative_download_retry_exhausted_stderr_has_no_warning_after_last_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -748,12 +752,7 @@ class PactFFIInstallerTests(TestCase):
                 [TimeoutError("timed out")] * 3, directory=root
             )
             self.assertIsInstance(outcome, pact_ffi.InstallError)
-            lines = [line for line in stderr_text.splitlines() if line]
-            self.assertEqual(len(lines), 2)
-            self.assertTrue(lines[0].startswith("pact-ffi: download attempt 1/3 failed:"))
-            self.assertTrue(lines[1].startswith("pact-ffi: download attempt 2/3 failed:"))
-            self.assertEqual(calls, 3)
-            self.assertEqual(sleeps, [2.0, 4.0])
+            self._assert_retry_stderr(stderr_text, calls, sleeps)
             self.assertEqual(list(root.iterdir()), [])
 
     def test_unit_is_transient_download_error_table(self) -> None:

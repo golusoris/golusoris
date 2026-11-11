@@ -360,6 +360,15 @@ class StopOnDraftJobsTest(unittest.TestCase):
             "missing: opened, synchronize, reopened, ready_for_review", messages[0]
         )
 
+    def _assert_unreadable_types_forms(self, cases: tuple[tuple[str, str], ...]) -> None:
+        """Check each unreadable types form under its original subtest label."""
+        for expected_stripped, on in cases:
+            with self.subTest(stripped=expected_stripped):
+                messages = self.check(workflow(on=on, uses=GATE))
+                self.assertEqual(len(messages), 1)
+                expected = unreadable_types_message(expected_stripped)
+                self.assertIn(expected, messages[0])
+
     def test_unreadable_types_forms_fail(self) -> None:
         """Negative: multiline flow, anchor, alias and folded types report unreadable form."""
         cases = (
@@ -371,12 +380,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
             ("types: *t", "on:\n  pull_request:\n    types: *t"),
             ("types: >", "on:\n  pull_request:\n    types: >\n      opened"),
         )
-        for expected_stripped, on in cases:
-            with self.subTest(stripped=expected_stripped):
-                messages = self.check(workflow(on=on, uses=GATE))
-                self.assertEqual(len(messages), 1)
-                expected = unreadable_types_message(expected_stripped)
-                self.assertIn(expected, messages[0])
+        self._assert_unreadable_types_forms(cases)
 
     def test_inline_unreadable_types_forms_fail(self) -> None:
         """Negative: an inline mapping whose types value is an alias, anchor or scalar reports unreadable form."""
@@ -388,12 +392,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
                 "on: {pull_request: {branches: [main], types: opened}}",
             ),
         )
-        for expected_stripped, on in cases:
-            with self.subTest(stripped=expected_stripped):
-                messages = self.check(workflow(on=on, uses=GATE))
-                self.assertEqual(len(messages), 1)
-                expected = unreadable_types_message(expected_stripped)
-                self.assertIn(expected, messages[0])
+        self._assert_unreadable_types_forms(cases)
 
 
 if __name__ == "__main__":

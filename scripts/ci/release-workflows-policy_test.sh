@@ -22,46 +22,37 @@ expect_failure() {
 	fi
 }
 
-insert_workflow_line_after() {
-	local source="$1" destination="$2" needle="$3" inserted_line="$4"
+copy_workflow_lines() {
+	local mode="$1" source="$2" destination="$3" needle="$4" original="${5:-}" replacement="${6:-}"
 	python3 -B -c 'import sys
 MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
     for idx, line in enumerate(src):
         if idx >= MAX_LINES:
             sys.exit("file exceeds MAX_LINES")
+        if sys.argv[4] == "drop" and sys.argv[3] in line:
+            continue
+        if sys.argv[4] == "rewrite" and sys.argv[3] in line:
+            line = line.replace(sys.argv[5], sys.argv[6])
         dst.write(line)
-        if sys.argv[3] in line:
-            dst.write(sys.argv[4] + "\n")' \
-		"$source" "$destination" "$needle" "$inserted_line"
+        if sys.argv[4] == "insert-after" and sys.argv[3] in line:
+            dst.write(sys.argv[5] + "\n")' \
+		"$source" "$destination" "$needle" "$mode" "$original" "$replacement"
+}
+
+insert_workflow_line_after() {
+	local source="$1" destination="$2" needle="$3" inserted_line="$4"
+	copy_workflow_lines "insert-after" "$source" "$destination" "$needle" "$inserted_line"
 }
 
 drop_workflow_line() {
 	local source="$1" destination="$2" needle="$3"
-	python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if sys.argv[3] not in line:
-            dst.write(line)' \
-		"$source" "$destination" "$needle"
+	copy_workflow_lines "drop" "$source" "$destination" "$needle"
 }
 
 rewrite_workflow_line() {
 	local source="$1" destination="$2" needle="$3" original="$4" replacement="$5"
-	python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if sys.argv[3] in line:
-            dst.write(line.replace(sys.argv[4], sys.argv[5]))
-        else:
-            dst.write(line)' \
-		"$source" "$destination" "$needle" "$original" "$replacement"
+	copy_workflow_lines "rewrite" "$source" "$destination" "$needle" "$original" "$replacement"
 }
 
 check_tag_release() {

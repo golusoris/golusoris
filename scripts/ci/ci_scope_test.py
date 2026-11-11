@@ -111,16 +111,20 @@ class CiScopeTest(unittest.TestCase):
             timeout=SCOPE_RUN_TIMEOUT_SECONDS,
         )
 
+    def _check_single_file_modules_scope(self) -> list[str]:
+        """Check the modules scope for a single changed file and return its lines."""
+        proc = self._run_scope("modules", base=self.base_sha)
+        self.assertEqual(proc.returncode, 0)
+        self.assertIn("ci-scope: diff-aware, 1 changed files vs", proc.stderr)
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+
     def test_positive_one_file_in_nested_module_selects_that_module_only(self) -> None:
         """Touching one file in nested module selects only that module."""
         (self.repo / "k8s" / "nri" / "new.go").write_text("package nri\n", encoding="utf-8")
         self._git("add", ".")
         self._git("commit", "-m", "touch k8s/nri")
 
-        proc = self._run_scope("modules", base=self.base_sha)
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("ci-scope: diff-aware, 1 changed files vs", proc.stderr)
-        lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        lines = self._check_single_file_modules_scope()
         self.assertEqual(lines, ["k8s/nri"])
 
     def test_positive_core_file_selects_dependents(self) -> None:
@@ -128,10 +132,7 @@ class CiScopeTest(unittest.TestCase):
         (self.repo / "core" / "core.go").write_text("package core\n// modified\n", encoding="utf-8")
         self._git("commit", "-am", "touch core")
 
-        proc = self._run_scope("modules", base=self.base_sha)
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("ci-scope: diff-aware, 1 changed files vs", proc.stderr)
-        lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        lines = self._check_single_file_modules_scope()
 
         # core changed -> selects core
         self.assertIn("core", lines)
@@ -239,10 +240,7 @@ class CiScopeTest(unittest.TestCase):
         (self.repo / "main.go").write_text("package main\n// update\n", encoding="utf-8")
         self._git("commit", "-am", "update main.go")
 
-        proc = self._run_scope("modules", base=self.base_sha)
-        self.assertEqual(proc.returncode, 0)
-        self.assertIn("ci-scope: diff-aware, 1 changed files vs", proc.stderr)
-        lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        lines = self._check_single_file_modules_scope()
         self.assertIn(".", lines)
         self.assertNotIn("k8s/nri", lines)
 
