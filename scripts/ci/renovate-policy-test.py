@@ -930,6 +930,7 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     return True
 
 
+# The preset holds the gomod vulnerability rangeStrategy auto rule.
 PRESET = "github>plurano/horistes"
 # The preset holds minimumReleaseAge "3 days" and switches github-runner proposals off.
 MINIMUM_RELEASE_AGE = "3 days"
@@ -1022,6 +1023,49 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     for label, mutated in {"preset removed": without_preset(config), "runner re-enabled": reenabled}.items():
         if runner_rules_off(mutated):
             print(f"runner hold negative control was accepted: {label}", file=sys.stderr)
+            return False
+    return True
+
+
+def vulnerability_range_inherited(config: dict[str, object]) -> bool:
+    """Require the preset's gomod vulnerability range rule without conflicting overrides."""
+    if not extends_preset(config):
+        return False
+    if config.get("osvVulnerabilityAlerts", True) is False:
+        return False
+    gomod = config.get("gomod", {})
+    alerts = gomod.get("vulnerabilityAlerts", {}) if isinstance(gomod, dict) else {}
+    return isinstance(alerts, dict) and alerts.get("rangeStrategy", "auto") == "auto"
+
+
+def vulnerability_range_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Build configurations that lose or override the preset's vulnerability range rule."""
+    disabled = json.loads(json.dumps(config))
+    disabled["osvVulnerabilityAlerts"] = False
+    update_lockfile = json.loads(json.dumps(config))
+    update_lockfile.setdefault("gomod", {})["vulnerabilityAlerts"] = {"rangeStrategy": "update-lockfile"}
+    pinned = json.loads(json.dumps(config))
+    pinned.setdefault("gomod", {})["vulnerabilityAlerts"] = {"rangeStrategy": "pin"}
+    return {
+        "preset removed": without_preset(config),
+        "OSV alerts off": disabled,
+        "gomod keeps update-lockfile": update_lockfile,
+        "gomod pins the range": pinned,
+    }
+
+
+def test_vulnerability_range(config: dict[str, object]) -> bool:
+    """Report a lost vulnerability range rule and prove each negative control is refused."""
+    if not vulnerability_range_inherited(config):
+        print(
+            f"renovate.json must extend {PRESET}, keep osvVulnerabilityAlerts enabled "
+            "and inherit gomod.vulnerabilityAlerts.rangeStrategy auto or set it to auto",
+            file=sys.stderr,
+        )
+        return False
+    for label, mutated in vulnerability_range_mutants(config).items():
+        if vulnerability_range_inherited(mutated):
+            print(f"vulnerability range negative control was accepted: {label}", file=sys.stderr)
             return False
     return True
 
@@ -1174,6 +1218,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_vulnerability_range(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
         test_current_value_template(),
