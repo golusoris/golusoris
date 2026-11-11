@@ -41,8 +41,15 @@ type Options struct {
 	VSync       bool
 }
 
-// Run starts the game loop. Blocks until the window is closed.
-func Run(g Game, opts Options) error {
+type windowConfig struct {
+	title      string
+	width      int
+	height     int
+	fullscreen bool
+	vsync      bool
+}
+
+func resolveWindow(opts Options) windowConfig {
 	if opts.Width <= 0 {
 		opts.Width = 640
 	}
@@ -53,16 +60,30 @@ func Run(g Game, opts Options) error {
 		opts.Title = "golusoris game"
 	}
 
-	ebiten.SetWindowTitle(opts.Title)
-	ebiten.SetWindowSize(opts.Width, opts.Height)
-	ebiten.SetFullscreen(opts.Fullscreen)
-	ebiten.SetVsyncEnabled(opts.VSync)
 	if opts.WindowScale > 0 {
-		ebiten.SetWindowSize(
-			int(float64(opts.Width)*opts.WindowScale),
-			int(float64(opts.Height)*opts.WindowScale),
-		)
+		opts.Width = int(float64(opts.Width) * opts.WindowScale)
+		opts.Height = int(float64(opts.Height) * opts.WindowScale)
 	}
+	return windowConfig{
+		title:      opts.Title,
+		width:      opts.Width,
+		height:     opts.Height,
+		fullscreen: opts.Fullscreen,
+		vsync:      opts.VSync,
+	}
+}
+
+func applyWindow(cfg windowConfig) {
+	ebiten.SetWindowTitle(cfg.title)
+	ebiten.SetWindowSize(cfg.width, cfg.height)
+	ebiten.SetFullscreen(cfg.fullscreen)
+	ebiten.SetVsyncEnabled(cfg.vsync)
+}
+
+// Run starts the game loop. Blocks until the window is closed.
+func Run(g Game, opts Options) error {
+	cfg := resolveWindow(opts)
+	applyWindow(cfg)
 
 	if err := ebiten.RunGame(g); err != nil {
 		return fmt.Errorf("game: run: %w", err)
