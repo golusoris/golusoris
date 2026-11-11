@@ -5,7 +5,7 @@
 // Package capabilities defines the framework's machine-readable capability
 // contract: the schema of the repository-root capabilities.yaml that maps
 // every golusoris package to the capability keys downstream manifests
-// (.needs.yaml) demand, and the third-party modules each package replaces.
+// (.needs.yaml) demand, and the third-party modules each package replaces or wraps.
 // Governance tooling answers "does the framework cover X, and with what?"
 // against this file instead of guessing from directory names.
 package capabilities
@@ -76,6 +76,8 @@ type Package struct {
 	// Replaces lists third-party module paths this package supersedes, so
 	// migration tooling can derive its catalog from the framework itself.
 	Replaces []string `yaml:"replaces,omitempty" json:"replaces,omitempty"`
+	// Wraps lists third-party modules this package builds on while the consumer keeps the library.
+	Wraps []string `yaml:"wraps,omitempty" json:"wraps,omitempty"`
 }
 
 // Index is the parsed capabilities.yaml.
@@ -180,8 +182,16 @@ func (idx *Index) validatePackage(p *Package, seen, modules map[string]bool) err
 	if err := validateCapabilities(p); err != nil {
 		return err
 	}
-	if err := validateReplacements(p); err != nil {
+	if err := validateModuleList(p.Import, "replacement", p.Replaces); err != nil {
 		return err
+	}
+	if err := validateModuleList(p.Import, "wrap", p.Wraps); err != nil {
+		return err
+	}
+	for _, module := range p.Wraps {
+		if slices.Contains(p.Replaces, module) {
+			return fmt.Errorf("%w: %s: module %q listed in both replaces and wraps", ErrInvalid, p.Import, module)
+		}
 	}
 	switch p.Status {
 	case "", StatusStable, StatusBeta, StatusExperimental:
@@ -227,16 +237,16 @@ func validateCapabilities(p *Package) error {
 	return nil
 }
 
-func validateReplacements(p *Package) error {
-	replacements := make(map[string]bool, len(p.Replaces))
-	for _, replacement := range p.Replaces {
-		if replacement == "" {
-			return fmt.Errorf("%w: %s: empty replacement", ErrInvalid, p.Import)
+func validateModuleList(importPath, name string, modules []string) error {
+	seen := make(map[string]bool, len(modules))
+	for _, module := range modules {
+		if module == "" {
+			return fmt.Errorf("%w: %s: empty %s", ErrInvalid, importPath, name)
 		}
-		if replacements[replacement] {
-			return fmt.Errorf("%w: %s: duplicate replacement %q", ErrInvalid, p.Import, replacement)
+		if seen[module] {
+			return fmt.Errorf("%w: %s: duplicate %s %q", ErrInvalid, importPath, name, module)
 		}
-		replacements[replacement] = true
+		seen[module] = true
 	}
 	return nil
 }

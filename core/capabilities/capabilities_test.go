@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -89,6 +90,69 @@ func TestParseValid(t *testing.T) {
 	checkCapabilitiesAndKeys(t, idx)
 	checkReplacements(t, idx)
 	checkLookupsAndKits(t, idx)
+	if idx.Packages[0].Wraps != nil {
+		t.Fatalf("omitted Wraps = %v, want nil", idx.Packages[0].Wraps)
+	}
+}
+
+func TestParseWraps(t *testing.T) {
+	t.Parallel()
+	const replacement = "    replaces: [github.com/spf13/viper]\n"
+	const wrapped = "github.com/knadh/koanf/v2"
+	tests := []struct {
+		name string
+		list string
+		want []string
+	}{
+		{"with replaces", replacement + "    wraps: [" + wrapped + "]\n", []string{wrapped}},
+		{"omitted", replacement, nil},
+		{"without replaces", "    wraps: [" + wrapped + "]\n", []string{wrapped}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := strings.Replace(valid, replacement, tc.list, 1)
+			idx, err := capabilities.Parse([]byte(src))
+			if err != nil {
+				t.Fatalf("Parse: %v", err)
+			}
+			if got := idx.Packages[0].Wraps; !slices.Equal(got, tc.want) {
+				t.Fatalf("Wraps = %v, want %v", got, tc.want)
+			}
+			if tc.name == "without replaces" && idx.Packages[0].Replaces != nil {
+				t.Fatalf("Replaces = %v, want nil", idx.Packages[0].Replaces)
+			}
+			if _, ok := idx.ReplacementCandidates()[wrapped]; ok {
+				t.Fatal("wrapped module must not become a replacement candidate")
+			}
+		})
+	}
+}
+
+func TestParseWrapsRejects(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		list string
+		want string
+	}{
+		{"empty entry", `[""]`, "empty wrap"},
+		{"duplicate entry", "[example.org/library, example.org/library]", `duplicate wrap "example.org/library"`},
+		{"replaces overlap", "[github.com/spf13/viper]", `module "github.com/spf13/viper" listed in both replaces and wraps`},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := strings.Replace(valid, "    domain: config\n", "    wraps: "+tc.list+"\n    domain: config\n", 1)
+			_, err := capabilities.Parse([]byte(src))
+			if !errors.Is(err, capabilities.ErrInvalid) {
+				t.Fatalf("got %v, want ErrInvalid", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want %q", err, tc.want)
+			}
+		})
+	}
 }
 
 func TestParseBuilderKitBounds(t *testing.T) {
@@ -131,6 +195,7 @@ func TestParseRejects(t *testing.T) {
 		{"bad key", valid + "  - import: github.com/golusoris/golusoris/z\n    domain: z\n    capabilities: [NoDot]\n", capabilities.ErrInvalid},
 		{"duplicate capability", strings.Replace(valid, "[db.postgres]", "[db.postgres, db.postgres]", 1), capabilities.ErrInvalid},
 		{"duplicate replacement", strings.Replace(valid, "[github.com/jackc/pgx, github.com/lib/pq, github.com/spf13/viper]", "[github.com/jackc/pgx, github.com/lib/pq, github.com/lib/pq]", 1), capabilities.ErrInvalid},
+		{"empty replacement", strings.Replace(valid, "[github.com/spf13/viper]", `[""]`, 1), capabilities.ErrInvalid},
 		{"undeclared module", valid + "  - import: github.com/golusoris/golusoris/z\n    module: github.com/golusoris/golusoris/zz\n    domain: z\n    capabilities: [z.a]\n", capabilities.ErrInvalid},
 		{"wrong module owner", strings.Replace(valid, "    domain: db\n    capabilities: [db.postgres]", "    module: github.com/golusoris/golusoris/core\n    domain: db\n    capabilities: [db.postgres]", 1), capabilities.ErrInvalid},
 		{"nested module omitted", strings.Replace(valid, "    module: github.com/golusoris/golusoris/core\n    domain: config", "    domain: config", 1), capabilities.ErrInvalid},
