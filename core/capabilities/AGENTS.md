@@ -26,6 +26,7 @@ packages:
     description: koanf v2 — env + file + YAML, hot reload
     status: stable                               # stable | beta | experimental
     replaces: [github.com/spf13/viper]           # third-party modules superseded
+    wraps: [github.com/knadh/koanf/v2]           # third-party modules built on and retained
 ```
 
 Capability keys: `domain.name[.sub]`, lowercase — praetor taxonomy
