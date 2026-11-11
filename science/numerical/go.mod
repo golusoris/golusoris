@@ -1,5 +1,5 @@
 module github.com/golusoris/golusoris/science/numerical
 
-go 1.27.3
+go 1.27.4
 
 require gonum.org/v1/gonum v0.17.0

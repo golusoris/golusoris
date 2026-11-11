@@ -1,5 +1,5 @@
 module github.com/golusoris/golusoris/hw/gpio
 
-go 1.27.3
+go 1.27.4
 
 require periph.io/x/conn/v3 v3.7.3
