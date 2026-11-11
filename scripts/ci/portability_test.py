@@ -28,6 +28,7 @@ import pact_ffi
 import portability
 
 ROOT = Path(__file__).resolve().parents[2]
+UNSAFE_TMPDIR = "/tmp"  # noqa: S108 - fallback selection input, never written. # nosec B108
 
 
 # Two pipe joins, the tree kill, its grace and the direct-child reap, plus 3 s for two interpreter starts (Windows took 4.97 s).
@@ -61,7 +62,7 @@ def literal_wall_clock_bounds(source: str) -> list[int]:
 
 
 def pact_modifier_violations(makefile: str) -> list[str]:
-    """Return non-Windows Pact assignments with combined modifiers or missing export pairs."""
+    """Return non-Windows Pact assignments with combined modifiers or missing origin-guarded exports."""
     before_windows, windows = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)
     lines = (before_windows + windows.split("\nelse\n", 1)[1]).splitlines()
     offending = []
@@ -73,8 +74,10 @@ def pact_modifier_violations(makefile: str) -> list[str]:
         if sum(token in {"override", "export"} for token in modifiers) > 1:
             offending.append(line)
         elif "override" in modifiers:
+            name = modifiers[-1]
             export = line.replace(": override ", ": export ", 1)
-            if index + 1 == len(lines) or lines[index + 1] != export:
+            expected = [f"ifeq ($(origin {name}),command line)", f"export {name}", "else", export, "endif"]
+            if lines[index + 1 : index + 6] != expected:
                 offending.append(line)
     return offending
 
@@ -1001,7 +1004,11 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn("$(PACT_FFI_TARGETS): pact-ffi", makefile)
         self.assertIn(
             "$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
-            "$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)",
+            "ifeq ($(origin PACT_GO_LIB_DOWNLOAD_PATH),command line)\n"
+            "export PACT_GO_LIB_DOWNLOAD_PATH\n"
+            "else\n"
+            "$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
+            "endif",
             makefile,
         )
         self.assertIn("'-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)'", makefile)
@@ -1010,7 +1017,7 @@ class PactFFIInstallerTests(TestCase):
         self.assertIn(".workingdir/", ignored)
 
     def test_positive_local_pact_modifier_pairs(self) -> None:
-        """Require separate override and export lines outside the Windows branch."""
+        """Require origin-guarded export blocks outside the Windows branch."""
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertEqual(pact_modifier_violations(makefile), [])
 
@@ -1019,8 +1026,9 @@ class PactFFIInstallerTests(TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         override = "$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)\n"
         export = "$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)\n"
+        guard = "ifeq ($(origin TMPDIR),command line)\nexport TMPDIR\nelse\n"
         combined = override.replace(": override ", ": override export ")
-        mutant = makefile.replace(override + export, combined)
+        mutant = makefile.replace(override + guard + export + "endif\n", combined)
         self.assertIn(combined.rstrip(), pact_modifier_violations(mutant))
 
     def test_negative_local_pact_reversed_modifier_pair(self) -> None:
@@ -1028,7 +1036,18 @@ class PactFFIInstallerTests(TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         override = "$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
         export = "$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
-        mutant = makefile.replace(override + export, export + override)
+        guard = "ifeq ($(origin PACT_GO_LIB_DOWNLOAD_PATH),command line)\nexport PACT_GO_LIB_DOWNLOAD_PATH\nelse\n"
+        mutant = makefile.replace(override + guard + export + "endif\n", export + override)
+        self.assertIn(override.rstrip(), pact_modifier_violations(mutant))
+
+    def test_negative_local_pact_adjacent_modifier_pair(self) -> None:
+        """Reject adjacent CGO_LDFLAGS modifiers that lose caller overrides on make 3.81."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        value = "$(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')\n"
+        override = "$(PACT_FFI_TARGETS): override CGO_LDFLAGS := " + value
+        export = "$(PACT_FFI_TARGETS): export CGO_LDFLAGS := " + value
+        guard = "ifeq ($(origin CGO_LDFLAGS),command line)\nexport CGO_LDFLAGS\nelse\n"
+        mutant = makefile.replace(override + guard + export + "endif\n", override + export)
         self.assertIn(override.rstrip(), pact_modifier_violations(mutant))
 
     def _assert_makefile_pact_tmpdir(self, makefile: str) -> None:
@@ -1037,11 +1056,15 @@ class PactFFIInstallerTests(TestCase):
             "PACT_FFI_TMPDIR := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/golusoris/tmp",
             makefile,
         )
-        unix = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)[1].split("\nelse\n", 1)[1].split("\nendif", 1)[0]
+        unix = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)[1].split("\nelse\n", 1)[1]
         self.assertIn("ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)", unix)
         self.assertIn(
             "$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)\n"
-            "$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)",
+            "ifeq ($(origin TMPDIR),command line)\n"
+            "export TMPDIR\n"
+            "else\n"
+            "$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)\n"
+            "endif",
             unix,
         )
         goal_guard = "ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)"
@@ -1069,8 +1092,16 @@ class PactFFIInstallerTests(TestCase):
 
     def _make_tmpdir_dry_run(self, goal: str, directory: str, *, tmpdir: str | None = None) -> Path:
         """Dry-run a named goal with isolated home and cache directories."""
+        self._make_dry_run(goal, directory, tmpdir=tmpdir)
+        return Path(directory) / "golusoris" / "tmp"
+
+    def _make_dry_run(
+        self, goal: str, directory: str, *, tmpdir: str | None = None, assignments: tuple[str, ...] = ()
+    ) -> subprocess.CompletedProcess[str]:
+        """Dry-run a fixed goal and print inherited Pact variables from an isolated prerequisite."""
         environment = os.environ.copy()
         environment.pop("TMPDIR", None)
+        environment.pop("CGO_LDFLAGS", None)
         environment.pop("MAKEFLAGS", None)
         environment.pop("MAKEOVERRIDES", None)
         environment.update(HOME=directory, XDG_CACHE_HOME=directory)
@@ -1078,8 +1109,18 @@ class PactFFIInstallerTests(TestCase):
             environment["TMPDIR"] = tmpdir
         make = shutil.which("make")
         self.assertIsNotNone(make)
+        probe = Path(directory) / "pact-environment.mk"
+        probe.write_text(
+            ".PHONY: pact-environment\n"
+            "portability-test: pact-environment\n"
+            "pact-environment:\n"
+            "\t+@printf '%s\\n' \"PACT_ENV_CGO_LDFLAGS=$$CGO_LDFLAGS\" "
+            '"PACT_ENV_PACT_GO_LIB_DOWNLOAD_PATH=$$PACT_GO_LIB_DOWNLOAD_PATH" '
+            '"PACT_ENV_TMPDIR=$$TMPDIR"\n',
+            encoding="utf-8",
+        )
         result = subprocess.run(  # noqa: S603 - resolved make, dry run of a fixed repository goal. # nosec B603
-            [str(make), "-n", "-j2", goal],
+            [str(make), "-n", "-j2", "-f", "Makefile", "-f", str(probe), goal, *assignments],
             cwd=ROOT,
             env=environment,
             capture_output=True,
@@ -1088,7 +1129,44 @@ class PactFFIInstallerTests(TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        return Path(directory) / "golusoris" / "tmp"
+        return result
+
+    def _pact_dry_run_environment(self, directory: str, assignments: tuple[str, ...]) -> dict[str, str]:
+        """Read marked prerequisite environment lines from the shared make dry run."""
+        result = self._make_dry_run("portability-test", directory, assignments=assignments)
+        return dict(
+            line.removeprefix("PACT_ENV_").split("=", 1)
+            for line in result.stdout.splitlines()
+            if line.startswith("PACT_ENV_")
+        )
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_positive_local_pact_command_line_exports(self) -> None:
+        """Export Pact flags and safe paths to prerequisites despite command-line assignments."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = self._pact_dry_run_environment(
+                directory,
+                ("CGO_LDFLAGS=-Lcaller", f"PACT_GO_LIB_DOWNLOAD_PATH={directory}/caller", f"TMPDIR={UNSAFE_TMPDIR}"),
+            )
+            self.assertTrue(environment["CGO_LDFLAGS"].startswith("-Lcaller "), environment)
+            self.assertIn(f"-L{ROOT / '.workingdir/cache/pact-ffi'}", environment["CGO_LDFLAGS"])
+            self.assertEqual(environment["PACT_GO_LIB_DOWNLOAD_PATH"], str(ROOT / ".workingdir/cache/pact-ffi"))
+            self.assertEqual(environment["TMPDIR"], str(Path(directory) / "golusoris/tmp"))
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_boundary_local_pact_empty_command_line_flags(self) -> None:
+        """Export quoted Pact linker flags without leading whitespace for an empty caller value."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = self._pact_dry_run_environment(directory, ("CGO_LDFLAGS=",))
+            self.assertTrue(environment["CGO_LDFLAGS"].startswith("'-L"), environment)
+
+    @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
+    def test_negative_local_pact_unset_caller_flags(self) -> None:
+        """Print inherited Pact flags without caller flags when the environment value is unset."""
+        with tempfile.TemporaryDirectory() as directory:
+            environment = self._pact_dry_run_environment(directory, ())
+            self.assertIn("CGO_LDFLAGS", environment)
+            self.assertNotIn("-Lcaller", environment["CGO_LDFLAGS"])
 
     @skipUnless(os.name == "posix" and shutil.which("make"), "POSIX make is required")
     def test_positive_local_pact_tmpdir_created_before_recipes(self) -> None:

@@ -357,10 +357,14 @@ pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/p
 	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
-# macOS /usr/bin/make 3.81 reads one modifier per line; keep override before export.
-# override keeps Pact paths over command-line values on GNU make 3.82+; on 3.81 command-line values win.
+# GNU make 3.81 accepts only one modifier per line.
+# 3.81 target-specific exports retain caller values; command-line origins need global export of the override.
 $(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+ifeq ($(origin PACT_GO_LIB_DOWNLOAD_PATH),command line)
+export PACT_GO_LIB_DOWNLOAD_PATH
+else
 $(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+endif
 ifeq ($(OS),Windows_NT)
 # MinGW has no rpath; Windows finds pact_ffi.dll through PATH, as the portability workflow does.
 PACT_PATH_SEP := $(if $(findstring ;,$(PATH)),;,:)
@@ -370,7 +374,11 @@ else
 # go1.27.4 scans pact-go's -L/tmp when it is os.TempDir(); use a cache directory outside the checkout.
 ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)
 $(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)
+ifeq ($(origin TMPDIR),command line)
+export TMPDIR
+else
 $(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)
+endif
 ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)
 # Prerequisites inherit TMPDIR and run before pact-ffi; create it before any recipe.
 $(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")
@@ -380,7 +388,11 @@ endif
 endif
 endif
 $(PACT_FFI_TARGETS): override CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+ifeq ($(origin CGO_LDFLAGS),command line)
+export CGO_LDFLAGS
+else
 $(PACT_FFI_TARGETS): export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+endif
 endif
 
 .PHONY: verify-all
