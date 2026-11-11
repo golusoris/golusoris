@@ -12,17 +12,42 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
-// fakeToolEnv makes a copy of this test binary act as a failing CLI tool; a shell script has no Windows executable form.
-const fakeToolEnv = "GOLUSORIS_FSSNAP_FAKE_TOOL"
+// Copies of this test binary work as fake CLI tools because shell scripts have no Windows executable form.
+const (
+	fakeToolEnv   = "GOLUSORIS_FSSNAP_FAKE_TOOL"
+	fakeArgsEnv   = "GOLUSORIS_FSSNAP_FAKE_ARGS"
+	fakeStdoutEnv = "GOLUSORIS_FSSNAP_FAKE_STDOUT"
+)
 
 func TestMain(m *testing.M) {
-	if os.Getenv(fakeToolEnv) == "1" {
-		_, _ = os.Stderr.WriteString("fixture diagnostic\n")
-		os.Exit(7)
+	if code, handled := runFakeTool(); handled {
+		os.Exit(code)
 	}
 	os.Exit(m.Run())
+}
+
+func runFakeTool() (int, bool) {
+	switch os.Getenv(fakeToolEnv) {
+	case "1":
+		if _, err := os.Stderr.WriteString("fixture diagnostic\n"); err != nil {
+			return 3, true
+		}
+		return 7, true
+	case "ok":
+		args := strings.Join(os.Args[1:], "\n") + "\n"
+		if err := os.WriteFile(os.Getenv(fakeArgsEnv), []byte(args), 0o600); err != nil {
+			return 2, true
+		}
+		if _, err := os.Stdout.WriteString(os.Getenv(fakeStdoutEnv)); err != nil {
+			return 2, true
+		}
+		return 0, true
+	default:
+		return 0, false
+	}
 }
 
 // installFakeTool copies this test binary into dir under the executable name PATH lookup resolves for name.
@@ -42,6 +67,193 @@ func installFakeTool(t *testing.T, dir string, name tool) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, file), binary, 0o700); err != nil {
 		t.Fatalf("write fake %s: %v", name, err)
+	}
+}
+
+func useFakeTool(t *testing.T, name tool, stdout string) (argsFile string) {
+	t.Helper()
+	dir := t.TempDir()
+	installFakeTool(t, dir, name)
+	argsFile = filepath.Join(dir, "args.txt")
+	t.Setenv("PATH", dir)
+	t.Setenv(fakeToolEnv, "ok")
+	t.Setenv(fakeArgsEnv, argsFile)
+	t.Setenv(fakeStdoutEnv, stdout)
+	return argsFile
+}
+
+func readFakeArgs(t *testing.T, argsFile string) []string {
+	t.Helper()
+	data, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("read fake tool args: %v", err)
+	}
+	return strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestZFSSnapshotPositive(t *testing.T) {
+	argsFile := useFakeTool(t, toolZFS, "")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := ZFS.Snapshot(ctx, "tank/data", "daily"); err != nil {
+		t.Fatalf("ZFS.Snapshot() error = %v", err)
+	}
+	want := []string{"snapshot", "tank/data@daily"}
+	if got := readFakeArgs(t, argsFile); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ZFS.Snapshot() argv = %q, want %q", got, want)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestZFSDestroyPositive(t *testing.T) {
+	argsFile := useFakeTool(t, toolZFS, "")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := ZFS.Destroy(ctx, "tank/data@daily"); err != nil {
+		t.Fatalf("ZFS.Destroy() error = %v", err)
+	}
+	want := []string{"destroy", "tank/data@daily"}
+	if got := readFakeArgs(t, argsFile); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ZFS.Destroy() argv = %q, want %q", got, want)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestZFSRollbackPositive(t *testing.T) {
+	argsFile := useFakeTool(t, toolZFS, "")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := ZFS.Rollback(ctx, "tank/data@daily"); err != nil {
+		t.Fatalf("ZFS.Rollback() error = %v", err)
+	}
+	want := []string{"rollback", "tank/data@daily"}
+	if got := readFakeArgs(t, argsFile); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ZFS.Rollback() argv = %q, want %q", got, want)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestZFSListPositiveAndBoundary(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdout string
+		want   []string
+	}{
+		{name: "two snapshots", stdout: "tank/data@a\ntank/data@b\n", want: []string{"tank/data@a", "tank/data@b"}},
+		{name: "empty"},
+		{name: "blank middle line", stdout: "tank/data@a\n\ntank/data@b\n", want: []string{"tank/data@a", "tank/data@b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			argsFile := useFakeTool(t, toolZFS, tt.stdout)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			got, err := ZFS.List(ctx, "tank/data")
+			if err != nil {
+				t.Fatalf("ZFS.List() error = %v", err)
+			}
+			if len(got) != len(tt.want) || (len(got) > 0 && !reflect.DeepEqual(got, tt.want)) {
+				t.Fatalf("ZFS.List() = %q, want %q", got, tt.want)
+			}
+			wantArgs := []string{"list", "-H", "-t", "snapshot", "-o", "name", "-r", "tank/data"}
+			if gotArgs := readFakeArgs(t, argsFile); !reflect.DeepEqual(gotArgs, wantArgs) {
+				t.Fatalf("ZFS.List() argv = %q, want %q", gotArgs, wantArgs)
+			}
+		})
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestBtrfsSnapshotPositive(t *testing.T) {
+	argsFile := useFakeTool(t, toolBtrfs, "")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := Btrfs.Snapshot(ctx, "/mnt/data", "/mnt/snaps/d1"); err != nil {
+		t.Fatalf("Btrfs.Snapshot() error = %v", err)
+	}
+	want := []string{"subvolume", "snapshot", "-r", "/mnt/data", "/mnt/snaps/d1"}
+	if got := readFakeArgs(t, argsFile); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Btrfs.Snapshot() argv = %q, want %q", got, want)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestBtrfsDeletePositive(t *testing.T) {
+	argsFile := useFakeTool(t, toolBtrfs, "")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := Btrfs.Delete(ctx, "/mnt/snaps/d1"); err != nil {
+		t.Fatalf("Btrfs.Delete() error = %v", err)
+	}
+	want := []string{"subvolume", "delete", "/mnt/snaps/d1"}
+	if got := readFakeArgs(t, argsFile); !reflect.DeepEqual(got, want) {
+		t.Fatalf("Btrfs.Delete() argv = %q, want %q", got, want)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestBtrfsListPositiveAndBoundary(t *testing.T) {
+	tests := []struct {
+		name   string
+		stdout string
+		want   []string
+	}{
+		{name: "one snapshot", stdout: "ID 256 gen 42 top level 5 path snaps/d1\n", want: []string{"snaps/d1"}},
+		{name: "empty"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			argsFile := useFakeTool(t, toolBtrfs, tt.stdout)
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			got, err := Btrfs.List(ctx, "/mnt/data")
+			if err != nil {
+				t.Fatalf("Btrfs.List() error = %v", err)
+			}
+			if len(got) != len(tt.want) || (len(got) > 0 && !reflect.DeepEqual(got, tt.want)) {
+				t.Fatalf("Btrfs.List() = %q, want %q", got, tt.want)
+			}
+			wantArgs := []string{"subvolume", "list", "-r", "-s", "-o", "/mnt/data"}
+			if gotArgs := readFakeArgs(t, argsFile); !reflect.DeepEqual(gotArgs, wantArgs) {
+				t.Fatalf("Btrfs.List() argv = %q, want %q", gotArgs, wantArgs)
+			}
+		})
+	}
+}
+
+func TestZFSSnapshotIncludesToolStderr(t *testing.T) {
+	useFakeTool(t, toolZFS, "")
+	t.Setenv(fakeToolEnv, "1")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if err := ZFS.Snapshot(ctx, "tank/data", "daily"); err == nil ||
+		!strings.Contains(err.Error(), "fixture diagnostic") {
+		t.Fatalf("ZFS.Snapshot() error = %v, want tool stderr", err)
+	}
+}
+
+//nolint:paralleltest // useFakeTool calls t.Setenv (PATH and fake-tool env), which forbids t.Parallel.
+func TestBtrfsListRejectsMalformedToolOutput(t *testing.T) {
+	useFakeTool(t, toolBtrfs, "garbage\n")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	if got, err := Btrfs.List(ctx, "/mnt/data"); err == nil {
+		t.Fatalf("Btrfs.List() = %q, nil error for malformed output", got)
+	}
+}
+
+func TestZFSListToolFailure(t *testing.T) {
+	useFakeTool(t, toolZFS, "")
+	t.Setenv(fakeToolEnv, "1")
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	got, err := ZFS.List(ctx, "tank/data")
+	if err == nil || !strings.Contains(err.Error(), "fixture diagnostic") {
+		t.Fatalf("ZFS.List() error = %v, want tool stderr", err)
+	}
+	if got != nil {
+		t.Fatalf("ZFS.List() = %q, want nil on tool failure", got)
 	}
 }
 
