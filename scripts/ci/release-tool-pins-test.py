@@ -616,18 +616,10 @@ SYFT_VERSION=1.56.0
 GORELEASER_VERSION=2.19.0
 """
 
-VALID_FIXTURE_GROUP_A = r"""
-name: Test Group A
-on: push
-jobs:
-  test:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Read release tool pins
-        shell: bash
-        run: bash scripts/ci/export-release-tool-pins.sh
-      - name: Install cosign
+
+def release_workflow_fixture(header: str) -> str:
+    """Append the shared tool-install and version-check fixture steps."""
+    return header + r"""      - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
           cosign-release: v${{ env.COSIGN_VERSION }}
@@ -656,7 +648,21 @@ jobs:
           test "$(node --version)" = "v${NODE_VERSION}"
 """
 
-VALID_FIXTURE_GROUP_B = r"""
+
+VALID_FIXTURE_GROUP_A = release_workflow_fixture(r"""
+name: Test Group A
+on: push
+jobs:
+  test:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Read release tool pins
+        shell: bash
+        run: bash scripts/ci/export-release-tool-pins.sh
+""")
+
+VALID_FIXTURE_GROUP_B = release_workflow_fixture(r"""
 name: Test Group B
 on: workflow_call
 permissions:
@@ -680,34 +686,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - name: Install cosign
-        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
-        with:
-          cosign-release: v${{ env.COSIGN_VERSION }}
-      - name: Install syft
-        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
-        with:
-          syft-version: v${{ env.SYFT_VERSION }}
-      - name: Install goreleaser
-        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        with:
-          version: v${{ env.GORELEASER_VERSION }}
-      - name: Install buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-        with:
-          version: v${{ env.BUILDX_VERSION }}
-      - name: Install node
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-      - name: Verify tools
-        run: |
-          buildx_version="$(docker buildx version)"; grep -Eq "^github.com/docker/buildx v${BUILDX_VERSION//./\\.}([[:space:]]|$)" <<<"$buildx_version"
-          cosign_version="$(cosign version)"; grep -Eq "^GitVersion:[[:space:]]+v?${COSIGN_VERSION//./\\.}(\+dirty)?[[:space:]]*$" <<<"$cosign_version"
-          syft_version="$(syft version)"; grep -Eq "Version:[[:space:]]+${SYFT_VERSION//./\\.}([[:space:]]|$)" <<<"$syft_version"
-          goreleaser_version="$(goreleaser --version)"; grep -Eq "GitVersion:[[:space:]]+v?${GORELEASER_VERSION//./\\.}([[:space:]]|$)" <<<"$goreleaser_version"
-          test "$(node --version)" = "v${NODE_VERSION}"
-"""
+""")
 
 
 def create_valid_fixture(root: Path) -> None:

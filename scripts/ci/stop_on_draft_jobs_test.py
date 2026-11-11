@@ -31,6 +31,14 @@ def workflow(
     return "\n".join(lines)
 
 
+def unreadable_types_message(stripped: str) -> str:
+    """Build the expected diagnostic fixture for an unreadable types form."""
+    return (
+        f"pull_request types form not readable: {stripped};"
+        " use a one-line flow list or a block sequence"
+    )
+
+
 class StopOnDraftJobsTest(unittest.TestCase):
     """Exercise the job checker on inline fixtures."""
 
@@ -367,10 +375,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
             with self.subTest(stripped=expected_stripped):
                 messages = self.check(workflow(on=on, uses=GATE))
                 self.assertEqual(len(messages), 1)
-                expected = (
-                    f"pull_request types form not readable: {expected_stripped};"
-                    " use a one-line flow list or a block sequence"
-                )
+                expected = unreadable_types_message(expected_stripped)
                 self.assertIn(expected, messages[0])
 
     def test_inline_unreadable_types_forms_fail(self) -> None:
@@ -387,10 +392,7 @@ class StopOnDraftJobsTest(unittest.TestCase):
             with self.subTest(stripped=expected_stripped):
                 messages = self.check(workflow(on=on, uses=GATE))
                 self.assertEqual(len(messages), 1)
-                expected = (
-                    f"pull_request types form not readable: {expected_stripped};"
-                    " use a one-line flow list or a block sequence"
-                )
+                expected = unreadable_types_message(expected_stripped)
                 self.assertIn(expected, messages[0])
 
 

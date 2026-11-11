@@ -57,6 +57,33 @@ def literal_wall_clock_bounds(source: str) -> list[int]:
             lines.append(node.lineno)
     return lines
 
+
+def cached_fixture_asset(compressed: bytes) -> pact_ffi.Asset:
+    """Build the pinned shared-library asset for a compressed cache fixture."""
+    return pact_ffi.Asset(
+        filename="fixture.so.gz",
+        sha256=hashlib.sha256(compressed).hexdigest(),
+        library="libpact_ffi.so",
+    )
+
+
+def plant_cached_archive(root: Path, asset: pact_ffi.Asset) -> Path:
+    """Create a cache containing the planted archive bytes."""
+    cache_dir = root / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(gzip.compress(b"planted bytes"))
+    return cache_dir
+
+
+def timeout_responses(compressed: bytes) -> list[object]:
+    """Build two transient failures followed by the compressed response."""
+    return [
+        TimeoutError("first timeout"),
+        TimeoutError("second timeout"),
+        io.BytesIO(compressed),
+    ]
+
+
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
 
@@ -470,11 +497,7 @@ class PactFFIInstallerTests(TestCase):
     def test_positive_cache_downloads_once_then_reuses_verified_archive(self) -> None:
         """Reuse verified archive in cache_dir and extract library into library_dir."""
         compressed = gzip.compress(b"verified pact ffi")
-        asset = pact_ffi.Asset(
-            filename="fixture.so.gz",
-            sha256=hashlib.sha256(compressed).hexdigest(),
-            library="libpact_ffi.so",
-        )
+        asset = cached_fixture_asset(compressed)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             cache_dir = root / "cache"
@@ -496,16 +519,10 @@ class PactFFIInstallerTests(TestCase):
     def test_negative_planted_cached_archive_digest_mismatch_is_refused(self) -> None:
         """Reject cached archive whose digest does not match the pinned asset sha256."""
         good = gzip.compress(b"verified pact ffi")
-        asset = pact_ffi.Asset(
-            filename="fixture.so.gz",
-            sha256=hashlib.sha256(good).hexdigest(),
-            library="libpact_ffi.so",
-        )
+        asset = cached_fixture_asset(good)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            cache_dir = root / "cache"
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(gzip.compress(b"planted bytes"))
+            cache_dir = plant_cached_archive(root, asset)
             with self.assertRaisesRegex(pact_ffi.InstallError, "digest mismatch"):
                 self._cache_install(root, asset, good, cache_dir=cache_dir)
             self.assertFalse((root / "lib" / asset.library).exists())
@@ -530,9 +547,7 @@ class PactFFIInstallerTests(TestCase):
         asset = pact_ffi.Asset("fixture.so.gz", hashlib.sha256(good).hexdigest(), "libpact_ffi.so")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            cache_dir = root / "cache"
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            pact_ffi.cached_archive_path(asset, cache_dir).write_bytes(gzip.compress(b"planted bytes"))
+            cache_dir = plant_cached_archive(root, asset)
             argv = ["pact_ffi.py", "--cache-dir", str(cache_dir), "--lib-dir", str(root / "lib")]
             argv += ["--module", str(ROOT / "testutil/pact/go.mod")]
             with (
@@ -576,11 +591,7 @@ class PactFFIInstallerTests(TestCase):
         payload, compressed, asset = retry_fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            responses: list[object] = [
-                TimeoutError("first timeout"),
-                TimeoutError("second timeout"),
-                io.BytesIO(compressed),
-            ]
+            responses = timeout_responses(compressed)
             calls, sleeps, _stderr, outcome = self._retry_download(
                 responses, directory=root, asset=asset
             )
@@ -618,15 +629,20 @@ class PactFFIInstallerTests(TestCase):
             self.assertEqual(len(sleeps), 0)
             self.assertEqual(list(root.iterdir()), [])
 
-    def test_negative_download_http_404_fails_at_once_without_retry(self) -> None:
+    def _http_error(self, code: int, message: str) -> urllib.error.HTTPError:
+        """Build an HTTP error fixture and register its cleanup."""
         http_error = urllib.error.HTTPError(
             url="https://example.com/asset",
-            code=404,
-            msg="Not Found",
+            code=code,
+            msg=message,
             hdrs={},
             fp=None,
         )
         self.addCleanup(http_error.close)
+        return http_error
+
+    def test_negative_download_http_404_fails_at_once_without_retry(self) -> None:
+        http_error = self._http_error(404, "Not Found")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, _stderr, outcome = self._retry_download(
@@ -643,14 +659,7 @@ class PactFFIInstallerTests(TestCase):
 
     def test_boundary_download_http_503_retries_and_succeeds(self) -> None:
         _, compressed, asset = retry_fixture()
-        http_error = urllib.error.HTTPError(
-            url="https://example.com/asset",
-            code=503,
-            msg="Service Unavailable",
-            hdrs={},
-            fp=None,
-        )
-        self.addCleanup(http_error.close)
+        http_error = self._http_error(503, "Service Unavailable")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, _stderr, outcome = self._retry_download(
@@ -664,14 +673,7 @@ class PactFFIInstallerTests(TestCase):
 
     def test_boundary_download_http_408_retries_and_succeeds(self) -> None:
         _, compressed, asset = retry_fixture()
-        http_error = urllib.error.HTTPError(
-            url="https://example.com/asset",
-            code=408,
-            msg="Request Timeout",
-            hdrs={},
-            fp=None,
-        )
-        self.addCleanup(http_error.close)
+        http_error = self._http_error(408, "Request Timeout")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             calls, sleeps, _stderr, outcome = self._retry_download(
@@ -727,11 +729,7 @@ class PactFFIInstallerTests(TestCase):
         _, compressed, asset = retry_fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            responses: list[object] = [
-                TimeoutError("first timeout"),
-                TimeoutError("second timeout"),
-                io.BytesIO(compressed),
-            ]
+            responses = timeout_responses(compressed)
             calls, sleeps, stderr_text, outcome = self._retry_download(
                 responses, directory=root, asset=asset
             )
@@ -843,11 +841,7 @@ class PactFFIInstallerTests(TestCase):
     def test_boundary_cache_dir_equals_library_dir_works(self) -> None:
         """Allow cache_dir and library_dir to match, as used by the Makefile target."""
         compressed = gzip.compress(b"verified pact ffi")
-        asset = pact_ffi.Asset(
-            filename="fixture.so.gz",
-            sha256=hashlib.sha256(compressed).hexdigest(),
-            library="libpact_ffi.so",
-        )
+        asset = cached_fixture_asset(compressed)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             combined = root / "pact-ffi"

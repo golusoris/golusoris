@@ -22,6 +22,48 @@ expect_failure() {
 	fi
 }
 
+insert_workflow_line_after() {
+	local source="$1" destination="$2" needle="$3" inserted_line="$4"
+	python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line)
+        if sys.argv[3] in line:
+            dst.write(sys.argv[4] + "\n")' \
+		"$source" "$destination" "$needle" "$inserted_line"
+}
+
+drop_workflow_line() {
+	local source="$1" destination="$2" needle="$3"
+	python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if sys.argv[3] not in line:
+            dst.write(line)' \
+		"$source" "$destination" "$needle"
+}
+
+rewrite_workflow_line() {
+	local source="$1" destination="$2" needle="$3" original="$4" replacement="$5"
+	python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if sys.argv[3] in line:
+            dst.write(line.replace(sys.argv[4], sys.argv[5]))
+        else:
+            dst.write(line)' \
+		"$source" "$destination" "$needle" "$original" "$replacement"
+}
+
 check_tag_release() {
 	local path="$1"
 	grep -Fq '      - name: Validate canonical release tag' "$path" || {
@@ -661,78 +703,28 @@ with open(sys.argv[2], "w", encoding="utf-8") as dst:
 	"$release_please_config" "$negative_config"
 expect_failure '. package include-v-in-tag must be true' \
 	check_release_please_tagging "$negative_config" "$release_please"
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        dst.write(line)
-        if "manifest-file: .release-please-manifest.json" in line:
-            dst.write("          skip-github-release: true\n")' \
-	"$release_please" "$negative"
+insert_workflow_line_after "$release_please" "$negative" \
+	'manifest-file: .release-please-manifest.json' '          skip-github-release: true'
 expect_failure 'release-please skips the tag and release step' \
 	check_release_please_tagging "$release_please_config" "$negative"
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        dst.write(line)
-        if "manifest-file: .release-please-manifest.json" in line:
-            dst.write("          skip-github-release: \"true\"\n")' \
-	"$release_please" "$negative"
+insert_workflow_line_after "$release_please" "$negative" \
+	'manifest-file: .release-please-manifest.json' '          skip-github-release: "true"'
 expect_failure 'release-please skips the tag and release step' \
 	check_release_please_tagging "$release_please_config" "$negative"
 # shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if "token: ${{ steps.app-token.outputs.token }}" not in line:
-            dst.write(line)' \
-	"$release_please" "$negative"
+drop_workflow_line "$release_please" "$negative" 'token: ${{ steps.app-token.outputs.token }}'
 expect_failure 'release-please does not pass App token to release-please-action' \
 	check_release_please_tagging "$release_please_config" "$negative"
 # shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if "token: ${{ steps.app-token.outputs.token }}" in line:
-            dst.write(line.replace("token:", "# token:"))
-        else:
-            dst.write(line)' \
-	"$release_please" "$negative"
+rewrite_workflow_line "$release_please" "$negative" \
+	'token: ${{ steps.app-token.outputs.token }}' 'token:' '# token:'
 expect_failure 'release-please does not pass App token to release-please-action' \
 	check_release_please_tagging "$release_please_config" "$negative"
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if "actions/create-github-app-token" not in line:
-            dst.write(line)' \
-	"$release_please" "$negative"
+drop_workflow_line "$release_please" "$negative" 'actions/create-github-app-token'
 expect_failure 'release-please lacks GitHub App token minting' \
 	check_release_please_tagging "$release_please_config" "$negative"
-python3 -B -c 'import sys
-MAX_LINES = 20000
-with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
-    for idx, line in enumerate(src):
-        if idx >= MAX_LINES:
-            sys.exit("file exceeds MAX_LINES")
-        if "actions/create-github-app-token" in line:
-            dst.write(line.replace("uses:", "# uses:"))
-        else:
-            dst.write(line)' \
-	"$release_please" "$negative"
+rewrite_workflow_line "$release_please" "$negative" \
+	'actions/create-github-app-token' 'uses:' '# uses:'
 expect_failure 'release-please lacks GitHub App token minting' \
 	check_release_please_tagging "$release_please_config" "$negative"
 

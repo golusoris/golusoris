@@ -38,6 +38,20 @@ printf '%s\n' "${1:-clean}"
 EOF
 }
 
+write_unexplained_workflow() {
+	local path="$1"
+	cat >"$path" <<'EOF'
+name: CI
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+EOF
+	printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
+		>>"$path"
+}
+
 run_hook() {
 	local target_root="$1"
 	shift
@@ -167,16 +181,7 @@ expect_failure_matching 'is not on PATH' \
 
 # B: tool absent + workflow only with unexplained suppression fails suppression check.
 mkdir -p "$absent_root/.github/workflows"
-cat >"$absent_root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-EOF
-printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
-	>>"$absent_root/.github/workflows/ci.yml"
+write_unexplained_workflow "$absent_root/.github/workflows/ci.yml"
 git -C "$absent_root" add .github/workflows/ci.yml
 expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/ci.yml' \
 	run_hook_no_tool "$absent_root" --staged .github/workflows/ci.yml
@@ -205,16 +210,7 @@ if [[ "$out" != *'changed workflow file(s) passed'* ]]; then
 fi
 
 # D: tool absent + mixed: unexplained workflow suppression blocks before tool check.
-cat >"$absent_root/.github/workflows/ci.yml" <<'EOF'
-name: CI
-on: [push]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-EOF
-printf '%s\n' '      # shellcheck disable=SC2086' '      - run: echo test' \
-	>>"$absent_root/.github/workflows/ci.yml"
+write_unexplained_workflow "$absent_root/.github/workflows/ci.yml"
 git -C "$absent_root" add .github/workflows/ci.yml
 expect_failure_matching 'ShellCheck suppression needs an inline WHY: .github/workflows/ci.yml' \
 	run_hook_no_tool "$absent_root" --staged .github/workflows/ci.yml clean.sh
