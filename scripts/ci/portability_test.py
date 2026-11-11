@@ -59,6 +59,26 @@ def literal_wall_clock_bounds(source: str) -> list[int]:
             lines.append(node.lineno)
     return lines
 
+
+def pact_modifier_violations(makefile: str) -> list[str]:
+    """Return non-Windows Pact assignments with combined modifiers or missing export pairs."""
+    before_windows, windows = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)
+    lines = (before_windows + windows.split("\nelse\n", 1)[1]).splitlines()
+    offending = []
+    prefix = "$(PACT_FFI_TARGETS): "
+    for index, line in enumerate(lines):
+        if not line.startswith(prefix) or ":=" not in line:
+            continue
+        modifiers = line.removeprefix(prefix).split(":=", 1)[0].split()
+        if sum(token in {"override", "export"} for token in modifiers) > 1:
+            offending.append(line)
+        elif "override" in modifiers:
+            export = line.replace(": override ", ": export ", 1)
+            if index + 1 == len(lines) or lines[index + 1] != export:
+                offending.append(line)
+    return offending
+
+
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
 
@@ -979,11 +999,37 @@ class PactFFIInstallerTests(TestCase):
             makefile,
         )
         self.assertIn("$(PACT_FFI_TARGETS): pact-ffi", makefile)
-        self.assertIn("override export PACT_GO_LIB_DOWNLOAD_PATH", makefile)
+        self.assertIn(
+            "$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
+            "$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)",
+            makefile,
+        )
         self.assertIn("'-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)'", makefile)
         self.assertIn("override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)", makefile)
         ignored = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn(".workingdir/", ignored)
+
+    def test_positive_local_pact_modifier_pairs(self) -> None:
+        """Require separate override and export lines outside the Windows branch."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertEqual(pact_modifier_violations(makefile), [])
+
+    def test_negative_local_pact_combined_modifiers(self) -> None:
+        """Reject a TMPDIR assignment folded into one override export line."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        override = "$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)\n"
+        export = "$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)\n"
+        combined = override.replace(": override ", ": override export ")
+        mutant = makefile.replace(override + export, combined)
+        self.assertIn(combined.rstrip(), pact_modifier_violations(mutant))
+
+    def test_negative_local_pact_reversed_modifier_pair(self) -> None:
+        """Reject a Pact download path export placed before its override line."""
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        override = "$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
+        export = "$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)\n"
+        mutant = makefile.replace(override + export, export + override)
+        self.assertIn(override.rstrip(), pact_modifier_violations(mutant))
 
     def _assert_makefile_pact_tmpdir(self, makefile: str) -> None:
         """Require Unix Pact targets to export safe temp storage created before installation."""
@@ -993,7 +1039,11 @@ class PactFFIInstallerTests(TestCase):
         )
         unix = makefile.split("ifeq ($(OS),Windows_NT)\n", 1)[1].split("\nelse\n", 1)[1].split("\nendif", 1)[0]
         self.assertIn("ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)", unix)
-        self.assertIn("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)", unix)
+        self.assertIn(
+            "$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)\n"
+            "$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)",
+            unix,
+        )
         goal_guard = "ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)"
         self.assertIn(goal_guard, unix)
         creation = unix.split(goal_guard + "\n", 1)[1]
@@ -1013,8 +1063,8 @@ class PactFFIInstallerTests(TestCase):
     def test_negative_local_pact_tmpdir_export_missing(self) -> None:
         """Reject Makefile text with the target-specific TMPDIR export removed."""
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
-        mutant = makefile.replace("$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)\n", "")
-        with self.assertRaisesRegex(AssertionError, "override export TMPDIR"):
+        mutant = makefile.replace("$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)\n", "")
+        with self.assertRaisesRegex(AssertionError, "export TMPDIR"):
             self._assert_makefile_pact_tmpdir(mutant)
 
     def _make_tmpdir_dry_run(self, goal: str, directory: str, *, tmpdir: str | None = None) -> Path:

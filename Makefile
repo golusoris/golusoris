@@ -357,9 +357,10 @@ pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/p
 	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
-# override keeps the Pact paths when a caller sets these variables on the make command line;
-# go splits CGO_LDFLAGS with shell quoting, so quoted paths survive spaces.
-$(PACT_FFI_TARGETS): override export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+# macOS /usr/bin/make 3.81 reads one modifier per line; keep override before export.
+# override keeps Pact paths over command-line values on GNU make 3.82+; on 3.81 command-line values win.
+$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
 ifeq ($(OS),Windows_NT)
 # MinGW has no rpath; Windows finds pact_ffi.dll through PATH, as the portability workflow does.
 PACT_PATH_SEP := $(if $(findstring ;,$(PATH)),;,:)
@@ -368,7 +369,8 @@ $(PACT_FFI_TARGETS): override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PA
 else
 # go1.27.4 scans pact-go's -L/tmp when it is os.TempDir(); use a cache directory outside the checkout.
 ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)
-$(PACT_FFI_TARGETS): override export TMPDIR := $(PACT_FFI_TMPDIR)
+$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)
+$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)
 ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)
 # Prerequisites inherit TMPDIR and run before pact-ffi; create it before any recipe.
 $(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")
@@ -377,7 +379,8 @@ $(error Cannot create Pact temporary directory "$(PACT_FFI_TMPDIR)")
 endif
 endif
 endif
-$(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+$(PACT_FFI_TARGETS): override CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+$(PACT_FFI_TARGETS): export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
 endif
 
 .PHONY: verify-all
