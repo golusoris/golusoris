@@ -8,11 +8,16 @@
 name: Security scan
 
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'lts-*'
     types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - main
+      - 'lts-*'
+  merge_group:
   schedule:
     - cron: '30 7 * * 1'
   workflow_dispatch:

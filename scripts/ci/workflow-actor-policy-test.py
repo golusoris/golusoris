@@ -39,12 +39,128 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     ): "Reusable Go CI PR-title check mirrors ci.yml on caller pull requests.",
 }
 
+# (workflow path, job id, stripped line) -> reason.
+ALLOWED_LINES: dict[tuple[str, str, str], str] = {
+    (
+        ".github/workflows/regenerate.yml",
+        "<top>",
+        "- 'renovate/**'",
+    ): "Regenerate workflow triggers only on Renovate branches.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "<top>",
+        "name: renovate-on-demand",
+    ): "On-demand Renovate workflow display name.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "<top>",
+        "group: renovate-${{ github.repository }}",
+    ): "On-demand Renovate concurrency group.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "renovate:",
+    ): "On-demand Renovate job identifier.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "image: docker.io/renovate/renovate:44@"
+        "sha256:0423c5dfb1488df5716b6584032b3bcf7091ad7a3bc547c5707f047da7a30674",
+    ): "Pinned Renovate container image for on-demand Gitea runs.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "- name: Run Renovate scoped to this repository",
+    ): "On-demand Renovate execution step name.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "RENOVATE_PLATFORM: gitea",
+    ): "Renovate CLI target platform setting.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "RENOVATE_ENDPOINT: https://git.dev.cauda.dev/api/v1",
+    ): "Renovate CLI Gitea API endpoint setting.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        'RENOVATE_AUTODISCOVER: "false"',
+    ): "Renovate CLI repository autodiscovery disabled.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "RENOVATE_REPOSITORIES: ${{ github.repository }}",
+    ): "Renovate CLI single-repository scope.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "RENOVATE_GIT_AUTHOR: Renovate Bot <renovate@cauda.dev>",
+    ): "Renovate CLI commit author identity.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        'RENOVATE_FETCH_CHANGE_LOGS: "off"',
+    ): "Renovate CLI changelog fetching disabled.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "RENOVATE_TOKEN: ${{ secrets.RENOVATE_TOKEN }}",
+    ): "Renovate CLI Gitea authentication secret.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "GITHUB_COM_TOKEN: ${{ secrets.RENOVATE_GITHUB_COM_TOKEN }}",
+    ): "Renovate CLI GitHub release-notes token secret.",
+    (
+        ".gitea/workflows/renovate-on-demand.yml",
+        "renovate",
+        "run: renovate",
+    ): "On-demand Renovate CLI invocation.",
+    (
+        ".github/workflows/ci.yml",
+        "ci-success",
+        "ACTOR: ${{ github.actor }}",
+    ): "check-required-jobs.sh bot skip input.",
+    (
+        ".github/workflows/rebuild-on-base.yml",
+        "rebuild",
+        "username: ${{ github.actor }}",
+    ): "GHCR docker/login-action username.",
+    (
+        ".github/workflows/release-go.yml",
+        "goreleaser",
+        "username: ${{ github.actor }}",
+    ): "GHCR docker/login-action username.",
+    (
+        ".github/workflows/tiny-litert-sidecar-image.yml",
+        "publish",
+        "username: ${{ github.actor }}",
+    ): "GHCR docker/login-action username.",
+    (
+        ".github/workflows/tiny-trainer-images.yml",
+        "publish",
+        "username: ${{ github.actor }}",
+    ): "GHCR docker/login-action username.",
+    (
+        ".github/workflows/verify-provenance.yml",
+        "verify",
+        "username: ${{ github.actor }}",
+    ): "GHCR docker/login-action username.",
+}
+
+_INDEX_ACCESS = re.compile(
+    r"(?:(?<=[A-Za-z0-9_\]\)])\s*)?\[\s*(?P<q>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)\s*\]"
+)
 _ACTOR_TOKEN = re.compile(
     r"\b(?:"
     r"(?:github|gitea)\.(?:actor_id|triggering_actor|actor)"
-    r"|(?:sender|user)\.(?:login|id|type)"
+    r"|(?:sender|user|actor)\.(?:login|id|node_id|type)"
+    r"|author_association"
     r"|pusher\.(?:name|email)"
     r"|(?:author|committer)\.(?:name|email|username)"
+    r"|GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
+    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR)"
     r")\b"
 )
 _BOT_LITERAL = re.compile(r"renovate|dependabot|\[bot\]", re.IGNORECASE)
@@ -52,12 +168,14 @@ _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)
 _JOB_KEY = re.compile(r"^  (?P<q>['\"]?)(?P<job>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
 _JOB_IF_KEY = re.compile(r"^    if:(?:\s|$)")
 _JOB_IF_LINE = re.compile(r"^    if:\s*(?P<expr>.+?)\s*$")
-_IF_KEY = re.compile(r"^\s*(?:-\s+)?if:(?:\s|$)")
-_ACTOR_VALUE_LINE = re.compile(
-    r"^\s*(?P<key>[A-Za-z_][A-Za-z0-9_-]*): \$\{\{ github\.actor \}\}$"
-)
 _BLOCK_SCALAR = re.compile(r"^(?:\s*-\s+|\s*[^:#]+:\s*)[|>][+-]?[1-9]?(?:\s+#.*)?\s*$")
 _SEQ_MAP_PREFIX = re.compile(r"^(?P<prefix>\s*-\s+)[^:#]+:")
+
+
+@dataclass
+class _AllowanceHits:
+    allowed_ifs: set[tuple[str, str, str]]
+    allowed_lines: set[tuple[str, str, str]]
 
 
 def _block_scalar_indent(line: str, indent: int) -> int | None:
@@ -70,11 +188,19 @@ def _block_scalar_indent(line: str, indent: int) -> int | None:
     return indent
 
 
-def _has_disallowed_token(line: str, *, check_bot_literal: bool) -> bool:
-    """Return True when line contains an actor token or an if-scoped bot literal."""
-    if _ACTOR_TOKEN.search(line) is not None:
+def _normalise_index_access(line: str) -> str:
+    """Normalise bracket property access x['name'] and x["name"] to x.name."""
+    return _INDEX_ACCESS.sub(r".\g<key>", line)
+
+
+def _has_disallowed_token(line: str) -> bool:
+    """Return True when line contains a disallowed actor token or bot literal."""
+    if _BOT_LITERAL.search(line) is not None:
         return True
-    return check_bot_literal and _BOT_LITERAL.search(line) is not None
+    return (
+        _ACTOR_TOKEN.search(line) is not None
+        or _ACTOR_TOKEN.search(_normalise_index_access(line)) is not None
+    )
 
 
 @dataclass
@@ -82,7 +208,7 @@ class _ScanState:
     in_jobs: bool = False
     current_job: str = "<top>"
     job_if_count: int = 0
-    block_scalar: tuple[int, bool] | None = None
+    block_scalar: int | None = None
 
     def advance_section(self, line: str, indent: int) -> None:
         """Update top-level YAML section, current job, and job-if count."""
@@ -103,14 +229,12 @@ class _ScanState:
         elif self.current_job != "<top>" and _JOB_IF_KEY.match(line) is not None:
             self.job_if_count += 1
 
-    def advance_structure(self, line: str, indent: int) -> bool:
-        """Advance YAML structure and return True when line is a job or step if key."""
+    def advance_structure(self, line: str, indent: int) -> None:
+        """Advance YAML structure and block-scalar state for allowance scoping."""
         self.advance_section(line, indent)
-        is_if_key = self.in_jobs and _IF_KEY.match(line) is not None
         block_indent = _block_scalar_indent(line, indent)
         if block_indent is not None:
-            self.block_scalar = (block_indent, is_if_key)
-        return is_if_key
+            self.block_scalar = block_indent
 
 
 def _normalise_if_expr(raw: str) -> str:
@@ -126,25 +250,39 @@ def _normalise_if_expr(raw: str) -> str:
     return " ".join(expr.split())
 
 
-def _is_allowed_actor_line(
+def _is_allowed_job_if(
     name: str,
-    job: str,
     line: str,
-    *,
-    in_jobs: bool,
-    job_if_count: int,
+    state: _ScanState,
+    hits: _AllowanceHits | None,
 ) -> bool:
-    """Return True only for exact github.actor values or allow-listed job ifs."""
-    value_match = _ACTOR_VALUE_LINE.fullmatch(line)
-    if value_match is not None:
-        return value_match.group("key") not in {"if", "run"}
-    if not in_jobs or job == "<top>" or job_if_count != 1:
+    """Return True when line matches an allow-listed pull-request-only job if."""
+    if not state.in_jobs or state.current_job == "<top>" or state.job_if_count != 1:
         return False
     if_match = _JOB_IF_LINE.fullmatch(line)
     if if_match is None:
         return False
-    expr = _normalise_if_expr(if_match.group("expr"))
-    return bool(ALLOWED.get((name, job, expr), "").strip())
+    if_key = (name, state.current_job, _normalise_if_expr(if_match.group("expr")))
+    if not ALLOWED.get(if_key, "").strip():
+        return False
+    if hits is not None:
+        hits.allowed_ifs.add(if_key)
+    return True
+
+
+def _is_allowed_actor_line(
+    name: str,
+    line: str,
+    state: _ScanState,
+    hits: _AllowanceHits | None = None,
+) -> bool:
+    """Return True only for allow-listed exact lines or pull-request-only job ifs."""
+    line_key = (name, state.current_job, line.strip())
+    if ALLOWED_LINES.get(line_key, "").strip():
+        if hits is not None:
+            hits.allowed_lines.add(line_key)
+        return True
+    return _is_allowed_job_if(name, line, state, hits)
 
 
 def _consume_block_scalar(
@@ -160,9 +298,8 @@ def _consume_block_scalar(
         return False, None
     if not stripped:
         return True, None
-    block_indent, block_is_if = state.block_scalar
-    if indent > block_indent:
-        if not _has_disallowed_token(line, check_bot_literal=block_is_if):
+    if indent > state.block_scalar:
+        if not _has_disallowed_token(line):
             return True, None
         return (
             True,
@@ -178,6 +315,7 @@ def _check_line(
     lineno: int,
     line: str,
     state: _ScanState,
+    hits: _AllowanceHits | None = None,
 ) -> str | None:
     """Return a finding if a workflow line carries an unlisted actor reference."""
     stripped = line.lstrip(" \t")
@@ -189,16 +327,10 @@ def _check_line(
         return block_finding
     if not stripped or stripped.startswith("#"):
         return None
-    is_if_key = state.advance_structure(line, indent)
-    if not _has_disallowed_token(line, check_bot_literal=is_if_key):
+    state.advance_structure(line, indent)
+    if not _has_disallowed_token(line):
         return None
-    if _is_allowed_actor_line(
-        name,
-        state.current_job,
-        line,
-        in_jobs=state.in_jobs,
-        job_if_count=state.job_if_count,
-    ):
+    if _is_allowed_actor_line(name, line, state, hits):
         return None
     return (
         f"{name}:{lineno}:{state.current_job}: "
@@ -206,37 +338,72 @@ def _check_line(
     )
 
 
-def check(name: str, text: str) -> list[str]:
-    """Return the actor-policy findings for one workflow file."""
+def _check_text(
+    name: str,
+    text: str,
+    hits: _AllowanceHits | None = None,
+) -> list[str]:
+    """Return actor-policy findings for one workflow file and record allowance hits."""
     lines = text.splitlines()
     if len(lines) > MAX_WORKFLOW_LINES:
         return [f"{name}:1:<top>: workflow exceeds {MAX_WORKFLOW_LINES} lines"]
     state = _ScanState()
     findings: list[str] = []
     for lineno, line in enumerate(lines[:MAX_WORKFLOW_LINES], start=1):
-        finding = _check_line(name, lineno, line, state)
+        finding = _check_line(name, lineno, line, state, hits)
         if finding is not None:
             findings.append(finding)
     return findings
 
 
-def scan(root: Path) -> list[str]:
-    """Scan all workflow YAML files under .github/workflows and .gitea/workflows."""
+def check(name: str, text: str) -> list[str]:
+    """Return the actor-policy findings for one workflow file."""
+    return _check_text(name, text)
+
+
+def _collect_workflow_paths(root: Path) -> list[Path]:
+    """Collect sorted workflow YAML paths under WORKFLOW_DIRS."""
     paths: list[Path] = []
     for directory in WORKFLOW_DIRS:
         workflow_dir = root / directory
         paths.extend(
             sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
         )
+    return paths
+
+
+def scan_with_hits(
+    root: Path,
+) -> tuple[list[str], set[tuple[str, str, str]], set[tuple[str, str, str]]]:
+    """Scan workflow files and return (findings, allowed_if_hits, allowed_line_hits)."""
+    paths = _collect_workflow_paths(root)
+    hits = _AllowanceHits(allowed_ifs=set(), allowed_lines=set())
     if len(paths) > MAX_WORKFLOW_FILES:
-        return [f"{root}:1:<top>: workflow count exceeds {MAX_WORKFLOW_FILES}"]
+        return (
+            [f"{root}:1:<top>: workflow count exceeds {MAX_WORKFLOW_FILES}"],
+            hits.allowed_ifs,
+            hits.allowed_lines,
+        )
     findings: list[str] = []
     for path in paths[:MAX_WORKFLOW_FILES]:
         name = path.relative_to(root).as_posix()
         if path.is_symlink():
             findings.append(f"{name}:1:<top>: workflow symlink refused")
             continue
-        findings.extend(check(name, path.read_text(encoding="utf-8")))
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            findings.append(
+                f"{name}:1:<top>: unreadable workflow: {type(exc).__name__}"
+            )
+            continue
+        findings.extend(_check_text(name, text, hits))
+    return findings, hits.allowed_ifs, hits.allowed_lines
+
+
+def scan(root: Path) -> list[str]:
+    """Scan all workflow YAML files under .github/workflows and .gitea/workflows."""
+    findings, _, _ = scan_with_hits(root)
     return findings
 
 
@@ -249,6 +416,31 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 expr.endswith("&& github.event_name == 'pull_request'"),
                 f"{path}:{job}: {expr}",
             )
+
+    def test_all_allowances_are_hit_by_repository_scan(self) -> None:
+        self.assertEqual(len(ALLOWED_LINES), 21)
+        for (path, job, line_text), reason in list(ALLOWED_LINES.items())[
+            :MAX_WORKFLOW_LINES
+        ]:
+            self.assertTrue(path and job and line_text and reason.strip())
+        findings, hit_ifs, hit_lines = scan_with_hits(REPO_ROOT)
+        self.assertEqual(findings, [])
+        self.assertEqual(hit_ifs, set(ALLOWED))
+        self.assertEqual(hit_lines, set(ALLOWED_LINES))
+
+    def test_scan_with_hits_omits_unhit_allowances(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ok.yml").write_text(
+                "on:\n  push:\njobs:\n  ok:\n    runs-on: ubuntu-26.04\n",
+                encoding="utf-8",
+            )
+            findings, hit_ifs, hit_lines = scan_with_hits(root)
+            self.assertEqual(findings, [])
+            self.assertEqual(hit_ifs, set())
+            self.assertEqual(hit_lines, set())
 
     def test_push_workflow_actor_if_fails(self) -> None:
         text = (
@@ -290,13 +482,26 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/ci.yml:6:pr-title:", findings[0])
 
+    def test_block_scalar_if_actor_id_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n    if: >-\n"
+            "      github.actor_id != 29139614\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
+            findings[0],
+        )
+
     def test_run_and_other_actor_tokens_fail(self) -> None:
         text = (
             "on:\n  push:\n"
             "jobs:\n  build:\n    steps:\n"
             "      - run: |\n"
             "          username: ${{ github.actor }}\n"
-            "      - if: github.triggering_actor != 'renovate[bot]'\n"
+            "      - if: github.triggering_actor != vars.BOT_LOGIN\n"
             "        run: echo ${{ github.event.sender.login }} ${{ github.event.issue.user.login }}\n"
         )
         findings = check(".github/workflows/build.yml", text)
@@ -305,18 +510,44 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         self.assertIn(".github/workflows/build.yml:8:build:", findings[1])
         self.assertIn(".github/workflows/build.yml:9:build:", findings[2])
 
-    def test_username_actor_value_line_passes(self) -> None:
+    def test_username_actor_value_line_pass_and_fail_pair(self) -> None:
         text = (
             "on:\n  push:\n"
-            "jobs:\n  publish:\n    steps:\n"
+            "jobs:\n  goreleaser:\n    steps:\n"
             "      - uses: docker/login-action@v4\n"
             "        with:\n"
             "          username: ${{ github.actor }}\n"
-            "      - env:\n"
-            "          ACTOR: ${{ github.actor }}\n"
-            "        run: echo ok\n"
         )
         self.assertEqual(check(".github/workflows/release-go.yml", text), [])
+        findings = check(".github/workflows/other.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/other.yml:8:goreleaser:"),
+            findings[0],
+        )
+        wrong_job_findings = check(
+            ".github/workflows/release-go.yml",
+            text.replace("  goreleaser:\n", "  publish:\n", 1),
+        )
+        self.assertEqual(len(wrong_job_findings), 1)
+        self.assertTrue(
+            wrong_job_findings[0].startswith(
+                ".github/workflows/release-go.yml:8:publish:"
+            ),
+            wrong_job_findings[0],
+        )
+        run_block_findings = check(
+            ".github/workflows/release-go.yml",
+            "on:\n  push:\njobs:\n  goreleaser:\n    steps:\n"
+            "      - run: |\n          username: ${{ github.actor }}\n",
+        )
+        self.assertEqual(len(run_block_findings), 1)
+        self.assertTrue(
+            run_block_findings[0].startswith(
+                ".github/workflows/release-go.yml:7:goreleaser:"
+            ),
+            run_block_findings[0],
+        )
 
     def test_allowed_entry_passes_plain_and_wrapped(self) -> None:
         text = (
@@ -365,9 +596,9 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             (workflows / "ci.yml").write_text(
                 "on:\n  push:\n"
                 "jobs:\n  lint:\n"
-                "    if: gitea.actor != 'renovate[bot]'\n"
+                "    if: gitea.actor != vars.BOT_LOGIN\n"
                 "    steps:\n"
-                "      - if: gitea.triggering_actor != 'renovate[bot]'\n"
+                "      - if: gitea.triggering_actor != vars.BOT_LOGIN\n"
                 "        run: echo ${{ gitea.actor_id }}\n",
                 encoding="utf-8",
             )
@@ -423,6 +654,8 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          K: ${{ inputs.co_author.name }} ${{ inputs.author.names }} ${{ inputs.author.emails }} ${{ inputs.author.usernames }}\n"
             "          L: ${{ inputs.my_committer.email }} ${{ inputs.committer.names }} ${{ inputs.committer.emails }} ${{ inputs.committer.usernames }}\n"
             "          M: ${{ inputs.app_user.type }} ${{ inputs.custom_sender.type }} ${{ inputs.user.types }} ${{ inputs.sender.types }}\n"
+            "          N: ${{ inputs.my_actor.id }} ${{ inputs.actor.identifier }} ${{ inputs.user.node_identifier }}\n"
+            "          O: ${{ inputs.my_author_association }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR\n"
             "        run: echo ok\n"
         )
         self.assertEqual(check(".github/workflows/build.yml", text), [])
@@ -498,28 +731,236 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             findings[0],
         )
 
-    def test_renovate_non_if_workflow_passes(self) -> None:
-        text = (
-            "name: renovate-on-demand\n"
-            "on:\n  push:\n    branches: ['renovate/**']\n"
-            "concurrency:\n  group: renovate-${{ github.repository }}\n"
-            "jobs:\n  renovate:\n"
-            "    if: >-\n"
-            "      github.event_name != 'issues'\n"
-            "    runs-on: ubuntu-26.04\n"
-            "    container:\n"
-            "      image: docker.io/renovate/renovate:44\n"
-            "    steps:\n"
-            "      - if: >-\n"
-            "          github.event_name == 'push'\n"
-            "        env:\n"
-            "          RENOVATE_GIT_AUTHOR: Renovate Bot <renovate@example.com>\n"
-            "          BOT_LABEL: dependabot[bot]\n"
-            "        run: |\n"
-            "          renovate --dry-run\n"
-            "x-notes:\n  if: renovate\n"
+    def test_renovate_on_demand_lines_pass_and_fail_pair(self) -> None:
+        text = (REPO_ROOT / ".gitea/workflows/renovate-on-demand.yml").read_text(
+            encoding="utf-8"
         )
         self.assertEqual(check(".gitea/workflows/renovate-on-demand.yml", text), [])
+        findings = check(".github/workflows/other.yml", text)
+        expected = (
+            (5, "<top>"),
+            (13, "<top>"),
+            (17, "renovate"),
+            (24, "renovate"),
+            (27, "renovate"),
+            (29, "renovate"),
+            (30, "renovate"),
+            (31, "renovate"),
+            (32, "renovate"),
+            (33, "renovate"),
+            (34, "renovate"),
+            (37, "renovate"),
+            (38, "renovate"),
+            (39, "renovate"),
+        )
+        self.assertEqual(len(findings), len(expected))
+        for idx, (lineno, job) in enumerate(expected):
+            self.assertTrue(
+                findings[idx].startswith(
+                    f".github/workflows/other.yml:{lineno}:{job}:"
+                ),
+                findings[idx],
+            )
+
+    def test_quoted_job_if_keys_fail(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n"
+            "    \"if\": ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
+            "  trivy:\n"
+            "    'if': ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
+            findings[0],
+        )
+        self.assertTrue(
+            findings[1].startswith(".github/workflows/security-scan.yml:7:trivy:"),
+            findings[1],
+        )
+
+    def test_explicit_indent_block_scalar_if_fails(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: >2-\n"
+            "      !startsWith(github.head_ref, 'renovate/')\n"
+            "  trivy:\n"
+            "    if: |2-\n"
+            "      !startsWith(github.head_ref, 'renovate/')\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
+            findings[0],
+        )
+        self.assertTrue(
+            findings[1].startswith(".github/workflows/security-scan.yml:9:trivy:"),
+            findings[1],
+        )
+
+    def test_jobs_key_with_space_before_colon_fails(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs :\n  semgrep:\n"
+            "    if: ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:5:<top>:"),
+            findings[0],
+        )
+
+    def test_index_syntax_actor_tokens_fail(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: ${{ github['actor_id'] != '29139614' }}\n"
+            "  trivy:\n"
+            '    if: github["actor"] != vars.BOT_LOGIN\n'
+            "  chained:\n"
+            "    if: github['event']['workflow_run']['actor']['login'] != vars.BOT_LOGIN\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 3)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
+            findings[0],
+        )
+        self.assertIn("github['actor_id']", findings[0])
+        self.assertTrue(
+            findings[1].startswith(".github/workflows/security-scan.yml:7:trivy:"),
+            findings[1],
+        )
+        self.assertIn('github["actor"]', findings[1])
+        self.assertTrue(
+            findings[2].startswith(".github/workflows/security-scan.yml:9:chained:"),
+            findings[2],
+        )
+
+    def test_workflow_run_actor_id_fails(self) -> None:
+        text = (
+            "on:\n  workflow_run:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: github.event.workflow_run.actor.id != 29139614\n"
+            "    steps:\n"
+            "      - if: github.event.workflow_run.actor.node_id != vars.BOT_NODE_ID\n"
+            "        run: echo one\n"
+            "      - if: github.event.workflow_run.actor.type != 'Bot'\n"
+            "        run: echo two\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        expected = (5, 7, 9)
+        self.assertEqual(len(findings), len(expected))
+        for idx, lineno in enumerate(expected):
+            self.assertTrue(
+                findings[idx].startswith(
+                    f".github/workflows/security-scan.yml:{lineno}:semgrep:"
+                ),
+                findings[idx],
+            )
+
+    def test_author_association_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: github.event.pull_request.author_association != 'BOT'\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
+            findings[0],
+        )
+
+    def test_user_node_id_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: github.event.pull_request.user.node_id != vars.BOT_NODE_ID\n"
+            "    steps:\n"
+            "      - if: github.event.sender.node_id != vars.BOT_NODE_ID\n"
+            "        run: echo ok\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
+            findings[0],
+        )
+        self.assertTrue(
+            findings[1].startswith(".github/workflows/security-scan.yml:7:semgrep:"),
+            findings[1],
+        )
+
+    def test_step_actor_env_and_default_actor_env_vars_fail(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n    steps:\n"
+            "      - env:\n"
+            "          ACTOR: ${{ github.actor }}\n"
+            "        run: echo ok\n"
+            '      - run: test "$GITHUB_ACTOR" != "$SKIP" || exit 0\n'
+            '      - run: echo "$GITHUB_ACTOR_ID"\n'
+            '      - run: echo "$GITHUB_TRIGGERING_ACTOR"\n'
+            '      - run: echo "$GITEA_ACTOR"\n'
+            '      - run: echo "$GITEA_TRIGGERING_ACTOR"\n'
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        expected = (7, 9, 10, 11, 12, 13)
+        self.assertEqual(len(findings), len(expected))
+        for idx, lineno in enumerate(expected):
+            self.assertTrue(
+                findings[idx].startswith(
+                    f".github/workflows/security-scan.yml:{lineno}:semgrep:"
+                ),
+                findings[idx],
+            )
+
+    def test_step_run_bot_literal_compare_fails(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n    steps:\n"
+            "      - run: '[ \"$ACTOR\" = renovate ] && exit 0'\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
+            findings[0],
+        )
+
+    def test_scan_invalid_utf8_workflow_reports_unreadable_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "broken.yml").write_bytes(b"name: \xff\xfe\n")
+            findings = scan(root)
+            self.assertEqual(len(findings), 1)
+            self.assertEqual(
+                findings[0],
+                ".github/workflows/broken.yml:1:<top>: "
+                "unreadable workflow: UnicodeDecodeError",
+            )
+
+    def test_scan_oserror_workflow_reports_unreadable_finding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github/workflows"
+            (workflows / "dir.yaml").mkdir(parents=True)
+            findings = scan(root)
+            self.assertEqual(len(findings), 1)
+            self.assertTrue(
+                findings[0].startswith(
+                    ".github/workflows/dir.yaml:1:<top>: unreadable workflow: "
+                ),
+                findings[0],
+            )
 
     def test_identity_field_tokens_without_bot_literal_fail(self) -> None:
         text = (
