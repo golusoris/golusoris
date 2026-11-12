@@ -10,7 +10,7 @@ RUN apk add --no-cache \
     pkgconf=3.0.10-r2 \
     ffmpeg-9.0-dev=9.0.2-r9 \
     libvips-dev=8.18.7-r3 \
-    glycin-2=2.2.5-r2 \
+    glycin-2=2.2.6-r0 \
     opencv-dev=4.13.0-r4 \
     tesseract-dev=5.5.2-r8
 
@@ -39,7 +39,7 @@ FROM cgr.dev/chainguard/wolfi-base:latest@sha256:256c88bb066424045021090932d50be
 RUN apk add --no-cache \
     ffmpeg-9.0=9.0.2-r9 \
     libvips=8.18.7-r3 \
-    glycin-2=2.2.5-r2 \
+    glycin-2=2.2.6-r0 \
     opencv=4.13.0-r4 \
     tesseract=5.5.2-r8 \
     tesseract-eng=5.5.2-r8
