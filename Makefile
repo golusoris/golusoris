@@ -349,6 +349,7 @@ docs-upstream-verify: ## verify upstream catalogue, authorities, and snapshots
 # testutil/pact links libpact_ffi; CI installs it per job, local gates use the same
 # digest-pinned installer into an ignored repository directory, never a host path.
 PACT_FFI_DIR := $(CURDIR)/.workingdir/cache/pact-ffi
+PACT_FFI_TMPDIR := $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/golusoris/tmp
 PACT_FFI_TARGETS := verify-all ci-all test-all build-all lint-all gosec-all vuln-all portability-test fault-recovery
 
 .PHONY: pact-ffi
@@ -356,16 +357,42 @@ pact-ffi: ## install the digest-pinned Pact FFI library into .workingdir/cache/p
 	@python3 -B scripts/ci/pact_ffi.py --cache-dir "$(PACT_FFI_DIR)" --lib-dir "$(PACT_FFI_DIR)"
 
 $(PACT_FFI_TARGETS): pact-ffi
-# override keeps the Pact paths when a caller sets these variables on the make command line;
-# go splits CGO_LDFLAGS with shell quoting, so quoted paths survive spaces.
-$(PACT_FFI_TARGETS): override export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+# GNU make 3.81 accepts only one modifier per line.
+# 3.81 target-specific exports retain caller values; command-line origins need global export of the override.
+$(PACT_FFI_TARGETS): override PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+ifeq ($(origin PACT_GO_LIB_DOWNLOAD_PATH),command line)
+export PACT_GO_LIB_DOWNLOAD_PATH
+else
+$(PACT_FFI_TARGETS): export PACT_GO_LIB_DOWNLOAD_PATH := $(PACT_FFI_DIR)
+endif
 ifeq ($(OS),Windows_NT)
 # MinGW has no rpath; Windows finds pact_ffi.dll through PATH, as the portability workflow does.
 PACT_PATH_SEP := $(if $(findstring ;,$(PATH)),;,:)
 $(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)')
 $(PACT_FFI_TARGETS): override export PATH := $(PACT_FFI_DIR)$(PACT_PATH_SEP)$(PATH)
 else
-$(PACT_FFI_TARGETS): override export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+# go1.27.4 scans pact-go's -L/tmp when it is os.TempDir(); use a cache directory outside the checkout.
+ifeq ($(filter-out /tmp /tmp/,$(strip $(TMPDIR))),)
+$(PACT_FFI_TARGETS): override TMPDIR := $(PACT_FFI_TMPDIR)
+ifeq ($(origin TMPDIR),command line)
+export TMPDIR
+else
+$(PACT_FFI_TARGETS): export TMPDIR := $(PACT_FFI_TMPDIR)
+endif
+ifneq ($(filter $(PACT_FFI_TARGETS),$(MAKECMDGOALS)),)
+# Prerequisites inherit TMPDIR and run before pact-ffi; create it before any recipe.
+$(shell mkdir -p -m 0700 "$(PACT_FFI_TMPDIR)")
+ifneq ($(shell test -d "$(PACT_FFI_TMPDIR)" && echo ok),ok)
+$(error Cannot create Pact temporary directory "$(PACT_FFI_TMPDIR)")
+endif
+endif
+endif
+$(PACT_FFI_TARGETS): override CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+ifeq ($(origin CGO_LDFLAGS),command line)
+export CGO_LDFLAGS
+else
+$(PACT_FFI_TARGETS): export CGO_LDFLAGS := $(strip $(CGO_LDFLAGS) '-L$(PACT_FFI_DIR)' '-Wl,-rpath,$(PACT_FFI_DIR)')
+endif
 endif
 
 .PHONY: verify-all
