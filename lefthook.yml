@@ -69,11 +69,7 @@ pre-push:
     audit:
       run: sh .config/lefthook/engine.sh audit
     merge-comments:
-      run: |
-        if git rev-parse --verify origin/main >/dev/null 2>&1; then
-          bash scripts/ci/check-merge-comments.sh "$(git merge-base origin/main HEAD)" HEAD
-        else
-          echo 'merge-comments: origin/main not found, skipping' >&2
-        fi
+      run: bash scripts/hooks/merge-comments.sh
+      use_stdin: true
     shellcheck:
       run: bash scripts/hooks/shellcheck.sh --pushed {push_files}

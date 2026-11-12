@@ -115,6 +115,7 @@ ci-policy-test: lefthook-validate go-apidiff-test tiny-trainer-publish-policy-te
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
 	@bash scripts/ci/check-merge-comments_test.sh
+	@bash scripts/ci/lefthook-validate_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
 	@bash scripts/ci/export-release-tool-pins_test.sh
