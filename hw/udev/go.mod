@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/hw/udev
 
-go 1.27.3
+go 1.27.4
 
 require github.com/jochenvg/go-udev v0.0.0-20240801134859-b65ed646224b
 

@@ -85,5 +85,7 @@ jobs:
         if: github.event.pull_request.draft != true
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
+          # yamllint disable-line rule:line-length
+          APICOMPAT_EXCEPTIONS: "[{\"path\":\"testutil/pact/go.mod\",\"reason\":\"Category B, 3 days from 2026-11-11: Go 1.27.4 (CVE-2026-97038 fix) scans every lib-like file under a cgo -L directory it treats as local; pact-go passes -L/tmp and the pinned compare step leaves TMPDIR on /tmp, so go list -export fails on its own /tmp/go-build archives. Ends when the engine compare step exports TMPDIR off /tmp (cordanaLLM/praetor#1907) and the next readopt drops this entry.\",\"expires\":\"2026-11-14\"}]"
           GOTOOLCHAIN: auto
         run: go run tools/apicompat/gate/main.go -base="$BASE"
