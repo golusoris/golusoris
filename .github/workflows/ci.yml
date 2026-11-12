@@ -1118,6 +1118,13 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/ci/check-dco.sh "$BASE" "$HEAD"
+      - name: Test the merge comment check
+        run: bash scripts/ci/check-merge-comments_test.sh
+      - name: Refuse git conflict comment lines in PR commits
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/ci/check-merge-comments.sh "$BASE" "$HEAD"
       - name: Test the attribution check
         run: bash scripts/ci/check-attribution_test.sh
       - name: Refuse model or coding-tool attribution in PR commits

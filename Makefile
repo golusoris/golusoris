@@ -110,6 +110,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
+	@bash scripts/ci/check-merge-comments_test.sh
 	@bash scripts/ci/check-attribution_test.sh
 	@bash scripts/ci/tool-versions_test.sh
 	@bash scripts/ci/export-release-tool-pins_test.sh
