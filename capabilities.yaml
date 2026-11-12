@@ -193,7 +193,7 @@ packages:
   - import: github.com/golusoris/golusoris/ai/tiny/litert
     domain: ai
     capabilities: [ai.tiny_litert]
-    description: "Package litert implements a [tiny.Trainer] for MediaPipe Model Maker."
+    description: "Package litert implements a [tiny.Trainer] for TensorFlow/Keras image classifiers."
   - import: github.com/golusoris/golusoris/ai/tiny/serve/fleet
     domain: ai
     capabilities: [ai.tiny_serve_fleet]

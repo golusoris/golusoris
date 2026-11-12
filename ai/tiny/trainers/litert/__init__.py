@@ -2,4 +2,4 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-"""MediaPipe Model Maker LiteRT trainer runtime."""
+"""Keras MobileNet V2 LiteRT trainer runtime."""
