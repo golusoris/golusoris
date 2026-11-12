@@ -3,7 +3,7 @@ module github.com/golusoris/golusoris/storage/gcs
 go 1.27.4
 
 require (
-	cloud.google.com/go/auth v0.24.2
+	cloud.google.com/go/auth v0.24.3
 	cloud.google.com/go/compute/metadata v0.10.0
 	cloud.google.com/go/storage v1.69.0
 	github.com/golusoris/golusoris v0.18.0
