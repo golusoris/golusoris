@@ -94,8 +94,8 @@ scan_symbol_findings() {
 		else false end
 	' "$report_file" >/dev/null; then
 		go_version="$(jq -sr '[.[] | .config? | select(. != null)][0].go_version' "$report_file")"
-		fail "govulncheck cannot read Go version $go_version: standard-library advisories would be skipped; run with GOTOOLCHAIN=go<version> (official toolchain)"
-		return
+		# Exit 3 (scripts/ci/AGENTS.md): the scan ran but cannot judge standard-library advisories.
+		fail "govulncheck cannot read Go version $go_version: standard-library advisories would be skipped; run with GOTOOLCHAIN=go<version> (official toolchain)" || return 3
 	fi
 	# The govulncheck protocol requires an OSV id and at least one trace frame on every finding.
 	if ! jq -se '
