@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/k8s/nri
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/containerd/nri v0.12.5
