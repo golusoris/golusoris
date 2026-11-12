@@ -40,7 +40,8 @@ ALLOWED: dict[tuple[str, str, str], str] = {
 }
 
 _ACTOR_TOKEN = re.compile(
-    r"\b(?:github\.actor|github\.triggering_actor|sender\.login|user\.login)\b"
+    r"\b(?:(?:github|gitea)\.(?:actor_id|triggering_actor|actor)"
+    r"|(?:sender|user)\.(?:login|id))\b"
 )
 _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
 _JOB_KEY = re.compile(r"^  (?P<q>['\"]?)(?P<job>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
@@ -308,6 +309,83 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(len(findings), 2)
             self.assertIn(".github/workflows/a.yaml:3:a:", findings[0])
             self.assertIn(".gitea/workflows/b.yml:3:b:", findings[1])
+
+    def test_github_actor_id_job_if_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: github.actor_id != 29139614\n"
+            "    runs-on: ubuntu-26.04\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertIn(".github/workflows/security-scan.yml:5:semgrep:", findings[0])
+
+    def test_gitea_workflow_actor_tokens_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".gitea/workflows"
+            workflows.mkdir(parents=True)
+            (workflows / "ci.yml").write_text(
+                "on:\n  push:\n"
+                "jobs:\n  lint:\n"
+                "    if: gitea.actor != 'renovate[bot]'\n"
+                "    steps:\n"
+                "      - if: gitea.triggering_actor != 'renovate[bot]'\n"
+                "        run: echo ${{ gitea.actor_id }}\n",
+                encoding="utf-8",
+            )
+            findings = scan(root)
+            self.assertEqual(len(findings), 3)
+            self.assertIn(".gitea/workflows/ci.yml:5:lint:", findings[0])
+            self.assertIn(".gitea/workflows/ci.yml:7:lint:", findings[1])
+            self.assertIn(".gitea/workflows/ci.yml:8:lint:", findings[2])
+
+    def test_step_user_id_and_sender_id_if_fail(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  verify:\n    steps:\n"
+            "      - if: github.event.pull_request.user.id != 29139614\n"
+            "        run: echo pr\n"
+            "      - if: github.event.sender.id != 29139614\n"
+            "        run: echo sender\n"
+        )
+        findings = check(".github/workflows/ci.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertIn(".github/workflows/ci.yml:6:verify:", findings[0])
+        self.assertIn(".github/workflows/ci.yml:8:verify:", findings[1])
+
+    def test_non_github_actor_value_lines_fail(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  publish:\n    steps:\n"
+            "      - env:\n"
+            "          ACTOR_ID: ${{ github.actor_id }}\n"
+            "          GITEA_ACTOR: ${{ gitea.actor }}\n"
+            "        run: echo ok\n"
+        )
+        findings = check(".github/workflows/release-go.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertIn(".github/workflows/release-go.yml:7:publish:", findings[0])
+        self.assertIn(".github/workflows/release-go.yml:8:publish:", findings[1])
+
+    def test_actor_token_word_boundaries_pass(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  build:\n    steps:\n"
+            "      - env:\n"
+            "          A: ${{ inputs.my_github.actor }}\n"
+            "          B: ${{ inputs.github.actor_identity }}\n"
+            "          C: ${{ inputs.x_gitea.actor_id }}\n"
+            "          D: ${{ inputs.gitea.actors }}\n"
+            "          E: ${{ inputs.app_user.id }}\n"
+            "          F: ${{ inputs.custom_sender.id }}\n"
+            "          G: ${{ inputs.user.identifier }}\n"
+            "          H: ${{ inputs.sender.identity }}\n"
+            "          I: github_actor gitea_actor_id sender_id user_id\n"
+            "        run: echo ok\n"
+        )
+        self.assertEqual(check(".github/workflows/build.yml", text), [])
 
     def test_repository_workflows_comply(self) -> None:
         self.assertEqual(scan(REPO_ROOT), [])
