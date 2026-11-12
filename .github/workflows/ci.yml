@@ -824,12 +824,13 @@ jobs:
       - uses: ./.github/actions/setup-go
         with:
           cache: false
-      - name: Install pinned actionlint, Helm and buf
+      - name: Install pinned actionlint, Helm, buf and lefthook
         run: |
           . tools/tool-versions.env
           bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/rhysd/actionlint/cmd/actionlint@${ACTIONLINT_VERSION}"
           bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "helm.sh/helm/v4/cmd/helm@${HELM_VERSION}"
           bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/bufbuild/buf/cmd/buf@${BUF_VERSION}"
+          bash "$GITHUB_WORKSPACE/scripts/ci/retry.sh" go install "github.com/evilmartians/lefthook/v2@${LEFTHOOK_VERSION}"
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - id: verified-download
         uses: plurano/horistes/actions/verified-download@962524ee8f56e372c3d6c46bcafaf956d7cc44a5

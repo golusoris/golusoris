@@ -105,8 +105,12 @@ tools-bootstrap: ## install repository-managed developer tools at exact versions
 	bash scripts/ci/retry.sh $(GO) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION)
 	bash scripts/ci/retry.sh $(GO) install github.com/rhysd/actionlint/cmd/actionlint@$(ACTIONLINT_VERSION)
 
+.PHONY: lefthook-validate
+lefthook-validate: ## verify lefthook.yml parses and matches the lefthook schema
+	@lefthook validate
+
 .PHONY: ci-policy-test
-ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
+ci-policy-test: lefthook-validate go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sidecar-publish-policy-test tiny-trainer-locks-policy-test docs-upstream-verify ## verify required-job fail-closed and not-applicable semantics
 	@bash scripts/ci/check-required-jobs_test.sh
 	@bash scripts/ci/sarif-upload-policy_test.sh
 	@bash scripts/ci/check-dco_test.sh
