@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/testutil/promcheck
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/golusoris/golusoris v0.18.0

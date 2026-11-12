@@ -1,6 +1,6 @@
 module github.com/golusoris/golusoris/web3/solana
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/gagliardetto/binary v0.8.0
