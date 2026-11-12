@@ -67,6 +67,7 @@ main() {
 		'scripts/ci/portability_test.py'
 		'scripts/ci/ci_scope_test.py'
 		'scripts/ci/gomod_test.py'
+		'scripts/ci/renovate_vulnerability_test.py'
 		'scripts/ci/repo_git_test.py'
 		'scripts/ci/review_bot_badges_test.py'
 		'scripts/ci/context_size_test.py'
