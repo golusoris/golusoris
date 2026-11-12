@@ -18,6 +18,7 @@ from collections import Counter
 from collections.abc import Generator
 from pathlib import Path
 
+import renovate_vulnerability
 import repo_git
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -1241,6 +1242,14 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     return True
 
 
+def test_vulnerability_gomod_range(config: dict[str, object]) -> bool:
+    """Report errors from the Go vulnerability range policy."""
+    errors = renovate_vulnerability.gomod_range_errors(config)
+    for error in errors:
+        print(error, file=sys.stderr)
+    return not errors
+
+
 def test_backup_restore_dockerfile(config: dict[str, object]) -> bool:
     """Require Renovate ownership and digest pins for the backup-restore Dockerfile."""
     manager = config.get("dockerfile")
@@ -1399,6 +1408,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_vulnerability_gomod_range(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
         test_current_value_template(),
