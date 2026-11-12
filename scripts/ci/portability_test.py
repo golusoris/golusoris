@@ -170,8 +170,10 @@ class PortabilityDriverTest(TestCase):
                     (
                         sys.executable,
                         "-c",
-                        "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
-                        "sys.stdout.flush(); time.sleep(10)",
+                        (
+                            "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
+                            "sys.stdout.flush(); time.sleep(10)"
+                        ),
                     ),
                     cwd=root,
                     environment=dict(os.environ),
@@ -190,8 +192,10 @@ class PortabilityDriverTest(TestCase):
                     (
                         sys.executable,
                         "-c",
-                        "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
-                        "sys.stdout.flush(); time.sleep(60)",
+                        (
+                            "import sys,time; sys.stdout.buffer.write(b'x' * 5); "
+                            "sys.stdout.flush(); time.sleep(60)"
+                        ),
                     ),
                     cwd=Path(directory),
                     environment=dict(os.environ),

@@ -4,9 +4,9 @@
 
 """Workflow and action files allow only listed pull-request actor checks.
 
-Every uses key and line separator must use recognised YAML 1.2 forms, every
-uses value must match the local, remote, or image shape, and local action
-targets must be scanned files.
+Identity matching is by object segment, every uses key and line separator must
+use recognised YAML 1.2 forms, every uses value must match the local, remote,
+or image shape, and local action targets must be scanned files.
 """
 
 from __future__ import annotations
@@ -34,9 +34,11 @@ ALLOWED: dict[tuple[str, str, str], str] = {
     (
         ".github/workflows/ci.yml",
         "dco",
-        "github.actor != 'renovate[bot]' "
-        "&& github.actor != 'github-actions[bot]' "
-        "&& github.event_name == 'pull_request'",
+        (
+            "github.actor != 'renovate[bot]' "
+            "&& github.actor != 'github-actions[bot]' "
+            "&& github.event_name == 'pull_request'"
+        ),
     ): "Bot PRs carry no human DCO sign-off; check-required-jobs.sh skips them.",
     (
         ".github/workflows/ci-go.yml",
@@ -70,8 +72,10 @@ ALLOWED_LINES: dict[tuple[str, str, str], str] = {
     (
         ".gitea/workflows/renovate-on-demand.yml",
         "renovate",
-        "image: docker.io/renovate/renovate:44@"
-        "sha256:0423c5dfb1488df5716b6584032b3bcf7091ad7a3bc547c5707f047da7a30674",
+        (
+            "image: docker.io/renovate/renovate:44@"
+            "sha256:0423c5dfb1488df5716b6584032b3bcf7091ad7a3bc547c5707f047da7a30674"
+        ),
     ): "Pinned Renovate container image for on-demand Gitea runs.",
     (
         ".gitea/workflows/renovate-on-demand.yml",
@@ -158,16 +162,20 @@ ALLOWED_LINES: dict[tuple[str, str, str], str] = {
 _INDEX_ACCESS = re.compile(
     r"(?:(?<=[A-Za-z0-9_\]\)])\s*)?\[\s*(?P<q>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)\s*\]"
 )
+# Match identity object segments directly so unlisted nested fields fail closed.
+_IDENTITY_OBJECT = (
+    r"(?:actor|actor_id|triggering_actor|sender|user|author|committer|pusher"
+    r"|merged_by|assignee|requested_reviewer)"
+)
 _ACTOR_TOKEN = re.compile(
-    r"\b(?:"
-    r"(?:github|gitea)\.(?:actor_id|triggering_actor|actor)"
-    r"|(?:sender|user|actor)\.(?:login|id|node_id|type)"
-    r"|author_association"
-    r"|pusher\.(?:name|email)"
-    r"|(?:author|committer)\.(?:name|email|username)"
-    r"|GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
-    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR)"
-    r")\b",
+    r"(?:"
+    rf"\.{_IDENTITY_OBJECT}\b"
+    rf"|\b{_IDENTITY_OBJECT}\s*[.\[]"
+    r"|\.login\b"
+    r"|\b(?:github|gitea)\.(?:actor_id|triggering_actor|actor)\b"
+    r"|\bauthor_association\b"
+    r"|\bGIT(?:HUB|EA)_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)\b"
+    r")",
     re.IGNORECASE,
 )
 _BOT_LITERAL = re.compile(r"renovate|dependabot|\[bot\]", re.IGNORECASE)
@@ -842,21 +850,21 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "on:\n  push:\n"
             "jobs:\n  build:\n    steps:\n"
             "      - env:\n"
-            "          A: ${{ inputs.my_github.actor }}\n"
+            "          A: ${{ inputs.my_actor.value }} ${{ inputs.actors }}\n"
             "          B: ${{ inputs.github.actor_identity }}\n"
-            "          C: ${{ inputs.x_gitea.actor_id }}\n"
-            "          D: ${{ inputs.gitea.actors }}\n"
+            "          C: ${{ inputs.my_actor_id.value }} ${{ inputs.x_gitea.actor_ids }}\n"
+            "          D: ${{ inputs.gitea.actors }} ${{ inputs.gitea.triggering_actors }}\n"
             "          E: ${{ inputs.app_user.id }}\n"
             "          F: ${{ inputs.custom_sender.id }}\n"
-            "          G: ${{ inputs.user.identifier }}\n"
-            "          H: ${{ inputs.sender.identity }}\n"
-            "          I: githubxactor github_actors gitea_actor_id sender_id user_id\n"
-            "          J: ${{ inputs.my_pusher.name }} ${{ inputs.pusher.names }} ${{ inputs.pusher.emails }}\n"
-            "          K: ${{ inputs.co_author.name }} ${{ inputs.author.names }} ${{ inputs.author.emails }} ${{ inputs.author.usernames }}\n"
-            "          L: ${{ inputs.my_committer.email }} ${{ inputs.committer.names }} ${{ inputs.committer.emails }} ${{ inputs.committer.usernames }}\n"
-            "          M: ${{ inputs.app_user.type }} ${{ inputs.custom_sender.type }} ${{ inputs.user.types }} ${{ inputs.sender.types }}\n"
-            "          N: ${{ inputs.my_actor.id }} ${{ inputs.actor.identifier }} ${{ inputs.user.node_identifier }}\n"
-            "          O: ${{ inputs.my_author_association }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR GITEA_ACTOR_NAME\n"
+            "          G: ${{ inputs.users.identifier }}\n"
+            "          H: ${{ inputs.senders.identity }}\n"
+            "          I: githubxactor github_actors my_gitea_actor_id gitea_actor_ids sender_id user_id\n"
+            "          J: ${{ inputs.my_pusher.name }} ${{ inputs.pushers.name }}\n"
+            "          K: ${{ inputs.co_author.name }} ${{ inputs.authors.name }}\n"
+            "          L: ${{ inputs.my_committer.email }} ${{ inputs.committers.email }}\n"
+            "          M: ${{ inputs.app_user.type }} ${{ inputs.custom_sender.type }} ${{ inputs.my_merged_by.type }} ${{ inputs.merged_by_user.type }}\n"
+            "          N: ${{ inputs.my_actor.id }} ${{ inputs.co_assignee.id }} ${{ inputs.assignees.id }} ${{ inputs.my_requested_reviewer.id }} ${{ inputs.requested_reviewers.id }}\n"
+            "          O: ${{ inputs.my_author_association }} ${{ inputs.author_associations }} ${{ inputs.x.logins }} ${{ inputs.my_login.id }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR GITEA_ACTOR_NAME\n"
             "        run: echo ok\n"
         )
         self.assertEqual(check(".github/workflows/build.yml", text), [])
@@ -1071,16 +1079,58 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - if: github.event.workflow_run.actor.type != 'Bot'\n"
             "        run: echo two\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
-        expected = (5, 7, 9)
-        self.assertEqual(len(findings), len(expected))
-        for idx, lineno in enumerate(expected):
-            self.assertTrue(
-                findings[idx].startswith(
-                    f".github/workflows/security-scan.yml:{lineno}:semgrep:"
+        self.assertEqual(
+            check(".github/workflows/security-scan.yml", text),
+            [
+                (
+                    ".github/workflows/security-scan.yml:5:semgrep: "
+                    "disallowed actor reference: "
+                    "if: github.event.workflow_run.actor.id != 29139614"
                 ),
-                findings[idx],
-            )
+                (
+                    ".github/workflows/security-scan.yml:7:semgrep: "
+                    "disallowed actor reference: "
+                    "- if: github.event.workflow_run.actor.node_id != vars.BOT_NODE_ID"
+                ),
+                (
+                    ".github/workflows/security-scan.yml:9:semgrep: "
+                    "disallowed actor reference: "
+                    "- if: github.event.workflow_run.actor.type != 'Bot'"
+                ),
+            ],
+        )
+        clauses = (
+            "if: github.event.workflow_run.triggering_actor.id != 29139614",
+            "if: github.event.release.author.login != 'x'",
+            "if: github.event.pull_request.merged_by.type != 'Bot'",
+            "if: github.event.sender.site_admin",
+            "if: toJSON(github.event.sender) != ''",
+            "if: github.event['workflow_run']['triggering_actor']['id'] != 1",
+            "if: contains(github.event.head_commit.author.login, 'x')",
+        )
+        for clause in clauses[:MAX_WORKFLOW_LINES]:
+            with self.subTest(clause=clause):
+                self.assertEqual(
+                    check(
+                        ".github/workflows/security-scan.yml",
+                        f"on:\n  workflow_run:\njobs:\n  semgrep:\n    {clause}\n",
+                    ),
+                    [
+                        (
+                            f".github/workflows/security-scan.yml:5:semgrep: "
+                            f"disallowed actor reference: {clause}"
+                        )
+                    ],
+                )
+
+    def test_identity_words_without_property_access_pass(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  build:\n    steps:\n"
+            "      - name: Check author\n"
+            "        run: echo user\n"
+        )
+        self.assertEqual(check(".github/workflows/build.yml", text), [])
 
     def test_author_association_fails(self) -> None:
         text = (
@@ -1126,10 +1176,11 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             '      - run: echo "$GITHUB_ACTOR_ID"\n'
             '      - run: echo "$GITHUB_TRIGGERING_ACTOR"\n'
             '      - run: echo "$GITEA_ACTOR"\n'
+            '      - run: echo "$GITEA_ACTOR_ID"\n'
             '      - run: echo "$GITEA_TRIGGERING_ACTOR"\n'
         )
         findings = check(".github/workflows/security-scan.yml", text)
-        expected = (7, 9, 10, 11, 12, 13)
+        expected = (7, 9, 10, 11, 12, 13, 14)
         self.assertEqual(len(findings), len(expected))
         for idx, lineno in enumerate(expected):
             self.assertTrue(
@@ -1193,10 +1244,15 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          AU: ${{ github.event.head_commit.author.username }}\n"
             "          CN: ${{ github.event.head_commit.committer.name }}\n"
             "          CE: ${{ github.event.head_commit.committer.email }}\n"
+            "          ASG: ${{ github.event.issue.assignee.id }}\n"
+            "          RR: ${{ github.event.pull_request.requested_reviewer.id }}\n"
+            "          LG: ${{ github.event.client_payload.account.login }}\n"
+            "          AI: ${{ inputs.actor_id }}\n"
+            "          SB: ${{ sender [inputs.key] }}\n"
             "        run: echo ${{ github.event.head_commit.committer.username }}\n"
         )
         findings = check(".github/workflows/audit.yml", text)
-        expected = (3, 5, 7, 8, 9, 10, 11, 12, 13)
+        expected = (3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
         self.assertEqual(len(findings), len(expected))
         for idx, lineno in enumerate(expected):
             self.assertTrue(
@@ -1374,8 +1430,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/ci.yml:6:gate-job: "
-                    "local action not scanned: ./tools/gate"
+                    (
+                        ".github/workflows/ci.yml:6:gate-job: "
+                        "local action not scanned: ./tools/gate"
+                    )
                 ],
             )
 
@@ -1391,8 +1449,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/ci.yml:6:build: "
-                    "local action not scanned: ./.github/actions/missing"
+                    (
+                        ".github/workflows/ci.yml:6:build: "
+                        "local action not scanned: ./.github/actions/missing"
+                    )
                 ],
             )
 
@@ -1438,8 +1498,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/ci.yml:6:gate-job: "
-                    "local action not scanned: ./tools/gate"
+                    (
+                        ".github/workflows/ci.yml:6:gate-job: "
+                        "local action not scanned: ./tools/gate"
+                    )
                 ],
             )
 
@@ -1453,7 +1515,6 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             )
             (root / ".github/actions/empty").mkdir(parents=True)
             _write_yaml(root, "tools/reuse.yml", "on:\n  workflow_call:\n")
-            (root / "tools/link").symlink_to(root / ".github/actions/clean")
             _write_yaml(
                 root,
                 ".github/workflows/action.yml",
@@ -1472,24 +1533,61 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 "      # - uses: ./tools/ignored\n"
                 '      - name: File target\n        uses: "./tools/reuse.yml" # note\n'
                 "      - uses: ./.github/actions/empty\n"
-                "      - uses: ./tools/link\n"
                 "      - uses: >-\n          ./tools/gate\n",
             )
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/action.yml:3:w: "
-                    "disallowed actor reference: if: github.actor_id != 1",
-                    ".github/workflows/z.yml:6:b: "
-                    "local action not scanned: ./tools/reuse.yml",
-                    ".github/workflows/z.yml:7:b: "
-                    "local action not scanned: ./.github/actions/empty",
-                    ".github/workflows/z.yml:8:b: "
-                    "local action not scanned: ./tools/link",
-                    ".github/workflows/z.yml:10:b: "
-                    "local action not scanned: ./tools/gate",
-                    ".gitea/actions/sub/deep/action.yaml:4:<top>: "
-                    "disallowed actor reference: - if: gitea.actor != vars.BOT_LOGIN",
+                    (
+                        ".github/workflows/action.yml:3:w: "
+                        "disallowed actor reference: if: github.actor_id != 1"
+                    ),
+                    (
+                        ".github/workflows/z.yml:6:b: "
+                        "local action not scanned: ./tools/reuse.yml"
+                    ),
+                    (
+                        ".github/workflows/z.yml:7:b: "
+                        "local action not scanned: ./.github/actions/empty"
+                    ),
+                    (
+                        ".github/workflows/z.yml:9:b: "
+                        "local action not scanned: ./tools/gate"
+                    ),
+                    (
+                        ".gitea/actions/sub/deep/action.yaml:4:<top>: "
+                        "disallowed actor reference: - if: gitea.actor != vars.BOT_LOGIN"
+                    ),
+                ],
+            )
+
+    def test_local_action_symlink_target_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            try:
+                _write_yaml(
+                    root,
+                    ".github/actions/clean/action.yml",
+                    "runs:\n  using: composite\n  steps:\n    - run: echo ok\n",
+                )
+                (root / "tools").mkdir()
+                (root / "tools/link").symlink_to(
+                    root / ".github/actions/clean", target_is_directory=True
+                )
+            except OSError as exc:
+                self.skipTest(f"symlink creation unavailable: {exc}")
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  b:\n    steps:\n      - uses: ./tools/link\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    (
+                        ".github/workflows/ci.yml:6:b: "
+                        "local action not scanned: ./tools/link"
+                    )
                 ],
             )
 
@@ -1589,8 +1687,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/ci.yml:7:gate-job: "
-                    "uses value not recognised: *gate"
+                    (
+                        ".github/workflows/ci.yml:7:gate-job: "
+                        "uses value not recognised: *gate"
+                    )
                 ],
             )
 
@@ -1633,8 +1733,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             self.assertEqual(
                 scan(root),
                 [
-                    ".github/workflows/ci.yml:6:gate-job: "
-                    "uses value not recognised: !!str ./tools/gate"
+                    (
+                        ".github/workflows/ci.yml:6:gate-job: "
+                        "uses value not recognised: !!str ./tools/gate"
+                    )
                 ],
             )
 
@@ -1661,8 +1763,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         self.assertEqual(
             check(".github/workflows/ci.yml", text),
             [
-                ".github/workflows/ci.yml:6:build: "
-                "uses value not recognised: actions/checkout"
+                (
+                    ".github/workflows/ci.yml:6:build: "
+                    "uses value not recognised: actions/checkout"
+                )
             ],
         )
 
@@ -1682,19 +1786,29 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         self.assertEqual(
             check(".github/workflows/ci.yml", text),
             [
-                ".github/workflows/ci.yml:6:build: "
-                "uses value not recognised: &gate ./tools/gate",
-                ".github/workflows/ci.yml:8:build: "
-                "uses value not recognised: actions/checkout",
+                (
+                    ".github/workflows/ci.yml:6:build: "
+                    "uses value not recognised: &gate ./tools/gate"
+                ),
+                (
+                    ".github/workflows/ci.yml:8:build: "
+                    "uses value not recognised: actions/checkout"
+                ),
                 ".github/workflows/ci.yml:9:build: flow-style uses refused",
                 ".github/workflows/ci.yml:10:build: flow-style uses refused",
-                ".github/workflows/ci.yml:11:build: "
-                "uses value not recognised: ./tools/gate@v1",
+                (
+                    ".github/workflows/ci.yml:11:build: "
+                    "uses value not recognised: ./tools/gate@v1"
+                ),
                 ".github/workflows/ci.yml:12:build: uses value not recognised: ''",
-                ".github/workflows/ci.yml:13:build: "
-                'uses value not recognised: "actions/checkout@v4 extra"',
-                ".github/workflows/ci.yml:14:build: "
-                'uses value not recognised: "docker://alpine:3.22 extra"',
+                (
+                    ".github/workflows/ci.yml:13:build: "
+                    'uses value not recognised: "actions/checkout@v4 extra"'
+                ),
+                (
+                    ".github/workflows/ci.yml:14:build: "
+                    'uses value not recognised: "docker://alpine:3.22 extra"'
+                ),
             ],
         )
 
