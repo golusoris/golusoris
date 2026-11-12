@@ -10,7 +10,11 @@
   ],
   "prConcurrentLimit": 5,
   "gomod": {
-    "enabled": true
+    "enabled": true,
+    "vulnerabilityAlerts": {
+      "description": "Go modules have no lock file version, so the default update-lockfile strategy skips security fixes for pseudo-version requirements as invalid-value; scripts/ci/renovate-policy-test.py keeps this setting.",
+      "rangeStrategy": "auto"
+    }
   },
   "postUpdateOptions": [
     "gomodTidy"
