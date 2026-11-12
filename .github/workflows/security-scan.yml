@@ -25,9 +25,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Renovate merges land dependency changes on main and need Semgrep and Trivy.
   semgrep:
     name: Semgrep analysis
-    if: github.actor != 'renovate[bot]'
     runs-on: ubuntu-26.04
     timeout-minutes: 25
     steps:

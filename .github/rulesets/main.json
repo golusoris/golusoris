@@ -175,6 +175,9 @@
             "context": "Scorecard Analysis"
           },
           {
+            "context": "Semgrep analysis"
+          },
+          {
             "context": "Build and smoke (litert sidecar)"
           },
           {

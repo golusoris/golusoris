@@ -636,7 +636,7 @@ jobs:
   # ruleset paths are always given by the caller relative to the repo root.
   spectral:
     name: OpenAPI lint (spectral)
-    if: ${{ github.actor != 'renovate[bot]' && inputs.openapi-spec != '' }}
+    if: ${{ inputs.openapi-spec != '' }}
     runs-on: ${{ inputs.runs-on }}
     timeout-minutes: 10
     steps:

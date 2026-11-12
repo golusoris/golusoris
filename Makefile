@@ -162,6 +162,7 @@ ci-policy-test: go-apidiff-test tiny-trainer-publish-policy-test tiny-litert-sid
 	@python3 -B scripts/ci/shell_flake_policy_test.py
 	@bash scripts/ci/retry_test.sh
 	@python3 -B scripts/ci/workflow-concurrency-policy-test.py
+	@python3 -B scripts/ci/workflow-actor-policy-test.py
 	@python3 -B scripts/ci/block_evasion_hook_test.py
 	@python3 -B scripts/ci/claude-hooks-policy-test.py
 	@python3 -B scripts/ci/hiss_coverage_counts_test.py
