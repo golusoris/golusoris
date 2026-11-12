@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Every workflow actor condition is pull-request-only and explicitly allow-listed."""
+"""Workflow and composite action files allow only listed pull-request actor checks."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIRS: tuple[str, ...] = (".github/workflows", ".gitea/workflows")
+ACTIONS_DIR = ".github/actions"
 MAX_WORKFLOW_FILES = 256
 MAX_WORKFLOW_LINES = 8192
 
@@ -159,8 +160,8 @@ _ACTOR_TOKEN = re.compile(
     r"|author_association"
     r"|pusher\.(?:name|email)"
     r"|(?:author|committer)\.(?:name|email|username)"
-    r"|(?-i:GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
-    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR))"
+    r"|GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
+    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR)"
     r")\b",
     re.IGNORECASE,
 )
@@ -369,20 +370,24 @@ def check(name: str, text: str) -> list[str]:
 
 
 def _collect_workflow_paths(root: Path) -> list[Path]:
-    """Collect sorted workflow YAML paths under WORKFLOW_DIRS."""
+    """Collect sorted workflow and composite action YAML paths."""
     paths: list[Path] = []
     for directory in WORKFLOW_DIRS:
         workflow_dir = root / directory
         paths.extend(
             sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
         )
+    actions_dir = root / ACTIONS_DIR
+    paths.extend(
+        sorted([*actions_dir.glob("*/action.yml"), *actions_dir.glob("*/action.yaml")])
+    )
     return paths
 
 
 def scan_with_hits(
     root: Path,
 ) -> tuple[list[str], set[tuple[str, str, str]], set[tuple[str, str, str]]]:
-    """Scan workflow files and return (findings, allowed_if_hits, allowed_line_hits)."""
+    """Scan workflow and composite action files and return findings plus hit sets."""
     paths = _collect_workflow_paths(root)
     hits = _AllowanceHits(allowed_ifs=set(), allowed_lines=set())
     if len(paths) > MAX_WORKFLOW_FILES:
@@ -409,7 +414,7 @@ def scan_with_hits(
 
 
 def scan(root: Path) -> list[str]:
-    """Scan all workflow YAML files under .github/workflows and .gitea/workflows."""
+    """Scan workflow and composite action YAML files under root."""
     findings, _, _ = scan_with_hits(root)
     return findings
 
@@ -656,13 +661,13 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          F: ${{ inputs.custom_sender.id }}\n"
             "          G: ${{ inputs.user.identifier }}\n"
             "          H: ${{ inputs.sender.identity }}\n"
-            "          I: github_actor gitea_actor_id sender_id user_id\n"
+            "          I: githubxactor github_actors gitea_actor_id sender_id user_id\n"
             "          J: ${{ inputs.my_pusher.name }} ${{ inputs.pusher.names }} ${{ inputs.pusher.emails }}\n"
             "          K: ${{ inputs.co_author.name }} ${{ inputs.author.names }} ${{ inputs.author.emails }} ${{ inputs.author.usernames }}\n"
             "          L: ${{ inputs.my_committer.email }} ${{ inputs.committer.names }} ${{ inputs.committer.emails }} ${{ inputs.committer.usernames }}\n"
             "          M: ${{ inputs.app_user.type }} ${{ inputs.custom_sender.type }} ${{ inputs.user.types }} ${{ inputs.sender.types }}\n"
             "          N: ${{ inputs.my_actor.id }} ${{ inputs.actor.identifier }} ${{ inputs.user.node_identifier }}\n"
-            "          O: ${{ inputs.my_author_association }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR\n"
+            "          O: ${{ inputs.my_author_association }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR GITEA_ACTOR_NAME\n"
             "        run: echo ok\n"
         )
         self.assertEqual(check(".github/workflows/build.yml", text), [])
@@ -1130,6 +1135,120 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             step_run[1].startswith(".github/workflows/ci.yml:11:lint:"),
             step_run[1],
         )
+
+    def test_composite_action_actor_if_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            action = root / ".github/actions/x/action.yml"
+            nested = root / ".github/actions/x/nested/action.yml"
+            nested.parent.mkdir(parents=True)
+            (root / ".github/actions/action.yml").write_text(
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+                encoding="utf-8",
+            )
+            nested.write_text(
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+                encoding="utf-8",
+            )
+            action.write_text(
+                "name: Gate\nruns:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n"
+                "      shell: bash\n      run: echo check\n",
+                encoding="utf-8",
+            )
+            findings = scan(root)
+            self.assertEqual(len(findings), 1)
+            self.assertTrue(
+                findings[0].startswith(".github/actions/x/action.yml:5:<top>:"),
+                findings[0],
+            )
+
+    def test_composite_action_renovate_literal_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            yaml_action = root / ".github/actions/x/action.yaml"
+            yaml_action.parent.mkdir(parents=True)
+            yaml_action.write_text(
+                "runs:\n  using: composite\n  steps:\n"
+                "    - shell: bash\n"
+                "      run: '[ \"$ACTOR\" = renovate ] && exit 0'\n",
+                encoding="utf-8",
+            )
+            findings = scan(root)
+            self.assertEqual(len(findings), 1)
+            self.assertTrue(
+                findings[0].startswith(".github/actions/x/action.yaml:5:<top>:"),
+                findings[0],
+            )
+            yml_action = root / ".github/actions/y/action.yml"
+            yml_action.parent.mkdir(parents=True)
+            yml_action.write_text(
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: !startsWith(github.head_ref, 'renovate/')\n",
+                encoding="utf-8",
+            )
+            ordered = scan(root)
+            self.assertEqual(len(ordered), 2)
+            self.assertTrue(
+                ordered[0].startswith(".github/actions/x/action.yaml:5:<top>:"),
+                ordered[0],
+            )
+            self.assertTrue(
+                ordered[1].startswith(".github/actions/y/action.yml:4:<top>:"),
+                ordered[1],
+            )
+
+    def test_lowercase_actor_env_step_run_fails(self) -> None:
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n    steps:\n"
+            "      - run: echo $env:github_actor\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 1)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
+            findings[0],
+        )
+        other_envs = check(
+            ".github/workflows/security-scan.yml",
+            "on:\n  push:\njobs:\n  semgrep:\n    steps:\n"
+            "      - run: echo $env:github_actor_id\n"
+            "      - run: echo $env:github_triggering_actor\n"
+            "      - run: echo $env:gitea_actor\n"
+            "      - run: echo $env:gitea_triggering_actor\n",
+        )
+        self.assertEqual(len(other_envs), 4)
+
+    def test_gap_repo_variable_bot_prefix_if(self) -> None:
+        """Known limit: repository variable exclusion carries no actor or bot token."""
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: ${{ !startsWith(github.head_ref, vars.BOT_PREFIX) }}\n"
+            "    runs-on: ubuntu-26.04\n"
+        )
+        self.assertEqual(check(".github/workflows/security-scan.yml", text), [])
+
+    def test_gap_script_file_step_run(self) -> None:
+        """Known limit: actor logic inside an external script file is not read."""
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n    steps:\n"
+            "      - run: bash scripts/ci/skip-bots.sh\n"
+        )
+        self.assertEqual(check(".github/workflows/security-scan.yml", text), [])
+
+    def test_gap_third_party_action_uses_step(self) -> None:
+        """Known limit: third-party action internals in uses steps are not scanned."""
+        text = (
+            "on:\n  push:\n"
+            "jobs:\n  semgrep:\n    steps:\n"
+            "      - uses: some-org/skip-bots@v1\n"
+        )
+        self.assertEqual(check(".github/workflows/security-scan.yml", text), [])
 
     def test_repository_workflows_comply(self) -> None:
         self.assertEqual(scan(REPO_ROOT), [])
