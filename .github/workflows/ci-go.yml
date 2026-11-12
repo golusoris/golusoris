@@ -24,7 +24,7 @@ on:
         type: string
         default: ubuntu-26.04
       working-directory:
-        description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses:` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
+        description: "Directory holding the Go module's go.mod, relative to the repository root (empty path segment = the repo root). Wired via job-level `defaults.run.working-directory`, so it only reaches `run:` steps — `uses` steps (setup-go, upload-artifact, upload-sarif) take root-relative paths regardless and are adjusted explicitly where needed."
         type: string
         default: "."
       go-version-file:

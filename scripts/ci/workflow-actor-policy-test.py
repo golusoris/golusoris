@@ -4,7 +4,8 @@
 
 """Workflow and action files allow only listed pull-request actor checks.
 
-Every uses value must match the local, remote, or image shape, and local action
+Every uses key and line separator must use recognised YAML 1.2 forms, every
+uses value must match the local, remote, or image shape, and local action
 targets must be scanned files.
 """
 
@@ -186,7 +187,10 @@ _USES_KEY = re.compile(r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:")
 _USES_LINE = re.compile(
     r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:[ \t]*(?P<val>.*?)[ \t]*$"
 )
+_USES_KEY_TOKEN = re.compile(r"\buses['\"]?[ \t]*:", re.IGNORECASE)
+_EXPLICIT_KEY = re.compile(r"^(?:-[ \t]+)*\?(?:[ \t]|$)")
 _FLOW_USES = re.compile(r"[{,][ \t]*['\"]?uses['\"]?[ \t]*:")
+_UNEXPECTED_LINE_SEP = re.compile(r"[\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]")
 _QUOTED_SCALAR = re.compile(
     r"^(?:(?:'(?P<sq>[^']*)')|(?:\"(?P<dq>[^\"\\]*)\"))(?:[ \t]+#.*)?$"
 )
@@ -403,14 +407,21 @@ def _check_uses_line(
     state: _ScanState,
     local_ctx: _LocalScanContext | None,
 ) -> list[str]:
-    """Return flow-style and allow-list findings for uses on a non-block line."""
+    """Return flow-style, key-form, and allow-list findings on a non-block line."""
     findings: list[str] = []
-    if _FLOW_USES.search(line) is not None:
+    flow_refused = _FLOW_USES.search(line) is not None
+    if flow_refused:
         findings.append(f"{name}:{lineno}:{state.current_job}: flow-style uses refused")
-    if state.uses_block:
-        return findings
     match = _USES_LINE.match(stripped)
-    if match is None:
+    key_count = len(_USES_KEY_TOKEN.findall(line))
+    if match is None or key_count != 1:
+        if key_count and not flow_refused:
+            findings.extend(
+                [f"{name}:{lineno}:{state.current_job}: uses key form not recognised"]
+                * key_count
+            )
+        return findings
+    if state.uses_block:
         return findings
     uses_finding = _check_uses_value(
         name, lineno, match.group("val"), state.current_job, local_ctx
@@ -480,6 +491,8 @@ def _check_line(
             f"{name}:{lineno}:{state.current_job}: "
             f"disallowed actor reference: {stripped.strip()}"
         )
+    if _EXPLICIT_KEY.match(stripped) is not None:
+        findings.append(f"{name}:{lineno}:{state.current_job}: explicit key refused")
     findings.extend(_check_uses_line(name, lineno, line, stripped, state, local_ctx))
     return findings
 
@@ -491,6 +504,8 @@ def _check_text(
     local_ctx: _LocalScanContext | None = None,
 ) -> list[str]:
     """Return actor-policy findings for one workflow file and record allowance hits."""
+    if _UNEXPECTED_LINE_SEP.search(text) is not None:
+        return [f"{name}:1:<top>: unexpected line separator"]
     lines = text.splitlines()
     if len(lines) > MAX_WORKFLOW_LINES:
         return [f"{name}:1:<top>: workflow exceeds {MAX_WORKFLOW_LINES} lines"]
@@ -1710,6 +1725,160 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - uses: some-org/skip-bots@v1\n"
         )
         self.assertEqual(check(".github/workflows/security-scan.yml", text), [])
+
+    def test_explicit_key_local_uses_bypass_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - ? uses\n"
+                "        : ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [".github/workflows/ci.yml:6:gate-job: explicit key refused"],
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      # ? uses\n"
+                "      - name: check ? mark\n"
+                "        env:\n          ?plain: ok\n"
+                "        run: |\n          ? uses\n"
+                "      - - ? uses\n"
+                "          : ./tools/gate\n"
+                "      ?\n"
+                "      : ignored\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:12:gate-job: explicit key refused",
+                    ".github/workflows/ci.yml:14:gate-job: explicit key refused",
+                ],
+            )
+
+    def test_anchor_tag_and_case_uses_key_forms_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - &k uses: ./tools/gate\n"
+                "      - !!str uses: ./tools/gate\n"
+                "      - Uses: ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:gate-job: uses key form not recognised",
+                    ".github/workflows/ci.yml:7:gate-job: uses key form not recognised",
+                    ".github/workflows/ci.yml:8:gate-job: uses key form not recognised",
+                ],
+            )
+
+    def test_run_block_echo_uses_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - env:\n          reuses: ok\n          uses-cache: ok\n"
+                "        run: |\n"
+                '          echo "uses: ./tools/gate"\n',
+            )
+            self.assertEqual(scan(root), [])
+
+    def test_prose_and_multi_match_uses_key_forms_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                '      - name: "see uses: docs"\n'
+                "        run: echo ok\n"
+                "      - &q 'uses' : ./tools/gate\n"
+                "      - uses: actions/checkout@v4 # uses: ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:gate-job: uses key form not recognised",
+                    ".github/workflows/ci.yml:8:gate-job: uses key form not recognised",
+                    ".github/workflows/ci.yml:9:gate-job: uses key form not recognised",
+                    ".github/workflows/ci.yml:9:gate-job: uses key form not recognised",
+                ],
+            )
+
+    def test_unexpected_line_separators_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      # hide\u2028    x: |\n"
+                "      - uses: ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [".github/workflows/ci.yml:1:<top>: unexpected line separator"],
+            )
+            for sep in (
+                "\x0b",
+                "\x0c",
+                "\x1c",
+                "\x1d",
+                "\x1e",
+                "\x85",
+                "\u2028",
+                "\u2029",
+            )[:MAX_WORKFLOW_FILES]:
+                _write_yaml(
+                    root,
+                    ".github/workflows/ci.yml",
+                    f"on:\n  push:\njobs:\n  b:\n    steps:\n      - run: echo a{sep}b\n",
+                )
+                self.assertEqual(
+                    scan(root),
+                    [".github/workflows/ci.yml:1:<top>: unexpected line separator"],
+                )
 
     def test_repository_workflows_comply(self) -> None:
         self.assertEqual(scan(REPO_ROOT), [])
