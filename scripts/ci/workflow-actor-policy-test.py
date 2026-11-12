@@ -2,7 +2,10 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-"""Workflow and composite action files allow only listed pull-request actor checks."""
+"""Workflow and action files allow only listed pull-request actor checks.
+
+Local action targets must be scanned files.
+"""
 
 from __future__ import annotations
 
@@ -15,7 +18,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_DIRS: tuple[str, ...] = (".github/workflows", ".gitea/workflows")
-ACTIONS_DIR = ".github/actions"
+ACTION_DIRS: tuple[str, ...] = (".github", ".gitea")
 MAX_WORKFLOW_FILES = 256
 MAX_WORKFLOW_LINES = 8192
 
@@ -178,12 +181,31 @@ _BLOCK_SCALAR = re.compile(
     r"^(?:\s*-\s+|\s*[^:#]+:\s*)[|>](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?\s*$"
 )
 _SEQ_MAP_PREFIX = re.compile(r"^(?P<prefix>\s*-\s+)[^:#]+:")
+_USES_KEY = re.compile(r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:")
+_USES_LINE = re.compile(
+    r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:[ \t]*(?P<val>.*?)[ \t]*$"
+)
+_QUOTED_SCALAR = re.compile(r"^(?P<q>['\"])(?P<inner>.*?)(?P=q)(?:[ \t]+#.*)?$")
+_INLINE_COMMENT = re.compile(r"[ \t]+#.*$")
 
 
 @dataclass
 class _AllowanceHits:
     allowed_ifs: set[tuple[str, str, str]]
     allowed_lines: set[tuple[str, str, str]]
+
+
+@dataclass(frozen=True)
+class _LocalScanContext:
+    root: Path
+    scanned_paths: frozenset[Path]
+
+
+@dataclass(frozen=True)
+class _LoadedFile:
+    name: str
+    text: str
+    error: str | None = None
 
 
 def _block_scalar_indent(line: str, indent: int) -> int | None:
@@ -217,6 +239,7 @@ class _ScanState:
     current_job: str = "<top>"
     job_if_count: int = 0
     block_scalar: int | None = None
+    uses_block: bool = False
 
     def advance_section(self, line: str, indent: int) -> None:
         """Update top-level YAML section, current job, and job-if count."""
@@ -243,6 +266,7 @@ class _ScanState:
         block_indent = _block_scalar_indent(line, indent)
         if block_indent is not None:
             self.block_scalar = block_indent
+            self.uses_block = _USES_KEY.match(line.lstrip(" \t")) is not None
 
 
 def _normalise_if_expr(raw: str) -> str:
@@ -293,6 +317,68 @@ def _is_allowed_actor_line(
     return _is_allowed_job_if(name, line, state, hits)
 
 
+def _unquote_uses_value(raw: str) -> str | None:
+    """Extract a local ./target value from raw YAML scalar text."""
+    val = raw.strip()
+    quoted = _QUOTED_SCALAR.match(val)
+    target = (
+        quoted.group("inner")
+        if quoted is not None
+        else _INLINE_COMMENT.sub("", val).strip()
+    )
+    return target if target.startswith("./") else None
+
+
+def _extract_local_uses(stripped: str) -> str | None:
+    """Return the ./target path when stripped is a local uses entry."""
+    match = _USES_LINE.match(stripped)
+    if match is None:
+        return None
+    return _unquote_uses_value(match.group("val"))
+
+
+def _has_symlink_component(root: Path, target: str) -> bool:
+    """Return True when any path segment traversed under root is a symlink."""
+    current = root
+    for part in Path(target).parts[:MAX_WORKFLOW_FILES]:
+        current = current / part
+        if current.is_symlink():
+            return True
+    return False
+
+
+def _is_scanned_local_action(target: str, ctx: _LocalScanContext) -> bool:
+    """Return True when local uses target resolves to a scanned file."""
+    if _has_symlink_component(ctx.root, target):
+        return False
+    try:
+        resolved = (ctx.root / target).resolve(strict=True)
+    except (OSError, ValueError):
+        return False
+    if resolved.is_file():
+        return resolved in ctx.scanned_paths
+    for filename in ("action.yml", "action.yaml"):
+        entry = resolved / filename
+        if entry.exists() or entry.is_symlink():
+            return not entry.is_symlink() and entry.resolve() in ctx.scanned_paths
+    return False
+
+
+def _check_local_uses(
+    name: str,
+    lineno: int,
+    target: str | None,
+    job: str,
+    local_ctx: _LocalScanContext | None,
+) -> str | None:
+    """Return a finding when a local uses target is outside the scanned set."""
+    if local_ctx is None or target is None:
+        return None
+    if _is_scanned_local_action(target, local_ctx):
+        return None
+    return f"{name}:{lineno}:{job}: local action not scanned: {target}"
+
+
 def _consume_block_scalar(
     name: str,
     lineno: int,
@@ -300,22 +386,30 @@ def _consume_block_scalar(
     stripped: str,
     indent: int,
     state: _ScanState,
-) -> tuple[bool, str | None]:
+    local_ctx: _LocalScanContext | None = None,
+) -> tuple[bool, list[str]]:
     """Handle lines while inside a YAML block scalar."""
     if state.block_scalar is None:
-        return False, None
+        return False, []
     if not stripped:
-        return True, None
-    if indent > state.block_scalar:
-        if not _has_disallowed_token(line):
-            return True, None
-        return (
-            True,
+        return True, []
+    if indent <= state.block_scalar:
+        state.block_scalar = None
+        state.uses_block = False
+        return False, []
+    findings: list[str] = []
+    if _has_disallowed_token(line):
+        findings.append(
             f"{name}:{lineno}:{state.current_job}: "
-            f"disallowed actor reference: {stripped.strip()}",
+            f"disallowed actor reference: {stripped.strip()}"
         )
-    state.block_scalar = None
-    return False, None
+    if state.uses_block:
+        uses_finding = _check_local_uses(
+            name, lineno, _unquote_uses_value(stripped), state.current_job, local_ctx
+        )
+        if uses_finding is not None:
+            findings.append(uses_finding)
+    return True, findings
 
 
 def _check_line(
@@ -324,32 +418,40 @@ def _check_line(
     line: str,
     state: _ScanState,
     hits: _AllowanceHits | None = None,
-) -> str | None:
-    """Return a finding if a workflow line carries an unlisted actor reference."""
+    local_ctx: _LocalScanContext | None = None,
+) -> list[str]:
+    """Return policy findings for one workflow or action line."""
     stripped = line.lstrip(" \t")
     indent = len(line) - len(stripped)
-    consumed, block_finding = _consume_block_scalar(
-        name, lineno, line, stripped, indent, state
+    consumed, block_findings = _consume_block_scalar(
+        name, lineno, line, stripped, indent, state, local_ctx
     )
     if consumed:
-        return block_finding
+        return block_findings
     if not stripped or stripped.startswith("#"):
-        return None
+        return []
     state.advance_structure(line, indent)
-    if not _has_disallowed_token(line):
-        return None
-    if _is_allowed_actor_line(name, line, state, hits):
-        return None
-    return (
-        f"{name}:{lineno}:{state.current_job}: "
-        f"disallowed actor reference: {stripped.strip()}"
+    findings: list[str] = []
+    if _has_disallowed_token(line) and not _is_allowed_actor_line(
+        name, line, state, hits
+    ):
+        findings.append(
+            f"{name}:{lineno}:{state.current_job}: "
+            f"disallowed actor reference: {stripped.strip()}"
+        )
+    uses_finding = _check_local_uses(
+        name, lineno, _extract_local_uses(stripped), state.current_job, local_ctx
     )
+    if uses_finding is not None:
+        findings.append(uses_finding)
+    return findings
 
 
 def _check_text(
     name: str,
     text: str,
     hits: _AllowanceHits | None = None,
+    local_ctx: _LocalScanContext | None = None,
 ) -> list[str]:
     """Return actor-policy findings for one workflow file and record allowance hits."""
     lines = text.splitlines()
@@ -358,9 +460,7 @@ def _check_text(
     state = _ScanState()
     findings: list[str] = []
     for lineno, line in enumerate(lines[:MAX_WORKFLOW_LINES], start=1):
-        finding = _check_line(name, lineno, line, state, hits)
-        if finding is not None:
-            findings.append(finding)
+        findings.extend(_check_line(name, lineno, line, state, hits, local_ctx))
     return findings
 
 
@@ -370,24 +470,60 @@ def check(name: str, text: str) -> list[str]:
 
 
 def _collect_workflow_paths(root: Path) -> list[Path]:
-    """Collect sorted workflow and composite action YAML paths."""
-    paths: list[Path] = []
+    """Collect sorted, deduplicated workflow and action YAML paths."""
+    candidates: list[Path] = []
     for directory in WORKFLOW_DIRS:
         workflow_dir = root / directory
-        paths.extend(
-            sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
+        candidates.extend(
+            sorted(
+                [*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")],
+                key=lambda path: path.relative_to(root).as_posix(),
+            )
         )
-    actions_dir = root / ACTIONS_DIR
-    paths.extend(
-        sorted([*actions_dir.glob("*/action.yml"), *actions_dir.glob("*/action.yaml")])
-    )
-    return paths
+    for directory in ACTION_DIRS:
+        action_dir = root / directory
+        candidates.extend(
+            sorted(
+                [*action_dir.rglob("action.yml"), *action_dir.rglob("action.yaml")],
+                key=lambda path: path.relative_to(root).as_posix(),
+            )
+        )
+    return list(dict.fromkeys(candidates))
+
+
+def _load_scanned_files(
+    root: Path, paths: list[Path]
+) -> tuple[list[_LoadedFile], frozenset[Path]]:
+    """Read collected YAML files, recording load errors and resolved scanned paths."""
+    loaded: list[_LoadedFile] = []
+    scanned: set[Path] = set()
+    for path in paths[:MAX_WORKFLOW_FILES]:
+        name = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            loaded.append(
+                _LoadedFile(name, "", f"{name}:1:<top>: workflow symlink refused")
+            )
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            loaded.append(
+                _LoadedFile(
+                    name,
+                    "",
+                    f"{name}:1:<top>: unreadable workflow: {type(exc).__name__}",
+                )
+            )
+            continue
+        loaded.append(_LoadedFile(name, text))
+        scanned.add(path.resolve())
+    return loaded, frozenset(scanned)
 
 
 def scan_with_hits(
     root: Path,
 ) -> tuple[list[str], set[tuple[str, str, str]], set[tuple[str, str, str]]]:
-    """Scan workflow and composite action files and return findings plus hit sets."""
+    """Scan workflow and action files and return findings plus hit sets."""
     paths = _collect_workflow_paths(root)
     hits = _AllowanceHits(allowed_ifs=set(), allowed_lines=set())
     if len(paths) > MAX_WORKFLOW_FILES:
@@ -396,20 +532,14 @@ def scan_with_hits(
             hits.allowed_ifs,
             hits.allowed_lines,
         )
+    loaded, scanned_paths = _load_scanned_files(root, paths)
+    local_ctx = _LocalScanContext(root=root.resolve(), scanned_paths=scanned_paths)
     findings: list[str] = []
-    for path in paths[:MAX_WORKFLOW_FILES]:
-        name = path.relative_to(root).as_posix()
-        if path.is_symlink():
-            findings.append(f"{name}:1:<top>: workflow symlink refused")
+    for item in loaded[:MAX_WORKFLOW_FILES]:
+        if item.error is not None:
+            findings.append(item.error)
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            findings.append(
-                f"{name}:1:<top>: unreadable workflow: {type(exc).__name__}"
-            )
-            continue
-        findings.extend(_check_text(name, text, hits))
+        findings.extend(_check_text(item.name, item.text, hits, local_ctx))
     return findings, hits.allowed_ifs, hits.allowed_lines
 
 
@@ -417,6 +547,13 @@ def scan(root: Path) -> list[str]:
     """Scan workflow and composite action YAML files under root."""
     findings, _, _ = scan_with_hits(root)
     return findings
+
+
+def _write_yaml(root: Path, rel: str, content: str) -> None:
+    """Write UTF-8 YAML fixture text at rel under root."""
+    target = root / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
 
 
 class WorkflowActorPolicyTest(unittest.TestCase):
@@ -1159,10 +1296,149 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 encoding="utf-8",
             )
             findings = scan(root)
-            self.assertEqual(len(findings), 1)
-            self.assertTrue(
-                findings[0].startswith(".github/actions/x/action.yml:5:<top>:"),
-                findings[0],
+            expected = (
+                ".github/actions/action.yml:4:<top>:",
+                ".github/actions/x/action.yml:5:<top>:",
+                ".github/actions/x/nested/action.yml:4:<top>:",
+            )
+            self.assertEqual(len(findings), len(expected))
+            for idx, prefix in enumerate(expected):
+                self.assertTrue(findings[idx].startswith(prefix), findings[idx])
+
+    def test_local_action_outside_scanned_set_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n    - run: echo ok\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - uses: ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:gate-job: "
+                    "local action not scanned: ./tools/gate"
+                ],
+            )
+
+    def test_missing_local_action_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  build:\n    steps:\n"
+                "      - uses: ./.github/actions/missing\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:build: "
+                    "local action not scanned: ./.github/actions/missing"
+                ],
+            )
+
+    def test_scanned_local_action_yaml_and_reusable_workflow_pass(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                ".github/actions/x/action.yaml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - shell: bash\n      run: echo ok\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/reuse.yml",
+                "on:\n  workflow_call:\njobs:\n  inner:\n"
+                "    runs-on: ubuntu-26.04\n    steps:\n      - run: echo ok\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  build:\n    steps:\n"
+                "      - uses: ./.github/actions/x\n"
+                "  call-reuse:\n"
+                "    uses: ./.github/workflows/reuse.yml\n",
+            )
+            self.assertEqual(scan(root), [])
+
+    def test_quoted_local_action_outside_scanned_set_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n    - run: echo ok\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - uses: './tools/gate'\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:gate-job: "
+                    "local action not scanned: ./tools/gate"
+                ],
+            )
+
+    def test_local_action_boundaries_and_gitea_depth_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                ".github/actions/clean/action.yml",
+                "runs:\n  using: composite\n  steps:\n    - run: echo ok\n",
+            )
+            (root / ".github/actions/empty").mkdir(parents=True)
+            _write_yaml(root, "tools/reuse.yml", "on:\n  workflow_call:\n")
+            (root / "tools/link").symlink_to(root / ".github/actions/clean")
+            _write_yaml(
+                root,
+                ".github/workflows/action.yml",
+                "jobs:\n  w:\n    if: github.actor_id != 1\n",
+            )
+            _write_yaml(
+                root,
+                ".gitea/actions/sub/deep/action.yaml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: gitea.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/z.yml",
+                "jobs:\n  b:\n    steps:\n"
+                "      # - uses: ./tools/ignored\n"
+                '      - name: File target\n        uses: "./tools/reuse.yml" # note\n'
+                "      - uses: ./.github/actions/empty\n"
+                "      - uses: ./tools/link\n"
+                "      - uses: >-\n          ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/action.yml:3:w: "
+                    "disallowed actor reference: if: github.actor_id != 1",
+                    ".github/workflows/z.yml:6:b: "
+                    "local action not scanned: ./tools/reuse.yml",
+                    ".github/workflows/z.yml:7:b: "
+                    "local action not scanned: ./.github/actions/empty",
+                    ".github/workflows/z.yml:8:b: "
+                    "local action not scanned: ./tools/link",
+                    ".github/workflows/z.yml:10:b: "
+                    "local action not scanned: ./tools/gate",
+                    ".gitea/actions/sub/deep/action.yaml:4:<top>: "
+                    "disallowed actor reference: - if: gitea.actor != vars.BOT_LOGIN",
+                ],
             )
 
     def test_composite_action_renovate_literal_fails(self) -> None:
