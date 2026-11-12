@@ -159,16 +159,23 @@ _ACTOR_TOKEN = re.compile(
     r"|author_association"
     r"|pusher\.(?:name|email)"
     r"|(?:author|committer)\.(?:name|email|username)"
-    r"|GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
-    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR)"
-    r")\b"
+    r"|(?-i:GITHUB_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)"
+    r"|GITEA_(?:TRIGGERING_ACTOR|ACTOR))"
+    r")\b",
+    re.IGNORECASE,
 )
 _BOT_LITERAL = re.compile(r"renovate|dependabot|\[bot\]", re.IGNORECASE)
-_TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
-_JOB_KEY = re.compile(r"^  (?P<q>['\"]?)(?P<job>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
+_TOP_KEY = re.compile(
+    r"^(?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q)[ \t]*:(?P<rest>.*)$"
+)
+_JOB_KEY = re.compile(
+    r"^  (?P<q>['\"]?)(?P<job>[A-Za-z0-9_-]+)(?P=q)[ \t]*:(?P<rest>.*)$"
+)
 _JOB_IF_KEY = re.compile(r"^    if:(?:\s|$)")
 _JOB_IF_LINE = re.compile(r"^    if:\s*(?P<expr>.+?)\s*$")
-_BLOCK_SCALAR = re.compile(r"^(?:\s*-\s+|\s*[^:#]+:\s*)[|>][+-]?[1-9]?(?:\s+#.*)?\s*$")
+_BLOCK_SCALAR = re.compile(
+    r"^(?:\s*-\s+|\s*[^:#]+:\s*)[|>](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?\s*$"
+)
 _SEQ_MAP_PREFIX = re.compile(r"^(?P<prefix>\s*-\s+)[^:#]+:")
 
 
@@ -805,14 +812,31 @@ class WorkflowActorPolicyTest(unittest.TestCase):
     def test_jobs_key_with_space_before_colon_fails(self) -> None:
         text = (
             "on:\n  push:\n"
-            "jobs :\n  semgrep:\n"
+            "jobs :\n  lint:\n"
             "    if: ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
+            "  trivy :\n"
+            "    if: github.actor_id != 29139614\n"
+            '  "audit"\t:\n'
+            "    if: github.actor_id != 29139614\n"
         )
         findings = check(".github/workflows/security-scan.yml", text)
-        self.assertEqual(len(findings), 1)
+        expected = ((5, "lint"), (7, "trivy"), (9, "audit"))
+        self.assertEqual(len(findings), len(expected))
+        for idx, (lineno, job) in enumerate(expected):
+            self.assertTrue(
+                findings[idx].startswith(
+                    f".github/workflows/security-scan.yml:{lineno}:{job}:"
+                ),
+                findings[idx],
+            )
+        tab_top = check(
+            ".github/workflows/security-scan.yml",
+            'on:\n  push:\n"jobs"\t:\n  lint:\n    if: github.actor_id != 29139614\n',
+        )
+        self.assertEqual(len(tab_top), 1)
         self.assertTrue(
-            findings[0].startswith(".github/workflows/security-scan.yml:5:<top>:"),
-            findings[0],
+            tab_top[0].startswith(".github/workflows/security-scan.yml:5:lint:"),
+            tab_top[0],
         )
 
     def test_index_syntax_actor_tokens_fail(self) -> None:
@@ -1009,6 +1033,103 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         self.assertTrue(findings[1].startswith(".github/workflows/gate.yml:5:gate:"))
         self.assertTrue(findings[2].startswith(".github/workflows/gate.yml:8:gate:"))
         self.assertTrue(findings[3].startswith(".github/workflows/gate.yml:12:gate:"))
+
+    def test_actor_token_case_insensitive_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: github.Actor != vars.BOT_LOGIN\n"
+            "  trivy:\n"
+            "    if: ${{ GITHUB['ACTOR_ID'] != '29139614' }}\n"
+            "    steps:\n"
+            "      - if: Gitea.Triggering_Actor != vars.BOT_LOGIN\n"
+            "        run: echo ${{ github.event.Sender.Login }} "
+            "${{ github.event.pull_request.Author_Association }}\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        expected = ((5, "semgrep"), (7, "trivy"), (9, "trivy"), (10, "trivy"))
+        self.assertEqual(len(findings), len(expected))
+        for idx, (lineno, job) in enumerate(expected):
+            self.assertTrue(
+                findings[idx].startswith(
+                    f".github/workflows/security-scan.yml:{lineno}:{job}:"
+                ),
+                findings[idx],
+            )
+
+    def test_indent_then_chomping_block_scalar_if_actor_id_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "jobs:\n  semgrep:\n"
+            "    if: >2-\n"
+            "      github.actor_id != 29139614\n"
+            "  trivy:\n"
+            "    if: |2+\n"
+            "      github.actor_id != 29139614\n"
+        )
+        findings = check(".github/workflows/security-scan.yml", text)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(
+            findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
+            findings[0],
+        )
+        self.assertTrue(
+            findings[1].startswith(".github/workflows/security-scan.yml:9:trivy:"),
+            findings[1],
+        )
+        run_blocks = check(
+            ".github/workflows/release-go.yml",
+            "on:\n  push:\njobs:\n  goreleaser:\n    steps:\n"
+            "      - run: >2-\n          username: ${{ github.actor }}\n"
+            "      - run: |2+\n          username: ${{ github.actor }}\n"
+            "      - run: >-2\n          username: ${{ github.actor }}\n"
+            "      - run: |+2\n          username: ${{ github.actor }}\n",
+        )
+        self.assertEqual(len(run_blocks), 4)
+        for idx, lineno in enumerate((7, 9, 11, 13)):
+            self.assertTrue(
+                run_blocks[idx].startswith(
+                    f".github/workflows/release-go.yml:{lineno}:goreleaser:"
+                ),
+                run_blocks[idx],
+            )
+
+    def test_run_indent_chomping_block_scalar_keeps_tracked_job(self) -> None:
+        indent_one = check(
+            ".github/workflows/ci.yml",
+            "on:\n  push:\njobs:\n  semgrep:\n    steps:\n"
+            "      - run: echo ok\n"
+            " run: >2-\n  pr-title:\n end: 1\n"
+            "    if: github.actor_id != 29139614\n"
+            "  lint:\n"
+            "    if: github.actor_id != 29139614\n",
+        )
+        self.assertEqual(len(indent_one), 2)
+        self.assertTrue(
+            indent_one[0].startswith(".github/workflows/ci.yml:10:semgrep:"),
+            indent_one[0],
+        )
+        self.assertTrue(
+            indent_one[1].startswith(".github/workflows/ci.yml:12:lint:"),
+            indent_one[1],
+        )
+        step_run = check(
+            ".github/workflows/ci.yml",
+            "on:\n  push:\njobs:\n  semgrep:\n    steps:\n"
+            "      - run: >2-\n          pr-title:\n"
+            "      - if: github.actor_id != 29139614\n        run: echo ok\n"
+            "  lint:\n"
+            "    if: github.actor_id != 29139614\n",
+        )
+        self.assertEqual(len(step_run), 2)
+        self.assertTrue(
+            step_run[0].startswith(".github/workflows/ci.yml:8:semgrep:"),
+            step_run[0],
+        )
+        self.assertTrue(
+            step_run[1].startswith(".github/workflows/ci.yml:11:lint:"),
+            step_run[1],
+        )
 
     def test_repository_workflows_comply(self) -> None:
         self.assertEqual(scan(REPO_ROOT), [])
