@@ -4,7 +4,8 @@
 
 """Workflow and action files allow only listed pull-request actor checks.
 
-Local action targets must be scanned files.
+Every uses value must match the local, remote, or image shape, and local action
+targets must be scanned files.
 """
 
 from __future__ import annotations
@@ -185,8 +186,16 @@ _USES_KEY = re.compile(r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:")
 _USES_LINE = re.compile(
     r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:[ \t]*(?P<val>.*?)[ \t]*$"
 )
-_QUOTED_SCALAR = re.compile(r"^(?P<q>['\"])(?P<inner>.*?)(?P=q)(?:[ \t]+#.*)?$")
+_FLOW_USES = re.compile(r"[{,][ \t]*['\"]?uses['\"]?[ \t]*:")
+_QUOTED_SCALAR = re.compile(
+    r"^(?:(?:'(?P<sq>[^']*)')|(?:\"(?P<dq>[^\"\\]*)\"))(?:[ \t]+#.*)?$"
+)
 _INLINE_COMMENT = re.compile(r"[ \t]+#.*$")
+_LOCAL_USES = re.compile(r"\./[A-Za-z0-9_./-]+")
+_REMOTE_USES = re.compile(
+    r"(?!\.\.?/)[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_./-]+)?@[A-Za-z0-9_./-]+"
+)
+_IMAGE_USES = re.compile(r"docker://\S+")
 
 
 @dataclass
@@ -317,24 +326,13 @@ def _is_allowed_actor_line(
     return _is_allowed_job_if(name, line, state, hits)
 
 
-def _unquote_uses_value(raw: str) -> str | None:
-    """Extract a local ./target value from raw YAML scalar text."""
+def _unquote_uses_value(raw: str) -> str:
+    """Strip one pair of matching quotes and any trailing YAML comment."""
     val = raw.strip()
     quoted = _QUOTED_SCALAR.match(val)
-    target = (
-        quoted.group("inner")
-        if quoted is not None
-        else _INLINE_COMMENT.sub("", val).strip()
-    )
-    return target if target.startswith("./") else None
-
-
-def _extract_local_uses(stripped: str) -> str | None:
-    """Return the ./target path when stripped is a local uses entry."""
-    match = _USES_LINE.match(stripped)
-    if match is None:
-        return None
-    return _unquote_uses_value(match.group("val"))
+    if quoted is not None:
+        return quoted.group("sq") or quoted.group("dq") or ""
+    return _INLINE_COMMENT.sub("", val).strip()
 
 
 def _has_symlink_component(root: Path, target: str) -> bool:
@@ -367,16 +365,59 @@ def _is_scanned_local_action(target: str, ctx: _LocalScanContext) -> bool:
 def _check_local_uses(
     name: str,
     lineno: int,
-    target: str | None,
+    target: str,
     job: str,
     local_ctx: _LocalScanContext | None,
 ) -> str | None:
     """Return a finding when a local uses target is outside the scanned set."""
-    if local_ctx is None or target is None:
-        return None
-    if _is_scanned_local_action(target, local_ctx):
+    if local_ctx is None or _is_scanned_local_action(target, local_ctx):
         return None
     return f"{name}:{lineno}:{job}: local action not scanned: {target}"
+
+
+def _check_uses_value(
+    name: str,
+    lineno: int,
+    raw: str,
+    job: str,
+    local_ctx: _LocalScanContext | None,
+) -> str | None:
+    """Validate one uses scalar against local, remote, and image allow-lists."""
+    val = raw.strip()
+    target = _unquote_uses_value(val)
+    if _LOCAL_USES.fullmatch(target) is not None:
+        return _check_local_uses(name, lineno, target, job, local_ctx)
+    if (
+        _REMOTE_USES.fullmatch(target) is not None
+        or _IMAGE_USES.fullmatch(target) is not None
+    ):
+        return None
+    return f"{name}:{lineno}:{job}: uses value not recognised: {val}"
+
+
+def _check_uses_line(
+    name: str,
+    lineno: int,
+    line: str,
+    stripped: str,
+    state: _ScanState,
+    local_ctx: _LocalScanContext | None,
+) -> list[str]:
+    """Return flow-style and allow-list findings for uses on a non-block line."""
+    findings: list[str] = []
+    if _FLOW_USES.search(line) is not None:
+        findings.append(f"{name}:{lineno}:{state.current_job}: flow-style uses refused")
+    if state.uses_block:
+        return findings
+    match = _USES_LINE.match(stripped)
+    if match is None:
+        return findings
+    uses_finding = _check_uses_value(
+        name, lineno, match.group("val"), state.current_job, local_ctx
+    )
+    if uses_finding is not None:
+        findings.append(uses_finding)
+    return findings
 
 
 def _consume_block_scalar(
@@ -404,8 +445,8 @@ def _consume_block_scalar(
             f"disallowed actor reference: {stripped.strip()}"
         )
     if state.uses_block:
-        uses_finding = _check_local_uses(
-            name, lineno, _unquote_uses_value(stripped), state.current_job, local_ctx
+        uses_finding = _check_uses_value(
+            name, lineno, stripped, state.current_job, local_ctx
         )
         if uses_finding is not None:
             findings.append(uses_finding)
@@ -439,11 +480,7 @@ def _check_line(
             f"{name}:{lineno}:{state.current_job}: "
             f"disallowed actor reference: {stripped.strip()}"
         )
-    uses_finding = _check_local_uses(
-        name, lineno, _extract_local_uses(stripped), state.current_job, local_ctx
-    )
-    if uses_finding is not None:
-        findings.append(uses_finding)
+    findings.extend(_check_uses_line(name, lineno, line, stripped, state, local_ctx))
     return findings
 
 
@@ -1497,6 +1534,154 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - run: echo $env:gitea_triggering_actor\n",
         )
         self.assertEqual(len(other_envs), 4)
+
+    def test_flow_mapping_local_uses_bypass_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - {uses: ./tools/gate}\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [".github/workflows/ci.yml:6:gate-job: flow-style uses refused"],
+            )
+
+    def test_alias_local_uses_bypass_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "x-gate: &gate ./tools/gate\n"
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - uses: *gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:7:gate-job: "
+                    "uses value not recognised: *gate"
+                ],
+            )
+
+    def test_next_line_local_uses_bypass_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - uses:\n"
+                "          ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [".github/workflows/ci.yml:6:gate-job: uses value not recognised: "],
+            )
+
+    def test_tag_local_uses_bypass_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_yaml(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n"
+                "    - if: github.actor != vars.BOT_LOGIN\n",
+            )
+            _write_yaml(
+                root,
+                ".github/workflows/ci.yml",
+                "on:\n  push:\njobs:\n  gate-job:\n    steps:\n"
+                "      - uses: !!str ./tools/gate\n",
+            )
+            self.assertEqual(
+                scan(root),
+                [
+                    ".github/workflows/ci.yml:6:gate-job: "
+                    "uses value not recognised: !!str ./tools/gate"
+                ],
+            )
+
+    def test_recognised_remote_and_image_uses_forms_pass(self) -> None:
+        text = (
+            "on:\n  push:\njobs:\n  build:\n    steps:\n"
+            "      - uses: actions/checkout@"
+            "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
+            "      - uses: golusoris/golusoris/.github/actions/"
+            "stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212\n"
+            "      - uses: 'actions/cache/save@v5'\n"
+            "      - uses: docker://alpine:3.22\n"
+            "      - uses: >-\n"
+            "          actions/checkout@"
+            "3d3c42e5aac5ba805825da76410c181273ba90b1\n"
+        )
+        self.assertEqual(check(".github/workflows/ci.yml", text), [])
+
+    def test_remote_uses_without_ref_fails(self) -> None:
+        text = (
+            "on:\n  push:\njobs:\n  build:\n    steps:\n"
+            "      - uses: actions/checkout\n"
+        )
+        self.assertEqual(
+            check(".github/workflows/ci.yml", text),
+            [
+                ".github/workflows/ci.yml:6:build: "
+                "uses value not recognised: actions/checkout"
+            ],
+        )
+
+    def test_unrecognised_anchor_block_and_comma_flow_uses_fail(self) -> None:
+        text = (
+            "on:\n  push:\njobs:\n  build:\n    steps:\n"
+            "      - uses: &gate ./tools/gate\n"
+            "      - uses: >-\n"
+            "          actions/checkout\n"
+            '      - {name: gate, "uses": "./tools/gate"}\n'
+            "      - {'uses' : ./tools/gate}\n"
+            "      - uses: ./tools/gate@v1\n"
+            "      - uses: ''\n"
+            '      - uses: "actions/checkout@v4 extra"\n'
+            '      - uses: "docker://alpine:3.22 extra"\n'
+        )
+        self.assertEqual(
+            check(".github/workflows/ci.yml", text),
+            [
+                ".github/workflows/ci.yml:6:build: "
+                "uses value not recognised: &gate ./tools/gate",
+                ".github/workflows/ci.yml:8:build: "
+                "uses value not recognised: actions/checkout",
+                ".github/workflows/ci.yml:9:build: flow-style uses refused",
+                ".github/workflows/ci.yml:10:build: flow-style uses refused",
+                ".github/workflows/ci.yml:11:build: "
+                "uses value not recognised: ./tools/gate@v1",
+                ".github/workflows/ci.yml:12:build: uses value not recognised: ''",
+                ".github/workflows/ci.yml:13:build: "
+                'uses value not recognised: "actions/checkout@v4 extra"',
+                ".github/workflows/ci.yml:14:build: "
+                'uses value not recognised: "docker://alpine:3.22 extra"',
+            ],
+        )
 
     def test_gap_repo_variable_bot_prefix_if(self) -> None:
         """Known limit: repository variable exclusion carries no actor or bot token."""
