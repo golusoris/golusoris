@@ -7,6 +7,8 @@ package singleflight_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -23,6 +25,106 @@ func (collidingKey) String() string { return "same" }
 type callResult struct {
 	value int
 	err   error
+}
+
+func TestDoPanicReachesCaller(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		calls := 0
+		const message = "singleflight caller panic"
+		var recovered any
+		func() {
+			defer func() { recovered = recover() }()
+			_, _, err := g.Do(t.Context(), "key", func(context.Context) (int, error) {
+				calls++
+				panic(message)
+			})
+			if err != nil {
+				t.Errorf("Do: %v", err)
+			}
+		}()
+		if recovered == nil || !strings.Contains(fmt.Sprint(recovered), message) {
+			t.Fatalf("caller recovered = %v, want panic containing %q", recovered, message)
+		}
+		value, _, err := g.Do(t.Context(), "key", func(context.Context) (int, error) {
+			calls++
+			return 42, nil
+		})
+		if value != 42 || err != nil || calls != 2 {
+			t.Fatalf("next Do = %d, %v, calls %d", value, err, calls)
+		}
+	})
+}
+
+func TestFnErrorReturnedUnchanged(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		sentinel := errors.New("callback failed")
+		fn := func(context.Context) (int, error) { return 0, sentinel }
+		for _, call := range []struct {
+			name string
+			do   func(context.Context, string, func(context.Context) (int, error)) (int, bool, error)
+		}{{name: "Do", do: g.Do}, {name: "DoCancelable", do: g.DoCancelable}} {
+			value, shared, err := call.do(t.Context(), "key", fn)
+			if !errors.Is(err, sentinel) || err != sentinel || value != 0 || shared { //nolint:errorlint // WHY: the contract requires error identity as well as errors.Is.
+				t.Errorf("%s = %d, %t, %v; want unchanged sentinel", call.name, value, shared, err)
+			}
+		}
+	})
+}
+
+func TestMixedDoAndCancelableRunsOnce(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		gate := make(chan struct{})
+		var mu sync.Mutex
+		calls, running, peak := 0, 0, 0
+		fn := func(ctx context.Context) (int, error) {
+			mu.Lock()
+			calls++
+			running++
+			peak = max(peak, running)
+			mu.Unlock()
+			<-gate
+			mu.Lock()
+			running--
+			mu.Unlock()
+			return 42, ctx.Err()
+		}
+		leader := make(chan callResult, 1)
+		go func() {
+			value, _, err := g.Do(t.Context(), "key", fn)
+			leader <- callResult{value: value, err: err}
+		}()
+		synctest.Wait()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		follower := make(chan error, 1)
+		go func() {
+			_, _, err := g.DoCancelable(ctx, "key", fn)
+			follower <- err
+		}()
+		synctest.Wait()
+		cancel()
+		if err := <-follower; !errors.Is(err, context.Canceled) {
+			t.Errorf("cancelled follower: %v", err)
+		}
+		close(gate)
+		if result := <-leader; result.value != 42 || result.err != nil {
+			t.Errorf("leader = %+v", result)
+		}
+		synctest.Wait()
+		if calls != 1 || running != 0 || peak != 1 {
+			t.Errorf("calls %d, running %d, peak %d; want 1, 0, 1", calls, running, peak)
+		}
+		value, _, err := g.Do(t.Context(), "key", fn)
+		if value != 42 || err != nil || calls != 2 {
+			t.Errorf("next Do = %d, %v, calls %d, peak %d", value, err, calls, peak)
+		}
+	})
 }
 
 func TestDoDeduplicates(t *testing.T) {
