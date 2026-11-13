@@ -38,11 +38,39 @@ find_python() {
 	return 1
 }
 
+# Print core.bare of the repository at $1; empty when unset.
+core_bare() {
+	local value rc=0
+	value="$(git -C "$1" config --get core.bare)" || rc=$?
+	case "$rc" in
+		0 | 1) printf '%s\n' "$value" ;;
+		*) return "$rc" ;;
+	esac
+}
+
+# Run one suite from root; fail when it rewrote core.bare of the repository under test.
+run_suite() {
+	local root="$1" python_bin="$2" test_file="$3" bare_before="$4" bare_after rc=0
+	(cd "$root" && PYTHONDONTWRITEBYTECODE=1 "$python_bin" -B "$test_file") || rc=$?
+	bare_after="$(core_bare "$root")"
+	if [[ "$bare_after" != "$bare_before" ]]; then
+		printf 'python-tests: %s changed core.bare from %q to %q; restore it with git config core.bare %q\n' \
+			"$test_file" "$bare_before" "$bare_after" "${bare_before:-false}" >&2
+		return 1
+	fi
+	return "$rc"
+}
+
 # Scope and run required repository Python test suites against the worktree.
 main() {
-	local root
+	local root names
+	local -a local_vars
 	root="$(resolve_root "$@")"
 	readonly root
+	# A git hook exports GIT_DIR; inherited, it points every fixture git init at this repository.
+	names="$(git rev-parse --local-env-vars)"
+	mapfile -t local_vars <<<"$names"
+	unset "${local_vars[@]}"
 	git -C "$root" rev-parse --is-inside-work-tree >/dev/null
 
 	local python_bin
@@ -73,7 +101,8 @@ main() {
 		'scripts/ci/context_size_test.py'
 		'scripts/ci/tiny-litert-sidecar-docs-policy_test.py'
 	)
-	local test_file
+	local test_file bare_before
+	bare_before="$(core_bare "$root")"
 	for test_file in "${tests[@]}"; do
 		if [[ -L "$root/$test_file" ]]; then
 			printf 'Python tests refuse symlink input: %s\n' "$test_file" >&2
@@ -83,10 +112,7 @@ main() {
 			printf 'required Python test is missing: %s\n' "$test_file" >&2
 			return 1
 		fi
-		(
-			cd "$root"
-			PYTHONDONTWRITEBYTECODE=1 "$python_bin" -B "$test_file"
-		)
+		run_suite "$root" "$python_bin" "$test_file" "$bare_before"
 	done
 	printf 'Python tests: %d required suites passed\n' "${#tests[@]}"
 }

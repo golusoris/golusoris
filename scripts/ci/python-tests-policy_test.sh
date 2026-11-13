@@ -119,6 +119,57 @@ git -C "$symlink_root" add .
 expect_failure 'Python tests refuse symlink input' \
 	bash "$symlink_root/scripts/ci/python-tests.sh" --root "$symlink_root"
 
+required_suites=(
+	'.config/lefthook/scripts/test_checkpoint.py'
+	'scripts/ci/block_evasion_hook_test.py'
+	'scripts/ci/portability_test.py'
+	'scripts/ci/ci_scope_test.py'
+	'scripts/ci/gomod_test.py'
+	'scripts/ci/renovate_vulnerability_test.py'
+	'scripts/ci/repo_git_test.py'
+	'scripts/ci/review_bot_badges_test.py'
+	'scripts/ci/context_size_test.py'
+	'scripts/ci/tiny-litert-sidecar-docs-policy_test.py'
+)
+
+# Write passing required suites under $1; the last one runs git with arguments $2 in directory $3.
+write_git_suites() {
+	local root="$1" suite
+	for suite in "${required_suites[@]}"; do
+		write_suite "$root/$suite" 'self.assertTrue(True)'
+	done
+	printf '%s\n' \
+		'import subprocess' \
+		'import tempfile' \
+		'import unittest' \
+		'' \
+		'class RequiredTest(unittest.TestCase):' \
+		'    def test_contract(self):' \
+		"        subprocess.run(['git', $2], cwd=$3, check=True, capture_output=True)" \
+		'' \
+		'if __name__ == "__main__":' \
+		'    unittest.main()' >"$root/${required_suites[-1]}"
+	git -C "$root" add .
+}
+
+# A pre-push hook in a linked worktree exports GIT_DIR; a fixture git init must not set core.bare.
+hook_root="$(new_repo hook-git-dir)"
+write_git_suites "$hook_root" "'init', '-q'" 'tempfile.mkdtemp()'
+git -C "$hook_root" -c user.name=policy -c user.email=policy@example.invalid -c commit.gpgsign=false \
+	commit -q -m fixture
+git -C "$hook_root" worktree add -q --detach "$suite_root/hook-linked"
+hook_git_dir="$(git -C "$suite_root/hook-linked" rev-parse --absolute-git-dir)"
+GIT_DIR="$hook_git_dir" bash "$suite_root/hook-linked/scripts/ci/python-tests.sh" \
+	--root "$suite_root/hook-linked" >/dev/null
+if [[ "$(git -C "$hook_root" config --get core.bare)" != false ]]; then
+	printf 'python-tests let an inherited GIT_DIR set core.bare in the shared config\n' >&2
+	exit 1
+fi
+
+bare_root="$(new_repo bare-write)"
+write_git_suites "$bare_root" "'config', 'core.bare', 'true'" "'.'"
+expect_failure 'changed core.bare' bash "$bare_root/scripts/ci/python-tests.sh" --root "$bare_root"
+
 python3 -B "$repo_root/.config/hiss/testdata/HISS-15/python/negative/test_complete_dimensions.py" >/dev/null
 python3 -B "$repo_root/.config/hiss/testdata/HISS-15/python/gap/test_positive_only.py" >/dev/null
 expect_failure 'FAILED' python3 -B \

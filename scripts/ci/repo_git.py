@@ -60,21 +60,32 @@ def fixture_environ() -> dict[str, str]:
     return env
 
 
+def _linked_decoy(decoy: Path, timeout: int) -> Path:
+    """Create a repository with one linked worktree under decoy; return the worktree's git dir."""
+    env = fixture_environ()
+    identity = ["-c", "user.name=decoy", "-c", "user.email=decoy@example.invalid", "-c", "commit.gpgsign=false"]
+    run_git(["init", "-q", "main"], decoy, timeout, env=env)
+    run_git([*identity, "commit", "-q", "--allow-empty", "-m", "decoy"], decoy / "main", timeout, env=env)
+    run_git(["worktree", "add", "-q", "--detach", str(decoy / "linked")], decoy / "main", timeout, env=env)
+    (decoy / "linked" / "sentinel").write_text("decoy index must survive", encoding="utf-8")
+    run_git(["add", "sentinel"], decoy / "linked", timeout, env=env)
+    return Path(run_git(["rev-parse", "--absolute-git-dir"], decoy / "linked", timeout, env=env).strip())
+
+
 @contextlib.contextmanager
 def decoy_environ(timeout: int = GIT_TIMEOUT_SECONDS) -> Generator[None, None, None]:
-    """Point hook git variables at a decoy repository; fail if fixture git touched its index."""
+    """Export pre-push hook git variables of a decoy linked worktree; fail if fixture git touched it."""
     with tempfile.TemporaryDirectory() as directory:
         decoy = Path(directory)
-        env = fixture_environ()
-        run_git(["init", "-q"], decoy, timeout, env=env)
-        (decoy / "sentinel").write_text("decoy index must survive", encoding="utf-8")
-        run_git(["add", "sentinel"], decoy, timeout, env=env)
-        index = decoy / ".git" / "index"
-        before = index.read_bytes()
+        # Git exports GIT_DIR of a linked worktree to hooks; git init under it sets core.bare in the shared config.
+        git_dir = _linked_decoy(decoy, timeout)
+        index = git_dir / "index"
+        config = decoy / "main" / ".git" / "config"
+        before = (index.read_bytes(), config.read_bytes())
         shallow = decoy / "invalid-shallow"
         shallow.write_text("invalid object id\n", encoding="utf-8")
         hostile = {
-            "GIT_DIR": str(decoy / ".git"),
+            "GIT_DIR": str(git_dir),
             "GIT_INDEX_FILE": str(index),
             "GIT_SHALLOW_FILE": str(shallow),
         }
@@ -88,8 +99,10 @@ def decoy_environ(timeout: int = GIT_TIMEOUT_SECONDS) -> Generator[None, None, N
                     os.environ.pop(name, None)
                 else:
                     os.environ[name] = value
-        if index.read_bytes() != before:
+        if index.read_bytes() != before[0]:
             raise GitError("decoy index changed: a fixture git command followed hook variables")
+        if config.read_bytes() != before[1]:
+            raise GitError("decoy shared config changed: a fixture git command followed hook variables")
 
 def worktree_files(root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS) -> list[Path]:
     """List tracked and untracked files called name under root that git does not ignore."""
