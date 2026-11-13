@@ -71,13 +71,11 @@ func boot(t *testing.T, opts Options) string {
 	defer startgate.Acquire(t)()
 	ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 	defer cancel()
-	req := testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image: image, Cmd: []string{"--proactor_threads=2"}, ExposedPorts: []string{"6379/tcp"},
-			WaitingFor: wait.ForListeningPort("6379/tcp"),
-		},
-		Started: true,
+	container := testcontainers.ContainerRequest{
+		Image: image, Cmd: []string{"--proactor_threads=2"}, ExposedPorts: []string{"6379/tcp"},
+		WaitingFor: wait.ForListeningPort("6379/tcp"),
 	}
+	req := testcontainers.GenericContainerRequest{ContainerRequest: container, Started: true}
 	if pinErr := testimages.WithPinnedReaper().Customize(&req); pinErr != nil {
 		t.Fatalf("testutil/dragonfly: pin reaper: %v", pinErr)
 	}

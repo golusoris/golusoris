@@ -709,7 +709,7 @@ func (b *linkedBody) Read(p []byte) (int, error) {
 }
 
 func varyMismatch(response, leader, follower http.Header) bool {
-	for _, name := range strings.Split(strings.Join(response.Values("Vary"), ","), ",") {
+	for name := range strings.SplitSeq(strings.Join(response.Values("Vary"), ","), ",") {
 		name = strings.TrimSpace(name)
 		if name == "*" {
 			return true

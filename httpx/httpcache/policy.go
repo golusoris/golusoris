@@ -219,7 +219,7 @@ func (c *Cache) credentialedResponse(resp *http.Response, host HostOptions) bool
 	if !ok || !state.credentialed {
 		return false
 	}
-	for _, name := range strings.Split(strings.Join(resp.Header.Values("Vary"), ","), ",") {
+	for name := range strings.SplitSeq(strings.Join(resp.Header.Values("Vary"), ","), ",") {
 		if _, secret := c.secretHeaders[strings.ToLower(strings.TrimSpace(name))]; secret {
 			return true
 		}
