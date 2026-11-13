@@ -41,6 +41,8 @@ bartventer/httpcache v0.14.0 has these properties, read from its source (`roundt
 - The cache is private: it stores `Cache-Control: private` responses and requests that carry `Authorization`.
 - `stale-if-error` serves a stored response on 500, 502, 503 and 504 only (`isStaleErrorAllowed`). A transport error during revalidation is returned to the caller without falling back to the stored response (`roundtripper.go`, `handleCacheHit`).
 - `stale-while-revalidate` starts one background goroutine for each stale hit. Concurrent revalidations are not collapsed, and each runs under the caller's context with `WithSWRTimeout` (default 5s).
+- `net/http` cancels a request's context when the caller closes the response body if `http.Client.Timeout` is set (`setRequestCancel`), and `httpx/client` always sets it. A revalidation that inherits the caller's context therefore stops as soon as the caller has read the stale response.
+- A 304 answer to a revalidation is merged into the stored entry and stored again without a second `no-store` check (`internal/validationresponsehandler.go`).
 - The library reads the wall clock through its own internal clock, which callers cannot replace.
 
 ### Dragonfly as L2 server and rueidis client-side caching
@@ -77,17 +79,19 @@ The wrappers cover the library properties listed in the context:
 - **Secrets stay out of keys and entries.** The outer wrapper removes configured secret query parameters before the library computes its key, and the inner wrapper puts them back before the request leaves the process. The inner wrapper also removes secret header names from response `Vary`, so the library never records credential values in stored references. The cache key contains no secrets, so a rotated token does not empty the cache. Each transport instance therefore serves one set of provider credentials: one principal per instance.
 - **Credential-bearing responses are never stored.** The cache is bypassed for request paths whose segments match configured authentication segments (defaults such as `login`, `oauth`, `token`, `pin`, `pins`). The inner wrapper marks a response `no-store` when it has status 401, 403 or 407, a `Set-Cookie` or `WWW-Authenticate` header, a configured secret header, a body over the size bound, or a body matching a configured credential field such as `access_token` or `authToken`.
 - **Stale on provider error.** The inner wrapper sets the configured `stale-if-error` window on storable responses. It turns transport errors into a marked 504 and provider 429 responses into a marked 503, so the library's stale-if-error path covers them. When the library has nothing stale to serve, the outer wrapper returns the original error or response.
+- **Revalidation outlives the response.** The outer wrapper hands the library a context that the caller cannot cancel, and links it back to the caller's context until the response body is closed, so foreground upstream calls still stop when the caller cancels. A stale response is unlinked at once: its background revalidation runs until it completes or `revalidate_timeout` expires (`TestCacheSWRSurvivesCallerClose`).
+- **Sensitive 304 responses are never merged.** When the policy marks a 304 `no-store`, a caller that sent its own validators receives that 304. For any other caller, the inner wrapper repeats the request without validators and returns the full response, which the policy also keeps out of storage (`TestCacheSensitive304NeverStored`).
 - **Bounded upstream work.** The inner wrapper collapses concurrent identical upstream requests through `cache/singleflight` and caps upstream requests in flight. Background revalidation goroutines started by the library therefore wait on that cap instead of each reaching the provider.
 - **Per-host freshness override.** A host entry with a TTL replaces the response's freshness lifetime with `max-age` and keeps validators, so the entry is revalidated with `If-None-Match` after the TTL.
 - **Storage.** The library sees a `driver.Conn` backed by `cache/twotier.Typed`. One driver is registered once per process under a package-owned scheme, and each instance is looked up by an identifier in the DSN. Every storage call runs under a bounded context, because `driver.Conn` passes none.
 
 ## Consequences
 
-- **Positive**: Applications get standards-based caching with stale fallback, shared across replicas through Redis or Dragonfly. The cache keeps no provider credentials in keys or entries.
+- **Positive**: Applications get standards-based caching with stale fallback, shared across replicas through Redis or Dragonfly (`TestCacheSharedL2_RealRedis`, `TestCacheSharedL2_RealDragonfly`). The cache keeps no provider credentials in keys or entries.
 - **Positive**: Outbound rate limiting reuses the `ulule/limiter/v3` limiter construction that inbound limiting already uses.
 - **Negative**: The root module gains `github.com/bartventer/httpcache`, a pre-1.0 library with one maintainer. The wrappers depend on its stale-if-error status list and on its keying by URL. Tests in `httpx/httpcache` pin both.
 - **Negative**: Freshness tests cannot use a fake clock, because the library reads the wall clock internally. Boundary tests use `Age` and `max-age` header arithmetic instead of waiting.
-- **Negative**: Background revalidation is best effort. It ends when the caller's context ends or after the revalidation timeout.
+- **Negative**: Background revalidation is best effort. It ends after `revalidate_timeout`, and a failed revalidation leaves the stale entry in place for the next request.
 - **Negative**: Secrets carried in path segments are not removed; only query parameters and headers are.
 - **Follow-up**: `httpx/extclient` keeps its own in-memory GET cache. Moving it onto `httpx/httpcache` is tracked separately to keep one cache implementation (HISS-19).
 - **Revisit trigger**: bartventer/httpcache accepts an injected `driver.Conn` or clock, serves stale on transport errors, or reaches v1.0; or a maintained RFC 9111 client transport is listed in awesome-go.
