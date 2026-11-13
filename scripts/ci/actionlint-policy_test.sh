@@ -305,58 +305,82 @@ if timeout < 60:
 PY
 }
 
-check_ryuk_reconnection_contract() {
-	local primary_workflow="$1"
-	local reusable_workflow="$2"
-	local modules="${3:-$repo_root/scripts/ci/go-modules.sh}"
-	local soak="${4:-$repo_root/.github/workflows/soak.yml}"
-	python3 - "$primary_workflow" "$reusable_workflow" "$modules" "$soak" <<'PY'
+ryuk_module_default() {
+	python3 - "$1" <<'PYM'
 import pathlib
 import re
 import sys
 
-source = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
-defaults = re.findall(r'^\s*: "\$\{RYUK_RECONNECTION_TIMEOUT:=([^}]+)\}"$', source, re.MULTILINE)
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+pattern = r'^\s*: "\$\{RYUK_RECONNECTION_TIMEOUT:=([^}]+)\}"$'
+defaults = re.findall(pattern, source, re.MULTILINE)
 if len(defaults) != 1 or "export RYUK_RECONNECTION_TIMEOUT" not in source:
     raise SystemExit("go-modules.sh must export one Ryuk reconnection timeout default")
-default = defaults[0]
-for name in (sys.argv[1], sys.argv[2], sys.argv[4]):
-    path = pathlib.Path(name)
-    markers = re.findall(r'^\s+RYUK_RECONNECTION_TIMEOUT: ([^\s]+)$', path.read_text(), re.MULTILINE)
-    if not markers or any(value != default for value in markers):
-        raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default}")
-
-contracts = (
-    (pathlib.Path(sys.argv[1]), "Run primary-module tests with race detector and coverage"),
-    (pathlib.Path(sys.argv[2]), "Run tests (Linux — full suite)"),
+phase = re.search(r'(?ms)^run_phase\(\) \{.*?^\s*case "\$phase" in\n(?P<arms>.*?)^\s*esac', source)
+arm = re.search(
+    r'(?m)^\t\ttest \| test-short\)\n(?:[ \t]*#[^\n]*\n)*' + pattern.lstrip('^'),
+    phase.group("arms") if phase else "",
 )
-for path, step_name in contracts:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    marker = f"      - name: {step_name}"
-    try:
-        start = lines.index(marker)
-    except ValueError as error:
-        raise SystemExit(f"{path}: missing test step {step_name}") from error
-    end = next(
-        (
-            index
-            for index in range(start + 1, len(lines))
-            if lines[index].startswith("      - ")
-        ),
-        len(lines),
-    )
-    step = "\n".join(lines[start:end])
-    if step.count(f"          RYUK_RECONNECTION_TIMEOUT: {default}") != 1:
-        raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default}")
+if arm is None:
+    raise SystemExit("Ryuk default case arm must be exactly test | test-short)")
+print(defaults[0])
+PYM
+}
+
+check_ryuk_workflow() {
+	python3 - "$@" <<'PYM'
+import pathlib
+import re
+import sys
+
+path, default, references, *contracts = sys.argv[1:]
+text = pathlib.Path(path).read_text(encoding="utf-8")
+lines = text.splitlines()
+steps = []
+for start, line in enumerate(lines):
+    if not line.startswith("      - "):
+        continue
+    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip()
+                and not lines[i].lstrip().startswith("#") and not lines[i].startswith("        ")), len(lines))
+    name = line.removeprefix("      - name: ") if line.startswith("      - name: ") else ""
+    steps.append((start, end, name, "\n".join(lines[start:end])))
+markers = [(i, re.fullmatch(r'\s+RYUK_RECONNECTION_TIMEOUT: (\S+)', line))
+           for i, line in enumerate(lines) if re.match(r'\s*RYUK_RECONNECTION_TIMEOUT:', line)]
+if not markers or any(match is None or match[1] != default for _, match in markers):
+    raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default}")
+for name in contracts:
+    matches = [step for step in steps if step[2] == name]
+    if len(matches) != 1:
+        raise SystemExit(f"{path}: missing or duplicate test step {name}")
+    start, end, _, step = matches[0]
+    if sum(start <= i < end for i, _ in markers) != 1:
+        raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default} in {name}")
     if "TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT" in step:
         raise SystemExit(f"{path}: Ryuk timeout must use the supported bare variable")
-    for upstream in (
-        "testcontainers/testcontainers-go#3867",
-        "testcontainers/testcontainers-go#3868",
-    ):
-        if upstream not in step:
-            raise SystemExit(f"{path}: Ryuk mitigation lacks upstream reference {upstream}")
-PY
+    if references == "1":
+        for upstream in ("testcontainers/testcontainers-go#3867", "testcontainers/testcontainers-go#3868"):
+            if upstream not in step:
+                raise SystemExit(f"{path}: Ryuk mitigation lacks upstream reference {upstream}")
+for index, _ in markers:
+    owner = next((step for step in steps if step[0] <= index < step[1]), None)
+    run = re.search(r'(?ms)^        run: (?P<body>.*?)(?=^        \S|\Z)', owner[3]) if owner else None
+    if owner is None or (owner[2] not in contracts and
+                         (run is None or re.search(r'\bgo[ \t]+test\b', run["body"]) is None)):
+        raise SystemExit(f"{path}: marker outside a test step")
+PYM
+}
+
+check_ryuk_reconnection_contract() {
+	local primary_workflow="$1" reusable_workflow="$2" default
+	local modules="${3:-$repo_root/scripts/ci/go-modules.sh}"
+	local soak="${4:-$repo_root/.github/workflows/soak.yml}"
+	default="$(ryuk_module_default "$modules")" || return $?
+	check_ryuk_workflow "$primary_workflow" "$default" 1 \
+		'Run primary-module tests with race detector and coverage' || return $?
+	check_ryuk_workflow "$reusable_workflow" "$default" 1 \
+		'Run tests (Linux — full suite)' || return $?
+	check_ryuk_workflow "$soak" "$default" 0 'Run soak tests (go -p 4)' \
+		'Measure examples/minimal against the Pulumi Fargate task size'
 }
 
 write_clean_workflow() {
@@ -394,12 +418,12 @@ test_ryuk_reconnection_contract() {
 	local reusable="$repo_root/.github/workflows/ci-go.yml"
 	local modules="$repo_root/scripts/ci/go-modules.sh"
 	check_ryuk_reconnection_contract "$primary" "$reusable"
-	python3 - "$modules" "$reusable" "$suite_root" <<'PY'
+	python3 - "$modules" "$reusable" "$suite_root" "$repo_root/.github/workflows/soak.yml" "$primary" <<'PY'
 import pathlib
 import re
 import sys
 
-modules, workflow, root = map(pathlib.Path, sys.argv[1:])
+modules, workflow, root, soak, primary = map(pathlib.Path, sys.argv[1:])
 source = modules.read_text()
 pattern = r'^\s*: "\$\{RYUK_RECONNECTION_TIMEOUT:=[^}]+\}"$'
 missing, count = re.subn(pattern, "", source, flags=re.MULTILINE)
@@ -408,6 +432,21 @@ if count != 1:
 (root / "missing-default.sh").write_text(missing)
 (root / "drift-default.sh").write_text(re.sub(pattern, ': "${RYUK_RECONNECTION_TIMEOUT:=10m}"', source, flags=re.MULTILINE))
 (root / "drift-workflow.yml").write_text(re.sub(r'RYUK_RECONNECTION_TIMEOUT: \S+', "RYUK_RECONNECTION_TIMEOUT: 1ns", workflow.read_text()))
+if source.count("\n\t\ttest | test-short)\n") != 1:
+    raise SystemExit("Ryuk arm mutation requires exactly one arm")
+(root / "narrow-arm.sh").write_text(source.replace("\n\t\ttest | test-short)\n", "\n\t\ttest)\n"))
+soak_source = soak.read_text()
+marker = "          RYUK_RECONNECTION_TIMEOUT: 30m\n"
+if soak_source.count(marker) != 2:
+    raise SystemExit("soak mutations require exactly two markers")
+(root / "missing-soak.yml").write_text(soak_source.replace(marker, "", 1))
+sizing = soak_source.index("      - name: Measure examples/minimal against the Pulumi Fargate task size")
+(root / "missing-sizing.yml").write_text(soak_source[:sizing] + soak_source[sizing:].replace(marker, "", 1))
+primary_source = primary.read_text()
+start = primary_source.index("      - name: Run the ClamAV integration suite\n")
+moved = primary_source[:start] + primary_source[start:].replace(marker, "", 1)
+(root / "misplaced-primary.yml").write_text(moved + "      - name: Non-test step\n        env:\n" + marker + "        run: echo clean\n")
+(root / "duplicate-soak.yml").write_text(soak_source.replace(marker, marker + marker, 1))
 PY
 	expect_failure_matching 'must export one Ryuk reconnection timeout default' \
 		check_ryuk_reconnection_contract "$primary" "$reusable" "$suite_root/missing-default.sh"
@@ -415,7 +454,17 @@ PY
 		check_ryuk_reconnection_contract "$primary" "$reusable" "$suite_root/drift-default.sh"
 	expect_failure_matching 'Ryuk reconnection timeout must be' \
 		check_ryuk_reconnection_contract "$primary" "$suite_root/drift-workflow.yml"
-	printf 'Ryuk reconnection contract: positive, missing default, default drift, workflow drift passed\n'
+	local failures=0 planted
+	expect_failure_matching 'Ryuk default case arm must be exactly test | test-short)' \
+		check_ryuk_reconnection_contract "$primary" "$reusable" "$suite_root/narrow-arm.sh" || failures=1
+	for planted in missing-soak missing-sizing duplicate-soak; do
+		expect_failure_matching 'Ryuk reconnection timeout must be' \
+			check_ryuk_reconnection_contract "$primary" "$reusable" "$modules" "$suite_root/$planted.yml" || failures=1
+	done
+	expect_failure_matching 'marker outside a test step' \
+		check_ryuk_reconnection_contract "$suite_root/misplaced-primary.yml" "$reusable" "$modules" || failures=1
+	(( failures == 0 )) || return 1
+	printf 'Ryuk reconnection contract: real files, defaults, arm, soak steps, marker placement passed\n'
 }
 
 if [[ "${1:-}" == --ryuk-only ]]; then

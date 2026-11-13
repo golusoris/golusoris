@@ -83,7 +83,7 @@ class CiScopeTest(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _git(self, *args: str) -> str:
-        proc = subprocess.run(  # noqa: S603 - fixed git command in test repository.
+        proc = subprocess.run(  # noqa: S603 - fixed git command in test repository. # nosec B603 B607
             ["git", "-C", str(self.repo), *args],  # noqa: S607 - git executable on runner PATH.
             capture_output=True,
             text=True,
@@ -104,7 +104,7 @@ class CiScopeTest(unittest.TestCase):
         else:
             env.pop("CI_SCOPE_BASE", None)
 
-        return subprocess.run(  # noqa: S603 - fixed interpreter and repository script.
+        return subprocess.run(  # noqa: S603 - fixed interpreter and repository script. # nosec B603
             [sys.executable, str(CI_SCOPE_SCRIPT), *args],
             cwd=self.repo,
             env=env,
@@ -315,7 +315,7 @@ class CiScopeTest(unittest.TestCase):
     def test_negative_inherited_hook_git_dir_cannot_redirect_in_process_gate(self) -> None:
         """A suite started under hook GIT_* variables still runs the in-process gate on its fixture."""
         with repo_git.decoy_environ():
-            proc = subprocess.run(  # noqa: S603 - fixed interpreter and this test file.
+            proc = subprocess.run(  # noqa: S603 - fixed interpreter and this test file. # nosec B603
                 [
                     sys.executable,
                     str(Path(__file__).resolve()),
@@ -408,7 +408,7 @@ class SkipSafeEmbedTest(unittest.TestCase):
         import ci_scope
 
         directive = re.compile(r"^//go:embed\s+(.+)$", re.MULTILINE)
-        listed = subprocess.run(  # noqa: S603 - fixed git command in this repository.
+        listed = subprocess.run(  # noqa: S603 - fixed git command in this repository. # nosec B603 B607
             ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--", "*.go"],  # noqa: S607 - git on PATH.
             capture_output=True,
             check=True,

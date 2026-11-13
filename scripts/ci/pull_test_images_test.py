@@ -50,7 +50,7 @@ class PullTestImagesTest(TestCase):
     def run_script(
         self, script: str, *args: str, environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(  # noqa: S603 - Repository scripts and fixture arguments only, without a shell.
+        return subprocess.run(  # noqa: S603 - Repository scripts and fixture arguments only, without a shell. # nosec B603
             [self.bash, str(ROOT / "scripts/ci" / script), *args],
             cwd=self.root, env=environment or self.environment,
             capture_output=True, text=True, timeout=10, check=False,

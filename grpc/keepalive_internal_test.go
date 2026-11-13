@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
 )
@@ -31,8 +33,10 @@ func TestLoadConfig_envReachesKeepaliveGrace(t *testing.T) {
 			if tc.name == "unset" {
 				require.NoError(t, os.Unsetenv(key))
 			}
-			cfg, err := config.New(config.Options{EnvPrefix: "APP_", Delimiter: "."})
-			require.NoError(t, err)
+			var cfg *config.Config
+			var opts config.Options
+			fxtest.New(t, config.Module, fx.Populate(&cfg, &opts))
+			require.NotContains(t, opts.CompoundKeys, "grpc.keepalive.max_connection_age_grace")
 			got, err := loadConfig(cfg)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got.Keepalive.MaxConnectionAgeGrace)
