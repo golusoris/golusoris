@@ -212,3 +212,84 @@ func TestDoCancelableSharesValue(t *testing.T) {
 		}
 	})
 }
+
+func TestDoCancelableLastWaiterLeavesRunningFlight(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		gate := make(chan struct{})
+		var calls atomic.Int32
+		fn := func(context.Context) (int, error) { calls.Add(1); <-gate; return 42, t.Context().Err() }
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		first := make(chan callResult, 1)
+		go func() {
+			value, _, err := g.DoCancelable(ctx, "key", fn)
+			first <- callResult{value: value, err: err}
+		}()
+		synctest.Wait()
+		cancel()
+		if result := <-first; !errors.Is(result.err, context.Canceled) {
+			t.Errorf("cancelled waiter = %+v", result)
+		}
+		next := make(chan callResult, 1)
+		go func() {
+			value, _, err := g.DoCancelable(t.Context(), "key", fn)
+			next <- callResult{value: value, err: err}
+		}()
+		synctest.Wait()
+		if got := calls.Load(); got != 1 {
+			t.Errorf("running callback count = %d, want 1", got)
+		}
+		close(gate)
+		if result := <-next; result.value != 42 || result.err != nil {
+			t.Errorf("live waiter = %+v", result)
+		}
+		value, _, err := g.Do(t.Context(), "key", func(context.Context) (int, error) {
+			calls.Add(1)
+			return 84, nil
+		})
+		if value != 84 || err != nil || calls.Load() != 2 {
+			t.Errorf("finished callback reused: value %d, err %v, calls %d", value, err, calls.Load())
+		}
+	})
+}
+
+func TestForgetOldCallbackKeepsReplacement(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		oldGate, newGate := make(chan struct{}), make(chan struct{})
+		var calls atomic.Int32
+		start := func(gate chan struct{}, value int) <-chan callResult {
+			done := make(chan callResult, 1)
+			go func() {
+				got, _, err := g.DoCancelable(t.Context(), "key", func(context.Context) (int, error) {
+					calls.Add(1)
+					<-gate
+					return value, nil
+				})
+				done <- callResult{value: got, err: err}
+			}()
+			synctest.Wait()
+			return done
+		}
+		old := start(oldGate, 1)
+		g.Forget("key")
+		replacement := start(newGate, 2)
+		close(oldGate)
+		if result := <-old; result.value != 1 || result.err != nil {
+			t.Errorf("old callback = %+v", result)
+		}
+		joined := start(newGate, 3)
+		if got := calls.Load(); got != 2 {
+			t.Errorf("callback count = %d, want 2", got)
+		}
+		close(newGate)
+		for _, done := range []<-chan callResult{replacement, joined} {
+			if result := <-done; result.value != 2 || result.err != nil {
+				t.Errorf("replacement waiter = %+v", result)
+			}
+		}
+	})
+}

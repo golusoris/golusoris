@@ -93,9 +93,15 @@ func (c *Cache) nonStorable(resp *http.Response, host HostOptions) bool {
 }
 
 func (c *Cache) applyBody(resp *http.Response, body []byte, oversized bool) {
-	if oversized || c.sensitiveBody(resp.Header, body) {
+	if oversized || (!bodylessResponse(resp) && c.sensitiveBody(resp.Header, body)) {
 		noStore(resp.Header)
 	}
+}
+
+func bodylessResponse(resp *http.Response) bool {
+	return (resp.Request != nil && resp.Request.Method == http.MethodHead) ||
+		resp.StatusCode == http.StatusNotModified || resp.StatusCode == http.StatusNoContent ||
+		(resp.StatusCode >= http.StatusContinue && resp.StatusCode < http.StatusOK)
 }
 
 func (c *Cache) sensitiveResponse(resp *http.Response) bool {
@@ -125,7 +131,7 @@ func (c *Cache) sensitiveLocation(header http.Header) bool {
 			if err != nil {
 				return true
 			}
-			if target.User != nil || c.secretQuery(target.RawQuery) {
+			if target.User != nil || c.secretQuery(target.RawQuery) || c.secretQuery(target.EscapedFragment()) {
 				return true
 			}
 		}

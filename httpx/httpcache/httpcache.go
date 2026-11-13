@@ -458,6 +458,46 @@ type flightResult struct {
 	streaming bool
 }
 
+type streamingHandoff struct {
+	mu        sync.Mutex
+	result    *flightResult
+	abandoned bool
+}
+
+func (h *streamingHandoff) publish(result *flightResult) error {
+	if !result.streaming {
+		return nil
+	}
+	h.mu.Lock()
+	if !h.abandoned {
+		h.result = result
+		h.mu.Unlock()
+		return nil
+	}
+	h.mu.Unlock()
+	return fmt.Errorf("httpcache: abandoned stream: %w", errors.Join(context.Canceled, result.response.Body.Close()))
+}
+
+func (h *streamingHandoff) abandon() error {
+	h.mu.Lock()
+	h.abandoned = true
+	result := h.result
+	h.result = nil
+	h.mu.Unlock()
+	if result != nil {
+		if err := result.response.Body.Close(); err != nil {
+			return fmt.Errorf("httpcache: close abandoned stream: %w", err)
+		}
+	}
+	return nil
+}
+
+func (h *streamingHandoff) take() {
+	h.mu.Lock()
+	h.result = nil
+	h.mu.Unlock()
+}
+
 func (c *Cache) upstream(req *http.Request, next http.RoundTripper) (*http.Response, error) {
 	if state, ok := stateOf(req); ok && req.Context().Done() != state.done {
 		select {
@@ -476,18 +516,31 @@ func (c *Cache) upstream(req *http.Request, next http.RoundTripper) (*http.Respo
 }
 
 func (c *Cache) flight(req *http.Request, next http.RoundTripper) (*flightResult, error) {
-	var leader atomic.Bool
-	call := func(context.Context) (*flightResult, error) { leader.Store(true); return c.fetchResolved(req, next) }
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
-		return call(req.Context())
+		return c.fetchResolved(req, next)
+	}
+	var leader atomic.Bool
+	var handoff streamingHandoff
+	call := func(context.Context) (*flightResult, error) {
+		leader.Store(true)
+		result, err := c.fetchResolved(req, next)
+		if err != nil {
+			return nil, err
+		}
+		if err = handoff.publish(result); err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
 	result, _, err := c.flights.DoCancelable(req.Context(), upstreamKey(req), call)
 	if err != nil {
+		err = errors.Join(err, handoff.abandon())
 		if !liveFollower(req, err, leader.Load()) {
 			return nil, fmt.Errorf("httpcache: flight: %w", err)
 		}
 		return c.fetchResolved(req, next)
 	}
+	handoff.take()
 	if !leader.Load() && (result.streaming || varyMismatch(result.response.Header, result.header, req.Header)) {
 		return c.fetchResolved(req, next)
 	}

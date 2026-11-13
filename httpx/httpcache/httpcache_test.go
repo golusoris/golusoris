@@ -973,22 +973,22 @@ func TestCacheOversizedTrailers(t *testing.T) {
 
 func TestCacheUpstreamErrorOmitsSecrets(t *testing.T) {
 	t.Parallel()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	address := listener.Addr().String()
-	require.NoError(t, listener.Close())
 	c, _ := testCache(t, DefaultOptions())
-	upstream := &http.Transport{}
+	cause := errors.New("synthetic dial failure")
+	upstream := &http.Transport{DialContext: func(context.Context, string, string) (net.Conn, error) {
+		return nil, &net.OpError{Op: "dial", Net: "tcp", Err: cause}
+	}}
 	defer upstream.CloseIdleConnections()
 	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 	defer cancel()
-	req := requestWith(t, ctx, "http://synthetic-user:SECRETPASSWORD@"+address+"/?api_key=SECRETVALUE")
+	req := requestWith(t, ctx, "http://synthetic-user:SECRETPASSWORD@127.0.0.1:1/?api_key=SECRETVALUE")
 	resp, err := c.Wrap(upstream).RoundTrip(req)
 	if resp != nil {
 		require.NoError(t, resp.Body.Close())
 	}
 	require.Nil(t, resp)
 	require.Error(t, err)
+	require.ErrorIs(t, err, cause)
 	require.NotContains(t, err.Error(), "SECRETVALUE")
 	require.NotContains(t, err.Error(), "SECRETPASSWORD")
 	var operation *net.OpError
@@ -1011,5 +1011,180 @@ func requireFlightError(t *testing.T, err error, canceled bool) {
 		require.ErrorIs(t, err, context.Canceled)
 	} else {
 		require.NoError(t, err)
+	}
+}
+
+type countedBody struct {
+	io.Reader
+	closes atomic.Int32
+	err    error
+}
+
+func (b *countedBody) Close() error {
+	b.closes.Add(1)
+	return b.err
+}
+
+func TestCacheCanceledLeaderReleasesStreamingSlot(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		opts := DefaultOptions()
+		opts.MaxInFlight = 2
+		c, _ := testCache(t, opts)
+		gate := make(chan struct{})
+		body := &countedBody{Reader: strings.NewReader("stream")}
+		var calls atomic.Int32
+		transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+			resp := response(200, "stream", "Cache-Control", "no-store")
+			if calls.Add(1) == 1 {
+				<-gate
+				resp.Body = body
+			}
+			return resp, nil
+		}))
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		done := make(chan error, 1)
+		go flightResultTo(t, transport, requestWith(t, ctx, "http://provider.test/data"), done)
+		synctest.Wait()
+		cancel()
+		require.ErrorIs(t, <-done, context.Canceled)
+		close(gate)
+		synctest.Wait()
+		require.EqualValues(t, 1, body.closes.Load())
+		require.Empty(t, c.slots)
+		for range opts.MaxInFlight + 1 {
+			bounded, stop := context.WithTimeout(t.Context(), time.Second)
+			_, data := readResponse(t, transport, requestWith(t, bounded, "http://provider.test/data"))
+			stop()
+			require.Equal(t, "stream", data)
+		}
+		require.Empty(t, c.slots)
+		require.EqualValues(t, opts.MaxInFlight+2, calls.Load())
+	})
+}
+
+func TestCacheLeaderStreamsUntilClose(t *testing.T) {
+	t.Parallel()
+	opts := DefaultOptions()
+	opts.MaxInFlight = 1
+	c, _ := testCache(t, opts)
+	body := &countedBody{Reader: strings.NewReader("stream")}
+	transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+		resp := response(200, "stream", "Cache-Control", "no-store")
+		resp.Body = body
+		return resp, nil
+	}))
+	resp, err := transport.RoundTrip(request(t, "http://provider.test/data"))
+	require.NoError(t, err)
+	data := make([]byte, len("stream"))
+	_, err = io.ReadFull(resp.Body, data)
+	require.NoError(t, err)
+	require.Equal(t, "stream", string(data))
+	require.Zero(t, body.closes.Load())
+	require.Len(t, c.slots, 1)
+	require.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
+	require.EqualValues(t, 1, body.closes.Load())
+	require.Empty(t, c.slots)
+}
+
+func TestCacheHeadGzipKeepsCacheEligibility(t *testing.T) {
+	t.Parallel()
+	c, _ := testCache(t, DefaultOptions())
+	calls := 0
+	transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return response(200, "", "Cache-Control", "max-age=60", "Content-Encoding", "gzip"), nil
+	}))
+	for range 2 {
+		req := request(t, "http://provider.test/data")
+		req.Method = http.MethodHead
+		resp, body := readResponse(t, transport, req)
+		require.Empty(t, body)
+		require.False(t, hasDirective(resp.Header, "no-store"))
+	}
+	// The pinned engine bypasses HEAD before cache lookup.
+	require.Equal(t, 2, calls)
+}
+
+func TestCacheGzip304DoesNotRefetch(t *testing.T) {
+	t.Parallel()
+	c, _ := testCache(t, DefaultOptions())
+	calls := 0
+	compressed := gzipBody(t, "metadata")
+	transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+		calls++
+		if calls == 1 {
+			return response(200, string(compressed), "Cache-Control", "max-age=60", "Age", "61", "ETag", `"v1"`, "Content-Encoding", "gzip"), nil
+		}
+		if got := req.Header.Get("If-None-Match"); got != `"v1"` {
+			t.Errorf("validator = %q, want v1; unexpected unconditional refetch", got)
+		}
+		return response(304, "", "Cache-Control", "max-age=60", "Content-Encoding", "gzip"), nil
+	}))
+	readResponse(t, transport, request(t, "http://provider.test/data"))
+	resp, body := readResponse(t, transport, request(t, "http://provider.test/data"))
+	require.Equal(t, string(compressed), body)
+	require.Equal(t, "REVALIDATED", resp.Header.Get("X-Httpcache-Status"))
+	require.Equal(t, 2, calls)
+}
+
+func TestStreamingHandoffAbandonOrders(t *testing.T) {
+	t.Parallel()
+	for _, publishFirst := range []bool{true, false} {
+		t.Run(strconv.FormatBool(publishFirst), func(t *testing.T) {
+			t.Parallel()
+			body := &countedBody{Reader: strings.NewReader("stream")}
+			result := &flightResult{streaming: true, response: &http.Response{Body: body}}
+			var handoff streamingHandoff
+			if publishFirst {
+				require.NoError(t, handoff.publish(result))
+				require.Zero(t, body.closes.Load())
+				require.NoError(t, handoff.abandon())
+			} else {
+				require.NoError(t, handoff.abandon())
+				require.ErrorIs(t, handoff.publish(result), context.Canceled)
+			}
+			require.NoError(t, handoff.abandon())
+			require.EqualValues(t, 1, body.closes.Load())
+		})
+	}
+}
+
+func TestStreamingHandoffTakenBodyStaysOpen(t *testing.T) {
+	t.Parallel()
+	body := &countedBody{Reader: strings.NewReader("stream")}
+	result := &flightResult{streaming: true, response: &http.Response{Body: body}}
+	var handoff streamingHandoff
+	require.NoError(t, handoff.publish(result))
+	handoff.take()
+	require.NoError(t, handoff.abandon())
+	require.Zero(t, body.closes.Load())
+	require.NoError(t, body.Close())
+	require.EqualValues(t, 1, body.closes.Load())
+}
+
+func TestStreamingHandoffCloseErrors(t *testing.T) {
+	t.Parallel()
+	for _, publishFirst := range []bool{true, false} {
+		t.Run(strconv.FormatBool(publishFirst), func(t *testing.T) {
+			t.Parallel()
+			cause := errors.New("synthetic close failure")
+			body := &countedBody{Reader: strings.NewReader("stream"), err: cause}
+			result := &flightResult{streaming: true, response: &http.Response{Body: body}}
+			var handoff streamingHandoff
+			if publishFirst {
+				require.NoError(t, handoff.publish(result))
+				require.ErrorIs(t, handoff.abandon(), cause)
+			} else {
+				require.NoError(t, handoff.abandon())
+				err := handoff.publish(result)
+				require.ErrorIs(t, err, cause)
+				require.ErrorIs(t, err, context.Canceled)
+			}
+			require.NoError(t, handoff.abandon())
+			require.EqualValues(t, 1, body.closes.Load())
+		})
 	}
 }

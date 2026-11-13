@@ -30,7 +30,6 @@ const sharedFlightKey = "flight"
 
 type keyedFlight struct {
 	group singleflight.Group
-	users int
 }
 
 // Group de-duplicates concurrent calls with the same key K.
@@ -51,16 +50,7 @@ func New[K comparable, V any]() *Group[K, V] {
 // per-call context cancellation should check ctx.Done() after Do
 // returns.
 func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context) (V, error)) (V, bool, error) {
-	flight := g.acquire(key)
-	defer g.release(key, flight)
-	v, err, shared := flight.group.Do(sharedFlightKey, func() (any, error) {
-		return fn(ctx)
-	})
-	if err != nil {
-		var zero V
-		return zero, shared, err //nolint:wrapcheck // propagate as-is
-	}
-	return v.(V), shared, nil //nolint:forcetypeassert // fn guarantees V
+	return flightValue[V](<-g.start(ctx, key, fn))
 }
 
 // DoCancelable shares a flight while allowing each caller to stop waiting when its context ends.
@@ -69,9 +59,7 @@ func (g *Group[K, V]) DoCancelable(ctx context.Context, key K, fn func(context.C
 	if err := ctx.Err(); err != nil {
 		return zero, false, fmt.Errorf("singleflight: wait: %w", err)
 	}
-	flight := g.acquire(key)
-	defer g.release(key, flight)
-	done := flight.group.DoChan(sharedFlightKey, func() (any, error) { return fn(ctx) })
+	done := g.start(ctx, key, fn)
 	select {
 	case <-ctx.Done():
 		return zero, false, fmt.Errorf("singleflight: wait: %w", ctx.Err())
@@ -79,10 +67,7 @@ func (g *Group[K, V]) DoCancelable(ctx context.Context, key K, fn func(context.C
 		if err := ctx.Err(); err != nil {
 			return zero, false, fmt.Errorf("singleflight: wait: %w", err)
 		}
-		if result.Err != nil {
-			return zero, result.Shared, result.Err
-		}
-		return result.Val.(V), result.Shared, nil //nolint:forcetypeassert // WHY: fn guarantees V.
+		return flightValue[V](result)
 	}
 }
 
@@ -92,11 +77,12 @@ func (g *Group[K, V]) Forget(key K) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if flight := g.flights[key]; flight != nil {
+		delete(g.flights, key)
 		flight.group.Forget(sharedFlightKey)
 	}
 }
 
-func (g *Group[K, V]) acquire(key K) *keyedFlight {
+func (g *Group[K, V]) start(ctx context.Context, key K, fn func(context.Context) (V, error)) <-chan singleflight.Result {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.flights == nil {
@@ -107,15 +93,24 @@ func (g *Group[K, V]) acquire(key K) *keyedFlight {
 		flight = &keyedFlight{}
 		g.flights[key] = flight
 	}
-	flight.users++
-	return flight
+	return flight.group.DoChan(sharedFlightKey, func() (any, error) {
+		defer g.finish(key, flight)
+		return fn(ctx)
+	})
 }
 
-func (g *Group[K, V]) release(key K, flight *keyedFlight) {
+func (g *Group[K, V]) finish(key K, flight *keyedFlight) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	flight.users--
-	if flight.users == 0 && g.flights[key] == flight {
+	if g.flights[key] == flight {
 		delete(g.flights, key)
 	}
+}
+
+func flightValue[V any](result singleflight.Result) (V, bool, error) {
+	if result.Err != nil {
+		var zero V
+		return zero, result.Shared, fmt.Errorf("singleflight: call: %w", result.Err)
+	}
+	return result.Val.(V), result.Shared, nil //nolint:forcetypeassert // WHY: fn guarantees V.
 }

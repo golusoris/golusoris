@@ -237,6 +237,10 @@ func TestPolicyRedirectCredentials(t *testing.T) {
 			{"https://u:p@x/", false},
 			{"https://x/next?page=2", true},
 			{"https://x/?x=1;accessToken=S", false},
+			{"https://x/#access_token=S", false},
+			{"https://x/#a=1&accessToken=S", false},
+			{"https://x/#%61ccess%5Ftoken=S", false},
+			{"https://x/page#section-2", true},
 		} {
 			c, _ := testCache(t, DefaultOptions())
 			calls := 0
@@ -295,5 +299,32 @@ func TestPolicyDurationRounding(t *testing.T) {
 			addStale(stale, directive, tc.duration)
 			require.Equal(t, directive+"="+tc.seconds, stale.Get("Cache-Control"))
 		}
+	}
+}
+
+func TestPolicyBodylessGzip(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		method    string
+		status    int
+		oversized bool
+		noStore   bool
+	}{
+		{http.MethodHead, 200, false, false},
+		{http.MethodGet, 304, false, false},
+		{http.MethodGet, 204, false, false},
+		{http.MethodGet, 100, false, false},
+		{http.MethodGet, 199, false, false},
+		{http.MethodGet, 200, false, true},
+		{http.MethodHead, 200, true, true},
+		{http.MethodGet, 304, true, true},
+	} {
+		c, _ := testCache(t, DefaultOptions())
+		resp := response(tc.status, "", "Content-Encoding", "gzip")
+		resp.Request = request(t, "http://provider.test/data")
+		resp.Request.Method = tc.method
+		c.applyBody(resp, nil, tc.oversized)
+		require.Equal(t, tc.noStore, hasDirective(resp.Header, "no-store"), "%s %d oversized=%t", tc.method, tc.status, tc.oversized)
+		require.NoError(t, resp.Body.Close())
 	}
 }
