@@ -5,6 +5,8 @@
 package httpcache
 
 import (
+	"bytes"
+	"compress/gzip"
 	"io"
 	"log/slog"
 	"net/http"
@@ -75,7 +77,7 @@ func TestOptionsExtensions(t *testing.T) {
 	opts.AuthPathSegments = []string{"extra_path"}
 	opts.Hosts = []HostOptions{{Host: "provider.test", AuthPathSegments: []string{"host_path"}}}
 	c, _ := testCache(t, opts)
-	for _, key := range []string{"api_key", "extra_param"} {
+	for _, key := range []string{"apikey", "extraparam"} {
 		require.Contains(t, c.secrets, key)
 	}
 	for _, key := range []string{"authorization", "extra-header"} {
@@ -95,7 +97,7 @@ func TestOptionsExtensions(t *testing.T) {
 func TestPolicyCredentialBoundaries(t *testing.T) {
 	t.Parallel()
 	pattern := credentialPattern(nil)
-	for _, body := range []string{`{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`} {
+	for _, body := range []string{`{"accessToken":1}`, `{"refresh-token":1}`, `?X-Plex-Token=x`, `{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`} {
 		require.True(t, pattern.MatchString(body), body)
 	}
 	for _, body := range []string{`{"access_tokens": 1}`, `<tokensuffix>`, `pinned=true`, `a_token=x`, `tokenizer=ok`, `"token"`} {
@@ -161,4 +163,137 @@ func TestPolicyQuotedDirectives(t *testing.T) {
 	require.Equal(t, `private="x, y", max-age=60`, header.Get("Cache-Control"))
 	require.False(t, hasDirective(http.Header{"Cache-Control": {`private="a, no-store"`}}, "no-store"))
 	require.True(t, hasDirective(http.Header{"Cache-Control": {`private="a, x", NO-STORE`}}, "no-store"))
+}
+
+func gzipBody(t *testing.T, body string) []byte {
+	t.Helper()
+	var out bytes.Buffer
+	writer := gzip.NewWriter(&out)
+	_, err := writer.Write([]byte(body))
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return out.Bytes()
+}
+
+func TestPolicyEncodedBodies(t *testing.T) {
+	t.Parallel()
+	opts := DefaultOptions()
+	opts.MaxBodyBytes = 256
+	c, _ := testCache(t, opts)
+	for _, tc := range []struct {
+		name, encoding string
+		contentType    string
+		body           []byte
+		stored         bool
+	}{
+		{"gzip secret", "gzip", "", gzipBody(t, `{"access_token":"`+string(bytes.Repeat([]byte("x"), 200))+`"}`), false},
+		{"gzip metadata", " GZip ", "", gzipBody(t, `{"name":"metadata"}`), true},
+		{"x-gzip", "x-gzip", "", gzipBody(t, "metadata"), true},
+		{"brotli", "br", "", []byte("opaque"), false},
+		{"multiple", "gzip, br", "", gzipBody(t, "metadata"), false},
+		{"expansion", "gzip", "", gzipBody(t, string(bytes.Repeat([]byte("x"), 257))), false},
+		{"invalid", "gzip", "", []byte("invalid gzip"), false},
+		{"identity", "identity", "", []byte("metadata"), true},
+		{"escaped key", "", "application/json", []byte(`{"\u0061ccess_token":"x"}`), false},
+		{"escaped value", "", "application/problem+json; charset=utf-8", []byte(`{"a":"\u0041"}`), true},
+		{"form key", "", "application/x-www-form-urlencoded", []byte("access%5Ftoken=x"), false},
+		{"form benign", "", "application/x-www-form-urlencoded", []byte("page=2"), true},
+		{"form invalid", "", "application/x-www-form-urlencoded", []byte("page=%xx"), false},
+		{"json invalid", "", "application/json", []byte(`{"a":"\u0041"`), false},
+		{"nested key", "", "application/json", []byte(`{"a":[{"\u0061ccess_token":"x"}]}`), false},
+		{"array values", "", "application/json", []byte(`["\u0061ccess_token", {"a":"b"}]`), true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resp := response(200, "", "Cache-Control", "max-age=60", "Content-Encoding", tc.encoding, "Content-Type", tc.contentType)
+			c.applyPolicy(resp, tc.body, HostOptions{}, false)
+			require.Equal(t, !tc.stored, hasDirective(resp.Header, "no-store"))
+			require.NoError(t, resp.Body.Close())
+		})
+	}
+}
+
+func TestCacheCredentialNameVariants(t *testing.T) {
+	t.Parallel()
+	c, _ := testCache(t, DefaultOptions())
+	for _, name := range []string{"accessToken", "access-token", "access_token", "X-Plex-Token", "refresh_token", "id_token"} {
+		req := request(t, "http://provider.test/data?"+name+"=synthetic")
+		c.stripSecrets(req, &requestState{})
+		require.Empty(t, req.URL.RawQuery, name)
+	}
+	header := http.Header{"Vary": {"X-Plex-Token, Accept"}}
+	c.cleanVary(header)
+	require.Equal(t, "Accept", header.Get("Vary"))
+}
+
+func TestPolicyRedirectCredentials(t *testing.T) {
+	t.Parallel()
+	for _, header := range []string{"Location", "Content-Location"} {
+		for _, tc := range []struct {
+			target string
+			stored bool
+		}{
+			{"https://x/?api_key=S", false},
+			{"https://u:p@x/", false},
+			{"https://x/next?page=2", true},
+			{"https://x/?x=1;accessToken=S", false},
+		} {
+			c, _ := testCache(t, DefaultOptions())
+			calls := 0
+			transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return response(302, "redirect", "Cache-Control", "max-age=60", header, tc.target), nil
+			}))
+			for range 2 {
+				readResponse(t, transport, request(t, "http://provider.test/data"))
+			}
+			expected := 2
+			if tc.stored {
+				expected = 1
+			}
+			require.Equal(t, expected, calls, header+" "+tc.target)
+		}
+	}
+}
+
+func TestCacheHostNames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		valid bool
+	}{
+		{"api.example.com", true},
+		{"API.Example.com", true},
+		{"::1", true},
+		{"10.0.0.1", true},
+		{"api.example.com:443", false},
+		{"[::1]", false},
+		{"http://x", false},
+		{"a/b", false},
+		{" a", false},
+		{"", false},
+	} {
+		opts := DefaultOptions()
+		opts.Hosts = []HostOptions{{Host: tc.name}}
+		require.Equal(t, tc.valid, validateOptions(opts) == nil, tc.name)
+	}
+}
+
+func TestPolicyDurationRounding(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		duration time.Duration
+		seconds  string
+	}{
+		{time.Nanosecond, "1"}, {time.Second, "1"}, {1500 * time.Millisecond, "2"}, {time.Duration(1<<63 - 1), "9223372037"},
+	} {
+		header := make(http.Header)
+		overrideTTL(header, tc.duration)
+		require.Equal(t, "max-age="+tc.seconds, header.Get("Cache-Control"))
+		for _, directive := range []string{"stale-if-error", "stale-while-revalidate"} {
+			stale := make(http.Header)
+			addStale(stale, directive, tc.duration)
+			require.Equal(t, directive+"="+tc.seconds, stale.Get("Cache-Control"))
+		}
+	}
 }

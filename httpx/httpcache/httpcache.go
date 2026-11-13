@@ -8,7 +8,9 @@
 // Use distinct prefixes for different principals sharing storage.
 // Each instance serves one principal; secret query parameters are removed from
 // storage keys, and X-Httpcache-Status reports HIT, MISS, STALE or REVALIDATED.
+// Credentialed responses require an RFC 9111 section 3.5 sharing directive or a shared host.
 // Dragonfly and Redis can provide L2; store.l2=none uses only memory.
+// With l2=none, retention controls L1 TTL; zero preserves the memory cache TTL.
 //
 // Config keys under http.outbound.cache:
 //
@@ -18,9 +20,9 @@
 //	store.l1_ttl, store.retention, store.l2
 //
 // Host entries have host, ttl, stale_if_error, stale_while_revalidate,
-// auth_path_segments and disabled. Zero host durations inherit defaults.
+// auth_path_segments, shared and disabled. Zero host durations inherit defaults.
 // Secret and path lists extend built-in protections. Construct options with
-// DefaultOptions, then override fields; retention=0 retains entries indefinitely.
+// DefaultOptions, then override fields; retention=0 retains L2 entries indefinitely.
 package httpcache
 
 import (
@@ -71,6 +73,7 @@ type HostOptions struct {
 	StaleIfError         time.Duration `koanf:"stale_if_error"`
 	StaleWhileRevalidate time.Duration `koanf:"stale_while_revalidate"`
 	AuthPathSegments     []string      `koanf:"auth_path_segments"`
+	Shared               bool          `koanf:"shared"` // Responses do not depend on caller credentials.
 	Disabled             bool          `koanf:"disabled"`
 }
 
@@ -104,7 +107,9 @@ type Cache struct {
 	secretHeaders map[string]struct{}
 	authPaths     map[string]struct{}
 	credentials   *regexp.Regexp
+	fields        map[string]struct{}
 	slots         chan struct{}
+	bgSlots       chan struct{}
 	flights       *singleflight.Group[flightKey, *flightResult]
 	mu            sync.Mutex
 	closed        bool
@@ -130,10 +135,12 @@ func New(opts Options, store *twotier.TwoTier, logger *slog.Logger) (*Cache, err
 	c := &Cache{
 		opts: opts, id: rand.Text(), logger: logger,
 		hosts:         make(map[string]HostOptions, len(opts.Hosts)),
-		secrets:       extendedSet(defaultSecretParams, opts.SecretParams),
+		secrets:       canonicalSet(defaultSecretParams, opts.SecretParams),
 		secretHeaders: extendedSet(defaultSecretHeaders, opts.SecretHeaders),
 		authPaths:     extendedSet(defaultAuthPaths, opts.AuthPathSegments),
+		fields:        canonicalSet(defaultCredentialFields, opts.CredentialFields),
 		credentials:   credentialPattern(opts.CredentialFields), slots: make(chan struct{}, opts.MaxInFlight),
+		bgSlots: make(chan struct{}, opts.MaxInFlight),
 		flights: singleflight.New[flightKey, *flightResult](),
 	}
 	for _, host := range opts.Hosts {
@@ -171,8 +178,8 @@ func validateHosts(opts Options) error {
 	}
 	for _, host := range opts.Hosts {
 		name := strings.ToLower(host.Host)
-		if name == "" || strings.TrimSpace(name) != name {
-			return errors.New("httpcache: empty or invalid host")
+		if err := validate.New().Var(name, "hostname_rfc1123|ip"); err != nil {
+			return fmt.Errorf("httpcache: invalid host: %w", err)
 		}
 		if _, exists := seen[name]; exists {
 			return fmt.Errorf("httpcache: duplicate host %q", name)
@@ -247,9 +254,12 @@ func (c *Cache) Wrap(next http.RoundTripper) http.RoundTripper {
 type (
 	requestStateKey struct{}
 	requestState    struct {
-		secrets     url.Values
-		failure     atomic.Pointer[upstreamFailure]
-		conditional bool
+		rawQuery     string
+		failure      atomic.Pointer[upstreamFailure]
+		conditional  bool
+		credentialed bool
+		done         <-chan struct{} // engine background revalidation derives a new Done channel
+		user         *url.Userinfo
 	}
 )
 
@@ -286,9 +296,10 @@ func (c *Cache) roundTrip(req *http.Request, cached, next http.RoundTripper) (*h
 		}
 		return resp, nil
 	}
-	state := &requestState{secrets: make(url.Values), conditional: hasValidators(req.Header)}
+	state := &requestState{conditional: hasValidators(req.Header)}
 	ctx, unlink, release := detach(req.Context())
 	stripped := req.Clone(context.WithValue(ctx, requestStateKey{}, state))
+	state.done = stripped.Context().Done()
 	c.stripSecrets(stripped, state)
 	resp, err := cached.RoundTrip(stripped)
 	failure := state.failure.Swap(completedFailure)
@@ -345,14 +356,27 @@ func closeFailure(failure *upstreamFailure, keep *http.Response) error {
 }
 
 func (c *Cache) stripSecrets(stripped *http.Request, state *requestState) {
-	query := stripped.URL.Query()
-	for key, values := range query {
-		if _, secret := c.secrets[strings.ToLower(key)]; secret {
-			state.secrets[key] = values
-			delete(query, key)
+	state.user = stripped.URL.User
+	stripped.URL.User = nil
+	state.credentialed = state.user != nil
+	for name := range stripped.Header {
+		if _, secret := c.secretHeaders[strings.ToLower(name)]; secret {
+			state.credentialed = true
 		}
 	}
-	stripped.URL.RawQuery = query.Encode()
+	state.rawQuery = stripped.URL.RawQuery
+	if !c.secretQuery(state.rawQuery) {
+		return
+	}
+	state.credentialed = true
+	segments := strings.Split(state.rawQuery, "&")
+	kept := segments[:0]
+	for _, segment := range segments {
+		if !c.secretSegment(segment) {
+			kept = append(kept, segment)
+		}
+	}
+	stripped.URL.RawQuery = strings.Join(kept, "&")
 }
 
 func resolveResponse(resp *http.Response, failure *upstreamFailure) (*http.Response, error) {
@@ -413,10 +437,14 @@ func (c *Cache) bypass(req *http.Request) bool {
 type flightKey struct {
 	method, url string
 	headers     [6]string
+	conditional bool
 }
 
 func upstreamKey(req *http.Request) flightKey {
 	key := flightKey{method: req.Method, url: req.URL.String()}
+	if state, ok := stateOf(req); ok {
+		key.conditional = state.conditional
+	}
 	for i, name := range [...]string{"Accept", "Accept-Language", "Accept-Encoding", "If-None-Match", "If-Modified-Since", "Range"} {
 		key.headers[i] = strings.Join(req.Header.Values(name), "\x00")
 	}
@@ -425,34 +453,61 @@ func upstreamKey(req *http.Request) flightKey {
 
 type flightResult struct {
 	response  *http.Response
+	header    http.Header
 	body      []byte
 	streaming bool
 }
 
 func (c *Cache) upstream(req *http.Request, next http.RoundTripper) (*http.Response, error) {
-	leader := false
-	call := func(context.Context) (*flightResult, error) { leader = true; return c.fetch(req, next) }
-	var result *flightResult
-	var err error
-	if req.Method == http.MethodGet || req.Method == http.MethodHead {
-		result, _, err = c.flights.Do(req.Context(), upstreamKey(req), call)
-	} else {
-		result, err = call(req.Context())
+	if state, ok := stateOf(req); ok && req.Context().Done() != state.done {
+		select {
+		case c.bgSlots <- struct{}{}:
+			defer func() { <-c.bgSlots }()
+		default:
+			return nil, errors.New("httpcache: revalidation budget exhausted")
+		}
 	}
-	if err != nil {
-		return c.failure(req, err)
-	}
-	if result.streaming && !leader {
-		result, err = c.fetch(req, next)
-	}
-	if err == nil && unmergeable304(req, result.response) {
-		result, err = c.fetchFull(req, next, result)
-	}
+	result, err := c.flight(req, next)
 	if err != nil {
 		return c.failure(req, err)
 	}
 	resp := copyResponse(result, req)
 	return c.upstreamResponse(req, resp, result.streaming)
+}
+
+func (c *Cache) flight(req *http.Request, next http.RoundTripper) (*flightResult, error) {
+	var leader atomic.Bool
+	call := func(context.Context) (*flightResult, error) { leader.Store(true); return c.fetchResolved(req, next) }
+	if req.Method != http.MethodGet && req.Method != http.MethodHead {
+		return call(req.Context())
+	}
+	result, _, err := c.flights.DoCancelable(req.Context(), upstreamKey(req), call)
+	if err != nil {
+		if !liveFollower(req, err, leader.Load()) {
+			return nil, fmt.Errorf("httpcache: flight: %w", err)
+		}
+		return c.fetchResolved(req, next)
+	}
+	if !leader.Load() && (result.streaming || varyMismatch(result.response.Header, result.header, req.Header)) {
+		return c.fetchResolved(req, next)
+	}
+	return result, nil
+}
+
+func liveFollower(req *http.Request, err error, leader bool) bool {
+	return !leader && req.Context().Err() == nil && canceledFlight(err)
+}
+
+func canceledFlight(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+func (c *Cache) fetchResolved(req *http.Request, next http.RoundTripper) (*flightResult, error) {
+	result, err := c.fetch(req, next)
+	if err == nil && unmergeable304(req, result.response) {
+		return c.fetchFull(req, next, result)
+	}
+	return result, err
 }
 
 // unmergeable304 reports a no-store 304 answering validators the caller never sent.
@@ -542,31 +597,33 @@ func (c *Cache) fetch(req *http.Request, next http.RoundTripper) (*flightResult,
 	if err != nil {
 		return nil, fmt.Errorf("httpcache: upstream: %w", err)
 	}
+	resp.Request = req
+	c.applyHeaders(resp, c.host(req))
+	if hasDirective(resp.Header, "no-store") {
+		release = false
+		return c.streamingResult(resp, nil), nil
+	}
 	prefix, err := io.ReadAll(io.LimitReader(resp.Body, c.opts.MaxBodyBytes+1))
 	if err != nil {
 		return nil, errors.Join(fmt.Errorf("httpcache: read body: %w", err), resp.Body.Close())
 	}
 	oversized := int64(len(prefix)) > c.opts.MaxBodyBytes
-	c.applyPolicy(resp, prefix, c.host(req), oversized)
+	c.applyBody(resp, prefix, oversized)
 	if oversized {
 		release = false
-		resp.Body = &streamBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), original: resp.Body, release: func() { <-c.slots }}
-		return &flightResult{response: resp, streaming: true}, nil
+		return c.streamingResult(resp, prefix), nil
 	}
 	if err := resp.Body.Close(); err != nil {
 		return nil, fmt.Errorf("httpcache: close upstream: %w", err)
 	}
-	return &flightResult{response: resp, body: prefix}, nil
+	return &flightResult{response: resp, body: prefix, header: req.Header.Clone()}, nil
 }
 
 func restoreRequest(req *http.Request) *http.Request {
 	restored := req.Clone(req.Context())
 	if state, ok := stateOf(req); ok {
-		query := restored.URL.Query()
-		for name, values := range state.secrets {
-			query[name] = append([]string(nil), values...)
-		}
-		restored.URL.RawQuery = query.Encode()
+		restored.URL.User = state.user
+		restored.URL.RawQuery = state.rawQuery
 	}
 	return restored
 }
@@ -574,9 +631,10 @@ func restoreRequest(req *http.Request) *http.Request {
 func copyResponse(result *flightResult, req *http.Request) *http.Response {
 	resp := *result.response
 	resp.Header = result.response.Header.Clone()
-	resp.Trailer = result.response.Trailer.Clone()
+	resp.Trailer = result.response.Trailer
 	resp.Request = req
 	if !result.streaming {
+		resp.Trailer = result.response.Trailer.Clone()
 		resp.Body = io.NopCloser(bytes.NewReader(result.body))
 	}
 	return &resp
@@ -596,4 +654,69 @@ func (b *streamBody) Close() error {
 		return fmt.Errorf("httpcache: close streaming body: %w", b.err)
 	}
 	return nil
+}
+
+func (c *Cache) secretQuery(raw string) bool {
+	for segment := range strings.SplitSeq(raw, "&") {
+		if c.secretSegment(segment) {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cache) secretSegment(segment string) bool {
+	for part := range strings.SplitSeq(segment, ";") {
+		key, _, _ := strings.Cut(part, "=")
+		decoded, err := url.QueryUnescape(key)
+		if err == nil {
+			key = decoded
+		}
+		if _, secret := c.secrets[canonicalName(key)]; secret {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cache) streamingResult(resp *http.Response, prefix []byte) *flightResult {
+	resp.Body = &streamBody{Reader: io.MultiReader(bytes.NewReader(prefix), resp.Body), original: resp.Body, release: func() { <-c.slots }}
+	return &flightResult{response: resp, streaming: true, header: resp.Request.Header.Clone()}
+}
+
+func (b *streamBody) Read(p []byte) (int, error) {
+	n, err := b.Reader.Read(p)
+	if errors.Is(err, io.EOF) {
+		if closeErr := b.Close(); closeErr != nil {
+			return n, closeErr
+		}
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("httpcache: read streaming body: %w", err)
+	}
+	return n, err //nolint:wrapcheck // WHY: preserve the original EOF sentinel required by io.Reader.
+}
+
+func (b *linkedBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if errors.Is(err, io.EOF) {
+		b.once.Do(b.release)
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return n, fmt.Errorf("httpcache: read linked body: %w", err)
+	}
+	return n, err //nolint:wrapcheck // WHY: preserve the original EOF sentinel required by io.Reader.
+}
+
+func varyMismatch(response, leader, follower http.Header) bool {
+	for _, name := range strings.Split(strings.Join(response.Values("Vary"), ","), ",") {
+		name = strings.TrimSpace(name)
+		if name == "*" {
+			return true
+		}
+		if name != "" && strings.Join(leader.Values(name), "\x00") != strings.Join(follower.Values(name), "\x00") {
+			return true
+		}
+	}
+	return false
 }

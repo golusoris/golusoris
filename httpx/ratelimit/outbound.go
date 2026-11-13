@@ -71,8 +71,8 @@ func NewOutbound(opts TransportOptions, clk clock.Clock) (*Outbound, error) {
 
 func (o *Outbound) addHost(entry HostRate, store limiter.Store) error {
 	host := strings.ToLower(entry.Host)
-	if host == "" || strings.TrimSpace(host) != host {
-		return errors.New("httpx/ratelimit: empty or invalid host")
+	if err := validate.New().Var(host, "hostname_rfc1123|ip"); err != nil {
+		return fmt.Errorf("httpx/ratelimit: invalid host: %w", err)
 	}
 	if _, exists := o.hosts[host]; exists {
 		return fmt.Errorf("httpx/ratelimit: duplicate host %q", host)
@@ -111,7 +111,7 @@ func (o *Outbound) Wrap(next http.RoundTripper) http.RoundTripper {
 
 func (t *outboundTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	if validate.IsNil(t.next) {
-		return nil, errors.New("httpx/ratelimit: next transport required")
+		return nil, closeRequestBody(req, errors.New("httpx/ratelimit: next transport required"))
 	}
 	host := strings.ToLower(req.URL.Hostname())
 	lim, configured := t.owner.hosts[host]
@@ -120,7 +120,7 @@ func (t *outboundTransport) RoundTrip(req *http.Request) (*http.Response, error)
 	}
 	if lim != nil {
 		if err := t.owner.acquire(req, host, lim); err != nil {
-			return nil, err
+			return nil, closeRequestBody(req, err)
 		}
 	}
 	resp, err := t.next.RoundTrip(req)
@@ -139,7 +139,7 @@ func (o *Outbound) acquire(req *http.Request, host string, lim *limiter.Limiter)
 		if !quota.Reached {
 			return nil
 		}
-		wait := max(time.Unix(quota.Reset, 0).Sub(o.clock.Now()), 0)
+		wait := max(time.Unix(quota.Reset+1, 0).Sub(o.clock.Now()), 0)
 		if attempt == 1 || o.maxWait == 0 || wait > o.maxWait {
 			break
 		}
@@ -164,3 +164,12 @@ func loadTransportOptions(cfg *config.Config) (TransportOptions, error) {
 
 // OutboundModule provides an Outbound independently of Module.
 var OutboundModule = fx.Module("golusoris.httpx.ratelimit.outbound", fx.Provide(loadTransportOptions, NewOutbound))
+
+func closeRequestBody(req *http.Request, err error) error {
+	if req.Body != nil {
+		if closeErr := req.Body.Close(); closeErr != nil {
+			return errors.Join(err, fmt.Errorf("httpx/ratelimit: close request: %w", closeErr))
+		}
+	}
+	return err
+}

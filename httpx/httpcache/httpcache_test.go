@@ -5,17 +5,21 @@
 package httpcache
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/bartventer/httpcache"
@@ -32,6 +36,7 @@ func testCache(t *testing.T, opts Options) (*Cache, *twotier.TwoTier) {
 	t.Helper()
 	l1, err := memory.NewForTest(1000, 0)
 	require.NoError(t, err)
+	t.Cleanup(func() { require.True(t, l1.StopAllGoroutines()) })
 	tt, err := twotier.New(l1, twotier.Options{L2: twotier.L2None}, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 	c, err := New(opts, tt, slog.New(slog.DiscardHandler))
@@ -54,7 +59,12 @@ func response(status int, body string, headers ...string) *http.Response {
 
 func request(t *testing.T, target string) *http.Request {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, target, nil)
+	return requestWith(t, t.Context(), target)
+}
+
+func requestWith(t *testing.T, ctx context.Context, target string) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	require.NoError(t, err)
 	return req
 }
@@ -181,7 +191,9 @@ func TestCacheOriginalFailures(t *testing.T) {
 
 func TestCacheSecretsAndVary(t *testing.T) {
 	t.Parallel()
-	c, tt := testCache(t, DefaultOptions())
+	opts := DefaultOptions()
+	opts.Hosts = []HostOptions{{Host: "provider.test", Shared: true}}
+	c, tt := testCache(t, opts)
 	seen := make([]string, 0, 2)
 	transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
 		seen = append(seen, req.URL.Query().Get("api_key"))
@@ -322,49 +334,43 @@ func TestCacheSingleflight(t *testing.T) {
 
 func testConcurrentMisses(t *testing.T, oversized bool) {
 	t.Helper()
-	opts := DefaultOptions()
-	opts.MaxBodyBytes = 64
-	c, _ := testCache(t, opts)
-	const count = 16
-	var calls atomic.Int32
-	started := make(chan struct{}, count)
-	gate := make(chan struct{})
-	payload := "ok"
-	if oversized {
-		payload = strings.Repeat("x", 65)
-	}
-	transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
-		calls.Add(1)
-		started <- struct{}{}
-		<-gate
-		return response(200, payload, "Cache-Control", "max-age=60"), nil
-	}))
-	var workers sync.WaitGroup
-	ready := make(chan struct{}, count)
-	results := make(chan string, count)
-	for range count {
-		workers.Go(func() {
-			ready <- struct{}{}
-			_, body := readResponse(t, transport, request(t, "http://provider.test/data"))
-			results <- body
-		})
-	}
-	for range count {
-		<-ready
-	}
-	<-started
-	// Give all callers a chance to join the blocked upstream flight.
-	time.Sleep(30 * time.Millisecond)
-	close(gate)
-	workers.Wait()
-	for range count {
-		require.Equal(t, payload, <-results)
-	}
-	if oversized {
-		require.GreaterOrEqual(t, calls.Load(), int32(1))
-	} else {
-		require.EqualValues(t, 1, calls.Load())
-	}
+	synctest.Test(t, func(t *testing.T) {
+		opts := DefaultOptions()
+		opts.MaxBodyBytes = 64
+		c, _ := testCache(t, opts)
+		const count = 16
+		var calls atomic.Int32
+		gate := make(chan struct{})
+		payload := "ok"
+		if oversized {
+			payload = strings.Repeat("x", 65)
+		}
+		transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+			calls.Add(1)
+			<-gate
+			return response(200, payload, "Cache-Control", "max-age=60"), nil
+		}))
+		type missResult struct{ body, status string }
+		results := make(chan missResult, count)
+		for range count {
+			go func() {
+				resp, body := readResponse(t, transport, request(t, "http://provider.test/data"))
+				results <- missResult{body: body, status: resp.Header.Get("X-Httpcache-Status")}
+			}()
+		}
+		synctest.Wait()
+		close(gate)
+		for range count {
+			result := <-results
+			require.Equal(t, payload, result.body)
+			require.Equal(t, "MISS", result.status)
+		}
+		expected := int32(1)
+		if oversized {
+			expected = count
+		}
+		require.Equal(t, expected, calls.Load())
+	})
 }
 
 func TestCacheSemaphoreCancellation(t *testing.T) {
@@ -383,7 +389,7 @@ func TestCacheSemaphoreCancellation(t *testing.T) {
 	go func() { readResponse(t, transport, request(t, "http://provider.test/one")); done <- struct{}{} }()
 	<-started
 	ctx, cancel := context.WithCancel(t.Context())
-	req := request(t, "http://provider.test/two").WithContext(ctx)
+	req := requestWith(t, ctx, "http://provider.test/two")
 	cancel()
 	require.ErrorIs(t, httpclient.RoundTripError(t, transport, req), context.Canceled)
 	close(release)
@@ -433,7 +439,7 @@ func TestCacheOversizedHoldsSlotUntilClose(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, c.slots, 1)
 	ctx, cancel := context.WithCancel(t.Context())
-	second := request(t, "http://provider.test/two").WithContext(ctx)
+	second := requestWith(t, ctx, "http://provider.test/two")
 	done := make(chan error, 1)
 	go func() { done <- httpclient.RoundTripError(t, transport, second) }()
 	cancel()
@@ -497,6 +503,7 @@ func TestCacheOversizedFailureReleasesSlot(t *testing.T) {
 func TestCacheSWRRestoresRotatedSecret(t *testing.T) {
 	t.Parallel()
 	opts := DefaultOptions()
+	opts.Hosts = []HostOptions{{Host: "provider.test", Shared: true}}
 	opts.StaleWhileRevalidate = time.Minute
 	c, _ := testCache(t, opts)
 	observed := make(chan string, 2)
@@ -646,5 +653,363 @@ func TestCacheBodySizeBoundary(t *testing.T) {
 			}
 			require.Equal(t, expected, calls)
 		})
+	}
+}
+
+func TestCacheCredentialedResponsesNeedSharing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, control, vary          string
+		credentialed, stored, shared bool
+	}{
+		{"private", "max-age=60", "", true, false, false},
+		{"public", "public, max-age=60", "", true, true, false},
+		{"shared age", "s-maxage=60, max-age=60", "", true, true, false},
+		{"revalidate", "must-revalidate, max-age=60", "", true, true, false},
+		{"secret vary", "public, max-age=60", "Authorization", true, false, false},
+		{"shared host", "max-age=60", "", true, true, true},
+		{"anonymous", "max-age=60", "", false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			opts := DefaultOptions()
+			opts.Hosts = []HostOptions{{Host: "provider.test", Shared: tc.shared}}
+			c, _ := testCache(t, opts)
+			calls := 0
+			transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return response(200, "metadata", "Cache-Control", tc.control, "Vary", tc.vary), nil
+			}))
+			for range 2 {
+				req := request(t, "http://provider.test/data")
+				if tc.credentialed {
+					req.Header.Set("Authorization", "Bearer synthetic")
+				}
+				readResponse(t, transport, req)
+			}
+			expected := 2
+			if tc.stored {
+				expected = 1
+			}
+			require.Equal(t, expected, calls)
+		})
+	}
+}
+
+func TestCacheUserinfoNeverLoggedOrStored(t *testing.T) {
+	t.Parallel()
+	c, _ := testCache(t, DefaultOptions())
+	var logs bytes.Buffer
+	c.logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "synthetic-user", req.URL.User.Username())
+		password, ok := req.URL.User.Password()
+		require.True(t, ok)
+		require.Equal(t, "synthetic-password", password)
+		return response(200, "metadata", "Cache-Control", "public, max-age=60"), nil
+	}))
+	readResponse(t, transport, request(t, "http://synthetic-user:synthetic-password@provider.test/data"))
+	require.NotContains(t, logs.String(), "synthetic-password")
+	require.NotContains(t, logs.String(), "synthetic-user")
+	requireStoredWithout(t, c, "http://provider.test/data", "synthetic-password")
+}
+
+func TestCacheRawQueryPreserved(t *testing.T) {
+	t.Parallel()
+	for _, query := range []string{"b=2&a=%7e&flag&api_key=S", "b=2&a=%7e&flag&api_key=SECRETVALUE", "b=2&x=1;api_key=SECRETVALUE&a=%7e&flag"} {
+		c, _ := testCache(t, DefaultOptions())
+		transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, query, req.URL.RawQuery)
+			return response(200, "metadata", "Cache-Control", "public, max-age=60"), nil
+		}))
+		req := request(t, "http://provider.test/data?"+query)
+		readResponse(t, transport, req)
+		stripped := req.Clone(req.Context())
+		c.stripSecrets(stripped, &requestState{})
+		require.Equal(t, "b=2&a=%7e&flag", stripped.URL.RawQuery)
+		requireStoredWithout(t, c, "http://provider.test/data?b=2&a=~&flag", "SECRETVALUE")
+	}
+}
+
+func TestCacheNonStorableStreamsUnbuffered(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		opts := DefaultOptions()
+		opts.MaxBodyBytes, opts.MaxInFlight = 8, 1
+		c, _ := testCache(t, opts)
+		reader, writer := io.Pipe()
+		gate := make(chan struct{})
+		var calls atomic.Int32
+		transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+			if calls.Add(1) > 1 {
+				return response(200, "second"), nil
+			}
+			go func() {
+				_, err := writer.Write([]byte("first"))
+				if err == nil {
+					<-gate
+					_, err = writer.Write([]byte("remaining body"))
+				}
+				require.NoError(t, writer.CloseWithError(err))
+			}()
+			resp := response(200, "", "Cache-Control", "no-store")
+			resp.Body, resp.ContentLength = reader, -1
+			return resp, nil
+		}))
+		done := make(chan *http.Response, 1)
+		go func() {
+			resp, err := transport.RoundTrip(request(t, "http://provider.test/first")) //nolint:bodyclose // WHY: the receiving select reads and closes the streamed body after the hand-off.
+			require.NoError(t, err)
+			done <- resp
+		}()
+		synctest.Wait()
+		select {
+		case resp := <-done:
+			first := make([]byte, 5)
+			_, err := io.ReadFull(resp.Body, first)
+			require.NoError(t, err)
+			require.Equal(t, "first", string(first))
+			require.Len(t, c.slots, 1)
+			require.NoError(t, resp.Body.Close())
+			require.Empty(t, c.slots)
+			readResponse(t, transport, request(t, "http://provider.test/second"))
+			close(gate)
+		default:
+			t.Error("no-store response buffered before caller could read first chunk")
+			close(gate)
+			resp := <-done
+			require.NoError(t, resp.Body.Close())
+		}
+	})
+}
+
+func TestCacheSingleflightRespectsVary(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := testCache(t, DefaultOptions())
+		gate := make(chan struct{})
+		transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+			<-gate
+			return response(200, req.Header.Get("X-Variant"), "Cache-Control", "max-age=60", "Vary", "X-Variant"), nil
+		}))
+		results := make(chan string, 2)
+		for _, variant := range []string{"a", "b"} {
+			go func() {
+				req := request(t, "http://provider.test/data")
+				req.Header.Set("X-Variant", variant)
+				_, body := readResponse(t, transport, req)
+				results <- variant + ":" + body
+			}()
+		}
+		synctest.Wait()
+		close(gate)
+		require.ElementsMatch(t, []string{"a:a", "b:b"}, []string{<-results, <-results})
+	})
+}
+
+func TestCacheLeaderCancelDoesNotFailFollowers(t *testing.T) {
+	t.Parallel()
+	testFlightCancellation(t, true)
+}
+
+func TestCacheFollowerCancelReturnsPromptly(t *testing.T) {
+	t.Parallel()
+	testFlightCancellation(t, false)
+}
+
+func testFlightCancellation(t *testing.T, cancelLeader bool) {
+	t.Helper()
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := testCache(t, DefaultOptions())
+		gate := make(chan struct{})
+		var calls atomic.Int32
+		transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+			if calls.Add(1) == 1 {
+				select {
+				case <-gate:
+				case <-req.Context().Done():
+					return nil, req.Context().Err()
+				}
+			}
+			return response(200, "metadata", "Cache-Control", "max-age=60"), nil
+		}))
+		leaderCtx, cancelFirst := context.WithCancel(t.Context())
+		defer cancelFirst()
+		followerCtx, cancelSecond := context.WithCancel(t.Context())
+		defer cancelSecond()
+		leader, follower := make(chan error, 1), make(chan error, 1)
+		send := func(ctx context.Context, done chan error) {
+			flightResultTo(t, transport, requestWith(t, ctx, "http://provider.test/data"), done)
+		}
+		go send(leaderCtx, leader)
+		synctest.Wait()
+		go send(followerCtx, follower)
+		synctest.Wait()
+		if cancelLeader {
+			cancelFirst()
+		} else {
+			cancelSecond()
+		}
+		synctest.Wait()
+		select {
+		case err := <-follower:
+			requireFlightError(t, err, !cancelLeader)
+		default:
+			t.Error("follower still blocked after cancellation")
+		}
+		close(gate)
+		requireFlightError(t, <-leader, cancelLeader)
+		expected := int32(1)
+		if cancelLeader {
+			expected = 2
+		}
+		require.Equal(t, expected, calls.Load())
+	})
+}
+
+func TestCacheBackgroundRevalidationBounded(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		opts := DefaultOptions()
+		opts.MaxInFlight = 1
+		opts.StaleWhileRevalidate = time.Minute
+		c, _ := testCache(t, opts)
+		gate := make(chan struct{})
+		var calls atomic.Int32
+		transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+			if calls.Add(1) <= 2 {
+				return response(200, "cached", "Cache-Control", "max-age=60", "Age", "61"), nil
+			}
+			<-gate
+			return response(200, "updated", "Cache-Control", "max-age=60"), nil
+		}))
+		for _, path := range []string{"/one", "/two"} {
+			readResponse(t, transport, request(t, "http://provider.test"+path))
+		}
+		for _, path := range []string{"/one", "/two"} {
+			resp, body := readResponse(t, transport, request(t, "http://provider.test"+path))
+			require.Equal(t, "STALE", resp.Header.Get("X-Httpcache-Status"))
+			require.Equal(t, "cached", body)
+			synctest.Wait()
+		}
+		require.EqualValues(t, 3, calls.Load())
+		close(gate)
+		synctest.Wait()
+		require.EqualValues(t, 3, calls.Load(), "second background request must be rejected, not queued")
+	})
+}
+
+func TestCacheSensitive304SharedRefetch(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		c, _ := testCache(t, DefaultOptions())
+		gate := make(chan struct{})
+		var warm atomic.Bool
+		var unconditional atomic.Int32
+		transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
+			if !warm.Swap(true) {
+				return response(200, "cached", "Cache-Control", "max-age=60", "Age", "61", "ETag", `"v1"`), nil
+			}
+			if req.Header.Get("If-None-Match") != "" {
+				<-gate
+				return response(304, "", "Cache-Control", "no-store"), nil
+			}
+			unconditional.Add(1)
+			return response(200, "fresh", "Cache-Control", "max-age=60"), nil
+		}))
+		readResponse(t, transport, request(t, "http://provider.test/data"))
+		const count = 8
+		results := make(chan string, count)
+		for range count {
+			go func() {
+				_, body := readResponse(t, transport, request(t, "http://provider.test/data"))
+				results <- body
+			}()
+		}
+		synctest.Wait()
+		close(gate)
+		for range count {
+			require.Equal(t, "fresh", <-results)
+		}
+		require.EqualValues(t, 1, unconditional.Load())
+	})
+}
+
+func TestCacheConditionalFlightKeys(t *testing.T) {
+	t.Parallel()
+	req := request(t, "http://provider.test/data")
+	key := func(conditional bool) flightKey {
+		state := &requestState{conditional: conditional}
+		return upstreamKey(req.WithContext(context.WithValue(req.Context(), requestStateKey{}, state)))
+	}
+	require.NotEqual(t, key(true), key(false))
+}
+
+func TestCacheOversizedTrailers(t *testing.T) {
+	t.Parallel()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Trailer", "X-Metadata-Version")
+		w.Header().Set("Cache-Control", "max-age=60")
+		_, err := io.WriteString(w, strings.Repeat("x", 128))
+		require.NoError(t, err)
+		w.Header().Set("X-Metadata-Version", "v2")
+	}))
+	defer server.Close()
+	opts := DefaultOptions()
+	opts.MaxBodyBytes = 8
+	c, _ := testCache(t, opts)
+	upstream := &http.Transport{}
+	defer upstream.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	resp, err := c.Wrap(upstream).RoundTrip(requestWith(t, ctx, server.URL))
+	require.NoError(t, err)
+	data, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Len(t, data, 128)
+	require.Equal(t, "v2", resp.Trailer.Get("X-Metadata-Version"))
+	require.NoError(t, resp.Body.Close())
+}
+
+func TestCacheUpstreamErrorOmitsSecrets(t *testing.T) {
+	t.Parallel()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	address := listener.Addr().String()
+	require.NoError(t, listener.Close())
+	c, _ := testCache(t, DefaultOptions())
+	upstream := &http.Transport{}
+	defer upstream.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	req := requestWith(t, ctx, "http://synthetic-user:SECRETPASSWORD@"+address+"/?api_key=SECRETVALUE")
+	resp, err := c.Wrap(upstream).RoundTrip(req)
+	if resp != nil {
+		require.NoError(t, resp.Body.Close())
+	}
+	require.Nil(t, resp)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "SECRETVALUE")
+	require.NotContains(t, err.Error(), "SECRETPASSWORD")
+	var operation *net.OpError
+	require.ErrorAs(t, err, &operation)
+}
+
+func flightResultTo(t *testing.T, transport http.RoundTripper, req *http.Request, done chan error) {
+	t.Helper()
+	resp, err := transport.RoundTrip(req)
+	if resp != nil {
+		_, err = io.Copy(io.Discard, resp.Body)
+		err = errors.Join(err, resp.Body.Close())
+	}
+	done <- err
+}
+
+func requireFlightError(t *testing.T, err error, canceled bool) {
+	t.Helper()
+	if canceled {
+		require.ErrorIs(t, err, context.Canceled)
+	} else {
+		require.NoError(t, err)
 	}
 }

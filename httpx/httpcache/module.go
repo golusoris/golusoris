@@ -41,10 +41,7 @@ func newModuleCache(p moduleParams) (*Cache, error) {
 	if p.Options.Store.L2 != twotier.L2None {
 		dependencies = append(dependencies, twotier.WithRedis(p.Redis))
 	}
-	store, err := twotier.New(p.L1, twotier.Options{
-		L1TTL: p.Options.Store.L1TTL,
-		L2TTL: p.Options.Store.Retention, L2: p.Options.Store.L2,
-	}, p.Logger, dependencies...)
+	store, err := twotier.New(p.L1, storeOptions(p.Options), p.Logger, dependencies...)
 	if err != nil {
 		return nil, fmt.Errorf("httpcache: build store: %w", err)
 	}
@@ -57,3 +54,11 @@ func registerClose(lc fx.Lifecycle, cache *Cache) {
 
 // Module provides a Cache, requiring config, memory, logger and Redis unless store.l2=none.
 var Module = fx.Module("golusoris.httpx.httpcache", fx.Provide(loadOptions, newModuleCache), fx.Invoke(registerClose))
+
+func storeOptions(opts Options) twotier.Options {
+	ttl := opts.Store.L1TTL
+	if opts.Store.L2 == twotier.L2None {
+		ttl = opts.Store.Retention
+	}
+	return twotier.Options{L1TTL: ttl, L2TTL: opts.Store.Retention, L2: opts.Store.L2}
+}

@@ -20,6 +20,7 @@ package singleflight
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
@@ -60,6 +61,29 @@ func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context
 		return zero, shared, err //nolint:wrapcheck // propagate as-is
 	}
 	return v.(V), shared, nil //nolint:forcetypeassert // fn guarantees V
+}
+
+// DoCancelable shares a flight while allowing each caller to stop waiting when its context ends.
+func (g *Group[K, V]) DoCancelable(ctx context.Context, key K, fn func(context.Context) (V, error)) (V, bool, error) {
+	var zero V
+	if err := ctx.Err(); err != nil {
+		return zero, false, fmt.Errorf("singleflight: wait: %w", err)
+	}
+	flight := g.acquire(key)
+	defer g.release(key, flight)
+	done := flight.group.DoChan(sharedFlightKey, func() (any, error) { return fn(ctx) })
+	select {
+	case <-ctx.Done():
+		return zero, false, fmt.Errorf("singleflight: wait: %w", ctx.Err())
+	case result := <-done:
+		if err := ctx.Err(); err != nil {
+			return zero, false, fmt.Errorf("singleflight: wait: %w", err)
+		}
+		if result.Err != nil {
+			return zero, result.Shared, result.Err
+		}
+		return result.Val.(V), result.Shared, nil //nolint:forcetypeassert // WHY: fn guarantees V.
+	}
 }
 
 // Forget evicts the in-flight or cached result for key, so the next

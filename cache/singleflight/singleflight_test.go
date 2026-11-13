@@ -6,9 +6,11 @@ package singleflight_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/golusoris/golusoris/cache/singleflight"
@@ -133,4 +135,80 @@ func TestDistinctComparableKeysNeverShareFlight(t *testing.T) {
 	if !seenResults[1] || !seenResults[2] {
 		t.Fatalf("results = %v, want distinct values", seenResults)
 	}
+}
+
+func TestDoCancelableFollower(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		gate := make(chan struct{})
+		leader := make(chan callResult, 1)
+		go func() {
+			value, _, err := g.DoCancelable(t.Context(), "key", func(context.Context) (int, error) { <-gate; return 42, nil })
+			leader <- callResult{value: value, err: err}
+		}()
+		synctest.Wait()
+		ctx, cancel := context.WithCancel(t.Context())
+		follower := make(chan callResult, 1)
+		go func() {
+			value, _, err := g.DoCancelable(ctx, "key", func(context.Context) (int, error) { return -1, nil })
+			follower <- callResult{value: value, err: err}
+		}()
+		synctest.Wait()
+		cancel()
+		synctest.Wait()
+		select {
+		case result := <-follower:
+			if !errors.Is(result.err, context.Canceled) || result.value != 0 {
+				t.Errorf("cancelled follower = %+v", result)
+			}
+		default:
+			t.Error("follower did not return on cancellation")
+		}
+		close(gate)
+		if result := <-leader; result.err != nil || result.value != 42 {
+			t.Errorf("leader = %+v", result)
+		}
+	})
+}
+
+func TestDoCancelableAlreadyCanceled(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	g := singleflight.New[string, int]()
+	called := false
+	value, shared, err := g.DoCancelable(ctx, "key", func(context.Context) (int, error) { called = true; return 42, nil })
+	if called || value != 0 || shared || !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancelled = %d, %t, %v, called %t", value, shared, err, called)
+	}
+}
+
+func TestDoCancelableSharesValue(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		gate := make(chan struct{})
+		var calls atomic.Int32
+		done := make(chan callResult, 2)
+		for range 2 {
+			go func() {
+				value, shared, err := g.DoCancelable(t.Context(), "key", func(context.Context) (int, error) { calls.Add(1); <-gate; return 42, nil })
+				if !shared {
+					t.Error("result not shared")
+				}
+				done <- callResult{value: value, err: err}
+			}()
+		}
+		synctest.Wait()
+		close(gate)
+		for range 2 {
+			if result := <-done; result.value != 42 || result.err != nil {
+				t.Errorf("result = %+v", result)
+			}
+		}
+		if calls.Load() != 1 {
+			t.Errorf("calls = %d", calls.Load())
+		}
+	})
 }

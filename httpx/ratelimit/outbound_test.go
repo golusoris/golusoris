@@ -7,11 +7,13 @@ package ratelimit
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/jonboulle/clockwork"
@@ -83,11 +85,11 @@ func TestOutboundLimits(t *testing.T) {
 
 func testOutboundLimit(t *testing.T, maxWait, reset time.Duration, waits, canceled, twice bool) {
 	t.Helper()
-	clk := clock.NewFake()
+	clk := clockwork.NewFakeClockAt(time.Unix(100, 0))
 	var checks atomic.Int32
 	store := &scriptedStore{get: func(context.Context, string, limiter.Rate) (limiter.Context, error) {
 		n := checks.Add(1)
-		return limiter.Context{Reached: n == 1 || twice, Reset: clk.Now().Add(reset).Unix()}, nil
+		return limiter.Context{Reached: n == 1 || twice, Reset: clk.Now().Add(reset).Unix() - 1}, nil
 	}}
 	out, err := NewOutbound(TransportOptions{Rate: "1-S", Store: store, MaxWait: maxWait}, clk)
 	require.NoError(t, err)
@@ -216,4 +218,154 @@ func TestOutboundDefaultAndUnlimitedHost(t *testing.T) {
 		require.NoError(t, resp.Body.Close())
 	}
 	require.EqualValues(t, 1, checks.Load())
+}
+
+func TestOutboundHostNames(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		valid bool
+	}{
+		{"api.example.com", true},
+		{"API.Example.com", true},
+		{"::1", true},
+		{"10.0.0.1", true},
+		{"api.example.com:443", false},
+		{"[::1]", false},
+		{"http://x", false},
+		{"a/b", false},
+		{" a", false},
+		{"", false},
+	} {
+		_, err := NewOutbound(TransportOptions{Hosts: []HostRate{{Host: tc.name}}}, clock.NewFake())
+		require.Equal(t, tc.valid, err == nil, tc.name)
+	}
+}
+
+type trackedBody struct {
+	io.ReadCloser
+	closed   bool
+	closeErr error
+}
+
+func (b *trackedBody) Close() error { b.closed = true; return b.closeErr }
+
+func TestOutboundRequestBodyOwnership(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"limited", "cancel", "nil", "success", "close error"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) { testRequestBodyOwnership(t, mode) })
+		})
+	}
+}
+
+func testRequestBodyOwnership(t *testing.T, mode string) {
+	t.Helper()
+	clk := clock.NewFake()
+	store := &scriptedStore{get: func(context.Context, string, limiter.Rate) (limiter.Context, error) {
+		return limiter.Context{Reached: mode != "success", Reset: clk.Now().Add(time.Second).Unix()}, nil
+	}}
+	opts := TransportOptions{Rate: "1-S", Store: store}
+	if mode == "cancel" {
+		opts.MaxWait = 3 * time.Second
+	}
+	out, err := NewOutbound(opts, clk)
+	require.NoError(t, err)
+	body := &trackedBody{ReadCloser: http.NoBody}
+	closeErr := errors.New("synthetic close failure")
+	if mode == "close error" {
+		body.closeErr = closeErr
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://provider.test/", body)
+	require.NoError(t, err)
+	var next http.RoundTripper = roundTripFunc(func(*http.Request) (*http.Response, error) {
+		require.False(t, body.closed)
+		return &http.Response{Body: http.NoBody}, nil
+	})
+	if mode == "nil" {
+		next = nil
+	}
+	done := make(chan error, 1)
+	go func() {
+		resp, callErr := out.Wrap(next).RoundTrip(req)
+		if resp != nil {
+			callErr = errors.Join(callErr, resp.Body.Close())
+		}
+		done <- callErr
+	}()
+	synctest.Wait()
+	if mode == "cancel" {
+		cancel()
+	}
+	requireBodyOwnership(t, mode, body, <-done, closeErr)
+}
+
+func requireBodyOwnership(t *testing.T, mode string, body *trackedBody, err, closeErr error) {
+	t.Helper()
+	switch mode {
+	case "success":
+		require.NoError(t, err)
+	case "cancel":
+		require.ErrorIs(t, err, context.Canceled)
+	case "nil":
+		require.Error(t, err)
+	default:
+		require.ErrorIs(t, err, ErrLimited)
+	}
+	if mode == "close error" {
+		require.ErrorIs(t, err, closeErr)
+	}
+	require.Equal(t, mode != "success", body.closed)
+}
+
+func TestOutboundQuotaResetPrecision(t *testing.T) {
+	t.Parallel()
+	for _, budget := range []time.Duration{800 * time.Millisecond, 800*time.Millisecond - time.Nanosecond} {
+		t.Run(budget.String(), func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				clk := clockwork.NewFakeClockAt(time.Unix(100, 200000000))
+				expiry := clk.Now().Add(400 * time.Millisecond)
+				var checks atomic.Int32
+				store := &scriptedStore{get: func(context.Context, string, limiter.Rate) (limiter.Context, error) {
+					checks.Add(1)
+					return limiter.Context{Reached: clk.Now().Before(expiry), Reset: expiry.Unix()}, nil
+				}}
+				out, err := NewOutbound(TransportOptions{Rate: "1-S", Store: store, MaxWait: budget}, clk)
+				require.NoError(t, err)
+				req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://provider.test", nil)
+				require.NoError(t, err)
+				next := roundTripFunc(func(*http.Request) (*http.Response, error) { return &http.Response{Body: http.NoBody}, nil })
+				done := make(chan error, 1)
+				go func() {
+					resp, callErr := out.Wrap(next).RoundTrip(req)
+					if resp != nil {
+						callErr = errors.Join(callErr, resp.Body.Close())
+					}
+					done <- callErr
+				}()
+				synctest.Wait()
+				if budget < 800*time.Millisecond {
+					require.ErrorIs(t, <-done, ErrLimited)
+					require.EqualValues(t, 1, checks.Load())
+					return
+				}
+				select {
+				case result := <-done:
+					t.Errorf("returned before expiry: %v", result)
+					return
+				default:
+				}
+				clk.Advance(budget - time.Nanosecond)
+				synctest.Wait()
+				require.EqualValues(t, 1, checks.Load())
+				clk.Advance(time.Nanosecond)
+				require.NoError(t, <-done)
+				require.EqualValues(t, 2, checks.Load())
+			})
+		})
+	}
 }

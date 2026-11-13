@@ -38,7 +38,7 @@ func testSharedL2(t *testing.T, client rueidis.Client) {
 	upstream := transportFunc(func(req *http.Request) (*http.Response, error) {
 		calls.Add(1)
 		require.Equal(t, secret, req.URL.Query().Get("api_key"))
-		return response(200, "metadata", "Cache-Control", "max-age=60"), nil
+		return response(200, "metadata", "Cache-Control", "public, max-age=60"), nil
 	})
 	newReplica := func() *Cache {
 		l1, err := memory.NewForTest(100, 0)
