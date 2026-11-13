@@ -308,9 +308,23 @@ PY
 check_ryuk_reconnection_contract() {
 	local primary_workflow="$1"
 	local reusable_workflow="$2"
-	python3 - "$primary_workflow" "$reusable_workflow" <<'PY'
+	local modules="${3:-$repo_root/scripts/ci/go-modules.sh}"
+	local soak="${4:-$repo_root/.github/workflows/soak.yml}"
+	python3 - "$primary_workflow" "$reusable_workflow" "$modules" "$soak" <<'PY'
 import pathlib
+import re
 import sys
+
+source = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+defaults = re.findall(r'^\s*: "\$\{RYUK_RECONNECTION_TIMEOUT:=([^}]+)\}"$', source, re.MULTILINE)
+if len(defaults) != 1 or "export RYUK_RECONNECTION_TIMEOUT" not in source:
+    raise SystemExit("go-modules.sh must export one Ryuk reconnection timeout default")
+default = defaults[0]
+for name in (sys.argv[1], sys.argv[2], sys.argv[4]):
+    path = pathlib.Path(name)
+    markers = re.findall(r'^\s+RYUK_RECONNECTION_TIMEOUT: ([^\s]+)$', path.read_text(), re.MULTILINE)
+    if not markers or any(value != default for value in markers):
+        raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default}")
 
 contracts = (
     (pathlib.Path(sys.argv[1]), "Run primary-module tests with race detector and coverage"),
@@ -332,8 +346,8 @@ for path, step_name in contracts:
         len(lines),
     )
     step = "\n".join(lines[start:end])
-    if step.count("          RYUK_RECONNECTION_TIMEOUT: 30m") != 1:
-        raise SystemExit(f"{path}: Ryuk reconnection timeout must be 30m")
+    if step.count(f"          RYUK_RECONNECTION_TIMEOUT: {default}") != 1:
+        raise SystemExit(f"{path}: Ryuk reconnection timeout must be {default}")
     if "TESTCONTAINERS_RYUK_RECONNECTION_TIMEOUT" in step:
         raise SystemExit(f"{path}: Ryuk timeout must use the supported bare variable")
     for upstream in (
@@ -374,6 +388,40 @@ jobs:
       - run: echo '${{ unknown }}'
 EOF
 }
+
+test_ryuk_reconnection_contract() {
+	local primary="$repo_root/.github/workflows/ci.yml"
+	local reusable="$repo_root/.github/workflows/ci-go.yml"
+	local modules="$repo_root/scripts/ci/go-modules.sh"
+	check_ryuk_reconnection_contract "$primary" "$reusable"
+	python3 - "$modules" "$reusable" "$suite_root" <<'PY'
+import pathlib
+import re
+import sys
+
+modules, workflow, root = map(pathlib.Path, sys.argv[1:])
+source = modules.read_text()
+pattern = r'^\s*: "\$\{RYUK_RECONNECTION_TIMEOUT:=[^}]+\}"$'
+missing, count = re.subn(pattern, "", source, flags=re.MULTILINE)
+if count != 1:
+    raise SystemExit("Ryuk default mutation requires exactly one marker")
+(root / "missing-default.sh").write_text(missing)
+(root / "drift-default.sh").write_text(re.sub(pattern, ': "${RYUK_RECONNECTION_TIMEOUT:=10m}"', source, flags=re.MULTILINE))
+(root / "drift-workflow.yml").write_text(re.sub(r'RYUK_RECONNECTION_TIMEOUT: \S+', "RYUK_RECONNECTION_TIMEOUT: 1ns", workflow.read_text()))
+PY
+	expect_failure_matching 'must export one Ryuk reconnection timeout default' \
+		check_ryuk_reconnection_contract "$primary" "$reusable" "$suite_root/missing-default.sh"
+	expect_failure_matching 'Ryuk reconnection timeout must be 10m' \
+		check_ryuk_reconnection_contract "$primary" "$reusable" "$suite_root/drift-default.sh"
+	expect_failure_matching 'Ryuk reconnection timeout must be' \
+		check_ryuk_reconnection_contract "$primary" "$suite_root/drift-workflow.yml"
+	printf 'Ryuk reconnection contract: positive, missing default, default drift, workflow drift passed\n'
+}
+
+if [[ "${1:-}" == --ryuk-only ]]; then
+	test_ryuk_reconnection_contract
+	exit 0
+fi
 
 clean_root="$(new_repo clean)"
 write_clean_workflow "$clean_root/.github/workflows/clean.yml"
@@ -655,22 +703,6 @@ PY
 expect_failure_matching 'reusable cache writer build timeout must cover cache upload' \
 	check_reusable_go_cache_writer_contract "$reusable_cache_timeout_negative"
 
-ryuk_timeout_negative="$suite_root/ci-go-ryuk-timeout-drift.yml"
-python3 - "$repo_root/.github/workflows/ci-go.yml" "$ryuk_timeout_negative" <<'PY'
-import pathlib
-import sys
-
-source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
-marker = "          RYUK_RECONNECTION_TIMEOUT: 30m"
-if source.count(marker) != 1:
-    raise SystemExit("Ryuk timeout mutation requires exactly one reusable-workflow marker")
-pathlib.Path(sys.argv[2]).write_text(
-    source.replace(marker, "          RYUK_RECONNECTION_TIMEOUT: 31m", 1),
-    encoding="utf-8",
-)
-PY
-expect_failure_matching 'Ryuk reconnection timeout must be 30m' \
-	check_ryuk_reconnection_contract "$repo_root/.github/workflows/ci.yml" \
-	"$ryuk_timeout_negative"
+test_ryuk_reconnection_contract
 
 printf 'actionlint workflow policy tests passed\n'

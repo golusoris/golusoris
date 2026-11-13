@@ -8,6 +8,7 @@ from __future__ import annotations
 import contextlib
 import os
 import subprocess  # Runs only git with arguments fixed by the calling script. # nosec B404
+import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
@@ -47,6 +48,48 @@ def local_env_names(timeout: int = GIT_TIMEOUT_SECONDS) -> set[str]:
     """Return environment variable names local to a git repository."""
     return set(run_git(["rev-parse", "--local-env-vars"], timeout=timeout).split())
 
+
+def fixture_environ() -> dict[str, str]:
+    """Isolate fixture git commands from hook variables and user configuration."""
+    local_vars = local_env_names()
+    env = {
+        key: value for key, value in os.environ.items()
+        if key not in local_vars and not key.startswith("GIT_")
+    }
+    env.update(GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    return env
+
+
+@contextlib.contextmanager
+def decoy_environ(timeout: int = GIT_TIMEOUT_SECONDS) -> Generator[None, None, None]:
+    """Point hook git variables at a decoy repository; fail if fixture git touched its index."""
+    with tempfile.TemporaryDirectory() as directory:
+        decoy = Path(directory)
+        env = fixture_environ()
+        run_git(["init", "-q"], decoy, timeout, env=env)
+        (decoy / "sentinel").write_text("decoy index must survive", encoding="utf-8")
+        run_git(["add", "sentinel"], decoy, timeout, env=env)
+        index = decoy / ".git" / "index"
+        before = index.read_bytes()
+        shallow = decoy / "invalid-shallow"
+        shallow.write_text("invalid object id\n", encoding="utf-8")
+        hostile = {
+            "GIT_DIR": str(decoy / ".git"),
+            "GIT_INDEX_FILE": str(index),
+            "GIT_SHALLOW_FILE": str(shallow),
+        }
+        saved = {name: os.environ.get(name) for name in hostile}
+        os.environ.update(hostile)
+        try:
+            yield
+        finally:
+            for name, value in saved.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        if index.read_bytes() != before:
+            raise GitError("decoy index changed: a fixture git command followed hook variables")
 
 def worktree_files(root: Path, name: str, timeout: int = GIT_TIMEOUT_SECONDS) -> list[Path]:
     """List tracked and untracked files called name under root that git does not ignore."""
