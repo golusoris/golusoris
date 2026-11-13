@@ -31,6 +31,8 @@ class CiScopeTest(unittest.TestCase):
     """Test suite covering positive, negative, and boundary cases for ci_scope.py."""
 
     def setUp(self) -> None:
+        # WHY: in-process ci_scope calls run git with os.environ; hook-exported GIT_* must not reach them.
+        self.enterContext(mock.patch.dict(os.environ, repo_git.fixture_environ(), clear=True))
         self.test_dir = tempfile.mkdtemp(prefix="golusoris-ci-scope-test-")
         self.repo = Path(self.test_dir)
 
@@ -309,6 +311,23 @@ class CiScopeTest(unittest.TestCase):
             decision, reason = ci_scope.evaluate_gate(self.repo)
         self.assertEqual(decision, "skip")
         self.assertIn("skip-safe", reason)
+
+    def test_negative_inherited_hook_git_dir_cannot_redirect_in_process_gate(self) -> None:
+        """A suite started under hook GIT_* variables still runs the in-process gate on its fixture."""
+        with repo_git.decoy_environ():
+            proc = subprocess.run(  # noqa: S603 - fixed interpreter and this test file.
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "CiScopeTest.test_negative_gate_unaffected_by_malformed_go_mod",
+                ],
+                env=dict(os.environ),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SCOPE_RUN_TIMEOUT_SECONDS,
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def test_negative_malformed_go_mod_selects_all_modules(self) -> None:
         """A broken replace cannot silently remove reverse dependency edges."""
