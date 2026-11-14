@@ -11,7 +11,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
   <!-- README-STANDARD badge block: one group, fixed order -->
   <!-- 1 release/version -->
-  [![Release](https://img.shields.io/static/v1?label=release&message=v0.21.0&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases) <!-- x-release-please-version -->
+  [![Release](https://img.shields.io/static/v1?label=release&message=v0.22.0&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases) <!-- x-release-please-version -->
   <!-- 2 CI/build -->
   [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
   [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
@@ -118,7 +118,7 @@ Prerequisites: [GitHub CLI (`gh`)](https://cli.github.com/) authenticated with
 and `shasum` (ships with Perl; Alpine Linux: `apk add perl-utils`).
 
 ```sh
-v=0.21.0 # x-release-please-version
+v=0.22.0 # x-release-please-version
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 a="golusoris_${v}_${os}_${arch}.tar.gz"
