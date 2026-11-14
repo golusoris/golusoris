@@ -76,10 +76,7 @@ ALLOWED_LINES: dict[tuple[str, str, str], str] = {
     (
         ".gitea/workflows/renovate-on-demand.yml",
         "renovate",
-        (
-            "image: docker.io/renovate/renovate:44@"
-            "sha256:7dba1a3b916a2cf302ba0df458ddcc8fcbac3c92d0fe9882ac13ba0363de656b"
-        ),
+        "image: docker.io/renovate/renovate:<major>@sha256:<digest>",
     ): "Pinned Renovate container image for on-demand Gitea runs.",
     (
         ".gitea/workflows/renovate-on-demand.yml",
@@ -252,6 +249,7 @@ _REMOTE_USES = re.compile(
     r"(?!\.\.?/)[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_./-]+)?@[A-Za-z0-9_./-]+"
 )
 _IMAGE_USES = re.compile(r"docker://\S+")
+_IMAGE_PIN_SUFFIX = re.compile(r":[0-9]{1,4}@sha256:[0-9a-f]{64}\Z")
 
 
 @dataclass
@@ -434,6 +432,11 @@ def _is_allowed_job_if(
     return True
 
 
+def _canonical_allow_line(line: str) -> str:
+    """Keep repository scope exact while allowing pinned image version updates."""
+    return _IMAGE_PIN_SUFFIX.sub(":<major>@sha256:<digest>", line)
+
+
 def _is_allowed_actor_line(
     name: str,
     line: str,
@@ -441,7 +444,7 @@ def _is_allowed_actor_line(
     hits: _AllowanceHits | None = None,
 ) -> bool:
     """Return True only for allow-listed exact lines or pull-request-only job ifs."""
-    line_key = (name, state.current_job, line.strip())
+    line_key = (name, state.current_job, _canonical_allow_line(line.strip()))
     if ALLOWED_LINES.get(line_key, "").strip():
         if hits is not None:
             hits.allowed_lines.add(line_key)
@@ -717,7 +720,7 @@ def _parsed_allowed(
     line = lines[lineno - 1].strip()
     if item["alias"]:
         return False
-    key = (name, job, line)
+    key = (name, job, _canonical_allow_line(line))
     if ALLOWED_LINES.get(key, "").strip():
         if hits is not None:
             hits.allowed_lines.add(key)

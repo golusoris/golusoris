@@ -529,6 +529,30 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 findings[idx],
             )
 
+    def test_renovate_on_demand_image_pin_updates(self) -> None:
+        name = ".gitea/workflows/renovate-on-demand.yml"
+        lines = (REPO_ROOT / name).read_text(encoding="utf-8").splitlines(keepends=True)
+        self.assertTrue(lines[23].startswith("      image: "))
+        repository = "docker.io/renovate/renovate"
+        digest = "b" * 64
+        cases = (
+            ("digest_bump", f"{repository}:44@sha256:{digest}", True),
+            ("major_bump", f"{repository}:45@sha256:{digest}", True),
+            ("missing_digest", f"{repository}:44", False),
+            ("latest_tag", f"{repository}:latest@sha256:{digest}", False),
+            ("other_repo", f"{repository}x:44@sha256:{digest}", False),
+            ("trailing_comment", f"{repository}:44@sha256:{digest} # note", False),
+            ("short_digest", f"{repository}:44@sha256:{'b' * 63}", False),
+            ("long_digest", f"{repository}:44@sha256:{'b' * 65}", False),
+            ("uppercase_digest", f"{repository}:44@sha256:{digest.upper()}", False),
+            ("long_tag", f"{repository}:12345@sha256:{digest}", False),
+        )
+        for case, image, allowed in cases:
+            with self.subTest(case=case):
+                lines[23] = f"      image: {image}\n"
+                findings = check(name, "".join(lines))
+                self.assertEqual(bool(findings), not allowed, findings)
+
     def test_quoted_job_if_keys_fail(self) -> None:
         text = (
             "on:\n  push:\n"
