@@ -84,10 +84,8 @@ def pact_modifier_violations(makefile: str) -> list[str]:
 
 def assert_blocking_arm64_leg(case: TestCase, workflow: str) -> None:
     """Require a blocking workflow and the pinned Windows arm64 job."""
-    case.assertNotRegex(
-        workflow,
-        r"(?m)^[ \t]*continue-on-error[ \t]*:",
-        "portability workflow must remain blocking",
+    case.assertNotIn(
+        "continue-on-error", workflow, "portability workflow must remain blocking"
     )
     case.assertRegex(
         workflow,
@@ -536,6 +534,28 @@ class WindowsARM64ToolchainTests(TestCase):
         marker = "  portability:\n"
         mutant = self.workflow.replace(
             marker, marker + "    continue-on-error: true\n", 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_step_first_key(self) -> None:
+        """Reject continue-on-error as the shared build step's first key."""
+        marker = "      - name: Build, vet, and short-test every Go module\n"
+        mutant = self.workflow.replace(
+            marker,
+            "      - continue-on-error: true\n        name: Build, vet, and short-test every Go module\n",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_quoted_key(self) -> None:
+        """Reject a quoted continue-on-error key on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, '    "continue-on-error": true\n' + marker, 1
         )
         self.assertNotEqual(mutant, self.workflow)
         with self.assertRaises(AssertionError):
