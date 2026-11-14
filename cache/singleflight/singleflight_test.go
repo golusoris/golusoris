@@ -62,7 +62,13 @@ type panicOutcome struct {
 	err       error
 }
 
-func captureFlightPanic(ctx context.Context, call func(context.Context, string, func(context.Context) (int, error)) (int, bool, error), fn func(context.Context) (int, error)) (result panicOutcome) {
+// flightFn keeps callback parameters separate from the panic capture helper.
+type flightFn func(context.Context) (int, error)
+
+// flightCall preserves method-value assignability with an unnamed callback type.
+type flightCall func(context.Context, string, func(context.Context) (int, error)) (int, bool, error)
+
+func captureFlightPanic(ctx context.Context, call flightCall, fn flightFn) (result panicOutcome) {
 	defer func() { result.recovered = recover() }()
 	_, _, result.err = call(ctx, "key", fn)
 	return result
