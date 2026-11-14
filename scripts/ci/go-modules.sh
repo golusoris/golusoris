@@ -327,6 +327,14 @@ run_phase() {
 	local module slug profile coverage
 	local -a primary_profiles=()
 
+	case "$phase" in
+		test | test-short)
+			# testcontainers-go v0.44.0 can reuse a stopped shared Ryuk after a package gap (testcontainers/testcontainers-go#3867); keep it alive until #3868 ships.
+			: "${RYUK_RECONNECTION_TIMEOUT:=30m}"
+			export RYUK_RECONNECTION_TIMEOUT
+			;;
+	esac
+
 	if [[ "$phase" == "test" ]]; then
 		coverage_dir="${GO_COVERAGE_DIR:-$REPO_ROOT/.workingdir/cache/go-module-coverage}"
 		[[ "$coverage_dir" == /* ]] || coverage_dir="$REPO_ROOT/$coverage_dir"

@@ -71,5 +71,7 @@ pre-push:
     merge-comments:
       run: bash scripts/hooks/merge-comments.sh
       use_stdin: true
+    python-tests:
+      run: bash scripts/hooks/python-tests.sh --pushed {push_files}
     shellcheck:
       run: bash scripts/hooks/shellcheck.sh --pushed {push_files}

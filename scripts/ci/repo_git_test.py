@@ -109,7 +109,8 @@ class ScratchEnvironTest(unittest.TestCase):
     """Exercise variable removal, restoration, and fail-closed lookup."""
 
     def setUp(self) -> None:
-        """Give each test a scratch directory and a decoy index path inside it."""
+        """Give each test a scratch directory, a decoy index path, and no inherited hook git variables."""
+        self.enterContext(unittest.mock.patch.dict(os.environ, repo_git.fixture_environ(), clear=True))
         directory = tempfile.TemporaryDirectory(prefix="golusoris-repo-git-env-test-")
         self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)
@@ -152,6 +153,27 @@ class ScratchEnvironTest(unittest.TestCase):
             with self.assertRaises(repo_git.GitError), repo_git.scratch_environ():
                 self.fail("scratch_environ entered without git")
             self.assertEqual(os.environ["GIT_INDEX_FILE"], str(self.decoy))
+
+
+class HookVariableSuiteTest(unittest.TestCase):
+    """Run the fixture suites the way a pre-push hook in a linked worktree starts them."""
+
+    def test_negative_suites_under_hook_git_dir_leave_the_repository_alone(self) -> None:
+        """Negative: an exported linked-worktree GIT_DIR reaches no fixture init, add, or config write."""
+        loader = unittest.defaultTestLoader
+        suite = unittest.TestSuite(loader.loadTestsFromTestCase(case) for case in (RepoGitCase, ScratchEnvironTest))
+        result = unittest.TestResult()
+        with repo_git.decoy_environ():
+            suite.run(result)
+        self.assertEqual(result.errors + result.failures, [])
+        self.assertGreater(result.testsRun, 0)
+
+    def test_boundary_decoy_detects_a_shared_config_write(self) -> None:
+        """Boundary: the decoy itself fails closed when hook-directed git init rewrites core.bare."""
+        outside = tempfile.TemporaryDirectory(prefix="golusoris-repo-git-init-")
+        self.addCleanup(outside.cleanup)
+        with self.assertRaisesRegex(repo_git.GitError, "shared config changed"), repo_git.decoy_environ():
+            repo_git.run_git(["init", "-q"], Path(outside.name))
 
 
 class CallerExitCodeTest(unittest.TestCase):

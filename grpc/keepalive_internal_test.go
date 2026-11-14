@@ -6,13 +6,43 @@ package grpc
 
 import (
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 
 	"github.com/golusoris/golusoris/core/config"
 )
+
+func TestLoadConfig_envReachesKeepaliveGrace(t *testing.T) {
+	const key = "APP_GRPC_KEEPALIVE_MAX_CONNECTION_AGE_GRACE"
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  time.Duration
+	}{
+		{name: "positive", value: "45s", want: 45 * time.Second},
+		{name: "unset", want: Infinite},
+		{name: "negative", value: "-1s", want: -time.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(key, tc.value)
+			if tc.name == "unset" {
+				require.NoError(t, os.Unsetenv(key))
+			}
+			var cfg *config.Config
+			var opts config.Options
+			fxtest.New(t, config.Module, fx.Populate(&cfg, &opts))
+			require.NotContains(t, opts.CompoundKeys, "grpc.keepalive.max_connection_age_grace")
+			got, err := loadConfig(cfg)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got.Keepalive.MaxConnectionAgeGrace)
+		})
+	}
+}
 
 func TestKeepalive_defaults(t *testing.T) {
 	t.Parallel()
