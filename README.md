@@ -209,7 +209,8 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 | `httpx/extclient/` | typed, bounded external-API client over the resilient HTTP transport | custom on httpx/client |
 | `httpx/cors/` | CORS middleware | rs/cors |
 | `httpx/csrf/` | CSRF middleware | gorilla/csrf |
-| `httpx/ratelimit/` | per-IP / per-user rate limiting | ulule/limiter/v3 |
+| `httpx/ratelimit/` | inbound per-IP and outbound per-host rate limiting | ulule/limiter/v3 |
+| `httpx/httpcache/` | outbound HTTP response cache with shared L2 and stale fallback | bartventer/httpcache |
 | `httpx/ws/` | WebSocket fan-out helpers | coder/websocket |
 | `httpx/form/` | HTML form → struct decoder | go-playground/form |
 | `httpx/static/` | static file serving + ETag + cache headers | stdlib |
@@ -468,6 +469,7 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 | --- | --- | --- |
 | `testutil/pg/` | testcontainers PostgreSQL + template cloning | testcontainers-go |
 | `testutil/redis/` | testcontainers Redis | testcontainers-go |
+| `testutil/dragonfly/` | testcontainers Dragonfly with rueidis tracking | testcontainers-go |
 | `testutil/clickhouse/` | testcontainers ClickHouse | testcontainers-go |
 | `testutil/kafka/` | testcontainers Redpanda/Kafka endpoint | testcontainers-go |
 | `testutil/nats/` | testcontainers NATS endpoint | testcontainers-go |

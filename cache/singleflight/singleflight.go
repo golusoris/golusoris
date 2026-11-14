@@ -20,6 +20,8 @@ package singleflight
 
 import (
 	"context"
+	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
@@ -27,9 +29,21 @@ import (
 
 const sharedFlightKey = "flight"
 
+type callbackPanic struct {
+	value any
+	stack []byte
+}
+
+func (p *callbackPanic) Error() string {
+	return fmt.Sprintf("singleflight: callback panic: %v\n%s", p.value, p.stack)
+}
+
 type keyedFlight struct {
-	group singleflight.Group
-	users int
+	group      singleflight.Group
+	users      int
+	running    bool
+	cancelable bool
+	panicking  bool
 }
 
 // Group de-duplicates concurrent calls with the same key K.
@@ -52,14 +66,38 @@ func New[K comparable, V any]() *Group[K, V] {
 func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context) (V, error)) (V, bool, error) {
 	flight := g.acquire(key)
 	defer g.release(key, flight)
-	v, err, shared := flight.group.Do(sharedFlightKey, func() (any, error) {
-		return fn(ctx)
+	value, err, shared := flight.group.Do(sharedFlightKey, func() (any, error) {
+		return g.call(ctx, key, flight, fn)
 	})
 	if err != nil {
 		var zero V
-		return zero, shared, err //nolint:wrapcheck // propagate as-is
+		return zero, shared, err //nolint:wrapcheck // WHY: preserve the callback error's identity.
 	}
-	return v.(V), shared, nil //nolint:forcetypeassert // fn guarantees V
+	v, ok := value.(V)
+	if !ok {
+		var zero V
+		return zero, shared, nil
+	}
+	return v, shared, nil
+}
+
+// DoCancelable shares a flight while allowing each caller to stop waiting when its context ends.
+func (g *Group[K, V]) DoCancelable(ctx context.Context, key K, fn func(context.Context) (V, error)) (V, bool, error) {
+	var zero V
+	if err := ctx.Err(); err != nil {
+		return zero, false, fmt.Errorf("singleflight: wait: %w", err)
+	}
+	flight, done := g.start(ctx, key, fn)
+	defer g.release(key, flight)
+	select {
+	case <-ctx.Done():
+		return zero, false, fmt.Errorf("singleflight: wait: %w", ctx.Err())
+	case result := <-done:
+		if err := ctx.Err(); err != nil {
+			return zero, false, fmt.Errorf("singleflight: wait: %w", err)
+		}
+		return flightValue[V](result)
+	}
 }
 
 // Forget evicts the in-flight or cached result for key, so the next
@@ -68,18 +106,33 @@ func (g *Group[K, V]) Forget(key K) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if flight := g.flights[key]; flight != nil {
+		delete(g.flights, key)
 		flight.group.Forget(sharedFlightKey)
 	}
+}
+
+func (g *Group[K, V]) start(ctx context.Context, key K, fn func(context.Context) (V, error)) (*keyedFlight, <-chan singleflight.Result) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	flight := g.acquireLocked(key)
+	flight.cancelable = true
+	return flight, flight.group.DoChan(sharedFlightKey, func() (any, error) {
+		return g.call(ctx, key, flight, fn)
+	})
 }
 
 func (g *Group[K, V]) acquire(key K) *keyedFlight {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	return g.acquireLocked(key)
+}
+
+func (g *Group[K, V]) acquireLocked(key K) *keyedFlight {
 	if g.flights == nil {
 		g.flights = make(map[K]*keyedFlight)
 	}
 	flight := g.flights[key]
-	if flight == nil {
+	if flight == nil || flight.panicking {
 		flight = &keyedFlight{}
 		g.flights[key] = flight
 	}
@@ -87,11 +140,62 @@ func (g *Group[K, V]) acquire(key K) *keyedFlight {
 	return flight
 }
 
+func (g *Group[K, V]) call(ctx context.Context, key K, flight *keyedFlight, fn func(context.Context) (V, error)) (value any, err error) {
+	g.mu.Lock()
+	if g.flights[key] != flight && flight.users == 0 {
+		g.mu.Unlock()
+		return nil, fmt.Errorf("singleflight: call: %w", context.Canceled)
+	}
+	flight.running = true
+	g.mu.Unlock()
+	defer g.finish(key, flight)
+	returned := false
+	defer func() {
+		if returned {
+			return
+		}
+		g.mu.Lock()
+		cancelable := flight.cancelable
+		flight.panicking = !cancelable
+		g.mu.Unlock()
+		if cancelable {
+			if recovered := recover(); recovered != nil {
+				value, err = nil, &callbackPanic{value: recovered, stack: debug.Stack()}
+			}
+		}
+	}()
+	value, err = fn(ctx)
+	returned = true
+	return value, err
+}
+
+func (g *Group[K, V]) finish(key K, flight *keyedFlight) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	flight.running = false
+	if flight.users == 0 && g.flights[key] == flight {
+		delete(g.flights, key)
+	}
+}
+
 func (g *Group[K, V]) release(key K, flight *keyedFlight) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	flight.users--
-	if flight.users == 0 && g.flights[key] == flight {
+	if flight.users == 0 && !flight.running && g.flights[key] == flight {
 		delete(g.flights, key)
 	}
+}
+
+func flightValue[V any](result singleflight.Result) (V, bool, error) {
+	if result.Err != nil {
+		var zero V
+		return zero, result.Shared, result.Err
+	}
+	v, ok := result.Val.(V)
+	if !ok {
+		var zero V
+		return zero, result.Shared, nil
+	}
+	return v, result.Shared, nil
 }

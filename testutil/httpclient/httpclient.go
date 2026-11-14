@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package httpclient provides test assertions for cloned and bounded HTTP clients.
+// Package httpclient provides test assertions for HTTP clients and transports.
 package httpclient
 
 import (
@@ -20,4 +20,19 @@ func AssertBoundedClone(tb testing.TB, source, clone *http.Client, timeout time.
 	if clone.Transport != source.Transport {
 		tb.Fatal("injected transport was not preserved")
 	}
+}
+
+// RoundTripError returns the error of a round trip that must fail; a returned response fails tb after its body is closed.
+func RoundTripError(tb testing.TB, rt http.RoundTripper, req *http.Request) error {
+	tb.Helper()
+	resp, err := rt.RoundTrip(req)
+	if resp == nil {
+		return err
+	}
+	var closeErr error
+	if resp.Body != nil {
+		closeErr = resp.Body.Close()
+	}
+	tb.Fatalf("unexpected response %d (close: %v)", resp.StatusCode, closeErr)
+	return err
 }

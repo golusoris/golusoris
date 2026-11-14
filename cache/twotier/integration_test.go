@@ -11,10 +11,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redis/rueidis"
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/realtime/pubsub/redis"
+	dragonflytest "github.com/golusoris/golusoris/testutil/dragonfly"
 	redistest "github.com/golusoris/golusoris/testutil/redis"
 )
 
@@ -24,7 +26,16 @@ import (
 // untouched.
 func TestRedisL2_DelPrefix_RealRedis(t *testing.T) {
 	t.Parallel()
-	client := redistest.Start(t)
+	testDelPrefix(t, redistest.Start(t))
+}
+
+func TestDragonflyL2_DelPrefix_RealDragonfly(t *testing.T) {
+	t.Parallel()
+	testDelPrefix(t, dragonflytest.Start(t))
+}
+
+func testDelPrefix(t *testing.T, client rueidis.Client) {
+	t.Helper()
 	l2 := redisL2{client: client}
 	ctx := context.Background()
 
@@ -53,7 +64,16 @@ func TestRedisL2_DelPrefix_RealRedis(t *testing.T) {
 // scan-the-whole-keyspace accident.
 func TestRedisL2_DelPrefix_EmptyPrefixRejected(t *testing.T) {
 	t.Parallel()
-	client := redistest.Start(t)
+	testEmptyPrefix(t, redistest.Start(t))
+}
+
+func TestDragonflyL2_DelPrefix_EmptyPrefixRejected(t *testing.T) {
+	t.Parallel()
+	testEmptyPrefix(t, dragonflytest.Start(t))
+}
+
+func testEmptyPrefix(t *testing.T, client rueidis.Client) {
+	t.Helper()
 	l2 := redisL2{client: client}
 
 	err := l2.DelPrefix(context.Background(), "")
@@ -64,7 +84,16 @@ func TestRedisL2_DelPrefix_EmptyPrefixRejected(t *testing.T) {
 // matches nothing completes cleanly after the first empty SCAN round.
 func TestRedisL2_DelPrefix_NoMatchesIsNoop(t *testing.T) {
 	t.Parallel()
-	client := redistest.Start(t)
+	testNoMatches(t, redistest.Start(t))
+}
+
+func TestDragonflyL2_DelPrefix_NoMatchesIsNoop(t *testing.T) {
+	t.Parallel()
+	testNoMatches(t, dragonflytest.Start(t))
+}
+
+func testNoMatches(t *testing.T, client rueidis.Client) {
+	t.Helper()
 	l2 := redisL2{client: client}
 
 	require.NoError(t, l2.DelPrefix(context.Background(), "nothing-has-this-prefix:"))
@@ -75,7 +104,16 @@ func TestRedisL2_DelPrefix_NoMatchesIsNoop(t *testing.T) {
 // evicts the other's L1 within one second once both subscriptions are up.
 func TestInvalidation_RealRedisAcrossReplicas(t *testing.T) {
 	t.Parallel()
-	client := redistest.Start(t)
+	testInvalidation(t, redistest.Start(t))
+}
+
+func TestInvalidation_RealDragonflyAcrossReplicas(t *testing.T) {
+	t.Parallel()
+	testInvalidation(t, dragonflytest.Start(t))
+}
+
+func testInvalidation(t *testing.T, client rueidis.Client) {
+	t.Helper()
 	newReplica := func() *Typed[int] {
 		l1, err := memory.NewForTest(100, 0)
 		require.NoError(t, err)

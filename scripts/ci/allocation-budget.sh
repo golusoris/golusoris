@@ -156,6 +156,8 @@ run_benchmarks() {
 		cd "$root"
 		"$go_bin" test -run '^$' -bench '^BenchmarkTyped(SetGet|GetMiss)$' \
 			-benchmem -count="$ALLOCATION_RUNS" ./cache/memory
+		"$go_bin" test -run '^$' -bench '^BenchmarkCacheHit$' \
+			-benchmem -count="$ALLOCATION_RUNS" ./httpx/httpcache
 	) | tee "$output"
 }
 

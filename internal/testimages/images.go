@@ -25,6 +25,8 @@ const (
 	TimescaleApache = "timescale/timescaledb:2.31.0-pg17-oss@sha256:668ee2d521ed472045f74c9e16f01318ab73120754ff8ba4cf1d76f00a26307a"
 	// Redis is the default Redis integration-test image.
 	Redis = "redis:8-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80"
+	// Dragonfly is the Redis-compatible Dragonfly integration-test image.
+	Dragonfly = "ghcr.io/dragonflydb/dragonfly:v2.1.0@sha256:94891bb22ce2fb0f7a5a3ff1bb3b2fbbc5830e2523293e47723d87fa3e5b1184"
 	// NATS is the default NATS integration-test image.
 	NATS = "nats:2-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a"
 	// ClickHouse is the default ClickHouse integration-test image.

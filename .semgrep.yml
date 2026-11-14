@@ -96,6 +96,33 @@ rules:
           - pattern: $MCP.StreamableClientTransport{...}
           - pattern-not: '$MCP.StreamableClientTransport{..., HTTPClient: $C, ...}'
 
+  # ── Httpcache callbacks must avoid fatal assertions ────────────────────────
+  # Transport callbacks and HTTP handlers in httpcache tests run on other goroutines.
+  # Other packages stay excluded because client.Do runs RoundTrip on its calling goroutine.
+  # Go statements stay outside scope because testifylint go-require remains excluded repo-wide (.golangci.yml).
+  - id: no-fatal-in-httpcache-transport-callback
+    languages: [go]
+    severity: ERROR
+    message: >-
+      This callback runs on a singleflight or server goroutine; FailNow there
+      hangs the test. Use assert, or record the result and check it on the test
+      goroutine.
+    paths:
+      include:
+        - "/httpx/httpcache/*_test.go"
+      exclude:
+        - "/.config/hiss/testdata/"
+        - "/.config/hiss/semgrep/testdata/"
+    patterns:
+      - pattern-either:
+          - pattern-inside: "func(...) (*http.Response, error) { ... }"
+          - pattern-inside: "func($W http.ResponseWriter, $R *http.Request) { ... }"
+      - pattern-either:
+          - pattern: require.$F(...)
+          - pattern: $T.Fatal(...)
+          - pattern: $T.Fatalf(...)
+          - pattern: $T.FailNow()
+
   # ── No http.ListenAndServe / ListenAndServeTLS ──────────────────────────────
   # The convenience helpers build an *http.Server with zero Read/Write/Idle
   # timeouts (Slowloris-exposed). golusoris HTTP servers are constructed with

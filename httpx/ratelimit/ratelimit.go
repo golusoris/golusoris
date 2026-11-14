@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-// Package ratelimit wraps ulule/limiter/v3 as a golusoris middleware.
+// Package ratelimit wraps ulule/limiter/v3 as inbound middleware and a per-host outbound transport.
 //
 // Defaults to an in-memory store keyed by client IP. Distributed apps can
 // supply a shared [limiter.Store] through [Options.Store], directly or by
@@ -11,6 +11,12 @@
 // Config keys (env: APP_HTTP_RATELIMIT_*):
 //
 //	http.ratelimit.rate      # e.g. "100-M" (100/minute), "5-S" (5/second)
+//
+// Outbound config keys:
+//
+//	http.outbound.ratelimit.rate      # default per-host rate; empty is unlimited
+//	http.outbound.ratelimit.hosts     # list of host/rate overrides
+//	http.outbound.ratelimit.max_wait  # zero fails fast
 //
 // Rate format: https://github.com/ulule/limiter?tab=readme-ov-file#usage
 package ratelimit
@@ -22,7 +28,6 @@ import (
 	"strconv"
 
 	"github.com/ulule/limiter/v3"
-	"github.com/ulule/limiter/v3/drivers/store/memory"
 	"go.uber.org/fx"
 
 	"github.com/golusoris/golusoris/core/config"
@@ -61,15 +66,10 @@ func New(opts Options) (middleware.Middleware, error) {
 	if opts.Rate == "" {
 		return identity, nil
 	}
-	rate, err := limiter.NewRateFromFormatted(opts.Rate)
+	lim, err := newLimiter(opts.Rate, opts.Store)
 	if err != nil {
-		return nil, fmt.Errorf("httpx/ratelimit: parse rate %q: %w", opts.Rate, err)
+		return nil, err
 	}
-	store := opts.Store
-	if store == nil {
-		store = memory.NewStore()
-	}
-	lim := limiter.New(store, rate)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ctx, err := lim.Get(r.Context(), limiter.GetIP(r).String())
