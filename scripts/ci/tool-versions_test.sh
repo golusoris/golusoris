@@ -8,6 +8,29 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly repo_root
 
+check_llvm_mingw_pin() {
+	python3 - "$1" "$repo_root/renovate.json" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+content = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+version = re.findall(r"(?m)^LLVM_MINGW_VERSION=([0-9]{8})$", content)
+digest = re.findall(r"(?m)^LLVM_MINGW_UCRT_AARCH64_SHA256=([0-9a-f]{64})$", content)
+if len(version) != 1 or len(digest) != 1:
+    raise SystemExit("llvm-mingw requires one dated version and one SHA-256 archive digest")
+manager = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))["customManagers"][0]
+pattern = re.sub(r"\(\?<([A-Za-z]+)>", r"(?P<\1>", manager["matchStrings"][0])
+matches = [match.groupdict() for match in re.finditer(pattern, content)]
+expected = dict(datasource="github-releases", depName="mstorsjo/llvm-mingw",
+                versioning="loose", currentValue=version[0])
+if expected not in matches:
+    raise SystemExit("llvm-mingw pin must match the Renovate manager with loose versioning")
+PY
+}
+check_llvm_mingw_pin "$repo_root/tools/tool-versions.env"
+
 duplicate_pins="$(awk -F= '/^[A-Za-z0-9_]+=/ { print $1 }' "$repo_root/tools/tool-versions.env" | sort | uniq -d)"
 if [[ -n "$duplicate_pins" ]]; then
 	printf 'duplicate tool pin in tools/tool-versions.env: %s\n' "$duplicate_pins" >&2
@@ -372,6 +395,29 @@ check_release_tool_installs "$repo_root/.github/workflows"
 check_ci_go_defaults "$repo_root/.github/workflows/ci-go.yml"
 install_suite="$(mktemp -d "${TMPDIR:-/tmp}/golusoris-tool-installs.XXXXXX")"
 trap 'rm -rf "$install_suite"' EXIT
+for mutation in missing-digest short-digest long-digest invalid-version untracked-pin; do
+	fixture="$install_suite/llvm-mingw-$mutation.env"
+	expected_error='llvm-mingw requires one dated version and one SHA-256 archive digest'
+	case "$mutation" in
+	missing-digest) sed '/^LLVM_MINGW_UCRT_AARCH64_SHA256=/d' "$repo_root/tools/tool-versions.env" >"$fixture" ;;
+	short-digest) sed '/^LLVM_MINGW_UCRT_AARCH64_SHA256=/s/.$//' "$repo_root/tools/tool-versions.env" >"$fixture" ;;
+	long-digest) sed '/^LLVM_MINGW_UCRT_AARCH64_SHA256=/s/$/0/' "$repo_root/tools/tool-versions.env" >"$fixture" ;;
+	invalid-version) sed '/^LLVM_MINGW_VERSION=/s/.$//' "$repo_root/tools/tool-versions.env" >"$fixture" ;;
+	untracked-pin)
+		sed '/depName=mstorsjo\/llvm-mingw/s/versioning=loose/versioning=semver/' "$repo_root/tools/tool-versions.env" >"$fixture"
+		expected_error='llvm-mingw pin must match the Renovate manager with loose versioning'
+		;;
+	esac
+	if cmp -s "$repo_root/tools/tool-versions.env" "$fixture"; then
+		printf 'llvm-mingw negative control did not mutate: %s\n' "$mutation" >&2
+		exit 1
+	fi
+	if check_llvm_mingw_pin "$fixture" >"$install_suite/llvm-mingw-error" 2>&1; then
+		printf 'llvm-mingw pin check accepted negative control: %s\n' "$mutation" >&2
+		exit 1
+	fi
+	grep -Fq "$expected_error" "$install_suite/llvm-mingw-error"
+done
 # expect_install_rejection <mutation-name> <file> <sed-expression>
 expect_install_rejection() {
 	local name="$1" file="$2" expression="$3"
