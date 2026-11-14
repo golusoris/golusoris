@@ -30,7 +30,7 @@ if [[ "${1:-}" == -version ]]; then
 	exit 0
 fi
 config() {
-	printf '{"config":{"protocol_version":"v1.0.0","scanner_name":"govulncheck","scanner_version":"%s","db":"https://vuln.go.dev","scan_level":"symbol","scan_mode":"source"}}\n' "${1:-$version}"
+	printf '{"config":{"protocol_version":"v1.0.0","scanner_name":"govulncheck","scanner_version":"%s","db":"https://vuln.go.dev","scan_level":"symbol","scan_mode":"source","go_version":"%s"}}\n' "${1:-$version}" "${GOVULN_FAKE_GO_VERSION:-go1.27.4}"
 }
 finding() { printf '{"finding":%s}\n' "$1"; }
 excelize='{"osv":"GO-2026-6452","trace":[{"module":"github.com/xuri/excelize/v2","version":"v2.11.0","package":"github.com/xuri/excelize/v2","function":"GetCellValue"}]}'
@@ -51,6 +51,8 @@ no-osv) config && finding '{"trace":[{"module":"example.invalid/vulnerable","ver
 invalid) printf 'not-json\n' ;;
 empty) ;;
 no-config) finding "$unknown" ;;
+no-go-version) config | jq 'del(.config.go_version)' ;;
+non-string-go-version) config | jq '.config.go_version = 1274' ;;
 duplicate-config) config && config ;;
 config-drift) config v0.0.0 ;;
 scanner-fail) printf 'network failure\n' >&2 && exit 7 ;;
@@ -84,10 +86,17 @@ expect_success() {
 }
 
 expect_failure() {
-	local expected="$1" case_name="$2" output
+	local expected="$1" case_name="$2" output rc=0
 	shift 2
-	if output="$(run_case "$case_name" "$@" 2>&1)"; then
+	output="$(run_case "$case_name" "$@" 2>&1)" || rc=$?
+	if ((rc == 0)); then
 		printf 'govulncheck policy accepted %s\n' "$case_name" >&2
+		exit 1
+	fi
+	# GOVULN_WANT_STATUS pins the exit status where the scripts/ci contract fixes one.
+	if [[ -n "${GOVULN_WANT_STATUS:-}" ]] && ((rc != GOVULN_WANT_STATUS)); then
+		printf 'govulncheck %s exited %d, want %d; output: %s\n' \
+			"$case_name" "$rc" "$GOVULN_WANT_STATUS" "$output" >&2
 		exit 1
 	fi
 	if ! grep -Fq -- "$expected" <<<"$output"; then
@@ -109,8 +118,17 @@ expect_failure 'reported 1 reachable finding(s)' mixed ./...
 expect_failure 'failed with status 7' scanner-fail ./...
 GOVULN_FAKE_SCANNER_VERSION=v0.0.0 expect_failure "expected govulncheck $GOVULNCHECK_VERSION" clean ./...
 GOVULN_TEST_BIN="$fixture_root/absent-govulncheck" expect_failure 'executable not found' clean ./...
+GOVULN_WANT_STATUS=3 GOVULN_FAKE_GO_VERSION=go1.27.3-X:nodwarf5 expect_failure 'cannot read Go version' clean ./...
+GOVULN_WANT_STATUS=3 expect_failure 'cannot read Go version' no-go-version ./...
+GOVULN_WANT_STATUS=3 expect_failure 'cannot read Go version' non-string-go-version ./...
 
-# Boundary: malformed, empty or protocol-violating streams and arguments fail closed.
+# Boundary: supported Go tags pass; malformed versions, streams and arguments fail closed.
+GOVULN_FAKE_GO_VERSION=go1.28rc1 expect_success 'no reachable vulnerabilities' clean ./...
+GOVULN_FAKE_GO_VERSION=go1.27 expect_success 'no reachable vulnerabilities' clean ./...
+GOVULN_WANT_STATUS=3 GOVULN_FAKE_GO_VERSION='go1.27.4 ' expect_failure 'cannot read Go version' clean ./...
+GOVULN_WANT_STATUS=3 GOVULN_FAKE_GO_VERSION='go1.27.4\n' expect_failure 'cannot read Go version' clean ./...
+GOVULN_WANT_STATUS=3 GOVULN_FAKE_GO_VERSION='go1.٢٧' expect_failure 'cannot read Go version' clean ./...
+GOVULN_WANT_STATUS=3 GOVULN_FAKE_GO_VERSION='devel go1.28-abcdef' expect_failure 'cannot read Go version' clean ./...
 expect_failure 'invalid JSON or unexpected govulncheck configuration' invalid ./...
 expect_failure 'invalid JSON or unexpected govulncheck configuration' empty ./...
 expect_failure 'invalid JSON or unexpected govulncheck configuration' no-config ./...

@@ -82,6 +82,28 @@ def pact_modifier_violations(makefile: str) -> list[str]:
     return offending
 
 
+def assert_blocking_arm64_leg(case: TestCase, workflow: str) -> None:
+    """Require a blocking workflow and the pinned Windows arm64 job."""
+    case.assertNotIn(
+        "continue-on-error", workflow, "portability workflow must remain blocking"
+    )
+    lines = workflow.splitlines()
+    job = "  portability-windows-arm64:"
+    case.assertEqual(lines.count(job), 1, "missing or duplicate Windows arm64 job")
+    block = []
+    for line in lines[lines.index(job) + 1 :]:
+        if line.strip() and not line.startswith("    "):
+            break
+        block.append(line)
+    for field in (
+        "    name: Platform Neutrality (Windows arm64)",
+        "    runs-on: windows-11-arm",
+        "    timeout-minutes: 90",
+        "    steps: *portability-steps",
+    ):
+        case.assertEqual(block.count(field), 1, f"missing or duplicate arm64 job field: {field}")
+
+
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
 
@@ -341,6 +363,17 @@ class PortabilityDriverTest(TestCase):
                     ):
                         verify_quiet(root, FakeRunner(manifests))
 
+    def _assert_windows_pact_link_contract(self, workflow: str) -> None:
+        """Pin explicit ARM64 linking and the unchanged amd64 library search path."""
+        install = workflow.split("name: Install verified Pact FFI on Windows\n", 1)[1]
+        install = install.split("\n      - name:", 1)[0]
+        expected = """          if ($env:RUNNER_ARCH -eq 'ARM64') {
+            "CGO_LDFLAGS=-L$pactDir -lpact_ffi" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }"""
+        self.assertIn(expected, install)
+
     def test_workflow_uses_pinned_three_platform_matrix(self) -> None:
         """Pin the portability matrix, its actions and the cached Pact FFI install path."""
         workflow = (ROOT / ".github" / "workflows" / "portability.yml").read_text(
@@ -359,6 +392,7 @@ class PortabilityDriverTest(TestCase):
             "$pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'",
             "python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
+            '"CGO_LDFLAGS=-L$pactDir -lpact_ffi"',
             "python -B scripts/ci/portability_test.py",
             "run: bash scripts/ci/release-depth-evidence_test.sh",
             "uses: ./.github/actions/install-cgo-libs",
@@ -368,6 +402,7 @@ class PortabilityDriverTest(TestCase):
         for fragment in required:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
+        self._assert_windows_pact_link_contract(workflow)
         # Name-runner pairings: a renamed matrix entry stops emitting the required context.
         pairs = (
             ("Linux", "ubuntu-26.04"),
@@ -382,12 +417,7 @@ class PortabilityDriverTest(TestCase):
                     workflow,
                     rf"(?m)^ +- name: {re.escape(name)}\n +runner: {re.escape(runner)}$",
                 )
-        self.assertIn("continue-on-error: true", workflow)
-        self.assertRegex(
-            workflow, r"(?m)^ +name: Platform Neutrality \(Windows arm64\)"
-        )
-        self.assertRegex(workflow, r"(?m)^ +runs-on: windows-11-arm$")
-        self.assertIn("steps: *portability-steps", workflow)
+        assert_blocking_arm64_leg(self, workflow)
         self.assertIn("&portability-steps", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
@@ -399,6 +429,16 @@ class PortabilityDriverTest(TestCase):
             workflow.index("Verify portability driver policy"),
             workflow.index("Install verified Pact FFI"),
         )
+
+    def test_windows_arm64_pact_link_rejects_missing_library_flag(self) -> None:
+        """Reject removal of the explicit Pact FFI link flag from the ARM64 branch."""
+        workflow = (ROOT / ".github/workflows/portability.yml").read_text(
+            encoding="utf-8"
+        )
+        mutant = workflow.replace(" -lpact_ffi", "", 1)
+        self.assertNotEqual(mutant, workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_windows_pact_link_contract(mutant)
 
     def test_workflow_install_steps_use_runner_temp(self) -> None:
         """Require every Unix install step to use RUNNER_TEMP and Windows to use env:RUNNER_TEMP."""
@@ -419,6 +459,209 @@ class PortabilityDriverTest(TestCase):
                 else:
                     self.assertIn('pact_dir="${RUNNER_TEMP}/pact-ffi"', step)
         self.assertEqual(install_steps, 4)
+
+
+# Bounded download loop the Windows arm64 install step must keep verbatim.
+LLVM_MINGW_RETRY = """foreach ($attempt in 1..3) {
+              try {
+                Invoke-WebRequest -Uri $url -OutFile $archive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300
+                break
+              } catch {
+                if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+                if ($attempt -eq 3) { throw }
+                Start-Sleep -Seconds (10 * $attempt)
+              }
+            }"""
+
+class WindowsARM64ToolchainTests(TestCase):
+    def setUp(self) -> None:
+        self.workflow = (ROOT / ".github/workflows/portability.yml").read_text(encoding="utf-8")
+
+    def _toolchain_steps(self, workflow: str) -> tuple[str, str, str]:
+        names = (
+            "Resolve llvm-mingw archive pin on Windows arm64",
+            "Cache llvm-mingw archive on Windows arm64",
+            "Install pinned llvm-mingw on Windows arm64",
+        )
+        steps = re.split(r"(?m)^ {6}- ", workflow)
+        selected = []
+        for name in names:
+            matches = [step for step in steps if step.startswith(f"name: {name}\n")]
+            self.assertEqual(len(matches), 1, f"missing or duplicate toolchain step: {name}")
+            step = matches[0]
+            self.assertIn("if: runner.os == 'Windows' && runner.arch == 'ARM64' && env.CI_GATED != 'skip'", step)
+            selected.append(step)
+        return selected[0], selected[1], selected[2]
+
+    def _assert_toolchain_contract(self, workflow: str) -> None:
+        resolve, cache, install = self._toolchain_steps(workflow)
+        self.assertIn("set -euo pipefail", resolve)
+        self.assertIn(". tools/tool-versions.env", resolve)
+        self.assertIn('"$LLVM_MINGW_VERSION" =~ ^[0-9]{8}$', resolve)
+        self.assertIn('"$LLVM_MINGW_UCRT_AARCH64_SHA256" =~ ^[0-9a-f]{64}$', resolve)
+        self.assertIn('"$LLVM_MINGW_UCRT_AARCH64_SHA256" >> "$GITHUB_OUTPUT"', resolve)
+        self.assertIn("actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0", cache)
+        self.assertIn("path: .workingdir/cache/llvm-mingw", cache)
+        self.assertIn("key: llvm-mingw-${{ runner.os }}-${{ runner.arch }}-${{ steps.llvm-mingw-pin.outputs.sha256 }}", cache)
+        self.assertIn("shell: pwsh", install)
+        self.assertIn("timeout-minutes: 18", install)
+        self.assertIn("$ErrorActionPreference = 'Stop'", install)
+        self.assertIn("LLVM_MINGW_VERSION: ${{ steps.llvm-mingw-pin.outputs.version }}", install)
+        self.assertIn("LLVM_MINGW_UCRT_AARCH64_SHA256: ${{ steps.llvm-mingw-pin.outputs.sha256 }}", install)
+        self.assertIn('-ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300', install)
+        self.assertIn(LLVM_MINGW_RETRY, install)
+        guard = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {\n            throw 'llvm-mingw archive digest mismatch'\n          }"
+        self.assertIn(guard, install)
+        self.assertLess(install.index(LLVM_MINGW_RETRY), install.index(guard))
+        extraction = "Expand-Archive -LiteralPath $archive -DestinationPath $destination"
+        self.assertLess(install.index(guard), install.index(extraction))
+        self.assertLess(install.index(extraction), install.index("$env:GITHUB_PATH"))
+        self.assertIn("$env:CC = 'aarch64-w64-mingw32-clang'", install)
+        self.assertIn("$env:CXX = 'aarch64-w64-mingw32-clang++'", install)
+        self.assertIn('"CC=$env:CC", "CXX=$env:CXX" | Out-File -FilePath $env:GITHUB_ENV', install)
+        self.assertIn('& (Join-Path $bin "$env:CC.exe") --version', install)
+        self.assertIn("if ($LASTEXITCODE -ne 0) { throw 'llvm-mingw compiler version check failed' }", install)
+        self.assertLess(workflow.index(resolve), workflow.index(cache))
+        self.assertLess(workflow.index(cache), workflow.index(install))
+        self.assertLess(workflow.index(install), workflow.index("name: Install verified Pact FFI on Windows"))
+        self.assertIn("    steps: &portability-steps", workflow)
+        assert_blocking_arm64_leg(self, workflow)
+
+    def test_windows_arm64_toolchain_is_pinned_verified_and_scoped(self) -> None:
+        self._assert_toolchain_contract(self.workflow)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_arm64_job(self) -> None:
+        """Reject continue-on-error on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, "    continue-on-error: true\n" + marker, 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_matrix_job(self) -> None:
+        """Reject continue-on-error elsewhere in the portability workflow."""
+        marker = "  portability:\n"
+        mutant = self.workflow.replace(
+            marker, marker + "    continue-on-error: true\n", 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_step_first_key(self) -> None:
+        """Reject continue-on-error as the shared build step's first key."""
+        marker = "      - name: Build, vet, and short-test every Go module\n"
+        mutant = self.workflow.replace(
+            marker,
+            "      - continue-on-error: true\n        name: Build, vet, and short-test every Go module\n",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_quoted_key(self) -> None:
+        """Reject a quoted continue-on-error key on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, '    "continue-on-error": true\n' + marker, 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_accepts_reordered_fields(self) -> None:
+        """Accept reordered job fields and an additional environment mapping."""
+        mutant = self.workflow.replace(
+            "    runs-on: windows-11-arm\n    timeout-minutes: 90\n",
+            "    timeout-minutes: 90\n    runs-on: windows-11-arm\n",
+            1,
+        ).replace(
+            "    steps: *portability-steps",
+            "    env:\n      GOFLAGS: -mod=readonly\n    steps: *portability-steps",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_wrong_runner(self) -> None:
+        """Reject a Windows arm64 job assigned to the wrong runner."""
+        mutant = self.workflow.replace("    runs-on: windows-11-arm\n", "    runs-on: windows-latest\n", 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_duplicate_job(self) -> None:
+        """Reject repeated Windows arm64 job blocks."""
+        job = self.workflow[self.workflow.index("  portability-windows-arm64:\n") :]
+        mutant = self.workflow + "\n" + job + job
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_missing_digest_check(self) -> None:
+        marker = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {"
+        mutant = self.workflow.replace(marker, "if ($false) {", 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_single_download(self) -> None:
+        marker = "            " + LLVM_MINGW_RETRY
+        single = "            Invoke-WebRequest -Uri $url -OutFile $archive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300"
+        mutant = self.workflow.replace(marker, single, 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_retry_contract_drift(self) -> None:
+        mutations = (
+            ("foreach ($attempt in 1..3)", "foreach ($attempt in 1..4)"),
+            ("                break\n", ""),
+            ("if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }", ""),
+            ("if ($attempt -eq 3) { throw }", ""),
+            ("Start-Sleep -Seconds (10 * $attempt)", "Start-Sleep -Seconds 10"),
+            ("-ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300", "-ConnectionTimeoutSeconds 60"),
+            ("timeout-minutes: 18", "timeout-minutes: 10"),
+        )
+        for marker, replacement in mutations:
+            with self.subTest(marker=marker):
+                mutant = self.workflow.replace(marker, replacement, 1)
+                self.assertNotEqual(mutant, self.workflow)
+                with self.assertRaises(AssertionError):
+                    self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_download_after_digest_guard(self) -> None:
+        marker = """          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {
+            throw 'llvm-mingw archive digest mismatch'
+          }
+"""
+        mutant = self.workflow.replace(marker, "", 1).replace(
+            "          if (-not (Test-Path -LiteralPath $archive)) {",
+            marker + "          if (-not (Test-Path -LiteralPath $archive)) {", 1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_missing_arm64_gate(self) -> None:
+        for name in ("Resolve llvm-mingw archive pin", "Cache llvm-mingw archive", "Install pinned llvm-mingw"):
+            with self.subTest(step=name):
+                marker = f"name: {name} on Windows arm64\n        if: runner.os == 'Windows' && runner.arch == 'ARM64' &&"
+                mutant = self.workflow.replace(marker, marker.replace(" && runner.arch == 'ARM64'", ""), 1)
+                self.assertNotEqual(mutant, self.workflow)
+                with self.assertRaises(AssertionError):
+                    self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_extraction_before_verification(self) -> None:
+        marker = "          Expand-Archive -LiteralPath $archive -DestinationPath $destination\n"
+        mutant = self.workflow.replace(marker, "", 1).replace(
+            "          if ((Get-FileHash", marker + "          if ((Get-FileHash", 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
 
 
 def retry_fixture() -> tuple[bytes, bytes, pact_ffi.Asset]:

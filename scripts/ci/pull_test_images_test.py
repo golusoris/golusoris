@@ -41,7 +41,7 @@ class PullTestImagesTest(TestCase):
             encoding="utf-8",
         )
         docker.chmod(0o755)
-        self.environment = dict(os.environ, PATH=f"{self.root}{os.pathsep}{os.environ['PATH']}",
+        self.environment = dict(repo_git.fixture_environ(), PATH=f"{self.root}{os.pathsep}{os.environ['PATH']}",
                                 DOCKER_LOG=str(self.log), CI_SCOPE_BASE="")  # fixture is no git repository
 
     def run_pulls(self, *images: str) -> subprocess.CompletedProcess[str]:
@@ -50,11 +50,26 @@ class PullTestImagesTest(TestCase):
     def run_script(
         self, script: str, *args: str, environment: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(  # noqa: S603 - Repository scripts and fixture arguments only, without a shell.
+        return subprocess.run(  # noqa: S603 - Repository scripts and fixture arguments only, without a shell. # nosec B603
             [self.bash, str(ROOT / "scripts/ci" / script), *args],
             cwd=self.root, env=environment or self.environment,
             capture_output=True, text=True, timeout=10, check=False,
         )
+
+    def test_decoy_git_environment_preserves_fixture_and_index(self) -> None:
+        """Pull fixtures discover the same module set under a hook environment."""
+        baseline = self.run_script("go-modules.sh", "list")
+        self.assertEqual(baseline.returncode, 0, baseline.stderr)
+        with repo_git.decoy_environ():
+            case = PullTestImagesTest("test_empty_shard_never_calls_docker")
+            try:
+                case.setUp()
+                self.assertTrue(repo_git.local_env_names().isdisjoint(case.environment))
+                result = case.run_script("go-modules.sh", "list")
+                self.assertEqual(result.returncode, baseline.returncode, result.stderr)
+                self.assertEqual(result.stdout, baseline.stdout)
+            finally:
+                case.doCleanups()
 
     def test_nonexistent_tag_exhausts_retries_and_emits_error(self) -> None:
         image = "example.invalid/emulator:nonexistent"

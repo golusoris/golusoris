@@ -166,6 +166,9 @@
             "context": "Platform Neutrality (Windows)"
           },
           {
+            "context": "Platform Neutrality (Windows arm64)"
+          },
+          {
             "context": "Go API Compatibility"
           },
           {

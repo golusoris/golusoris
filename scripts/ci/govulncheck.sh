@@ -63,7 +63,7 @@ scan_symbol_findings() {
 	shift 2
 	local report_file="$scan_temp_dir/report.json"
 	local stderr_file="$scan_temp_dir/stderr.log"
-	local scanner_status
+	local scanner_status go_version
 	set +e
 	"$govulncheck_bin" -format=json "$@" >"$report_file" 2>"$stderr_file"
 	scanner_status=$?
@@ -85,6 +85,17 @@ scan_symbol_findings() {
 	' "$report_file" >/dev/null; then
 		fail "scanner emitted invalid JSON or unexpected govulncheck configuration"
 		return
+	fi
+	if ! jq -se '
+		[.[] | .config? | select(. != null)] as $configs |
+		$configs[0].go_version |
+		if type == "string" then
+			test("^go([0-9]+\\.[0-9]+)(\\.[0-9]+|)((beta|rc|-pre)([0-9]+))?\\z")
+		else false end
+	' "$report_file" >/dev/null; then
+		go_version="$(jq -sr '[.[] | .config? | select(. != null)][0].go_version' "$report_file")"
+		# Exit 3 (scripts/ci/AGENTS.md): the scan ran but cannot judge standard-library advisories.
+		fail "govulncheck cannot read Go version $go_version: standard-library advisories would be skipped; run with GOTOOLCHAIN=go<version> (official toolchain)" || return 3
 	fi
 	# The govulncheck protocol requires an OSV id and at least one trace frame on every finding.
 	if ! jq -se '
