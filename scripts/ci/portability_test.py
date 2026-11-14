@@ -82,6 +82,28 @@ def pact_modifier_violations(makefile: str) -> list[str]:
     return offending
 
 
+def assert_blocking_arm64_leg(case: TestCase, workflow: str) -> None:
+    """Require a blocking workflow and the pinned Windows arm64 job."""
+    case.assertNotIn(
+        "continue-on-error", workflow, "portability workflow must remain blocking"
+    )
+    lines = workflow.splitlines()
+    job = "  portability-windows-arm64:"
+    case.assertEqual(lines.count(job), 1, "missing or duplicate Windows arm64 job")
+    block = []
+    for line in lines[lines.index(job) + 1 :]:
+        if line.strip() and not line.startswith("    "):
+            break
+        block.append(line)
+    for field in (
+        "    name: Platform Neutrality (Windows arm64)",
+        "    runs-on: windows-11-arm",
+        "    timeout-minutes: 90",
+        "    steps: *portability-steps",
+    ):
+        case.assertEqual(block.count(field), 1, f"missing or duplicate arm64 job field: {field}")
+
+
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
 
@@ -391,12 +413,7 @@ class PortabilityDriverTest(TestCase):
                     workflow,
                     rf"(?m)^ +- name: {re.escape(name)}\n +runner: {re.escape(runner)}$",
                 )
-        self.assertIn("continue-on-error: true", workflow)
-        self.assertRegex(
-            workflow, r"(?m)^ +name: Platform Neutrality \(Windows arm64\)"
-        )
-        self.assertRegex(workflow, r"(?m)^ +runs-on: windows-11-arm$")
-        self.assertIn("steps: *portability-steps", workflow)
+        assert_blocking_arm64_leg(self, workflow)
         self.assertIn("&portability-steps", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
@@ -504,10 +521,80 @@ class WindowsARM64ToolchainTests(TestCase):
         self.assertLess(workflow.index(cache), workflow.index(install))
         self.assertLess(workflow.index(install), workflow.index("name: Install verified Pact FFI on Windows"))
         self.assertIn("    steps: &portability-steps", workflow)
-        self.assertRegex(workflow, r"(?m)^    continue-on-error: true\n    steps: \*portability-steps$")
+        assert_blocking_arm64_leg(self, workflow)
 
     def test_windows_arm64_toolchain_is_pinned_verified_and_scoped(self) -> None:
         self._assert_toolchain_contract(self.workflow)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_arm64_job(self) -> None:
+        """Reject continue-on-error on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, "    continue-on-error: true\n" + marker, 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_matrix_job(self) -> None:
+        """Reject continue-on-error elsewhere in the portability workflow."""
+        marker = "  portability:\n"
+        mutant = self.workflow.replace(
+            marker, marker + "    continue-on-error: true\n", 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_step_first_key(self) -> None:
+        """Reject continue-on-error as the shared build step's first key."""
+        marker = "      - name: Build, vet, and short-test every Go module\n"
+        mutant = self.workflow.replace(
+            marker,
+            "      - continue-on-error: true\n        name: Build, vet, and short-test every Go module\n",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_quoted_key(self) -> None:
+        """Reject a quoted continue-on-error key on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, '    "continue-on-error": true\n' + marker, 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_accepts_reordered_fields(self) -> None:
+        """Accept reordered job fields and an additional environment mapping."""
+        mutant = self.workflow.replace(
+            "    runs-on: windows-11-arm\n    timeout-minutes: 90\n",
+            "    timeout-minutes: 90\n    runs-on: windows-11-arm\n",
+            1,
+        ).replace(
+            "    steps: *portability-steps",
+            "    env:\n      GOFLAGS: -mod=readonly\n    steps: *portability-steps",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_wrong_runner(self) -> None:
+        """Reject a Windows arm64 job assigned to the wrong runner."""
+        mutant = self.workflow.replace("    runs-on: windows-11-arm\n", "    runs-on: windows-latest\n", 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_duplicate_job(self) -> None:
+        """Reject repeated Windows arm64 job blocks."""
+        job = self.workflow[self.workflow.index("  portability-windows-arm64:\n") :]
+        mutant = self.workflow + "\n" + job + job
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
 
     def test_windows_arm64_toolchain_rejects_missing_digest_check(self) -> None:
         marker = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {"
