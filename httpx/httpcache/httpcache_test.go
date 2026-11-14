@@ -258,6 +258,7 @@ func TestCacheNoStore(t *testing.T) {
 		{"secret header", 200, "ok", []string{"X-Api-Key", "example"}},
 		{"json", 200, `{"access_token": "example"}`, nil},
 		{"xml", 200, `<token>example</token>`, nil},
+		{"xml namespaced", 200, `<r xmlns:a="urn:auth"><a:access_token>S</a:access_token></r>`, nil},
 		{"form", 200, "token=example", nil},
 		{"oversized", 200, strings.Repeat("x", 65), nil},
 	}

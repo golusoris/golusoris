@@ -97,10 +97,10 @@ func TestOptionsExtensions(t *testing.T) {
 func TestPolicyCredentialBoundaries(t *testing.T) {
 	t.Parallel()
 	pattern := credentialPattern(nil)
-	for _, body := range []string{`{"accessToken":1}`, `{"refresh-token":1}`, `?X-Plex-Token=x`, `{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`} {
+	for _, body := range []string{`{"accessToken":1}`, `{"refresh-token":1}`, `?X-Plex-Token=x`, `{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`, `<a:access_token>S</a:access_token>`, `<ns.sub-x:token/>`, `<x a:token="v">`, `<r a:password = "v"/>`} {
 		require.True(t, pattern.MatchString(body), body)
 	}
-	for _, body := range []string{`{"access_tokens": 1}`, `<tokensuffix>`, `pinned=true`, `a_token=x`, `tokenizer=ok`, `"token"`} {
+	for _, body := range []string{`{"access_tokens": 1}`, `<tokensuffix>`, `pinned=true`, `a_token=x`, `tokenizer=ok`, `"token"`, `<a:tokenizer>`, `<a:access_tokens>`, `a:access_tokens=1`} {
 		require.False(t, pattern.MatchString(body), body)
 	}
 }

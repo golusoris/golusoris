@@ -44,7 +44,7 @@ func credentialPattern(extra []string) *regexp.Regexp {
 		}
 	}
 	names := "(?:" + strings.Join(fields, "|") + ")"
-	return regexp.MustCompile(`(?i)("` + names + `"\s*:|<` + names + `[\s>/]|(^|[\s?&])` + names + `\s*=)`)
+	return regexp.MustCompile(`(?i)("` + names + `"\s*:|<(?:[\w.-]+:)?` + names + `[\s>/]|(^|[\s?&:])` + names + `\s*=)`)
 }
 
 func noStore(header http.Header) {
