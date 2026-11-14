@@ -6,11 +6,14 @@
 
 from __future__ import annotations
 
+import ast
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import workflow_actor_policy as policy
 from workflow_actor_policy import (
     ALLOWED,
     ALLOWED_LINES,
@@ -77,6 +80,101 @@ _NEW_FAILURES: dict[str, tuple[str, ...]] = {
 
 
 class WorkflowActorPolicyTest(unittest.TestCase):
+    def test_parser_unavailable_fails_closed(self) -> None:
+        with patch.object(policy, "_parser_command", side_effect=OSError, create=True):
+            findings = check(_FIXTURE_NAME, "on: push\njobs: {}\n")
+        self.assertTrue(any("workflow parser unavailable" in item for item in findings))
+
+    def test_parser_output_wrong_shape_fails_closed(self) -> None:
+        for document in (
+            None,
+            [],
+            {},
+            {"scalars": []},
+            {"error": ""},
+            {"scalars": [{}], "error": ""},
+            {"scalars": [None], "error": ""},
+            {"scalars": 1, "error": ""},
+        ):
+            with (
+                self.subTest(document=document),
+                patch.object(
+                    policy, "_parse_document", return_value=document, create=True
+                ),
+            ):
+                findings = check(_FIXTURE_NAME, "on: push\njobs: {}\n")
+                self.assertTrue(
+                    any("workflow parser unavailable" in item for item in findings)
+                )
+
+    def test_suite_failure_exit_code(self) -> None:
+        for filename in (
+            "workflow_actor_policy_test.py",
+            "workflow_actor_policy_uses_test.py",
+        ):
+            tree = ast.parse(
+                Path(__file__).with_name(filename).read_text(encoding="utf-8")
+            )
+            exit_call = tree.body[-1].body[0].value
+            self.assertEqual(exit_call.args[0].orelse.value, 3, filename)
+
+    def test_wildcard_identity_context_fails(self) -> None:
+        text = _FIXTURE_PREFIX + "    if: ${{ !contains(github.*, '29139614') }}\n"
+        self.assertTrue(check(_FIXTURE_NAME, text))
+
+    def test_expression_reference_bound_fails_closed(self) -> None:
+        text = (
+            _FIXTURE_PREFIX
+            + "    steps:\n      - run: echo "
+            + "${{ github.ref }} " * (MAX_WORKFLOW_LINES + 1)
+            + "${{ github.* }}\n"
+        )
+        self.assertTrue(check(_FIXTURE_NAME, text))
+
+    def test_job_alias_does_not_inherit_allowance(self) -> None:
+        text = (
+            "on:\n  pull_request:\njobs:\n  pr-title: &checks\n"
+            "    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'\n"
+            "  semgrep: *checks\n"
+        )
+        self.assertTrue(check(".github/workflows/ci.yml", text))
+
+    def test_delimiter_before_multiline_expression_fails(self) -> None:
+        text = (
+            _FIXTURE_PREFIX + "    steps:\n      - run: |\n"
+            "          : '}}'; if [ \"${{ github .\n"
+            '          actor_id }}" = 29139614 ]; then exit 0; fi\n'
+        )
+        self.assertTrue(check(_FIXTURE_NAME, text))
+
+    def test_bare_on_pull_request_passes(self) -> None:
+        self.assertEqual(check(_FIXTURE_NAME, "on:\n  pull_request:\njobs: {}\n"), [])
+
+    def test_unlisted_context_paths_fail_closed(self) -> None:
+        for expr in (
+            "github",
+            "github.event",
+            "github.event.unlisted",
+            "github[inputs.key]",
+        ):
+            self.assertTrue(check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {expr}\n"))
+        self.assertEqual(
+            check(
+                _FIXTURE_NAME,
+                _FIXTURE_PREFIX + "    if: github['event_name'] == 'push'\n",
+            ),
+            [],
+        )
+
+    def test_duplicate_keys_fail_closed(self) -> None:
+        self.assertTrue(check(_FIXTURE_NAME, "on: push\non: pull_request\njobs: {}\n"))
+
+    def test_recursive_alias_fails_closed(self) -> None:
+        self.assertTrue(check(_FIXTURE_NAME, "x: &loop {child: *loop}\n"))
+
+    def test_multiple_documents_fail_closed(self) -> None:
+        self.assertTrue(check(_FIXTURE_NAME, "on: push\n---\non: pull_request\n"))
+
     def test_allowed_entries_are_pull_request_only(self) -> None:
         self.assertEqual(len(ALLOWED), 3)
         for (path, job, expr), reason in ALLOWED.items():
@@ -880,8 +978,9 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         )
         for value in (r'"x\UFFFFFFFFy"', r'"x\xZZy"', r'"x\uD800y"'):
             with self.subTest(value=value):
-                self.assertEqual(
-                    check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {value}\n"), []
+                # Invalid YAML must fail closed before expression analysis.
+                self.assertTrue(
+                    check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {value}\n")
                 )
 
     def test_escaped_line_break_fails(self) -> None:
@@ -920,4 +1019,4 @@ class WorkflowActorPolicyTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)
+    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 3)

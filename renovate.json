@@ -473,6 +473,19 @@
   ],
   "packageRules": [
     {
+      "description": "actionlint pins this pre-release; go mod tidy moves it with actionlint updates.",
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchFileNames": [
+        "scripts/ci/workflow_actor_parser/go.mod"
+      ],
+      "matchPackageNames": [
+        "go.yaml.in/yaml/v4"
+      ],
+      "enabled": false
+    },
+    {
       "description": "Resolve pinned Wolfi APK packages from the official x86_64 repository.",
       "matchDatasources": [
         "apk"

@@ -11,8 +11,15 @@ or image shape, and local action targets must be scanned files.
 
 from __future__ import annotations
 
+import atexit
+import json
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -71,7 +78,7 @@ ALLOWED_LINES: dict[tuple[str, str, str], str] = {
         "renovate",
         (
             "image: docker.io/renovate/renovate:44@"
-            "sha256:0423c5dfb1488df5716b6584032b3bcf7091ad7a3bc547c5707f047da7a30674"
+            "sha256:7dba1a3b916a2cf302ba0df458ddcc8fcbac3c92d0fe9882ac13ba0363de656b"
         ),
     ): "Pinned Renovate container image for on-demand Gitea runs.",
     (
@@ -486,7 +493,7 @@ def _check_local_uses(
     local_ctx: _LocalScanContext | None,
 ) -> str | None:
     """Return a finding when a local uses target is outside the scanned set."""
-    if local_ctx is None or _is_scanned_local_action(target, local_ctx):
+    if local_ctx is not None and _is_scanned_local_action(target, local_ctx):
         return None
     return f"{name}:{lineno}:{job}: local action not scanned: {target}"
 
@@ -622,7 +629,7 @@ def _check_line(
     return findings
 
 
-def _check_text(
+def _check_lines(
     name: str,
     text: str,
     hits: _AllowanceHits | None = None,
@@ -643,6 +650,184 @@ def _check_text(
             )
         findings.extend(_check_line(name, lineno, line, state, hits, local_ctx))
     return findings
+
+
+_SAFE_CONTEXT_PATHS = frozenset(
+    "action action_path action_ref action_repository api_url base_ref env event_name "
+    "graphql_url head_ref job output path ref ref_name ref_protected ref_type "
+    "repository repository_id retention_days run_attempt run_id "
+    "run_number secret_source server_url sha token workflow workflow_ref workflow_sha "
+    "workspace event.issue.body event.issue.title event.merge_group.base_sha "
+    "event.merge_group.head_sha event.number event.pull_request.base.sha "
+    "event.pull_request.body event.pull_request.draft event.pull_request.head.repo.fork "
+    "event.pull_request.head.sha event.pull_request.number event.pull_request.title "
+    "event.repository.private event.workflow_run.conclusion "
+    "event.workflow_run.head_branch event.workflow_run.head_sha".split()
+)
+
+
+@cache
+def _parser_command() -> list[str]:
+    """Build the pinned parser once per process to exclude stale binaries."""
+    directory = REPO_ROOT / "scripts/ci/workflow_actor_parser"
+    build_dir = tempfile.mkdtemp(prefix="workflow-actor-parser-")
+    atexit.register(shutil.rmtree, build_dir, ignore_errors=True)
+    output = Path(build_dir) / "workflow_actor_parser"
+    if os.name == "nt":
+        output = output.with_suffix(".exe")
+    go = shutil.which("go")
+    if go is None:
+        raise OSError("workflow parser: Go compiler unavailable")
+    subprocess.run(  # noqa: S603 # WHY: fixed argv and repository-owned build paths.
+        [go, "build", "-p=2", "-o", str(output), "./..."],
+        cwd=directory,
+        check=True,
+        capture_output=True,
+        timeout=180,
+    )
+    return [str(output)]
+
+
+def _parse_document(text: str) -> dict:
+    """Return decoded YAML scalars and actionlint expression facts."""
+    result = subprocess.run(  # noqa: S603 # WHY: fixed binary; YAML enters only stdin.
+        _parser_command(),
+        input=text,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=True,
+        timeout=30,
+    )
+    return json.loads(result.stdout)
+
+
+def _parsed_job(path: list[str]) -> str:
+    """Use decoded ownership even when source lines belong to an aliased job."""
+    return path[1] if len(path) > 1 and path[0] == "jobs" else "<top>"
+
+
+def _parsed_allowed(
+    name: str, item: dict, lines: list[str], hits: _AllowanceHits | None
+) -> bool:
+    """Scope allowances to parsed jobs and refuse inheritance through aliases."""
+    path = item["path"]
+    job = _parsed_job(path)
+    lineno = item["line"] if path[-1].startswith("#") else item["key_line"]
+    line = lines[lineno - 1].strip()
+    if item["alias"]:
+        return False
+    key = (name, job, line)
+    if ALLOWED_LINES.get(key, "").strip():
+        if hits is not None:
+            hits.allowed_lines.add(key)
+        return True
+    if path != ["jobs", job, "if"] or item["key"] or item["style"]:
+        return False
+    if_key = (name, job, _normalise_if_expr(item["text"]))
+    if ALLOWED.get(if_key, "").strip():
+        if hits is not None:
+            hits.allowed_ifs.add(if_key)
+        return True
+    return False
+
+
+def _unsafe_context(item: dict) -> bool:
+    """Allow only enumerated github and gitea leaves, including literal indexes."""
+    references = item["refs"] or []
+    if len(references) > MAX_WORKFLOW_LINES:
+        return True
+    for reference in references[:MAX_WORKFLOW_LINES]:
+        if reference == "[depth-bound]":
+            return True
+        root, _, path = reference.partition(".")
+        if root in ("github", "gitea") and path not in _SAFE_CONTEXT_PATHS:
+            return True
+    return False
+
+
+def _document_scalars(document: dict) -> list[dict]:
+    """Refuse parser protocol drift before inspecting any scalar."""
+    if not isinstance(document, dict) or not {"scalars", "error"} <= document.keys():
+        raise TypeError("workflow parser: invalid response keys")
+    if not isinstance(document["error"], str):
+        raise TypeError("workflow parser: invalid error field")
+    scalars = document["scalars"]
+    if scalars is None:
+        return []
+    if not isinstance(scalars, list) or len(scalars) > 65536:
+        raise TypeError("workflow parser: invalid scalar collection")
+    return scalars
+
+
+def _parsed_scalar_finding(
+    name: str,
+    item: dict,
+    lines: list[str],
+    hits: _AllowanceHits | None,
+    local_ctx: _LocalScanContext | None,
+) -> str | None:
+    """Apply policy using decoded keys, references and alias ownership."""
+    path = item["path"]
+    if not path or _parsed_allowed(name, item, lines, hits):
+        return None
+    job = _parsed_job(path)
+    lineno = item["key_line"] or item["line"]
+    if (
+        item["error"]
+        or _unsafe_context(item)
+        or _has_disallowed_token(item["text"], path[-1] == "if")
+    ):
+        return (
+            f"{name}:{lineno}:{job}: disallowed parsed scalar: " + item["text"].strip()
+        )
+    if path[-1] == "uses" and not item["key"]:
+        return _check_uses_value(name, lineno, item["text"], job, local_ctx)
+    return None
+
+
+def _parsed_findings(
+    name: str,
+    text: str,
+    hits: _AllowanceHits | None,
+    local_ctx: _LocalScanContext | None,
+) -> list[str]:
+    """Apply policy to decoded scalars after bounded alias expansion."""
+    try:
+        document = _parse_document(text)
+        scalars = _document_scalars(document)
+        if document["error"]:
+            return [f"{name}:1:<top>: {document['Error']}"]
+        lines = text.splitlines()
+        findings: list[str] = []
+        for item in scalars[:65536]:
+            finding = _parsed_scalar_finding(name, item, lines, hits, local_ctx)
+            if finding is not None:
+                findings.append(finding)
+        return list(dict.fromkeys(findings))
+    except (
+        OSError,
+        subprocess.SubprocessError,
+        ValueError,
+        KeyError,
+        TypeError,
+        IndexError,
+        AttributeError,
+    ) as exc:
+        return [f"{name}:1:<top>: workflow parser unavailable: {type(exc).__name__}"]
+
+
+def _check_text(
+    name: str,
+    text: str,
+    hits: _AllowanceHits | None = None,
+    local_ctx: _LocalScanContext | None = None,
+) -> list[str]:
+    """Require both the conservative lexical policy and parsed policy to accept."""
+    findings = _check_lines(name, text, hits, local_ctx)
+    if findings:
+        return findings
+    return _parsed_findings(name, text, hits, local_ctx)
 
 
 def check(name: str, text: str) -> list[str]:

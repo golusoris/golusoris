@@ -20,6 +20,45 @@ from workflow_actor_policy import (
 
 
 class WorkflowActorUsesPolicyTest(unittest.TestCase):
+    def test_local_uses_without_scan_context_fails_closed(self) -> None:
+        for key in ("uses", '"uses"', '"\\u0075ses"'):
+            self.assertTrue(
+                check(
+                    ".github/workflows/ci.yml",
+                    f"jobs:\n  build:\n    steps:\n      - {key}: ./tools/gate\n",
+                )
+            )
+
+    def test_quoted_uses_key_cannot_hide_local_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_fixture(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n    - if: github.actor_id == 29139614\n",
+            )
+            write_fixture(
+                root,
+                ".github/workflows/ci.yml",
+                'on:\n  push:\njobs:\n  build:\n    steps:\n      - "uses": ./tools/gate\n',
+            )
+            self.assertTrue(scan(root))
+
+    def test_escaped_uses_key_cannot_hide_local_action(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_fixture(
+                root,
+                "tools/gate/action.yml",
+                "runs:\n  using: composite\n  steps:\n    - if: github.actor_id == 29139614\n",
+            )
+            write_fixture(
+                root,
+                ".github/workflows/ci.yml",
+                'on:\n  push:\njobs:\n  build:\n    steps:\n      - "\\u0075ses": ./tools/gate\n',
+            )
+            self.assertTrue(scan(root))
+
     def test_composite_action_actor_if_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -635,4 +674,4 @@ class WorkflowActorUsesPolicyTest(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 1)
+    sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 3)
