@@ -18,7 +18,7 @@ const (
 	// PostGIS is the PostgreSQL 18 PostGIS integration-test image.
 	PostGIS = "postgis/postgis:18-3.6-alpine@sha256:c53a483fc274072dfa02cd491efa79f3c8ae0a10774a0ece6c9c53b6a632cdef"
 	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
-	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:5895949dfcdf308eb0cd31c950c93c14895c77f33fbedfecf1fa511ab1d4bcd2"
+	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:ab49524d18df7200b74ac9a475e1db6297fc1eb57da4c214c63d10ecc4b754fa"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
 	Timescale = "timescale/timescaledb:2.31.0-pg17@sha256:b56a3f51991df1f79d0c1a0841cad5c5fa8058fdd6a3ee6886394a6d4c174538"
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
