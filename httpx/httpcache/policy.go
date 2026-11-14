@@ -96,6 +96,12 @@ func (c *Cache) nonStorable(resp *http.Response, host HostOptions) bool {
 }
 
 func (c *Cache) applyBody(resp *http.Response, body []byte, oversized bool) {
+	for name := range resp.Trailer {
+		if c.sensitiveFieldName(name) {
+			noStore(resp.Header)
+			break
+		}
+	}
 	if oversized || (!bodylessResponse(resp) && c.sensitiveBody(resp.Header, body)) {
 		noStore(resp.Header)
 	}
@@ -116,15 +122,24 @@ func (c *Cache) sensitiveResponse(resp *http.Response) bool {
 		return true
 	}
 	for name := range resp.Header {
-		if _, secret := c.secretHeaders[strings.ToLower(name)]; secret {
-			return true
-		}
-		switch strings.ToLower(name) {
-		case "set-cookie", "www-authenticate", "proxy-authenticate", "authentication-info":
+		if c.sensitiveFieldName(name) {
 			return true
 		}
 	}
 	return false
+}
+
+func (c *Cache) sensitiveFieldName(name string) bool {
+	name = strings.ToLower(name)
+	if _, secret := c.secretHeaders[name]; secret {
+		return true
+	}
+	switch name {
+	case "set-cookie", "www-authenticate", "proxy-authenticate", "authentication-info":
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *Cache) sensitiveLocation(header http.Header) bool {

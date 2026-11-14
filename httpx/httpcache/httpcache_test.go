@@ -18,6 +18,7 @@ import (
 
 	"github.com/bartventer/httpcache/store"
 	"github.com/bartventer/httpcache/store/driver"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/cache/memory"
@@ -118,7 +119,7 @@ func TestCacheETagRevalidation(t *testing.T) {
 		if calls == 1 {
 			return response(200, "metadata", "Cache-Control", "max-age=60", "Age", "61", "ETag", `"v1"`), nil
 		}
-		require.Equal(t, `"v1"`, req.Header.Get("If-None-Match"))
+		assert.Equal(t, `"v1"`, req.Header.Get("If-None-Match"))
 		return response(304, "", "Cache-Control", "max-age=60"), nil
 	}))
 	readResponse(t, transport, request(t, "http://provider.test/data"))

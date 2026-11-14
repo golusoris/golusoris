@@ -23,6 +23,8 @@ import (
 
 	"github.com/bartventer/httpcache"
 	"github.com/bartventer/httpcache/store"
+	"github.com/bartventer/httpcache/store/driver"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -115,10 +117,10 @@ func TestCacheSensitive304NeverStored(t *testing.T) {
 				case 1:
 					return response(200, "cached", "Cache-Control", "max-age=60", "Age", "61", "ETag", `"v1"`), nil
 				case 2:
-					require.Equal(t, `"v1"`, req.Header.Get("If-None-Match"))
+					assert.Equal(t, `"v1"`, req.Header.Get("If-None-Match"))
 					return response(304, "", "Set-Cookie", "private-example-cookie"), nil
 				default:
-					require.Empty(t, req.Header.Get("If-None-Match"))
+					assert.Empty(t, req.Header.Get("If-None-Match"))
 					return response(200, "fresh", "Set-Cookie", "private-example-cookie"), nil
 				}
 			}))
@@ -240,10 +242,10 @@ func TestCacheUserinfoNeverLoggedOrStored(t *testing.T) {
 	var logs bytes.Buffer
 	c.logger = slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
-		require.Equal(t, "synthetic-user", req.URL.User.Username())
+		assert.Equal(t, "synthetic-user", req.URL.User.Username())
 		password, ok := req.URL.User.Password()
-		require.True(t, ok)
-		require.Equal(t, "synthetic-password", password)
+		assert.True(t, ok)
+		assert.Equal(t, "synthetic-password", password)
 		return response(200, "metadata", "Cache-Control", "public, max-age=60"), nil
 	}))
 	readResponse(t, transport, request(t, "http://synthetic-user:synthetic-password@provider.test/data"))
@@ -257,7 +259,7 @@ func TestCacheRawQueryPreserved(t *testing.T) {
 	for _, query := range []string{"b=2&a=%7e&flag&api_key=S", "b=2&a=%7e&flag&api_key=SECRETVALUE", "b=2&x=1;api_key=SECRETVALUE&a=%7e&flag"} {
 		c, _ := testCache(t, DefaultOptions())
 		transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
-			require.Equal(t, query, req.URL.RawQuery)
+			assert.Equal(t, query, req.URL.RawQuery)
 			return response(200, "metadata", "Cache-Control", "public, max-age=60"), nil
 		}))
 		req := request(t, "http://provider.test/data?"+query)
@@ -425,7 +427,7 @@ func TestCacheOversizedTrailers(t *testing.T) {
 		w.Header().Set("Trailer", "X-Metadata-Version")
 		w.Header().Set("Cache-Control", "max-age=60")
 		_, err := io.WriteString(w, strings.Repeat("x", 128))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.Header().Set("X-Metadata-Version", "v2")
 	}))
 	defer server.Close()
@@ -443,6 +445,74 @@ func TestCacheOversizedTrailers(t *testing.T) {
 	require.Len(t, data, 128)
 	require.Equal(t, "v2", resp.Trailer.Get("X-Metadata-Version"))
 	require.NoError(t, resp.Body.Close())
+}
+
+func TestCacheResponseTrailers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name       string
+		trailer    string
+		undeclared bool
+		stored     bool
+	}{
+		{"declared", "X-Api-Key", false, false},
+		{"undeclared", "X-Api-Key", true, false},
+		{"benign", "X-Metadata-Version", false, true},
+		{"lowercase", "x-api-key", false, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			testCacheResponseTrailer(t, tc.trailer, tc.undeclared, tc.stored)
+		})
+	}
+}
+
+func testCacheResponseTrailer(t *testing.T, name string, undeclared, stored bool) {
+	t.Helper()
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		if !undeclared {
+			w.Header().Set("Trailer", name)
+		}
+		w.Header().Set("Cache-Control", "max-age=60")
+		_, err := io.WriteString(w, "metadata")
+		assert.NoError(t, err)
+		w.(http.Flusher).Flush()
+		if undeclared {
+			w.Header().Set(http.TrailerPrefix+name, "v2")
+		} else {
+			w.Header().Set(name, "v2")
+		}
+	}))
+	defer server.Close()
+	c, _ := testCache(t, DefaultOptions())
+	upstream := &http.Transport{}
+	defer upstream.CloseIdleConnections()
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	transport := c.Wrap(upstream)
+	target := server.URL + "/"
+	for range 2 {
+		resp, err := transport.RoundTrip(requestWith(t, ctx, target))
+		require.NoError(t, err)
+		data, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		require.Equal(t, "metadata", string(data))
+		require.Equal(t, "v2", resp.Trailer.Get(name))
+	}
+	conn, err := store.Open(driverScheme + "://" + c.id)
+	require.NoError(t, err)
+	_, err = conn.Get(target)
+	if stored {
+		require.NoError(t, err)
+		require.EqualValues(t, 1, calls.Load())
+	} else {
+		require.ErrorIs(t, err, driver.ErrNotExist)
+		require.EqualValues(t, 2, calls.Load())
+	}
 }
 
 func TestCacheUpstreamErrorOmitsSecrets(t *testing.T) {

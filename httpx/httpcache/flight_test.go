@@ -17,6 +17,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/golusoris/golusoris/testutil/httpclient"
@@ -168,7 +169,7 @@ func TestCacheUncachedSecretsReachProvider(t *testing.T) {
 	seen := make([]string, 0, 2)
 	transport := c.Wrap(transportFunc(func(req *http.Request) (*http.Response, error) {
 		seen = append(seen, req.URL.Query().Get("API_KEY"))
-		require.Equal(t, "value", req.URL.Query().Get("public"))
+		assert.Equal(t, "value", req.URL.Query().Get("public"))
 		return response(200, "ok", "Cache-Control", "no-store"), nil
 	}))
 	for _, value := range []string{"K1", "K2"} {
