@@ -49,8 +49,11 @@ func credentialPattern(extra []string) *regexp.Regexp {
 
 func noStore(header http.Header) {
 	if !hasDirective(header, "no-store") {
-		directives := append(header.Values("Cache-Control"), "no-store")
-		header.Set("Cache-Control", strings.Join(directives, ", "))
+		value := "no-store"
+		if current := strings.Join(header.Values("Cache-Control"), ", "); current != "" {
+			value += ", " + current
+		}
+		header.Set("Cache-Control", value)
 	}
 	header.Del("Expires")
 }

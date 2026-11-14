@@ -110,13 +110,18 @@ func TestPolicyTTLAndVary(t *testing.T) {
 	c, _ := testCache(t, DefaultOptions())
 	resp := response(200, "ok", "Cache-Control", "private, max-age=10, s-maxage=12, no-cache, must-revalidate, proxy-revalidate", "Expires", "old", "Pragma", "no-cache", "ETag", `"v1"`, "Last-Modified", "date", "Vary", "AUTHORIZATION, Accept")
 	defer func() { require.NoError(t, resp.Body.Close()) }()
-	c.applyPolicy(resp, []byte("ok"), HostOptions{TTL: time.Minute, StaleIfError: time.Hour}, false)
+	nonShared := *resp
+	c.applyPolicy(resp, []byte("ok"), HostOptions{TTL: time.Minute, StaleIfError: time.Hour, Shared: true}, false)
 	require.Equal(t, "private, max-age=60, stale-if-error=3600", resp.Header.Get("Cache-Control"))
 	require.Empty(t, resp.Header.Get("Expires"))
 	require.Empty(t, resp.Header.Get("Pragma"))
 	require.Equal(t, `"v1"`, resp.Header.Get("ETag"))
 	require.Equal(t, "date", resp.Header.Get("Last-Modified"))
 	require.Equal(t, "Accept", resp.Header.Get("Vary"))
+	c.applyPolicy(&nonShared, []byte("ok"), HostOptions{TTL: time.Minute, StaleIfError: time.Hour}, false)
+	require.True(t, hasDirective(nonShared.Header, "no-store"))
+	require.Contains(t, nonShared.Header.Get("Cache-Control"), "max-age=10")
+	require.NotContains(t, nonShared.Header.Get("Cache-Control"), "max-age=60")
 	for _, vary := range []string{"Authorization", "*", ""} {
 		header := http.Header{"Vary": {vary}}
 		c.cleanVary(header)
@@ -326,5 +331,35 @@ func TestPolicyBodylessGzip(t *testing.T) {
 		c.applyBody(resp, nil, tc.oversized)
 		require.Equal(t, tc.noStore, hasDirective(resp.Header, "no-store"), "%s %d oversized=%t", tc.method, tc.status, tc.oversized)
 		require.NoError(t, resp.Body.Close())
+	}
+}
+
+func TestPolicyNoStoreUnclosedQuote(t *testing.T) {
+	t.Parallel()
+	c, _ := testCache(t, DefaultOptions())
+	for _, tc := range []struct {
+		name      string
+		control   []string
+		want      string
+		oversized bool
+	}{
+		{"unclosed quote", []string{`max-age=60, s-maxage="60`}, `no-store, max-age=60, s-maxage="60`, false},
+		{"empty", nil, "no-store", false},
+		{"empty value", []string{""}, "no-store", false},
+		{"existing", []string{"no-store, max-age=60"}, "no-store, max-age=60", false},
+		{"multiple lines", []string{"max-age=60", `s-maxage="60`}, `no-store, max-age=60, s-maxage="60`, false},
+		{"oversized unclosed quote", []string{`max-age=60, s-maxage="60`}, `no-store, max-age=60, s-maxage="60`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resp := response(200, "ok", "Vary", "Authorization", "Expires", "old")
+			defer func() { require.NoError(t, resp.Body.Close()) }()
+			resp.Header["Cache-Control"] = tc.control
+			c.applyPolicy(resp, []byte("ok"), HostOptions{}, tc.oversized)
+			t.Logf("after applyPolicy: Cache-Control=%q directives=%q no-store=%t", resp.Header.Get("Cache-Control"), cacheDirectives(resp.Header.Get("Cache-Control")), hasDirective(resp.Header, "no-store"))
+			require.True(t, hasDirective(resp.Header, "no-store"))
+			require.Equal(t, tc.want, resp.Header.Get("Cache-Control"))
+			require.Empty(t, resp.Header.Get("Expires"))
+		})
 	}
 }

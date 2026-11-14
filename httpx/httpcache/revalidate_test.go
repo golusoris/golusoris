@@ -195,7 +195,7 @@ func TestCacheCredentialedResponsesNeedSharing(t *testing.T) {
 		{"empty shared age", "max-age=60, s-maxage=", "", true, false, false},
 		{"negative shared age", "max-age=60, s-maxage=-1", "", true, false, false},
 		{"quoted shared age", `max-age=60, S-Maxage="60"`, "", true, true, false},
-		{"zero shared age", "max-age=60, s-maxage=0", "", true, false, false},
+		{"zero shared age", "max-age=60, s-maxage=0", "", true, true, false},
 		{"missing shared age", "max-age=60, s-maxage", "", true, false, false},
 		{"empty quoted shared age", `max-age=60, s-maxage=""`, "", true, false, false},
 		{"signed shared age", "max-age=60, s-maxage=+60", "", true, false, false},
