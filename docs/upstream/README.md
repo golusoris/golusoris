@@ -41,7 +41,7 @@ regenerator.
 | `@scalar/api-reference` | `v1.76.4` | embedded asset | [scalar/](scalar/README.md) |
 | `k8s.io/client-go` | `v0.37.2` | root | [k8s/](k8s/README.md) |
 | `github.com/go-chi/chi/v5` | `v5.5.0` | root | [chi/](chi/README.md) |
-| `github.com/go-playground/validator/v10` | `v10.30.5` | root + core | [validator/](validator/README.md) |
+| `github.com/go-playground/validator/v10` | `v10.30.6` | root + core | [validator/](validator/README.md) |
 | `github.com/jonboulle/clockwork` | `v0.5.0` | root + core | [clockwork/](clockwork/README.md) |
 | `github.com/yuin/goldmark/v2` | `v2.1.11` | root | [goldmark/](goldmark/README.md) |
 | `github.com/prometheus/client_golang` | `v1.25.0` | root | [prometheus/](prometheus/README.md) |
