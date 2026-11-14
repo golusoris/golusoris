@@ -87,14 +87,21 @@ def assert_blocking_arm64_leg(case: TestCase, workflow: str) -> None:
     case.assertNotIn(
         "continue-on-error", workflow, "portability workflow must remain blocking"
     )
-    case.assertRegex(
-        workflow,
-        r"(?m)^  portability-windows-arm64:\n"
-        r"    name: Platform Neutrality \(Windows arm64\)\n"
-        r"    runs-on: windows-11-arm\n"
-        r"    timeout-minutes: 90\n"
-        r"    steps: \*portability-steps$",
-    )
+    lines = workflow.splitlines()
+    job = "  portability-windows-arm64:"
+    case.assertEqual(lines.count(job), 1, "missing or duplicate Windows arm64 job")
+    block = []
+    for line in lines[lines.index(job) + 1 :]:
+        if line.strip() and not line.startswith("    "):
+            break
+        block.append(line)
+    for field in (
+        "    name: Platform Neutrality (Windows arm64)",
+        "    runs-on: windows-11-arm",
+        "    timeout-minutes: 90",
+        "    steps: *portability-steps",
+    ):
+        case.assertEqual(block.count(field), 1, f"missing or duplicate arm64 job field: {field}")
 
 
 class FakeRunner:
@@ -558,6 +565,34 @@ class WindowsARM64ToolchainTests(TestCase):
             marker, '    "continue-on-error": true\n' + marker, 1
         )
         self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_accepts_reordered_fields(self) -> None:
+        """Accept reordered job fields and an additional environment mapping."""
+        mutant = self.workflow.replace(
+            "    runs-on: windows-11-arm\n    timeout-minutes: 90\n",
+            "    timeout-minutes: 90\n    runs-on: windows-11-arm\n",
+            1,
+        ).replace(
+            "    steps: *portability-steps",
+            "    env:\n      GOFLAGS: -mod=readonly\n    steps: *portability-steps",
+            1,
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_wrong_runner(self) -> None:
+        """Reject a Windows arm64 job assigned to the wrong runner."""
+        mutant = self.workflow.replace("    runs-on: windows-11-arm\n", "    runs-on: windows-latest\n", 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_job_rejects_duplicate_job(self) -> None:
+        """Reject repeated Windows arm64 job blocks."""
+        job = self.workflow[self.workflow.index("  portability-windows-arm64:\n") :]
+        mutant = self.workflow + "\n" + job + job
         with self.assertRaises(AssertionError):
             self._assert_toolchain_contract(mutant)
 

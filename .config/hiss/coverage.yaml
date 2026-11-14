@@ -762,6 +762,17 @@ rules:
           negative/portable-path.go delegates separators to filepath. The claim remains
           partial: gap/silent-platform-skip_test.go exits green after skipping its only Windows
           behavior because the driver proves packages and phases, not per-test execution.
-          All five required legs (Linux, Linux arm64, macOS, macOS Intel, Windows) are required
-          status contexts in the active ruleset after their first hosted green run. Windows arm64
-          (windows-11-arm) runs the same steps via YAML anchor as a blocking leg since its first hosted green.
+          All six legs (Linux, Linux arm64, macOS, macOS Intel, Windows, Windows arm64) are
+          required status contexts in the active ruleset (read 2026-11-14) after their first
+          hosted green run. Measured 2026-11-14, scripts/ci/portability_test.py rejects unquoted
+          continue-on-error on the arm64 and matrix jobs in
+          test_windows_arm64_toolchain_rejects_nonblocking_arm64_job and
+          test_windows_arm64_toolchain_rejects_nonblocking_matrix_job; sequence-first and quoted
+          keys are rejected by test_windows_arm64_toolchain_rejects_nonblocking_step_first_key
+          and test_windows_arm64_toolchain_rejects_nonblocking_quoted_key. Wrong runners and
+          duplicate arm64 jobs are rejected by test_windows_arm64_job_rejects_wrong_runner and
+          test_windows_arm64_job_rejects_duplicate_job; reordered fields and an added env mapping
+          pass test_windows_arm64_job_accepts_reordered_fields. One measured gap remains:
+          replacing the shared build step's `if: env.CI_GATED != 'skip'` with `if: false` in a
+          workflow text copy still passes WindowsARM64ToolchainTests._assert_toolchain_contract,
+          so the contract does not prove that the build step executes.
