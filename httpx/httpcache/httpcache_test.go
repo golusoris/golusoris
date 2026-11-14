@@ -261,6 +261,9 @@ func TestCacheNoStore(t *testing.T) {
 		{"xml namespaced", 200, `<r xmlns:a="urn:auth"><a:access_token>S</a:access_token></r>`, nil},
 		{"form", 200, "token=example", nil},
 		{"oversized", 200, strings.Repeat("x", 65), nil},
+		{"json escaped untyped", 200, `{"access\u005ftoken":"S"}`, nil},
+		{"json escaped text", 200, `{"access\u005ftoken":"S"}`, []string{"Content-Type", "text/plain"}},
+		{"xml unicode prefix", 200, `<é:token>S</é:token>`, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

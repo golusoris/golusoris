@@ -97,10 +97,10 @@ func TestOptionsExtensions(t *testing.T) {
 func TestPolicyCredentialBoundaries(t *testing.T) {
 	t.Parallel()
 	pattern := credentialPattern(nil)
-	for _, body := range []string{`{"accessToken":1}`, `{"refresh-token":1}`, `?X-Plex-Token=x`, `{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`, `<a:access_token>S</a:access_token>`, `<ns.sub-x:token/>`, `<x a:token="v">`, `<r a:password = "v"/>`} {
+	for _, body := range []string{`{"accessToken":1}`, `{"refresh-token":1}`, `?X-Plex-Token=x`, `{"access_token": "x"}`, `<token>`, `<TOKEN value>`, `<token/>`, `x token =x`, `?pin=x`, `&password=x`, `<x token="x">`, `<a:access_token>S</a:access_token>`, `<ns.sub-x:token/>`, `<x a:token="v">`, `<r a:password = "v"/>`, `<é:token>S</é:token>`, `<ns1é:access_token/>`, `<é:token/>`, `<ns١:token/>`} {
 		require.True(t, pattern.MatchString(body), body)
 	}
-	for _, body := range []string{`{"access_tokens": 1}`, `<tokensuffix>`, `pinned=true`, `a_token=x`, `tokenizer=ok`, `"token"`, `<a:tokenizer>`, `<a:access_tokens>`, `a:access_tokens=1`} {
+	for _, body := range []string{`{"access_tokens": 1}`, `<tokensuffix>`, `pinned=true`, `a_token=x`, `tokenizer=ok`, `"token"`, `<a:tokenizer>`, `<a:access_tokens>`, `a:access_tokens=1`, `<é:tokenizer>`, `<é:access_tokens>`} {
 		require.False(t, pattern.MatchString(body), body)
 	}
 }
@@ -207,6 +207,13 @@ func TestPolicyEncodedBodies(t *testing.T) {
 		{"json invalid", "", "application/json", []byte(`{"a":"\u0041"`), false},
 		{"nested key", "", "application/json", []byte(`{"a":[{"\u0061ccess_token":"x"}]}`), false},
 		{"array values", "", "application/json", []byte(`["\u0061ccess_token", {"a":"b"}]`), true},
+		{"escaped key untyped", "", "", []byte(`{"access\u005ftoken":"x"}`), false},
+		{"escaped key text", "", "text/plain; charset=utf-8", []byte(`{"access\u005ftoken":"x"}`), false},
+		{"percent key untyped", "", "", []byte("access%5Ftoken=x"), false},
+		{"percent key text", "", "text/plain", []byte("access%5Ftoken=x"), false},
+		{"escaped value text", "", "text/plain", []byte(`{"a":"\u0041"}`), true},
+		{"plain text percent", "", "text/plain", []byte("100% done"), true},
+		{"invalid json text", "", "text/plain", []byte(`{"a":"\u0041"`), true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

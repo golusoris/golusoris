@@ -44,7 +44,7 @@ func credentialPattern(extra []string) *regexp.Regexp {
 		}
 	}
 	names := "(?:" + strings.Join(fields, "|") + ")"
-	return regexp.MustCompile(`(?i)("` + names + `"\s*:|<(?:[\w.-]+:)?` + names + `[\s>/]|(^|[\s?&:])` + names + `\s*=)`)
+	return regexp.MustCompile(`(?i)("` + names + `"\s*:|<(?:[\p{L}\p{M}\p{N}_.-]+:)?` + names + `[\s>/]|(^|[\s?&:])` + names + `\s*=)`)
 }
 
 func noStore(header http.Header) {
@@ -296,22 +296,28 @@ func canonicalSet(defaults, extra []string) map[string]struct{} {
 func (c *Cache) encodedCredentials(header http.Header, body []byte) bool {
 	mediaType, _, err := mime.ParseMediaType(header.Get("Content-Type"))
 	if err != nil {
+		mediaType = ""
+	}
+	if c.formCredentials(body, mediaType == "application/x-www-form-urlencoded") {
+		return true
+	}
+	if !bytes.Contains(body, []byte(`\u`)) {
 		return false
 	}
-	switch {
-	case mediaType == "application/x-www-form-urlencoded":
-		values, parseErr := url.ParseQuery(string(body))
-		if parseErr != nil {
+	return (mediaType == "application/json" || strings.HasSuffix(mediaType, "+json") || json.Valid(body)) && c.jsonCredentials(body)
+}
+
+func (c *Cache) formCredentials(body []byte, strict bool) bool {
+	if !strict && !bytes.Contains(body, []byte("%")) {
+		return false
+	}
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return strict
+	}
+	for key := range values {
+		if _, secret := c.fields[canonicalName(key)]; secret {
 			return true
-		}
-		for key := range values {
-			if _, secret := c.fields[canonicalName(key)]; secret {
-				return true
-			}
-		}
-	case mediaType == "application/json" || strings.HasSuffix(mediaType, "+json"):
-		if bytes.Contains(body, []byte(`\u`)) {
-			return c.jsonCredentials(body)
 		}
 	}
 	return false
