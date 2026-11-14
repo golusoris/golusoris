@@ -9,6 +9,7 @@ on:
     paths:
       - 'db/sqlite/stallprobe_test.go'
       - '.github/workflows/sqlite-stall-probe.yml'
+      - 'scripts/ci/sqlite-probe-load-summary.sh'
   workflow_dispatch:
 
 permissions:
@@ -74,9 +75,17 @@ jobs:
             load_rc=0
             wait "$load_pid" || load_rc=$?
             echo "probe_rc=$probe_rc load_rc=$load_rc"
-            if [[ "$load_rc" != 0 ]]; then grep -E -- '--- FAIL|^FAIL' "$RUNNER_TEMP/load.log" | sed -n '1,40p'; fi
+            if [[ "$load_rc" != 0 ]]; then bash scripts/ci/sqlite-probe-load-summary.sh "$RUNNER_TEMP/load.log"; fi
             [[ "$probe_rc" == 0 && "$load_rc" == 0 ]]
           else
             export STALLPROBE_P=1
             go test -p 4 -tags stallprobe -run StallProbe -count=1 -v ./db/sqlite/
           fi
+      - name: Upload file-load test log
+        if: failure() && matrix.variant == 'file-load'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          path: ${{ runner.temp }}/load.log
+          name: sqlite-probe-load-${{ matrix.os }}-${{ matrix.attempt }}
+          retention-days: 7
+          if-no-files-found: ignore

@@ -28,7 +28,7 @@ const (
 	// Dragonfly is the Redis-compatible Dragonfly integration-test image.
 	Dragonfly = "ghcr.io/dragonflydb/dragonfly:v2.1.0@sha256:94891bb22ce2fb0f7a5a3ff1bb3b2fbbc5830e2523293e47723d87fa3e5b1184"
 	// NATS is the default NATS integration-test image.
-	NATS = "nats:2-alpine@sha256:afae2fdbe2e326c65e1246cb83b9d05d319188734f3bd577ac8072daae78a10f"
+	NATS = "nats:2-alpine@sha256:558394a23dd3c36f2d3a64b51865fd09908010e80a542cea5e75c2af543ed62a"
 	// ClickHouse is the default ClickHouse integration-test image.
 	ClickHouse = "clickhouse/clickhouse-server:24@sha256:2113951827761e37c386b37f716dbdf8522b9172488a44b97a96fe6059e172a8"
 	// Redpanda is the Kafka-compatible integration-test image.
