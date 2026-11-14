@@ -66,7 +66,7 @@ func (c *Cache) applyHeaders(resp *http.Response, host HostOptions) {
 		resp.Header = make(http.Header)
 	}
 	resp.Header.Del(syntheticHeader)
-	if c.nonStorable(resp, host) {
+	if c.nonStorable(resp, host) || (!host.Shared && c.hasSecretVary(resp.Header)) {
 		noStore(resp.Header)
 	}
 	c.cleanVary(resp.Header)
@@ -154,6 +154,15 @@ func (c *Cache) cleanVary(header http.Header) {
 	}
 }
 
+func (c *Cache) hasSecretVary(header http.Header) bool {
+	for name := range strings.SplitSeq(strings.Join(header.Values("Vary"), ","), ",") {
+		if _, secret := c.secretHeaders[strings.ToLower(strings.TrimSpace(name))]; secret {
+			return true
+		}
+	}
+	return false
+}
+
 func cacheDirectives(line string) []string {
 	directives := make([]string, 0, strings.Count(line, ",")+1)
 	start := 0
@@ -184,6 +193,34 @@ func hasDirective(header http.Header, name string) bool {
 		}
 	}
 	return false
+}
+
+func hasSharedMaxAge(header http.Header) bool {
+	for _, line := range header.Values("Cache-Control") {
+		for _, directive := range cacheDirectives(line) {
+			key, value, found := strings.Cut(strings.TrimSpace(directive), "=")
+			if found && strings.EqualFold(strings.TrimSpace(key), "s-maxage") && validDeltaSeconds(value) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func validDeltaSeconds(value string) bool {
+	value = strings.TrimSpace(value)
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		value = value[1 : len(value)-1]
+	}
+	if value == "" {
+		return false
+	}
+	for i := range len(value) {
+		if value[i] < '0' || value[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func storableStatus(code int) bool { return code >= 200 && code < 400 || code == http.StatusNotFound }
@@ -225,12 +262,10 @@ func (c *Cache) credentialedResponse(resp *http.Response, host HostOptions) bool
 	if !ok || !state.credentialed {
 		return false
 	}
-	for name := range strings.SplitSeq(strings.Join(resp.Header.Values("Vary"), ","), ",") {
-		if _, secret := c.secretHeaders[strings.ToLower(strings.TrimSpace(name))]; secret {
-			return true
-		}
+	if c.hasSecretVary(resp.Header) {
+		return true
 	}
-	return !hasDirective(resp.Header, "public") && !hasDirective(resp.Header, "s-maxage") && !hasDirective(resp.Header, "must-revalidate")
+	return !hasDirective(resp.Header, "public") && !hasSharedMaxAge(resp.Header) && !hasDirective(resp.Header, "must-revalidate")
 }
 
 func contentEncoding(header http.Header) string {

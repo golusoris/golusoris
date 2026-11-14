@@ -191,6 +191,18 @@ func TestCacheCredentialedResponsesNeedSharing(t *testing.T) {
 		{"private", "max-age=60", "", true, false, false},
 		{"public", "public, max-age=60", "", true, true, false},
 		{"shared age", "s-maxage=60, max-age=60", "", true, true, false},
+		{"invalid shared age", "max-age=60, s-maxage=invalid", "", true, false, false},
+		{"empty shared age", "max-age=60, s-maxage=", "", true, false, false},
+		{"negative shared age", "max-age=60, s-maxage=-1", "", true, false, false},
+		{"quoted shared age", `max-age=60, S-Maxage="60"`, "", true, true, false},
+		{"zero shared age", "max-age=60, s-maxage=0", "", true, false, false},
+		{"missing shared age", "max-age=60, s-maxage", "", true, false, false},
+		{"empty quoted shared age", `max-age=60, s-maxage=""`, "", true, false, false},
+		{"signed shared age", "max-age=60, s-maxage=+60", "", true, false, false},
+		{"fractional shared age", "max-age=60, s-maxage=6.0", "", true, false, false},
+		{"spaced shared age", `max-age=60, s-maxage=" 60"`, "", true, false, false},
+		{"unicode shared age", "max-age=60, s-maxage=６０", "", true, false, false},
+		{"unclosed shared age", `max-age=60, s-maxage="60`, "", true, false, false},
 		{"revalidate", "must-revalidate, max-age=60", "", true, true, false},
 		{"secret vary", "public, max-age=60", "Authorization", true, false, false},
 		{"shared host", "max-age=60", "", true, true, true},
@@ -265,6 +277,7 @@ func TestCacheNonStorableStreamsUnbuffered(t *testing.T) {
 		c, _ := testCache(t, opts)
 		reader, writer := io.Pipe()
 		gate := make(chan struct{})
+		writes := make(chan error, 1)
 		var calls atomic.Int32
 		transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
 			if calls.Add(1) > 1 {
@@ -276,21 +289,23 @@ func TestCacheNonStorableStreamsUnbuffered(t *testing.T) {
 					<-gate
 					_, err = writer.Write([]byte("remaining body"))
 				}
-				require.NoError(t, writer.CloseWithError(err))
+				writes <- writer.CloseWithError(err)
 			}()
 			resp := response(200, "", "Cache-Control", "no-store")
 			resp.Body, resp.ContentLength = reader, -1
 			return resp, nil
 		}))
-		done := make(chan *http.Response, 1)
+		done := make(chan roundTripResult, 1)
+		req := request(t, "http://provider.test/first")
 		go func() {
-			resp, err := transport.RoundTrip(request(t, "http://provider.test/first")) //nolint:bodyclose // WHY: the receiving select reads and closes the streamed body after the hand-off.
-			require.NoError(t, err)
-			done <- resp
+			resp, err := transport.RoundTrip(req) //nolint:bodyclose // WHY: the receiving select reads and closes the streamed body after the hand-off.
+			done <- roundTripResult{resp: resp, err: err}
 		}()
 		synctest.Wait()
 		select {
-		case resp := <-done:
+		case result := <-done:
+			require.NoError(t, result.err)
+			resp := result.resp
 			first := make([]byte, 5)
 			_, err := io.ReadFull(resp.Body, first)
 			require.NoError(t, err)
@@ -303,10 +318,33 @@ func TestCacheNonStorableStreamsUnbuffered(t *testing.T) {
 		default:
 			t.Error("no-store response buffered before caller could read first chunk")
 			close(gate)
-			resp := <-done
-			require.NoError(t, resp.Body.Close())
+			result := <-done
+			require.NoError(t, result.err)
+			require.NoError(t, result.resp.Body.Close())
 		}
+		require.NoError(t, <-writes)
 	})
+}
+
+type roundTripResult struct {
+	resp *http.Response
+	err  error
+}
+
+type readResult struct {
+	resp served
+	body string
+	err  error
+}
+
+func readResponseResult(transport http.RoundTripper, req *http.Request) (served, string, error) {
+	resp, err := transport.RoundTrip(req)
+	if err != nil {
+		return served{}, "", err
+	}
+	data, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	return served{StatusCode: resp.StatusCode, Header: resp.Header}, string(data), errors.Join(readErr, closeErr)
 }
 
 func TestCacheBackgroundRevalidationBounded(t *testing.T) {
@@ -361,17 +399,21 @@ func TestCacheSensitive304SharedRefetch(t *testing.T) {
 		}))
 		readResponse(t, transport, request(t, "http://provider.test/data"))
 		const count = 8
-		results := make(chan string, count)
+		results := make(chan readResult, count)
 		for range count {
+			req := request(t, "http://provider.test/data")
 			go func() {
-				_, body := readResponse(t, transport, request(t, "http://provider.test/data"))
-				results <- body
+				resp, body, err := readResponseResult(transport, req)
+				results <- readResult{resp: resp, body: body, err: err}
 			}()
 		}
 		synctest.Wait()
 		close(gate)
 		for range count {
-			require.Equal(t, "fresh", <-results)
+			result := <-results
+			require.NoError(t, result.err)
+			require.Empty(t, result.resp.Header.Get(syntheticHeader))
+			require.Equal(t, "fresh", result.body)
 		}
 		require.EqualValues(t, 1, unconditional.Load())
 	})

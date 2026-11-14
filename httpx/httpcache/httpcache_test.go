@@ -223,6 +223,23 @@ func TestCacheSecretsAndVary(t *testing.T) {
 	require.Equal(t, "Accept", resp.Header.Get("Vary"))
 }
 
+func TestCacheAnonymousSecretVaryNotStored(t *testing.T) {
+	t.Parallel()
+	opts := DefaultOptions()
+	opts.Hosts = []HostOptions{{Host: "provider.test"}}
+	c, _ := testCache(t, opts)
+	calls := 0
+	transport := c.Wrap(transportFunc(func(*http.Request) (*http.Response, error) {
+		calls++
+		return response(200, "metadata", "Cache-Control", "max-age=60", "Vary", "Authorization, Accept"), nil
+	}))
+	readResponse(t, transport, request(t, "http://provider.test/data"))
+	req := request(t, "http://provider.test/data")
+	req.Header.Set("Authorization", "Bearer synthetic")
+	readResponse(t, transport, req)
+	require.Equal(t, 2, calls)
+}
+
 func TestCacheNoStore(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
