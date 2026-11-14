@@ -25,7 +25,7 @@ concurrency:
 
 # main requires these matrix contexts, so the merge queue runs them too; each leg had its first hosted green
 # before it became required: Platform Neutrality (Linux), Platform Neutrality (Linux arm64), Platform Neutrality (macOS), Platform Neutrality (macOS Intel), Platform Neutrality (Windows).
-# Platform Neutrality (Windows arm64) is advisory (continue-on-error) until #1341 is fixed.
+# Windows arm64 runs blocking on windows-11-arm with the pinned llvm-mingw toolchain since its first hosted green (#1341).
 jobs:
   portability:
     name: Platform Neutrality (${{ matrix.name }})
@@ -203,9 +203,8 @@ jobs:
           CI_SCOPE_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
         run: python -B scripts/ci/portability.py
 
-  portability-advisory:
+  portability-windows-arm64:
     name: Platform Neutrality (Windows arm64)
     runs-on: windows-11-arm
     timeout-minutes: 90
-    continue-on-error: true
     steps: *portability-steps

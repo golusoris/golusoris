@@ -751,8 +751,8 @@ rules:
           module and 1..512 packages per module, then runs go build, go vet, and go test -short
           without a command shell. make portability-test runs the same driver locally;
           .github/workflows/portability.yml runs it on Linux (amd64 and arm64), macOS (arm64 and Intel), and Windows
-          with fail-fast disabled and digest-pinned toolchain actions. A Windows arm64 advisory leg
-          (continue-on-error, windows-11-arm) runs the same steps via YAML anchor until #1341 is resolved.
+          with fail-fast disabled and digest-pinned toolchain actions. The Windows arm64 leg
+          (windows-11-arm) runs the same steps via YAML anchor as a blocking leg since its first hosted green.
         rationale: >-
           scripts/ci/portability_test.py proves every discovered module receives all three
           phases; a Git-reported worktree deletion is excluded while an unknown deletion fails
@@ -762,6 +762,17 @@ rules:
           negative/portable-path.go delegates separators to filepath. The claim remains
           partial: gap/silent-platform-skip_test.go exits green after skipping its only Windows
           behavior because the driver proves packages and phases, not per-test execution.
-          All five required legs (Linux, Linux arm64, macOS, macOS Intel, Windows) are required
-          status contexts in the active ruleset after their first hosted green run. Windows arm64
-          runs as an advisory leg (continue-on-error true) until #1341 is resolved.
+          All six legs (Linux, Linux arm64, macOS, macOS Intel, Windows, Windows arm64) are
+          required status contexts in the active ruleset (read 2026-11-14) after their first
+          hosted green run. Measured 2026-11-14, scripts/ci/portability_test.py rejects unquoted
+          continue-on-error on the arm64 and matrix jobs in
+          test_windows_arm64_toolchain_rejects_nonblocking_arm64_job and
+          test_windows_arm64_toolchain_rejects_nonblocking_matrix_job; sequence-first and quoted
+          keys are rejected by test_windows_arm64_toolchain_rejects_nonblocking_step_first_key
+          and test_windows_arm64_toolchain_rejects_nonblocking_quoted_key. Wrong runners and
+          duplicate arm64 jobs are rejected by test_windows_arm64_job_rejects_wrong_runner and
+          test_windows_arm64_job_rejects_duplicate_job; reordered fields and an added env mapping
+          pass test_windows_arm64_job_accepts_reordered_fields. One measured gap remains:
+          replacing the shared build step's `if: env.CI_GATED != 'skip'` with `if: false` in a
+          workflow text copy still passes WindowsARM64ToolchainTests._assert_toolchain_contract,
+          so the contract does not prove that the build step executes.
