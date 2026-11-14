@@ -159,6 +159,7 @@ ci-policy-test: lefthook-validate go-apidiff-test tiny-trainer-publish-policy-te
 	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
+	@bash scripts/hooks/python-tests_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
 	@python3 -B scripts/ci/renovate-policy-test.py

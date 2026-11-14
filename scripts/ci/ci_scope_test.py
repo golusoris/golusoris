@@ -22,6 +22,7 @@ CI_SCOPE_SCRIPT = REPO_ROOT / "scripts" / "ci" / "ci_scope.py"
 # WHY: Path insert allows importing ci_scope directly when tests run outside scripts/ci.
 sys.path.insert(0, str(CI_SCOPE_SCRIPT.parent))
 import ci_scope  # noqa: E402 - path insert required before importing script module.
+import repo_git  # noqa: E402 - path insert required before importing script module.
 
 SCOPE_RUN_TIMEOUT_SECONDS = ci_scope.COMMAND_TIMEOUT_SECONDS + 60
 
@@ -30,6 +31,8 @@ class CiScopeTest(unittest.TestCase):
     """Test suite covering positive, negative, and boundary cases for ci_scope.py."""
 
     def setUp(self) -> None:
+        # WHY: in-process ci_scope calls run git with os.environ; hook-exported GIT_* must not reach them.
+        self.enterContext(mock.patch.dict(os.environ, repo_git.fixture_environ(), clear=True))
         self.test_dir = tempfile.mkdtemp(prefix="golusoris-ci-scope-test-")
         self.repo = Path(self.test_dir)
 
@@ -80,12 +83,13 @@ class CiScopeTest(unittest.TestCase):
         shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def _git(self, *args: str) -> str:
-        proc = subprocess.run(  # noqa: S603 - fixed git command in test repository.
+        proc = subprocess.run(  # noqa: S603 - fixed git command in test repository. # nosec B603 B607
             ["git", "-C", str(self.repo), *args],  # noqa: S607 - git executable on runner PATH.
             capture_output=True,
             text=True,
             check=True,
             timeout=30,
+            env=repo_git.fixture_environ(),
         )
         return proc.stdout
 
@@ -94,13 +98,13 @@ class CiScopeTest(unittest.TestCase):
         *args: str,
         base: str | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        env = os.environ.copy()
+        env = repo_git.fixture_environ()
         if base is not None:
             env["CI_SCOPE_BASE"] = base
         else:
             env.pop("CI_SCOPE_BASE", None)
 
-        return subprocess.run(  # noqa: S603 - fixed interpreter and repository script.
+        return subprocess.run(  # noqa: S603 - fixed interpreter and repository script. # nosec B603
             [sys.executable, str(CI_SCOPE_SCRIPT), *args],
             cwd=self.repo,
             env=env,
@@ -110,6 +114,17 @@ class CiScopeTest(unittest.TestCase):
             # WHY: Outer bound exceeds ci_scope's own git timeout so git is killed and reaped by ci_scope first.
             timeout=SCOPE_RUN_TIMEOUT_SECONDS,
         )
+
+    def test_decoy_git_environment_preserves_fixture_and_index(self) -> None:
+        """Hook variables cannot redirect fixture git commands or scope selection."""
+        baseline = self._git("ls-files")
+        scope = self._run_scope("modules", base=self.base_sha)
+        with repo_git.decoy_environ():
+            self._git("add", "main.go")
+            self.assertEqual(self._git("ls-files"), baseline)
+            result = self._run_scope("modules", base=self.base_sha)
+            self.assertEqual(result.returncode, scope.returncode, result.stderr)
+            self.assertEqual(result.stdout, scope.stdout)
 
     def test_positive_one_file_in_nested_module_selects_that_module_only(self) -> None:
         """Touching one file in nested module selects only that module."""
@@ -297,6 +312,23 @@ class CiScopeTest(unittest.TestCase):
         self.assertEqual(decision, "skip")
         self.assertIn("skip-safe", reason)
 
+    def test_negative_inherited_hook_git_dir_cannot_redirect_in_process_gate(self) -> None:
+        """A suite started under hook GIT_* variables still runs the in-process gate on its fixture."""
+        with repo_git.decoy_environ():
+            proc = subprocess.run(  # noqa: S603 - fixed interpreter and this test file. # nosec B603
+                [
+                    sys.executable,
+                    str(Path(__file__).resolve()),
+                    "CiScopeTest.test_negative_gate_unaffected_by_malformed_go_mod",
+                ],
+                env=dict(os.environ),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=SCOPE_RUN_TIMEOUT_SECONDS,
+            )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
     def test_negative_malformed_go_mod_selects_all_modules(self) -> None:
         """A broken replace cannot silently remove reverse dependency edges."""
         self._write("go.mod", "module example.com/root\nreplace example.com/core =>\n")
@@ -376,11 +408,12 @@ class SkipSafeEmbedTest(unittest.TestCase):
         import ci_scope
 
         directive = re.compile(r"^//go:embed\s+(.+)$", re.MULTILINE)
-        listed = subprocess.run(  # noqa: S603 - fixed git command in this repository.
+        listed = subprocess.run(  # noqa: S603 - fixed git command in this repository. # nosec B603 B607
             ["git", "-C", str(REPO_ROOT), "ls-files", "-z", "--", "*.go"],  # noqa: S607 - git on PATH.
             capture_output=True,
             check=True,
             timeout=60,
+            env=repo_git.fixture_environ(),
         ).stdout.decode()
         embedded: list[str] = []
         for rel in filter(None, listed.split("\0")):
