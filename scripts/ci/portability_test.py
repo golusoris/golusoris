@@ -337,6 +337,17 @@ class PortabilityDriverTest(TestCase):
                     ):
                         verify_quiet(root, FakeRunner(manifests))
 
+    def _assert_windows_pact_link_contract(self, workflow: str) -> None:
+        """Pin explicit ARM64 linking and the unchanged amd64 library search path."""
+        install = workflow.split("name: Install verified Pact FFI on Windows\n", 1)[1]
+        install = install.split("\n      - name:", 1)[0]
+        expected = """          if ($env:RUNNER_ARCH -eq 'ARM64') {
+            "CGO_LDFLAGS=-L$pactDir -lpact_ffi" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          } else {
+            "CGO_LDFLAGS=-L$pactDir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          }"""
+        self.assertIn(expected, install)
+
     def test_workflow_uses_pinned_three_platform_matrix(self) -> None:
         """Pin the portability matrix, its actions and the cached Pact FFI install path."""
         workflow = (ROOT / ".github" / "workflows" / "portability.yml").read_text(
@@ -355,6 +366,7 @@ class PortabilityDriverTest(TestCase):
             "$pactDir = Join-Path $env:RUNNER_TEMP 'pact-ffi'",
             "python -B scripts/ci/pact_ffi.py --cache-dir .workingdir/cache/pact-ffi --lib-dir $pactDir",
             "CGO_LDFLAGS=-L$pactDir",
+            '"CGO_LDFLAGS=-L$pactDir -lpact_ffi"',
             "python -B scripts/ci/portability_test.py",
             "run: bash scripts/ci/release-depth-evidence_test.sh",
             "uses: ./.github/actions/install-cgo-libs",
@@ -364,6 +376,7 @@ class PortabilityDriverTest(TestCase):
         for fragment in required:
             with self.subTest(fragment=fragment):
                 self.assertIn(fragment, workflow)
+        self._assert_windows_pact_link_contract(workflow)
         # Name-runner pairings: a renamed matrix entry stops emitting the required context.
         pairs = (
             ("Linux", "ubuntu-26.04"),
@@ -395,6 +408,16 @@ class PortabilityDriverTest(TestCase):
             workflow.index("Verify portability driver policy"),
             workflow.index("Install verified Pact FFI"),
         )
+
+    def test_windows_arm64_pact_link_rejects_missing_library_flag(self) -> None:
+        """Reject removal of the explicit Pact FFI link flag from the ARM64 branch."""
+        workflow = (ROOT / ".github/workflows/portability.yml").read_text(
+            encoding="utf-8"
+        )
+        mutant = workflow.replace(" -lpact_ffi", "", 1)
+        self.assertNotEqual(mutant, workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_windows_pact_link_contract(mutant)
 
     def test_workflow_install_steps_use_runner_temp(self) -> None:
         """Require every Unix install step to use RUNNER_TEMP and Windows to use env:RUNNER_TEMP."""
