@@ -15,6 +15,46 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.22.0](https://github.com/golusoris/golusoris/compare/v0.21.0...v0.22.0) (2026-11-14)
+
+
+### Features
+
+* **cache/singleflight:** add DoCancelable so a caller can leave a shared flight ([665afd7](https://github.com/golusoris/golusoris/commit/665afd7f9397ec3761bfc0c93623480a5f2686b8))
+* **ci:** multi-arch OCI images (amd64 + arm64) ([#1362](https://github.com/golusoris/golusoris/issues/1362)) ([2cde5c4](https://github.com/golusoris/golusoris/commit/2cde5c4c626ddf07631f5676b593852ce18247c0))
+* **httpx/httpcache:** add outbound HTTP response cache transport ([665afd7](https://github.com/golusoris/golusoris/commit/665afd7f9397ec3761bfc0c93623480a5f2686b8))
+* **httpx/ratelimit:** add per-host outbound rate-limit transport ([665afd7](https://github.com/golusoris/golusoris/commit/665afd7f9397ec3761bfc0c93623480a5f2686b8))
+
+
+### Bug Fixes
+
+* address review findings from merged and closed PRs ([#1361](https://github.com/golusoris/golusoris/issues/1361)) ([2127ec5](https://github.com/golusoris/golusoris/commit/2127ec5d0add1c124128a3d8e161a15cbd451b58))
+* **changelog:** limit 0.21.0 to its own range and refuse re-listed releases ([#1336](https://github.com/golusoris/golusoris/issues/1336)) ([7c0d8f8](https://github.com/golusoris/golusoris/commit/7c0d8f8a74753a35c7e874505c0bdf68b30c281f))
+* **ci:** cache and retry the Pact FFI download ([#1374](https://github.com/golusoris/golusoris/issues/1374)) ([fef3d2b](https://github.com/golusoris/golusoris/commit/fef3d2bdb9be7ad8724ec73bad01f65578e0e70c))
+* **ci:** list policy inputs through git so nested worktrees stay out ([#1366](https://github.com/golusoris/golusoris/issues/1366)) ([c945001](https://github.com/golusoris/golusoris/commit/c945001d0bbe077b462ea8dc0422d8cf66df1238))
+* **ci:** read pipe output fully and retry module downloads ([#1379](https://github.com/golusoris/golusoris/issues/1379)) ([81f98b0](https://github.com/golusoris/golusoris/commit/81f98b0cf09cd1237e8e6f3a1cfc1dd3e7546b3e))
+* **ci:** read release tool versions from one source ([#1383](https://github.com/golusoris/golusoris/issues/1383)) ([52e17b4](https://github.com/golusoris/golusoris/commit/52e17b4bdaebab320fddc588195e40e9ce07d3c0))
+* **ci:** refuse a Go version govulncheck cannot parse ([#1415](https://github.com/golusoris/golusoris/issues/1415)) ([91c3f26](https://github.com/golusoris/golusoris/commit/91c3f266c29785ccbacc8c7f40295810a3d065b8))
+* **ci:** rerun draft-gated workflows when a PR is marked ready ([#1376](https://github.com/golusoris/golusoris/issues/1376)) ([f250f90](https://github.com/golusoris/golusoris/commit/f250f909b4637cd4c2e5d2e87d4e06a37cb3473e))
+* **db/migrate:** run Up at start when auto is set, with no consumer ([#1335](https://github.com/golusoris/golusoris/issues/1335)) ([94f3ad0](https://github.com/golusoris/golusoris/commit/94f3ad097cace79cb959111648d7c27b496b6a18)), closes [#1330](https://github.com/golusoris/golusoris/issues/1330)
+* **deps:** move to Go 1.27.4 for the net/http advisory GO-2026-6859 ([#1410](https://github.com/golusoris/golusoris/issues/1410)) ([c297e2a](https://github.com/golusoris/golusoris/commit/c297e2a6941fc7432206e60a3c0c25d49668c725))
+* **deps:** update aws-sdk-go-v2 monorepo ([#1316](https://github.com/golusoris/golusoris/issues/1316)) ([fabbbed](https://github.com/golusoris/golusoris/commit/fabbbedcc66332b8ea8bbca3c40c3fb36df88b0a))
+* **deps:** update module cloud.google.com/go/auth to v0.24.3 ([#1422](https://github.com/golusoris/golusoris/issues/1422)) ([ecac37f](https://github.com/golusoris/golusoris/commit/ecac37fdefb4d1e4ce6531152175340ac9eb15ca))
+* **deps:** update module github.com/go-playground/validator/v10 to v10.30.6 ([#1322](https://github.com/golusoris/golusoris/issues/1322)) ([5131202](https://github.com/golusoris/golusoris/commit/513120216d405651e6968aa2051150ff53101e09))
+* **deps:** update module github.com/xuri/excelize/v2 to v2.11.1 [security] ([#1416](https://github.com/golusoris/golusoris/issues/1416)) ([a8ea39d](https://github.com/golusoris/golusoris/commit/a8ea39d498bba5d8c57bd27a7ee966b48127b9f3))
+* **deps:** update module golang.org/x/crypto to v0.59.0 [security] ([#1414](https://github.com/golusoris/golusoris/issues/1414)) ([e2cf7b7](https://github.com/golusoris/golusoris/commit/e2cf7b742699f214753d5b605e8c7a4edfd62f5a))
+* **hooks:** run the pinned ShellCheck gate on changed shell scripts ([#1387](https://github.com/golusoris/golusoris/issues/1387)) ([82bf049](https://github.com/golusoris/golusoris/commit/82bf049e749d1233ff37d21f516b8aafa5942975))
+* **pdf:** widen post-deadline reap margin for macOS Intel ([#1360](https://github.com/golusoris/golusoris/issues/1360)) ([97756e9](https://github.com/golusoris/golusoris/commit/97756e9ca1c5e870a7706eccb8e607be768c97d0))
+* **renovate:** keep Go security fixes for pseudo-version requirements ([#1408](https://github.com/golusoris/golusoris/issues/1408)) ([66bff9c](https://github.com/golusoris/golusoris/commit/66bff9c812b2da632c6eb2b6f26a9922b5d1eef9))
+* **test:** pass explicit timeouts to Python subprocess calls ([#1378](https://github.com/golusoris/golusoris/issues/1378)) ([6bfa0f2](https://github.com/golusoris/golusoris/commit/6bfa0f253bc2469cc01d1f6cdac3881f6f1cb21a))
+
+
+### Code Refactoring
+
+* **ci:** share policy-test helpers in scripts/ci/lib ([#1380](https://github.com/golusoris/golusoris/issues/1380)) ([ed0b21b](https://github.com/golusoris/golusoris/commit/ed0b21b25ef6f9800c63764b6faac3f309a586c4))
+* **ci:** share the gitea security gate sequence ([#1368](https://github.com/golusoris/golusoris/issues/1368)) ([7c16109](https://github.com/golusoris/golusoris/commit/7c1610984bf8dfb7cb8199aa987a166287a26277))
+* **ci:** use the shared expect_failure_matching in four policy suites ([#1385](https://github.com/golusoris/golusoris/issues/1385)) ([d2a8620](https://github.com/golusoris/golusoris/commit/d2a86203bbf27d1edcb10c7f61578a2b8f41e06f))
+
 ## [0.21.0](https://github.com/golusoris/golusoris/compare/v0.20.0...v0.21.0) (2026-11-06)
 
 

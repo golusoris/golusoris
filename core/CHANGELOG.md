@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.3](https://github.com/golusoris/golusoris/compare/core/v0.12.2...core/v0.12.3) (2026-11-14)
+
+
+### Bug Fixes
+
+* **deps:** move to Go 1.27.4 for the net/http advisory GO-2026-6859 ([#1410](https://github.com/golusoris/golusoris/issues/1410)) ([c297e2a](https://github.com/golusoris/golusoris/commit/c297e2a6941fc7432206e60a3c0c25d49668c725))
+* **deps:** update module github.com/go-playground/validator/v10 to v10.30.6 ([#1322](https://github.com/golusoris/golusoris/issues/1322)) ([5131202](https://github.com/golusoris/golusoris/commit/513120216d405651e6968aa2051150ff53101e09))
+* **deps:** update module golang.org/x/crypto to v0.59.0 [security] ([#1414](https://github.com/golusoris/golusoris/issues/1414)) ([e2cf7b7](https://github.com/golusoris/golusoris/commit/e2cf7b742699f214753d5b605e8c7a4edfd62f5a))
+
 ## [0.12.2](https://github.com/golusoris/golusoris/compare/core/v0.12.1...core/v0.12.2) (2026-11-06)
 
 
