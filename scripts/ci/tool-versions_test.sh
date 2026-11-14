@@ -416,7 +416,7 @@ for mutation in missing-digest short-digest long-digest invalid-version broken-p
 		expected_error='llvm-mingw version and digest must match one adjacent Renovate pair'
 		;;
 	double-tracking)
-		sed '/^LLVM_MINGW_VERSION=/i\# renovate: datasource=github-releases depName=mstorsjo/llvm-mingw versioning=loose' "$repo_root/tools/tool-versions.env" >"$fixture"
+		awk '/^LLVM_MINGW_VERSION=/ { print "# renovate: datasource=github-releases depName=mstorsjo/llvm-mingw versioning=loose" } { print }' "$repo_root/tools/tool-versions.env" >"$fixture"
 		expected_error='llvm-mingw version must not also match the generic Renovate manager'
 		;;
 	esac
