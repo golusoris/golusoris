@@ -45,7 +45,7 @@ permissions:
 # Reusable workflow runs in caller checkouts, so pins live here; renovate.json moves them with tools/tool-versions.env.
 env:
   # renovate: datasource=github-releases depName=docker/buildx versioning=semver
-  BUILDX_VERSION: 0.38.1
+  BUILDX_VERSION: 0.38.2
   # renovate: datasource=github-releases depName=sigstore/cosign versioning=semver
   COSIGN_VERSION: 3.1.4
   # renovate: datasource=github-releases depName=anchore/syft versioning=semver
