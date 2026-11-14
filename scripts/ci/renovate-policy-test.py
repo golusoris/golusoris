@@ -78,6 +78,7 @@ EXPECTED = {
     ("tools/tool-versions.env", "helm.sh/helm/v4", "go"),
     ("tools/tool-versions.env", "github.com/bufbuild/buf", "go"),
     ("tools/tool-versions.env", "koalaman/shellcheck", "github-releases"),
+    ("tools/tool-versions.env", "mstorsjo/llvm-mingw", "github-release-attachments"),
     ("tools/tool-versions.env", "github.com/rhysd/actionlint", "go"),
     ("tools/tool-versions.env", "github.com/daveshanley/vacuum", "go"),
     ("tools/tool-versions.env", "docker/buildx", "github-releases"),
@@ -190,6 +191,7 @@ EXPECTED_MULTIPLICITY = {
 }
 
 EXPECTED_DIGESTS = {
+    "mstorsjo/llvm-mingw",
     "tonistiigi/binfmt",
     "fsfe/reuse",
     "ghcr.io/yannh/kubeconform",
@@ -829,6 +831,78 @@ def test_digest_inventory(found: list[dict[str, str]]) -> bool:
     return True
 
 
+def llvm_mingw_pair_valid(
+    config: dict[str, object], found: list[dict[str, str]], contents: dict[str, str],
+) -> bool:
+    """Require one archive pair and an automerge veto after every enabling rule."""
+    content = contents["tools/tool-versions.env"]
+    versions = re.findall(r"(?m)^LLVM_MINGW_VERSION=([0-9]{8})$", content)
+    digests = re.findall(r"(?m)^LLVM_MINGW_UCRT_AARCH64_SHA256=([a-f0-9]{64})$", content)
+    if len(versions) != 1 or len(digests) != 1:
+        return False
+    pins = [item for item in found if item["dep_name"] == "mstorsjo/llvm-mingw"]
+    expected = {
+        "path": "tools/tool-versions.env", "dep_name": "mstorsjo/llvm-mingw",
+        "datasource": "github-release-attachments", "versioning": "loose",
+        "current_value": versions[0], "current_digest": digests[0],
+    }
+    rules = config["packageRules"]
+    vetoes = [
+        index for index, rule in enumerate(rules)
+        if rule.get("matchPackageNames") == ["mstorsjo/llvm-mingw"]
+        and rule.get("automerge") is False
+    ]
+    enabled = [index for index, rule in enumerate(rules) if rule.get("automerge") is True]
+    return pins == [expected] and any(index > max(enabled, default=-1) for index in vetoes)
+
+
+def test_llvm_mingw_pair(
+    config: dict[str, object], found: list[dict[str, str]], contents: dict[str, str],
+) -> bool:
+    """Prove uncoupled digests, duplicate tracking and missing or early vetoes fail."""
+    if not llvm_mingw_pair_valid(config, found, contents):
+        print("llvm-mingw requires one release-attachment pair and a final automerge veto", file=sys.stderr)
+        return False
+    missing_digest = json.loads(json.dumps(config))
+    for manager in missing_digest["customManagers"]:
+        if manager.get("depNameTemplate") == "mstorsjo/llvm-mingw":
+            manager["matchStrings"] = [
+                pattern.replace("(?<currentDigest>", "(?:") for pattern in manager["matchStrings"]
+            ]
+    missing_veto = json.loads(json.dumps(config))
+    missing_veto["packageRules"] = [
+        rule for rule in missing_veto["packageRules"]
+        if rule.get("matchPackageNames") != ["mstorsjo/llvm-mingw"]
+    ]
+    early_veto = json.loads(json.dumps(config))
+    early_veto["packageRules"].append({"automerge": True})
+    duplicate = dict(contents)
+    duplicate["tools/tool-versions.env"] = duplicate["tools/tool-versions.env"].replace(
+        "LLVM_MINGW_VERSION=",
+        "# renovate: datasource=github-releases depName=mstorsjo/llvm-mingw versioning=loose\nLLVM_MINGW_VERSION=",
+        1,
+    )
+    mutations = [
+        ("missing digest capture", missing_digest, contents),
+        ("missing automerge veto", missing_veto, contents),
+        ("later automerge rule", early_veto, contents),
+        ("generic double tracking", config, duplicate),
+    ]
+    for name, mutated_config, mutated_contents in mutations:
+        if llvm_mingw_pair_valid(mutated_config, extract(mutated_config, mutated_contents), mutated_contents):
+            print(f"llvm-mingw negative control accepted {name}", file=sys.stderr)
+            return False
+    for field in ("datasource", "versioning", "current_value", "current_digest"):
+        mutated_found = [dict(item) for item in found]
+        for item in mutated_found:
+            if item["dep_name"] == "mstorsjo/llvm-mingw":
+                item[field] = "wrong"
+        if llvm_mingw_pair_valid(config, mutated_found, contents):
+            print(f"llvm-mingw negative control accepted drifting {field}", file=sys.stderr)
+            return False
+    return True
+
+
 def test_negative_controls(config: dict[str, object], contents: dict[str, str]) -> bool:
     """Prove stale template and missing tool metadata are rejected."""
     template_path = "template/.devcontainer/docker-compose.yml"
@@ -1171,6 +1245,7 @@ def main() -> int:
     checks = (
         test_pin_inventory(found),
         test_digest_inventory(found),
+        test_llvm_mingw_pair(config, found, contents),
         test_image_authorities_match(found),
         test_split_image_authorities(found, contents[SPLIT_IMAGES_PATH]),
         test_trainer_manager_coverage(config),

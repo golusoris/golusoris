@@ -126,6 +126,19 @@
     },
     {
       "customType": "regex",
+      "description": "Update llvm-mingw and its archive SHA-256 together.",
+      "managerFilePatterns": [
+        "/^tools/tool-versions\\.env$/"
+      ],
+      "matchStrings": [
+        "LLVM_MINGW_VERSION=(?<currentValue>[0-9]{8})\\nLLVM_MINGW_UCRT_AARCH64_SHA256=(?<currentDigest>[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "github-release-attachments",
+      "depNameTemplate": "mstorsjo/llvm-mingw",
+      "versioningTemplate": "loose"
+    },
+    {
+      "customType": "regex",
       "description": "Update kubeconform and its immutable validation image digest as one authority pair.",
       "managerFilePatterns": [
         "/^tools/tool-versions\\.env$/"
@@ -506,6 +519,13 @@
       "automerge": true,
       "automergeStrategy": "squash",
       "platformAutomerge": true
+    },
+    {
+      "description": "Review llvm-mingw updates because the digest comes from downloaded release assets and only the Windows arm64 leg proves the pair.",
+      "matchPackageNames": [
+        "mstorsjo/llvm-mingw"
+      ],
+      "automerge": false
     },
     {
       "description": "chromedp and cdproto move together: a tagged cdproto removes APIs that older chromedp calls (pdf build broke on #597), so one pull request bumps both.",
