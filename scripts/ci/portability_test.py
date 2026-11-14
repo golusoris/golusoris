@@ -417,6 +417,18 @@ class PortabilityDriverTest(TestCase):
         self.assertEqual(install_steps, 4)
 
 
+# Bounded download loop the Windows arm64 install step must keep verbatim.
+LLVM_MINGW_RETRY = """foreach ($attempt in 1..3) {
+              try {
+                Invoke-WebRequest -Uri $url -OutFile $archive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300
+                break
+              } catch {
+                if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+                if ($attempt -eq 3) { throw }
+                Start-Sleep -Seconds (10 * $attempt)
+              }
+            }"""
+
 class WindowsARM64ToolchainTests(TestCase):
     def setUp(self) -> None:
         self.workflow = (ROOT / ".github/workflows/portability.yml").read_text(encoding="utf-8")
@@ -448,13 +460,15 @@ class WindowsARM64ToolchainTests(TestCase):
         self.assertIn("path: .workingdir/cache/llvm-mingw", cache)
         self.assertIn("key: llvm-mingw-${{ runner.os }}-${{ runner.arch }}-${{ steps.llvm-mingw-pin.outputs.sha256 }}", cache)
         self.assertIn("shell: pwsh", install)
-        self.assertIn("timeout-minutes: 10", install)
+        self.assertIn("timeout-minutes: 18", install)
         self.assertIn("$ErrorActionPreference = 'Stop'", install)
         self.assertIn("LLVM_MINGW_VERSION: ${{ steps.llvm-mingw-pin.outputs.version }}", install)
         self.assertIn("LLVM_MINGW_UCRT_AARCH64_SHA256: ${{ steps.llvm-mingw-pin.outputs.sha256 }}", install)
         self.assertIn('-ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300', install)
+        self.assertIn(LLVM_MINGW_RETRY, install)
         guard = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {\n            throw 'llvm-mingw archive digest mismatch'\n          }"
         self.assertIn(guard, install)
+        self.assertLess(install.index(LLVM_MINGW_RETRY), install.index(guard))
         extraction = "Expand-Archive -LiteralPath $archive -DestinationPath $destination"
         self.assertLess(install.index(guard), install.index(extraction))
         self.assertLess(install.index(extraction), install.index("$env:GITHUB_PATH"))
@@ -475,6 +489,44 @@ class WindowsARM64ToolchainTests(TestCase):
     def test_windows_arm64_toolchain_rejects_missing_digest_check(self) -> None:
         marker = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {"
         mutant = self.workflow.replace(marker, "if ($false) {", 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_single_download(self) -> None:
+        marker = "            " + LLVM_MINGW_RETRY
+        single = "            Invoke-WebRequest -Uri $url -OutFile $archive -ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300"
+        mutant = self.workflow.replace(marker, single, 1)
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_retry_contract_drift(self) -> None:
+        mutations = (
+            ("foreach ($attempt in 1..3)", "foreach ($attempt in 1..4)"),
+            ("                break\n", ""),
+            ("if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }", ""),
+            ("if ($attempt -eq 3) { throw }", ""),
+            ("Start-Sleep -Seconds (10 * $attempt)", "Start-Sleep -Seconds 10"),
+            ("-ConnectionTimeoutSeconds 30 -OperationTimeoutSeconds 300", "-ConnectionTimeoutSeconds 60"),
+            ("timeout-minutes: 18", "timeout-minutes: 10"),
+        )
+        for marker, replacement in mutations:
+            with self.subTest(marker=marker):
+                mutant = self.workflow.replace(marker, replacement, 1)
+                self.assertNotEqual(mutant, self.workflow)
+                with self.assertRaises(AssertionError):
+                    self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_download_after_digest_guard(self) -> None:
+        marker = """          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {
+            throw 'llvm-mingw archive digest mismatch'
+          }
+"""
+        mutant = self.workflow.replace(marker, "", 1).replace(
+            "          if (-not (Test-Path -LiteralPath $archive)) {",
+            marker + "          if (-not (Test-Path -LiteralPath $archive)) {", 1,
+        )
         self.assertNotEqual(mutant, self.workflow)
         with self.assertRaises(AssertionError):
             self._assert_toolchain_contract(mutant)
