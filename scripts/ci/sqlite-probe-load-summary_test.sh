@@ -103,6 +103,17 @@ for ((index = 1; index <= 16; index++)); do
 done
 expect_output packages_equal_durations_first_seen "$ok_log" "$packages_expected"
 
+printf '%s\n' $'ok pkg/crlf 2.500s\r' 'ok pkg/lf 1.000s' >"$ok_log"
+expect_output packages_crlf_result "$ok_log" \
+	$'Package results (slowest first):\nok pkg/crlf 2.500s\r\nok pkg/lf 1.000s'
+
+timeout_cap_log="$suite_root/timeout-cap.log"
+awk 'BEGIN { for (line = 1; line <= 99997; line++) print "load output" }' >"$timeout_cap_log"
+printf '%s\n' 'panic: test timed out after 1m0s' $'\trunning tests:' \
+	$'\t\tTestAtCap (59s)' >>"$timeout_cap_log"
+expect_output timeout_block_at_cap "$timeout_cap_log" \
+	$'Go test timeouts:\npanic: test timed out after 1m0s\n\trunning tests:\n\t\tTestAtCap (59s)'
+
 truncated_log="$suite_root/truncated.log"
 awk 'BEGIN { for (line = 1; line < 100000; line++) print "load output" }' >"$truncated_log"
 printf '%s\n' 'FAIL pkg/at-cap 1.001s' >>"$truncated_log"
