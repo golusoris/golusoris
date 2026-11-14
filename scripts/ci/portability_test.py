@@ -82,6 +82,23 @@ def pact_modifier_violations(makefile: str) -> list[str]:
     return offending
 
 
+def assert_blocking_arm64_leg(case: TestCase, workflow: str) -> None:
+    """Require a blocking workflow and the pinned Windows arm64 job."""
+    case.assertNotRegex(
+        workflow,
+        r"(?m)^[ \t]*continue-on-error[ \t]*:",
+        "portability workflow must remain blocking",
+    )
+    case.assertRegex(
+        workflow,
+        r"(?m)^  portability-windows-arm64:\n"
+        r"    name: Platform Neutrality \(Windows arm64\)\n"
+        r"    runs-on: windows-11-arm\n"
+        r"    timeout-minutes: 90\n"
+        r"    steps: \*portability-steps$",
+    )
+
+
 class FakeRunner:
     """Return deterministic Git and Go output while recording phase execution."""
 
@@ -391,12 +408,7 @@ class PortabilityDriverTest(TestCase):
                     workflow,
                     rf"(?m)^ +- name: {re.escape(name)}\n +runner: {re.escape(runner)}$",
                 )
-        self.assertIn("continue-on-error: true", workflow)
-        self.assertRegex(
-            workflow, r"(?m)^ +name: Platform Neutrality \(Windows arm64\)"
-        )
-        self.assertRegex(workflow, r"(?m)^ +runs-on: windows-11-arm$")
-        self.assertIn("steps: *portability-steps", workflow)
+        assert_blocking_arm64_leg(self, workflow)
         self.assertIn("&portability-steps", workflow)
         # main requires the matrix contexts; without this trigger the merge queue waits for them forever.
         self.assertRegex(workflow, r"(?m)^  merge_group:$")
@@ -504,10 +516,30 @@ class WindowsARM64ToolchainTests(TestCase):
         self.assertLess(workflow.index(cache), workflow.index(install))
         self.assertLess(workflow.index(install), workflow.index("name: Install verified Pact FFI on Windows"))
         self.assertIn("    steps: &portability-steps", workflow)
-        self.assertRegex(workflow, r"(?m)^    continue-on-error: true\n    steps: \*portability-steps$")
+        assert_blocking_arm64_leg(self, workflow)
 
     def test_windows_arm64_toolchain_is_pinned_verified_and_scoped(self) -> None:
         self._assert_toolchain_contract(self.workflow)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_arm64_job(self) -> None:
+        """Reject continue-on-error on the Windows arm64 job."""
+        marker = "    steps: *portability-steps"
+        mutant = self.workflow.replace(
+            marker, "    continue-on-error: true\n" + marker, 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
+
+    def test_windows_arm64_toolchain_rejects_nonblocking_matrix_job(self) -> None:
+        """Reject continue-on-error elsewhere in the portability workflow."""
+        marker = "  portability:\n"
+        mutant = self.workflow.replace(
+            marker, marker + "    continue-on-error: true\n", 1
+        )
+        self.assertNotEqual(mutant, self.workflow)
+        with self.assertRaises(AssertionError):
+            self._assert_toolchain_contract(mutant)
 
     def test_windows_arm64_toolchain_rejects_missing_digest_check(self) -> None:
         marker = "if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:LLVM_MINGW_UCRT_AARCH64_SHA256) {"
