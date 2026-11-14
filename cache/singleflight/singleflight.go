@@ -21,6 +21,7 @@ package singleflight
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
@@ -28,10 +29,21 @@ import (
 
 const sharedFlightKey = "flight"
 
+type callbackPanic struct {
+	value any
+	stack []byte
+}
+
+func (p *callbackPanic) Error() string {
+	return fmt.Sprintf("singleflight: callback panic: %v\n%s", p.value, p.stack)
+}
+
 type keyedFlight struct {
-	group   singleflight.Group
-	users   int
-	running bool
+	group      singleflight.Group
+	users      int
+	running    bool
+	cancelable bool
+	panicking  bool
 }
 
 // Group de-duplicates concurrent calls with the same key K.
@@ -61,7 +73,12 @@ func (g *Group[K, V]) Do(ctx context.Context, key K, fn func(ctx context.Context
 		var zero V
 		return zero, shared, err //nolint:wrapcheck // WHY: preserve the callback error's identity.
 	}
-	return value.(V), shared, nil //nolint:forcetypeassert // WHY: fn guarantees V.
+	v, ok := value.(V)
+	if !ok {
+		var zero V
+		return zero, shared, nil
+	}
+	return v, shared, nil
 }
 
 // DoCancelable shares a flight while allowing each caller to stop waiting when its context ends.
@@ -98,6 +115,7 @@ func (g *Group[K, V]) start(ctx context.Context, key K, fn func(context.Context)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	flight := g.acquireLocked(key)
+	flight.cancelable = true
 	return flight, flight.group.DoChan(sharedFlightKey, func() (any, error) {
 		return g.call(ctx, key, flight, fn)
 	})
@@ -114,7 +132,7 @@ func (g *Group[K, V]) acquireLocked(key K) *keyedFlight {
 		g.flights = make(map[K]*keyedFlight)
 	}
 	flight := g.flights[key]
-	if flight == nil {
+	if flight == nil || flight.panicking {
 		flight = &keyedFlight{}
 		g.flights[key] = flight
 	}
@@ -122,7 +140,7 @@ func (g *Group[K, V]) acquireLocked(key K) *keyedFlight {
 	return flight
 }
 
-func (g *Group[K, V]) call(ctx context.Context, key K, flight *keyedFlight, fn func(context.Context) (V, error)) (any, error) {
+func (g *Group[K, V]) call(ctx context.Context, key K, flight *keyedFlight, fn func(context.Context) (V, error)) (value any, err error) {
 	g.mu.Lock()
 	if g.flights[key] != flight && flight.users == 0 {
 		g.mu.Unlock()
@@ -131,7 +149,24 @@ func (g *Group[K, V]) call(ctx context.Context, key K, flight *keyedFlight, fn f
 	flight.running = true
 	g.mu.Unlock()
 	defer g.finish(key, flight)
-	return fn(ctx)
+	returned := false
+	defer func() {
+		if returned {
+			return
+		}
+		g.mu.Lock()
+		cancelable := flight.cancelable
+		flight.panicking = !cancelable
+		g.mu.Unlock()
+		if cancelable {
+			if recovered := recover(); recovered != nil {
+				value, err = nil, &callbackPanic{value: recovered, stack: debug.Stack()}
+			}
+		}
+	}()
+	value, err = fn(ctx)
+	returned = true
+	return value, err
 }
 
 func (g *Group[K, V]) finish(key K, flight *keyedFlight) {
@@ -157,5 +192,10 @@ func flightValue[V any](result singleflight.Result) (V, bool, error) {
 		var zero V
 		return zero, result.Shared, result.Err
 	}
-	return result.Val.(V), result.Shared, nil //nolint:forcetypeassert // WHY: fn guarantees V.
+	v, ok := result.Val.(V)
+	if !ok {
+		var zero V
+		return zero, result.Shared, nil
+	}
+	return v, result.Shared, nil
 }

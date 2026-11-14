@@ -57,6 +57,147 @@ func TestDoPanicReachesCaller(t *testing.T) {
 	})
 }
 
+type panicOutcome struct {
+	recovered any
+	err       error
+}
+
+func captureFlightPanic(ctx context.Context, call func(context.Context, string, func(context.Context) (int, error)) (int, bool, error), fn func(context.Context) (int, error)) (result panicOutcome) {
+	defer func() { result.recovered = recover() }()
+	_, _, result.err = call(ctx, "key", fn)
+	return result
+}
+
+func TestDoPanicWithCancelableWaiter(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) { testPanicWithCancelableWaiter(t, false) })
+}
+
+func TestDoPanicAfterCancelableWaiterLeaves(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) { testPanicWithCancelableWaiter(t, true) })
+}
+
+func testPanicWithCancelableWaiter(t *testing.T, cancelBeforePanic bool) {
+	t.Helper()
+	g := singleflight.New[string, int]()
+	gate := make(chan struct{})
+	const message = "shared callback panic"
+	calls := 0
+	fn := func(context.Context) (int, error) { calls++; <-gate; panic(message) }
+	leader, follower := make(chan panicOutcome, 1), make(chan panicOutcome, 1)
+	go func() { leader <- captureFlightPanic(t.Context(), g.Do, fn) }()
+	synctest.Wait()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	go func() { follower <- captureFlightPanic(ctx, g.DoCancelable, fn) }()
+	synctest.Wait()
+	if cancelBeforePanic {
+		cancel()
+		result := <-follower
+		if result.recovered != nil || !errors.Is(result.err, context.Canceled) {
+			t.Fatalf("cancelled follower = %+v", result)
+		}
+	}
+	close(gate)
+	checkFlightPanic(t, <-leader, message)
+	if !cancelBeforePanic {
+		checkFlightPanic(t, <-follower, message)
+	}
+	if calls != 1 {
+		t.Fatalf("callback count = %d, want 1", calls)
+	}
+	checkDoAfterPanic(t, g)
+	checkPureDoPanic(t, g)
+}
+
+func checkFlightPanic(t *testing.T, result panicOutcome, message string) {
+	t.Helper()
+	if result.recovered != nil || result.err == nil {
+		t.Fatalf("panic outcome = %+v; want error without panic", result)
+	}
+	text := result.err.Error()
+	if !strings.Contains(text, "singleflight: callback panic: "+message) || !strings.Contains(text, "runtime/debug.Stack") {
+		t.Fatalf("panic error = %q; want %q and recovery stack", text, message)
+	}
+}
+
+func TestNilInterfaceResult(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, any]()
+		for _, call := range []struct {
+			name string
+			do   func(context.Context, string, func(context.Context) (any, error)) (any, bool, error)
+		}{{name: "Do", do: g.Do}, {name: "DoCancelable", do: g.DoCancelable}} {
+			value, shared, err := call.do(t.Context(), "key", func(context.Context) (any, error) {
+				return nil, nil //nolint:nilnil // WHY: nil is a valid interface result exercised by this regression.
+			})
+			if value != nil || shared || err != nil {
+				t.Errorf("%s = %v, %t, %v; want nil, false, nil", call.name, value, shared, err)
+			}
+		}
+	})
+}
+
+func checkDoAfterPanic(t *testing.T, g *singleflight.Group[string, int]) {
+	t.Helper()
+	value, shared, err := g.Do(t.Context(), "key", func(context.Context) (int, error) { return 42, nil })
+	if value != 42 || shared || err != nil {
+		t.Fatalf("next Do = %d, %t, %v; want 42, false, nil", value, shared, err)
+	}
+}
+
+func checkPureDoPanic(t *testing.T, g *singleflight.Group[string, int]) {
+	t.Helper()
+	const message = "pure Do callback panic"
+	result := captureFlightPanic(t.Context(), g.Do, func(context.Context) (int, error) { panic(message) })
+	checkCallerPanic(t, result, message)
+	checkDoAfterPanic(t, g)
+}
+
+func checkCallerPanic(t *testing.T, result panicOutcome, message string) {
+	t.Helper()
+	if result.err != nil || result.recovered == nil || !strings.Contains(fmt.Sprint(result.recovered), message) {
+		t.Fatalf("panic outcome = %+v; want caller panic containing %q", result, message)
+	}
+}
+
+func TestDoCancelablePanicReturnsError(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		const message = "cancelable callback panic"
+		result := captureFlightPanic(t.Context(), g.DoCancelable, func(context.Context) (int, error) { panic(message) })
+		checkFlightPanic(t, result, message)
+		checkDoAfterPanic(t, g)
+	})
+}
+
+func TestDoPanicReachesDuplicateCallers(t *testing.T) {
+	t.Parallel()
+	synctest.Test(t, func(t *testing.T) {
+		g := singleflight.New[string, int]()
+		gate := make(chan struct{})
+		const message = "duplicate Do callback panic"
+		calls := 0
+		fn := func(context.Context) (int, error) { calls++; <-gate; panic(message) }
+		results := make(chan panicOutcome, 2)
+		go func() { results <- captureFlightPanic(t.Context(), g.Do, fn) }()
+		synctest.Wait()
+		go func() { results <- captureFlightPanic(t.Context(), g.Do, fn) }()
+		synctest.Wait()
+		close(gate)
+		for range 2 {
+			checkCallerPanic(t, <-results, message)
+		}
+		if calls != 1 {
+			t.Fatalf("callback count = %d, want 1", calls)
+		}
+		checkDoAfterPanic(t, g)
+	})
+}
+
 func TestFnErrorReturnedUnchanged(t *testing.T) {
 	t.Parallel()
 	synctest.Test(t, func(t *testing.T) {
