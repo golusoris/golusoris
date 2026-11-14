@@ -4,10 +4,10 @@ SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 SPDX-License-Identifier: CC-BY-SA-4.0
 -->
 
-# go-playground/validator/v10 — v10.30.5 snapshot
+# go-playground/validator/v10 — v10.30.6 snapshot
 
-Pinned: **v10.30.5**
-Source: [tagged source](https://github.com/go-playground/validator/tree/v10.30.5)
+Pinned: **v10.30.6**
+Source: [tagged source](https://github.com/go-playground/validator/tree/v10.30.6)
 
 ## Initialization
 
