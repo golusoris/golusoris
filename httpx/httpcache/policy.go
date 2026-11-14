@@ -301,10 +301,14 @@ func (c *Cache) encodedCredentials(header http.Header, body []byte) bool {
 	if c.formCredentials(body, mediaType == "application/x-www-form-urlencoded") {
 		return true
 	}
+	declaredJSON := mediaType == "application/json" || strings.HasSuffix(mediaType, "+json")
+	if declaredJSON && !json.Valid(body) {
+		return true
+	}
 	if !bytes.Contains(body, []byte(`\u`)) {
 		return false
 	}
-	return (mediaType == "application/json" || strings.HasSuffix(mediaType, "+json") || json.Valid(body)) && c.jsonCredentials(body)
+	return (declaredJSON || json.Valid(body)) && c.jsonCredentials(body)
 }
 
 func (c *Cache) formCredentials(body []byte, strict bool) bool {
@@ -312,15 +316,12 @@ func (c *Cache) formCredentials(body []byte, strict bool) bool {
 		return false
 	}
 	values, err := url.ParseQuery(string(body))
-	if err != nil {
-		return strict
-	}
 	for key := range values {
 		if _, secret := c.fields[canonicalName(key)]; secret {
 			return true
 		}
 	}
-	return false
+	return err != nil && strict
 }
 
 type jsonScope struct{ object, key bool }

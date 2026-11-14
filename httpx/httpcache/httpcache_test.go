@@ -264,6 +264,8 @@ func TestCacheNoStore(t *testing.T) {
 		{"json escaped untyped", 200, `{"access\u005ftoken":"S"}`, nil},
 		{"json escaped text", 200, `{"access\u005ftoken":"S"}`, []string{"Content-Type", "text/plain"}},
 		{"xml unicode prefix", 200, `<é:token>S</é:token>`, nil},
+		{"form partial text", 200, "access%5Ftoken=S&other=%zz", []string{"Content-Type", "text/plain"}},
+		{"json malformed declared", 200, `{"name":`, []string{"Content-Type", "application/json"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

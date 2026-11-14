@@ -214,6 +214,14 @@ func TestPolicyEncodedBodies(t *testing.T) {
 		{"escaped value text", "", "text/plain", []byte(`{"a":"\u0041"}`), true},
 		{"plain text percent", "", "text/plain", []byte("100% done"), true},
 		{"invalid json text", "", "text/plain", []byte(`{"a":"\u0041"`), true},
+		{"json malformed declared", "", "application/json", []byte(`{"name":`), false},
+		{"json malformed problem", "", "application/problem+json", []byte(`{"name":`), false},
+		{"json valid declared", "", "application/json", []byte(`{"name":"x"}`), true},
+		{"invalid json text plain", "", "text/plain", []byte(`{"name":`), true},
+		{"percent key text partial", "", "text/plain", []byte("access%5Ftoken=S&other=%zz"), false},
+		{"percent key untyped partial", "", "", []byte("access%5Ftoken=S&other=%zz"), false},
+		{"percent benign text partial", "", "text/plain", []byte("page=2&x=%zz"), true},
+		{"form key partial", "", "application/x-www-form-urlencoded", []byte("access%5Ftoken=S&other=%zz"), false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
