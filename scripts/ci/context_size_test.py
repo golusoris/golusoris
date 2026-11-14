@@ -18,21 +18,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import context_size
+import repo_git
 
 ROOT = Path(__file__).resolve().parents[2]
 CAP = context_size.WINDSURF_CHARS_PER_FILE
 NEAR = (CAP * 95 + 99) // 100
 CHAIN_NEAR = (context_size.CODEX_BYTES_PER_CHAIN * 95 + 99) // 100
-REPO_ENV = (
-    "GIT_DIR",
-    "GIT_WORK_TREE",
-    "GIT_INDEX_FILE",
-    "GIT_OBJECT_DIRECTORY",
-    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-    "GIT_COMMON_DIR",
-    "GIT_PREFIX",
-    "GIT_NAMESPACE",
-)
 
 
 class ContextSizeTest(unittest.TestCase):
@@ -40,12 +31,7 @@ class ContextSizeTest(unittest.TestCase):
 
     def setUp(self) -> None:
         """Create a scratch repository with the hook's git variables removed."""
-        # A git hook exports these; inherited, they would point the scratch repo at the real one.
-        env = unittest.mock.patch.dict(os.environ)
-        env.start()
-        self.addCleanup(env.stop)
-        for name in REPO_ENV:
-            os.environ.pop(name, None)
+        self.enterContext(unittest.mock.patch.dict(os.environ, repo_git.fixture_environ(), clear=True))
         scratch = tempfile.TemporaryDirectory()
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
@@ -70,6 +56,20 @@ class ContextSizeTest(unittest.TestCase):
     def check(self) -> list[str]:
         """Return the checker's findings for the scratch repository."""
         return context_size.oversized(context_size.agents_contents(self.root))
+
+    def test_decoy_git_environment_preserves_fixture_and_index(self) -> None:
+        """Fixture setup ignores hook variables, including git's discovered shallow path."""
+        self.write("AGENTS.md", "short")
+        baseline = self.check()
+        with repo_git.decoy_environ():
+            case = ContextSizeTest("test_file_below_near_cap_passes")
+            try:
+                case.setUp()
+                self.assertTrue(repo_git.local_env_names().isdisjoint(os.environ))
+                case.write("AGENTS.md", "short")
+                self.assertEqual(case.check(), baseline)
+            finally:
+                case.doCleanups()
 
     def test_repository_agents_files_fit_every_cap(self) -> None:
         """This repository's AGENTS.md files fit both caps."""
@@ -125,7 +125,7 @@ class ContextSizeTest(unittest.TestCase):
 
     def test_hook_environment_does_not_reach_the_scratch_repository(self) -> None:
         """Hook variables are gone, so the checker reads the scratch repository."""
-        self.assertTrue(all(name not in os.environ for name in REPO_ENV))
+        self.assertTrue(repo_git.local_env_names().isdisjoint(os.environ))
         self.write("AGENTS.md", "short")
         self.assertEqual(set(context_size.agents_contents(self.root)), {"AGENTS.md"})
 

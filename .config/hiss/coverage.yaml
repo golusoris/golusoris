@@ -625,14 +625,18 @@ rules:
         mechanism: >-
           scripts/ci/python-tests.sh requires Python 3.12 or newer and executes the vendored
           Praetor checkpoint suite, command-policy hook suite, and portability-policy suite.
-          Missing, linked, failing, or zero-test suites fail closed. make python-test runs
+          Missing, linked, failing, or zero-test suites fail closed. The runner unsets
+          repository-local git variables before the suites and fails when a suite changes
+          core.bare. make python-test runs
           inside make verify-all; GitHub Test and the Gitea CI gate run the same wrapper.
         rationale: >-
           The production run executes 48 tests: 33 current-Praetor checkpoint tests, five
           command-policy hook tests, and ten portability-policy tests.
           scripts/ci/python-tests-policy_test.sh proves positive/test_failing_suite.py fails and
           negative/test_complete_dimensions.py passes with positive, negative, and boundary
-          cases. gap/test_positive_only.py also passes, proving unittest execution cannot
+          cases. The same script runs a fixture git init under an exported linked-worktree
+          GIT_DIR and a suite that sets core.bare; dropping the unset or the core.bare check
+          fails it. gap/test_positive_only.py also passes, proving unittest execution cannot
           decide 3D shape; gap/untested-public-function.py remains outside the required suites.
   - id: HISS-16
     title: "Canonical AGENTS.md & Server Gates"
