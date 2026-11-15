@@ -56,16 +56,13 @@ func (t *redactingTransport) RoundTrip(req *http.Request) (*http.Response, error
 
 func redactedURL(target *url.URL, secrets map[string]struct{}) (string, bool) {
 	clone := *target
-	query, queryChanged := redactedQuery(target.RawQuery, secrets)
-	opaque, opaqueChanged := redactedOpaque(target.Opaque, secrets)
-	if !queryChanged && !opaqueChanged && target.Fragment == "" && target.RawFragment == "" {
-		return "", false
-	}
-	if queryChanged {
+	changed := redactedOpaque(&clone, secrets)
+	if query, queryChanged := redactedQuery(clone.RawQuery, secrets); queryChanged {
 		clone.RawQuery = query
+		changed = true
 	}
-	if opaqueChanged {
-		clone.Opaque = opaque
+	if !changed && target.Fragment == "" && target.RawFragment == "" {
+		return "", false
 	}
 	clone.User = nil
 	clone.Fragment = ""
@@ -73,27 +70,36 @@ func redactedURL(target *url.URL, secrets map[string]struct{}) (string, bool) {
 	return clone.String(), true
 }
 
-func redactedOpaque(opaque string, secrets map[string]struct{}) (string, bool) {
-	base, _, fragment := strings.Cut(opaque, "#")
+// redactedOpaque redacts an Opaque query together with RawQuery because URL.String joins them with '?'.
+func redactedOpaque(clone *url.URL, secrets map[string]struct{}) bool {
+	base, _, fragment := strings.Cut(clone.Opaque, "#")
+	clone.Opaque = base
 	path, query, found := strings.Cut(base, "?")
-	if found {
-		if replacement, changed := redactedQuery(query, secrets); changed {
-			return path + "?" + replacement, true
-		}
+	if !found {
+		return fragment
 	}
-	return base, fragment
+	if clone.RawQuery != "" || clone.ForceQuery {
+		query += "?" + clone.RawQuery
+	}
+	replacement, changed := redactedQuery(query, secrets)
+	if !changed {
+		return fragment
+	}
+	clone.Opaque = path + "?" + replacement
+	clone.RawQuery = ""
+	clone.ForceQuery = false
+	return true
 }
 
 func redactedQuery(query string, secrets map[string]struct{}) (string, bool) {
 	var replacement strings.Builder
 	copied := 0
 	for start := 0; start < len(query); {
-		end := len(query)
-		if offset := strings.IndexAny(query[start:], "&;"); offset >= 0 {
-			end = start + offset
-		}
+		end := parameterEnd(query, start, "&;")
 		name, _, _ := strings.Cut(query[start:end], "=")
 		if secretQueryName(name, secrets) {
+			// WHY: ';' separates names but not values, so a secret value runs to the next '&' as in httpcache.
+			end = parameterEnd(query, start, "&")
 			replacement.WriteString(query[copied:start])
 			replacement.WriteString(name)
 			replacement.WriteString("=REDACTED")
@@ -106,6 +112,13 @@ func redactedQuery(query string, secrets map[string]struct{}) (string, bool) {
 	}
 	replacement.WriteString(query[copied:])
 	return replacement.String(), true
+}
+
+func parameterEnd(query string, start int, separators string) int {
+	if offset := strings.IndexAny(query[start:], separators); offset >= 0 {
+		return start + offset
+	}
+	return len(query)
 }
 
 func secretQueryName(name string, secrets map[string]struct{}) bool {

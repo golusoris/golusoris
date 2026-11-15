@@ -109,16 +109,33 @@ func TestRedactedURLNoSecretAllocations(t *testing.T) { //nolint:paralleltest //
 
 func TestRedactedURLOpaqueAndRawQuery(t *testing.T) {
 	t.Parallel()
-	target := &url.URL{
-		Scheme: "http", Opaque: "//example.test/?token=hidden#secret=fragment",
-		RawQuery: "api_key=second", Fragment: "third", RawFragment: "%74hird",
+	const redacted = "http://example.test/?token=REDACTED"
+	for _, test := range []struct {
+		target url.URL
+		want   string
+	}{
+		{url.URL{
+			Scheme: "http", Opaque: "//example.test/?token=hidden#secret=fragment",
+			RawQuery: "api_key=second", Fragment: "third", RawFragment: "%74hird",
+		}, redacted},
+		{url.URL{Scheme: "http", Opaque: "//example.test/?token=prefix", RawQuery: "private-suffix&q=1"}, redacted + "&q=1"},
+		{url.URL{Scheme: "http", Opaque: "//example.test/?token=prefix", ForceQuery: true}, redacted},
+	} {
+		original := test.target
+		got, changed := redactedURL(&test.target, secretparam.Set(secretparam.Defaults(), nil))
+		if !changed || got != test.want {
+			t.Fatalf("redacted URL = %q, changed = %v, want %q", got, changed, test.want)
+		}
+		if test.target != original {
+			t.Fatal("redactedURL mutated its input")
+		}
 	}
-	original := *target
-	got, changed := redactedURL(target, secretparam.Set(secretparam.Defaults(), nil))
-	if want := "http://example.test/?token=REDACTED?api_key=REDACTED"; !changed || got != want {
-		t.Fatalf("redacted URL = %q, changed = %v, want %q", got, changed, want)
-	}
-	if *target != original {
-		t.Fatal("redactedURL mutated its input")
+}
+
+func TestRedactedURLOpaqueWithoutSecret(t *testing.T) {
+	t.Parallel()
+	target := &url.URL{Scheme: "http", Opaque: "//example.test/?q=prefix", RawQuery: "suffix"}
+	if got, changed := redactedURL(target, secretparam.Set(secretparam.Defaults(), nil)); changed || got != "" {
+		t.Fatalf("redacted URL = %q, changed = %v, want unchanged", got, changed)
 	}
 }

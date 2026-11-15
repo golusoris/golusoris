@@ -38,7 +38,8 @@ func TestURLFullRedactsSecrets(t *testing.T) {
 		{name: "negative", query: "z=2&q=a%20b&q=%2f", want: "z=2&q=a%20b&q=%2f"},
 		{name: "no query"},
 		{name: "semicolon separator", query: "a=1;api_key=s3cr3t", want: "a=1;api_key=REDACTED"},
-		{name: "mixed separators", query: ";api_key=first;;token=second&secret=third;", want: ";api_key=REDACTED;;token=REDACTED&secret=REDACTED;"},
+		{name: "mixed separators", query: ";api_key=first;;token=second&secret=third;", want: ";api_key=REDACTED&secret=REDACTED"},
+		{name: "semicolon after secret value", query: "token=a;q=1&b=2", want: "token=REDACTED&b=2"},
 		{name: "secret default", query: "secret=hidden", want: "secret=REDACTED"},
 		{name: "query fragment", query: "q=1", want: "q=1", fragment: "api_key=s3cr3t", rawFragment: "api_key=%733cr3t"},
 		{name: "fragment only", fragment: "token=x"},
@@ -59,7 +60,7 @@ func TestURLFullRedactsSecrets(t *testing.T) {
 		{name: "extra keeps defaults", query: "My_Secret=extra&api_key=builtin&q=1", want: "My_Secret=REDACTED&api_key=REDACTED&q=1", extra: []string{"my-secret"}},
 		{name: "encoded name", query: "api%5Fkey=hidden&q=1", want: "api%5Fkey=REDACTED&q=1"},
 		{name: "malformed value", query: "api_key=hidden%zz&q=1", want: "api_key=REDACTED&q=1"},
-		{name: "semicolon value", query: "api_key=hidden;more&q=1", want: "api_key=REDACTED;more&q=1"},
+		{name: "semicolon value", query: "api_key=prefix;private-suffix&q=1", want: "api_key=REDACTED&q=1"},
 		{name: "userinfo", query: "api_key=hidden&q=1", want: "api_key=REDACTED&q=1", userinfo: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
