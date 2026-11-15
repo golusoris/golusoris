@@ -1,4 +1,4 @@
-module github.com/golusoris/golusoris/scripts/ci/workflow_actor_parser
+module github.com/golusoris/golusoris/scripts/ci/cmd/workflow_actor_parser
 
 go 1.27.4
 

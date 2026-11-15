@@ -13,7 +13,7 @@ CI verification drivers, scripts, policy tests.
 | Script | Purpose |
 | --- | --- |
 | `ci_scope.py` | Diff-aware CI scope calculator (`modules`, `files`, `any`) |
-| `workflow_actor_parser/` | Bounded YAML scalar and actionlint expression parser; actor-policy second barrier |
+| `cmd/workflow_actor_parser/` | Bounded YAML scalar and actionlint expression parser; actor-policy second barrier |
 
 ## Operational Rules
 

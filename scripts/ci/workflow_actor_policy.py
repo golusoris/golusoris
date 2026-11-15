@@ -672,7 +672,7 @@ _SAFE_CONTEXT_PATHS = frozenset(
 @cache
 def _parser_command() -> list[str]:
     """Build the pinned parser once per process to exclude stale binaries."""
-    directory = REPO_ROOT / "scripts/ci/workflow_actor_parser"
+    directory = REPO_ROOT / "scripts/ci/cmd/workflow_actor_parser"
     build_dir = tempfile.mkdtemp(prefix="workflow-actor-parser-")
     atexit.register(shutil.rmtree, build_dir, ignore_errors=True)
     output = Path(build_dir) / "workflow_actor_parser"
@@ -681,7 +681,7 @@ def _parser_command() -> list[str]:
     go = shutil.which("go")
     if go is None:
         raise OSError("workflow parser: Go compiler unavailable")
-    subprocess.run(  # noqa: S603 # WHY: fixed argv and repository-owned build paths.
+    subprocess.run(  # noqa: S603 - fixed argv and repository-owned build paths.
         [go, "build", "-p=2", "-o", str(output), "./..."],
         cwd=directory,
         check=True,
@@ -693,7 +693,7 @@ def _parser_command() -> list[str]:
 
 def _parse_document(text: str) -> dict:
     """Return decoded YAML scalars and actionlint expression facts."""
-    result = subprocess.run(  # noqa: S603 # WHY: fixed binary; YAML enters only stdin.
+    result = subprocess.run(  # noqa: S603 - fixed binary; YAML enters only stdin.
         _parser_command(),
         input=text,
         text=True,

@@ -478,7 +478,7 @@
         "gomod"
       ],
       "matchFileNames": [
-        "scripts/ci/workflow_actor_parser/go.mod"
+        "scripts/ci/cmd/workflow_actor_parser/go.mod"
       ],
       "matchPackageNames": [
         "go.yaml.in/yaml/v4"

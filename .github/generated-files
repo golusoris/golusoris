@@ -80,6 +80,8 @@ science/numerical/go.mod
 science/numerical/go.sum
 science/plot/go.mod
 science/plot/go.sum
+scripts/ci/cmd/workflow_actor_parser/go.mod
+scripts/ci/cmd/workflow_actor_parser/go.sum
 storage/azblob/go.mod
 storage/azblob/go.sum
 storage/gcs/go.mod
