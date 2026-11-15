@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -16,31 +17,36 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// bumpHelperBlockFor outlives every caller deadline in these tests.
+// bumpHelperBlockFor allows hosted Windows start-up latency while distinguishing deadline return from helper completion.
 const bumpHelperBlockFor = time.Minute
+
+// bumpHelperDeadline leaves the helper time to write its start marker before the deadline fires.
+const bumpHelperDeadline = 10 * time.Second
 
 func TestRunBoundedCommandTimesOutFromBackground(t *testing.T) {
 	t.Parallel()
-	name, args := bumpHelperCommand("block", 0)
+	marker, name, args := bumpBlockingHelper(t)
 	started := time.Now()
 
-	_, err := runBoundedCommand(context.Background(), 25*time.Millisecond, 128, name, args...)
+	_, err := runBoundedCommand(context.Background(), bumpHelperDeadline, 128, name, args...)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Less(t, time.Since(started), time.Second)
+	require.Less(t, time.Since(started), bumpHelperBlockFor/2)
+	require.FileExists(t, marker, "helper must start before the deadline")
 }
 
 func TestRunBoundedCommandPreservesEarlierCallerDeadline(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), bumpHelperDeadline)
 	defer cancel()
-	name, args := bumpHelperCommand("block", 0)
+	marker, name, args := bumpBlockingHelper(t)
 	started := time.Now()
 
 	_, err := runBoundedCommand(ctx, time.Minute, 128, name, args...)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Less(t, time.Since(started), time.Second)
+	require.Less(t, time.Since(started), bumpHelperBlockFor/2)
+	require.FileExists(t, marker, "helper must start before the deadline")
 }
 
 func TestRunBoundedCommandPreservesCallerCancellation(t *testing.T) {
@@ -71,13 +77,14 @@ func TestRunBoundedCommandCapsDiagnosticsAtBoundary(t *testing.T) {
 
 			diagnostics, err := runBoundedCommand(
 				context.Background(),
-				time.Second,
+				bumpHelperBlockFor,
 				outputLimit,
 				name,
 				args...,
 			)
 
 			require.Error(t, err)
+			require.NotErrorIs(t, err, context.DeadlineExceeded)
 			require.Len(t, diagnostics, outputLimit)
 			require.Equal(t, tt.wantTruncated, strings.HasSuffix(diagnostics, commandOutputTruncated))
 		})
@@ -91,6 +98,13 @@ func bumpHelperCommand(mode string, outputBytes int) (string, []string) {
 		mode,
 		strconv.Itoa(outputBytes),
 	}
+}
+
+func bumpBlockingHelper(t *testing.T) (string, string, []string) {
+	t.Helper()
+	marker := filepath.Join(t.TempDir(), "started")
+	name, args := bumpHelperCommand("block", 0)
+	return marker, name, append(args, marker)
 }
 
 func TestBumpCommandHelperProcess(t *testing.T) {
@@ -108,6 +122,12 @@ func TestBumpCommandHelperProcess(t *testing.T) {
 	mode := os.Args[separator+1]
 	switch mode {
 	case "block":
+		if len(os.Args) > separator+3 {
+			// The marker is the start handshake the deadline tests assert on.
+			if err := os.WriteFile(os.Args[separator+3], nil, 0o600); err != nil {
+				panic(err)
+			}
+		}
 		// A pending timer keeps the runtime deadlock detector quiet; select {} exits 2 in cgo-free binaries.
 		time.Sleep(bumpHelperBlockFor)
 	case "output":
