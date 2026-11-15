@@ -37,34 +37,51 @@ fail() {
 }
 
 # find_base prints the highest-version tag of the tag's component that is an ancestor of the end commit.
-# Returns 1 when there is none and 2 when more than max_tags tags were scanned without a match.
+# Returns 1 when no earlier tag is an ancestor.
+# Returns 2 when more than max_tags tags were scanned without a match.
+# Returns 3 when listing release tags fails.
+# Returns 4 when the listing omits the existing release tag.
+# Returns 5 when git merge-base fails.
 find_base() {
-	local tag="$1" end="$2" prefix="$3" candidate pattern scanned=0
+	local tag="$1" end="$2" prefix="$3" candidate pattern candidates status scanned=0
 	if [[ -z "$prefix" ]]; then
 		pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
 	else
 		pattern='^core/v[0-9]+\.[0-9]+\.[0-9]+$'
 	fi
-	while IFS= read -r candidate; do
-		if [[ "$candidate" == "$tag" ]]; then
-			continue
-		fi
-		scanned=$((scanned + 1))
-		if ((scanned > max_tags)); then
-			return 2
-		fi
-		if rgit merge-base --is-ancestor "refs/tags/$candidate^{commit}" "$end"; then
-			printf '%s\n' "$candidate"
-			return 0
-		fi
-	done < <(rgit tag --list "${prefix}v*.*.*" | re="$pattern" LC_ALL=C awk '
+	if ! candidates="$(rgit tag --list "${prefix}v*.*.*" | re="$pattern" LC_ALL=C awk '
 		$0 ~ ENVIRON["re"] {
 			version = $0
 			sub(/^(core\/)?v/, "", version)
 			split(version, part, ".")
 			print part[1], part[2], part[3], $0
 		}
-	' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr | LC_ALL=C awk '{ print $4 }')
+	' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr | LC_ALL=C awk '{ print $4 }')"; then
+		return 3
+	fi
+	if rgit rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null 2>&1 &&
+		! grep -Fxq "$tag" <<<"$candidates"; then
+		return 4
+	fi
+	while IFS= read -r candidate; do
+		if [[ -z "$candidate" || "$candidate" == "$tag" ]]; then
+			continue
+		fi
+		scanned=$((scanned + 1))
+		if ((scanned > max_tags)); then
+			return 2
+		fi
+		status=0
+		rgit merge-base --is-ancestor "refs/tags/$candidate^{commit}" "$end" || status=$?
+		case "$status" in
+			0)
+				printf '%s\n' "$candidate"
+				return 0
+				;;
+			1) ;;
+			*) return 5 ;;
+		esac
+	done <<<"$candidates"
 	return 1
 }
 
@@ -351,6 +368,21 @@ load_range() {
 	return 1
 }
 
+# load_base sets the caller's base (bash dynamic scope) and records why when it cannot.
+load_base() {
+	local status=0
+	base="$(find_base "$1" "$2" "$3")" || status=$?
+	case "$status" in
+		0) return 0 ;;
+		2) fail "more than $max_tags tags scanned for the base of $1" ;;
+		3) fail "listing release tags failed while searching the base of $1" ;;
+		4) fail "tag listing did not include $1; no base for $1" ;;
+		5) fail "git merge-base failed while searching the base of $1" ;;
+		*) fail "no earlier release tag of the same component is an ancestor of $4; no base for $1" ;;
+	esac
+	return 1
+}
+
 check_release() {
 	local tag="$1" given_end="${2:-}"
 	local tag_re='^(core/)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
@@ -374,21 +406,11 @@ check_release() {
 		report_errors
 		return 1
 	fi
-	local base status=0
-	base="$(find_base "$tag" "$end" "$prefix")" || status=$?
-	case "$status" in
-		0) ;;
-		2)
-			fail "more than $max_tags tags scanned for the base of $tag"
-			report_errors
-			return 1
-			;;
-		*)
-			fail "no earlier release tag of the same component is an ancestor of $end_name; no base for $tag"
-			report_errors
-			return 1
-			;;
-	esac
+	local base
+	if ! load_base "$tag" "$end" "$prefix" "$end_name"; then
+		report_errors
+		return 1
+	fi
 	if ! load_range "$base" "$end" "$prefix" "$end_name"; then
 		report_errors
 		return 1

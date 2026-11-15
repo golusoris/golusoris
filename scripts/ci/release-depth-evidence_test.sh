@@ -26,6 +26,19 @@ expect_failure() {
 	fi
 }
 
+expect_base_failure() {
+	local expected="$1" output
+	shift
+	if output="$("$@" 2>&1)"; then
+		printf 'expected failure: %s\n' "$*" >&2
+		return 1
+	fi
+	if [[ "$output" != *"$expected"* || "$output" == *'no earlier release tag'* ]]; then
+		printf 'expected base diagnostic %q without no-earlier-tag diagnostic in: %s\n' "$expected" "$output" >&2
+		return 1
+	fi
+}
+
 expect_status() {
 	local want="$1" expected="$2" output status=0
 	shift 2
@@ -393,6 +406,48 @@ exec "$REAL_GIT" "$@"
 STUB
 chmod +x "$stub/git"
 expect_failure 'git log failed for v0.1.0..refs/tags/v0.2.0' \
+	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
+
+# negative: a failed listing must not look like a missing ancestor
+stub="$suite_root/tag_list_fails"
+mkdir -p "$stub"
+cat >"$stub/git" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -C && "${3:-}" == tag && "${4:-}" == --list ]]; then
+	exit 128
+fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$stub/git"
+expect_base_failure 'listing release tags failed while searching the base of v0.2.0' \
+	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
+
+# negative: an existing release tag must appear in a successful listing
+stub="$suite_root/tag_list_empty"
+mkdir -p "$stub"
+cat >"$stub/git" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -C && "${3:-}" == tag && "${4:-}" == --list ]]; then
+	exit 0
+fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$stub/git"
+expect_base_failure 'tag listing did not include v0.2.0; no base for v0.2.0' \
+	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
+
+# negative: a merge-base error must not look like a non-ancestor
+stub="$suite_root/merge_base_128"
+mkdir -p "$stub"
+cat >"$stub/git" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == -C && "${3:-}" == merge-base ]]; then
+	exit 128
+fi
+exec "$REAL_GIT" "$@"
+STUB
+chmod +x "$stub/git"
+expect_base_failure 'git merge-base failed while searching the base of v0.2.0' \
 	env REAL_GIT="$(command -v git)" PATH="$stub:$PATH" bash "$script" --root "$repo" check v0.2.0
 
 # negative: the row check itself fails, so no row was checked
