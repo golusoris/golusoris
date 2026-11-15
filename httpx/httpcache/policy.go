@@ -17,10 +17,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golusoris/golusoris/httpx/internal/secretparam"
 )
 
 var (
-	defaultSecretParams     = []string{"api_key", "apikey", "access_token", "token", "pin", "password", "client_secret", "x-plex-token", "refresh_token", "id_token"}
 	defaultSecretHeaders    = []string{"Authorization", "Proxy-Authorization", "Cookie", "X-Api-Key", "Api-Key", "X-Auth-Token", "X-Plex-Token"}
 	defaultCredentialFields = []string{"access_token", "refresh_token", "id_token", "token", "authToken", "apikey", "api_key", "password", "client_secret", "secret", "pin", "x-plex-token"}
 	defaultAuthPaths        = []string{"login", "logout", "oauth", "oauth2", "token", "tokens", "auth", "authorize", "pin", "pins", "session", "sessions"}
@@ -295,19 +296,6 @@ func (c *Cache) sensitiveBody(header http.Header, body []byte) bool {
 	return !ok || c.credentials.Match(decoded) || c.encodedCredentials(header, decoded)
 }
 
-func canonicalName(name string) string {
-	return strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(name, "_", ""), "-", ""))
-}
-
-func canonicalSet(defaults, extra []string) map[string]struct{} {
-	set := extendedSet(defaults, extra)
-	result := make(map[string]struct{}, len(set))
-	for name := range set {
-		result[canonicalName(name)] = struct{}{}
-	}
-	return result
-}
-
 func (c *Cache) encodedCredentials(header http.Header, body []byte) bool {
 	mediaType, _, err := mime.ParseMediaType(header.Get("Content-Type"))
 	if err != nil {
@@ -332,7 +320,7 @@ func (c *Cache) formCredentials(body []byte, strict bool) bool {
 	}
 	values, err := url.ParseQuery(string(body))
 	for key := range values {
-		if _, secret := c.fields[canonicalName(key)]; secret {
+		if _, secret := c.fields[secretparam.CanonicalName(key)]; secret {
 			return true
 		}
 	}
@@ -389,7 +377,7 @@ func (c *Cache) jsonField(token json.Token, scope *jsonScope) bool {
 	if !ok {
 		return false
 	}
-	_, secret := c.fields[canonicalName(name)]
+	_, secret := c.fields[secretparam.CanonicalName(name)]
 	return secret
 }
 

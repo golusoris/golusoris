@@ -46,6 +46,7 @@ import (
 	"github.com/golusoris/golusoris/cache/singleflight"
 	"github.com/golusoris/golusoris/cache/twotier"
 	"github.com/golusoris/golusoris/core/validate"
+	"github.com/golusoris/golusoris/httpx/internal/secretparam"
 )
 
 // Options configures http.outbound.cache; use DefaultOptions as a starting point.
@@ -90,7 +91,7 @@ func DefaultOptions() Options {
 		Prefix: "httpcache", MaxBodyBytes: 1 << 20, MaxInFlight: 64,
 		RevalidateTimeout: 5 * time.Second, StoreTimeout: 2 * time.Second, StaleIfError: time.Hour,
 		Store:            StoreOptions{L1TTL: 30 * time.Second, Retention: 24 * time.Hour, L2: twotier.L2Redis},
-		SecretParams:     append([]string(nil), defaultSecretParams...),
+		SecretParams:     secretparam.Defaults(),
 		SecretHeaders:    append([]string(nil), defaultSecretHeaders...),
 		CredentialFields: append([]string(nil), defaultCredentialFields...),
 		AuthPathSegments: append([]string(nil), defaultAuthPaths...),
@@ -135,10 +136,10 @@ func New(opts Options, store *twotier.TwoTier, logger *slog.Logger) (*Cache, err
 	c := &Cache{
 		opts: opts, id: rand.Text(), logger: logger,
 		hosts:         make(map[string]HostOptions, len(opts.Hosts)),
-		secrets:       canonicalSet(defaultSecretParams, opts.SecretParams),
+		secrets:       secretparam.Set(secretparam.Defaults(), opts.SecretParams),
 		secretHeaders: extendedSet(defaultSecretHeaders, opts.SecretHeaders),
 		authPaths:     extendedSet(defaultAuthPaths, opts.AuthPathSegments),
-		fields:        canonicalSet(defaultCredentialFields, opts.CredentialFields),
+		fields:        secretparam.Set(defaultCredentialFields, opts.CredentialFields),
 		credentials:   credentialPattern(opts.CredentialFields), slots: make(chan struct{}, opts.MaxInFlight),
 		bgSlots: make(chan struct{}, opts.MaxInFlight),
 		flights: singleflight.New[flightKey, *flightResult](),
@@ -725,7 +726,7 @@ func (c *Cache) secretSegment(segment string) bool {
 		if err == nil {
 			key = decoded
 		}
-		if _, secret := c.secrets[canonicalName(key)]; secret {
+		if _, secret := c.secrets[secretparam.CanonicalName(key)]; secret {
 			return true
 		}
 	}
