@@ -16,7 +16,7 @@ import json
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # Builds and runs only the pinned parser. # nosec B404
 import tempfile
 from dataclasses import dataclass
 from functools import cache
@@ -160,6 +160,16 @@ ALLOWED_LINES: dict[tuple[str, str, str], str] = {
     ): "GHCR docker/login-action username.",
 }
 
+# Parsed ownership prevents an exact line from changing trigger semantics.
+ALLOWED_LINE_PARENTS: dict[tuple[str, str, str], tuple[str, ...]] = {
+    (
+        ".github/workflows/regenerate.yml",
+        "<top>",
+        "- 'renovate/**'",
+    ): ("on", "push", "branches"),
+}
+
+
 _INDEX_ACCESS = re.compile(
     r"(?:(?<=[A-Za-z0-9_\]\)])\s*)?\[\s*(?P<q>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)\s*\]"
 )
@@ -189,7 +199,6 @@ _STRING_BUILDING_CALL = re.compile(
 )
 _IDENTITY_CONTEXT = re.compile(r"\b(?:github|gitea)\b", re.IGNORECASE)
 _EXPRESSION_SPAN = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
-_DOT_WHITESPACE = re.compile(r"\s*\.\s*")
 _IF_LINE = re.compile(
     r"^[ \t]*(?:-[ \t]+)?(?P<key>(?P<q>['\"]?)if(?P=q))"
     r"[ \t]*:[ \t]*(?P<expr>.*)$",
@@ -286,6 +295,17 @@ def _normalise_index_access(line: str) -> str:
     return _INDEX_ACCESS.sub(r".\g<key>", line)
 
 
+def _collapse_dot_whitespace(text: str) -> str:
+    """Collapse whitespace touching dots with one linear pass over split parts."""
+    parts = text.split(".")
+    if len(parts) == 1:
+        return text
+    parts[0] = parts[0].rstrip()
+    parts[-1] = parts[-1].lstrip()
+    parts[1:-1] = [part.strip() for part in parts[1:-1]]
+    return ".".join(parts)
+
+
 def _decode_yaml_escape(match: re.Match[str]) -> str:
     """Decode a YAML escape, preserving invalid Unicode scalar values."""
     escape = match.group()[1:]
@@ -309,7 +329,7 @@ def _expression_texts(line: str, if_block: bool) -> list[str]:
 
 def _expression_has_disallowed_token(expression: str, is_if: bool) -> bool:
     """Check lexer-equivalent member access and computed string expressions."""
-    collapsed = _DOT_WHITESPACE.sub(".", _normalise_index_access(expression))
+    collapsed = _collapse_dot_whitespace(_normalise_index_access(expression))
     if (
         _ACTOR_TOKEN.search(collapsed) is not None
         or _COMPUTED_CONTEXT_INDEX.search(collapsed) is not None
@@ -681,7 +701,7 @@ def _parser_command() -> list[str]:
     go = shutil.which("go")
     if go is None:
         raise OSError("workflow parser: Go compiler unavailable")
-    subprocess.run(  # noqa: S603 - fixed argv and repository-owned build paths.
+    subprocess.run(  # noqa: S603 - fixed argv and build paths. # nosec B603
         [go, "build", "-p=2", "-o", str(output), "./..."],
         cwd=directory,
         check=True,
@@ -693,7 +713,7 @@ def _parser_command() -> list[str]:
 
 def _parse_document(text: str) -> dict:
     """Return decoded YAML scalars and actionlint expression facts."""
-    result = subprocess.run(  # noqa: S603 - fixed binary; YAML enters only stdin.
+    result = subprocess.run(  # noqa: S603 - fixed binary; stdin YAML. # nosec B603
         _parser_command(),
         input=text,
         text=True,
@@ -721,6 +741,9 @@ def _parsed_allowed(
     if item["alias"]:
         return False
     key = (name, job, _canonical_allow_line(line))
+    required_parent = ALLOWED_LINE_PARENTS.get(key)
+    if required_parent is not None and tuple(path[:-1]) != required_parent:
+        return False
     if ALLOWED_LINES.get(key, "").strip():
         if hits is not None:
             hits.allowed_lines.add(key)
@@ -800,7 +823,7 @@ def _parsed_findings(
         document = _parse_document(text)
         scalars = _document_scalars(document)
         if document["error"]:
-            return [f"{name}:1:<top>: {document['Error']}"]
+            return [f"{name}:1:<top>: {document['error']}"]
         lines = text.splitlines()
         findings: list[str] = []
         for item in scalars[:65536]:

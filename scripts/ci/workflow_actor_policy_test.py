@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 import tempfile
 import unittest
@@ -14,15 +15,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import workflow_actor_policy as policy
-from workflow_actor_policy import (
-    ALLOWED,
-    ALLOWED_LINES,
-    MAX_WORKFLOW_LINES,
-    REPO_ROOT,
-    check,
-    scan,
-    scan_with_hits,
-)
 
 _FIXTURE_NAME = ".github/workflows/security-scan.yml"
 _FIXTURE_PREFIX = "on:\n  push:\njobs:\n  build:\n"
@@ -80,9 +72,49 @@ _NEW_FAILURES: dict[str, tuple[str, ...]] = {
 
 
 class WorkflowActorPolicyTest(unittest.TestCase):
+    def test_duplicate_key_diagnostic_preserved(self) -> None:
+        findings = policy.check(_FIXTURE_NAME, "on: push\non: pull_request\njobs: {}\n")
+        self.assertEqual(len(findings), 1)
+        self.assertIn('workflow parser: duplicate key "on" at line 2', findings[0])
+        self.assertNotIn("KeyError", findings[0])
+
+    def test_collapse_dot_whitespace_matches_regex(self) -> None:
+        cases = (
+            "",
+            "no dot",
+            "  no dot  ",
+            ". leading",
+            "trailing . ",
+            " . ",
+            "..",
+            "a . . b",
+            "  a . b  ",
+            "a\t.\nb",
+            "a\u00a0.\u00a0b",
+            "github . event [0]",
+            " " * 65536,
+            " " * 65536 + ".",
+        )
+        for index, text in enumerate(cases):
+            with self.subTest(case=index):
+                expected = re.sub(r"\s*\.\s*", ".", text)
+                self.assertEqual(policy._collapse_dot_whitespace(text), expected)
+
+    def test_regenerate_branch_allowance_parent(self) -> None:
+        name = ".github/workflows/regenerate.yml"
+        text = "on:\n  push:\n    branches:\n      - 'renovate/**'\njobs: {}\n"
+        self.assertEqual(policy.check(name, text), [])
+        findings = policy.check(
+            name, text.replace("    branches:", "    branches-ignore:", 1)
+        )
+        self.assertTrue(findings)
+        self.assertTrue(
+            any("disallowed parsed scalar: renovate/**" in item for item in findings)
+        )
+
     def test_parser_unavailable_fails_closed(self) -> None:
         with patch.object(policy, "_parser_command", side_effect=OSError, create=True):
-            findings = check(_FIXTURE_NAME, "on: push\njobs: {}\n")
+            findings = policy.check(_FIXTURE_NAME, "on: push\njobs: {}\n")
         self.assertTrue(any("workflow parser unavailable" in item for item in findings))
 
     def test_parser_output_wrong_shape_fails_closed(self) -> None:
@@ -102,7 +134,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                     policy, "_parse_document", return_value=document, create=True
                 ),
             ):
-                findings = check(_FIXTURE_NAME, "on: push\njobs: {}\n")
+                findings = policy.check(_FIXTURE_NAME, "on: push\njobs: {}\n")
                 self.assertTrue(
                     any("workflow parser unavailable" in item for item in findings)
                 )
@@ -120,16 +152,16 @@ class WorkflowActorPolicyTest(unittest.TestCase):
 
     def test_wildcard_identity_context_fails(self) -> None:
         text = _FIXTURE_PREFIX + "    if: ${{ !contains(github.*, '29139614') }}\n"
-        self.assertTrue(check(_FIXTURE_NAME, text))
+        self.assertTrue(policy.check(_FIXTURE_NAME, text))
 
     def test_expression_reference_bound_fails_closed(self) -> None:
         text = (
             _FIXTURE_PREFIX
             + "    steps:\n      - run: echo "
-            + "${{ github.ref }} " * (MAX_WORKFLOW_LINES + 1)
+            + "${{ github.ref }} " * (policy.MAX_WORKFLOW_LINES + 1)
             + "${{ github.* }}\n"
         )
-        self.assertTrue(check(_FIXTURE_NAME, text))
+        self.assertTrue(policy.check(_FIXTURE_NAME, text))
 
     def test_job_alias_does_not_inherit_allowance(self) -> None:
         text = (
@@ -137,7 +169,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'\n"
             "  semgrep: *checks\n"
         )
-        self.assertTrue(check(".github/workflows/ci.yml", text))
+        self.assertTrue(policy.check(".github/workflows/ci.yml", text))
 
     def test_delimiter_before_multiline_expression_fails(self) -> None:
         text = (
@@ -145,10 +177,12 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          : '}}'; if [ \"${{ github .\n"
             '          actor_id }}" = 29139614 ]; then exit 0; fi\n'
         )
-        self.assertTrue(check(_FIXTURE_NAME, text))
+        self.assertTrue(policy.check(_FIXTURE_NAME, text))
 
     def test_bare_on_pull_request_passes(self) -> None:
-        self.assertEqual(check(_FIXTURE_NAME, "on:\n  pull_request:\njobs: {}\n"), [])
+        self.assertEqual(
+            policy.check(_FIXTURE_NAME, "on:\n  pull_request:\njobs: {}\n"), []
+        )
 
     def test_unlisted_context_paths_fail_closed(self) -> None:
         for expr in (
@@ -157,9 +191,11 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "github.event.unlisted",
             "github[inputs.key]",
         ):
-            self.assertTrue(check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {expr}\n"))
+            self.assertTrue(
+                policy.check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {expr}\n")
+            )
         self.assertEqual(
-            check(
+            policy.check(
                 _FIXTURE_NAME,
                 _FIXTURE_PREFIX + "    if: github['event_name'] == 'push'\n",
             ),
@@ -167,17 +203,21 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         )
 
     def test_duplicate_keys_fail_closed(self) -> None:
-        self.assertTrue(check(_FIXTURE_NAME, "on: push\non: pull_request\njobs: {}\n"))
+        self.assertTrue(
+            policy.check(_FIXTURE_NAME, "on: push\non: pull_request\njobs: {}\n")
+        )
 
     def test_recursive_alias_fails_closed(self) -> None:
-        self.assertTrue(check(_FIXTURE_NAME, "x: &loop {child: *loop}\n"))
+        self.assertTrue(policy.check(_FIXTURE_NAME, "x: &loop {child: *loop}\n"))
 
     def test_multiple_documents_fail_closed(self) -> None:
-        self.assertTrue(check(_FIXTURE_NAME, "on: push\n---\non: pull_request\n"))
+        self.assertTrue(
+            policy.check(_FIXTURE_NAME, "on: push\n---\non: pull_request\n")
+        )
 
     def test_allowed_entries_are_pull_request_only(self) -> None:
-        self.assertEqual(len(ALLOWED), 3)
-        for (path, job, expr), reason in ALLOWED.items():
+        self.assertEqual(len(policy.ALLOWED), 3)
+        for (path, job, expr), reason in policy.ALLOWED.items():
             self.assertTrue(path and job and reason.strip())
             self.assertTrue(
                 expr.endswith("&& github.event_name == 'pull_request'"),
@@ -185,15 +225,15 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             )
 
     def test_all_allowances_are_hit_by_repository_scan(self) -> None:
-        self.assertEqual(len(ALLOWED_LINES), 21)
-        for (path, job, line_text), reason in list(ALLOWED_LINES.items())[
-            :MAX_WORKFLOW_LINES
+        self.assertEqual(len(policy.ALLOWED_LINES), 21)
+        for (path, job, line_text), reason in list(policy.ALLOWED_LINES.items())[
+            : policy.MAX_WORKFLOW_LINES
         ]:
             self.assertTrue(path and job and line_text and reason.strip())
-        findings, hit_ifs, hit_lines = scan_with_hits(REPO_ROOT)
+        findings, hit_ifs, hit_lines = policy.scan_with_hits(policy.REPO_ROOT)
         self.assertEqual(findings, [])
-        self.assertEqual(hit_ifs, set(ALLOWED))
-        self.assertEqual(hit_lines, set(ALLOWED_LINES))
+        self.assertEqual(hit_ifs, set(policy.ALLOWED))
+        self.assertEqual(hit_lines, set(policy.ALLOWED_LINES))
 
     def test_scan_with_hits_omits_unhit_allowances(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -204,7 +244,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 "on:\n  push:\njobs:\n  ok:\n    runs-on: ubuntu-26.04\n",
                 encoding="utf-8",
             )
-            findings, hit_ifs, hit_lines = scan_with_hits(root)
+            findings, hit_ifs, hit_lines = policy.scan_with_hits(root)
             self.assertEqual(findings, [])
             self.assertEqual(hit_ifs, set())
             self.assertEqual(hit_lines, set())
@@ -215,7 +255,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  semgrep:\n    if: github.actor != 'renovate[bot]'\n"
             "    runs-on: ubuntu-26.04\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/security-scan.yml:6:semgrep:", findings[0])
 
@@ -225,7 +265,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  spectral:\n"
             "    if: ${{ github.actor != 'renovate[bot]' && inputs.openapi-spec != '' }}\n"
         )
-        findings = check(".github/workflows/ci-go.yml", text)
+        findings = policy.check(".github/workflows/ci-go.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/ci-go.yml:5:spectral:", findings[0])
 
@@ -235,7 +275,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  semgrep:\n"
             "    if: github.actor != 'renovate[bot]' && github.event_name == 'pull_request'\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/security-scan.yml:5:semgrep:", findings[0])
 
@@ -245,7 +285,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  pr-title:\n    if: >-\n"
             "      github.actor != 'renovate[bot]' && github.event_name == 'pull_request'\n"
         )
-        findings = check(".github/workflows/ci.yml", text)
+        findings = policy.check(".github/workflows/ci.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/ci.yml:6:pr-title:", findings[0])
 
@@ -255,7 +295,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  semgrep:\n    if: >-\n"
             "      github.actor_id != 29139614\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
@@ -271,7 +311,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - if: github.triggering_actor != vars.BOT_LOGIN\n"
             "        run: echo ${{ github.event.sender.login }} ${{ github.event.issue.user.login }}\n"
         )
-        findings = check(".github/workflows/build.yml", text)
+        findings = policy.check(".github/workflows/build.yml", text)
         self.assertEqual(len(findings), 3)
         self.assertIn(".github/workflows/build.yml:7:build:", findings[0])
         self.assertIn(".github/workflows/build.yml:8:build:", findings[1])
@@ -285,14 +325,14 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "        with:\n"
             "          username: ${{ github.actor }}\n"
         )
-        self.assertEqual(check(".github/workflows/release-go.yml", text), [])
-        findings = check(".github/workflows/other.yml", text)
+        self.assertEqual(policy.check(".github/workflows/release-go.yml", text), [])
+        findings = policy.check(".github/workflows/other.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/other.yml:8:goreleaser:"),
             findings[0],
         )
-        wrong_job_findings = check(
+        wrong_job_findings = policy.check(
             ".github/workflows/release-go.yml",
             text.replace("  goreleaser:\n", "  publish:\n", 1),
         )
@@ -303,7 +343,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             ),
             wrong_job_findings[0],
         )
-        run_block_findings = check(
+        run_block_findings = policy.check(
             ".github/workflows/release-go.yml",
             "on:\n  push:\njobs:\n  goreleaser:\n    steps:\n"
             "      - run: |\n          username: ${{ github.actor }}\n",
@@ -324,7 +364,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "  dco:\n"
             "    if: ${{  github.actor != 'renovate[bot]'   && github.actor != 'github-actions[bot]' && github.event_name == 'pull_request'  }}\n"
         )
-        self.assertEqual(check(".github/workflows/ci.yml", text), [])
+        self.assertEqual(policy.check(".github/workflows/ci.yml", text), [])
 
     def test_scan_checks_github_and_gitea_workflows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -339,7 +379,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 "jobs:\n  b:\n    if: user.login != 'bot'\n",
                 encoding="utf-8",
             )
-            findings = scan(root)
+            findings = policy.scan(root)
             self.assertEqual(len(findings), 2)
             self.assertIn(".github/workflows/a.yaml:3:a:", findings[0])
             self.assertIn(".gitea/workflows/b.yml:3:b:", findings[1])
@@ -351,7 +391,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: github.actor_id != 29139614\n"
             "    runs-on: ubuntu-26.04\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertIn(".github/workflows/security-scan.yml:5:semgrep:", findings[0])
 
@@ -369,7 +409,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 "        run: echo ${{ gitea.actor_id }}\n",
                 encoding="utf-8",
             )
-            findings = scan(root)
+            findings = policy.scan(root)
             self.assertEqual(len(findings), 3)
             self.assertIn(".gitea/workflows/ci.yml:5:lint:", findings[0])
             self.assertIn(".gitea/workflows/ci.yml:7:lint:", findings[1])
@@ -384,7 +424,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - if: github.event.sender.id != 29139614\n"
             "        run: echo sender\n"
         )
-        findings = check(".github/workflows/ci.yml", text)
+        findings = policy.check(".github/workflows/ci.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertIn(".github/workflows/ci.yml:6:verify:", findings[0])
         self.assertIn(".github/workflows/ci.yml:8:verify:", findings[1])
@@ -398,7 +438,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          GITEA_ACTOR: ${{ gitea.actor }}\n"
             "        run: echo ok\n"
         )
-        findings = check(".github/workflows/release-go.yml", text)
+        findings = policy.check(".github/workflows/release-go.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertIn(".github/workflows/release-go.yml:7:publish:", findings[0])
         self.assertIn(".github/workflows/release-go.yml:8:publish:", findings[1])
@@ -425,7 +465,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          O: ${{ inputs.my_author_association }} ${{ inputs.author_associations }} ${{ inputs.x.logins }} ${{ inputs.my_login.id }} MY_GITHUB_ACTOR GITHUB_ACTOR_NAME MY_GITEA_ACTOR GITEA_ACTOR_NAME\n"
             "        run: echo ok\n"
         )
-        self.assertEqual(check(".github/workflows/build.yml", text), [])
+        self.assertEqual(policy.check(".github/workflows/build.yml", text), [])
 
     def test_job_if_head_ref_renovate_fails(self) -> None:
         text = (
@@ -434,7 +474,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
             "    runs-on: ubuntu-26.04\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
@@ -448,7 +488,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - if: github.event.pull_request.user.type != 'Bot'\n"
             "        run: echo check\n"
         )
-        findings = check(".github/workflows/ci.yml", text)
+        findings = policy.check(".github/workflows/ci.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/ci.yml:6:verify:"),
@@ -462,7 +502,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: github.event.pusher.name != 'renovate[bot]'\n"
             "    runs-on: ubuntu-26.04\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:trivy:"),
@@ -477,7 +517,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "        if: github.event.head_commit.author.username != 'renovate-bot'\n"
             "        run: echo scan\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:7:scan:"),
@@ -491,7 +531,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      !startsWith(github.head_ref, 'dependabot/')\n"
             "    runs-on: ubuntu-26.04\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
@@ -499,11 +539,13 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         )
 
     def test_renovate_on_demand_lines_pass_and_fail_pair(self) -> None:
-        text = (REPO_ROOT / ".gitea/workflows/renovate-on-demand.yml").read_text(
+        text = (policy.REPO_ROOT / ".gitea/workflows/renovate-on-demand.yml").read_text(
             encoding="utf-8"
         )
-        self.assertEqual(check(".gitea/workflows/renovate-on-demand.yml", text), [])
-        findings = check(".github/workflows/other.yml", text)
+        self.assertEqual(
+            policy.check(".gitea/workflows/renovate-on-demand.yml", text), []
+        )
+        findings = policy.check(".github/workflows/other.yml", text)
         expected = (
             (5, "<top>"),
             (13, "<top>"),
@@ -531,7 +573,11 @@ class WorkflowActorPolicyTest(unittest.TestCase):
 
     def test_renovate_on_demand_image_pin_updates(self) -> None:
         name = ".gitea/workflows/renovate-on-demand.yml"
-        lines = (REPO_ROOT / name).read_text(encoding="utf-8").splitlines(keepends=True)
+        lines = (
+            (policy.REPO_ROOT / name)
+            .read_text(encoding="utf-8")
+            .splitlines(keepends=True)
+        )
         self.assertTrue(lines[23].startswith("      image: "))
         repository = "docker.io/renovate/renovate"
         digest = "b" * 64
@@ -550,7 +596,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         for case, image, allowed in cases:
             with self.subTest(case=case):
                 lines[23] = f"      image: {image}\n"
-                findings = check(name, "".join(lines))
+                findings = policy.check(name, "".join(lines))
                 self.assertEqual(bool(findings), not allowed, findings)
 
     def test_quoted_job_if_keys_fail(self) -> None:
@@ -561,7 +607,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "  trivy:\n"
             "    'if': ${{ !startsWith(github.head_ref, 'renovate/') }}\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
@@ -582,7 +628,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: |2-\n"
             "      !startsWith(github.head_ref, 'renovate/')\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
@@ -603,7 +649,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             '  "audit"\t:\n'
             "    if: github.actor_id != 29139614\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         expected = ((5, "lint"), (7, "trivy"), (9, "audit"))
         self.assertEqual(len(findings), len(expected))
         for idx, (lineno, job) in enumerate(expected):
@@ -613,7 +659,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
                 ),
                 findings[idx],
             )
-        tab_top = check(
+        tab_top = policy.check(
             ".github/workflows/security-scan.yml",
             'on:\n  push:\n"jobs"\t:\n  lint:\n    if: github.actor_id != 29139614\n',
         )
@@ -633,7 +679,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "  chained:\n"
             "    if: github['event']['workflow_run']['actor']['login'] != vars.BOT_LOGIN\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 3)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
@@ -662,7 +708,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "        run: echo two\n"
         )
         self.assertEqual(
-            check(".github/workflows/security-scan.yml", text),
+            policy.check(".github/workflows/security-scan.yml", text),
             [
                 (
                     ".github/workflows/security-scan.yml:5:semgrep: "
@@ -690,10 +736,10 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "if: github.event['workflow_run']['triggering_actor']['id'] != 1",
             "if: contains(github.event.head_commit.author.login, 'x')",
         )
-        for clause in clauses[:MAX_WORKFLOW_LINES]:
+        for clause in clauses[: policy.MAX_WORKFLOW_LINES]:
             with self.subTest(clause=clause):
                 self.assertEqual(
-                    check(
+                    policy.check(
                         ".github/workflows/security-scan.yml",
                         f"on:\n  workflow_run:\njobs:\n  semgrep:\n    {clause}\n",
                     ),
@@ -712,7 +758,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - name: Check author\n"
             "        run: echo user\n"
         )
-        self.assertEqual(check(".github/workflows/build.yml", text), [])
+        self.assertEqual(policy.check(".github/workflows/build.yml", text), [])
 
     def test_author_association_fails(self) -> None:
         text = (
@@ -720,7 +766,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  semgrep:\n"
             "    if: github.event.pull_request.author_association != 'BOT'\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
@@ -736,7 +782,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "      - if: github.event.sender.node_id != vars.BOT_NODE_ID\n"
             "        run: echo ok\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:5:semgrep:"),
@@ -761,7 +807,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             '      - run: echo "$GITEA_ACTOR_ID"\n'
             '      - run: echo "$GITEA_TRIGGERING_ACTOR"\n'
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         expected = (7, 9, 10, 11, 12, 13, 14)
         self.assertEqual(len(findings), len(expected))
         for idx, lineno in enumerate(expected):
@@ -778,7 +824,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "jobs:\n  semgrep:\n    steps:\n"
             "      - run: '[ \"$ACTOR\" = renovate ] && exit 0'\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 1)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
@@ -791,7 +837,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             workflows = root / ".github/workflows"
             workflows.mkdir(parents=True)
             (workflows / "broken.yml").write_bytes(b"name: \xff\xfe\n")
-            findings = scan(root)
+            findings = policy.scan(root)
             self.assertEqual(len(findings), 1)
             self.assertEqual(
                 findings[0],
@@ -804,7 +850,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             root = Path(tmp)
             workflows = root / ".github/workflows"
             (workflows / "dir.yaml").mkdir(parents=True)
-            findings = scan(root)
+            findings = policy.scan(root)
             self.assertEqual(len(findings), 1)
             self.assertTrue(
                 findings[0].startswith(
@@ -833,7 +879,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          SB: ${{ sender [inputs.key] }}\n"
             "        run: echo ${{ github.event.head_commit.committer.username }}\n"
         )
-        findings = check(".github/workflows/audit.yml", text)
+        findings = policy.check(".github/workflows/audit.yml", text)
         expected = (3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
         self.assertEqual(len(findings), len(expected))
         for idx, lineno in enumerate(expected):
@@ -859,7 +905,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "          !contains(github.head_ref, '[bot]')\n"
             "        run: echo three\n"
         )
-        findings = check(".github/workflows/gate.yml", text)
+        findings = policy.check(".github/workflows/gate.yml", text)
         self.assertEqual(len(findings), 4)
         self.assertTrue(findings[0].startswith(".github/workflows/gate.yml:3:gate:"))
         self.assertTrue(findings[1].startswith(".github/workflows/gate.yml:5:gate:"))
@@ -878,7 +924,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "        run: echo ${{ github.event.Sender.Login }} "
             "${{ github.event.pull_request.Author_Association }}\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         expected = ((5, "semgrep"), (7, "trivy"), (9, "trivy"), (10, "trivy"))
         self.assertEqual(len(findings), len(expected))
         for idx, (lineno, job) in enumerate(expected):
@@ -899,7 +945,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             "    if: |2+\n"
             "      github.actor_id != 29139614\n"
         )
-        findings = check(".github/workflows/security-scan.yml", text)
+        findings = policy.check(".github/workflows/security-scan.yml", text)
         self.assertEqual(len(findings), 2)
         self.assertTrue(
             findings[0].startswith(".github/workflows/security-scan.yml:6:semgrep:"),
@@ -909,7 +955,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             findings[1].startswith(".github/workflows/security-scan.yml:9:trivy:"),
             findings[1],
         )
-        run_blocks = check(
+        run_blocks = policy.check(
             ".github/workflows/release-go.yml",
             "on:\n  push:\njobs:\n  goreleaser:\n    steps:\n"
             "      - run: >2-\n          username: ${{ github.actor }}\n"
@@ -927,7 +973,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             )
 
     def test_run_indent_chomping_block_scalar_keeps_tracked_job(self) -> None:
-        indent_one = check(
+        indent_one = policy.check(
             ".github/workflows/ci.yml",
             "on:\n  push:\njobs:\n  semgrep:\n    steps:\n"
             "      - run: echo ok\n"
@@ -945,7 +991,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
             indent_one[1].startswith(".github/workflows/ci.yml:12:lint:"),
             indent_one[1],
         )
-        step_run = check(
+        step_run = policy.check(
             ".github/workflows/ci.yml",
             "on:\n  push:\njobs:\n  semgrep:\n    steps:\n"
             "      - run: >2-\n          pr-title:\n"
@@ -964,17 +1010,17 @@ class WorkflowActorPolicyTest(unittest.TestCase):
         )
 
     def test_repository_workflows_comply(self) -> None:
-        self.assertEqual(scan(REPO_ROOT), [])
+        self.assertEqual(policy.scan(policy.REPO_ROOT), [])
 
     def assert_rejected_fixtures(self, category: str) -> None:
-        for body in _NEW_FAILURES[category][:MAX_WORKFLOW_LINES]:
+        for body in _NEW_FAILURES[category][: policy.MAX_WORKFLOW_LINES]:
             with self.subTest(body=body):
-                self.assertTrue(check(_FIXTURE_NAME, _FIXTURE_PREFIX + body))
+                self.assertTrue(policy.check(_FIXTURE_NAME, _FIXTURE_PREFIX + body))
 
     def test_computed_index_on_identity_context_fails(self) -> None:
         self.assert_rejected_fixtures("computed_index")
         self.assertEqual(
-            check(
+            policy.check(
                 _FIXTURE_NAME,
                 _FIXTURE_PREFIX + "    env:\n"
                 "      X: ${{ steps.a.outputs[inputs.k] }}\n"
@@ -986,7 +1032,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
     def test_computed_bot_literal_fails(self) -> None:
         self.assert_rejected_fixtures("computed_bot")
         self.assertEqual(
-            check(
+            policy.check(
                 _FIXTURE_NAME,
                 _FIXTURE_PREFIX + "    env:\n"
                 "      X: ${{ fromJSON(toJSON(job)) }}\n"
@@ -998,23 +1044,25 @@ class WorkflowActorPolicyTest(unittest.TestCase):
     def test_double_quoted_escapes_fail(self) -> None:
         self.assert_rejected_fixtures("escapes")
         self.assertTrue(
-            check(_FIXTURE_NAME, _FIXTURE_PREFIX + '    if: "github.actor_id != 1"\n')
+            policy.check(
+                _FIXTURE_NAME, _FIXTURE_PREFIX + '    if: "github.actor_id != 1"\n'
+            )
         )
         for value in (r'"x\UFFFFFFFFy"', r'"x\xZZy"', r'"x\uD800y"'):
             with self.subTest(value=value):
                 # Invalid YAML must fail closed before expression analysis.
                 self.assertTrue(
-                    check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {value}\n")
+                    policy.check(_FIXTURE_NAME, _FIXTURE_PREFIX + f"    if: {value}\n")
                 )
 
     def test_escaped_line_break_fails(self) -> None:
         self.assert_rejected_fixtures("line_break")
-        findings = check(
+        findings = policy.check(
             _FIXTURE_NAME, _FIXTURE_PREFIX + _NEW_FAILURES["line_break"][0]
         )
         self.assertTrue(any("escaped line break refused" in item for item in findings))
         self.assertEqual(
-            check(
+            policy.check(
                 _FIXTURE_NAME,
                 _FIXTURE_PREFIX + "    steps:\n      - run: |\n"
                 "          echo one \\\n          two\n",
@@ -1025,7 +1073,7 @@ class WorkflowActorPolicyTest(unittest.TestCase):
     def test_whitespace_around_dot_fails(self) -> None:
         self.assert_rejected_fixtures("dot_whitespace")
         self.assertEqual(
-            check(
+            policy.check(
                 _FIXTURE_NAME,
                 _FIXTURE_PREFIX + "    steps:\n      - run: |\n"
                 '          echo "Done. Author unknown"\n',
@@ -1035,11 +1083,11 @@ class WorkflowActorPolicyTest(unittest.TestCase):
 
     def test_multiline_expression_forms_fail(self) -> None:
         self.assert_rejected_fixtures("multiline")
-        text = (REPO_ROOT / ".gitea/workflows/publish-github.yml").read_text(
+        text = (policy.REPO_ROOT / ".gitea/workflows/publish-github.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("    if: >-\n", text)
-        self.assertEqual(check(".gitea/workflows/publish-github.yml", text), [])
+        self.assertEqual(policy.check(".gitea/workflows/publish-github.yml", text), [])
 
 
 if __name__ == "__main__":
