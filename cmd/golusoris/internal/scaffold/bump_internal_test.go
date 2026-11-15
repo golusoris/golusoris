@@ -16,7 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// bumpHelperBlockFor outlives every caller deadline in these tests.
+// bumpHelperBlockFor allows hosted Windows start-up latency while distinguishing deadline return from helper completion.
 const bumpHelperBlockFor = time.Minute
 
 func TestRunBoundedCommandTimesOutFromBackground(t *testing.T) {
@@ -27,7 +27,7 @@ func TestRunBoundedCommandTimesOutFromBackground(t *testing.T) {
 	_, err := runBoundedCommand(context.Background(), 25*time.Millisecond, 128, name, args...)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Less(t, time.Since(started), time.Second)
+	require.Less(t, time.Since(started), bumpHelperBlockFor/2)
 }
 
 func TestRunBoundedCommandPreservesEarlierCallerDeadline(t *testing.T) {
@@ -40,7 +40,7 @@ func TestRunBoundedCommandPreservesEarlierCallerDeadline(t *testing.T) {
 	_, err := runBoundedCommand(ctx, time.Minute, 128, name, args...)
 
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.Less(t, time.Since(started), time.Second)
+	require.Less(t, time.Since(started), bumpHelperBlockFor/2)
 }
 
 func TestRunBoundedCommandPreservesCallerCancellation(t *testing.T) {
@@ -71,13 +71,14 @@ func TestRunBoundedCommandCapsDiagnosticsAtBoundary(t *testing.T) {
 
 			diagnostics, err := runBoundedCommand(
 				context.Background(),
-				time.Second,
+				bumpHelperBlockFor,
 				outputLimit,
 				name,
 				args...,
 			)
 
 			require.Error(t, err)
+			require.NotErrorIs(t, err, context.DeadlineExceeded)
 			require.Len(t, diagnostics, outputLimit)
 			require.Equal(t, tt.wantTruncated, strings.HasSuffix(diagnostics, commandOutputTruncated))
 		})
