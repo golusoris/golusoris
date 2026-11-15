@@ -32,18 +32,23 @@ check_workflow() {
 	invalid_line="$(printf '%s\n' "$load_block" | awk -v summary="$SUMMARY" '
 		NR > 1000 { exit 1 }
 		/^ *#/ { next }
-		/^            export STALLPROBE_P=4 STALLPROBE_N=600$/ { next }
+		# Each shape carries its step, so a moved result reset cannot hide a failed probe or load.
+		{ step = 0 }
+		/^            export STALLPROBE_P=4 STALLPROBE_N=600$/ { step = 1 }
 		# A "#" inside a go test line would comment out its tail, so it is excluded with the separators.
-		/^            go test [^;&|#]* > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { next }
-		/^            load_pid=\$!$/ { next }
-		/^            probe_rc=0$/ { next }
-		/^            go test [^;&|#]* \|\| probe_rc=\$\?$/ { next }
-		/^            load_rc=0$/ { next }
-		/^            wait "\$load_pid" \|\| load_rc=\$\?$/ { next }
-		/^            echo "probe_rc=\$probe_rc load_rc=\$load_rc"$/ { next }
-		$0 == "            " summary { next }
-		/^            \[\[ "\$probe_rc" == 0 && "\$load_rc" == 0 \]\]$/ { next }
-		{ print "file-load branch line outside the straight-line allow-list: " $0; exit }
+		/^            go test [^;&|#]* > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { step = 2 }
+		/^            load_pid=\$!$/ { step = 3 }
+		/^            probe_rc=0$/ { step = 4 }
+		/^            go test [^;&|#]* \|\| probe_rc=\$\?$/ { step = 5 }
+		/^            load_rc=0$/ { step = 6 }
+		/^            wait "\$load_pid" \|\| load_rc=\$\?$/ { step = 7 }
+		/^            echo "probe_rc=\$probe_rc load_rc=\$load_rc"$/ { step = 8 }
+		$0 == "            " summary { step = 9 }
+		/^            \[\[ "\$probe_rc" == 0 && "\$load_rc" == 0 \]\]$/ { step = 10 }
+		step == 0 { print "file-load branch line outside the straight-line allow-list: " $0; failed = 1; exit }
+		step != last + 1 { print "file-load branch line out of order (want step " last + 1 ", got step " step "): " $0; failed = 1; exit }
+		{ last = step }
+		END { if (!failed && last != 10) print "file-load branch stops after step " last " of 10" }
 	')"
 	if [[ -n "$invalid_line" ]]; then
 		printf '%s\n' "$invalid_line" >&2
@@ -78,6 +83,16 @@ expect_failure() {
 		exit 1
 	fi
 	printf 'PASS %s: rc=%d: %s\n' "$name" "$status" "$output"
+}
+
+# Writes the workflow with exact line $1 moved to just after exact line $2.
+move_line_after() {
+	awk -v moved="$1" -v anchor="$2" '
+		NR > 1000 { exit 1 }
+		$0 == moved { held = $0; next }
+		{ print }
+		$0 == anchor { print held }
+	' "$WORKFLOW" >"$3"
 }
 
 check_workflow "$WORKFLOW"
@@ -159,14 +174,23 @@ awk '
 expect_failure early_exit "$suite_root/early-exit.yml" \
 	'file-load branch line outside the straight-line allow-list:             exit 0'
 
-awk -v summary="$SUMMARY" '
-	NR > 1000 { exit 1 }
-	$0 == "            echo \"probe_rc=$probe_rc load_rc=$load_rc\"" { echo_line = $0; next }
-	{ print }
-	$0 == "            " summary { print echo_line }
-' "$WORKFLOW" >"$suite_root/reordered-summary.yml"
+move_line_after "            echo \"probe_rc=\$probe_rc load_rc=\$load_rc\"" "            $SUMMARY" \
+	"$suite_root/reordered-summary.yml"
 expect_failure reordered_summary "$suite_root/reordered-summary.yml" \
-	'file-load summary must be unconditional before final probe_rc/load_rc result'
+	"file-load branch line out of order (want step 8, got step 9):             $SUMMARY"
+
+probe_line="$(sed -n '/^            go test .* || probe_rc=\$?$/p' "$WORKFLOW")"
+move_line_after "            probe_rc=0" "$probe_line" "$suite_root/moved-probe-init.yml"
+expect_failure moved_probe_init "$suite_root/moved-probe-init.yml" \
+	"file-load branch line out of order (want step 4, got step 5): $probe_line"
+
+wait_line="            wait \"\$load_pid\" || load_rc=\$?"
+move_line_after "            load_rc=0" "$wait_line" "$suite_root/moved-load-init.yml"
+expect_failure moved_load_init "$suite_root/moved-load-init.yml" \
+	"file-load branch line out of order (want step 6, got step 7): $wait_line"
+
+grep -vxF "            [[ \"\$probe_rc\" == 0 && \"\$load_rc\" == 0 ]]" "$WORKFLOW" >"$suite_root/truncated.yml"
+expect_failure truncated_result "$suite_root/truncated.yml" 'file-load branch stops after step 9 of 10'
 
 sed -E 's/^(            go test .*\.\/db\/sqlite\/) \|\| probe_rc=/\1 # || probe_rc=/' \
 	"$WORKFLOW" >"$suite_root/hash-in-probe.yml"
