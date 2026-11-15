@@ -33,10 +33,11 @@ check_workflow() {
 		NR > 1000 { exit 1 }
 		/^ *#/ { next }
 		/^            export STALLPROBE_P=4 STALLPROBE_N=600$/ { next }
-		/^            go test [^;&|]* > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { next }
+		# A "#" inside a go test line would comment out its tail, so it is excluded with the separators.
+		/^            go test [^;&|#]* > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { next }
 		/^            load_pid=\$!$/ { next }
 		/^            probe_rc=0$/ { next }
-		/^            go test [^;&|]* \|\| probe_rc=\$\?$/ { next }
+		/^            go test [^;&|#]* \|\| probe_rc=\$\?$/ { next }
 		/^            load_rc=0$/ { next }
 		/^            wait "\$load_pid" \|\| load_rc=\$\?$/ { next }
 		/^            echo "probe_rc=\$probe_rc load_rc=\$load_rc"$/ { next }
@@ -157,5 +158,20 @@ awk '
 ' "$WORKFLOW" >"$suite_root/early-exit.yml"
 expect_failure early_exit "$suite_root/early-exit.yml" \
 	'file-load branch line outside the straight-line allow-list:             exit 0'
+
+awk -v summary="$SUMMARY" '
+	NR > 1000 { exit 1 }
+	$0 == "            echo \"probe_rc=$probe_rc load_rc=$load_rc\"" { echo_line = $0; next }
+	{ print }
+	$0 == "            " summary { print echo_line }
+' "$WORKFLOW" >"$suite_root/reordered-summary.yml"
+expect_failure reordered_summary "$suite_root/reordered-summary.yml" \
+	'file-load summary must be unconditional before final probe_rc/load_rc result'
+
+sed -E 's/^(            go test .*\.\/db\/sqlite\/) \|\| probe_rc=/\1 # || probe_rc=/' \
+	"$WORKFLOW" >"$suite_root/hash-in-probe.yml"
+probe_line="$(sed -n '/^            go test .* # || probe_rc=\$?$/p' "$suite_root/hash-in-probe.yml")"
+expect_failure hash_in_probe "$suite_root/hash-in-probe.yml" \
+	"file-load branch line outside the straight-line allow-list: $probe_line"
 
 printf 'sqlite stall probe policy tests passed\n'
