@@ -21,6 +21,10 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+
 	"github.com/golusoris/golusoris/cache/memory"
 	"github.com/golusoris/golusoris/httpx/client"
 	"github.com/golusoris/golusoris/httpx/extclient"
@@ -686,4 +690,64 @@ func TestNewIgnoresNilOption(t *testing.T) {
 	if client == nil {
 		t.Fatal("New returned nil client")
 	}
+}
+
+func TestSecretParamsForwarded(t *testing.T) { //nolint:paralleltest // WHY: extclient tracing uses the global provider; restore it before parallel tests resume.
+	exporter := newURLTraceExporter(t)
+	received := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		received <- req.URL.RawQuery
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+	names := []string{"CuStOm-Secret"}
+	c, err := extclient.New(extclient.ServiceOptions{BaseURL: server.URL, SecretParams: names})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(c.HTTPClient().CloseIdleConnections)
+	names[0] = "changed"
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/?custom_secret=hidden&api_key=builtin", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := c.HTTPClient().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = resp.Body.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-received; got != req.URL.RawQuery {
+		t.Fatalf("upstream query = %q, want %q", got, req.URL.RawQuery)
+	}
+	spans := exporter.GetSpans()
+	if len(spans) != 1 {
+		t.Fatalf("exported spans = %d, want 1", len(spans))
+	}
+	for _, attr := range spans[0].Attributes {
+		if attr.Key == "url.full" && attr.Value.AsString() == server.URL+"/?custom_secret=REDACTED&api_key=REDACTED" {
+			return
+		}
+	}
+	t.Fatalf("redacted url.full missing: %v", spans[0].Attributes)
+}
+
+func newURLTraceExporter(t *testing.T) *tracetest.InMemoryExporter {
+	t.Helper()
+	exporter := tracetest.NewInMemoryExporter()
+	provider := trace.NewTracerProvider(trace.WithSyncer(exporter))
+	previous := otel.GetTracerProvider()
+	otel.SetTracerProvider(provider)
+	t.Cleanup(func() {
+		otel.SetTracerProvider(previous)
+		shutdown, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Second)
+		defer cancel()
+		if err := provider.Shutdown(shutdown); err != nil {
+			t.Error(err)
+		}
+	})
+	return exporter
 }

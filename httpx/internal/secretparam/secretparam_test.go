@@ -13,7 +13,7 @@ import (
 func TestSharedSet(t *testing.T) {
 	t.Parallel()
 	set := secretparam.Set(secretparam.Defaults(), []string{"Extra-Secret"})
-	for _, name := range []string{"API_KEY", "access-token", "To_ken", "PIN", "password", "client_secret", "X-Plex-Token", "refresh_token", "id_token", "extra_secret"} {
+	for _, name := range []string{"API_KEY", "access-token", "To_ken", "PIN", "password", "client_secret", "SECRET", "X-Plex-Token", "refresh_token", "id_token", "extra_secret"} {
 		if _, ok := set[secretparam.CanonicalName(name)]; !ok {
 			t.Errorf("secret %q absent", name)
 		}

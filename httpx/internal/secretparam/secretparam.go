@@ -9,7 +9,7 @@ import "strings"
 
 // Defaults returns a fresh copy of the shared secret parameter names.
 func Defaults() []string {
-	return []string{"api_key", "apikey", "access_token", "token", "pin", "password", "client_secret", "x-plex-token", "refresh_token", "id_token"}
+	return []string{"api_key", "apikey", "access_token", "token", "pin", "password", "client_secret", "secret", "x-plex-token", "refresh_token", "id_token"}
 }
 
 // CanonicalName folds case and removes underscores and hyphens for matching.

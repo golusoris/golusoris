@@ -98,6 +98,9 @@ type ServiceOptions struct {
 	// User-Agent). Per-request headers override these.
 	Headers map[string]string `koanf:"headers"`
 
+	// SecretParams adds case-insensitive names to the shared secret query defaults.
+	SecretParams []string `koanf:"secret_params"`
+
 	// Timeout caps a single request (default 30s, inherited from
 	// httpx/client when non-positive).
 	Timeout time.Duration `koanf:"timeout"`
@@ -179,11 +182,12 @@ func New(opts ServiceOptions, options ...Option) (*Client, error) {
 	}
 
 	cl.http = client.New(client.Options{
-		Name:    name,
-		Timeout: opts.Timeout,
-		Retry:   opts.Retry,
-		Breaker: opts.Breaker,
-		Logger:  cl.logger,
+		Name:         name,
+		Timeout:      opts.Timeout,
+		Retry:        opts.Retry,
+		Breaker:      opts.Breaker,
+		Logger:       cl.logger,
+		SecretParams: client.NewSecretParams(opts.SecretParams...),
 	})
 	cl.http.CheckRedirect = cl.checkRedirect
 	return cl, nil

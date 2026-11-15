@@ -36,7 +36,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/golusoris/golusoris/core/validate"
-	"github.com/golusoris/golusoris/httpx/internal/secretparam"
 )
 
 const (
@@ -83,7 +82,7 @@ type Options struct {
 	Transport http.RoundTripper
 
 	// SecretParams adds case-insensitive names to the shared secret query defaults.
-	SecretParams []string
+	SecretParams SecretParams
 }
 
 // RetryOptions tunes retryablehttp. Max == 0 disables retries.
@@ -138,9 +137,9 @@ func resolveOptions(opts Options) resolvedOptions {
 func New(opts Options) *http.Client {
 	resolved := resolveOptions(opts)
 
-	// Redact after otelhttp sets url.full and before the upstream call.
+	// Stack: circuit-breaker → retry → otelhttp → span redaction → stdlib transport.
 	inner := innerTransport(opts)
-	redacted := &redactingTransport{next: inner, secrets: secretparam.Set(secretparam.Defaults(), opts.SecretParams)}
+	redacted := &redactingTransport{next: inner, secrets: opts.SecretParams.withDefaults()}
 	traced := otelhttp.NewTransport(redacted, otelhttp.WithTracerProvider(resolved.tracerProvider))
 	base := idleForwarder{RoundTripper: traced, inner: inner}
 

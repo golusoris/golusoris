@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -48,13 +49,19 @@ func (r *requestCheckingTransport) RoundTrip(req *http.Request) (*http.Response,
 func TestRedactingTransportAttributeWrites(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
-		name   string
-		query  string
-		span   bool
-		writes int
+		name        string
+		query       string
+		fragment    string
+		rawFragment string
+		opaque      string
+		span        bool
+		writes      int
 	}{
 		{name: "secret with span", query: "api_key=hidden", span: true, writes: 1},
 		{name: "no secret with span", query: "q=1", span: true},
+		{name: "fragment without query", fragment: "token=x", span: true, writes: 1},
+		{name: "raw fragment without query", rawFragment: "token=x", span: true, writes: 1},
+		{name: "opaque without raw query", opaque: "//example.test/?api_key=hidden", span: true, writes: 1},
 		{name: "no span", query: "api_key=hidden"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -69,6 +76,9 @@ func TestRedactingTransportAttributeWrites(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			req.URL.Fragment = test.fragment
+			req.URL.RawFragment = test.rawFragment
+			req.URL.Opaque = test.opaque
 			inner := &requestCheckingTransport{testing: t, want: req, span: span, writes: test.writes}
 			transport := &redactingTransport{next: inner, secrets: secretparam.Set(secretparam.Defaults(), nil)}
 			resp, err := transport.RoundTrip(req)
@@ -79,5 +89,36 @@ func TestRedactingTransportAttributeWrites(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestRedactedURLNoSecretAllocations(t *testing.T) { //nolint:paralleltest // WHY: testing.AllocsPerRun forbids execution during parallel tests.
+	secrets := secretparam.Set(secretparam.Defaults(), nil)
+	for _, query := range []string{"q=1&a=2", "Q=1;not_a_secret=2", "%71=1&not%2Dsecret=2", "q=1&&;", "api%zzkey=x", "%=x", "%C3%84=1", ""} {
+		target := &url.URL{Scheme: "http", Host: "example.test", RawQuery: query}
+		allocations := testing.AllocsPerRun(100, func() {
+			if result, changed := redactedURL(target, secrets); changed || result != "" {
+				t.Fatalf("unexpected redaction: %q", result)
+			}
+		})
+		if allocations != 0 {
+			t.Errorf("query %q: allocations = %v, want 0", query, allocations)
+		}
+	}
+}
+
+func TestRedactedURLOpaqueAndRawQuery(t *testing.T) {
+	t.Parallel()
+	target := &url.URL{
+		Scheme: "http", Opaque: "//example.test/?token=hidden#secret=fragment",
+		RawQuery: "api_key=second", Fragment: "third", RawFragment: "%74hird",
+	}
+	original := *target
+	got, changed := redactedURL(target, secretparam.Set(secretparam.Defaults(), nil))
+	if want := "http://example.test/?token=REDACTED?api_key=REDACTED"; !changed || got != want {
+		t.Fatalf("redacted URL = %q, changed = %v, want %q", got, changed, want)
+	}
+	if *target != original {
+		t.Fatal("redactedURL mutated its input")
 	}
 }
