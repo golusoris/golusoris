@@ -57,6 +57,10 @@ __pycache__/
 /deploy/pulumi/pulumi
 /deploy/multiregion/multiregion
 
+# Compiled CI helper binaries from module-wide go build are build outputs, never checked in.
+/scripts/ci/cmd/workflow_actor_parser/workflow_actor_parser
+/scripts/ci/cmd/workflow_actor_parser/workflow_actor_parser.exe
+
 # Claude Code worktrees (personal, machine-local; never checked in).
 /.claude/worktrees/
 
