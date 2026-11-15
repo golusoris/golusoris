@@ -15,6 +15,15 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.22.1](https://github.com/golusoris/golusoris/compare/v0.22.0...v0.22.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **deps:** update aws-sdk-go-v2 monorepo ([#1421](https://github.com/golusoris/golusoris/issues/1421)) ([bec5d8a](https://github.com/golusoris/golusoris/commit/bec5d8af19556e32a9fd5b42f069ea28fec7b840))
+* **deps:** update module cloud.google.com/go/pubsub/v2 to v2.9.0 ([#1423](https://github.com/golusoris/golusoris/issues/1423)) ([0954f4e](https://github.com/golusoris/golusoris/commit/0954f4e6e163a21053a84d4c9d18e118ef191d04))
+* **httpx/client:** redact secret query values in traced url.full ([#1445](https://github.com/golusoris/golusoris/issues/1445)) ([256777c](https://github.com/golusoris/golusoris/commit/256777ceaaf9e22e736ad7174d85e1a3e5136a2b)), closes [#1427](https://github.com/golusoris/golusoris/issues/1427)
+
 ## [0.22.0](https://github.com/golusoris/golusoris/compare/v0.21.0...v0.22.0) (2026-11-15)
 
 
