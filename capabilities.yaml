@@ -582,10 +582,15 @@ packages:
     domain: http
     capabilities: [http.range]
     description: "Package rangeserve provides HTTP range-request serving for large files (video playback, resumable downloads) backed by any io.ReadSeeker."
+  - import: github.com/golusoris/golusoris/httpx/httpcache
+    domain: http
+    capabilities: [http.client_cache]
+    description: "Package httpcache provides outbound HTTP response caching over cache/twotier and bartventer/httpcache."
+    replaces: [github.com/bartventer/httpcache, github.com/gregjones/httpcache]
   - import: github.com/golusoris/golusoris/httpx/ratelimit
     domain: http
-    capabilities: [http.ratelimit]
-    description: "Package ratelimit wraps ulule/limiter/v3 as a golusoris middleware."
+    capabilities: [http.ratelimit, http.ratelimit_outbound]
+    description: "Package ratelimit wraps ulule/limiter/v3 as inbound middleware and a per-host outbound transport."
     replaces: [github.com/ulule/limiter/v3, golang.org/x/time/rate]
   - import: github.com/golusoris/golusoris/httpx/router
     domain: http
@@ -1231,6 +1236,11 @@ packages:
     capabilities: [test.prop]
     description: "Package prop provides property-based testing helpers backed by leanovate/gopter."
     replaces: [github.com/leanovate/gopter]
+  - import: github.com/golusoris/golusoris/testutil/dragonfly
+    domain: test
+    capabilities: [test.dragonfly]
+    description: "Package dragonfly boots a real Dragonfly container via testcontainers-go and returns a connected [rueidis.Client]."
+    replaces: [github.com/redis/rueidis, github.com/testcontainers/testcontainers-go]
   - import: github.com/golusoris/golusoris/testutil/redis
     domain: test
     capabilities: [test.redis]

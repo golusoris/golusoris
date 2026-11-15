@@ -1,0 +1,110 @@
+2026-11-15T02:41:21+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:21+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:21+01:00 substitute: v0.22.0 -> v0.21.1-0.20261114202725-7b04f7250f4f (commit 7b04f725, tree fe3d30b0)
+2026-11-15T02:41:21+01:00 command: go version; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:22+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:22+01:00 go version go1.27.4-X:nodwarf5 linux/amd64
+2026-11-15T02:41:22+01:00 rc=0: go version
+2026-11-15T02:41:22+01:00 command: python3 --version; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:22+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:22+01:00 Python 3.15.2
+2026-11-15T02:41:22+01:00 rc=0: python3 --version
+2026-11-15T02:41:22+01:00 command: git rev-parse HEAD; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 7b04f7250f4f2076345ba31cad5b73cf6105cf7c
+2026-11-15T02:41:22+01:00 rc=0: git rev-parse HEAD
+2026-11-15T02:41:22+01:00 command: git rev-parse 'HEAD^{tree}'; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 fe3d30b06ee92083a48255f64b4333005a58c216
+2026-11-15T02:41:22+01:00 rc=0: git rev-parse 'HEAD^{tree}'
+2026-11-15T02:41:22+01:00 execution: CPU only; GOFLAGS=-p=4; GOWORK=off; proxy module; no worktree replace
+2026-11-15T02:41:22+01:00 command: praetorctl admit --label test -- go build -o <proof-worktree>/depth/bin/golusoris ./cmd/golusoris; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 02:41:22 admitted test: available 25.2 GiB, swap free 88.6 GiB, load 36.3
+2026-11-15T02:41:22+01:00 admission test: runs unscoped, systemd-run --user cannot start a scope: exit status 1: Failed to connect to user scope bus via local transport: No data available
+2026-11-15T02:41:22+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:22+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:22+01:00 rc=0: praetorctl admit --label test -- go build -o <proof-worktree>/depth/bin/golusoris ./cmd/golusoris
+2026-11-15T02:41:22+01:00 command: praetorctl admit --label test -- go build -ldflags '-X main.version=0.22.0' -o <proof-worktree>/depth/bin/golusoris-mcp ./cmd/golusoris-mcp; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 02:41:22 admitted test: available 25.6 GiB, swap free 88.5 GiB, load 36.3
+2026-11-15T02:41:22+01:00 admission test: runs unscoped, systemd-run --user cannot start a scope: exit status 1: Failed to connect to user scope bus via local transport: No data available
+2026-11-15T02:41:22+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:22+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:22+01:00 rc=0: praetorctl admit --label test -- go build -ldflags '-X main.version=0.22.0' -o <proof-worktree>/depth/bin/golusoris-mcp ./cmd/golusoris-mcp
+2026-11-15T02:41:22+01:00 command: <proof-worktree>/depth/bin/golusoris-mcp --version; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 golusoris-mcp version 0.22.0
+2026-11-15T02:41:22+01:00 rc=0: <proof-worktree>/depth/bin/golusoris-mcp --version
+2026-11-15T02:41:22+01:00 command: <proof-worktree>/depth/bin/golusoris add --help; cwd=<proof-worktree>
+2026-11-15T02:41:22+01:00 Show how to add a golusoris module to an existing app
+2026-11-15T02:41:22+01:00 Usage:
+2026-11-15T02:41:22+01:00   golusoris add [flags]
+2026-11-15T02:41:22+01:00 Flags:
+2026-11-15T02:41:22+01:00   -h, --help   help for add
+2026-11-15T02:41:22+01:00 rc=0: <proof-worktree>/depth/bin/golusoris add --help
+2026-11-15T02:41:22+01:00 command: python3 -I <proof-worktree>/depth/dogfood/mcp_client.py <proof-worktree>/depth/bin/golusoris-mcp <proof-worktree>/depth/dogfood/work/commands.json v0.21.1-0.20261114202725-7b04f7250f4f; cwd=<proof-worktree>
+2026-11-15T02:41:23+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:23+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.027+01:00 level=INFO msg="golusoris-mcp serving on stdio"
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.028+01:00 level=INFO msg="server run start"
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.028+01:00 level=INFO msg="server connecting"
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.028+01:00 level=INFO msg="server session connected" session_id=""
+2026-11-15T02:41:23+01:00 raw initialize: {"jsonrpc": "2.0", "id": 1, "result": {"capabilities": {"logging": {}, "tools": {"listChanged": true}}, "protocolVersion": "2025-06-18", "serverInfo": {"name": "golusoris-mcp", "version": "0.22.0"}}}
+2026-11-15T02:41:23+01:00 initialize: {"name": "golusoris-mcp", "version": "0.22.0"}
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.028+01:00 level=INFO msg="session initialized"
+2026-11-15T02:41:23+01:00 raw tools/list: {"jsonrpc": "2.0", "id": 2, "result": {"ttlMs": 0, "cacheScope": "public", "tools": [{"description": "Show how to add a golusoris module (db, http, otel, cache, jobs, auth-oidc, authz, k8s) to an existing app.", "inputSchema": {"type": "object", "required": ["module"], "additionalProperties": false, "properties": {"module": {"type": "string", "description": "Module short name (e.g. 'db', 'http', 'jobs')"}}}, "name": "golusoris_add"}, {"description": "Show how to bump golusoris to a specific version in a downstream app.", "inputSchema": {"type": "object", "additionalProperties": false, "properties": {"version": {"type": "string", "description": "Target version (e.g. 'v0.5.0' or 'latest')"}}}, "name": "golusoris_bump"}, {"description": "Scaffold a new golusoris application with a go.mod and cmd/app/main.go.", "inputSchema": {"type": "object", "required": ["name"], "additionalProperties": false, "properties": {"name": {"type": "string", "description": "App name (directory name)"}, "module": {"type": "string", "description": "Go module path (default: github.com/example/<name>)"}}}, "name": "golusoris_init"}]}}
+2026-11-15T02:41:23+01:00 tools/list: golusoris_add golusoris_bump golusoris_init
+2026-11-15T02:41:23+01:00 raw golusoris_init: {"jsonrpc": "2.0", "id": 3, "result": {"content": [{"type": "text", "text": "Run:\n  golusoris init dogapp --module example.com/dogapp"}]}}
+2026-11-15T02:41:23+01:00 command golusoris_init: golusoris init dogapp --module example.com/dogapp
+2026-11-15T02:41:23+01:00 raw golusoris_add: {"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text", "text": "Run:\n  golusoris add db"}]}}
+2026-11-15T02:41:23+01:00 command golusoris_add: golusoris add db
+2026-11-15T02:41:23+01:00 raw golusoris_bump: {"jsonrpc": "2.0", "id": 5, "result": {"content": [{"type": "text", "text": "Run:\n  golusoris bump v0.22.0\n\nCheck docs/migrations/ for breaking-change notes."}]}}
+2026-11-15T02:41:23+01:00 substitute: v0.22.0 -> v0.21.1-0.20261114202725-7b04f7250f4f (commit 7b04f725, tree fe3d30b0)
+2026-11-15T02:41:23+01:00 command golusoris_bump: golusoris bump v0.22.0
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.032+01:00 level=INFO msg="server session disconnected" session_id=""
+2026-11-15T02:41:23+01:00 time=2026-11-15T02:41:23.032+01:00 level=INFO msg="server session ended"
+2026-11-15T02:41:23+01:00 rc=0: python3 -I <proof-worktree>/depth/dogfood/mcp_client.py <proof-worktree>/depth/bin/golusoris-mcp <proof-worktree>/depth/dogfood/work/commands.json v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T02:41:23+01:00 command: <proof-worktree>/depth/bin/golusoris init dogapp --module example.com/dogapp; cwd=<proof-worktree>/depth/dogfood/work
+2026-11-15T02:41:23+01:00   created dogapp/go.mod
+2026-11-15T02:41:23+01:00   created dogapp/cmd/app/main.go
+2026-11-15T02:41:23+01:00   created dogapp/LICENSE
+2026-11-15T02:41:23+01:00   created dogapp/REUSE.toml
+2026-11-15T02:41:23+01:00 App scaffolded in ./dogapp (EUPL-1.2, REUSE-ready)
+2026-11-15T02:41:23+01:00 Next steps:
+2026-11-15T02:41:23+01:00   cd dogapp
+2026-11-15T02:41:23+01:00   go get github.com/golusoris/golusoris/core@latest
+2026-11-15T02:41:23+01:00   go mod tidy
+2026-11-15T02:41:23+01:00   go run ./cmd/app
+2026-11-15T02:41:23+01:00 rc=0: <proof-worktree>/depth/bin/golusoris init dogapp --module example.com/dogapp
+2026-11-15T02:41:23+01:00 command: <proof-worktree>/depth/bin/golusoris add db; cwd=<proof-worktree>/depth/dogfood/work/dogapp
+2026-11-15T02:41:23+01:00 Add "db" to your fx.New() call:
+2026-11-15T02:41:23+01:00   import "github.com/golusoris/golusoris"
+2026-11-15T02:41:23+01:00   fx.New(
+2026-11-15T02:41:23+01:00     // ...
+2026-11-15T02:41:23+01:00     golusoris.DB,
+2026-11-15T02:41:23+01:00   )
+2026-11-15T02:41:23+01:00 rc=0: <proof-worktree>/depth/bin/golusoris add db
+2026-11-15T02:41:23+01:00 applied returned add guidance: import=github.com/golusoris/golusoris; fx.Option=golusoris.DB
+2026-11-15T02:41:23+01:00 substitute: v0.22.0 -> v0.21.1-0.20261114202725-7b04f7250f4f (commit 7b04f725, tree fe3d30b0)
+2026-11-15T02:41:23+01:00 command: praetorctl admit --label test -- <proof-worktree>/depth/bin/golusoris bump v0.21.1-0.20261114202725-7b04f7250f4f; cwd=<proof-worktree>/depth/dogfood/work/dogapp
+2026-11-15T02:41:23+01:00 02:41:23 admitted test: available 25.3 GiB, swap free 88.4 GiB, load 36.3
+2026-11-15T02:41:23+01:00 admission test: runs unscoped, systemd-run --user cannot start a scope: exit status 1: Failed to connect to user scope bus via local transport: No data available
+2026-11-15T02:41:23+01:00 Running: go get github.com/golusoris/golusoris@v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T02:41:23+01:00 Running: go mod tidy
+2026-11-15T02:41:23+01:00 Bumped github.com/golusoris/golusoris to v0.21.1-0.20261114202725-7b04f7250f4f.
+2026-11-15T02:41:23+01:00 Check docs/migrations/ in the framework repo for breaking-change notes.
+2026-11-15T02:41:23+01:00 rc=0: praetorctl admit --label test -- <proof-worktree>/depth/bin/golusoris bump v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T02:41:23+01:00 go.mod: github.com/golusoris/golusoris v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T02:41:23+01:00 go.mod: github.com/golusoris/golusoris/core v0.12.1
+2026-11-15T02:41:23+01:00 command: praetorctl admit --label test -- go build ./...; cwd=<proof-worktree>/depth/dogfood/work/dogapp
+2026-11-15T02:41:31+01:00 02:41:23 admitted test: available 25.8 GiB, swap free 88.3 GiB, load 36.3
+2026-11-15T02:41:31+01:00 admission test: runs unscoped, systemd-run --user cannot start a scope: exit status 1: Failed to connect to user scope bus via local transport: No data available
+2026-11-15T02:41:31+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:31+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:31+01:00 rc=0: praetorctl admit --label test -- go build ./...
+2026-11-15T02:41:31+01:00 command: praetorctl admit --label test -- go vet ./...; cwd=<proof-worktree>/depth/dogfood/work/dogapp
+2026-11-15T02:41:32+01:00 02:41:31 admitted test: available 25.8 GiB, swap free 87.5 GiB, load 37.8
+2026-11-15T02:41:32+01:00 admission test: runs unscoped, systemd-run --user cannot start a scope: exit status 1: Failed to connect to user scope bus via local transport: No data available
+2026-11-15T02:41:32+01:00 [WARN] migrate: failed create_dir_all: ~/.local/state/mise/incomplete-installs
+2026-11-15T02:41:32+01:00 mise WARN  tracking config: failed create_dir_all: ~/.local/state/mise/tracked-configs: Read-only file system (os error 30)
+2026-11-15T02:41:32+01:00 rc=0: praetorctl admit --label test -- go vet ./...
+2026-11-15T02:41:32+01:00 health: not applicable; generated scaffold config+log+DB has no HTTP module or listener
+2026-11-15T02:41:32+01:00 result: PASS

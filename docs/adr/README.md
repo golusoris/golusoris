@@ -51,6 +51,7 @@ This directory captures every architectural decision worth preserving — pinned
 | [ADR-0025](0025-keep-handwritten-session-engine.md) | Keep hand-written session engine | Accepted | auth, session, dependencies |
 | [ADR-0026](0026-keep-handwritten-llm-clients.md) | Keep hand-written LLM provider clients | Accepted | ai, llm, dependencies |
 | [ADR-0027](0027-keep-handwritten-man-renderer.md) | Keep the hand-written man page renderer | Accepted | clikit, cli, dependencies |
+| [ADR-0028](0028-outbound-http-cache-transport.md) | Outbound HTTP response cache as a transport on bartventer/httpcache and cache/twotier | Accepted | http, cache, security, dependencies |
 
 ## Numbering policy
 

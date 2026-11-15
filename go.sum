@@ -153,6 +153,8 @@ github.com/aymanbagabas/go-udiff v0.2.0 h1:TK0fH4MteXUDspT88n8CKzvK0X9O2xu9yQjWp
 github.com/aymanbagabas/go-udiff v0.2.0/go.mod h1:RE4Ex0qsGkTAJoQdQQCA0uG+nAzJO/pI/QwceO5fgrA=
 github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPnH1Wvgk=
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
+github.com/bartventer/httpcache v0.14.0 h1:+gePKEpVIhJpMZmEDkd2bZYT9erVXslAbYVoc/o5H4M=
+github.com/bartventer/httpcache v0.14.0/go.mod h1:AXVAaiITDQ83wjpI8TzzLior8A9VFq0cl3chDtQRpgU=
 github.com/baruwa-enterprise/clamd v1.0.1 h1:/Urmb7+snmNSTpklsXNh7sbMWAmJjp97g6B6zX9QU8c=
 github.com/baruwa-enterprise/clamd v1.0.1/go.mod h1:2fjN7vyA+9voVOtNf5dNGr8wsio6ezvuCPX8udrsDGA=
 github.com/benbjohnson/hashfs v0.2.2 h1:vFZtksphM5LcnMRFctj49jCUkCc7wp3NP6INyfjkse4=

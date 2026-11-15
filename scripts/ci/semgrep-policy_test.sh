@@ -113,6 +113,102 @@ git -C "$alias_finding_root" add .
 expect_semgrep_failure 'no-time-sleep-in-library' \
 	bash "$alias_finding_root/scripts/ci/semgrep-scan.sh" --root "$alias_finding_root"
 
+callback_fatal_root="$(new_repo httpcache-callback-fatal)"
+mkdir -p "$callback_fatal_root/httpx/httpcache"
+cat >"$callback_fatal_root/httpx/httpcache/planted_test.go" <<'EOF'
+package httpcache
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlanted(t *testing.T) {
+	_ = func(req *http.Request) (*http.Response, error) {
+		require.Equal(t, "v1", req.Header.Get("If-None-Match"))
+		return nil, nil
+	}
+}
+EOF
+git -C "$callback_fatal_root" add .
+expect_semgrep_failure 'no-fatal-in-httpcache-transport-callback' \
+	bash "$callback_fatal_root/scripts/ci/semgrep-scan.sh" --root "$callback_fatal_root"
+
+callback_assert_root="$(new_repo httpcache-callback-assert)"
+mkdir -p "$callback_assert_root/httpx/httpcache"
+cat >"$callback_assert_root/httpx/httpcache/planted_test.go" <<'EOF'
+package httpcache
+
+import (
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlanted(t *testing.T) {
+	_ = func(req *http.Request) (*http.Response, error) {
+		assert.Equal(t, "v1", req.Header.Get("If-None-Match"))
+		return nil, nil
+	}
+	require.Equal(t, 1, 1)
+}
+EOF
+git -C "$callback_assert_root" add .
+bash "$callback_assert_root/scripts/ci/semgrep-scan.sh" --root "$callback_assert_root" >/dev/null
+
+handler_fatal_root="$(new_repo httpcache-handler-fatal)"
+mkdir -p "$handler_fatal_root/httpx/httpcache"
+cat >"$handler_fatal_root/httpx/httpcache/planted_test.go" <<'EOF'
+package httpcache
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlanted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "GET", r.Method)
+	}))
+	defer server.Close()
+}
+EOF
+git -C "$handler_fatal_root" add .
+expect_semgrep_failure 'no-fatal-in-httpcache-transport-callback' \
+	bash "$handler_fatal_root/scripts/ci/semgrep-scan.sh" --root "$handler_fatal_root"
+
+handler_assert_root="$(new_repo httpcache-handler-assert)"
+mkdir -p "$handler_assert_root/httpx/httpcache"
+cat >"$handler_assert_root/httpx/httpcache/planted_test.go" <<'EOF'
+package httpcache
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPlanted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "GET", r.Method)
+	}))
+	defer server.Close()
+	require.Equal(t, 1, 1)
+}
+EOF
+git -C "$handler_assert_root" add .
+bash "$handler_assert_root/scripts/ci/semgrep-scan.sh" --root "$handler_assert_root" >/dev/null
+
 symlink_root="$(new_repo symlink)"
 mkdir -p "$suite_root/outside"
 write_clean_go "$suite_root/outside"

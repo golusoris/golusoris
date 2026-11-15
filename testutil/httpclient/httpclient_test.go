@@ -5,8 +5,11 @@
 package httpclient
 
 import (
+	"errors"
+	"io"
 	"net/http"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,4 +142,63 @@ func TestAssertBoundedClone_BoundaryZeroTimeout(t *testing.T) {
 			t.Fatal("expected failure when clone == source with zero timeout")
 		}
 	})
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+type closeTracker struct {
+	io.Reader
+	closed bool
+}
+
+func (c *closeTracker) Close() error { c.closed = true; return nil }
+
+func newRequest(t *testing.T) *http.Request {
+	t.Helper()
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://provider.test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return req
+}
+
+func TestRoundTripError_ReturnsFailure(t *testing.T) {
+	t.Parallel()
+	cause := errors.New("upstream failed")
+	err := RoundTripError(t, roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, cause }), newRequest(t))
+	if !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want %v", err, cause)
+	}
+}
+
+func TestRoundTripError_ResponseFailsAndCloses(t *testing.T) {
+	t.Parallel()
+	for _, withBody := range []bool{true, false} {
+		body := &closeTracker{Reader: strings.NewReader("ok")}
+		req := newRequest(t)
+		failed := runInFakeTB(func(tb testing.TB) {
+			tb.Helper()
+			resp := &http.Response{StatusCode: http.StatusOK}
+			if withBody {
+				resp.Body = body
+			}
+			_ = RoundTripError(tb, roundTripFunc(func(*http.Request) (*http.Response, error) { return resp, nil }), req)
+		})
+		if !failed || body.closed != withBody {
+			t.Fatalf("body=%t: failed=%t closed=%t", withBody, failed, body.closed)
+		}
+	}
+}
+
+func TestRoundTripError_BoundaryNilResponseNilError(t *testing.T) {
+	t.Parallel()
+	// A contract-breaking transport yields nil; callers assert the error themselves.
+	//nolint:nilnil // WHY: the boundary under test is a transport returning neither response nor error.
+	silent := roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, nil })
+	err := RoundTripError(t, silent, newRequest(t))
+	if err != nil {
+		t.Fatalf("error = %v, want nil", err)
+	}
 }
