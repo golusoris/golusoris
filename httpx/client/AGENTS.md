@@ -11,7 +11,7 @@ Bounded outbound client. Retry. Breaker. OTel. Slog.
 ## Stack
 
 ```text
-circuit-breaker → retry → otelhttp → stdlib transport
+circuit-breaker → retry → otelhttp → span redaction → stdlib transport
 ```
 
 - Breaker outside retry. Open breaker stops request.
