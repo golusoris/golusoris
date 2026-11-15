@@ -1,0 +1,28 @@
+# Depth evidence for v0.22.0: one row per user-visible first-parent commit.
+# base: v0.21.0
+# Proof worktree at release head 7b04f725 (tree fe3d30b0); v0.22.0 untagged at proof time, module target v0.21.1-0.20261114202725-7b04f7250f4f.
+# deps rows: CI run 43637545264 on main 665afd7f (Build, Test race+coverage, govulncheck, CI policy tests); release head differs from it only in CHANGELOG.md, core/CHANGELOG.md, README.md, .release-please-manifest.json.
+665afd7	1425	go test -count=1 -v -run '^TestE2E_1425$' . (depth/e2e); depth/evidence/e2e-1425.log	PASS	
+5131202	1322	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+91c3f26	1415	policy tests at release head 7b04f725: govulncheck-policy_test.sh (rc 0, dispatcher)	PASS	
+ecac37f	1422	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+a8ea39d	1416	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+66bff9c	1408	policy tests at release head 7b04f725: python-tests-policy_test.sh, renovate-policy-test.py, renovate_vulnerability_test.py (rc 0, dispatcher)	PASS	
+e2cf7b7	1414	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+c297e2a	1410	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+fabbbed	1316	CI run 43637545264 Build + Test (race + coverage) + govulncheck on main 665afd7f; depth e2e/upgrade/dogfood build at v0.21.1-0.20261114202725-7b04f7250f4f	PASS	
+81f98b0	1379	policy tests at release head 7b04f725: allocation-budget-policy_test.sh, helm-backup-restore_test.sh, install-vacuum_test.sh, release-depth-evidence_test.sh, release-tool-pins-test.py, release-workflows-policy_test.sh, retry_test.sh, shell_flake_policy_test.py, stop-on-draft-policy_test.sh, tiny-litert-sidecar-publish-policy_test.sh, tiny-trainer-publish-policy_test.sh, tool-versions_test.sh, trivy-policy_test.sh, verify-system-packages_test.sh (rc 0, dispatcher)	PASS	
+7c16109	1368	policy tests at release head 7b04f725: security-gates_test.sh, tool-versions_test.sh (rc 0, dispatcher)	PASS	
+82bf049	1387	policy tests at release head 7b04f725: shellcheck-hook_test.sh, shellcheck-policy_test.sh (rc 0, dispatcher)	PASS	
+f250f90	1376	policy tests at release head 7b04f725: stop_on_draft_jobs_test.py (rc 0, dispatcher)	PASS	
+2cde5c4	1362	policy tests at release head 7b04f725: tiny-litert-sidecar-publish-policy_test.sh, tiny-trainer-publish-policy_test.sh (rc 0, dispatcher)	PASS	
+d2a8620	1385	policy tests at release head 7b04f725: policy-test_test.sh, python-lint-policy_test.sh, semgrep-policy_test.sh, shellcheck-policy_test.sh, template-workflows-policy_test.sh (rc 0, dispatcher)	PASS	
+52e17b4	1383	policy tests at release head 7b04f725: export-release-tool-pins_test.sh, release-tool-pins-test.py, release-workflows-policy_test.sh, renovate-policy-test.py, tiny-litert-sidecar-publish-policy_test.sh, tiny-trainer-publish-policy_test.sh, tool-versions_test.sh (rc 0, dispatcher)	PASS	
+c945001	1366	policy tests at release head 7b04f725: pull_test_images_test.py, python-tests-policy_test.sh, renovate-policy-test.py, repo_git_test.py (rc 0, dispatcher)	PASS	
+6bfa0f2	1378	policy tests at release head 7b04f725: test_sidecar.py, ci_scope_test.py (rc 0, dispatcher)	PASS	
+ed0b21b	1380	policy tests at release head 7b04f725: actionlint-policy_test.sh, c-quality-policy_test.sh, release_smoke_test.py, tiny-litert-sidecar-publish-policy_test.sh, tiny-trainer-locks-policy_test.sh (rc 0, dispatcher)	PASS	
+fef3d2b	1374	policy tests at release head 7b04f725: portability_test.py (rc 0, dispatcher)	PASS	
+2127ec5	1361	policy tests at release head 7b04f725: release-depth-evidence_test.sh (rc 0, dispatcher)	PASS	
+97756e9	1360	go test -count=1 -run '^TestNewRendererLaunchTimeoutOwnsSilentPipe$' ./pdf (worktree; GOWORK=depth/pdf-work/go.work); depth/evidence/e2e-1360.log	PASS	
+7c0d8f8	1336	policy tests at release head 7b04f725: release-notes-breaking_test.sh (rc 0, dispatcher)	PASS	
+94f3ad0	1335	go test -count=1 -v -run '^TestE2E_1335$' . (depth/e2e); depth/evidence/e2e-1335.log	PASS	
