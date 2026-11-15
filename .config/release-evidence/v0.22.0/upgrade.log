@@ -1,0 +1,545 @@
+2026-11-15T06:55:56+01:00 substitute: v0.22.0 -> v0.21.1-0.20261114202725-7b04f7250f4f (commit 7b04f725, tree fe3d30b0)
+2026-11-15T06:55:56+01:00 command: go version; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 go version go1.27.4-X:nodwarf5 linux/amd64
+2026-11-15T06:55:56+01:00 rc=0: go version
+2026-11-15T06:55:56+01:00 command: python3 --version; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 Python 3.14.10
+2026-11-15T06:55:56+01:00 rc=0: python3 --version
+2026-11-15T06:55:56+01:00 command: git rev-parse HEAD; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 7b04f7250f4f2076345ba31cad5b73cf6105cf7c
+2026-11-15T06:55:56+01:00 rc=0: git rev-parse HEAD
+2026-11-15T06:55:56+01:00 command: git rev-parse 'HEAD^{tree}'; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 fe3d30b06ee92083a48255f64b4333005a58c216
+2026-11-15T06:55:56+01:00 rc=0: git rev-parse 'HEAD^{tree}'
+2026-11-15T06:55:56+01:00 execution: CPU only; GOFLAGS=-p=4; GOWORK=off; proxy module; no worktree replace
+2026-11-15T06:55:56+01:00 from: v0.21.0
+2026-11-15T06:55:56+01:00 to: v0.22.0
+2026-11-15T06:55:56+01:00 docs: Docker Engine API v1.54 https://docs.docker.com/reference/api/engine/version/v1.54.yaml; schema read in memory; no document saved
+2026-11-15T06:55:56+01:00 negative case without equality guard: planted checksum accepted; rc=0 (mutation)
+2026-11-15T06:55:56+01:00 negative case with equality guard: planted checksum rejected; rc=1 expected
+2026-11-15T06:55:56+01:00 negative case without equality guard: planted COPY md5 accepted; rc=0 (mutation)
+2026-11-15T06:55:56+01:00 negative case with equality guard: planted COPY md5 rejected; rc=1 expected
+2026-11-15T06:55:56+01:00 negative case without equality guard: planted schema_migrations accepted; rc=0 (mutation)
+2026-11-15T06:55:56+01:00 negative case with equality guard: planted schema_migrations rejected; rc=1 expected
+2026-11-15T06:55:56+01:00 check: boundary identical snapshot unchanged; rc=0
+2026-11-15T06:55:56+01:00 command: git rev-parse 'v0.21.0^{commit}'; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 797933359452be64e8dfff65087c687f80de0935
+2026-11-15T06:55:56+01:00 rc=0: git rev-parse 'v0.21.0^{commit}'
+2026-11-15T06:55:56+01:00 command: git -C <proof-worktree> archive v0.21.0 -o <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0.tar; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 rc=0: git -C <proof-worktree> archive v0.21.0 -o <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0.tar
+2026-11-15T06:55:56+01:00 command: tar -x -f <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0.tar -C <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0; cwd=<proof-worktree>
+2026-11-15T06:55:56+01:00 rc=0: tar -x -f <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0.tar -C <proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0
+2026-11-15T06:55:56+01:00 command: praetorctl admit --label test -- go build -o <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 ./cmd/golusoris; cwd=<proof-worktree>/.tmp/depth/upgrade/cli/v0.21.0
+2026-11-15T06:55:57+01:00 06:55:56 admitted test: available 20.5 GiB, swap free 86.5 GiB, load 28.0
+2026-11-15T06:55:57+01:00 rc=0: praetorctl admit --label test -- go build -o <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 ./cmd/golusoris
+2026-11-15T06:55:57+01:00 old CLI built: v0.21.0 tag commit 797933359452be64e8dfff65087c687f80de0935
+2026-11-15T06:55:57+01:00 command: <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 init --help; cwd=<proof-worktree>
+2026-11-15T06:55:57+01:00 Scaffold a new golusoris application
+2026-11-15T06:55:57+01:00 Usage:
+2026-11-15T06:55:57+01:00   golusoris init [flags]
+2026-11-15T06:55:57+01:00 Flags:
+2026-11-15T06:55:57+01:00   -h, --help            help for init
+2026-11-15T06:55:57+01:00       --module string   Go module path (default: github.com/example/<name>)
+2026-11-15T06:55:57+01:00 rc=0: <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 init --help
+2026-11-15T06:55:57+01:00 command: sha256sum <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0; cwd=<proof-worktree>
+2026-11-15T06:55:57+01:00 cc95c22d70a34741f46cd7ad4531c25d6c7aa6d749aa635aee83925c7f13a53b  <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0
+2026-11-15T06:55:57+01:00 rc=0: sha256sum <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0
+2026-11-15T06:55:57+01:00 command: <proof-worktree>/.tmp/depth/bin/golusoris --version; cwd=<proof-worktree>
+2026-11-15T06:55:57+01:00 golusoris version dev (commit none, built unknown)
+2026-11-15T06:55:57+01:00 rc=0: <proof-worktree>/.tmp/depth/bin/golusoris --version
+2026-11-15T06:55:57+01:00 command: sha256sum <proof-worktree>/.tmp/depth/bin/golusoris; cwd=<proof-worktree>
+2026-11-15T06:55:57+01:00 f1dad92c39416ce6bc649df76686b30dca73653ad95c9df74a928379123599e0  <proof-worktree>/.tmp/depth/bin/golusoris
+2026-11-15T06:55:57+01:00 rc=0: sha256sum <proof-worktree>/.tmp/depth/bin/golusoris
+2026-11-15T06:55:57+01:00 command: <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 init upgapp --module example.com/upgapp; cwd=<proof-worktree>/.tmp/depth/upgrade/work
+2026-11-15T06:55:57+01:00   created upgapp/go.mod
+2026-11-15T06:55:57+01:00   created upgapp/cmd/app/main.go
+2026-11-15T06:55:57+01:00   created upgapp/LICENSE
+2026-11-15T06:55:57+01:00   created upgapp/REUSE.toml
+2026-11-15T06:55:57+01:00 App scaffolded in ./upgapp (EUPL-1.2, REUSE-ready)
+2026-11-15T06:55:57+01:00 Next steps:
+2026-11-15T06:55:57+01:00   cd upgapp
+2026-11-15T06:55:57+01:00   go get github.com/golusoris/golusoris/core@latest
+2026-11-15T06:55:57+01:00   go mod tidy
+2026-11-15T06:55:57+01:00   go run ./cmd/app
+2026-11-15T06:55:57+01:00 rc=0: <proof-worktree>/.tmp/depth/upgrade/cli/golusoris-v0.21.0 init upgapp --module example.com/upgapp
+2026-11-15T06:55:57+01:00 command: praetorctl admit --label test -- go get github.com/golusoris/golusoris@v0.21.0; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:55:57+01:00 06:55:57 admitted test: available 20.5 GiB, swap free 86.4 GiB, load 28.0
+2026-11-15T06:55:57+01:00 go: upgraded go 1.27.0 => 1.27.3
+2026-11-15T06:55:57+01:00 go: added github.com/CAFxX/httpcompression v0.0.9
+2026-11-15T06:55:57+01:00 go: added github.com/alexedwards/argon2id v1.0.0
+2026-11-15T06:55:57+01:00 go: added github.com/andybalholm/brotli v1.2.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2 v1.47.5
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.25
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/config v1.33.12
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/credentials v1.20.12
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.20.5
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.5.1
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/internal/configsources v1.5.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.8.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/internal/v4a v1.5.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.23
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.11.9
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.14.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.20.8
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/s3 v1.114.6
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/signin v1.12.0
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/sso v1.39.0
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/ssooidc v1.44.0
+2026-11-15T06:55:57+01:00 go: added github.com/aws/aws-sdk-go-v2/service/sts v1.51.6
+2026-11-15T06:55:57+01:00 go: added github.com/aws/smithy-go v1.28.7
+2026-11-15T06:55:57+01:00 go: added github.com/beorn7/perks v1.0.1
+2026-11-15T06:55:57+01:00 go: added github.com/bmatcuk/doublestar/v4 v4.10.4
+2026-11-15T06:55:57+01:00 go: added github.com/casbin/casbin/v3 v3.11.0
+2026-11-15T06:55:57+01:00 go: added github.com/casbin/govaluate v1.10.0
+2026-11-15T06:55:57+01:00 go: added github.com/cespare/xxhash/v2 v2.3.0
+2026-11-15T06:55:57+01:00 go: added github.com/coreos/go-oidc/v3 v3.21.0
+2026-11-15T06:55:57+01:00 go: added github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
+2026-11-15T06:55:57+01:00 go: added github.com/emicklei/go-restful/v3 v3.13.0
+2026-11-15T06:55:57+01:00 go: added github.com/evanphx/json-patch/v5 v5.9.11
+2026-11-15T06:55:57+01:00 go: added github.com/fatih/color v1.19.0
+2026-11-15T06:55:57+01:00 go: added github.com/felixge/httpsnoop v1.1.0
+2026-11-15T06:55:57+01:00 go: added github.com/fsnotify/fsnotify v1.10.1
+2026-11-15T06:55:57+01:00 go: added github.com/fxamacker/cbor/v2 v2.9.6
+2026-11-15T06:55:57+01:00 go: added github.com/gabriel-vasile/mimetype v1.4.16
+2026-11-15T06:55:57+01:00 go: added github.com/go-chi/chi/v5 v5.5.0
+2026-11-15T06:55:57+01:00 go: added github.com/go-faster/errors v0.8.0
+2026-11-15T06:55:57+01:00 go: added github.com/go-jose/go-jose/v4 v4.1.6
+2026-11-15T06:55:57+01:00 go: added github.com/go-logr/logr v1.4.4
+2026-11-15T06:55:57+01:00 go: added github.com/go-logr/stdr v1.2.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/jsonpointer v1.0.1
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/jsonreference v1.0.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/cmdutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/conv v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/fileutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/jsonutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/loading v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/mangling v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/netutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/pools v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/stringutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/typeutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-openapi/swag/yamlutils v0.29.2
+2026-11-15T06:55:57+01:00 go: added github.com/go-playground/locales v0.14.1
+2026-11-15T06:55:57+01:00 go: added github.com/go-playground/universal-translator v0.18.1
+2026-11-15T06:55:57+01:00 go: added github.com/go-playground/validator/v10 v10.30.5
+2026-11-15T06:55:57+01:00 go: added github.com/go-viper/mapstructure/v2 v2.5.0
+2026-11-15T06:55:57+01:00 go: added github.com/golang-migrate/migrate/v4 v4.20.1
+2026-11-15T06:55:57+01:00 go: added github.com/golusoris/golusoris v0.21.0
+2026-11-15T06:55:57+01:00 go: added github.com/golusoris/golusoris/core v0.12.1
+2026-11-15T06:55:57+01:00 go: added github.com/google/gnostic-models v0.7.1
+2026-11-15T06:55:57+01:00 go: added github.com/google/jsonschema-go v0.4.3
+2026-11-15T06:55:57+01:00 go: added github.com/google/uuid v1.6.0
+2026-11-15T06:55:57+01:00 go: added github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
+2026-11-15T06:55:57+01:00 go: added github.com/hashicorp/go-cleanhttp v0.5.2
+2026-11-15T06:55:57+01:00 go: added github.com/hashicorp/go-retryablehttp v0.7.8
+2026-11-15T06:55:57+01:00 go: added github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
+2026-11-15T06:55:57+01:00 go: added github.com/jackc/pgpassfile v1.0.0
+2026-11-15T06:55:57+01:00 go: added github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761
+2026-11-15T06:55:57+01:00 go: added github.com/jackc/pgx/v5 v5.11.0
+2026-11-15T06:55:57+01:00 go: added github.com/jackc/puddle/v2 v2.2.2
+2026-11-15T06:55:57+01:00 go: added github.com/jinzhu/inflection v1.0.0
+2026-11-15T06:55:57+01:00 go: added github.com/jonboulle/clockwork v0.5.0
+2026-11-15T06:55:57+01:00 go: added github.com/json-iterator/go v1.1.12
+2026-11-15T06:55:57+01:00 go: added github.com/klauspost/compress v1.20.3
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/maps v0.1.3
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/parsers/json v1.0.1
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/parsers/yaml v1.1.1
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/providers/env/v2 v2.0.2
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/providers/file v1.2.1
+2026-11-15T06:55:57+01:00 go: added github.com/knadh/koanf/v2 v2.3.8
+2026-11-15T06:55:57+01:00 go: added github.com/leodido/go-urn v1.5.0
+2026-11-15T06:55:57+01:00 go: added github.com/lmittmann/tint v1.2.1
+2026-11-15T06:55:57+01:00 go: added github.com/mattn/go-colorable v0.1.16
+2026-11-15T06:55:57+01:00 go: added github.com/mattn/go-isatty v0.0.24
+2026-11-15T06:55:57+01:00 go: added github.com/maypok86/otter/v2 v2.3.0
+2026-11-15T06:55:57+01:00 go: added github.com/mitchellh/copystructure v1.2.0
+2026-11-15T06:55:57+01:00 go: added github.com/mitchellh/reflectwalk v1.0.2
+2026-11-15T06:55:57+01:00 go: added github.com/modelcontextprotocol/go-sdk v1.8.0
+2026-11-15T06:55:57+01:00 go: added github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
+2026-11-15T06:55:57+01:00 go: added github.com/modern-go/reflect2 v1.0.3-0.20250322232337-35a7c28c31ee
+2026-11-15T06:55:57+01:00 go: added github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+2026-11-15T06:55:57+01:00 go: added github.com/pgvector/pgvector-go v0.4.1
+2026-11-15T06:55:57+01:00 go: added github.com/pgvector/pgvector-go/pgx v0.4.1
+2026-11-15T06:55:57+01:00 go: added github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
+2026-11-15T06:55:57+01:00 go: added github.com/prometheus/client_golang v1.25.0
+2026-11-15T06:55:57+01:00 go: added github.com/prometheus/client_model v0.6.3
+2026-11-15T06:55:57+01:00 go: added github.com/prometheus/common v0.72.1
+2026-11-15T06:55:57+01:00 go: added github.com/prometheus/procfs v0.22.0
+2026-11-15T06:55:57+01:00 go: added github.com/puzpuzpuz/xsync/v3 v3.5.1
+2026-11-15T06:55:57+01:00 go: added github.com/redis/rueidis v1.0.79
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/river v0.49.0
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/river/riverdriver v0.49.0
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/river/riverdriver/riverpgxv5 v0.49.0
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/river/rivershared v0.49.0
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/river/rivertype v0.49.0
+2026-11-15T06:55:57+01:00 go: added github.com/riverqueue/rivercontrib/otelriver v0.12.0
+2026-11-15T06:55:57+01:00 go: added github.com/segmentio/asm v1.2.1
+2026-11-15T06:55:57+01:00 go: added github.com/segmentio/encoding v0.5.4
+2026-11-15T06:55:57+01:00 go: added github.com/segmentio/ksuid v1.0.4
+2026-11-15T06:55:57+01:00 go: added github.com/sony/gobreaker/v2 v2.4.0
+2026-11-15T06:55:57+01:00 go: added github.com/spf13/pflag v1.0.10
+2026-11-15T06:55:57+01:00 go: added github.com/stretchr/testify v1.12.1
+2026-11-15T06:55:57+01:00 go: added github.com/tidwall/gjson v1.19.0
+2026-11-15T06:55:57+01:00 go: added github.com/tidwall/match v1.2.0
+2026-11-15T06:55:57+01:00 go: added github.com/tidwall/pretty v1.2.2
+2026-11-15T06:55:57+01:00 go: added github.com/tidwall/sjson v1.2.5
+2026-11-15T06:55:57+01:00 go: added github.com/tmthrgd/go-hex v0.0.0-20190904060850-447a3041c3bc
+2026-11-15T06:55:57+01:00 go: added github.com/uptrace/bun v1.3.0
+2026-11-15T06:55:57+01:00 go: added github.com/uptrace/bun/dialect/pgdialect v1.3.0
+2026-11-15T06:55:57+01:00 go: added github.com/uptrace/bun/extra/bundebug v1.3.0
+2026-11-15T06:55:57+01:00 go: added github.com/vmihailenco/msgpack/v5 v5.4.1
+2026-11-15T06:55:57+01:00 go: added github.com/vmihailenco/tagparser/v2 v2.0.0
+2026-11-15T06:55:57+01:00 go: added github.com/wneessen/go-mail v0.8.1
+2026-11-15T06:55:57+01:00 go: added github.com/x448/float16 v0.8.4
+2026-11-15T06:55:57+01:00 go: added github.com/yosida95/uritemplate/v3 v3.0.2
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/auto/sdk v1.2.1
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.72.0
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/otel v1.47.0
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/otel/log v1.47.0
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/otel/metric v1.47.0
+2026-11-15T06:55:57+01:00 go: added go.opentelemetry.io/otel/trace v1.47.0
+2026-11-15T06:55:57+01:00 go: added go.uber.org/dig v1.19.0
+2026-11-15T06:55:57+01:00 go: added go.uber.org/fx v1.24.0
+2026-11-15T06:55:57+01:00 go: added go.uber.org/multierr v1.11.0
+2026-11-15T06:55:57+01:00 go: added go.uber.org/zap v1.28.0
+2026-11-15T06:55:57+01:00 go: added go.yaml.in/yaml/v2 v2.4.4
+2026-11-15T06:55:57+01:00 go: added go.yaml.in/yaml/v3 v3.0.5
+2026-11-15T06:55:57+01:00 go: added golang.org/x/crypto v0.58.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/net v0.62.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/oauth2 v0.37.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/sync v0.24.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/sys v0.49.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/term v0.47.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/text v0.43.0
+2026-11-15T06:55:57+01:00 go: added golang.org/x/time v0.16.0
+2026-11-15T06:55:57+01:00 go: added gomodules.xyz/jsonpatch/v2 v2.5.0
+2026-11-15T06:55:57+01:00 go: added google.golang.org/genproto/googleapis/rpc v0.0.0-20261005182115-fad411399dd8
+2026-11-15T06:55:57+01:00 go: added google.golang.org/grpc v1.84.0
+2026-11-15T06:55:57+01:00 go: added google.golang.org/protobuf v1.36.12
+2026-11-15T06:55:57+01:00 go: added gopkg.in/evanphx/json-patch.v4 v4.13.0
+2026-11-15T06:55:57+01:00 go: added gopkg.in/inf.v0 v0.9.1
+2026-11-15T06:55:57+01:00 go: added k8s.io/api v0.37.2
+2026-11-15T06:55:57+01:00 go: added k8s.io/apiextensions-apiserver v0.37.0
+2026-11-15T06:55:57+01:00 go: added k8s.io/apimachinery v0.37.2
+2026-11-15T06:55:57+01:00 go: added k8s.io/client-go v0.37.2
+2026-11-15T06:55:57+01:00 go: added k8s.io/klog/v2 v2.140.0
+2026-11-15T06:55:57+01:00 go: added k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098
+2026-11-15T06:55:57+01:00 go: added k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
+2026-11-15T06:55:57+01:00 go: added sigs.k8s.io/controller-runtime v0.25.2
+2026-11-15T06:55:57+01:00 go: added sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5
+2026-11-15T06:55:57+01:00 go: added sigs.k8s.io/randfill v1.0.0
+2026-11-15T06:55:57+01:00 go: added sigs.k8s.io/structured-merge-diff/v6 v6.4.2
+2026-11-15T06:55:57+01:00 go: added sigs.k8s.io/yaml v1.6.0
+2026-11-15T06:55:57+01:00 rc=0: praetorctl admit --label test -- go get github.com/golusoris/golusoris@v0.21.0
+2026-11-15T06:55:57+01:00 command: praetorctl admit --label test -- go mod tidy; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:55:58+01:00 06:55:57 admitted test: available 20.5 GiB, swap free 86.3 GiB, load 28.0
+2026-11-15T06:55:58+01:00 rc=0: praetorctl admit --label test -- go mod tidy
+2026-11-15T06:55:58+01:00 go.mod before: github.com/golusoris/golusoris v0.21.0; github.com/golusoris/golusoris/core v0.12.1 // indirect
+2026-11-15T06:55:58+01:00 command: praetorctl admit --label test -- go build -o bin/upgapp-0.21.0 ./cmd/app; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:02+01:00 06:55:58 admitted test: available 20.5 GiB, swap free 86.3 GiB, load 28.0
+2026-11-15T06:56:02+01:00 rc=0: praetorctl admit --label test -- go build -o bin/upgapp-0.21.0 ./cmd/app
+2026-11-15T06:56:02+01:00 command: praetorctl admit --label test -- go vet ./cmd/app; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:02+01:00 06:56:02 admitted test: available 19.6 GiB, swap free 85.6 GiB, load 27.3
+2026-11-15T06:56:02+01:00 rc=0: praetorctl admit --label test -- go vet ./cmd/app
+2026-11-15T06:56:02+01:00 command: Docker Engine unix:/var/run/docker.sock GET /version
+2026-11-15T06:56:03+01:00 HTTP 200; rc=0: GET /version
+2026-11-15T06:56:03+01:00 Docker Engine version: 29.9.3; supported API 1.56; selected API 1.54
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/images/postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395/json
+2026-11-15T06:56:03+01:00 HTTP 200; rc=0: GET /v1.54/images/postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395/json
+2026-11-15T06:56:03+01:00 check: Postgres image pin unchanged; rc=0
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/create?name=depth-0220-r2-upgrade-1297164
+2026-11-15T06:56:03+01:00 HTTP 201; rc=0: POST /v1.54/containers/create?name=depth-0220-r2-upgrade-1297164
+2026-11-15T06:56:03+01:00 container created: depth-0220-r2-upgrade-1297164 e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/start
+2026-11-15T06:56:03+01:00 HTTP 204; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/start
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/json
+2026-11-15T06:56:03+01:00 HTTP 200; rc=0: GET /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/json
+2026-11-15T06:56:03+01:00 Postgres loopback port: 32769
+2026-11-15T06:56:03+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:03+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/e97b54b25e87da78bb9bab2ae18a15fd7755179597156cfae412a9241546bb69/start
+2026-11-15T06:56:03+01:00 HTTP 200; rc=0: POST /v1.54/exec/e97b54b25e87da78bb9bab2ae18a15fd7755179597156cfae412a9241546bb69/start
+2026-11-15T06:56:03+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/e97b54b25e87da78bb9bab2ae18a15fd7755179597156cfae412a9241546bb69/json
+2026-11-15T06:56:03+01:00 HTTP 200; rc=0: GET /v1.54/exec/e97b54b25e87da78bb9bab2ae18a15fd7755179597156cfae412a9241546bb69/json
+2026-11-15T06:56:03+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:03+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:04+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:04+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:04+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:04+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/277f2a57b2e5b179e3e0e9e94a1c7c72388a55099f6065ce5a185e7c4f9a2d28/start
+2026-11-15T06:56:04+01:00 HTTP 200; rc=0: POST /v1.54/exec/277f2a57b2e5b179e3e0e9e94a1c7c72388a55099f6065ce5a185e7c4f9a2d28/start
+2026-11-15T06:56:04+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/277f2a57b2e5b179e3e0e9e94a1c7c72388a55099f6065ce5a185e7c4f9a2d28/json
+2026-11-15T06:56:04+01:00 HTTP 200; rc=0: GET /v1.54/exec/277f2a57b2e5b179e3e0e9e94a1c7c72388a55099f6065ce5a185e7c4f9a2d28/json
+2026-11-15T06:56:04+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:04+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:05+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:05+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:05+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:05+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/5adeb2a0ba8eb03cb5fd254f998f7f4751f5fcec4f5d6ce220a4f7393243013c/start
+2026-11-15T06:56:05+01:00 HTTP 200; rc=0: POST /v1.54/exec/5adeb2a0ba8eb03cb5fd254f998f7f4751f5fcec4f5d6ce220a4f7393243013c/start
+2026-11-15T06:56:05+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/5adeb2a0ba8eb03cb5fd254f998f7f4751f5fcec4f5d6ce220a4f7393243013c/json
+2026-11-15T06:56:05+01:00 HTTP 200; rc=0: GET /v1.54/exec/5adeb2a0ba8eb03cb5fd254f998f7f4751f5fcec4f5d6ce220a4f7393243013c/json
+2026-11-15T06:56:05+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:05+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:06+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:06+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:06+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:06+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/a65dea18cf8cf021d9e528f4bb161ee79488e84bf8ec8036302450989e67b671/start
+2026-11-15T06:56:07+01:00 HTTP 200; rc=0: POST /v1.54/exec/a65dea18cf8cf021d9e528f4bb161ee79488e84bf8ec8036302450989e67b671/start
+2026-11-15T06:56:07+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/a65dea18cf8cf021d9e528f4bb161ee79488e84bf8ec8036302450989e67b671/json
+2026-11-15T06:56:07+01:00 HTTP 200; rc=0: GET /v1.54/exec/a65dea18cf8cf021d9e528f4bb161ee79488e84bf8ec8036302450989e67b671/json
+2026-11-15T06:56:07+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:07+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:08+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:08+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:08+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:08+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/91ff8102628ad159b110ea11b37a1bd5659c747c73a43bb7a29219bd6b660546/start
+2026-11-15T06:56:08+01:00 HTTP 200; rc=0: POST /v1.54/exec/91ff8102628ad159b110ea11b37a1bd5659c747c73a43bb7a29219bd6b660546/start
+2026-11-15T06:56:08+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/91ff8102628ad159b110ea11b37a1bd5659c747c73a43bb7a29219bd6b660546/json
+2026-11-15T06:56:08+01:00 HTTP 200; rc=0: GET /v1.54/exec/91ff8102628ad159b110ea11b37a1bd5659c747c73a43bb7a29219bd6b660546/json
+2026-11-15T06:56:08+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:08+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:09+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:09+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:09+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:09+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/2092e6cd1e7b1c8900adf9c429a598b30529af5cf8c3ed531df77c126646d9e9/start
+2026-11-15T06:56:09+01:00 HTTP 200; rc=0: POST /v1.54/exec/2092e6cd1e7b1c8900adf9c429a598b30529af5cf8c3ed531df77c126646d9e9/start
+2026-11-15T06:56:09+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/2092e6cd1e7b1c8900adf9c429a598b30529af5cf8c3ed531df77c126646d9e9/json
+2026-11-15T06:56:09+01:00 HTTP 200; rc=0: GET /v1.54/exec/2092e6cd1e7b1c8900adf9c429a598b30529af5cf8c3ed531df77c126646d9e9/json
+2026-11-15T06:56:09+01:00 /var/run/postgresql:5432 - no response
+2026-11-15T06:56:09+01:00 rc=2: container exec pg_isready -U postgres
+2026-11-15T06:56:10+01:00 command: container exec pg_isready -U postgres
+2026-11-15T06:56:10+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:10+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:10+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/9ca5c78cd11fa6fdadb6c37264a9c7913509e01f2f5c2857544aa5be7d0fd638/start
+2026-11-15T06:56:10+01:00 HTTP 200; rc=0: POST /v1.54/exec/9ca5c78cd11fa6fdadb6c37264a9c7913509e01f2f5c2857544aa5be7d0fd638/start
+2026-11-15T06:56:10+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/9ca5c78cd11fa6fdadb6c37264a9c7913509e01f2f5c2857544aa5be7d0fd638/json
+2026-11-15T06:56:10+01:00 HTTP 200; rc=0: GET /v1.54/exec/9ca5c78cd11fa6fdadb6c37264a9c7913509e01f2f5c2857544aa5be7d0fd638/json
+2026-11-15T06:56:10+01:00 /var/run/postgresql:5432 - accepting connections
+2026-11-15T06:56:10+01:00 rc=0: container exec pg_isready -U postgres
+2026-11-15T06:56:12+01:00 command: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/upgrade/work/upgapp/bin/upgapp-0.21.0; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:12+01:00 06:56:12 admitted test: available 19.7 GiB, swap free 86.8 GiB, load 26.1
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	fx.Lifecycle <= go.uber.org/fx.New.func1()
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	fx.Shutdowner <= go.uber.org/fx.(*App).shutdowner-fm()
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	fx.DotGraph <= go.uber.org/fx.(*App).dotGraph-fm()
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	config.Options <= github.com/golusoris/golusoris/core/config.init.func1() from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*config.Config <= github.com/golusoris/golusoris/core/config.init.func2() from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	log.Options <= github.com/golusoris/golusoris/core/log.loadOptions() from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*slog.Logger <= github.com/golusoris/golusoris/core/log.init.func1() from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	clockwork.Clock <= github.com/golusoris/golusoris/core/clock.init.func1() from module "golusoris.clock"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	id.Generator <= github.com/golusoris/golusoris/core/id.New() from module "golusoris.id"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*validate.Validator <= github.com/golusoris/golusoris/core/validate.New() from module "golusoris.validate"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*crypto.PasswordHasher <= github.com/golusoris/golusoris/core/crypto.newPasswordHasher() from module "golusoris.crypto"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*crypto.Encryptor <= github.com/golusoris/golusoris/core/crypto.newEncryptor() from module "golusoris.crypto"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	pgx.Options <= github.com/golusoris/golusoris/db/pgx.loadOptions() from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*pgxpool.Pool <= github.com/golusoris/golusoris/db/pgx.init.func1() from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*pgx.ReadPool <= github.com/golusoris/golusoris/db/pgx.provideReadPool() from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	migrate.Options <= github.com/golusoris/golusoris/db/migrate.LoadOptions() from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] PROVIDE	*migrate.Migrator <= github.com/golusoris/golusoris/db/migrate.init.func1() from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] INVOKE		main.run()
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: go.uber.org/fx.New.func1()
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: go.uber.org/fx.New.func1() in 6.673µs
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: go.uber.org/fx.(*App).shutdowner-fm()
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: go.uber.org/fx.(*App).shutdowner-fm() in 1.312µs
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/config.init.func1() from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/config.init.func1() in 3.777µs from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/config.init.func2() from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/config.init.func2() in 35.607µs from module "golusoris.config"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/pgx.loadOptions() from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/pgx.loadOptions() in 43.983µs from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/log.loadOptions() from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/log.loadOptions() in 3.797µs from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/log.init.func1() from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/log.init.func1() in 5.46µs from module "golusoris.log"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/clock.init.func1() from module "golusoris.clock"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/clock.init.func1() in 1.363µs from module "golusoris.clock"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/pgx.init.func1() from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 {"time":"2026-11-15T06:56:12.234321282+01:00","level":"INFO","msg":"db/pgx: connected","attempt":1}
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/pgx.init.func1() in 3.165293ms from module "golusoris.db.pgx"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/migrate.LoadOptions() from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/migrate.LoadOptions() in 40.806µs from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/migrate.init.func1() from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/migrate.init.func1() in 12.902335ms from module "golusoris.db.migrate"
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/core/config.init.func2.1() executing (caller: github.com/golusoris/golusoris/core/config.init.func2)
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/core/config.init.func2.1() called by github.com/golusoris/golusoris/core/config.init.func2 ran successfully in 46.137µs
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/db/migrate.Bind.func1() executing (caller: github.com/golusoris/golusoris/db/migrate.Bind)
+2026-11-15T06:56:12+01:00 {"time":"2026-11-15T06:56:12.267656524+01:00","level":"INFO","msg":"db/migrate: up complete"}
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/db/migrate.Bind.func1() called by github.com/golusoris/golusoris/db/migrate.Bind ran successfully in 20.164482ms
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		main.run.func1() executing (caller: main.run)
+2026-11-15T06:56:12+01:00 row 1|refund|-5|USD rendered="-0.05 USD"
+2026-11-15T06:56:12+01:00 row 2|fee|1234|KWD rendered="1.234 KWD"
+2026-11-15T06:56:12+01:00 row 3|sale|120000|JPY rendered="120000 JPY"
+2026-11-15T06:56:12+01:00 row 4|credit|-99|EUR rendered="-0.99 EUR"
+2026-11-15T06:56:12+01:00 checksum: d3a7c3a99725cc8902ba37217ec063c4
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStart		main.run.func1() called by main.run ran successfully in 22.52953ms
+2026-11-15T06:56:12+01:00 [Fx] RUNNING
+2026-11-15T06:56:12+01:00 [Fx] TERMINATED
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/migrate.Bind.func2() executing (caller: github.com/golusoris/golusoris/db/migrate.Bind)
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/migrate.Bind.func2() called by github.com/golusoris/golusoris/db/migrate.Bind ran successfully in 100.148µs
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/pgx.init.func1.1() executing (caller: github.com/golusoris/golusoris/db/pgx.init.func1)
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/pgx.init.func1.1() called by github.com/golusoris/golusoris/db/pgx.init.func1 ran successfully in 24.175µs
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/core/config.init.func2.2() executing (caller: github.com/golusoris/golusoris/core/config.init.func2)
+2026-11-15T06:56:12+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/core/config.init.func2.2() called by github.com/golusoris/golusoris/core/config.init.func2 ran successfully in 20.429µs
+2026-11-15T06:56:12+01:00 rc=0: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/upgrade/work/upgapp/bin/upgapp-0.21.0
+2026-11-15T06:56:12+01:00 command: container exec psql -U postgres -Atc 'COPY (SELECT * FROM ledger ORDER BY id) TO STDOUT'
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/6d025d9f685fcdec8b4420129b65c8782cf544309aae461db724f741bc4ffa2e/start
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: POST /v1.54/exec/6d025d9f685fcdec8b4420129b65c8782cf544309aae461db724f741bc4ffa2e/start
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/6d025d9f685fcdec8b4420129b65c8782cf544309aae461db724f741bc4ffa2e/json
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: GET /v1.54/exec/6d025d9f685fcdec8b4420129b65c8782cf544309aae461db724f741bc4ffa2e/json
+2026-11-15T06:56:12+01:00 1	refund	-5	USD
+2026-11-15T06:56:12+01:00 2	fee	1234	KWD
+2026-11-15T06:56:12+01:00 3	sale	120000	JPY
+2026-11-15T06:56:12+01:00 4	credit	-99	EUR
+2026-11-15T06:56:12+01:00 rc=0: container exec psql -U postgres -Atc 'COPY (SELECT * FROM ledger ORDER BY id) TO STDOUT'
+2026-11-15T06:56:12+01:00 command: container exec psql -U postgres -Atc 'SELECT version, dirty FROM schema_migrations'
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/1b301ab410c0c9e548f9843720479c97fda4f31f62926076844680b60b5de7de/start
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: POST /v1.54/exec/1b301ab410c0c9e548f9843720479c97fda4f31f62926076844680b60b5de7de/start
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/1b301ab410c0c9e548f9843720479c97fda4f31f62926076844680b60b5de7de/json
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: GET /v1.54/exec/1b301ab410c0c9e548f9843720479c97fda4f31f62926076844680b60b5de7de/json
+2026-11-15T06:56:12+01:00 1|f
+2026-11-15T06:56:12+01:00 rc=0: container exec psql -U postgres -Atc 'SELECT version, dirty FROM schema_migrations'
+2026-11-15T06:56:12+01:00 command: container exec psql -U postgres -Atc 'SELECT count(*) FROM ledger'
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/87ac25ec99f79069ea4e59118ab0069cd69aaebbe08418c4742471d78a31ebb9/start
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: POST /v1.54/exec/87ac25ec99f79069ea4e59118ab0069cd69aaebbe08418c4742471d78a31ebb9/start
+2026-11-15T06:56:12+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/87ac25ec99f79069ea4e59118ab0069cd69aaebbe08418c4742471d78a31ebb9/json
+2026-11-15T06:56:12+01:00 HTTP 200; rc=0: GET /v1.54/exec/87ac25ec99f79069ea4e59118ab0069cd69aaebbe08418c4742471d78a31ebb9/json
+2026-11-15T06:56:12+01:00 4
+2026-11-15T06:56:12+01:00 rc=0: container exec psql -U postgres -Atc 'SELECT count(*) FROM ledger'
+2026-11-15T06:56:12+01:00 before: app checksum d3a7c3a99725cc8902ba37217ec063c4; COPY md5 a786f8604841ff6577363830eaefcd15; schema_migrations 1|f; rows 4
+2026-11-15T06:56:12+01:00 substitute: v0.22.0 -> v0.21.1-0.20261114202725-7b04f7250f4f (commit 7b04f725, tree fe3d30b0)
+2026-11-15T06:56:12+01:00 command: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/bin/golusoris bump v0.21.1-0.20261114202725-7b04f7250f4f; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:13+01:00 06:56:12 admitted test: available 19.6 GiB, swap free 86.6 GiB, load 26.1
+2026-11-15T06:56:13+01:00 Running: go get github.com/golusoris/golusoris@v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T06:56:13+01:00 Running: go mod tidy
+2026-11-15T06:56:13+01:00 Bumped github.com/golusoris/golusoris to v0.21.1-0.20261114202725-7b04f7250f4f.
+2026-11-15T06:56:13+01:00 Check docs/migrations/ in the framework repo for breaking-change notes.
+2026-11-15T06:56:13+01:00 rc=0: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/bin/golusoris bump v0.21.1-0.20261114202725-7b04f7250f4f
+2026-11-15T06:56:13+01:00 go.mod after: github.com/golusoris/golusoris v0.21.1-0.20261114202725-7b04f7250f4f; github.com/golusoris/golusoris/core v0.12.1 // indirect
+2026-11-15T06:56:13+01:00 command: praetorctl admit --label test -- go build -o bin/upgapp-0.22.0 ./cmd/app; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:17+01:00 06:56:13 admitted test: available 19.4 GiB, swap free 86.4 GiB, load 26.1
+2026-11-15T06:56:17+01:00 rc=0: praetorctl admit --label test -- go build -o bin/upgapp-0.22.0 ./cmd/app
+2026-11-15T06:56:17+01:00 command: praetorctl admit --label test -- go vet ./cmd/app; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:17+01:00 06:56:17 admitted test: available 19.1 GiB, swap free 85.9 GiB, load 25.4
+2026-11-15T06:56:17+01:00 rc=0: praetorctl admit --label test -- go vet ./cmd/app
+2026-11-15T06:56:17+01:00 command: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/upgrade/work/upgapp/bin/upgapp-0.22.0; cwd=<proof-worktree>/.tmp/depth/upgrade/work/upgapp
+2026-11-15T06:56:17+01:00 06:56:17 admitted test: available 19.1 GiB, swap free 86.0 GiB, load 25.4
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	fx.Lifecycle <= go.uber.org/fx.New.func1()
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	fx.Shutdowner <= go.uber.org/fx.(*App).shutdowner-fm()
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	fx.DotGraph <= go.uber.org/fx.(*App).dotGraph-fm()
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	config.Options <= github.com/golusoris/golusoris/core/config.init.func1() from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*config.Config <= github.com/golusoris/golusoris/core/config.init.func2() from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	log.Options <= github.com/golusoris/golusoris/core/log.loadOptions() from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*slog.Logger <= github.com/golusoris/golusoris/core/log.init.func1() from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	clockwork.Clock <= github.com/golusoris/golusoris/core/clock.init.func1() from module "golusoris.clock"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	id.Generator <= github.com/golusoris/golusoris/core/id.New() from module "golusoris.id"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*validate.Validator <= github.com/golusoris/golusoris/core/validate.New() from module "golusoris.validate"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*crypto.PasswordHasher <= github.com/golusoris/golusoris/core/crypto.newPasswordHasher() from module "golusoris.crypto"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*crypto.Encryptor <= github.com/golusoris/golusoris/core/crypto.newEncryptor() from module "golusoris.crypto"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	pgx.Options <= github.com/golusoris/golusoris/db/pgx.loadOptions() from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*pgxpool.Pool <= github.com/golusoris/golusoris/db/pgx.init.func1() from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*pgx.ReadPool <= github.com/golusoris/golusoris/db/pgx.provideReadPool() from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	migrate.Options <= github.com/golusoris/golusoris/db/migrate.LoadOptions() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE (PRIVATE)	*migrate.lazyMigrator <= fx.Annotate(github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func1() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] PROVIDE	*migrate.Migrator <= github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func2() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] INVOKE		github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func3() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: go.uber.org/fx.New.func1()
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: go.uber.org/fx.New.func1() in 9.778µs
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/config.init.func1() from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/config.init.func1() in 3.707µs from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/config.init.func2() from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/config.init.func2() in 37.25µs from module "golusoris.config"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/migrate.LoadOptions() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/migrate.LoadOptions() in 42.63µs from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/pgx.loadOptions() from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/pgx.loadOptions() in 22.943µs from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/log.loadOptions() from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/log.loadOptions() in 2.865µs from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/log.init.func1() from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/log.init.func1() in 7.585µs from module "golusoris.log"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: fx.Annotate(github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func1() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: fx.Annotate(github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func1() in 6.302µs from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] INVOKE		main.run()
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: go.uber.org/fx.(*App).shutdowner-fm()
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: go.uber.org/fx.(*App).shutdowner-fm() in 11.241µs
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/core/clock.init.func1() from module "golusoris.clock"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/core/clock.init.func1() in 4.949µs from module "golusoris.clock"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/pgx.init.func1() from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 {"time":"2026-11-15T06:56:17.817968469+01:00","level":"INFO","msg":"db/pgx: connected","attempt":1}
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/pgx.init.func1() in 3.463114ms from module "golusoris.db.pgx"
+2026-11-15T06:56:17+01:00 [Fx] BEFORE RUN	provide: github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func2() from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] RUN	provide: github.com/golusoris/golusoris/db/migrate.ProvideMigrator[...].func2() in 18.945µs from module "golusoris.db.migrate"
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/core/config.init.func2.1() executing (caller: github.com/golusoris/golusoris/core/config.init.func2)
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/core/config.init.func2.1() called by github.com/golusoris/golusoris/core/config.init.func2 ran successfully in 32.522µs
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/db/migrate.Bind.func1() executing (caller: github.com/golusoris/golusoris/db/migrate.Bind)
+2026-11-15T06:56:17+01:00 {"time":"2026-11-15T06:56:17.819239299+01:00","level":"INFO","msg":"db/migrate: up complete"}
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		github.com/golusoris/golusoris/db/migrate.Bind.func1() called by github.com/golusoris/golusoris/db/migrate.Bind ran successfully in 995.833µs
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		main.run.func1() executing (caller: main.run)
+2026-11-15T06:56:17+01:00 row 1|refund|-5|USD rendered="-0.05 USD"
+2026-11-15T06:56:17+01:00 row 2|fee|1234|KWD rendered="1.234 KWD"
+2026-11-15T06:56:17+01:00 row 3|sale|120000|JPY rendered="120000 JPY"
+2026-11-15T06:56:17+01:00 row 4|credit|-99|EUR rendered="-0.99 EUR"
+2026-11-15T06:56:17+01:00 checksum: d3a7c3a99725cc8902ba37217ec063c4
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStart		main.run.func1() called by main.run ran successfully in 1.351342ms
+2026-11-15T06:56:17+01:00 [Fx] RUNNING
+2026-11-15T06:56:17+01:00 [Fx] TERMINATED
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/pgx.init.func1.1() executing (caller: github.com/golusoris/golusoris/db/pgx.init.func1)
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/pgx.init.func1.1() called by github.com/golusoris/golusoris/db/pgx.init.func1 ran successfully in 56.286µs
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/migrate.Bind.func2() executing (caller: github.com/golusoris/golusoris/db/migrate.Bind)
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/db/migrate.Bind.func2() called by github.com/golusoris/golusoris/db/migrate.Bind ran successfully in 34.435µs
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/core/config.init.func2.2() executing (caller: github.com/golusoris/golusoris/core/config.init.func2)
+2026-11-15T06:56:17+01:00 [Fx] HOOK OnStop		github.com/golusoris/golusoris/core/config.init.func2.2() called by github.com/golusoris/golusoris/core/config.init.func2 ran successfully in 26.2µs
+2026-11-15T06:56:17+01:00 rc=0: praetorctl admit --label test -- <proof-worktree>/.tmp/depth/upgrade/work/upgapp/bin/upgapp-0.22.0
+2026-11-15T06:56:17+01:00 command: container exec psql -U postgres -Atc 'COPY (SELECT * FROM ledger ORDER BY id) TO STDOUT'
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/17271c190c6ccae3e9c22fa8e67bb7eb1f6880945dc93b9e2fbbc0d0f0712be4/start
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: POST /v1.54/exec/17271c190c6ccae3e9c22fa8e67bb7eb1f6880945dc93b9e2fbbc0d0f0712be4/start
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/17271c190c6ccae3e9c22fa8e67bb7eb1f6880945dc93b9e2fbbc0d0f0712be4/json
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: GET /v1.54/exec/17271c190c6ccae3e9c22fa8e67bb7eb1f6880945dc93b9e2fbbc0d0f0712be4/json
+2026-11-15T06:56:17+01:00 1	refund	-5	USD
+2026-11-15T06:56:17+01:00 2	fee	1234	KWD
+2026-11-15T06:56:17+01:00 3	sale	120000	JPY
+2026-11-15T06:56:17+01:00 4	credit	-99	EUR
+2026-11-15T06:56:17+01:00 rc=0: container exec psql -U postgres -Atc 'COPY (SELECT * FROM ledger ORDER BY id) TO STDOUT'
+2026-11-15T06:56:17+01:00 command: container exec psql -U postgres -Atc 'SELECT version, dirty FROM schema_migrations'
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/7e428d4dd70a0efb44f216d561d7fb6d806c177d8336767f23c22d11daa7c0a7/start
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: POST /v1.54/exec/7e428d4dd70a0efb44f216d561d7fb6d806c177d8336767f23c22d11daa7c0a7/start
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/7e428d4dd70a0efb44f216d561d7fb6d806c177d8336767f23c22d11daa7c0a7/json
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: GET /v1.54/exec/7e428d4dd70a0efb44f216d561d7fb6d806c177d8336767f23c22d11daa7c0a7/json
+2026-11-15T06:56:17+01:00 1|f
+2026-11-15T06:56:17+01:00 rc=0: container exec psql -U postgres -Atc 'SELECT version, dirty FROM schema_migrations'
+2026-11-15T06:56:17+01:00 command: container exec psql -U postgres -Atc 'SELECT count(*) FROM ledger'
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 HTTP 201; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/exec
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/exec/fc44b9be7fa447b688416211f0dea6dd2b7dca8a008280bab56c9b48b0e9260d/start
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: POST /v1.54/exec/fc44b9be7fa447b688416211f0dea6dd2b7dca8a008280bab56c9b48b0e9260d/start
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/exec/fc44b9be7fa447b688416211f0dea6dd2b7dca8a008280bab56c9b48b0e9260d/json
+2026-11-15T06:56:17+01:00 HTTP 200; rc=0: GET /v1.54/exec/fc44b9be7fa447b688416211f0dea6dd2b7dca8a008280bab56c9b48b0e9260d/json
+2026-11-15T06:56:17+01:00 4
+2026-11-15T06:56:17+01:00 rc=0: container exec psql -U postgres -Atc 'SELECT count(*) FROM ledger'
+2026-11-15T06:56:17+01:00 after: app checksum d3a7c3a99725cc8902ba37217ec063c4; COPY md5 a786f8604841ff6577363830eaefcd15; schema_migrations 1|f; rows 4
+2026-11-15T06:56:17+01:00 check: app checksum unchanged; rc=0
+2026-11-15T06:56:17+01:00 check: COPY md5 unchanged; rc=0
+2026-11-15T06:56:17+01:00 check: schema_migrations unchanged; rc=0
+2026-11-15T06:56:17+01:00 command: Docker Engine unix:/var/run/docker.sock POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/stop?t=10
+2026-11-15T06:56:19+01:00 HTTP 204; rc=0: POST /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/stop?t=10
+2026-11-15T06:56:19+01:00 command: Docker Engine unix:/var/run/docker.sock DELETE /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31?v=true
+2026-11-15T06:56:22+01:00 HTTP 204; rc=0: DELETE /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31?v=true
+2026-11-15T06:56:22+01:00 command: Docker Engine unix:/var/run/docker.sock GET /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/json
+2026-11-15T06:56:22+01:00 HTTP 404; rc=0: GET /v1.54/containers/e5453253cf13723da941e28a9b3d35d15a7f38a5516ed654ad6b00894762ac31/json
+2026-11-15T06:56:22+01:00 cleanup: containers started=1; removed=1
+2026-11-15T06:56:22+01:00 command: git status --porcelain; cwd=<proof-worktree>
+2026-11-15T06:56:22+01:00 rc=0: git status --porcelain
+2026-11-15T06:56:22+01:00 final git status --porcelain line count: 0
+2026-11-15T06:56:22+01:00 result: PASS
