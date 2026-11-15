@@ -35,10 +35,11 @@ check_workflow() {
 		# Each shape carries its step, so a moved result reset cannot hide a failed probe or load.
 		{ step = 0 }
 		/^            export STALLPROBE_P=4 STALLPROBE_N=600$/ { step = 1 }
-		# A "#" inside a go test line would comment out its tail, so it is excluded with the separators.
-		/^            go test [^;&|#]* > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { step = 2 }
+		# Exact flag allow-list: Go keeps the last flag value, so a second timeout in any spelling would override the checked one.
+		/^            go test -short -count=[1-9][0-9]*( -timeout [1-9][0-9]*m)?( \.\/[a-z0-9_][a-z0-9_\/]*\/\.\.\.)+ > "\$RUNNER_TEMP\/load\.log" 2>&1 &$/ { step = 2 }
 		/^            load_pid=\$!$/ { step = 3 }
 		/^            probe_rc=0$/ { step = 4 }
+		# A "#" inside a go test line would comment out its tail, so it is excluded with the separators.
 		/^            go test [^;&|#]* \|\| probe_rc=\$\?$/ { step = 5 }
 		/^            load_rc=0$/ { step = 6 }
 		/^            wait "\$load_pid" \|\| load_rc=\$\?$/ { step = 7 }
@@ -197,5 +198,13 @@ sed -E 's/^(            go test .*\.\/db\/sqlite\/) \|\| probe_rc=/\1 # || probe
 probe_line="$(sed -n '/^            go test .* # || probe_rc=\$?$/p' "$suite_root/hash-in-probe.yml")"
 expect_failure hash_in_probe "$suite_root/hash-in-probe.yml" \
 	"file-load branch line outside the straight-line allow-list: $probe_line"
+
+for plant in 'dup_timeout_space:-timeout 5m' 'dup_timeout_equals:-timeout=5m' 'dup_timeout_alias:-test.timeout=5m'; do
+	name="${plant%%:*}"
+	sed -E "s/ -timeout ([0-9]+)m / -timeout \\1m ${plant#*:} /" "$WORKFLOW" >"$suite_root/$name.yml"
+	load_line="$(grep -E '^            go test -short .* &$' "$suite_root/$name.yml")"
+	expect_failure "$name" "$suite_root/$name.yml" \
+		"file-load branch line outside the straight-line allow-list: $load_line"
+done
 
 printf 'sqlite stall probe policy tests passed\n'
