@@ -18,6 +18,8 @@ import (
 	"github.com/golusoris/golusoris/testutil/configfile"
 )
 
+var _ = goenvoy.ServiceOptions{} == goenvoy.ServiceOptions{} //nolint:gocritic // WHY: public option structs stay comparable, HISS-14.
+
 func discardLogger() *slog.Logger {
 	return slog.New(slog.DiscardHandler)
 }

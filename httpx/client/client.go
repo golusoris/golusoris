@@ -11,7 +11,7 @@
 //
 // Layering (outer → inner):
 //
-//	circuit-breaker -> retry -> otelhttp -> stdlib transport
+//	circuit-breaker -> retry -> otelhttp -> span redaction -> stdlib transport
 //
 // Circuit-breaker outermost = when the breaker is open, we short-circuit
 // without even entering the retry loop. OTel inside the retry layer = each
@@ -80,6 +80,9 @@ type Options struct {
 	// Transport replaces the innermost transport; otelhttp, retry, and the
 	// breaker still wrap it. nil uses a private clone of http.DefaultTransport.
 	Transport http.RoundTripper
+
+	// SecretParams adds case-insensitive names to the shared secret query defaults.
+	SecretParams SecretParams
 }
 
 // RetryOptions tunes retryablehttp. Max == 0 disables retries.
@@ -134,9 +137,10 @@ func resolveOptions(opts Options) resolvedOptions {
 func New(opts Options) *http.Client {
 	resolved := resolveOptions(opts)
 
-	// Innermost: stdlib (or caller) transport wrapped by otelhttp.
+	// Stack: circuit-breaker → retry → otelhttp → span redaction → stdlib transport.
 	inner := innerTransport(opts)
-	traced := otelhttp.NewTransport(inner, otelhttp.WithTracerProvider(resolved.tracerProvider))
+	redacted := &redactingTransport{next: inner, secrets: opts.SecretParams.withDefaults()}
+	traced := otelhttp.NewTransport(redacted, otelhttp.WithTracerProvider(resolved.tracerProvider))
 	base := idleForwarder{RoundTripper: traced, inner: inner}
 
 	// Middle: retry layer.
