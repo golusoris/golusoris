@@ -206,6 +206,107 @@ func TestScalarOutputByteBoundary(t *testing.T) {
 	}
 }
 
+func TestRunResponseAliasPaths(t *testing.T) {
+	t.Parallel()
+	lines := make([]string, 0, 47)
+	for depth := range 45 {
+		lines = append(lines, strings.Repeat(" ", 2*depth)+strings.Repeat("k", 1000)+":\n")
+	}
+	lines = append(lines, strings.Repeat(" ", 90)+"- &small x\n",
+		strings.Repeat(strings.Repeat(" ", 90)+"- *small\n", 7000))
+	input := strings.Join(lines, "")
+	if len(input) > maxBytes {
+		t.Fatal("fixture exceeds input byte bound")
+	}
+	document := parseDocument([]byte(input))
+	if document.Error != "" {
+		t.Fatal(document.Error)
+	}
+	scalarBytes := 0
+	for _, item := range document.Scalars[:min(len(document.Scalars), maxNodes)] {
+		scalarBytes += len(item.Text)
+	}
+	if scalarBytes >= maxScalarBytes {
+		t.Fatalf("fixture scalar bytes = %d; must remain below walking bound", scalarBytes)
+	}
+	var output bytes.Buffer
+	if err := run(t.Context(), strings.NewReader(input), &output); err != nil {
+		t.Fatal(err)
+	}
+	assertResponseBound(t, output)
+}
+
+func assertResponseBound(t *testing.T, output bytes.Buffer) {
+	t.Helper()
+	var document response
+	if err := json.Unmarshal(output.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Error != "workflow parser: response byte bound exceeded" || len(document.Scalars) != 0 {
+		t.Fatalf("response error = %q, scalars = %d", document.Error, len(document.Scalars))
+	}
+	if output.Len() > maxResponseBytes || !bytes.HasSuffix(output.Bytes(), []byte("\n")) {
+		t.Fatalf("invalid bounded output length or terminator: %d bytes", output.Len())
+	}
+}
+
+func responseBoundaryInput(t *testing.T, size int) string {
+	t.Helper()
+	input := "- &small <\n" + strings.Repeat("- *small\n", 6) + "- x\n"
+	var baseline bytes.Buffer
+	if err := json.NewEncoder(&baseline).Encode(parseDocument([]byte(input))); err != nil {
+		t.Fatal(err)
+	}
+	// Seven copies of an HTML-escaped byte add 42 wire bytes; plain padding fills the remainder.
+	padding := size - baseline.Len()
+	input = strings.Replace(input, "<", strings.Repeat("<", 1+padding/42), 1)
+	input = strings.TrimSuffix(input, "\n") + strings.Repeat("x", padding%42) + "\n"
+	if len(input) > maxBytes {
+		t.Fatal("boundary fixture exceeds input byte bound")
+	}
+	return input
+}
+
+func TestRunResponseByteBoundary(t *testing.T) {
+	t.Parallel()
+	for _, size := range []int{maxResponseBytes, maxResponseBytes + 1} {
+		t.Run(strconv.Itoa(size), func(t *testing.T) {
+			t.Parallel()
+			var output bytes.Buffer
+			if err := run(t.Context(), strings.NewReader(responseBoundaryInput(t, size)), &output); err != nil {
+				t.Fatal(err)
+			}
+			if size > maxResponseBytes {
+				assertResponseBound(t, output)
+				return
+			}
+			var document response
+			if err := json.Unmarshal(output.Bytes(), &document); err != nil {
+				t.Fatal(err)
+			}
+			if output.Len() != size || document.Error != "" || len(document.Scalars) != 8 {
+				t.Fatalf("boundary bytes = %d, error = %q, scalars = %d", output.Len(), document.Error, len(document.Scalars))
+			}
+		})
+	}
+}
+
+func TestRunResponseCompatibility(t *testing.T) {
+	t.Parallel()
+	for _, input := range []string{"on: push\njobs: {}\n", "x: '<>&é'\n", "x: [\n", "null\n"} {
+		var expected, actual bytes.Buffer
+		if err := json.NewEncoder(&expected).Encode(parseDocument([]byte(input))); err != nil {
+			t.Fatal(err)
+		}
+		if err := run(t.Context(), strings.NewReader(input), &actual); err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(expected.Bytes(), actual.Bytes()) {
+			t.Fatalf("wire response changed for %q", input)
+		}
+	}
+}
+
 type failingWriter struct{ err error }
 
 func (w failingWriter) Write(_ []byte) (int, error) { return 0, w.err }

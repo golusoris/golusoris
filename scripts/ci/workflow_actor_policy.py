@@ -18,6 +18,8 @@ import re
 import shutil
 import subprocess  # Builds and runs only the pinned parser. # nosec B404
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
@@ -27,6 +29,8 @@ WORKFLOW_DIRS: tuple[str, ...] = (".github/workflows", ".gitea/workflows")
 ACTION_DIRS: tuple[str, ...] = (".github", ".gitea")
 MAX_WORKFLOW_FILES = 256
 MAX_WORKFLOW_LINES = 8192
+# Match Go maxResponseBytes to bound the complete parser wire response.
+MAX_RESPONSE_BYTES = 8 * (1 << 20)
 
 # (workflow path, job id, normalised expression) -> reason.
 ALLOWED: dict[tuple[str, str, str], str] = {
@@ -720,18 +724,68 @@ def _parser_command() -> list[str]:
     return [str(output)]
 
 
+def _read_parser_output(process: subprocess.Popen) -> bytearray:
+    """Read at most the wire bound plus one overflow sentinel byte."""
+    output = bytearray()
+    for _ in range(MAX_RESPONSE_BYTES + 1):
+        chunk = process.stdout.read(MAX_RESPONSE_BYTES + 1 - len(output))
+        if not chunk:
+            break
+        output.extend(chunk)
+        if len(output) > MAX_RESPONSE_BYTES:
+            raise ValueError("workflow parser: response byte bound exceeded")
+    return output
+
+
+def _write_parser_input(process: subprocess.Popen, text: str) -> None:
+    """Close stdin even if the parser exits before consuming its input."""
+    try:
+        with process.stdin:
+            data = memoryview(text.encode("utf-8"))
+            for _ in range(len(data)):
+                written = process.stdin.write(data)
+                if not written:
+                    raise OSError("workflow parser: stdin write made no progress")
+                data = data[written:]
+                if not data:
+                    break
+    except BrokenPipeError:
+        pass
+
+
+def _parser_exchange(process: subprocess.Popen, text: str) -> bytearray:
+    """Bound concurrent pipe I/O and process exit by one shared deadline."""
+    deadline = time.monotonic() + 30
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(_write_parser_input, process, text)
+        reader = pool.submit(_read_parser_output, process)
+        try:
+            output = reader.result(timeout=max(0, deadline - time.monotonic()))
+            writer.result(timeout=max(0, deadline - time.monotonic()))
+            process.wait(timeout=max(0, deadline - time.monotonic()))
+        except TimeoutError as exc:
+            process.kill()
+            process.wait(timeout=30)
+            raise subprocess.TimeoutExpired(process.args, 30) from exc
+        except BaseException:
+            process.kill()
+            process.wait(timeout=30)
+            raise
+    if process.returncode:
+        raise subprocess.CalledProcessError(process.returncode, process.args)
+    return output
+
+
 def _parse_document(text: str) -> dict:
     """Return decoded YAML scalars and actionlint expression facts."""
-    result = subprocess.run(  # noqa: S603 - fixed binary; stdin YAML. # nosec B603
+    with subprocess.Popen(  # noqa: S603 - fixed binary; stdin YAML. # nosec B603
         _parser_command(),
-        input=text,
-        text=True,
-        encoding="utf-8",
-        capture_output=True,
-        check=True,
-        timeout=30,
-    )
-    return json.loads(result.stdout)
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        bufsize=0,
+    ) as process:
+        return json.loads(_parser_exchange(process, text))
 
 
 def _parsed_job(path: list[str]) -> str:
