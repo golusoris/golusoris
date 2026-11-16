@@ -7,6 +7,10 @@
 #   check <tag> [<end-ref>]  a minor or major tag (vX.Y.Z root, core/vX.Y.Z core) needs .config/release-evidence/<tag>/
 #                            e2e.tsv, upgrade.log and dogfood.log; patch tags pass; <end-ref> is required before the tag exists
 #   pending                  runs check on HEAD for every component of .release-please-manifest.json whose tag is not yet created
+# Exit 0: pass (patch tag, evidence complete, pending all released or passing).
+# Exit 1: refusal (evidence missing or wrong, no ancestor base, tag or end-ref absent, scan over cap, manifest missing or unreadable).
+# Exit 2: usage (bad arguments, not a release tag).
+# Exit 3: operational error (not a git repository, tag listing failed or omitted existing tag, merge-base/log failed, row check could not run).
 
 set -euo pipefail
 
@@ -19,6 +23,7 @@ readonly max_tags=1000
 
 root=''
 errors=()
+op_error=0
 work="$(mktemp -d "${TMPDIR:-/tmp}/release-depth-evidence.XXXXXX")"
 readonly work
 trap 'rm -rf "$work"' EXIT
@@ -34,6 +39,11 @@ rgit() {
 
 fail() {
 	errors+=("$1")
+}
+
+operational_error() {
+	op_error=1
+	fail "$1"
 }
 
 # find_base prints the highest-version tag of the tag's component that is an ancestor of the end commit.
@@ -213,7 +223,7 @@ check_rows() {
 		done
 	fi
 	if ! output="$(LABEL="$label" MAX_ROWS="$max_rows" LC_ALL=C awk -F'\t' "$rows_program" "$work/required" "$file")"; then
-		fail "the row check of $label could not run; no row was checked"
+		operational_error "the row check of $label could not run; no row was checked"
 		return 0
 	fi
 	if [[ -n "$output" ]]; then
@@ -363,7 +373,7 @@ load_range() {
 	case "$status" in
 		0) return 0 ;;
 		2) fail "more than $max_commits commits in $1..$4; range over the cap" ;;
-		*) fail "git log failed for $1..$4; the user-visible commits are unknown" ;;
+		*) operational_error "git log failed for $1..$4; the user-visible commits are unknown" ;;
 	esac
 	return 1
 }
@@ -375,9 +385,9 @@ load_base() {
 	case "$status" in
 		0) return 0 ;;
 		2) fail "more than $max_tags tags scanned for the base of $1" ;;
-		3) fail "listing release tags failed while searching the base of $1" ;;
-		4) fail "tag listing did not include $1; no base for $1" ;;
-		5) fail "git merge-base failed while searching the base of $1" ;;
+		3) operational_error "listing release tags failed while searching the base of $1" ;;
+		4) operational_error "tag listing did not include $1; no base for $1" ;;
+		5) operational_error "git merge-base failed while searching the base of $1" ;;
 		*) fail "no earlier release tag of the same component is an ancestor of $4; no base for $1" ;;
 	esac
 	return 1
@@ -387,6 +397,7 @@ check_release() {
 	local tag="$1" given_end="${2:-}"
 	local tag_re='^(core/)?v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 	errors=()
+	op_error=0
 	if [[ ! "$tag" =~ $tag_re ]]; then
 		printf 'not a release tag (vX.Y.Z or core/vX.Y.Z): %s\n' "$tag" >&2
 		return 2
@@ -397,30 +408,25 @@ check_release() {
 		return 0
 	fi
 	if ! rgit rev-parse --git-dir >/dev/null 2>&1; then
-		fail "$root is not a git repository"
-		report_errors
-		return 1
+		operational_error "$root is not a git repository"
+		report_errors || return "$((1 + 2 * op_error))"
 	fi
 	local end end_name
 	if ! resolve_end "$tag" "$given_end"; then
-		report_errors
-		return 1
+		report_errors || return "$((1 + 2 * op_error))"
 	fi
 	local base
 	if ! load_base "$tag" "$end" "$prefix" "$end_name"; then
-		report_errors
-		return 1
+		report_errors || return "$((1 + 2 * op_error))"
 	fi
 	if ! load_range "$base" "$end" "$prefix" "$end_name"; then
-		report_errors
-		return 1
+		report_errors || return "$((1 + 2 * op_error))"
 	fi
 	local name="${tag//\//-}"
 	local relative=".config/release-evidence/$name"
 	check_evidence "$base" "$root/$relative" "$relative" "$tag"
 	if ((${#errors[@]} > 0)); then
-		report_errors
-		return 1
+		report_errors || return "$((1 + 2 * op_error))"
 	fi
 	printf 'release-depth-evidence: %s has depth evidence over %s..%s (%d user-visible commits)\n' \
 		"$tag" "$base" "$end_name" "${#required_shas[@]}"
@@ -447,7 +453,7 @@ for key, prefix in ((".", ""), ("core", "core/")):
 }
 
 check_pending() {
-	local manifest="$root/.release-please-manifest.json" tags tag status=0
+	local manifest="$root/.release-please-manifest.json" tags tag result status=0
 	if [[ ! -f "$manifest" ]]; then
 		printf 'no .release-please-manifest.json under %s\n' "$root" >&2
 		return 1
@@ -461,7 +467,17 @@ check_pending() {
 			printf 'release-depth-evidence: %s already released; skipped\n' "$tag"
 			continue
 		fi
-		check_release "$tag" HEAD || status=1
+		result=0
+		check_release "$tag" HEAD || result=$?
+		case "$result" in
+			0) ;;
+			3) status=3 ;;
+			*)
+				if ((status != 3)); then
+					status=1
+				fi
+				;;
+		esac
 	done <<<"$tags"
 	return "$status"
 }
