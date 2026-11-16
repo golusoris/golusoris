@@ -24,7 +24,7 @@ const (
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
 	TimescaleApache = "timescale/timescaledb:2.31.0-pg17-oss@sha256:668ee2d521ed472045f74c9e16f01318ab73120754ff8ba4cf1d76f00a26307a"
 	// Redis is the default Redis integration-test image.
-	Redis = "redis:8-alpine@sha256:71885d8cc6e42f2bc0aa2eb853bfc4be200b5108a46ac50e117ae1df0531fb80"
+	Redis = "redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3"
 	// Dragonfly is the Redis-compatible Dragonfly integration-test image.
 	Dragonfly = "ghcr.io/dragonflydb/dragonfly:v2.1.0@sha256:94891bb22ce2fb0f7a5a3ff1bb3b2fbbc5830e2523293e47723d87fa3e5b1184"
 	// NATS is the default NATS integration-test image.
