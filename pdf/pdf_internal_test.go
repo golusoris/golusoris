@@ -313,6 +313,25 @@ func TestNewRendererExpiredLaunchTimeout(t *testing.T) {
 	assertChromeGoroutinesStopped(t)
 }
 
+func TestNewRendererSpentLaunchBudgetSkipsChrome(t *testing.T) {
+	t.Setenv(fakeChromeEnv, fakeChromePipe)
+	pidFile := filepath.Join(t.TempDir(), "chrome.pid")
+	t.Setenv(fakeChromePIDEnv, pidFile)
+	renderer, err := NewRendererContext(t.Context(), Options{ChromePath: testExecutable(t), LaunchTimeout: -time.Nanosecond})
+	if err == nil {
+		renderer.Close()
+		t.Fatal("NewRendererContext() = nil error for a spent launch budget")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("NewRendererContext() error = %v; want context.DeadlineExceeded", err)
+	}
+	assertChromeGoroutinesStopped(t)
+	// The pipe-mode fake writes its PID on start, so a missing file proves no launch.
+	if _, statErr := os.Stat(pidFile); !errors.Is(statErr, os.ErrNotExist) {
+		t.Errorf("fake Chrome started for a spent launch budget: stat %s: %v", pidFile, statErr)
+	}
+}
+
 // testExecutable is this test binary, which TestMain turns into a Chrome stand-in under fakeChromeEnv.
 func testExecutable(t *testing.T) string {
 	t.Helper()
