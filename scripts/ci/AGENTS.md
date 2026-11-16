@@ -14,6 +14,8 @@ CI verification drivers, scripts, policy tests.
 | --- | --- |
 | `ci_scope.py` | Diff-aware CI scope calculator (`modules`, `files`, `any`) |
 
+Scope: stdlib rule below covers Python tools in this table; existing shell policy tests (`*_test.sh`) run via `make ci-policy-test`, except four with own make targets: `gci-hook-test`, `go-modules-test`, `helm-backup-restore`, `text-register-policy`.
+
 ## Operational Rules
 
 - Stdlib only, Python 3.12+, Linux/macOS/Windows portable.
