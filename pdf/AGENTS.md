@@ -41,6 +41,7 @@ per-render `Timeout`. Cold Chrome start reads ~250 MB before first tab answers;
 slow CI disks need 15-25 s. Default pipe transport, no debugging port; launch
 deadline cancels browser + allocator, waits for process cleanup. Launch error
 carries last 4 KiB of Chrome output, or says Chrome printed nothing.
+Spent `LaunchTimeout` -> fail without starting Chrome.
 
 ```go
 r, err := pdf.NewRendererContext(ctx, pdf.Options{Timeout: 30 * time.Second})
