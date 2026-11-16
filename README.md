@@ -531,9 +531,9 @@ Heavy / CGO / native-dep packages each live in their own `go.mod` so the main fr
 ### Tooling
 
 ```sh
-make verify-all  # universal gate: build/lint/security/race across all 31 Go modules plus governance and licensing
+make verify-all  # universal gate: build/lint/security/race across all 32 Go modules plus governance and licensing
 make ci          # golangci-lint + govulncheck + gosec + go test -race (current module)
-make ci-all      # lint + govulncheck + gosec + race/coverage across all 31 modules
+make ci-all      # lint + govulncheck + gosec + race/coverage across all 32 modules
 make lint        # golangci-lint only
 make test        # go test -race -count=1 ./...
 make sec         # govulncheck + gosec
@@ -563,12 +563,12 @@ system layout.
 
 ## Support golusoris
 
-**Why it matters.** golusoris is a composable Go framework: opt-in fx modules for what a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s), spread over [31 Go modules](#tooling) that `make verify-all` builds, lints, scans and race-tests on every change.
+**Why it matters.** golusoris is a composable Go framework: opt-in fx modules for what a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s), spread over [32 Go modules](#tooling) that `make verify-all` builds, lints, scans and race-tests on every change.
 
 **What support funds.**
 
 - CI time for the required Linux, macOS and Windows matrix.
-- Keeping all [31 Go modules](#tooling) green under `make verify-all` on every change.
+- Keeping all [32 Go modules](#tooling) green under `make verify-all` on every change.
 
 Sponsor on [GitHub Sponsors](https://github.com/sponsors/lusoris), any amount; no support or priority is sold. Open Collective: pending.
 Also on [Ko-fi](https://ko-fi.com/lusoris).
@@ -601,7 +601,7 @@ Breaking changes between minor versions are called out in the commit
 [docs/migrations/v0.13.0.md](docs/migrations/v0.13.0.md) for current API and
 secure-default changes. The [v0.9.0 guide](docs/migrations/v0.9.0.md) retains
 the earlier `core/…` import-path mapping. Every module in the catalog above is
-committed; CI gates all 31 discovered Go modules through the primary lane and
+committed; CI gates all 32 discovered Go modules through the primary lane and
 four deterministic module-sweep shards.
 
 ---

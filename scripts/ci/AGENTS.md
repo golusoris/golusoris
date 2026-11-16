@@ -13,6 +13,7 @@ CI verification drivers, scripts, policy tests.
 | Script | Purpose |
 | --- | --- |
 | `ci_scope.py` | Diff-aware CI scope calculator (`modules`, `files`, `any`) |
+| `cmd/workflow_actor_parser/` | Bounded YAML scalar and actionlint expression parser; actor-policy second barrier |
 
 Scope: stdlib rule below covers Python tools in this table; existing shell policy tests (`*_test.sh`) run via `make ci-policy-test`, except four with own make targets: `gci-hook-test`, `go-modules-test`, `helm-backup-restore`, `text-register-policy`.
 
