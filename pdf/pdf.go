@@ -129,6 +129,7 @@ type Renderer struct {
 // Call [Renderer.Close] when done to free the browser process.
 // Start-up is bounded by [Options.LaunchTimeout]; a failed launch reports the
 // tail of Chrome's output.
+// A spent LaunchTimeout fails without starting Chrome.
 func NewRendererContext(ctx context.Context, opts Options) (*Renderer, error) {
 	opts = opts.withDefaults()
 	output := &outputTail{}
@@ -144,6 +145,12 @@ func NewRendererContext(ctx context.Context, opts Options) (*Renderer, error) {
 		})
 	}
 	startupCtx, cancelStartup := context.WithTimeout(ctx, opts.LaunchTimeout)
+	// Avoid process startup and teardown when no launch budget remains.
+	if errors.Is(startupCtx.Err(), context.DeadlineExceeded) && ctx.Err() == nil {
+		cancelStartup()
+		combined()
+		return nil, launchError(startupError(startupCtx.Err(), opts.LaunchTimeout), "")
+	}
 	stopStartup := context.AfterFunc(startupCtx, combined)
 	err := chromedp.Do(browserCtx)
 	startupTimedOut := !stopStartup()
