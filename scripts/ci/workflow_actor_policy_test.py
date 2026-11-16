@@ -10,6 +10,7 @@ import ast
 import re
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -72,6 +73,67 @@ _NEW_FAILURES: dict[str, tuple[str, ...]] = {
 
 
 class WorkflowActorPolicyTest(unittest.TestCase):
+    def test_z_long_continuation_indent_is_bounded(self) -> None:
+        prefix = _FIXTURE_PREFIX + "    name: safe\n"
+        expected = policy._check_lines(_FIXTURE_NAME, prefix + "      safe\n")
+        self.assertEqual(expected, [])
+        started = time.monotonic()
+        findings = policy._check_lines(_FIXTURE_NAME, prefix + " " * 262144 + "safe\n")
+        self.assertEqual(findings, expected)
+        self.assertLess(time.monotonic() - started, 5)
+
+    def test_block_header_key_boundaries(self) -> None:
+        for line in ("key: |", "- key: >-", "  - run: |2"):
+            with self.subTest(line=line):
+                self.assertIsNotNone(policy._BLOCK_SCALAR.fullmatch(line))
+        self.assertIsNone(policy._BLOCK_SCALAR.fullmatch(" " * 32 + "|"))
+
+    def test_line_regex_whitespace_captures(self) -> None:
+        cases = (
+            (policy._IF_LINE, "    if:   safe  ", "expr", "safe  "),
+            (policy._JOB_IF_LINE, "    if:   safe  ", "expr", "safe"),
+            (policy._USES_LINE, "uses:   owner/action@v1  ", "val", "owner/action@v1"),
+            (policy._USES_LINE, "uses:   ", "val", ""),
+            (policy._BLOCK_SCALAR, "key: |   # comment   ", None, None),
+        )
+        for regex, line, group, expected in cases:
+            with self.subTest(line=line):
+                match = regex.fullmatch(line)
+                self.assertIsNotNone(match)
+                if group is not None:
+                    self.assertEqual(match.group(group), expected)
+
+    def test_username_allowance_refuses_job_env(self) -> None:
+        text = (
+            "on: push\njobs:\n  goreleaser:\n    env:\n"
+            "      username: ${{ github.actor }}\n"
+            "    steps:\n      - if: env.username != vars.SKIP_LOGIN\n"
+            "        run: echo safe\n"
+        )
+        findings = policy.check(".github/workflows/release-go.yml", text)
+        self.assertTrue(any("disallowed parsed scalar" in item for item in findings))
+
+    def test_username_allowance_requires_login_action(self) -> None:
+        for uses, accepted in (
+            ("actions/checkout@v4", False),
+            ("docker/login-action-extra@v3", False),
+            ("docker/login-action@v3", True),
+        ):
+            with self.subTest(uses=uses):
+                text = (
+                    "on: push\njobs:\n  goreleaser:\n    steps:\n"
+                    f"      - uses: {uses}\n"
+                    "        with:\n          username: ${{ github.actor }}\n"
+                    "      - uses: docker/login-action@v3\n"
+                )
+                findings = policy.check(".github/workflows/release-go.yml", text)
+                if accepted:
+                    self.assertEqual(findings, [])
+                else:
+                    self.assertTrue(
+                        any("disallowed parsed scalar" in item for item in findings)
+                    )
+
     def test_duplicate_key_diagnostic_preserved(self) -> None:
         findings = policy.check(_FIXTURE_NAME, "on: push\non: pull_request\njobs: {}\n")
         self.assertEqual(len(findings), 1)

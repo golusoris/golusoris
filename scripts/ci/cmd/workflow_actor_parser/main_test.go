@@ -155,6 +155,57 @@ func TestRunByteBoundaryOver(t *testing.T) {
 	}
 }
 
+func TestScalarOutputAliasBound(t *testing.T) {
+	t.Parallel()
+	text := "value: &large " + strings.Repeat("x", 512*1024) + "\nitems:\n" +
+		strings.Repeat("  - *large\n", 7000)
+	if len(text) > maxBytes {
+		t.Fatal("fixture exceeds input byte bound")
+	}
+	got := parseDocument([]byte(text))
+	if got.Error != "workflow parser: YAML scalar output bound exceeded" || len(got.Scalars) != 0 {
+		t.Fatalf("alias output: error = %q, scalars = %d", got.Error, len(got.Scalars))
+	}
+}
+
+func TestScalarOutputSmallAliases(t *testing.T) {
+	t.Parallel()
+	text := "name: &safe safe\njobs:\n  build:\n    steps:\n      - run: *safe\n      - run: *safe\n"
+	got := parseDocument([]byte(text))
+	if got.Error != "" {
+		t.Fatal(got.Error)
+	}
+	for i := range 2 {
+		item := findScalar(t, got, []string{"jobs", "build", "steps", "#" + strconv.Itoa(i), "run"}, false)
+		if item.Text != "safe" || !item.Alias {
+			t.Fatalf("alias %d = %+v; want safe alias", i, item)
+		}
+	}
+}
+
+func TestScalarOutputByteBoundary(t *testing.T) {
+	t.Parallel()
+	large := strings.Repeat("x", 512*1024)
+	tests := []struct {
+		name, text string
+		valid      bool
+	}{
+		{"unaliased near input bound", "value: " + strings.Repeat("x", maxBytes-len("value: ")-1), true},
+		{"exact", "- &large " + large + "\n" + strings.Repeat("- *large\n", 3), true},
+		{"keys count", "value: &large " + large + "\nitems:\n" + strings.Repeat("  - *large\n", 3), false},
+		{"UTF-8 bytes", "- &large " + strings.Repeat("é", 256*1024) + "\n" + strings.Repeat("- *large\n", 4), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := parseDocument([]byte(tt.text))
+			if (got.Error == "") != tt.valid {
+				t.Fatalf("scalar output error = %q; want valid %t", got.Error, tt.valid)
+			}
+		})
+	}
+}
+
 type failingWriter struct{ err error }
 
 func (w failingWriter) Write(_ []byte) (int, error) { return 0, w.err }

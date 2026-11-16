@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	maxBytes = 1 << 20
-	maxNodes = 65536
+	maxBytes       = 1 << 20
+	maxNodes       = 65536
+	maxScalarBytes = 2 * maxBytes
 )
 
 // JSON keys are the Python policy protocol; rename on both sides together.

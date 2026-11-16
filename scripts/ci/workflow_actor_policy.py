@@ -169,6 +169,14 @@ ALLOWED_LINE_PARENTS: dict[tuple[str, str, str], tuple[str, ...]] = {
     ): ("on", "push", "branches"),
 }
 
+# Bind action inputs to their decoded step rather than source-line indentation.
+ALLOWED_LINE_ACTION_INPUTS: dict[str, tuple[tuple[str, ...], str]] = {
+    "username: ${{ github.actor }}": (
+        ("jobs", "steps", "with", "username"),
+        "docker/login-action@",
+    ),
+}
+
 
 _INDEX_ACCESS = re.compile(
     r"(?:(?<=[A-Za-z0-9_\]\)])\s*)?\[\s*(?P<q>['\"])(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)\s*\]"
@@ -201,7 +209,7 @@ _IDENTITY_CONTEXT = re.compile(r"\b(?:github|gitea)\b", re.IGNORECASE)
 _EXPRESSION_SPAN = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
 _IF_LINE = re.compile(
     r"^[ \t]*(?:-[ \t]+)?(?P<key>(?P<q>['\"]?)if(?P=q))"
-    r"[ \t]*:[ \t]*(?P<expr>.*)$",
+    r"[ \t]*:[ \t]*+(?P<expr>.*)$",
     re.DOTALL,
 )
 _YAML_SIMPLE_ESCAPES = {
@@ -236,14 +244,15 @@ _JOB_KEY = re.compile(
     r"^  (?P<q>['\"]?)(?P<job>[A-Za-z0-9_-]+)(?P=q)[ \t]*:(?P<rest>.*)$"
 )
 _JOB_IF_KEY = re.compile(r"^    if:(?:\s|$)")
-_JOB_IF_LINE = re.compile(r"^    if:\s*(?P<expr>.+?)\s*$")
+_JOB_IF_LINE = re.compile(r"^    if:\s*(?P<expr>\S(?:.*\S)?)\s*$")
 _BLOCK_SCALAR = re.compile(
-    r"^(?:\s*-\s+|\s*[^:#]+:\s*)[|>](?:[1-9][+-]?|[+-][1-9]?)?(?:\s+#.*)?\s*$"
+    r"^(?:\s*-\s+|\s*[^\s:#][^:#]*:\s*)[|>](?:[1-9][+-]?|[+-][1-9]?)?(?:\s++#.*+)?\s*+$"
 )
-_SEQ_MAP_PREFIX = re.compile(r"^(?P<prefix>\s*-\s+)[^:#]+:")
+_SEQ_MAP_PREFIX = re.compile(r"^(?P<prefix>\s*-\s+)[^\s:#][^:#]*:")
 _USES_KEY = re.compile(r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:")
 _USES_LINE = re.compile(
-    r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:[ \t]*(?P<val>.*?)[ \t]*$"
+    r"^(?:-[ \t]+)?(?P<kq>['\"]?)uses(?P=kq)[ \t]*:"
+    r"[ \t]*+(?P<val>(?:[^ \t](?:.*[^ \t])?)?)[ \t]*$"
 )
 _USES_KEY_TOKEN = re.compile(r"\buses['\"]?[ \t]*:", re.IGNORECASE)
 _EXPLICIT_KEY = re.compile(r"^(?:-[ \t]+)*\?(?:[ \t]|$)")
@@ -730,24 +739,63 @@ def _parsed_job(path: list[str]) -> str:
     return path[1] if len(path) > 1 and path[0] == "jobs" else "<top>"
 
 
-def _parsed_allowed(
-    name: str, item: dict, lines: list[str], hits: _AllowanceHits | None
+def _parsed_line_scope(
+    key: tuple[str, str, str],
+    path: list[str],
+    step_uses: dict[tuple[str, ...], str],
 ) -> bool:
-    """Scope allowances to parsed jobs and refuse inheritance through aliases."""
-    path = item["path"]
-    job = _parsed_job(path)
-    lineno = item["line"] if path[-1].startswith("#") else item["key_line"]
-    line = lines[lineno - 1].strip()
-    if item["alias"]:
-        return False
-    key = (name, job, _canonical_allow_line(line))
+    """Require each listed parent or action-input shape and sibling action."""
     required_parent = ALLOWED_LINE_PARENTS.get(key)
     if required_parent is not None and tuple(path[:-1]) != required_parent:
         return False
-    if ALLOWED_LINES.get(key, "").strip():
-        if hits is not None:
-            hits.allowed_lines.add(key)
+    action_input = ALLOWED_LINE_ACTION_INPUTS.get(key[2])
+    if action_input is None:
         return True
+    shape, action_prefix = action_input
+    if (
+        len(path) != 6
+        or (path[0], path[2], path[4], path[5]) != shape
+        or re.fullmatch(r"#[0-9]+", path[3]) is None
+    ):
+        return False
+    return step_uses.get(tuple(path[:4]), "").startswith(action_prefix)
+
+
+def _parsed_line_allowed(
+    name: str,
+    item: dict,
+    lines: list[str],
+    hits: _AllowanceHits | None,
+    step_uses: dict[tuple[str, ...], str],
+) -> bool:
+    """Record exact-line allowances only after parsed ownership checks."""
+    path = item["path"]
+    lineno = item["line"] if path[-1].startswith("#") else item["key_line"]
+    line = _canonical_allow_line(lines[lineno - 1].strip())
+    key = (name, _parsed_job(path), line)
+    if not ALLOWED_LINES.get(key, "").strip() or not _parsed_line_scope(
+        key, path, step_uses
+    ):
+        return False
+    if hits is not None:
+        hits.allowed_lines.add(key)
+    return True
+
+
+def _parsed_allowed(
+    name: str,
+    item: dict,
+    lines: list[str],
+    hits: _AllowanceHits | None,
+    step_uses: dict[tuple[str, ...], str],
+) -> bool:
+    """Scope allowances to parsed jobs and refuse inheritance through aliases."""
+    if item["alias"]:
+        return False
+    if _parsed_line_allowed(name, item, lines, hits, step_uses):
+        return True
+    path = item["path"]
+    job = _parsed_job(path)
     if path != ["jobs", job, "if"] or item["key"] or item["style"]:
         return False
     if_key = (name, job, _normalise_if_expr(item["text"]))
@@ -792,10 +840,11 @@ def _parsed_scalar_finding(
     lines: list[str],
     hits: _AllowanceHits | None,
     local_ctx: _LocalScanContext | None,
+    step_uses: dict[tuple[str, ...], str],
 ) -> str | None:
     """Apply policy using decoded keys, references and alias ownership."""
     path = item["path"]
-    if not path or _parsed_allowed(name, item, lines, hits):
+    if not path or _parsed_allowed(name, item, lines, hits, step_uses):
         return None
     job = _parsed_job(path)
     lineno = item["key_line"] or item["line"]
@@ -825,9 +874,16 @@ def _parsed_findings(
         if document["error"]:
             return [f"{name}:1:<top>: {document['error']}"]
         lines = text.splitlines()
+        step_uses = {
+            tuple(item["path"][:-1]): item["text"]
+            for item in scalars[:65536]
+            if item["path"][-1:] == ["uses"] and not item["key"]
+        }
         findings: list[str] = []
         for item in scalars[:65536]:
-            finding = _parsed_scalar_finding(name, item, lines, hits, local_ctx)
+            finding = _parsed_scalar_finding(
+                name, item, lines, hits, local_ctx, step_uses
+            )
             if finding is not None:
                 findings.append(finding)
         return list(dict.fromkeys(findings))

@@ -82,9 +82,21 @@ func newScalar(item pending) scalar {
 	return s
 }
 
+func pushChildren(stack []pending, item pending) ([]pending, error) {
+	next, err := children(item)
+	if err != nil {
+		return nil, fmt.Errorf("workflow parser: walk YAML: %w", err)
+	}
+	for i := min(len(next), maxNodes) - 1; i >= 0; i-- {
+		stack = append(stack, next[i])
+	}
+	return stack, nil
+}
+
 func flatten(root *yaml.Node) ([]scalar, error) {
 	stack := []pending{{node: root}}
 	result := make([]scalar, 0, 256)
+	scalarBytes := 0
 	for visited := 0; len(stack) > 0 && visited < maxNodes; visited++ {
 		item := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
@@ -96,15 +108,17 @@ func flatten(root *yaml.Node) ([]scalar, error) {
 			continue
 		}
 		if item.node.Kind == yaml.ScalarNode {
+			scalarBytes += len(item.node.Value)
+			if scalarBytes > maxScalarBytes {
+				return nil, errors.New("workflow parser: YAML scalar output bound exceeded")
+			}
 			result = append(result, newScalar(item))
 			continue
 		}
-		next, err := children(item)
+		var err error
+		stack, err = pushChildren(stack, item)
 		if err != nil {
-			return nil, fmt.Errorf("workflow parser: walk YAML: %w", err)
-		}
-		for i := len(next) - 1; i >= 0 && i < maxNodes; i-- {
-			stack = append(stack, next[i])
+			return nil, err
 		}
 	}
 	if len(stack) != 0 {
