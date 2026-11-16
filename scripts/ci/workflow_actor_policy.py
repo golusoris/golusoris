@@ -750,7 +750,8 @@ def _write_parser_input(process: subprocess.Popen, text: str) -> None:
                 if not data:
                     break
     except BrokenPipeError:
-        pass
+        # An early parser exit closes the pipe; its exit status and output carry the verdict.
+        return
 
 
 def _parser_exchange(process: subprocess.Popen, text: str) -> bytearray:
