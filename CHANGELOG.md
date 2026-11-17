@@ -15,6 +15,17 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.22.2](https://github.com/golusoris/golusoris/compare/v0.22.1...v0.22.2) (2026-11-17)
+
+
+### Bug Fixes
+
+* **ci:** retry transient GitHub API errors in the Windows panic rescan ([#1471](https://github.com/golusoris/golusoris/issues/1471)) ([12eeed2](https://github.com/golusoris/golusoris/commit/12eeed25ebadd4ae6faf84b448f2674cd23af34b))
+* **ci:** tell release-depth tag listing and merge-base errors apart ([13300ad](https://github.com/golusoris/golusoris/commit/13300ad7c2795c38a1593e9eaad528e807a64ed4)), closes [#1454](https://github.com/golusoris/golusoris/issues/1454)
+* **db/migrate:** wait for a late database before the migrator opens ([#1472](https://github.com/golusoris/golusoris/issues/1472)) ([e89635f](https://github.com/golusoris/golusoris/commit/e89635fc31182e9f4a918ed03b1ebea9d46d116e))
+* **deps:** update github.com/jackc/pglogrepl digest to d50336b ([#1451](https://github.com/golusoris/golusoris/issues/1451)) ([b0e0d46](https://github.com/golusoris/golusoris/commit/b0e0d464540c9c9bbc54d6d3aa09749a66a5c333))
+* **pdf:** fail fast when the launch budget is already spent ([614ace7](https://github.com/golusoris/golusoris/commit/614ace70b42e3d0fd65616123b5f35eddb62d835))
+
 ## [0.22.1](https://github.com/golusoris/golusoris/compare/v0.22.0...v0.22.1) (2026-11-15)
 
 
