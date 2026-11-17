@@ -71,17 +71,15 @@ func newLateDBProxy(t *testing.T, target string) (*lateDBProxy, string) {
 	deadline, ok := ctx.Deadline()
 	require.True(t, ok)
 	require.NoError(t, listener.SetDeadline(deadline))
-	proxy.workers.Add(1)
-	go func() {
-		defer proxy.workers.Done()
+	proxy.workers.Go(func() {
 		proxy.accept(ctx, t, listener, target)
-	}()
+	})
 	return proxy, listener.Addr().String()
 }
 
 func (p *lateDBProxy) accept(ctx context.Context, t *testing.T, listener net.Listener, target string) {
 	t.Helper()
-	for attempt := 0; attempt < lateProxyConnections; attempt++ { //nolint:intrange // WHY: Scalar bound exposes fan-out to the HISS goroutine rule.
+	for attempt := range lateProxyConnections {
 		conn, err := listener.Accept()
 		if err != nil {
 			if ctx.Err() == nil {
@@ -97,11 +95,9 @@ func (p *lateDBProxy) accept(ctx context.Context, t *testing.T, listener net.Lis
 			_ = conn.Close()
 			continue
 		}
-		p.workers.Add(1)
-		go func() {
-			defer p.workers.Done()
+		p.workers.Go(func() {
 			p.forward(ctx, t, conn, target)
-		}()
+		})
 	}
 	t.Error("proxy connection bound exhausted")
 }
