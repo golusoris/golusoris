@@ -114,11 +114,13 @@ class FakeRunner:
         deleted_manifests: tuple[str, ...] = (),
         packages: bytes = b"example.test/package\n",
         fail_phase: str = "",
+        created_after_build: tuple[str, ...] = (),
     ) -> None:
         self.manifests = manifests
         self.deleted_manifests = deleted_manifests
         self.packages = packages
         self.fail_phase = fail_phase
+        self.created_after_build = created_after_build
         self.commands: list[tuple[Path, tuple[str, ...]]] = []
 
     def output(
@@ -133,6 +135,10 @@ class FakeRunner:
         self.commands.append((cwd, argv))
         if argv[0] == "git":
             manifests = self.deleted_manifests if "--deleted" in argv else self.manifests
+            if "go.mod" not in argv and any(
+                command[:2] == ("go", "build") for _, command in self.commands
+            ):
+                manifests += self.created_after_build
             return b"\0".join(path.encode() for path in manifests) + b"\0"
         if argv == ("go", "list", "./..."):
             return self.packages
@@ -289,6 +295,44 @@ class PortabilityDriverTest(TestCase):
         self.assertEqual(summary, portability.Summary(modules=2, packages=2, phases=6))
         phase_commands = [argv for _, argv in runner.commands if argv[0] == "go" and argv[1] != "list"]
         self.assertEqual(phase_commands, [argv for _ in manifests for _, argv in portability.PHASES])
+
+    def test_positive_untracked_snapshots_surround_module_phases(self) -> None:
+        manifests = ("go.mod", "nested/go.mod")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            create_repository(root, manifests)
+            runner = FakeRunner(manifests)
+            summary = verify_quiet(root, runner)
+        self.assertEqual(summary.modules, 2)
+        snapshots = [argv for _, argv in runner.commands if argv[0] == "git" and "go.mod" not in argv]
+        expected = ("git", "-C", str(root), "ls-files", "-z", "--others", "--exclude-standard")
+        self.assertEqual(snapshots, [expected] * (len(manifests) + 1))
+
+    def test_negative_build_creating_untracked_path_fails(self) -> None:
+        manifests = ("go.mod",)
+        created = "scripts/ci/cmd/sample/sample"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            create_repository(root, manifests)
+            runner = FakeRunner(manifests, created_after_build=(created,))
+            with self.assertRaisesRegex(portability.PortabilityError, re.escape(created)) as failure:
+                verify_quiet(root, runner)
+        self.assertIn(".: module phases left 1 new untracked", str(failure.exception))
+
+    def test_boundary_existing_untracked_tolerated_and_new_paths_capped(self) -> None:
+        manifests = ("go.mod",)
+        created = tuple(f"output-{index}" for index in reversed(range(6)))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            create_repository(root, manifests)
+            self.assertEqual(verify_quiet(root, FakeRunner(manifests)).modules, 1)
+            runner = FakeRunner(manifests, created_after_build=created)
+            with self.assertRaises(portability.PortabilityError) as failure:
+                verify_quiet(root, runner)
+        self.assertEqual(
+            str(failure.exception),
+            f".: module phases left 6 new untracked, non-ignored path(s): {sorted(created)[:5]!r}",
+        )
 
     def test_negative_empty_discovery_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
