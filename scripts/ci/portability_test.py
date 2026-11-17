@@ -301,11 +301,13 @@ class PortabilityDriverTest(TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             create_repository(root, manifests)
+            # The driver runs git on the resolved root (8.3 names on Windows, /private on macOS).
+            resolved = str(root.resolve(strict=True))
             runner = FakeRunner(manifests)
             summary = verify_quiet(root, runner)
         self.assertEqual(summary.modules, 2)
         snapshots = [argv for _, argv in runner.commands if argv[0] == "git" and "go.mod" not in argv]
-        expected = ("git", "-C", str(root), "ls-files", "-z", "--others", "--exclude-standard")
+        expected = ("git", "-C", resolved, "ls-files", "-z", "--others", "--exclude-standard")
         self.assertEqual(snapshots, [expected] * (len(manifests) + 1))
 
     def test_negative_build_creating_untracked_path_fails(self) -> None:
