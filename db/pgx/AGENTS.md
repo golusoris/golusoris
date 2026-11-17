@@ -13,6 +13,7 @@ Provides `*pgxpool.Pool` as fx dependency. Reads config from `config.Config["db"
 - All app code that needs Postgres connection injects `*pgxpool.Pool` from this module — never call `pgxpool.New*` directly.
 - Slow-query logging is on by default at 200ms. Set `db.tracing.slow=0` to disable.
 - Connection retry on start uses exponential backoff (defaults: 10 attempts, 50ms→5s). Tune via `db.retry.*` keys.
+- `Retry` = pool start-up retry; exported for connections opened outside pool.
 - Pool bounds: min nonnegative; max positive; min <= max. Durations nonnegative.
 - Retry attempts and delays positive; initial <= max; doubling saturates at max.
 - Nil and typed-nil custom tracers ignored before multitracer composition.

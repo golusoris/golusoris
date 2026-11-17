@@ -23,9 +23,10 @@ other golang-migrate database URL whose driver program registers.
 - `pgxToMigrateURL` rewrites `postgres://` → `pgx5://` so users keep their normal pgx DSN.
 - `New` applies `db.ssl.*` + `db.password_file` via `dbpgx.Options.ConnString` only to inherited `db.dsn`.
   Explicit `db.migrate.dsn` = own role: used as given, scheme rewritten only. #810.
-  (pool precedence; files read once at construction, no rotation). No other `db.*` option applies.
+  (pool precedence; files read once at construction, no rotation).
   Keyword/value DSN refused; `db.ssl.*` file path with space refused (driver re-encodes space as `+`). #771.
 - `Module` / `ProvideMigrator(build)` build `*Migrator` lazily; `auto=true` forces build at fx start (Up runs with no consumer, #1330), one instance, one `Bind`.
+- `Module` waits via `dbpgx.Retry` with `db.retry` and `db.connect_timeout` before golang-migrate open; explicit `db.migrate.dsn` included; `New` / `Open` fail fast.
 - Driver-specific modules reuse `LoadOptions` (config `db.migrate`) and `Bind`
   (Up on start when `auto`, best-effort Close on stop); never copy them.
 - SQLite lives in `db/migrate/sqlite`, own package, so PostgreSQL-only

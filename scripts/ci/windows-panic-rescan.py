@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 
 REPO = os.environ.get("GITHUB_REPOSITORY", "golusoris/golusoris")
 ISSUE = "800"
@@ -25,16 +26,40 @@ FAIL_BUN = re.compile(r"FAIL\s+github\.com/golusoris/golusoris/db/bun\s")
 # #870 (cd0d780) merged here; earlier crashes are the known pre-fix cause.
 FIX_FLOOR = "2026-10-15T15:20:00Z"
 GH_TIMEOUT_SECONDS = 300
+API_ATTEMPTS = 3
+TRANSIENT_API_ERROR = re.compile(r"\bHTTP (?:5[0-9]{2}|429)\b")
+
+
+def retry_delay_seconds() -> int:
+    value = os.environ.get("RESCAN_RETRY_DELAY_SECONDS", "5")
+    try:
+        delay = int(value)
+    except ValueError as err:
+        raise RuntimeError("RESCAN_RETRY_DELAY_SECONDS must be an integer from 0 to 60") from err
+    if not 0 <= delay <= 60:
+        raise RuntimeError("RESCAN_RETRY_DELAY_SECONDS must be an integer from 0 to 60")
+    return delay
 
 
 def gh(args: list[str]) -> str:
-    out = subprocess.run(  # noqa: S603 - fixed gh subcommands built in this file.
-        ["gh", *args],  # noqa: S607 - gh CLI on runner PATH.
-        capture_output=True, text=True, timeout=GH_TIMEOUT_SECONDS, check=False,
-    )
-    if out.returncode != 0:
-        raise RuntimeError(f"gh {' '.join(args[:3])}: rc={out.returncode}: {out.stderr.strip()[:300]}")
-    return out.stdout
+    delay = retry_delay_seconds()
+    message = ""
+    for attempt in range(1, API_ATTEMPTS + 1):
+        out = subprocess.run(  # noqa: S603 - fixed gh subcommands built in this file.
+            ["gh", *args],  # noqa: S607 - gh CLI on runner PATH.
+            capture_output=True, text=True, timeout=GH_TIMEOUT_SECONDS, check=False,
+        )
+        if out.returncode == 0:
+            return out.stdout
+        message = f"gh {' '.join(args[:3])}: rc={out.returncode}: {out.stderr.strip()[:300]}"
+        # Retry only explicit transient API statuses so other failures stay closed.
+        if not TRANSIENT_API_ERROR.search(out.stderr):
+            raise RuntimeError(message)
+        if attempt < API_ATTEMPTS:
+            warning = message.replace("\n", " ").replace("\r", " ")
+            print(f"windows-panic-rescan: warning: attempt {attempt}/{API_ATTEMPTS}: {warning}", file=sys.stderr)
+            time.sleep(delay * 2 ** (attempt - 1))
+    raise RuntimeError(message)
 
 
 def failed_runs(since: str) -> list[str]:
