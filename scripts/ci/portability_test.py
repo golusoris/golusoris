@@ -29,6 +29,7 @@ import portability
 
 ROOT = Path(__file__).resolve().parents[2]
 UNSAFE_TMPDIR = "/tmp"  # noqa: S108 - fallback selection input, never written. # nosec B108
+PHASE_HEADS = frozenset(argv[:2] for _, argv in portability.PHASES)
 
 
 # Two pipe joins, the tree kill, its grace and the direct-child reap, plus 3 s for two interpreter starts (Windows took 4.97 s).
@@ -302,13 +303,18 @@ class PortabilityDriverTest(TestCase):
             root = Path(directory)
             create_repository(root, manifests)
             # The driver runs git on the resolved root (8.3 names on Windows, /private on macOS).
-            resolved = str(root.resolve(strict=True))
+            resolved = root.resolve(strict=True)
             runner = FakeRunner(manifests)
             summary = verify_quiet(root, runner)
         self.assertEqual(summary.modules, 2)
-        snapshots = [argv for _, argv in runner.commands if argv[0] == "git" and "go.mod" not in argv]
-        expected = ("git", "-C", resolved, "ls-files", "-z", "--others", "--exclude-standard")
-        self.assertEqual(snapshots, [expected] * (len(manifests) + 1))
+        snapshot = (resolved, ("git", "-C", str(resolved), "ls-files", "-z", "--others", "--exclude-standard"))
+        trace = [entry for entry in runner.commands if entry == snapshot or entry[1][:2] in PHASE_HEADS]
+        modules = [resolved.joinpath(*manifest.split("/")[:-1]) for manifest in manifests]
+        # Each snapshot follows its own module's phases, so a later module cannot hide earlier output.
+        expected = [snapshot] + [
+            step for module in modules for step in [*((module, argv) for _, argv in portability.PHASES), snapshot]
+        ]
+        self.assertEqual(trace, expected)
 
     def test_negative_build_creating_untracked_path_fails(self) -> None:
         manifests = ("go.mod",)
