@@ -169,11 +169,18 @@ func validateOptions(opts Options) error {
 	if err := validatePoolOptions(opts.Pool); err != nil {
 		return err
 	}
-	if opts.ConnectTimeout <= 0 {
-		return errors.New("db/pgx: connect timeout must be positive")
+	if err := validateConnectOptions(opts); err != nil {
+		return err
 	}
 	if opts.Tracing.Slow < 0 {
 		return errors.New("db/pgx: slow-query threshold must not be negative")
+	}
+	return nil
+}
+
+func validateConnectOptions(opts Options) error {
+	if opts.ConnectTimeout <= 0 {
+		return errors.New("db/pgx: connect timeout must be positive")
 	}
 	return validateRetryOptions(opts.Retry)
 }
@@ -296,21 +303,43 @@ func connectWithRetry(
 	logger *slog.Logger,
 	clk clock.Clock,
 ) (*pgxpool.Pool, error) {
+	var pool *pgxpool.Pool
+	err := Retry(ctx, opts, logger, clk, func(attemptCtx context.Context) error {
+		candidate, err := pgxpool.NewWithConfig(attemptCtx, cfg)
+		if err != nil {
+			return err //nolint:wrapcheck // WHY: Retry wraps failures once, preserving pool logs and errors.
+		}
+		if err = candidate.Ping(attemptCtx); err != nil {
+			candidate.Close()
+			return err //nolint:wrapcheck // WHY: Retry wraps failures once, preserving pool logs and errors.
+		}
+		pool = candidate
+		return nil
+	})
+	return pool, err
+}
+
+// Retry runs connect under the pool's start-up retry policy, for connections
+// opened outside the pool, such as the migrator's. It defaults options, runs
+// opts.Retry.Attempts tries with opts.ConnectTimeout per try and backoff on clk,
+// and bounds the whole run by the connect budget.
+func Retry(ctx context.Context, opts Options, logger *slog.Logger, clk clock.Clock, connect func(context.Context) error) error {
+	opts = opts.withDefaults()
+	if err := validateRetryInputs(opts, logger, clk, connect); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(ctx, opts.connectBudget())
+	defer cancel()
 	delay := opts.Retry.Initial
 	var lastErr error
 	for attempt := 1; attempt <= opts.Retry.Attempts; attempt++ {
-		attemptCtx, cancel := context.WithTimeout(ctx, opts.ConnectTimeout)
-		pool, err := pgxpool.NewWithConfig(attemptCtx, cfg)
+		attemptCtx, attemptCancel := context.WithTimeout(ctx, opts.ConnectTimeout)
+		err := connect(attemptCtx)
+		attemptCancel()
 		if err == nil {
-			err = pool.Ping(attemptCtx)
-			if err == nil {
-				cancel()
-				logger.InfoContext(ctx, "db/pgx: connected", slog.Int("attempt", attempt))
-				return pool, nil
-			}
-			pool.Close()
+			logger.InfoContext(ctx, "db/pgx: connected", slog.Int("attempt", attempt))
+			return nil
 		}
-		cancel()
 		lastErr = err
 		if attempt == opts.Retry.Attempts {
 			break
@@ -324,12 +353,28 @@ func connectWithRetry(
 		)
 		select {
 		case <-ctx.Done():
-			return nil, fmt.Errorf("db/pgx: connect canceled: %w", ctx.Err())
+			return fmt.Errorf("db/pgx: connect canceled: %w", ctx.Err())
 		case <-clk.After(delay):
 		}
 		delay = nextRetryDelay(delay, opts.Retry.Max)
 	}
-	return nil, fmt.Errorf("db/pgx: connect failed after %d attempts: %w", opts.Retry.Attempts, lastErr)
+	return fmt.Errorf("db/pgx: connect failed after %d attempts: %w", opts.Retry.Attempts, lastErr)
+}
+
+func validateRetryInputs(opts Options, logger *slog.Logger, clk clock.Clock, connect func(context.Context) error) error {
+	if err := validateConnectOptions(opts); err != nil {
+		return err
+	}
+	if logger == nil {
+		return errors.New("db/pgx: nil logger")
+	}
+	if validate.IsNil(clk) {
+		return errors.New("db/pgx: nil clock")
+	}
+	if connect == nil {
+		return errors.New("db/pgx: nil connect")
+	}
+	return nil
 }
 
 // connectBudget bounds the whole start-up connect: every attempt's timeout
