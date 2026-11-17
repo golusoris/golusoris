@@ -21,7 +21,7 @@ jobs:
        contains(github.event.issue.body, '[x]'))
     runs-on: cauda-k8s-office-canary
     container:
-      image: docker.io/renovate/renovate:44@sha256:7dba1a3b916a2cf302ba0df458ddcc8fcbac3c92d0fe9882ac13ba0363de656b
+      image: docker.io/renovate/renovate:44@sha256:68d74af05716df73410c5bd2dd8b3e6cbb0ebd21db1055d6d222e98a21d2d77a
     timeout-minutes: 30
     steps:
       - name: Run Renovate scoped to this repository
