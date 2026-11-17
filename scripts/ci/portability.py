@@ -538,6 +538,19 @@ def module_name(root: Path, module: Path) -> str:
     return "." if relative == Path() else relative.as_posix()
 
 
+def untracked_paths(
+    root: Path, runner: ProcessRunner, environment: dict[str, str]
+) -> set[str]:
+    """List bounded paths Git neither tracks nor ignores."""
+    output = runner.output(
+        ("git", "-C", str(root), "ls-files", "-z", "--others", "--exclude-standard"),
+        cwd=root,
+        environment=environment,
+        timeout=DISCOVERY_TIMEOUT_SECONDS,
+    )
+    return set(decode_manifest_output(output, "untracked path discovery"))
+
+
 def verify_repository(root: Path, runner: ProcessRunner | None = None) -> Summary:
     """Run every portability phase for every discovered module."""
     resolved_root = root.resolve(strict=True)
@@ -550,6 +563,8 @@ def verify_repository(root: Path, runner: ProcessRunner | None = None) -> Summar
         if not modules:
             print("ci-scope: no Go module changed; skipping portability", flush=True)
             return Summary(modules=0, packages=0, phases=0)
+    # Existing untracked paths belong to the caller, so only new paths fail.
+    initial_untracked = untracked_paths(resolved_root, process_runner, environment)
     package_total = 0
     phase_total = 0
     for module in modules:
@@ -566,6 +581,12 @@ def verify_repository(root: Path, runner: ProcessRunner | None = None) -> Summar
                 timeout=PHASE_TIMEOUT_SECONDS,
             )
             phase_total += 1
+        created = sorted(untracked_paths(resolved_root, process_runner, environment) - initial_untracked)
+        if created:
+            raise PortabilityError(
+                f"{name}: module phases left {len(created)} new untracked, non-ignored path(s): "
+                f"{created[:5]!r}"
+            )
     expected_phases = len(modules) * len(PHASES)
     if package_total == 0 or phase_total != expected_phases:
         raise PortabilityError(

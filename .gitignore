@@ -56,6 +56,8 @@ __pycache__/
 # Compiled deploy binaries are build outputs, never checked in (OSSF Scorecard BinaryArtifacts).
 /deploy/pulumi/pulumi
 /deploy/multiregion/multiregion
+/scripts/ci/cmd/workflow_actor_parser/workflow_actor_parser
+/scripts/ci/cmd/workflow_actor_parser/workflow_actor_parser.exe
 
 # Claude Code worktrees (personal, machine-local; never checked in).
 /.claude/worktrees/
