@@ -26,8 +26,8 @@
 // A migrator that inherits db.dsn also honours db.ssl.* and db.password_file,
 // with the pool's precedence over the DSN; it reads those files once, when it
 // is constructed. An explicit db.migrate.dsn names its own role and is used as
-// given: it carries its password and TLS parameters itself. No other db.*
-// option applies to the migrator.
+// given: it carries its password and TLS parameters itself. Module also uses
+// db.retry and db.connect_timeout to wait for either DSN before opening.
 package migrate
 
 import (
@@ -46,8 +46,10 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5" // registers pgx5 scheme
 	_ "github.com/golang-migrate/migrate/v4/source/file"     // registers the file:// source for Options.Path
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"go.uber.org/fx"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	dbpgx "github.com/golusoris/golusoris/db/pgx"
 )
@@ -148,17 +150,58 @@ func (m *Migrator) Close() error {
 // precedence over Path. opts.DSN is used as given; when it is empty the
 // migrator inherits pgxOpts.DSN with db.ssl.* and db.password_file applied.
 func New(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (*Migrator, error) {
-	if opts.DSN == "" && pgxOpts.DSN == "" {
-		return nil, errors.New("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
-	}
-	if logger == nil {
-		return nil, errors.New("db/migrate: nil logger")
-	}
-	dbURL, err := databaseURL(opts.DSN, pgxOpts)
+	dbURL, err := checkedDatabaseURL(opts, pgxOpts, logger)
 	if err != nil {
 		return nil, err
 	}
 	return Open(opts, dbURL, logger)
+}
+
+func checkedDatabaseURL(opts Options, pgxOpts dbpgx.Options, logger *slog.Logger) (string, error) {
+	if opts.DSN == "" && pgxOpts.DSN == "" {
+		return "", errors.New("db/migrate: no DSN (set db.migrate.dsn or db.dsn)")
+	}
+	if logger == nil {
+		return "", errors.New("db/migrate: nil logger")
+	}
+	return databaseURL(opts.DSN, pgxOpts)
+}
+
+type moduleParams struct {
+	fx.In
+
+	Options dbpgx.Options
+	Clock   clock.Clock
+}
+
+func buildMigrator(opts Options, params moduleParams, logger *slog.Logger) (*Migrator, error) {
+	dbURL, err := checkedDatabaseURL(opts, params.Options, logger)
+	if err != nil {
+		return nil, err
+	}
+	if err = dbpgx.Retry(context.Background(), params.Options, logger, params.Clock, func(ctx context.Context) error {
+		return probeDatabase(ctx, dbURL)
+	}); err != nil {
+		return nil, fmt.Errorf("db/migrate: wait for database: %w", err)
+	}
+	return Open(opts, dbURL, logger)
+}
+
+func probeDatabase(ctx context.Context, dbURL string) error {
+	purl, err := url.Parse(dbURL)
+	if err != nil {
+		return fmt.Errorf("db/migrate: parse database URL: %w", err)
+	}
+	purl = migrate.FilterCustomQuery(purl)
+	purl.Scheme = "postgres"
+	conn, err := pgx.Connect(ctx, purl.String())
+	if err != nil {
+		return fmt.Errorf("db/migrate: connect: %w", err)
+	}
+	if err = conn.Close(ctx); err != nil {
+		return fmt.Errorf("db/migrate: close connection: %w", err)
+	}
+	return nil
 }
 
 // databaseURL keeps an explicit migrator DSN as given: it names its own role,
@@ -351,8 +394,8 @@ func ProvideMigrator[D any](build func(Options, D, *slog.Logger) (*Migrator, err
 
 // Module provides a *Migrator for PostgreSQL and (when db.migrate.auto=true)
 // runs Up() on fx Start, whether or not anything requests the *Migrator.
-// Requires [config.Module], [log.Module], and [dbpgx.Module] in the same fx
-// graph.
+// Requires [config.Module], [log.Module], [clock.Module], and [dbpgx.Module]
+// in the same fx graph. Waits for the database like the pool before opening.
 //
 // Apps embedding migrations should override Options via fx.Replace:
 //
@@ -360,5 +403,5 @@ func ProvideMigrator[D any](build func(Options, D, *slog.Logger) (*Migrator, err
 var Module = fx.Module(
 	"golusoris.db.migrate",
 	fx.Provide(LoadOptions),
-	ProvideMigrator(New),
+	ProvideMigrator(buildMigrator),
 )

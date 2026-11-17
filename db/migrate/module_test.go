@@ -17,6 +17,7 @@ import (
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 
+	"github.com/golusoris/golusoris/core/clock"
 	"github.com/golusoris/golusoris/core/config"
 	"github.com/golusoris/golusoris/core/log"
 	dbmigrate "github.com/golusoris/golusoris/db/migrate"
@@ -29,10 +30,16 @@ const moduleQueryTimeout = 30 * time.Second
 
 func moduleOptions(t *testing.T, dsn string, mopts dbmigrate.Options, logger *slog.Logger, extra ...fx.Option) []fx.Option {
 	t.Helper()
+	return moduleOptionsWithPGX(t, dbpgx.Options{DSN: dsn}, mopts, logger, extra...)
+}
+
+func moduleOptionsWithPGX(t *testing.T, pgxOpts dbpgx.Options, mopts dbmigrate.Options, logger *slog.Logger, extra ...fx.Option) []fx.Option {
+	t.Helper()
 	cfg, err := config.New(config.Options{EnvPrefix: "MIGRATE_MODULE_TEST_"})
 	require.NoError(t, err)
 	return append([]fx.Option{
-		fx.Supply(cfg, logger, dbpgx.Options{DSN: dsn}),
+		fx.Supply(cfg, logger, pgxOpts),
+		clock.Module,
 		dbmigrate.Module,
 		fx.Replace(mopts),
 	}, extra...)
