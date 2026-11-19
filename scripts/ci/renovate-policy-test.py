@@ -1112,8 +1112,24 @@ RATE_LIMIT_CAPS = {
     "prHourlyLimit": 2,
     "commitHourlyLimit": 4,
 }
-UNLIMITING_PRESETS = frozenset(
-    {":disableRateLimiting", ":prConcurrentLimitNone", ":prHourlyLimitNone"}
+LIMIT_PRESETS: dict[str, dict[str, int]] = {
+    ":disableRateLimiting": {
+        "commitHourlyLimit": 0,
+        "prConcurrentLimit": 0,
+        "prHourlyLimit": 0,
+    },
+    ":prConcurrentLimit10": {"prConcurrentLimit": 10},
+    ":prConcurrentLimit20": {"prConcurrentLimit": 20},
+    ":prConcurrentLimitNone": {"prConcurrentLimit": 0},
+    ":prHourlyLimit1": {"prHourlyLimit": 1},
+    ":prHourlyLimit2": {"prHourlyLimit": 2},
+    ":prHourlyLimit4": {"prHourlyLimit": 4},
+    ":prHourlyLimitNone": {"prHourlyLimit": 0},
+}
+LIFTING_PRESETS = frozenset(
+    preset
+    for preset, limits in LIMIT_PRESETS.items()
+    if any(value == 0 or value > RATE_LIMIT_CAPS[key] for key, value in limits.items())
 )
 
 
@@ -1121,7 +1137,7 @@ MAX_CONFIG_NODES = 65536
 
 
 def limit_overrides(config: dict[str, object]) -> list[str]:
-    """Return every limit key or unlimiting preset below the top level, where it would beat the repository cap."""
+    """Return every limit key or limit preset below the top level to preserve repository pacing."""
     found: list[str] = []
     pending: list[object] = list(config.values())
     for _ in range(MAX_CONFIG_NODES):
@@ -1130,10 +1146,12 @@ def limit_overrides(config: dict[str, object]) -> list[str]:
         node = pending.pop()
         if isinstance(node, dict):
             found.extend(key for key in RATE_LIMIT_CAPS if key in node)
-            # A package rule may extend presets too; one 0 limit lifts the cap for its whole branch.
+            # Package rules can override repository pacing through presets as well as explicit limits.
             nested = node.get("extends")
             if isinstance(nested, list):
-                found.extend(p for p in nested if isinstance(p, str) and p in UNLIMITING_PRESETS)
+                found.extend(
+                    p for p in nested if isinstance(p, str) and p in LIMIT_PRESETS
+                )
             pending.extend(node.values())
         elif isinstance(node, list):
             pending.extend(node)
@@ -1147,7 +1165,7 @@ def rate_limits_valid(config: dict[str, object]) -> bool:
         if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= cap:
             return False
     extends = config.get("extends")
-    if not isinstance(extends, list) or UNLIMITING_PRESETS.intersection(extends):
+    if not isinstance(extends, list) or LIFTING_PRESETS.intersection(extends):
         return False
     return not limit_overrides(config)
 
@@ -1171,6 +1189,12 @@ def rate_limit_mutants(config: dict[str, object]) -> dict[str, dict[str, object]
     manager["gomod"]["branchConcurrentLimit"] = 0
     rule_preset = json.loads(json.dumps(config))
     rule_preset["packageRules"].append({"matchManagers": ["gomod"], "extends": [":disableRateLimiting"]})
+    rule_hourly_preset = json.loads(json.dumps(config))
+    rule_hourly_preset["packageRules"].append(
+        {"matchManagers": ["gomod"], "extends": [":prHourlyLimit4"]}
+    )
+    concurrent_preset = json.loads(json.dumps(config))
+    concurrent_preset["extends"].append(":prConcurrentLimit20")
     mutants.update(
         {
             "commit limit zero means unlimited": unlimited,
@@ -1179,6 +1203,8 @@ def rate_limit_mutants(config: dict[str, object]) -> dict[str, dict[str, object]
             "package rule lifts a limit": rule,
             "manager block lifts a limit": manager,
             "package rule extends an unlimiting preset": rule_preset,
+            "package rule extends a preset above the hourly cap": rule_hourly_preset,
+            "preset above the concurrent cap": concurrent_preset,
         }
     )
     return mutants
@@ -1189,8 +1215,8 @@ def test_rate_limits(config: dict[str, object]) -> bool:
     if not rate_limits_valid(config):
         caps = ", ".join(f"{key} 1..{cap}" for key, cap in RATE_LIMIT_CAPS.items())
         print(
-            f"renovate.json must set {caps} at top level, extend no unlimiting preset "
-            "and neither override a limit nor extend such a preset in a rule or manager block",
+            f"renovate.json must set {caps} at top level, extend no preset that lifts a cap "
+            "and neither override a limit nor extend a limit preset in a rule or manager block",
             file=sys.stderr,
         )
         return False
