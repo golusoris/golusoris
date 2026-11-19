@@ -24,6 +24,9 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {}
 
 _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?P<rest>.*)$")
 _CHILD_KEY = re.compile(r"^  (?P<key>[A-Za-z_-]+):(?P<rest>.*)$")
+_JOB_KEY = re.compile(r"^  (?P<key>[A-Za-z0-9_-]+):")
+_JOB_IF = re.compile(r"^    if:(?P<rest>.*)$")
+_ALWAYS = re.compile(r"\balways\s*\(\s*\)")
 
 
 def _top_blocks(text: str) -> dict[str, tuple[str, list[str]]]:
@@ -104,20 +107,54 @@ def _cancel_findings(name: str, cancel: str) -> list[str]:
     return findings
 
 
+def _job_conditions(lines: list[str]) -> dict[str, str]:
+    """Map each job id to its job-level if: text, block scalars joined."""
+    conditions: dict[str, str] = {}
+    job = ""
+    in_block = False
+    for line in lines:
+        if in_block and (line.startswith("      ") or not line.strip()):
+            conditions[job] += " " + line.strip()
+            continue
+        in_block = False
+        job_match = _JOB_KEY.match(line)
+        if job_match:
+            job = job_match.group("key")
+            continue
+        if_match = _JOB_IF.match(line)
+        if job and if_match:
+            conditions[job] = if_match.group("rest").strip()
+            in_block = conditions[job][:1] in {"|", ">"}
+    return conditions
+
+
+def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> list[str]:
+    conditions = _job_conditions(blocks.get("jobs", ("", []))[1])
+    return [
+        f"{name}: job {job} runs under always(), which survives cancellation and "
+        "holds the concurrency group; use ${{ !cancelled() }}"
+        for job, condition in sorted(conditions.items())
+        if _ALWAYS.search(condition)
+    ]
+
+
 def check(name: str, text: str, today: datetime.date) -> list[str]:
     """Return the policy findings for one workflow file."""
     blocks = _top_blocks(text)
     events = _events(blocks)
     if not events.intersection(PR_EVENTS):
-        return []
+        # A called workflow runs inside its caller's run, so always() there holds the caller's group.
+        return _always_findings(name, blocks) if "workflow_call" in events else []
     exceptions = _exception_findings(name, today)
     if exceptions is not None:
         return exceptions
     if "concurrency" not in blocks:
         return [f"{name}: pull-request workflow has no top-level concurrency group"]
     fields = _concurrency_fields(blocks["concurrency"][1])
-    return _group_findings(name, fields.get("group", ""), events) + _cancel_findings(
-        name, fields.get("cancel-in-progress", "")
+    return (
+        _group_findings(name, fields.get("group", ""), events)
+        + _cancel_findings(name, fields.get("cancel-in-progress", ""))
+        + _always_findings(name, blocks)
     )
 
 
@@ -141,6 +178,10 @@ concurrency:
 jobs: {}
 """
 _TODAY = datetime.date(2026, 10, 16)
+
+
+def _with_jobs(body: str) -> str:
+    return _GOOD.replace("jobs: {}\n", "jobs:\n" + body)
 
 
 class WorkflowConcurrencyPolicyTest(unittest.TestCase):
@@ -169,6 +210,38 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
             "  cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}\n"
         )
         self.assertIn("pull_request.number", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_always_aggregate_fails(self) -> None:
+        text = _with_jobs("  ci-success:\n    if: always()\n    needs: [lint]\n")
+        self.assertIn("job ci-success runs under always()", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_not_cancelled_aggregate_passes(self) -> None:
+        text = _with_jobs("  ci-success:\n    if: ${{ !cancelled() }}\n    needs: [lint]\n")
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_always_in_block_scalar_fails(self) -> None:
+        text = _with_jobs(
+            "  gate:\n    if: >-\n      always() &&\n      github.event_name == 'push'\n"
+            "    runs-on: ubuntu-26.04\n"
+        )
+        self.assertIn("job gate runs under always()", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_step_level_always_passes(self) -> None:
+        text = _with_jobs("  upload:\n    steps:\n      - run: 'true'\n        if: always()\n")
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_called_workflow_always_fails(self) -> None:
+        text = "on:\n  workflow_call:\njobs:\n  gate:\n    if: ${{ always() }}\n"
+        self.assertEqual(len(check("w.yml", text, _TODAY)), 1)
+
+    def test_restored_always_on_ci_aggregate_fails(self) -> None:
+        ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+        mutant = ci.replace("    if: ${{ !cancelled() }}\n", "    if: always()\n")
+        self.assertNotEqual(mutant, ci)
+        self.assertIn(
+            "job ci-success runs under always()",
+            " ".join(check(".github/workflows/ci.yml", mutant, _TODAY)),
+        )
 
     def test_inline_trigger_list_is_seen(self) -> None:
         self.assertNotEqual(
