@@ -9,6 +9,9 @@
     "dependencies"
   ],
   "prConcurrentLimit": 5,
+  "branchConcurrentLimit": 5,
+  "prHourlyLimit": 2,
+  "commitHourlyLimit": 4,
   "gomod": {
     "enabled": true,
     "vulnerabilityAlerts": {

@@ -1104,6 +1104,96 @@ def test_runner_hold(config: dict[str, object]) -> bool:
     return True
 
 
+# Each Renovate push starts about nine workflows on the shared organisation runner pool, so
+# pushes, not open PRs, set the queue depth; commitHourlyLimit is the knob that paces them.
+RATE_LIMIT_CAPS = {
+    "prConcurrentLimit": 5,
+    "branchConcurrentLimit": 5,
+    "prHourlyLimit": 2,
+    "commitHourlyLimit": 4,
+}
+UNLIMITING_PRESETS = frozenset(
+    {":disableRateLimiting", ":prConcurrentLimitNone", ":prHourlyLimitNone"}
+)
+
+
+MAX_CONFIG_NODES = 65536
+
+
+def limit_overrides(config: dict[str, object]) -> list[str]:
+    """Return every limit key set below the top level, where it would beat the repository cap."""
+    found: list[str] = []
+    pending: list[object] = list(config.values())
+    for _ in range(MAX_CONFIG_NODES):
+        if not pending:
+            return found
+        node = pending.pop()
+        if isinstance(node, dict):
+            found.extend(key for key in RATE_LIMIT_CAPS if key in node)
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    return [f"more than {MAX_CONFIG_NODES} config nodes"]
+
+
+def rate_limits_valid(config: dict[str, object]) -> bool:
+    """Require explicit, bounded, non-zero run pacing that no rule or preset lifts."""
+    for key, cap in RATE_LIMIT_CAPS.items():
+        value = config.get(key)
+        if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= cap:
+            return False
+    extends = config.get("extends")
+    if not isinstance(extends, list) or UNLIMITING_PRESETS.intersection(extends):
+        return False
+    return not limit_overrides(config)
+
+
+def rate_limit_mutants(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Build the configurations the pacing check must refuse."""
+    mutants: dict[str, dict[str, object]] = {}
+    for key in RATE_LIMIT_CAPS:
+        dropped = json.loads(json.dumps(config))
+        del dropped[key]
+        mutants[f"{key} dropped"] = dropped
+    unlimited = json.loads(json.dumps(config))
+    unlimited["commitHourlyLimit"] = 0
+    raised = json.loads(json.dumps(config))
+    raised["prHourlyLimit"] = 10
+    preset = json.loads(json.dumps(config))
+    preset["extends"].append(":disableRateLimiting")
+    rule = json.loads(json.dumps(config))
+    rule["packageRules"].append({"matchManagers": ["gomod"], "prHourlyLimit": 0})
+    manager = json.loads(json.dumps(config))
+    manager["gomod"]["branchConcurrentLimit"] = 0
+    mutants.update(
+        {
+            "commit limit zero means unlimited": unlimited,
+            "hourly limit raised": raised,
+            "unlimiting preset": preset,
+            "package rule lifts a limit": rule,
+            "manager block lifts a limit": manager,
+        }
+    )
+    return mutants
+
+
+def test_rate_limits(config: dict[str, object]) -> bool:
+    """Keep Renovate's push rate under the runner pool and prove the check refuses each weakening."""
+    if not rate_limits_valid(config):
+        caps = ", ".join(f"{key} 1..{cap}" for key, cap in RATE_LIMIT_CAPS.items())
+        print(
+            f"renovate.json must set {caps} at top level, extend no unlimiting preset "
+            "and override no limit in a rule or manager block",
+            file=sys.stderr,
+        )
+        return False
+    for label, mutated in rate_limit_mutants(config).items():
+        if rate_limits_valid(mutated):
+            print(f"rate limit negative control was accepted: {label}", file=sys.stderr)
+            return False
+    return True
+
+
 def test_vulnerability_gomod_range(config: dict[str, object]) -> bool:
     """Report errors from the Go vulnerability range policy."""
     errors = renovate_vulnerability.gomod_range_errors(config)
@@ -1261,6 +1351,7 @@ def main() -> int:
         test_chromedp_group(config),
         test_minimum_age(config),
         test_runner_hold(config),
+        test_rate_limits(config),
         test_vulnerability_gomod_range(config),
         test_backup_restore_dockerfile(config),
         test_syft_workflow_pins(config),
