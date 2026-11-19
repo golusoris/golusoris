@@ -68,8 +68,8 @@ exceptions:
     expires: "2027-01-16"
   - rule: api-compatibility
     path: testutil/pact/go.mod
-    reason: "Category B, 3 days from 2026-11-15, renewed while cordanaLLM/praetor#1907 stays open: Go 1.27.4 (CVE-2026-97038 fix) scans every lib-like file under a cgo -L directory it treats as local; pact-go passes -L/tmp and the pinned compare step leaves TMPDIR on /tmp, so go list -export fails on its own /tmp/go-build archives. Ends when the engine compare step exports TMPDIR off /tmp (cordanaLLM/praetor#1907) and the next readopt drops this entry."
-    expires: "2026-11-18"
+    reason: "Category B, 3 days from 2026-11-19, renewed while cordanaLLM/praetor#1907 stays open: Go 1.27.4 (CVE-2026-97038 fix) scans every lib-like file under a cgo -L directory it treats as local; pact-go passes -L/tmp and the pinned compare step leaves TMPDIR on /tmp, so go list -export fails on its own /tmp/go-build archives. Ends when the engine compare step exports TMPDIR off /tmp (cordanaLLM/praetor#1907) and the next readopt drops this entry."
+    expires: "2026-11-22"
 # Style-rule exclusions for the praetor documentation gate (make docs-lint); the
 # private-link rule still reads every Markdown file.
 documentation:
