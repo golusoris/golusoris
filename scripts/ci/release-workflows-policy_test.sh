@@ -269,6 +269,16 @@ check_release_please_workflow() {
 		printf 'release-please lacks GitHub App token minting: %s\n' "$workflow" >&2
 		return 1
 	fi
+	awk '
+		/^[[:space:]]*-[[:space:]]/ { mint = 0; token_id = 0 }
+		/^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]*actions\/create-github-app-token@/ { mint = 1 }
+		/^[[:space:]]*(-[[:space:]]+)?id:[[:space:]]*app-token[[:space:]]*(#.*)?$/ { token_id = 1 }
+		mint && token_id { found = 1; exit }
+		END { exit !found }
+	' "$workflow" || {
+		printf 'release-please App token step id is not app-token: %s\n' "$workflow" >&2
+		return 1
+	}
 	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
 	awk '
 		/uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1; next }
@@ -734,6 +744,16 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
             dst.write(line)' \
 	"$release_please" "$negative"
 expect_failure 'release-please lacks GitHub App token minting' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
 	check_release_please_tagging "$release_please_config" "$negative"
 
 printf 'release workflow policy tests passed\n'
