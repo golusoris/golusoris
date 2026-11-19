@@ -1136,6 +1136,20 @@ LIFTING_PRESETS = frozenset(
 MAX_CONFIG_NODES = 65536
 
 
+def preset_key(name: str) -> str:
+    """Normalize default-prefixed presets to Renovate's colon shorthand."""
+    return ":" + name.removeprefix("default:") if name.startswith("default:") else name
+
+
+def extends_entries(value: object) -> list[str]:
+    """Return preset strings from either scalar or list extends values."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [entry for entry in value if isinstance(entry, str)]
+    return []
+
+
 def limit_overrides(config: dict[str, object]) -> list[str]:
     """Return every limit key or limit preset below the top level to preserve repository pacing."""
     found: list[str] = []
@@ -1147,11 +1161,8 @@ def limit_overrides(config: dict[str, object]) -> list[str]:
         if isinstance(node, dict):
             found.extend(key for key in RATE_LIMIT_CAPS if key in node)
             # Package rules can override repository pacing through presets as well as explicit limits.
-            nested = node.get("extends")
-            if isinstance(nested, list):
-                found.extend(
-                    p for p in nested if isinstance(p, str) and p in LIMIT_PRESETS
-                )
+            nested = extends_entries(node.get("extends"))
+            found.extend(p for p in nested if preset_key(p) in LIMIT_PRESETS)
             pending.extend(node.values())
         elif isinstance(node, list):
             pending.extend(node)
@@ -1165,7 +1176,9 @@ def rate_limits_valid(config: dict[str, object]) -> bool:
         if isinstance(value, bool) or not isinstance(value, int) or not 0 < value <= cap:
             return False
     extends = config.get("extends")
-    if not isinstance(extends, list) or LIFTING_PRESETS.intersection(extends):
+    if not isinstance(extends, list) or LIFTING_PRESETS.intersection(
+        {preset_key(p) for p in extends if isinstance(p, str)}
+    ):
         return False
     return not limit_overrides(config)
 
@@ -1195,6 +1208,16 @@ def rate_limit_mutants(config: dict[str, object]) -> dict[str, dict[str, object]
     )
     concurrent_preset = json.loads(json.dumps(config))
     concurrent_preset["extends"].append(":prConcurrentLimit20")
+    scalar_rule_preset = json.loads(json.dumps(config))
+    scalar_rule_preset["packageRules"].append(
+        {"matchManagers": ["gomod"], "extends": ":prHourlyLimit4"}
+    )
+    default_rule_preset = json.loads(json.dumps(config))
+    default_rule_preset["packageRules"].append(
+        {"matchManagers": ["gomod"], "extends": ["default:prHourlyLimit4"]}
+    )
+    default_concurrent_preset = json.loads(json.dumps(config))
+    default_concurrent_preset["extends"].append("default:prConcurrentLimit20")
     mutants.update(
         {
             "commit limit zero means unlimited": unlimited,
@@ -1205,9 +1228,26 @@ def rate_limit_mutants(config: dict[str, object]) -> dict[str, dict[str, object]
             "package rule extends an unlimiting preset": rule_preset,
             "package rule extends a preset above the hourly cap": rule_hourly_preset,
             "preset above the concurrent cap": concurrent_preset,
+            "package rule extends a scalar preset above the hourly cap": scalar_rule_preset,
+            "package rule extends a default-prefixed preset": default_rule_preset,
+            "default-prefixed preset above the concurrent cap": default_concurrent_preset,
         }
     )
     return mutants
+
+
+def rate_limit_accepted(config: dict[str, object]) -> dict[str, dict[str, object]]:
+    """Build the configurations the pacing check must accept."""
+    default_hourly_preset = json.loads(json.dumps(config))
+    default_hourly_preset["extends"].append("default:prHourlyLimit2")
+    unrelated_rule_preset = json.loads(json.dumps(config))
+    unrelated_rule_preset["packageRules"].append(
+        {"matchManagers": ["gomod"], "extends": "default:semanticCommits"}
+    )
+    return {
+        "default-prefixed preset at the hourly cap": default_hourly_preset,
+        "package rule extends an unrelated preset": unrelated_rule_preset,
+    }
 
 
 def test_rate_limits(config: dict[str, object]) -> bool:
@@ -1223,6 +1263,10 @@ def test_rate_limits(config: dict[str, object]) -> bool:
     for label, mutated in rate_limit_mutants(config).items():
         if rate_limits_valid(mutated):
             print(f"rate limit negative control was accepted: {label}", file=sys.stderr)
+            return False
+    for label, accepted in rate_limit_accepted(config).items():
+        if not rate_limits_valid(accepted):
+            print(f"rate limit positive control was refused: {label}", file=sys.stderr)
             return False
     return True
 
