@@ -63,7 +63,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.4
 	github.com/h2non/filetype v1.1.3
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/hekmon/transmissionrpc/v3 v3.0.0
+	github.com/hekmon/transmissionrpc/v3 v3.1.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pglogrepl v0.0.0-20261111174325-d50336b09c47
 	github.com/jackc/pgx/v5 v5.11.0
