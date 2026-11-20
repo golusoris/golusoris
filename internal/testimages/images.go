@@ -46,7 +46,7 @@ const (
 	// PubSubEmulator is the Google Cloud Pub/Sub emulator integration-test image.
 	PubSubEmulator = "gcr.io/google.com/cloudsdktool/google-cloud-cli:588.0.0-emulators@sha256:be2f0e582a94c9e06e7a384fe2b3b39d590eeb8da65a110eda991598c100fe80"
 	// Mailpit is the SMTP server and API emulator image for notify tests.
-	Mailpit = "axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498"
+	Mailpit = "axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e"
 	// StripeMock is the Stripe API emulator image for payments/stripe integration tests.
 	StripeMock = "stripe/stripe-mock:v0.206.0@sha256:aeb96b83e87a893d2ac005e363ac01ffa6e59a5ad85b49c155dfc9129de02e78"
 	// Bugsink is the Sentry-compatible error reporting server image for observability tests.
