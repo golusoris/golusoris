@@ -30,6 +30,11 @@ _JOB_KEY = re.compile(
     r"^  (?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q):"
     r"(?=[ \t]|$)(?P<rest>.*)$"
 )
+_EVENT_SEQUENCE = re.compile(
+    r"^  -[ \t]+(?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)"
+    r"[ \t]*(?:#.*)?$"
+)
+_EVENT_SEQUENCE_ITEM = re.compile(r"^  -(?:[ \t]|$)")
 _JOB_IF = re.compile(r"^    (?P<q>['\"]?)if(?P=q):(?=[ \t]|$)(?P<rest>.*)$")
 _JOB_FIELD = re.compile(r"^    (?P<q>['\"]?)[A-Za-z_][A-Za-z0-9_-]*(?P=q):(?:[ \t]|$)")
 _JOB_SEQUENCE = re.compile(r"^    -(?:[ \t]|$)")
@@ -61,12 +66,30 @@ def _top_blocks(text: str) -> dict[str, tuple[str, list[str]]]:
     return blocks
 
 
-def _events(blocks: dict[str, tuple[str, list[str]]]) -> set[str]:
+def _readable_event_content(line: str, empty_value: bool) -> bool:
+    return line.startswith("   ") or (
+        empty_value and bool(_EVENT_SEQUENCE_ITEM.match(line))
+    )
+
+
+def _events(blocks: dict[str, tuple[str, list[str]]]) -> set[str] | None:
     inline, body = blocks.get("on", ("", []))
     events = set(re.findall(r"[A-Za-z_]+", inline))
-    for line in body:
-        match = _CHILD_KEY.match(line)
-        if match:
+    has_mapping = False
+    empty_value = False
+    for line in _significant_lines(body):
+        key, empty = _job_entry(line)
+        if key:
+            events.add(key)
+            has_mapping = True
+            empty_value = empty
+        elif has_mapping:
+            if not _readable_event_content(line, empty_value):
+                return None
+        else:
+            match = _EVENT_SEQUENCE.fullmatch(line)
+            if not match:
+                return None
             events.add(match.group("key"))
     return events
 
@@ -154,7 +177,9 @@ def _without_condition_comments(condition: str) -> str:
 
 
 def _significant_lines(lines: list[str]) -> list[str]:
-    return [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
+    return [
+        line for line in lines if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 def _readable_workflow(text: str) -> bool:
@@ -169,7 +194,9 @@ def _job_entry(line: str) -> tuple[str, bool]:
     match = _JOB_KEY.match(line)
     if not match:
         return "", False
-    return match.group("key"), not _without_condition_comments(match.group("rest")).strip()
+    return match.group("key"), not _without_condition_comments(
+        match.group("rest")
+    ).strip()
 
 
 def _readable_job_line(line: str, has_field: bool) -> bool:
@@ -247,7 +274,9 @@ def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> lis
     unreadable = _unreadable_jobs(lines)
     conditions = _job_conditions(lines)
     unreadable.update(
-        job for job, condition in conditions.items() if not _readable_condition(condition)
+        job
+        for job, condition in conditions.items()
+        if not _readable_condition(condition)
     )
     findings = [
         _plain_mapping_finding(name, f"job {job}" if job else "jobs")
@@ -267,6 +296,8 @@ def check(name: str, text: str, today: datetime.date) -> list[str]:
         return [_plain_mapping_finding(name, "workflow")]
     blocks = _top_blocks(text)
     events = _events(blocks)
+    if events is None:
+        return [_plain_mapping_finding(name, "on")]
     if not events.intersection(PR_EVENTS):
         # A called workflow runs inside its caller's run, so always() there holds the caller's group.
         return _always_findings(name, blocks) if "workflow_call" in events else []
@@ -341,6 +372,69 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         self.assertIn(
             "job ci-success runs under always()", " ".join(check("w.yml", text, _TODAY))
         )
+
+    def test_event_forms_always_fails(self) -> None:
+        for body in (
+            "  'pull_request':",
+            '  "pull_request":',
+            "  - pull_request\n  - push",
+            "  - 'pull_request'",
+        ):
+            with self.subTest(body=body):
+                text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+                text = text.replace(
+                    "  pull_request:\n  push:\n    branches: [main]\n", body + "\n"
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("runs under always()", findings[0])
+
+    def test_event_mapping_always_fails_closed(self) -> None:
+        for body in (
+            "   pull_request:\n   push:",
+            "   - pull_request",
+            "  pull_request :",
+            "  ? pull_request",
+            "  <<: *base",
+            " pull_request:",
+            "  push: {}\n  - pull_request",
+        ):
+            with self.subTest(body=body):
+                text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+                text = text.replace(
+                    "  pull_request:\n  push:\n    branches: [main]\n", body + "\n"
+                )
+                self.assertEqual(
+                    check("w.yml", text, _TODAY),
+                    ["w.yml: on: always() check reads plain block mappings only"],
+                )
+
+    def test_event_content_always_check_passes(self) -> None:
+        bodies = [
+            "  schedule:\n  - cron: '0 0 * * *'\n  pull_request:",
+            "\n  pull_request:\n\n  push:",
+        ]
+        bodies.extend(
+            " " * indent + "# event comment\n  pull_request:\n  push:"
+            for indent in range(7)
+        )
+        for body in bodies:
+            with self.subTest(body=body):
+                text = _GOOD.replace(
+                    "  pull_request:\n  push:\n    branches: [main]\n", body + "\n"
+                )
+                self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_quoted_workflow_call_always_fails(self) -> None:
+        for body in ("  'workflow_call':",):
+            with self.subTest(body=body):
+                text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+                text = text.replace(
+                    "  pull_request:\n  push:\n    branches: [main]\n", body + "\n"
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("runs under always()", findings[0])
 
     def test_top_mapping_always_fails_closed(self) -> None:
         text = _with_jobs("  gate:\n    if: always()\n")
