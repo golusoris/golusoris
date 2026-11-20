@@ -30,10 +30,8 @@ _JOB_KEY = re.compile(
     r"^  (?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q):"
     r"(?=[ \t]|$)(?P<rest>.*)$"
 )
-_EVENT_SEQUENCE = re.compile(
-    r"^  -[ \t]+(?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)"
-    r"[ \t]*(?:#.*)?$"
-)
+_EVENT_NAME = re.compile(r"(?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q)")
+_EVENT_SEQUENCE = re.compile(r"^  -[ \t]+" + _EVENT_NAME.pattern + r"[ \t]*(?:#.*)?$")
 _EVENT_SEQUENCE_ITEM = re.compile(r"^  -(?:[ \t]|$)")
 _JOB_IF = re.compile(r"^    (?P<q>['\"]?)if(?P=q):(?=[ \t]|$)(?P<rest>.*)$")
 _JOB_FIELD = re.compile(r"^    (?P<q>['\"]?)[A-Za-z_][A-Za-z0-9_-]*(?P=q):(?:[ \t]|$)")
@@ -72,9 +70,27 @@ def _readable_event_content(line: str, empty_value: bool) -> bool:
     )
 
 
+def _inline_events(inline: str, body: list[str]) -> set[str] | None:
+    if not inline or inline.startswith("#"):
+        return set()
+    if _significant_lines(body):
+        return None
+    value = _without_condition_comments(inline).strip()
+    names = [value]
+    if value.startswith("[") and value.endswith("]"):
+        content = value[1:-1].strip(" \t")
+        names = content.split(",") if content else []
+    matches = [_EVENT_NAME.fullmatch(name.strip(" \t")) for name in names]
+    if any(match is None for match in matches):
+        return None
+    return {match.group("key") for match in matches if match}
+
+
 def _events(blocks: dict[str, tuple[str, list[str]]]) -> set[str] | None:
     inline, body = blocks.get("on", ("", []))
-    events = set(re.findall(r"[A-Za-z_]+", inline))
+    events = _inline_events(inline, body)
+    if events is None:
+        return None
     has_mapping = False
     empty_value = False
     for line in _significant_lines(body):
@@ -183,11 +199,20 @@ def _significant_lines(lines: list[str]) -> list[str]:
 
 
 def _readable_workflow(text: str) -> bool:
-    return all(
-        line == "---" or _TOP_KEY.match(line)
-        for line in _significant_lines(text.splitlines())
-        if not line[0].isspace()
-    )
+    keys: set[str] = set()
+    for index, line in enumerate(_significant_lines(text.splitlines())):
+        if line == "---" and index == 0:
+            continue
+        if line[0].isspace():
+            continue
+        match = _TOP_KEY.match(line)
+        if not match:
+            return False
+        key = match.group("key")
+        if key in keys:
+            return False
+        keys.add(key)
+    return True
 
 
 def _job_entry(line: str) -> tuple[str, bool]:
@@ -372,6 +397,86 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         self.assertIn(
             "job ci-success runs under always()", " ".join(check("w.yml", text, _TODAY))
         )
+
+    def test_inline_event_forms_always_fails(self) -> None:
+        for trigger in (
+            "'on': pull_request",
+            "'on': 'pull_request'",
+            "'on': \"pull_request\"",
+            "'on': [push, pull_request]",
+            "'on': [ 'push' ,\"pull_request\" ]",
+            "'on': pull_request # pr",
+            "'on': # c\n  pull_request:\n  push:\n    branches: [main]",
+            "'on': workflow_call",
+            "'on': [\tpull_request\t,\tpush\t] # pr",
+        ):
+            with self.subTest(trigger=trigger):
+                text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+                text = text.replace(
+                    "'on':\n  pull_request:\n  push:\n    branches: [main]\n",
+                    trigger + "\n",
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("runs under always()", findings[0])
+
+    def test_inline_events_always_fails_closed(self) -> None:
+        for trigger in (
+            "name: &ev pull_request\n'on': *ev",
+            "'on': \"pull\\x5frequest\"",
+            "'on': &ev pull_request",
+            "'on': !!str pull_request",
+            "'on': {pull_request: {}}",
+            "'on': [pull_request, [push]]",
+            "'on': pull_request#x",
+            "'on': |\n  pull_request",
+            "'on': push\n  pull_request:\n  push:\n    branches: [main]",
+            "'on': !x pull_request",
+            "'on': >\n  pull_request",
+            "'on': [pull_request,]",
+            "'on': [pull_request]#x",
+            "'on': 'pull request'",
+            "'on': 'pull_request",
+        ):
+            with self.subTest(trigger=trigger):
+                text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+                text = text.replace(
+                    "'on':\n  pull_request:\n  push:\n    branches: [main]\n",
+                    trigger + "\n",
+                )
+                if trigger.startswith("name:"):
+                    text = text.replace("name: x\n", "")
+                self.assertEqual(
+                    check("w.yml", text, _TODAY),
+                    ["w.yml: on: always() check reads plain block mappings only"],
+                )
+
+    def test_duplicate_top_keys_and_documents_always_fails_closed(self) -> None:
+        text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+        variants = (
+            text + "'on':\n  push:\n",
+            text + "jobs:\n  b:\n    runs-on: x\n",
+            text.replace("jobs:", "---\njobs:"),
+            text + '"on":\n  push:\n',
+            text + "name: duplicate\n",
+        )
+        for variant in variants:
+            with self.subTest(text=variant):
+                self.assertEqual(
+                    check("w.yml", variant, _TODAY),
+                    ["w.yml: workflow: always() check reads plain block mappings only"],
+                )
+
+    def test_inline_non_pr_events_always_check_passes(self) -> None:
+        for text in (
+            "---\n" + _GOOD,
+            "on: [push]\njobs: {}\n",
+            "on: []\njobs: {}\n",
+            "on: [ \t ] # empty\njobs: {}\n",
+            "on: push # event\n  # body comment\njobs: {}\n",
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(check("w.yml", text, _TODAY), [])
 
     def test_event_forms_always_fails(self) -> None:
         for body in (
