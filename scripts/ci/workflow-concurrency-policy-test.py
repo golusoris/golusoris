@@ -204,6 +204,8 @@ def _readable_workflow(text: str) -> bool:
         if line == "---" and index == 0:
             continue
         if line[0].isspace():
+            if not keys:
+                return False
             continue
         match = _TOP_KEY.match(line)
         if not match:
@@ -556,6 +558,32 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
                     "workflow: always() check reads plain block mappings only",
                     findings[0],
                 )
+
+    def test_indented_root_always_fails_closed(self) -> None:
+        text = _with_jobs("  gate:\n    runs-on: x\n    if: always()\n")
+        indented = [
+            "\n".join(
+                " " * indent + line if line.strip() else line
+                for line in text.splitlines()
+            )
+            for indent in (1, 2)
+        ]
+        for variant in (
+            *indented,
+            "# workflow comment\n" + indented[0],
+            "---\n" + indented[0],
+            "\t" + text,
+        ):
+            with self.subTest(text=variant):
+                self.assertEqual(
+                    check("w.yml", variant, _TODAY),
+                    ["w.yml: workflow: always() check reads plain block mappings only"],
+                )
+
+    def test_workflow_prefix_always_check_passes(self) -> None:
+        for prefix in ("# workflow comment\n", "---\n# workflow comment\n", "\n"):
+            with self.subTest(prefix=prefix):
+                self.assertEqual(check("w.yml", prefix + _GOOD, _TODAY), [])
 
     def test_job_mapping_always_fails_closed(self) -> None:
         for body in (
