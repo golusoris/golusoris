@@ -1025,12 +1025,12 @@ github.com/tsenart/vegeta/v12 v12.13.0 h1:J/UiNS3f69MkL0tsRLVUUV8uXXQZxdRUchtS+G
 github.com/tsenart/vegeta/v12 v12.13.0/go.mod h1:gpdfR++WHV9/RZh4oux0f6lNPhsOH8pCjIGUlcPQe1M=
 github.com/tus/tusd/v2 v2.10.1 h1:hO312j4rT0unhaF4Ga7izNaYGbPOKI2kVIXbKgtv1W8=
 github.com/tus/tusd/v2 v2.10.1/go.mod h1:33RsdwtbXdqb3esrge+95TT7XUHl45uSO1vvA96fNbc=
-github.com/twmb/franz-go v1.22.2 h1:EdwIHGzD/4mgCpl/sNS0C74JYn6cL/r2KYS+8UC96Ww=
-github.com/twmb/franz-go v1.22.2/go.mod h1:HzZMc00pBWNfe0hNcNK4NxnsDNyKOoXnlTBkB4SUTjI=
+github.com/twmb/franz-go v1.22.3 h1:RHe35s34pKefMLyL+ZYJ6mQVtfFZz4zHDHVkTyACur0=
+github.com/twmb/franz-go v1.22.3/go.mod h1:OhbFLkvp6GLcN5daC7I4Q2z0W/rFP16HG+gTbe9CDC4=
 github.com/twmb/franz-go/pkg/kadm v1.11.0 h1:FfeWJ0qadntFpAcQt8JzNXW4dijjytZNLrzJuzzzuxA=
 github.com/twmb/franz-go/pkg/kadm v1.11.0/go.mod h1:qrhkdH+SWS3ivmbqOgHbpgVHamhaKcjH0UM+uOp0M1A=
-github.com/twmb/franz-go/pkg/kmsg v1.15.0 h1:mILdOQm4JkWojbSYVQ7KJNJ1qMdYNsLrdNOBUVKM6IA=
-github.com/twmb/franz-go/pkg/kmsg v1.15.0/go.mod h1:sGkGxKexpRLBThFHJLjjywcyfkK09qB/g+X+wFWZQ/A=
+github.com/twmb/franz-go/pkg/kmsg v1.15.1 h1:3sj7ekbH33t73nsBcHS0wtp/PyMIViHLNItZrE8V9zM=
+github.com/twmb/franz-go/pkg/kmsg v1.15.1/go.mod h1:sGkGxKexpRLBThFHJLjjywcyfkK09qB/g+X+wFWZQ/A=
 github.com/ulikunitz/xz v0.5.8/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.11/go.mod h1:nbz6k7qbPmH4IRqmfOplQw/tblSgqTqBwxkY0oWt/14=
 github.com/ulikunitz/xz v0.5.16 h1:ld6NyySjx5lowVKwJvMRLnW5nxKX/xnpSiFYZ/Lxur0=
