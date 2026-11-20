@@ -59,7 +59,7 @@ on:
         description: Exact govulncheck version
         type: string
         # renovate: datasource=go depName=golang.org/x/vuln versioning=semver
-        default: v1.9.0
+        default: v1.10.0
       apidiff-version:
         description: Exact go-apidiff version
         type: string
