@@ -52,8 +52,8 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.20.1
 	github.com/golusoris/goenvoy/arr/sonarr v1.5.6
 	github.com/golusoris/goenvoy/arr/v2 v2.6.2
-	github.com/golusoris/goenvoy/metadata v1.4.3
-	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.5
+	github.com/golusoris/goenvoy/metadata v1.4.4
+	github.com/golusoris/goenvoy/metadata/anime/anilist v1.3.7
 	github.com/golusoris/goenvoy/metadata/tracking/trakt v1.3.6
 	github.com/golusoris/goenvoy/metadata/video/tmdb v1.3.5
 	github.com/golusoris/golusoris/core v0.12.1
