@@ -117,7 +117,7 @@ while read -r branch sha; do
 		fi
 	done
 	if [ -z "$runs" ]; then
-		echo "::notice title=release-pr-ci late run::no pull request run on $branch at $sha after $TRIES tries; the App token starts its checks without approval"
+		echo "::notice title=release-pr-ci late run::no pull request run on $branch at $sha after $TRIES tries; none approved here, the next release-please run approves one still waiting"
 		continue
 	fi
 	while read -r id conclusion run_branch run_repo; do
