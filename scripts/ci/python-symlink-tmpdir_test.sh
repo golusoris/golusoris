@@ -128,6 +128,24 @@ PY
 	printf 'pre-fix 1470 snapshot with plain TMPDIR: green\n'
 }
 
+# A copied directory must not masquerade as a symlink on platforms without link privilege.
+assert_copy_link_refused() {
+	local root stub
+	root="$(new_repo copy-link)"
+	write_snapshot "$root" planted
+	stub="$suite_root/copy-link-stub"
+	mkdir "$stub"
+	cat >"$stub/ln" <<'SH'
+#!/usr/bin/env bash
+mkdir "${!#}"
+SH
+	chmod +x "$stub/ln"
+	printf 'copy-link case: checking invalid symlink rejection\n'
+	expect_failure_matching 'python-symlink-tmpdir: invalid symlink:' \
+		env PATH="$stub:$PATH" bash "$root/scripts/ci/python-symlink-tmpdir.sh" --root "$root"
+	assert_clean
+}
+
 # Fixture-only runs exercise discovery, regression rejection, and both cleanup paths.
 main() {
 	local positive negative empty
@@ -160,7 +178,8 @@ PY
 	expect_failure_matching "no scripts/ci/*_test.py suites under $empty" \
 		bash "$empty/scripts/ci/python-symlink-tmpdir.sh" --root "$empty"
 	assert_clean
-	printf 'symlink TMPDIR replay: positive, planted negative, plain control, empty discovery, cleanup passed\n'
+	assert_copy_link_refused
+	printf 'symlink TMPDIR replay: positive, planted negative, plain control, empty discovery, refused copy-link, cleanup passed\n'
 }
 
 main "$@"
