@@ -15,10 +15,12 @@ policy_suite_init "golusoris-template-workflows-policy"
 new_repo() {
 	local name="$1"
 	local root="$suite_root/$name"
-	mkdir -p "$root/scripts/ci" "$root/tools" "$root/.github/workflows" \
+	mkdir -p "$root/scripts/ci/lib" "$root/tools" "$root/.github/workflows" \
 		"$root/template/.github/workflows"
 	install -m 0755 "$repo_root/scripts/ci/template-workflows.sh" \
 		"$root/scripts/ci/template-workflows.sh"
+	install -m 0644 "$repo_root/scripts/ci/lib/lint-tools.sh" \
+		"$root/scripts/ci/lib/lint-tools.sh"
 	install -m 0644 "$repo_root/tools/tool-versions.env" \
 		"$root/tools/tool-versions.env"
 	install -m 0644 "$repo_root/.github/actionlint.yaml" \

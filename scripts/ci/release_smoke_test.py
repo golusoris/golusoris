@@ -264,11 +264,12 @@ class ReleaseSmokeTest(TestCase):
         self.assertEqual(code, 1)
         self.assertIn("missing or empty", err)
 
-    def test_path_with_parent_reference(self) -> None:
+    def _assert_invalid_artifact_path(self, path: str) -> None:
+        """Keep artifact setup and rejection assertions identical for invalid paths."""
         self.write_artifacts([
             {
                 "name": "golusoris",
-                "path": "dist/../golusoris",
+                "path": path,
                 "goos": "linux",
                 "goarch": "amd64",
                 "type": "Binary",
@@ -289,30 +290,11 @@ class ReleaseSmokeTest(TestCase):
         self.assertEqual(code, 1)
         self.assertIn("must be relative and contain no '..'", err)
 
+    def test_path_with_parent_reference(self) -> None:
+        self._assert_invalid_artifact_path("dist/../golusoris")
+
     def test_absolute_path(self) -> None:
-        self.write_artifacts([
-            {
-                "name": "golusoris",
-                "path": "/usr/local/bin/golusoris",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris"},
-            },
-            {
-                "name": "golusoris-mcp",
-                "path": "dist/golusoris-mcp_linux_amd64_v1/golusoris-mcp",
-                "goos": "linux",
-                "goarch": "amd64",
-                "type": "Binary",
-                "extra": {"ID": "golusoris-mcp"},
-            },
-        ])
-        code, _, err = self.run_smoke(
-            ["--version", "v1.2.3", "--target", "linux/amd64", "--dist", str(self.dist_dir)],
-        )
-        self.assertEqual(code, 1)
-        self.assertIn("must be relative and contain no '..'", err)
+        self._assert_invalid_artifact_path("/usr/local/bin/golusoris")
 
     def test_bad_target(self) -> None:
         code, _, err = self.run_smoke(
