@@ -2,5 +2,5 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-keras-hub==0.32.0
+keras-hub==0.33.0
 tensorflow[and-cuda]==2.21.0
