@@ -38,6 +38,7 @@ _EXPRESSION_STRING = re.compile(r"'(?:[^']|'')*'", re.DOTALL)
 _DOUBLE_QUOTED_SCALAR = re.compile(r'"(?:[^"\\]|\\["\\])*"', re.DOTALL)
 _BLOCK_SCALAR_HEADER = re.compile(r"[|>](?:[-+][1-9]?|[1-9][-+]?)?[ \t]*")
 _PLAIN_SCALAR_START = re.compile(r"[A-Za-z0-9$(]")
+_QUOTED_EXPRESSION_START = re.compile(r"[A-Za-z0-9$(!']")
 _YAML_COMMENT = re.compile(
     r"""(?P<quoted>'(?:[^']|'')*'|"(?:[^"\\]|\\.)*")|(?<!\S)#[^\n]*""",
     re.DOTALL,
@@ -218,15 +219,22 @@ def _condition_expression(condition: str) -> str:
     return _EXPRESSION_STRING.sub("", scalar)
 
 
+def _readable_quoted_condition(condition: str, pattern: re.Pattern[str]) -> bool:
+    if not pattern.fullmatch(condition):
+        return False
+    expression = _decode_condition_scalar(condition).strip()
+    return not expression or bool(_QUOTED_EXPRESSION_START.match(expression))
+
+
 def _readable_condition(condition: str) -> bool:
     """Accept only scalar forms whose expression text the reader can inspect."""
     condition = _without_condition_comments(condition).strip()
     if not condition:
         return True
     if condition[0] == "'":
-        return bool(_EXPRESSION_STRING.fullmatch(condition))
+        return _readable_quoted_condition(condition, _EXPRESSION_STRING)
     if condition[0] == '"':
-        return bool(_DOUBLE_QUOTED_SCALAR.fullmatch(condition))
+        return _readable_quoted_condition(condition, _DOUBLE_QUOTED_SCALAR)
     if condition[0] in "|>":
         return bool(_BLOCK_SCALAR_HEADER.fullmatch(condition.splitlines()[0]))
     return bool(_PLAIN_SCALAR_START.match(condition))
@@ -397,6 +405,7 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
                 "\t${{ !cancelled() }}",
                 " (github.event_name == 'push')",
                 ' "${{ !cancelled() }}"',
+                " '!cancelled()'",
                 " 'x\n      y'",
             )
         )
@@ -466,6 +475,17 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
                 self.assertIn("job gate", findings[0])
                 self.assertIn(
                     "always() check reads plain block mappings only", findings[0]
+                )
+
+    def test_decoded_condition_start_always_fails_closed(self) -> None:
+        for condition in ("'&x always()'", '"[always()]"'):
+            with self.subTest(condition=condition):
+                text = _with_jobs(f"  gate:\n    if: {condition}\n")
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn(
+                    "job gate: always() check reads plain block mappings only",
+                    findings[0],
                 )
 
     def test_supported_yaml_always_check_passes(self) -> None:
@@ -659,10 +679,19 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         )
 
     def test_comment_without_whitespace_always_fails(self) -> None:
-        text = _with_jobs("  gate:\n    if: !cancelled()#always()\n")
-        self.assertIn(
-            "job gate runs under always()", " ".join(check("w.yml", text, _TODAY))
-        )
+        for condition, expected in (
+            (
+                "!cancelled()#always()",
+                "job gate: always() check reads plain block mappings only",
+            ),
+            ("${{ !cancelled() }}#always()", "job gate runs under always()"),
+            ("success()#always()", "job gate runs under always()"),
+        ):
+            with self.subTest(condition=condition):
+                text = _with_jobs(f"  gate:\n    if: {condition}\n")
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn(expected, findings[0])
 
     def test_not_cancelled_before_step_level_always_passes(self) -> None:
         text = _with_jobs(
