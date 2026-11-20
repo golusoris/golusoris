@@ -66,7 +66,7 @@ require (
 	github.com/hekmon/transmissionrpc/v3 v3.0.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pglogrepl v0.0.0-20261111174325-d50336b09c47
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/jszwec/csvutil v1.10.1
 	github.com/leanovate/gopter v0.2.11
@@ -282,7 +282,7 @@ require (
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
