@@ -53,7 +53,7 @@ env:
   # renovate: datasource=github-releases depName=goreleaser/goreleaser versioning=semver
   GORELEASER_VERSION: 2.19.0
   # renovate: datasource=node-version depName=node versioning=node
-  NODE_VERSION: 24.22.2
+  NODE_VERSION: 24.22.3
 
 concurrency:
   group: release-go-${{ github.repository }}-${{ github.ref }}
