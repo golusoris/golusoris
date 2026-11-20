@@ -8,7 +8,7 @@ set -euo pipefail
 # Bound scanned template files and referenced workflows against runaway inputs.
 readonly max_template_files=64
 readonly max_uses_per_file=64
-readonly allow_regex='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+golusoris/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})[[:space:]]+#[[:space:]]+(v[0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$'
+readonly allow_regex='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+plurano/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})[[:space:]]+#[[:space:]]+(v[0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$'
 
 temp_dir=""
 total_matched_pins=0
@@ -203,7 +203,7 @@ lint_rewritten_workflow() {
 	local name="${file##*/}"
 	local copy_name="check_${name}"
 
-	sed -E 's|^([[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+)golusoris/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$|\1./.github/workflows/\3|' \
+	sed -E 's|^([[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+)plurano/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$|\1./.github/workflows/\3|' \
 		"$root/$file" > "$repo_dir/.github/workflows/$copy_name"
 
 	local actionlint_status=0

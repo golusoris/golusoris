@@ -19,7 +19,7 @@ import subprocess
 import sys
 import time
 
-REPO = os.environ.get("GITHUB_REPOSITORY", "golusoris/golusoris")
+REPO = os.environ.get("GITHUB_REPOSITORY", "plurano/golusoris")
 ISSUE = "800"
 NIL = "invalid memory address or nil pointer dereference"
 FAIL_BUN = re.compile(r"FAIL\s+github\.com/golusoris/golusoris/db/bun\s")

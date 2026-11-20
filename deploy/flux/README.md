@@ -41,7 +41,7 @@ Use Flux's image-automation controllers to auto-bump Helm `values.image.tag` whe
 
 ```bash
 flux create image repository golusoris-app \
-  --image=ghcr.io/golusoris/app-myapp \
+  --image=ghcr.io/plurano/app-myapp \
   --interval=1m
 flux create image policy golusoris-app \
   --image-ref=golusoris-app \

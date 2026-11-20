@@ -98,10 +98,10 @@ Releases are:
 - Signed with [cosign](https://docs.sigstore.dev/cosign/) (keyless, GitHub OIDC)
 - Accompanied by per-archive SPDX SBOMs ([syft](https://github.com/anchore/syft)
   via goreleaser). The
-  [v0.12.0 release run](https://github.com/golusoris/golusoris/actions/runs/35001126039)
+  [v0.12.0 release run](https://github.com/plurano/golusoris/actions/runs/35001126039)
   succeeded and its immutable release carries those SBOM assets. The separate
   source-tree SPDX/CycloneDX workflow is intended to run on each root tag, but
-  its [v0.12.0 run](https://github.com/golusoris/golusoris/actions/runs/35001126102)
+  its [v0.12.0 run](https://github.com/plurano/golusoris/actions/runs/35001126102)
   failed during Rekor publication. Retry handling is now prospective; do not
   treat source-tree attestations as an every-tag guarantee until a later tag
   proves the repaired path
@@ -128,14 +128,14 @@ are signed by `release-build.yml`, while `v0.17.0` and earlier were signed by
 # v0.18.0 and later:
 cosign verify-blob \
   --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
+  --certificate-identity-regexp '^https://github.com/(golusoris|plurano)/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   checksums.txt
 
 # v0.17.0 and earlier:
 cosign verify-blob \
   --bundle checksums.txt.sigstore.json \
-  --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release.yml@refs/tags/.*$' \
+  --certificate-identity-regexp '^https://github.com/(golusoris|plurano)/golusoris/.github/workflows/release.yml@refs/tags/.*$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   checksums.txt
 ```
@@ -143,8 +143,10 @@ cosign verify-blob \
 For `v0.18.0` and later, verify build provenance with the GitHub CLI:
 
 ```bash
-gh attestation verify <archive> --repo golusoris/golusoris --signer-workflow golusoris/golusoris/.github/workflows/release-build.yml
+gh attestation verify <archive> --repo plurano/golusoris --signer-workflow plurano/golusoris/.github/workflows/release-build.yml
 ```
+
+Framework releases up to v0.22.2 were signed while the repository lived at `golusoris/golusoris`, so their certificates name that owner; verify those with `--signer-workflow golusoris/golusoris/.github/workflows/release-build.yml`.
 
 ## Dependencies
 

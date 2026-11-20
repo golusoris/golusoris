@@ -178,7 +178,7 @@ check_workflow() {
 		printf '%s uses deprecated Cosign SBOM attachments\n' "$path" >&2
 		return 1
 	fi
-	if grep -Fq 'ghcr.io/golusoris/' "$path"; then
+	if grep -Eq 'ghcr\.io/[A-Za-z0-9]' "$path"; then
 		printf '%s must derive repository dynamically instead of hardcoding namespace\n' "$path" >&2
 		return 1
 	fi
@@ -233,17 +233,17 @@ cat >"$suite_root/bin/gh" <<'EOF'
 EOF
 chmod +x "$suite_root/bin/cosign" "$suite_root/bin/gh"
 
-image="ghcr.io/golusoris/tiny-gemma-trainer@sha256:$(printf 'a%.0s' {1..64})"
+image="ghcr.io/plurano/tiny-gemma-trainer@sha256:$(printf 'a%.0s' {1..64})"
 source_sha="$(printf 'b%.0s' {1..40})"
 source_ref='refs/tags/tiny-trainers-v1.2.3'
 call_log="$suite_root/calls"
 PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 
 require_literal "$call_log" $'cosign\tverify'
-require_literal "$call_log" $'--certificate-identity\thttps://github.com/golusoris/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
+require_literal "$call_log" $'--certificate-identity\thttps://github.com/plurano/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
 require_literal "$call_log" $'--certificate-github-workflow-sha\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 require_literal "$call_log" $'--bundle-from-oci'
 require_literal "$call_log" $'--source-ref\trefs/tags/tiny-trainers-v1.2.3'
@@ -310,15 +310,15 @@ fi
 
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/heads/main \
+	"$image" plurano/golusoris "$source_sha" refs/heads/main \
 	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=cosign \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=gh \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 
 workflow="$repo_root/.github/workflows/tiny-trainer-images.yml"
@@ -338,7 +338,7 @@ sed 's/^PIP_AUDIT_VERSION=.*/PIP_AUDIT_VERSION=9.9.9/' \
 expect_failure check_audit_toolchain "$unlocked_audit" \
 	"$repo_root/scripts/ci/tiny-trainer-pip-audit.lock"
 
-test_source="https://github.com/golusoris/golusoris"
+test_source="https://github.com/plurano/golusoris"
 test_rev="$(printf 'a%.0s' {1..40})"
 test_ver="v1.2.3"
 valid_amd64_config=$(printf '{"architecture":"amd64","os":"linux","config":{"Labels":{"org.opencontainers.image.source":"%s","org.opencontainers.image.revision":"%s","org.opencontainers.image.version":"%s"}}}' \
@@ -453,5 +453,10 @@ with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
 sed 's/image: tiny-gemma-trainer/image: ghcr.io\/golusoris\/tiny-gemma-trainer/' \
 	"$workflow" >"$with_hardcoded_repo"
 expect_failure check_workflow "$with_hardcoded_repo"
+
+with_hardcoded_plurano_repo="$suite_root/with-hardcoded-plurano-repo.yml"
+sed 's/image: tiny-gemma-trainer/image: ghcr.io\/plurano\/tiny-gemma-trainer/' \
+	"$workflow" >"$with_hardcoded_plurano_repo"
+expect_failure check_workflow "$with_hardcoded_plurano_repo"
 
 printf 'tiny trainer publication policy tests passed\n'

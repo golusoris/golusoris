@@ -100,7 +100,7 @@ permissions:
 
 jobs:
   ci:
-    uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
+    uses: plurano/golusoris/.github/workflows/ci-go.yml@main
     with:
       runs-on: ubuntu-26.04               # default; or your self-hosted runner-set label
       working-directory: .                  # dir holding go.mod; "." for a root module
@@ -120,7 +120,7 @@ on the test job (set `0` to skip the gate).
 
 If your app is also a multi-module repo, invoke `ci-go.yml` once per module
 (each `uses:` gets its own `working-directory`). The workflow is matrix-safe
-for this since [#498](https://github.com/golusoris/golusoris/pull/498): the
+for this since [#498](https://github.com/plurano/golusoris/pull/498): the
 coverage artifact is named `coverage-<working-directory-slug>` (or plain
 `coverage` at the repo root) instead of a fixed `coverage`, and the gosec
 SARIF upload is tagged with a `gosec[/<working-directory>]` code-scanning
@@ -131,11 +131,11 @@ upload.
 ### Pinning the reusable-workflow reference
 
 The example above uses `@main` for readability. The app template this
-framework ships under [`template/`](https://github.com/golusoris/golusoris/tree/main/template) pins the same calls to a
+framework ships under [`template/`](https://github.com/plurano/golusoris/tree/main/template) pins the same calls to a
 full commit SHA with a version comment instead —
-[`template/.github/workflows/ci.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/ci.yml)
-and [`release.yml`](https://github.com/golusoris/golusoris/blob/main/template/.github/workflows/release.yml) both reference
-`golusoris/golusoris/.github/workflows/<workflow>.yml@4b22fc0dc3c1f9c779b77e78a292539655d2dc69 # v0.12.0`.
+[`template/.github/workflows/ci.yml`](https://github.com/plurano/golusoris/blob/main/template/.github/workflows/ci.yml)
+and [`release.yml`](https://github.com/plurano/golusoris/blob/main/template/.github/workflows/release.yml) both reference
+`plurano/golusoris/.github/workflows/<workflow>.yml@4b22fc0dc3c1f9c779b77e78a292539655d2dc69 # v0.12.0`.
 Do the same in a real app: pin to a released tag's commit SHA (and bump it
 deliberately) rather than floating on `@main`, so an unreviewed change to
 this repository's default branch cannot silently change your CI.
@@ -185,7 +185,7 @@ permissions:
 
 jobs:
   release:
-    uses: golusoris/golusoris/.github/workflows/release-go.yml@fedcba9876543210fedcba9876543210fedcba98
+    uses: plurano/golusoris/.github/workflows/release-go.yml@fedcba9876543210fedcba9876543210fedcba98
     with:
       runs-on: ubuntu-26.04               # default; or your self-hosted runner-set label
       image-name: ghcr.io/myorg/myapp     # required
@@ -193,7 +193,7 @@ jobs:
 ```
 
 Replace the example `fedcba...` value with a reviewed full commit SHA from
-`golusoris/golusoris`. Keep that SHA for provenance verification; a branch or
+`plurano/golusoris`. Keep that SHA for provenance verification; a branch or
 tag does not provide an immutable reusable-workflow identity.
 
 The caller must grant all five permissions: a called workflow can reduce a
@@ -237,16 +237,18 @@ permissions:
 
 jobs:
   verify:
-    uses: golusoris/golusoris/.github/workflows/verify-provenance.yml@fedcba9876543210fedcba9876543210fedcba98
+    uses: plurano/golusoris/.github/workflows/verify-provenance.yml@fedcba9876543210fedcba9876543210fedcba98
     with:
       image: ghcr.io/myorg/myapp
       digest: sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       repository: myorg/myapp
       source-ref: refs/tags/v1.2.3
       source-digest: 0123456789abcdef0123456789abcdef01234567
-      signer-workflow: golusoris/golusoris/.github/workflows/release-go.yml
+      signer-workflow: plurano/golusoris/.github/workflows/release-go.yml
       signer-digest: fedcba9876543210fedcba9876543210fedcba98
 ```
+
+Framework releases up to v0.22.2 were signed while the repository lived at `golusoris/golusoris`, so their certificates name that owner; callers pinned to a framework commit from v0.22.2 or earlier must verify with `--signer-workflow golusoris/golusoris/.github/workflows/release-go.yml`.
 
 `verify-provenance.yml` fails if every verification mode is disabled. By
 default it verifies the keyless signature plus the SLSA provenance and SPDX
@@ -308,6 +310,6 @@ pre-commit:
       run: make ci
 ```
 
-The framework's own [`lefthook.yml`](https://github.com/golusoris/golusoris/blob/main/lefthook.yml) + `scripts/hooks/` is a
+The framework's own [`lefthook.yml`](https://github.com/plurano/golusoris/blob/main/lefthook.yml) + `scripts/hooks/` is a
 finer-grained template (staged-package lint, commit-msg Conventional Commits +
 DCO, pre-push build + `go test -short`) that apps can copy verbatim.

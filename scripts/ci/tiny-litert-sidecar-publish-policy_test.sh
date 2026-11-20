@@ -179,7 +179,7 @@ check_workflow() {
 		printf '%s uses deprecated Cosign SBOM attachments\n' "$path" >&2
 		return 1
 	fi
-	if grep -Fq 'ghcr.io/golusoris/' "$path"; then
+	if grep -Eq 'ghcr\.io/[A-Za-z0-9]' "$path"; then
 		printf '%s must derive repository dynamically instead of hardcoding namespace\n' "$path" >&2
 		return 1
 	fi
@@ -206,20 +206,20 @@ cat >"$suite_root/bin/gh" <<'EOF'
 EOF
 chmod +x "$suite_root/bin/cosign" "$suite_root/bin/gh"
 
-image="ghcr.io/golusoris/tiny-litert-sidecar@sha256:$(printf 'a%.0s' {1..64})"
+image="ghcr.io/plurano/tiny-litert-sidecar@sha256:$(printf 'a%.0s' {1..64})"
 source_sha="$(printf 'b%.0s' {1..40})"
 source_ref='refs/tags/tiny-litert-sidecar-v1.2.3'
 call_log="$suite_root/calls"
 PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 
 require_literal "$call_log" $'cosign\tverify'
-require_literal "$call_log" $'--certificate-identity\thttps://github.com/golusoris/golusoris/.github/workflows/tiny-litert-sidecar-image.yml@refs/tags/tiny-litert-sidecar-v1.2.3'
+require_literal "$call_log" $'--certificate-identity\thttps://github.com/plurano/golusoris/.github/workflows/tiny-litert-sidecar-image.yml@refs/tags/tiny-litert-sidecar-v1.2.3'
 require_literal "$call_log" $'--certificate-github-workflow-sha\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 require_literal "$call_log" $'--bundle-from-oci'
-require_literal "$call_log" $'--signer-workflow\tgolusoris/golusoris/.github/workflows/tiny-litert-sidecar-image.yml'
+require_literal "$call_log" $'--signer-workflow\tplurano/golusoris/.github/workflows/tiny-litert-sidecar-image.yml'
 require_literal "$call_log" $'--source-ref\trefs/tags/tiny-litert-sidecar-v1.2.3'
 require_literal "$call_log" $'--predicate-type\thttps://slsa.dev/provenance/v1'
 require_literal "$call_log" $'--predicate-type\thttps://spdx.dev/Document/v2.3'
@@ -230,23 +230,23 @@ fi
 
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/heads/main \
+	"$image" plurano/golusoris "$source_sha" refs/heads/main \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/tags/tiny-trainers-v1.2.3 \
+	"$image" plurano/golusoris "$source_sha" refs/tags/tiny-trainers-v1.2.3 \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-litert-sidecar-image.yml untrusted-prefix-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=cosign \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=gh \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-litert-sidecar-image.yml tiny-litert-sidecar-
 
 workflow="$repo_root/.github/workflows/tiny-litert-sidecar-image.yml"
@@ -321,5 +321,11 @@ with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
 sed 's/echo "IMAGE_REPO=.*/echo "IMAGE_REPO=ghcr.io\/golusoris\/tiny-litert-sidecar" >> "$GITHUB_ENV"/' \
 	"$workflow" >"$with_hardcoded_repo"
 expect_failure check_workflow "$with_hardcoded_repo"
+
+with_hardcoded_plurano_repo="$suite_root/with-hardcoded-plurano-repo.yml"
+# shellcheck disable=SC2016 # The planted line keeps $GITHUB_ENV literal.
+sed 's/echo "IMAGE_REPO=.*/echo "IMAGE_REPO=ghcr.io\/plurano\/tiny-litert-sidecar" >> "$GITHUB_ENV"/' \
+	"$workflow" >"$with_hardcoded_plurano_repo"
+expect_failure check_workflow "$with_hardcoded_plurano_repo"
 
 printf 'tiny litert sidecar publication policy tests passed\n'

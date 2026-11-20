@@ -7,7 +7,7 @@ ARG PYTHON_IMAGE="python:3.14.8-slim-trixie@sha256:fbecd461fc72d21b2143c6eaba251
 FROM ${PYTHON_IMAGE}
 
 ARG VCS_REF="unknown"
-LABEL org.opencontainers.image.source="https://github.com/golusoris/golusoris" \
+LABEL org.opencontainers.image.source="https://github.com/plurano/golusoris" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.title="Golusoris LiteRT inference sidecar"
 

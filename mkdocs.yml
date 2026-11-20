@@ -4,9 +4,9 @@
 
 site_name: golusoris
 site_description: A composable Go framework built around go.uber.org/fx.
-site_url: https://golusoris.github.io/golusoris/
-repo_url: https://github.com/golusoris/golusoris
-repo_name: golusoris/golusoris
+site_url: https://plurano.github.io/golusoris/
+repo_url: https://github.com/plurano/golusoris
+repo_name: plurano/golusoris
 docs_dir: docs
 edit_uri: edit/main/docs/
 

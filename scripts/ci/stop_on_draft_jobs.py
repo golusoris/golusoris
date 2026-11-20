@@ -22,7 +22,7 @@ NOT_PR = re.compile(
     r"(!=\s*'pull_request'\s*(&&|\}\}|$)|==\s*'(?!pull_request')[a-z_]+'\s*(\}\})?$)"
 )
 REQUIRED = re.compile(
-    r"^golusoris/golusoris/\.github/actions/stop-on-draft@[0-9a-f]{40}$"
+    r"^plurano/golusoris/\.github/actions/stop-on-draft@[0-9a-f]{40}$"
 )
 REQUIRED_TYPES = ("opened", "synchronize", "reopened", "ready_for_review")
 ON_KEY = re.compile(r"^(on|'on'|\"on\"):\s*(.*)$")
