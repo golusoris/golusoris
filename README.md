@@ -146,11 +146,34 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 
 ## Architecture at a glance
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
-[![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
-[![Uber Fx](https://img.shields.io/badge/built_on-Uber_Fx-3b82f6?style=flat-square&labelColor=111a35)](https://github.com/uber-go/fx)
-[![C4 Architecture](https://img.shields.io/badge/Architecture-C4_Model-8b5cf6?style=flat-square&labelColor=111a35)](docs/architecture/README.md)
+[![Go Reference](https://img.shields.io/badge/Go-Reference-06b6d4?style=for-the-badge&labelColor=111a35)](https://pkg.go.dev/github.com/golusoris/golusoris)
+[![Go Report Card](https://img.shields.io/badge/Go-Report_Card-3b82f6?style=for-the-badge&labelColor=111a35)](https://goreportcard.com/report/github.com/golusoris/golusoris)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/plurano/golusoris?style=for-the-badge&labelColor=111a35&color=06b6d4)](go.mod)
+[![Uber Fx](https://img.shields.io/badge/built_on-Uber_Fx-3b82f6?style=for-the-badge&labelColor=111a35)](https://github.com/uber-go/fx)
+[![C4 Architecture](https://img.shields.io/badge/Architecture-C4_Model-8b5cf6?style=for-the-badge&labelColor=111a35)](docs/architecture/README.md)
+
+An application's main calls fx.New with only the modules it opts into; these examples show root-module families above the lean core and separate specialty sub-modules.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'ui-sans-serif, Segoe UI, Helvetica, Arial, sans-serif', 'fontSize': '15px', 'primaryColor': '#111a35', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#3b82f6', 'lineColor': '#3b82f6', 'edgeLabelBackground': '#111a35', 'tertiaryColor': '#0b1020'}}}%%
+flowchart TD
+main["main"]:::input --> compose["fx.New"]:::decide
+subgraph root["github.com/golusoris/golusoris"]
+db["Database & data<br/>db/pgx/<br/>db/migrate/"]:::step
+http["HTTP / API<br/>httpx/router/<br/>httpx/server/"]:::step
+jobs["Background work<br/>jobs/<br/>jobs/cron/"]:::step
+end
+compose --> db
+compose --> http
+compose --> jobs
+compose --> specialty["Specialty sub-modules<br/>own go.mod<br/>storage/gcs/<br/>storage/azblob/"]:::step
+db --> core["core/<br/>own go.mod<br/>ADR-0017"]:::step
+http --> core
+jobs --> core
+classDef input fill:#0b1020,stroke:#06b6d4,stroke-width:2px,color:#e2e8f0
+classDef step fill:#111a35,stroke:#3b82f6,stroke-width:2px,color:#e2e8f0
+classDef decide fill:#111a35,stroke:#8b5cf6,stroke-width:2px,color:#e2e8f0
+```
 
 ### Core
 
