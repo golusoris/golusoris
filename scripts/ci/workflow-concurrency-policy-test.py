@@ -22,13 +22,22 @@ PR_EVENTS: tuple[str, ...] = ("pull_request", "pull_request_target")
 # path -> (reason, expiry). An expired entry fails like a missing group.
 EXCEPTIONS: dict[str, tuple[str, str]] = {}
 
-_TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?P<rest>.*)$")
+_TOP_KEY = re.compile(
+    r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?=[ \t]|$)(?P<rest>.*)$"
+)
 _CHILD_KEY = re.compile(r"^  (?P<key>[A-Za-z_-]+):(?P<rest>.*)$")
-_JOB_KEY = re.compile(r"^  (?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$")
-_JOB_IF = re.compile(r"^    (?P<q>['\"]?)if(?P=q):(?P<rest>.*)$")
-_JOB_MERGE = re.compile(r"^    (?P<q>['\"]?)<<(?P=q):")
+_JOB_KEY = re.compile(
+    r"^  (?P<q>['\"]?)(?P<key>[A-Za-z_][A-Za-z0-9_-]*)(?P=q):"
+    r"(?=[ \t]|$)(?P<rest>.*)$"
+)
+_JOB_IF = re.compile(r"^    (?P<q>['\"]?)if(?P=q):(?=[ \t]|$)(?P<rest>.*)$")
+_JOB_FIELD = re.compile(r"^    (?P<q>['\"]?)[A-Za-z_][A-Za-z0-9_-]*(?P=q):(?:[ \t]|$)")
+_JOB_SEQUENCE = re.compile(r"^    -(?:[ \t]|$)")
 _ALWAYS = re.compile(r"\balways\s*\(\s*\)", re.IGNORECASE)
 _EXPRESSION_STRING = re.compile(r"'(?:[^']|'')*'", re.DOTALL)
+_DOUBLE_QUOTED_SCALAR = re.compile(r'"(?:[^"\\]|\\["\\])*"', re.DOTALL)
+_BLOCK_SCALAR_HEADER = re.compile(r"[|>](?:[-+][1-9]?|[1-9][-+]?)?[ \t]*")
+_PLAIN_SCALAR_START = re.compile(r"[A-Za-z0-9$(]")
 _YAML_COMMENT = re.compile(
     r"""(?P<quoted>'(?:[^']|'')*'|"(?:[^"\\]|\\.)*")|(?<!\S)#[^\n]*""",
     re.DOTALL,
@@ -143,44 +152,49 @@ def _without_condition_comments(condition: str) -> str:
     return header + separator + body
 
 
-def _job_layout_location(line: str, job: str, expect_field: bool) -> str | None:
-    indent = len(line) - len(line.lstrip(" "))
-    if indent == 2 and not _JOB_KEY.match(line):
-        return ""
-    if indent in (1, 3) or (expect_field and indent != 4):
-        return job
-    if not job and indent >= 4:
-        return ""
-    return None
+def _significant_lines(lines: list[str]) -> list[str]:
+    return [line for line in lines if line.strip() and not line.lstrip().startswith("#")]
 
 
-def _unreadable_job_field(line: str) -> bool:
-    if _JOB_MERGE.match(line) or line.startswith(("    ?", "    :")):
+def _readable_workflow(text: str) -> bool:
+    return all(
+        line == "---" or _TOP_KEY.match(line)
+        for line in _significant_lines(text.splitlines())
+        if not line[0].isspace()
+    )
+
+
+def _job_entry(line: str) -> tuple[str, bool]:
+    match = _JOB_KEY.match(line)
+    if not match:
+        return "", False
+    return match.group("key"), not _without_condition_comments(match.group("rest")).strip()
+
+
+def _readable_job_line(line: str, has_field: bool) -> bool:
+    if _JOB_FIELD.match(line):
         return True
-    key = re.match(r'^    "(?P<key>(?:[^"\\]|\\.)*)"\s*:', line)
-    return bool(key and "\\" in key.group("key"))
+    indent = len(line) - len(line.lstrip(" "))
+    return has_field and (indent >= 5 or bool(_JOB_SEQUENCE.match(line)))
 
 
 def _unreadable_jobs(lines: list[str]) -> set[str]:
-    """Find jobs whose values or merge keys need a full YAML reader."""
+    """Accept only job entries, fields, and their indented value content."""
     unreadable: set[str] = set()
     job = ""
-    expect_field = False
-    for line in lines:
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        location = _job_layout_location(line, job, expect_field)
-        if location is not None:
-            unreadable.add(location)
-        expect_field = False
-        match = _JOB_KEY.match(line)
-        if match:
-            job = match.group("key")
-            expect_field = True
-            if _without_condition_comments(match.group("rest")).strip():
-                unreadable.add(job)
-        elif job and _unreadable_job_field(line):
+    has_field = False
+    for line in _significant_lines(lines):
+        if job and not has_field and not _JOB_FIELD.match(line):
             unreadable.add(job)
+        if len(line) - len(line.lstrip(" ")) == 2:
+            job, readable = _job_entry(line)
+            has_field = False
+            if not readable:
+                unreadable.add(job)
+        elif not job or not _readable_job_line(line, has_field):
+            unreadable.add(job)
+        else:
+            has_field = True
     return unreadable
 
 
@@ -204,18 +218,18 @@ def _condition_expression(condition: str) -> str:
     return _EXPRESSION_STRING.sub("", scalar)
 
 
-def _unsupported_condition_escapes(condition: str) -> bool:
-    return condition.startswith('"') and any(
-        escape.group() not in ('\\"', "\\\\")
-        for escape in re.finditer(r"\\(?:.|$)", condition, re.DOTALL)
-    )
-
-
-def _unreadable_condition(condition: str) -> bool:
+def _readable_condition(condition: str) -> bool:
+    """Accept only scalar forms whose expression text the reader can inspect."""
     condition = _without_condition_comments(condition).strip()
-    return _unsupported_condition_escapes(condition) or (
-        _decode_condition_scalar(condition).startswith("*")
-    )
+    if not condition:
+        return True
+    if condition[0] == "'":
+        return bool(_EXPRESSION_STRING.fullmatch(condition))
+    if condition[0] == '"':
+        return bool(_DOUBLE_QUOTED_SCALAR.fullmatch(condition))
+    if condition[0] in "|>":
+        return bool(_BLOCK_SCALAR_HEADER.fullmatch(condition.splitlines()[0]))
+    return bool(_PLAIN_SCALAR_START.match(condition))
 
 
 def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> list[str]:
@@ -225,7 +239,7 @@ def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> lis
     unreadable = _unreadable_jobs(lines)
     conditions = _job_conditions(lines)
     unreadable.update(
-        job for job, condition in conditions.items() if _unreadable_condition(condition)
+        job for job, condition in conditions.items() if not _readable_condition(condition)
     )
     findings = [
         _plain_mapping_finding(name, f"job {job}" if job else "jobs")
@@ -241,6 +255,8 @@ def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> lis
 
 def check(name: str, text: str, today: datetime.date) -> list[str]:
     """Return the policy findings for one workflow file."""
+    if not _readable_workflow(text):
+        return [_plain_mapping_finding(name, "workflow")]
     blocks = _top_blocks(text)
     events = _events(blocks)
     if not events.intersection(PR_EVENTS):
@@ -317,6 +333,76 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         self.assertIn(
             "job ci-success runs under always()", " ".join(check("w.yml", text, _TODAY))
         )
+
+    def test_top_mapping_always_fails_closed(self) -> None:
+        text = _with_jobs("  gate:\n    if: always()\n")
+        variants = [
+            text.replace("jobs:", key)
+            for key in ("jobs :", "? jobs", "<<: *base", "jobs:x", "%YAML 1.2")
+        ]
+        variants.append(text.replace("'on':", "on :"))
+        for variant in variants:
+            with self.subTest(text=variant):
+                findings = check("w.yml", variant, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn(
+                    "workflow: always() check reads plain block mappings only",
+                    findings[0],
+                )
+
+    def test_job_mapping_always_fails_closed(self) -> None:
+        for body in (
+            "  gate:\n    if : always()\n",
+            "  gate :\n    if: always()\n",
+            "  gate:\n    'if' : always()\n",
+            "  gate:\n    - if: always()\n",
+            "  gate:\n    if:always()\n",
+            "  1gate:\n    if: always()\n",
+        ):
+            with self.subTest(body=body):
+                findings = check("w.yml", _with_jobs(body), _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn(
+                    "always() check reads plain block mappings only", findings[0]
+                )
+
+    def test_condition_scalar_always_fails_closed(self) -> None:
+        for condition in (
+            "&cond 'always()'",
+            "!!str 'always()'",
+            "!!str always()",
+            "[always()]",
+            "\n      &c always()",
+            "{a: b}",
+            "!cancelled()",
+            "'always()",
+            '"always()',
+            "|0\n      always()",
+        ):
+            with self.subTest(condition=condition):
+                text = _with_jobs(f"  gate:\n    if: {condition}\n")
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn(
+                    "job gate: always() check reads plain block mappings only",
+                    findings[0],
+                )
+
+    def test_allowlisted_yaml_always_check_passes(self) -> None:
+        variants = ["---\n" + _GOOD]
+        variants.extend(
+            _with_jobs(f"  gate:\n    if:{condition}\n")
+            for condition in (
+                " |-\n      ${{ !cancelled() }}",
+                "\t${{ !cancelled() }}",
+                " (github.event_name == 'push')",
+                ' "${{ !cancelled() }}"',
+                " 'x\n      y'",
+            )
+        )
+        for text in variants:
+            with self.subTest(text=text):
+                self.assertEqual(check("w.yml", text, _TODAY), [])
 
     def test_case_insensitive_always_fails(self) -> None:
         for condition in ("ALWAYS()", "Always()", ">-\n      ALWAYS()"):
