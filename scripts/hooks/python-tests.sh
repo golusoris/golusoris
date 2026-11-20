@@ -35,6 +35,7 @@ main() {
 	done
 	if (( selected )); then
 		env -u CI_SCOPE_BASE bash "$root/scripts/ci/python-tests.sh" --root "$root" "${suites[@]}" || return $?
+		env -u CI_SCOPE_BASE bash "$root/scripts/ci/python-symlink-tmpdir.sh" --root "$root" || return $?
 		return 0
 	fi
 	printf 'python-tests: no Python policy files pushed, skipping\n'
