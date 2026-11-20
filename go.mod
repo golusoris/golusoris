@@ -83,7 +83,7 @@ require (
 	github.com/ogen-go/ogen v1.24.0
 	github.com/onsi/ginkgo/v2 v2.33.1
 	github.com/onsi/gomega v1.44.0
-	github.com/oschwald/maxminddb-golang/v2 v2.8.0
+	github.com/oschwald/maxminddb-golang/v2 v2.9.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pgvector/pgvector-go v0.4.1
 	github.com/pgvector/pgvector-go/pgx v0.4.1
