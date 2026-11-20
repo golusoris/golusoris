@@ -5,7 +5,7 @@ go 1.27.4
 replace github.com/golusoris/golusoris/core => ./core
 
 require (
-	charm.land/bubbletea/v2 v2.1.1
+	charm.land/bubbletea/v2 v2.1.2
 	cloud.google.com/go/pubsub/v2 v2.9.0
 	code.dny.dev/ssrf v0.3.0
 	filippo.io/csrf v0.2.1
