@@ -70,7 +70,7 @@ require (
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/jszwec/csvutil v1.10.1
 	github.com/leanovate/gopter v0.2.11
-	github.com/maypok86/otter/v2 v2.3.0
+	github.com/maypok86/otter/v2 v2.4.0
 	github.com/mholt/archives v0.1.5
 	github.com/miekg/dns v1.1.73
 	github.com/minio/selfupdate v0.6.0
