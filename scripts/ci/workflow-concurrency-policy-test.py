@@ -24,9 +24,13 @@ EXCEPTIONS: dict[str, tuple[str, str]] = {}
 
 _TOP_KEY = re.compile(r"^(?P<q>['\"]?)(?P<key>[A-Za-z_-]+)(?P=q):(?P<rest>.*)$")
 _CHILD_KEY = re.compile(r"^  (?P<key>[A-Za-z_-]+):(?P<rest>.*)$")
-_JOB_KEY = re.compile(r"^  (?P<key>[A-Za-z0-9_-]+):")
-_JOB_IF = re.compile(r"^    if:(?P<rest>.*)$")
+_JOB_KEY = re.compile(
+    r"^  (?P<q>['\"]?)(?P<key>[A-Za-z0-9_-]+)(?P=q):(?P<rest>.*)$"
+)
+_JOB_IF = re.compile(r"^    (?P<q>['\"]?)if(?P=q):(?P<rest>.*)$")
+_JOB_MERGE = re.compile(r"^    (?P<q>['\"]?)<<(?P=q):")
 _ALWAYS = re.compile(r"\balways\s*\(\s*\)")
+_EXPRESSION_STRING = re.compile(r"'(?:[^']|'')*'", re.DOTALL)
 _YAML_COMMENT = re.compile(
     r"""(?P<quoted>'(?:[^']|'')*'|"(?:[^"\\]|\\.)*")|(?<!\S)#[^\n]*""",
     re.DOTALL,
@@ -141,13 +145,55 @@ def _without_condition_comments(condition: str) -> str:
     return header + separator + body
 
 
+def _unreadable_jobs(lines: list[str]) -> set[str]:
+    """Find jobs whose values or merge keys need a full YAML reader."""
+    unreadable: set[str] = set()
+    job = ""
+    for line in lines:
+        match = _JOB_KEY.match(line)
+        if match:
+            job = match.group("key")
+            if _without_condition_comments(match.group("rest")).strip():
+                unreadable.add(job)
+        elif job and _JOB_MERGE.match(line):
+            unreadable.add(job)
+    return unreadable
+
+
+def _plain_mapping_finding(name: str, location: str) -> str:
+    return f"{name}: {location}: always() check reads plain block mappings only"
+
+
+def _decode_condition_scalar(condition: str) -> str:
+    """Decode YAML quoting before interpreting GitHub expression literals."""
+    condition = condition.strip()
+    if len(condition) >= 2:
+        if condition[0] == condition[-1] == "'":
+            return condition[1:-1].replace("''", "'")
+        if condition[0] == condition[-1] == '"':
+            return re.sub(r'\\(["\\])', r"\1", condition[1:-1])
+    return condition
+
+
+def _condition_expression(condition: str) -> str:
+    scalar = _decode_condition_scalar(_without_condition_comments(condition))
+    return _EXPRESSION_STRING.sub("", scalar)
+
+
 def _always_findings(name: str, blocks: dict[str, tuple[str, list[str]]]) -> list[str]:
-    conditions = _job_conditions(blocks.get("jobs", ("", []))[1])
-    return [
+    inline, lines = blocks.get("jobs", ("", []))
+    if _without_condition_comments(inline).strip() not in ("", "{}"):
+        return [_plain_mapping_finding(name, "jobs")]
+    unreadable = _unreadable_jobs(lines)
+    findings = [
+        _plain_mapping_finding(name, f"job {job}") for job in sorted(unreadable)
+    ]
+    conditions = _job_conditions(lines)
+    return findings + [
         f"{name}: job {job} runs under always(), which survives cancellation and "
         "holds the concurrency group; use ${{ !cancelled() }}"
         for job, condition in sorted(conditions.items())
-        if _ALWAYS.search(_without_condition_comments(condition))
+        if job not in unreadable and _ALWAYS.search(_condition_expression(condition))
     ]
 
 
@@ -229,6 +275,101 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
         self.assertIn(
             "job ci-success runs under always()", " ".join(check("w.yml", text, _TODAY))
         )
+
+    def test_quoted_job_key_always_fails(self) -> None:
+        for quote in ('"', "'"):
+            with self.subTest(quote=quote):
+                text = _with_jobs(
+                    f"  {quote}gate{quote}:\n    if: always()\n    runs-on: x\n"
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("job gate runs under always()", findings[0])
+
+    def test_quoted_if_key_always_fails(self) -> None:
+        for quote in ('"', "'"):
+            with self.subTest(quote=quote):
+                text = _with_jobs(
+                    f"  gate:\n    {quote}if{quote}: always()\n    runs-on: x\n"
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("job gate runs under always()", findings[0])
+
+    def test_unreadable_job_always_fails(self) -> None:
+        for body in (
+            "  gate: {if: always(), runs-on: x}\n",
+            "  gate: {runs-on: x}\n",
+            "  gate: *base\n",
+            "  gate: &base\n    if: always()\n    runs-on: x\n",
+        ):
+            with self.subTest(body=body):
+                findings = check("w.yml", _with_jobs(body), _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("job gate", findings[0])
+                self.assertIn(
+                    "always() check reads plain block mappings only", findings[0]
+                )
+
+    def test_inline_jobs_always_check_fails_closed(self) -> None:
+        for value in ("{gate: {runs-on: x}}", "*base", "&base"):
+            with self.subTest(value=value):
+                text = _GOOD.replace("jobs: {}", f"jobs: {value}")
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("jobs", findings[0])
+                self.assertIn(
+                    "always() check reads plain block mappings only", findings[0]
+                )
+
+    def test_empty_jobs_always_check_passes(self) -> None:
+        self.assertEqual(check("w.yml", _GOOD, _TODAY), [])
+
+    def test_mapping_comments_always_check_passes(self) -> None:
+        text = _with_jobs("  gate: # block job\n    runs-on: x\n")
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+        text = _GOOD.replace("jobs: {}", "jobs: {} # empty jobs")
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_job_merge_key_always_fails(self) -> None:
+        for merge_key in ("<<", "'<<'", '"<<"'):
+            with self.subTest(merge_key=merge_key):
+                text = _with_jobs(
+                    f"  gate:\n    {merge_key}: *base\n    runs-on: x\n"
+                )
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("job gate", findings[0])
+                self.assertIn(
+                    "always() check reads plain block mappings only", findings[0]
+                )
+
+    def test_expression_string_always_passes(self) -> None:
+        for condition in (
+            "${{ contains(github.ref, 'always()') && !cancelled() }}",
+            "'${{ contains(github.ref, ''always()'') }}'",
+            '"${{ contains(github.ref, \'always()\') }}"',
+            "${{ contains(github.ref, 'it''s always()') }}",
+        ):
+            with self.subTest(condition=condition):
+                text = _with_jobs(f"  gate:\n    if: {condition}\n    runs-on: x\n")
+                self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_yaml_quoted_always_call_fails(self) -> None:
+        for condition in ("'always()'", '"always()"'):
+            with self.subTest(condition=condition):
+                text = _with_jobs(f"  gate:\n    if: {condition}\n    runs-on: x\n")
+                findings = check("w.yml", text, _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("job gate runs under always()", findings[0])
+
+    def test_expression_literal_then_always_call_fails(self) -> None:
+        text = _with_jobs(
+            "  gate:\n    if: ${{ contains(github.ref, 'x') || always() }}\n"
+        )
+        findings = check("w.yml", text, _TODAY)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("job gate runs under always()", findings[0])
 
     def test_not_cancelled_aggregate_passes(self) -> None:
         text = _with_jobs(
