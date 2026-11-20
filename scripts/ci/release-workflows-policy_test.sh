@@ -273,7 +273,6 @@ readonly skip_yaml_block_scalar='
             match($0, /^[ ]*(-[ ]+)?/)
             block_indent = RLENGTH
             in_block = 1
-            next
         }
     }
 '
@@ -775,7 +774,6 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
 expect_failure 'release-please App token step id is not app-token' \
 	check_release_please_tagging "$release_please_config" "$negative"
 
-
 python3 -B -c 'import sys
 MAX_LINES = 20000
 with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
@@ -797,6 +795,31 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
         if "token: ${{ steps.app-token.outputs.token }}" not in line:
             dst.write(line)
     dst.write("      - run: |\n          uses: googleapis/release-please-action@fake\n          token: ${{ steps.app-token.outputs.token }}\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - uses: actions/create-github-app-token@fake\n      - run: |\n          echo planted\n        id: app-token\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - uses: googleapis/release-please-action@fake\n      - run: |\n          echo planted\n        env:\n          token: ${{ steps.app-token.outputs.token }}\n")' \
 	"$release_please" "$negative"
 expect_failure 'release-please does not pass App token to release-please-action' \
 	check_release_please_tagging "$release_please_config" "$negative"
