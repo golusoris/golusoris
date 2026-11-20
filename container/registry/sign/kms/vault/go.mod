@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/golusoris/golusoris/container/registry/sign v0.0.0-20261030052321-26a731438cab
-	github.com/moby/moby/api v1.56.1
+	github.com/moby/moby/api v1.57.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 )
 
