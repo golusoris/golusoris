@@ -20,9 +20,9 @@ const (
 	// Pgvector is the PostgreSQL 18 image with the pgvector extension for ai/vector tests.
 	Pgvector = "pgvector/pgvector:0.8.7-pg18-trixie@sha256:ab49524d18df7200b74ac9a475e1db6297fc1eb57da4c214c63d10ecc4b754fa"
 	// Timescale is the PostgreSQL 17 TimescaleDB integration-test image.
-	Timescale = "timescale/timescaledb:2.31.0-pg17@sha256:b56a3f51991df1f79d0c1a0841cad5c5fa8058fdd6a3ee6886394a6d4c174538"
+	Timescale = "timescale/timescaledb:2.32.0-pg17@sha256:6a6b7d7a346d7c6be03a310c240706f3bbc6d7adbdf3fbc07823570b34337f5e"
 	// TimescaleApache is the Apache-2.0-only (OSS) build of the same TimescaleDB release.
-	TimescaleApache = "timescale/timescaledb:2.31.0-pg17-oss@sha256:668ee2d521ed472045f74c9e16f01318ab73120754ff8ba4cf1d76f00a26307a"
+	TimescaleApache = "timescale/timescaledb:2.32.0-pg17-oss@sha256:c9ad81cd4f28fcf3dc8667ec3daf0b08e24de123cd884c3a1bb9e79fbd8439e7"
 	// Redis is the default Redis integration-test image.
 	Redis = "redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3"
 	// Dragonfly is the Redis-compatible Dragonfly integration-test image.
