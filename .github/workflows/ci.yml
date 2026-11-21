@@ -1206,14 +1206,15 @@ jobs:
 
   # ── Aggregate gate ───────────────────────────────────────────────────────────
   # Single "green only if every gating job passed" check used by classic branch
-  # protection and release verification. Current praetor excludes `if: always()`
-  # jobs from generated rulesets, so the tracked ruleset names the leaf contexts
-  # until cordanaLLM/praetor#76 gains aggregate selection. CodeQL stays separate.
+  # protection and release verification. The tracked ruleset names the leaf
+  # contexts until cordanaLLM/praetor#76 gains aggregate selection, so a skipped
+  # aggregate never passes alone. CodeQL stays separate.
   ci-success:
     name: CI success
     # Runs for renovate[bot] too. Mandatory jobs must succeed; only jobs whose
     # event contract makes them inapplicable may be skipped.
-    if: always()
+    # always() survives cancellation and holds the concurrency group, so a newer push waits.
+    if: ${{ !cancelled() }}
     needs:
       - pr-title
       - lint
