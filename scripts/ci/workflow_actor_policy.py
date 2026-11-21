@@ -29,6 +29,7 @@ WORKFLOW_DIRS: tuple[str, ...] = (".github/workflows", ".gitea/workflows")
 ACTION_DIRS: tuple[str, ...] = (".github", ".gitea")
 MAX_WORKFLOW_FILES = 256
 MAX_WORKFLOW_LINES = 8192
+MAX_SPAN_LINES = 8
 # Match Go maxResponseBytes to bound the complete parser wire response.
 MAX_RESPONSE_BYTES = 8 * (1 << 20)
 
@@ -187,7 +188,7 @@ _INDEX_ACCESS = re.compile(
 )
 # Match identity object segments directly so unlisted nested fields fail closed.
 _IDENTITY_OBJECT = (
-    r"(?:actor|actor_id|triggering_actor|sender|user|author|committer|pusher"
+    r"(?:actor|actor_id|triggering_\s*actor|sender|user|author|committer|pusher"
     r"|merged_by|assignee|requested_reviewer)"
 )
 _ACTOR_TOKEN = re.compile(
@@ -195,7 +196,7 @@ _ACTOR_TOKEN = re.compile(
     rf"\.{_IDENTITY_OBJECT}\b"
     rf"|\b{_IDENTITY_OBJECT}\s*[.\[]"
     r"|\.login\b"
-    r"|\b(?:github|gitea)\.(?:actor_id|triggering_actor|actor)\b"
+    r"|\b(?:github|gitea)\.(?:actor_id|triggering_\s*actor|actor)\b"
     r"|\bauthor_association\b"
     r"|\bGIT(?:HUB|EA)_(?:ACTOR_ID|TRIGGERING_ACTOR|ACTOR)\b"
     r")",
@@ -387,6 +388,9 @@ class _ScanState:
     if_block: bool = False
     previous_if_line: str = ""
     pending_if_indent: int | None = None
+    span_lineno: int = 0
+    span_lines: int = 0
+    span_text: str = ""
 
     def advance_section(self, line: str, indent: int) -> None:
         """Update top-level YAML section, current job, and job-if count."""
@@ -430,6 +434,47 @@ class _ScanState:
             and _TOP_KEY.match(stripped) is None
             and re.match(r"^-[ \t]", stripped) is None
         )
+
+    def flush_span(self, name: str) -> list[str]:
+        """Refuse a block-scalar expression span that remains open."""
+        if not self.span_lineno:
+            return []
+        finding = (
+            f"{name}:{self.span_lineno}:{self.current_job}: "
+            "expression spans lines refused"
+        )
+        self.span_lineno = 0
+        self.span_lines = 0
+        self.span_text = ""
+        return [finding]
+
+    def consume_span(self, name: str, lineno: int, text: str) -> list[str]:
+        """Join multi-line block-scalar expressions and check actor tokens on close."""
+        if not self.span_lineno:
+            if text.count("${{") > text.count("}}"):
+                self.span_lineno = lineno
+                self.span_lines = 1
+                self.span_text = text
+            return []
+        self.span_text = f"{self.span_text} {text}"
+        self.span_lines += 1
+        if self.span_text.count("${{") <= self.span_text.count("}}"):
+            open_lineno = self.span_lineno
+            joined = self.span_text
+            self.span_lineno = 0
+            self.span_lines = 0
+            self.span_text = ""
+            if _has_disallowed_token(joined, self.if_block):
+                return [
+                    (
+                        f"{name}:{open_lineno}:{self.current_job}: "
+                        f"disallowed actor reference: {joined}"
+                    )
+                ]
+            return []
+        if self.span_lines >= MAX_SPAN_LINES:
+            return self.flush_span(name)
+        return []
 
 
 def _normalise_if_expr(raw: str) -> str:
@@ -601,12 +646,13 @@ def _consume_block_scalar(
     if not stripped:
         return True, []
     if indent <= state.block_scalar:
+        findings = state.flush_span(name)
         state.block_scalar = None
         state.uses_block = False
         state.if_block = False
         state.previous_if_line = ""
-        return False, []
-    findings: list[str] = []
+        return False, findings
+    findings = []
     token_line = line
     if state.if_block:
         token_line = state.previous_if_line + " " + line
@@ -616,6 +662,7 @@ def _consume_block_scalar(
             f"{name}:{lineno}:{state.current_job}: "
             f"disallowed actor reference: {stripped.strip()}"
         )
+    findings.extend(state.consume_span(name, lineno, stripped.strip()))
     if state.uses_block:
         uses_finding = _check_uses_value(
             name, lineno, stripped, state.current_job, local_ctx
@@ -636,16 +683,19 @@ def _check_line(
     """Return policy findings for one workflow or action line."""
     stripped = line.lstrip(" \t")
     indent = len(line) - len(stripped)
-    consumed, block_findings = _consume_block_scalar(
+    consumed, findings = _consume_block_scalar(
         name, lineno, line, stripped, indent, state, local_ctx
     )
     if consumed:
-        return block_findings
+        return findings
+    if line.count("${{") > line.count("}}"):
+        findings.append(
+            f"{name}:{lineno}:{state.current_job}: expression spans lines refused"
+        )
     if not stripped or stripped.startswith("#"):
-        return []
+        return findings
     multiline_if = state.consume_if_continuation(stripped, indent)
     state.advance_structure(line, indent)
-    findings: list[str] = []
     if multiline_if:
         findings.append(f"{name}:{lineno}:{state.current_job}: multi-line if refused")
     if line.rstrip().endswith("\\"):
@@ -680,11 +730,8 @@ def _check_lines(
     state = _ScanState()
     findings: list[str] = []
     for lineno, line in enumerate(lines[:MAX_WORKFLOW_LINES], start=1):
-        if line.count("${{") > line.count("}}"):
-            findings.append(
-                f"{name}:{lineno}:{state.current_job}: expression spans lines refused"
-            )
         findings.extend(_check_line(name, lineno, line, state, hits, local_ctx))
+    findings.extend(state.flush_span(name))
     return findings
 
 
