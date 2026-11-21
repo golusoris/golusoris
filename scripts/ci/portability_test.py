@@ -41,6 +41,24 @@ TEARDOWN_BUDGET_SECONDS = (
     + 3
 )
 
+# 3600 s cap at 0.05 s polls; the test, not a timer, ends the hold.
+PIPE_HOLD_POLLS = 72000
+
+
+def pipe_holding_parent(release: Path) -> str:
+    """Return a direct-child python -c script whose grandchild holds pipes until release exists."""
+    grandchild = (
+        "import os,sys,time\n"
+        f"for _ in range({PIPE_HOLD_POLLS}):\n"
+        "    if os.path.exists(sys.argv[1]):\n"
+        "        break\n"
+        "    time.sleep(0.05)"
+    )
+    return (
+        "import subprocess,sys; "
+        f"subprocess.Popen([sys.executable, '-c', {grandchild!r}, {str(release)!r}])"
+    )
+
 
 def _transient_retry_responses(compressed: bytes) -> list[object]:
     """Keep the scripted retry sequence identical across download checks."""
@@ -260,24 +278,57 @@ class PortabilityDriverTest(TestCase):
 
     def test_process_output_bounds_pipe_inheriting_descendant(self) -> None:
         runner = portability.ProcessRunner()
-        grandchild = "import time; time.sleep(60)"
-        parent = (
-            "import subprocess,sys; "
-            f"subprocess.Popen([sys.executable, '-c', {grandchild!r}]); "
-        )
         started = time.monotonic()
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(
-                portability.PortabilityError, "output pipes remained open"
-            ):
-                runner.output(
-                    (sys.executable, "-c", parent),
-                    cwd=Path(directory),
-                    environment=dict(os.environ),
-                    timeout=30,
-                    max_output_bytes=4,
-                )
+            release = Path(directory) / "release"
+            survived = True
+            try:
+                with self.assertRaisesRegex(portability.PortabilityError, "output pipes remained open"):
+                    runner.output(
+                        (sys.executable, "-c", pipe_holding_parent(release)),
+                        cwd=Path(directory), environment=dict(os.environ), timeout=30, max_output_bytes=4,
+                    )
+                survived = False
+            finally:
+                release.touch()
+                if survived:
+                    # Keep release on disk past one 0.05 s poll before TemporaryDirectory unlinks it.
+                    time.sleep(0.2)
         self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
+
+    def test_process_output_pipe_detection_survives_runner_stall(self) -> None:
+        # Exceeds PROCESS_PIPE_JOIN_SECONDS (1.0 s) so a 1 s timer-bounded hold would already exit.
+        STALL = 1.5
+        original = portability._join_threads
+        first_call = [True]
+
+        def stalled_join(threads: list[portability.threading.Thread], timeout: float) -> bool:
+            if first_call[0]:
+                first_call[0] = False
+                time.sleep(STALL)
+            return original(threads, timeout)
+
+        runner = portability.ProcessRunner()
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory() as directory:
+            release = Path(directory) / "release"
+            survived = True
+            try:
+                with (
+                    mock.patch.object(portability, "_join_threads", side_effect=stalled_join),
+                    self.assertRaisesRegex(portability.PortabilityError, "output pipes remained open"),
+                ):
+                    runner.output(
+                        (sys.executable, "-c", pipe_holding_parent(release)),
+                        cwd=Path(directory), environment=dict(os.environ), timeout=30, max_output_bytes=4,
+                    )
+                survived = False
+            finally:
+                release.touch()
+                if survived:
+                    # Keep release on disk past one 0.05 s poll before TemporaryDirectory unlinks it.
+                    time.sleep(0.2)
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS + STALL)
 
     @skipUnless(os.name == "posix", "process groups are POSIX")
     def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
