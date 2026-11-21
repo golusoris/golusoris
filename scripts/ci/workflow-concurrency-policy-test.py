@@ -162,13 +162,22 @@ def _cancel_findings(name: str, cancel: str) -> list[str]:
     return findings
 
 
+def _continues_condition(line: str, condition: str) -> bool:
+    if line.startswith("     ") or not line.strip():
+        return True
+    # YAML may place a separation comment before the scalar while the value is still empty.
+    return line.lstrip().startswith("#") and not _without_condition_comments(
+        condition,
+    ).strip()
+
+
 def _job_conditions(lines: list[str]) -> dict[str, str]:
     """Map each job id to its job-level if: text, retaining continuation lines."""
     conditions: dict[str, str] = {}
     job = ""
     in_condition = False
     for line in lines:
-        if in_condition and (line.startswith("     ") or not line.strip()):
+        if in_condition and _continues_condition(line, conditions[job]):
             conditions[job] += "\n" + line
             continue
         in_condition = False
@@ -936,6 +945,37 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
     def test_called_workflow_always_fails(self) -> None:
         text = "on:\n  workflow_call:\njobs:\n  gate:\n    if: ${{ always() }}\n"
         self.assertEqual(len(check("w.yml", text, _TODAY)), 1)
+
+    def test_if_separation_comment_always_finds(self) -> None:
+        def _probe(condition: str, sep: str, if_line: str = "    if:\n") -> str:
+            return (
+                "on: workflow_call\njobs:\n  gate:\n"
+                + if_line
+                + sep
+                + "      "
+                + condition
+                + "\n    runs-on: ubuntu-latest\n    steps:\n      - run: 'true'\n"
+            )
+
+        always_find = (
+            ("    # Explain the condition.\n", "    if:\n"),
+            ("  # shallow\n", "    if:\n"),
+            ("    # first\n    # second\n", "    if:\n"),
+            ("    # after inline\n", "    if: # explain\n"),
+        )
+        for sep, if_line in always_find:
+            with self.subTest(sep=sep, condition="always()"):
+                findings = check("w.yml", _probe("always()", sep, if_line), _TODAY)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("runs under always()", findings[0])
+        for sep, if_line in always_find:
+            with self.subTest(sep=sep, condition="not_cancelled"):
+                findings = check(
+                    "w.yml",
+                    _probe("${{ !cancelled() }}", sep, if_line),
+                    _TODAY,
+                )
+                self.assertEqual(findings, [])
 
     def test_restored_always_on_ci_aggregate_fails(self) -> None:
         ci = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
