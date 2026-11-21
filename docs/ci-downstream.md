@@ -249,13 +249,16 @@ jobs:
 ```
 
 The certificate names the `release-go.yml` path of the run that signed the
-artifact, not the framework commit that run pinned. Artifacts signed while the
-repository lived at `golusoris/golusoris` (framework releases up to v0.22.2,
-and caller release runs from before the move) name that owner and verify with
+artifact, not the framework commit that run pinned. Caller release runs from
+before the move, signed while the repository lived at `golusoris/golusoris`,
+name that owner and verify with
 `--signer-workflow golusoris/golusoris/.github/workflows/release-go.yml`.
-Artifacts signed after the move through a `plurano/golusoris` call name
+Caller release runs after the move through a `plurano/golusoris` call name
 `plurano/golusoris`, whatever commit the call pins. When unsure, take the owner
-from the subject alternative name of the signing certificate.
+from the subject alternative name of the signing certificate. Framework release
+archives are signed by `release-build.yml`, not `release-go.yml`; verify them
+with the commands in
+[`SECURITY.md`](https://github.com/plurano/golusoris/blob/main/SECURITY.md).
 
 `verify-provenance.yml` fails if every verification mode is disabled. By
 default it verifies the keyless signature plus the SLSA provenance and SPDX
