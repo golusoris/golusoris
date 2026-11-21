@@ -2,7 +2,7 @@ module github.com/golusoris/golusoris/testutil/pact
 
 go 1.27.4
 
-require github.com/pact-foundation/pact-go/v2 v2.8.0
+require github.com/pact-foundation/pact-go/v2 v2.9.1
 
 require (
 	github.com/hashicorp/go-version v1.9.0 // indirect
@@ -12,11 +12,12 @@ require (
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/ulikunitz/xz v0.5.17 // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
-	google.golang.org/grpc v1.83.2 // indirect
+	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
