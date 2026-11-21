@@ -20,7 +20,7 @@
     }
   },
   "postUpdateOptions": [
-    "gomodTidy"
+    "gomodTidyAll"
   ],
   "dockerfile": {
     "managerFilePatterns": [
