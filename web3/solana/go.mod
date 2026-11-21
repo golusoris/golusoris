@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	github.com/gagliardetto/binary v0.8.0
-	github.com/solana-foundation/solana-go/v2 v2.1.0
+	github.com/solana-foundation/solana-go/v2 v2.3.0
 	github.com/stretchr/testify v1.12.1
 )
 
