@@ -98,5 +98,10 @@ expect_failure env PR_TITLE=skipped EVENT_NAME=merge_group DEPENDENCY_REVIEW=ski
 expect_failure env PR_TITLE=skipped EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=failure bash "$0" --single
 expect_failure env ATTRIBUTION=success bash "$0" --single
 expect_failure env PR_TITLE=skipped EVENT_NAME=push DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=success bash "$0" --single
+# The job runs under !cancelled(), not always(); a cancelled leaf still fails it.
+expect_failure env TEST=cancelled bash "$0" --single
+expect_failure env DEPENDENCY_REVIEW=cancelled bash "$0" --single
+expect_failure env PR_TITLE=skipped EVENT_NAME=push DEPENDENCY_REVIEW=cancelled DCO=skipped bash "$0" --single
+expect_failure env PR_TITLE=skipped EVENT_NAME=merge_group DEPENDENCY_REVIEW=skipped DCO=skipped ATTRIBUTION=cancelled bash "$0" --single
 
 printf 'required-job result policy tests passed\n'

@@ -43,7 +43,18 @@ while (( $# > 0 )); do
 	[[ "$#" -ge 2 && "$1" == --suite ]] || exit 97
 	shift 2
 done
+[[ ! -f "$root/runner.pass" ]] || exit 0
 python3 -B "$root/scripts/ci/failing_test.py"
+SH
+	cat >"$root/scripts/ci/python-symlink-tmpdir.sh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "$#" == 2 && "$1" == --root ]] || exit 97
+[[ ! -v CI_SCOPE_BASE ]] || { printf 'replay inherited CI_SCOPE_BASE\n' >&2; exit 98; }
+root="$2"
+printf '%s\n' "$@" >"$root/replay.args"
+printf 'replay invoked\n' >"$root/replay.called"
+[[ ! -f "$root/replay.fail" ]] || exit 29
 SH
 	cat >"$root/scripts/ci/failing_test.py" <<'PYF'
 import sys
@@ -87,7 +98,7 @@ import sys
 source = Path(sys.argv[1]).read_text()
 mutations = {
     "bypass": ('env -u CI_SCOPE_BASE bash "$root/scripts/ci/python-tests.sh" --root "$root" "${suites[@]}" || return $?', 'true'),
-    "scope": ('env -u CI_SCOPE_BASE bash', 'bash'),
+    "scope": ('env -u CI_SCOPE_BASE bash "$root/scripts/ci/python-tests.sh"', 'bash "$root/scripts/ci/python-tests.sh"'),
     "suites": ('"${suites[@]}" || return $?', '|| return $?'),
     "dirty": ('if ! git -C "$root" diff --quiet HEAD -- "$path"; then', 'if ! true; then'),
 }
@@ -96,6 +107,39 @@ for name, (marker, replacement) in mutations.items():
         raise SystemExit(f"{name} mutation requires exactly one marker")
     (Path(sys.argv[2]) / f"{name}.sh").write_text(source.replace(marker, replacement))
 PYM
+	sed '\|env -u CI_SCOPE_BASE bash .*scripts/ci/python-symlink-tmpdir[.]sh|d' \
+		"$1/scripts/hooks/python-tests.sh" >"$1/scripts/hooks/replay.sh"
+}
+
+# A passing plain runner must reach the replay with its repository and clean scope.
+assert_replay_called() {
+	local hook="$1" root="$2" expected
+	rm -f "$root/replay.called" "$root/replay.args"
+	bash "$hook" --pushed scripts/ci/helper.py || return $?
+	expected="$(printf '%s\n' --root "$root")"
+	if [[ ! -f "$root/replay.called" || "$(cat "$root/replay.args")" != "$expected" ]]; then
+		printf 'symlink TMPDIR replay missing or arguments mismatch\n' >&2
+		return 1
+	fi
+}
+
+# Replay failures and plain failures must retain their separate exit paths.
+assert_replay_contract() {
+	local root="$1" hook="$1/scripts/hooks/python-tests.sh" rc=0
+	assert_python_failure "$hook" scripts/ci/helper.py
+	[[ ! -e "$root/replay.called" ]]
+	touch "$root/runner.pass"
+	assert_replay_called "$hook" "$root"
+	expect_failure_matching 'symlink TMPDIR replay missing or arguments mismatch' \
+		assert_replay_called "$root/scripts/hooks/replay.sh" "$root"
+	touch "$root/replay.fail"
+	bash "$hook" --pushed scripts/ci/helper.py || rc=$?
+	if (( rc != 29 )); then
+		printf 'replay failure swallowed: expected exit 29, got %s\n' "$rc" >&2
+		return 1
+	fi
+	[[ -e "$root/replay.called" ]]
+	rm "$root/runner.pass" "$root/replay.fail" "$root/replay.called"
 }
 
 main() {
@@ -116,12 +160,14 @@ main() {
 		output="$(bash "$root/scripts/hooks/python-tests.sh" --pushed "$path")"
 		[[ "$output" == 'python-tests: no Python policy files pushed, skipping' ]]
 		[[ ! -e "$root/runner.called" ]]
+		[[ ! -e "$root/replay.called" ]]
 	done
 	output="$(bash "$root/scripts/hooks/python-tests.sh" --pushed)"
 	[[ "$output" == 'python-tests: no Python policy files pushed, skipping' ]]
 	[[ ! -e "$root/runner.called" ]]
 	grep -Fq '      run: bash scripts/hooks/python-tests.sh --pushed {push_files}' "$repo_root/lefthook.yml"
 	write_mutants "$root"
+	assert_replay_contract "$root"
 	expect_failure_matching 'Python failure swallowed: expected exit 23, got 0' \
 		assert_python_failure "$root/scripts/hooks/bypass.sh" scripts/ci/failing_test.py
 	expect_failure_matching 'runner inherited CI_SCOPE_BASE' \

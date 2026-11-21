@@ -68,7 +68,7 @@ class WindowsPanicRescanTest(TestCase):
             "STUB_STATE": state,
             "STUB_COUNTER": str(self.root / "counter"),
             "RESCAN_RETRY_DELAY_SECONDS": retry_delay,
-            "GITHUB_REPOSITORY": "golusoris/golusoris",
+            "GITHUB_REPOSITORY": "plurano/golusoris",
         }
         if fail:
             env["STUB_FAIL"] = "1"

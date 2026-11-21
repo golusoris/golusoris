@@ -8,7 +8,7 @@ set -euo pipefail
 # Bound scanned template files and referenced workflows against runaway inputs.
 readonly max_template_files=64
 readonly max_uses_per_file=64
-readonly allow_regex='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+golusoris/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})[[:space:]]+#[[:space:]]+(v[0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$'
+readonly allow_regex='^[[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+plurano/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@([0-9a-f]{40})[[:space:]]+#[[:space:]]+(v[0-9]+\.[0-9]+\.[0-9]+)[[:space:]]*$'
 
 temp_dir=""
 total_matched_pins=0
@@ -29,50 +29,6 @@ resolve_root() {
 		return 2
 	fi
 	(cd "$2" && pwd)
-}
-
-# locate_tool prints the override path, else the PATH match; it prints nothing when the tool is absent.
-locate_tool() {
-	local override="$1"
-	local name="$2"
-	local found
-	if [[ -n "$override" ]]; then
-		printf '%s\n' "$override"
-	elif found="$(command -v "$name")"; then
-		printf '%s\n' "$found"
-	fi
-}
-
-check_actionlint() {
-	local actionlint_bin="$1"
-	if [[ -z "$actionlint_bin" || ! -x "$actionlint_bin" ]]; then
-		printf 'actionlint %s is required; executable is unavailable\n' \
-			"$ACTIONLINT_VERSION" >&2
-		return 1
-	fi
-	local actual_actionlint_version
-	actual_actionlint_version="$("$actionlint_bin" -version | awk 'NR == 1 { print $1; exit }')"
-	if [[ "$actual_actionlint_version" != "$ACTIONLINT_VERSION" ]]; then
-		printf 'actionlint version is %s, want %s\n' \
-			"${actual_actionlint_version:-unknown}" "$ACTIONLINT_VERSION" >&2
-		return 1
-	fi
-}
-
-check_shellcheck() {
-	local shellcheck_bin="$1"
-	if [[ -z "$shellcheck_bin" || ! -x "$shellcheck_bin" ]]; then
-		printf 'ShellCheck %s is required by actionlint; executable is unavailable\n' \
-			"$SHELLCHECK_VERSION" >&2
-		return 1
-	fi
-	local actual_shellcheck_version
-	actual_shellcheck_version="$("$shellcheck_bin" --version | awk '$1 == "version:" { print $2; exit }')"
-	if [[ "$actual_shellcheck_version" != "$SHELLCHECK_VERSION" ]]; then
-		printf 'actionlint ShellCheck version is %s, want %s\n' \
-			"${actual_shellcheck_version:-unknown}" "$SHELLCHECK_VERSION" >&2
-		return 1
-	fi
 }
 
 collect_template_files() {
@@ -203,7 +159,7 @@ lint_rewritten_workflow() {
 	local name="${file##*/}"
 	local copy_name="check_${name}"
 
-	sed -E 's|^([[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+)golusoris/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$|\1./.github/workflows/\3|' \
+	sed -E 's|^([[:space:]]*(-[[:space:]]+)?uses:[[:space:]]+)plurano/golusoris/\.github/workflows/([A-Za-z0-9._-]+\.ya?ml)@[0-9a-f]{40}[[:space:]]+#[[:space:]]+v[0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$|\1./.github/workflows/\3|' \
 		"$root/$file" > "$repo_dir/.github/workflows/$copy_name"
 
 	local actionlint_status=0
@@ -251,6 +207,10 @@ check_template_file() {
 }
 
 main() {
+	local script_root
+	script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	# shellcheck source=scripts/ci/lib/lint-tools.sh
+	. "$script_root/scripts/ci/lib/lint-tools.sh"
 	local root
 	root="$(resolve_root "$@")"
 	readonly root

@@ -143,7 +143,7 @@ neg_inline="$suite_root/inline-block.yml"
 python3 - "$repo_root/.github/workflows/ci.yml" "$neg_inline" <<'PY'
 import sys
 text = open(sys.argv[1], encoding="utf-8").read()
-marker = "uses: golusoris/golusoris/.github/actions/stop-on-draft@"
+marker = "uses: plurano/golusoris/.github/actions/stop-on-draft@"
 block = "env:\n          TITLE: Gate not run on a draft\n        " + marker
 open(sys.argv[2], "w", encoding="utf-8").write(text.replace(marker, block, 1))
 PY
@@ -184,7 +184,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Stop on a draft pull request
-        uses: golusoris/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553
+        uses: plurano/golusoris/.github/actions/stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553
 YAML
 expect_failure 'job build must run the stop-on-draft action as its first step' \
 	check_stop_on_draft_usage "$neg_after_checkout"

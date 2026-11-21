@@ -127,8 +127,8 @@ run_case other-repository "$HEAD" "11 action_required release-please--branches--
 run_case no-release-pr "" "" 0 0
 run_case non-release-head "feature/x $SHA false" "11 action_required feature/x owner/repo" 0 0
 run_case cross-repository-head "release-please--branches--main $SHA true" "11 action_required release-please--branches--main owner/repo" 0 0
-run_case no-run "$HEAD" "" 1 0
-grep -q 'no pull request run on release-please--branches--main' "$WORK/out"
+run_case no-run "$HEAD" "" 0 0
+grep -Fxq "::notice title=release-pr-ci late run::no pull request run on release-please--branches--main at $SHA after 2 tries; none approved here, the next release-please run approves one still waiting" "$WORK/out"
 run_case api-fails "$HEAD" fail 1 0
 run_case pr-list-fails fail "11 action_required release-please--branches--main owner/repo" 1 0
 grep -q 'could not list open release pull requests' "$WORK/out"
@@ -160,8 +160,13 @@ run_case odd-run "$HEAD" "null action_required release-please--branches--main ow
 run_case odd-head "release-please--branches--main not-a-sha false" "11 action_required release-please--branches--main owner/repo" 1 0
 STUB_EMPTY_FIRST=1 run_case late-run "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1 ok 2
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
-STUB_EMPTY_FIRST=2 run_case too-late "$HEAD" "11 action_required release-please--branches--main owner/repo" 1 0 ok 2
-grep -q 'after 2 tries' "$WORK/out"
+STUB_EMPTY_FIRST=2 run_case too-late "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 0 ok 2
+grep -q 'after 2 tries; none approved here, the next release-please run approves one still waiting' "$WORK/out"
+STUB_EMPTY_FIRST=2 run_case late-run-then-next-head "$HEAD
+release-please--branches--main--components--core $SHA false" "11 action_required release-please--branches--main owner/repo
+12 action_required release-please--branches--main--components--core owner/repo" 0 1 ok 2
+grep -qx 'repos/owner/repo/actions/runs/12/approve' "$WORK/log"
+grep -Fxq "::notice title=release-pr-ci late run::no pull request run on release-please--branches--main at $SHA after 2 tries; none approved here, the next release-please run approves one still waiting" "$WORK/out"
 STUB_EMPTY_FIRST=10 run_case default-window "$HEAD" "11 action_required release-please--branches--main owner/repo" 0 1 ok ""
 grep -qx 'repos/owner/repo/actions/runs/11/approve' "$WORK/log"
 
@@ -171,4 +176,4 @@ RELEASE_PR_EXPECTED=true run_case expected-pr-missing "" "" 1 0
 grep -q 'none listed after 2 tries' "$WORK/out"
 RELEASE_PR_EXPECTED=yes run_case odd-expected "$HEAD" "11 action_required release-please--branches--main owner/repo" 2 0
 
-echo "release pull request CI: 7 approved, 6 skipped, 11 refused"
+echo "release pull request CI: 11 approved, 8 skipped, 10 refused"

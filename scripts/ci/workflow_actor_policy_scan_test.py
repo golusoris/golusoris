@@ -98,6 +98,138 @@ class WorkflowActorPolicyScanTest(unittest.TestCase):
     def test_repository_workflows_comply(self) -> None:
         self.assertEqual(policy.scan(policy.REPO_ROOT), [])
 
+    def test_folded_block_multiline_safe_expression_passes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/praetor.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n  group: >-\n"
+                "    ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+                "    github.run_id }}\n"
+                "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(policy.scan(root), [])
+
+    def test_folded_block_multiline_split_github_actor_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/actor.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n  group: >-\n"
+                "    ${{ github.\n"
+                "    actor }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(
+                policy.scan(root),
+                [
+                    (
+                        ".github/workflows/actor.yml:5:<top>: "
+                        "disallowed actor reference: ${{ github. actor }}"
+                    )
+                ],
+            )
+
+    def test_folded_block_multiline_split_triggering_actor_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/triggering.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n  group: >-\n"
+                "    ${{ github.triggering_\n"
+                "    actor }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(
+                policy.scan(root),
+                [
+                    (
+                        ".github/workflows/triggering.yml:5:<top>: "
+                        "disallowed actor reference: ${{ github.triggering_ actor }}"
+                    )
+                ],
+            )
+
+    def test_plain_scalar_multiline_expression_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/plain.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n"
+                "  group: ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+                "    github.run_id }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(
+                policy.scan(root),
+                [
+                    (
+                        ".github/workflows/plain.yml:4:<top>: "
+                        "expression spans lines refused"
+                    )
+                ],
+            )
+
+    def test_block_scalar_unclosed_expression_span_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/unclosed.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n  group: >-\n"
+                "    ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+                "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(
+                policy.scan(root),
+                [
+                    (
+                        ".github/workflows/unclosed.yml:5:<top>: "
+                        "expression spans lines refused"
+                    )
+                ],
+            )
+
+    def test_block_scalar_expression_span_over_eight_lines_refused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            policy.write_fixture(
+                root,
+                ".github/workflows/long-span.yml",
+                "on:\n  pull_request:\n"
+                "concurrency:\n  group: >-\n"
+                "    ${{ github.workflow ||\n"
+                "    github.run_id ||\n"
+                "    github.run_number ||\n"
+                "    github.run_attempt ||\n"
+                "    github.job ||\n"
+                "    github.ref ||\n"
+                "    github.ref_name ||\n"
+                "    github.sha ||\n"
+                "    github.workspace }}\n"
+                "jobs: {}\n",
+            )
+            self.assertEqual(
+                policy.scan(root),
+                [
+                    (
+                        ".github/workflows/long-span.yml:5:<top>: "
+                        "expression spans lines refused"
+                    )
+                ],
+            )
+
 
 if __name__ == "__main__":
     sys.exit(0 if unittest.main(exit=False).result.wasSuccessful() else 3)
