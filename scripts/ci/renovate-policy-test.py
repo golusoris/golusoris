@@ -809,38 +809,24 @@ def test_chromedp_group(config: dict[str, object]) -> bool:
 
 
 def goenvoy_group_valid(config: dict[str, object]) -> bool:
-    """Require one active goenvoy package rule that groups only goenvoy Go modules."""
+    """Require one active goenvoy package rule with the canonical goenvoy pattern."""
     rules = config.get("packageRules")
     if not isinstance(rules, list):
         return False
-    expected = {
-        "github.com/golusoris/goenvoy/arr/v2": True,
-        "github.com/golusoris/goenvoy/metadata": True,
-        "github.com/golusoris/goenvoy/downloadclient/sabnzbd/v2": True,
-        "github.com/golusoris/golusoris/core": False,
-        "github.com/golusoris/goenvoyx/arr": False,
-        "github.com/other/goenvoy/arr": False,
-    }
     matching = 0
     for rule in rules:
         if not isinstance(rule, dict) or rule.get("enabled") is False:
             continue
         if rule.get("matchDatasources") != ["go"] or rule.get("groupName") != "goenvoy modules":
             continue
-        names = rule.get("matchPackageNames")
-        if not isinstance(names, list) or not all(isinstance(pat, str) for pat in names):
-            return False
-        if not all(
-            any(name == pat or fnmatch.fnmatch(name, pat) for pat in names) is wanted
-            for name, wanted in expected.items()
-        ):
+        if rule.get("matchPackageNames") != ["github.com/golusoris/goenvoy/**"]:
             return False
         matching += 1
     return matching == 1
 
 
 def test_goenvoy_group(config: dict[str, object]) -> bool:
-    """Report a missing goenvoy group and prove its removal, widening and rename are refused."""
+    """Report a missing goenvoy group; refuse removed, widened, renamed, external-added and single-star rules."""
     if not goenvoy_group_valid(config):
         print(
             'renovate.json must group goenvoy module updates in one "goenvoy modules" branch',
@@ -851,6 +837,11 @@ def test_goenvoy_group(config: dict[str, object]) -> bool:
         ("removed", None),
         ("widened", {"matchPackageNames": ["github.com/golusoris/**"]}),
         ("renamed", {"groupName": "goenvoy"}),
+        (
+            "external added",
+            {"matchPackageNames": ["github.com/golusoris/goenvoy/**", "github.com/google/uuid"]},
+        ),
+        ("single star", {"matchPackageNames": ["github.com/golusoris/goenvoy/*"]}),
     )
     for name, patch in patches:
         mutated = json.loads(json.dumps(config))
