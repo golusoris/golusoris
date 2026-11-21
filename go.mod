@@ -89,7 +89,7 @@ require (
 	github.com/pgvector/pgvector-go/pgx v0.4.1
 	github.com/pion/webrtc/v4 v4.2.26
 	github.com/pquerna/otp v1.5.0
-	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.94.2
+	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.95.2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.72.1
@@ -431,10 +431,10 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/apiextensions-apiserver v0.37.0 // indirect
+	k8s.io/apiextensions-apiserver v0.37.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260821135717-be32def86098 // indirect
-	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3 // indirect
+	k8s.io/utils v0.0.0-20261023123148-ca04ba58ecab // indirect
 	modernc.org/libc v1.77.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
