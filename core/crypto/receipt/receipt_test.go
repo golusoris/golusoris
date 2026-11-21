@@ -33,7 +33,7 @@ func newSigner(t *testing.T) *receipt.Signer {
 func TestSignVerifyRoundTrip(t *testing.T) {
 	t.Parallel()
 	s := newSigner(t)
-	r, err := s.Sign(receipt.Run{Command: "make verify-all", Output: []byte("ok\n"), CommitSHA: "abc123", Repository: "golusoris/golusoris"})
+	r, err := s.Sign(receipt.Run{Command: "make verify-all", Output: []byte("ok\n"), CommitSHA: "abc123", Repository: "plurano/golusoris"})
 	if err != nil {
 		t.Fatalf("Sign: %v", err)
 	}

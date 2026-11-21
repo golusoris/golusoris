@@ -6,7 +6,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 # Agent guide — integrations/goenvoy/
 
-Thin fx adapter that wires opt-in [goenvoy](https://github.com/golusoris/goenvoy)
+Thin fx adapter that wires opt-in [goenvoy](https://github.com/plurano/goenvoy)
 service clients (Sonarr, TMDb, AniList, Trakt.) onto framework's
 resilient outbound `*http.Client` (`httpx/client`: retry + circuit-breaker +
 otelhttp + slog). **It does NOT reimplement goenvoy** — it only injects framework transport, optional response cache, and config into goenvoy's own

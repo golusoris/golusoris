@@ -67,6 +67,11 @@
         {
           "type": "generic",
           "path": "README.md"
+        },
+        {
+          "type": "json",
+          "path": ".agents/plugins/praetor/plugin.json",
+          "jsonpath": "$.version"
         }
       ]
     },

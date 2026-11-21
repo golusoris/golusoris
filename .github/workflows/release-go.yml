@@ -14,7 +14,7 @@
 # Apps call it with:
 #   jobs:
 #     release:
-#       uses: golusoris/golusoris/.github/workflows/release-go.yml@<full-framework-commit-sha>
+#       uses: plurano/golusoris/.github/workflows/release-go.yml@<full-framework-commit-sha>
 #       with:
 #         image-name: ghcr.io/myorg/myapp
 name: release-go (reusable)

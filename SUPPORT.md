@@ -12,7 +12,7 @@ support tier. If you need help, start here.
 ## Questions about using the framework
 
 - **A module won't wire / `fx` errors at startup** —
-  [open a bug report](https://github.com/golusoris/golusoris/issues/new/choose).
+  [open a bug report](https://github.com/plurano/golusoris/issues/new/choose).
 - **Config / koanf key resolution, env-var mapping** — same.
 - **HTTP, DB (pgx), jobs (river), cache, auth, observability modules** — same.
 - **Bumping golusoris in a downstream app + applying migration codemods** —
@@ -50,5 +50,5 @@ v1.0, this section will define a concrete support window.
 
 ## Chat / real-time
 
-None currently. Watch [the repo](https://github.com/golusoris/golusoris) for
+None currently. Watch [the repo](https://github.com/plurano/golusoris) for
 announcements.

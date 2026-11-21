@@ -7,7 +7,7 @@
 # Apps call it with:
 #   jobs:
 #     ci:
-#       uses: golusoris/golusoris/.github/workflows/ci-go.yml@main
+#       uses: plurano/golusoris/.github/workflows/ci-go.yml@main
 #       with:
 #         runs-on: ubuntu-26.04
 #         working-directory: .

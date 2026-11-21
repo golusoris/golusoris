@@ -42,5 +42,5 @@ We will use `github.com/ogen-go/ogen` for generating server stubs, request/respo
 
 - The decision evaluated ogen v1.20.3. The maintained current pin is recorded in
   [`docs/upstream/ogen/`](../upstream/ogen/README.md).
-- ogenkit middleware: [`ogenkit/`](https://github.com/golusoris/golusoris/tree/main/ogenkit).
+- ogenkit middleware: [`ogenkit/`](https://github.com/plurano/golusoris/tree/main/ogenkit).
 - [ADR-0007](0007-rfc-9457-problem-details.md) — error body format.

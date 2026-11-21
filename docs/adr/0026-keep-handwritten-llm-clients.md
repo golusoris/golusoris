@@ -13,19 +13,19 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-The packages `ai/llm`, `ai/llm/anthropic`, and `ai/llm/ollama` provide minimal, resilient HTTP clients for OpenAI-compatible endpoints, Anthropic Messages, and Ollama APIs. The public interface defines a text-only contract centered on `Client` with `Chat`, `Stream`, and `Embed` methods ([`ai/llm/llm.go:263`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L263)). The underlying types strictly exchange text: `Message` ([`ai/llm/llm.go:59`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L59)), `Response` ([`ai/llm/llm.go:65`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L65)), and `Chunk` ([`ai/llm/llm.go:73`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L73)).
+The packages `ai/llm`, `ai/llm/anthropic`, and `ai/llm/ollama` provide minimal, resilient HTTP clients for OpenAI-compatible endpoints, Anthropic Messages, and Ollama APIs. The public interface defines a text-only contract centered on `Client` with `Chat`, `Stream`, and `Embed` methods ([`ai/llm/llm.go:263`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L263)). The underlying types strictly exchange text: `Message` ([`ai/llm/llm.go:59`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L59)), `Response` ([`ai/llm/llm.go:65`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L65)), and `Chunk` ([`ai/llm/llm.go:73`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L73)).
 
 The current in-tree provider wire and mapping slices comprise 642 physical lines of Go across three packages:
 
-- OpenAI wire client and mapping: 250 lines ([`ai/llm/llm.go:321-570`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L321-L570)).
-- Anthropic wire client and mapping: 198 lines ([`ai/llm/anthropic/anthropic.go:115-312`](https://github.com/golusoris/golusoris/blob/main/ai/llm/anthropic/anthropic.go#L115-L312)).
-- Ollama wire client and mapping: 194 lines ([`ai/llm/ollama/ollama.go:101-294`](https://github.com/golusoris/golusoris/blob/main/ai/llm/ollama/ollama.go#L101-L294)).
-- Shared SSE line scanner: 29 lines ([`ai/llm/llm.go:188-216`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L188-L216)).
+- OpenAI wire client and mapping: 250 lines ([`ai/llm/llm.go:321-570`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L321-L570)).
+- Anthropic wire client and mapping: 198 lines ([`ai/llm/anthropic/anthropic.go:115-312`](https://github.com/plurano/golusoris/blob/main/ai/llm/anthropic/anthropic.go#L115-L312)).
+- Ollama wire client and mapping: 194 lines ([`ai/llm/ollama/ollama.go:101-294`](https://github.com/plurano/golusoris/blob/main/ai/llm/ollama/ollama.go#L101-L294)).
+- Shared SSE line scanner: 29 lines ([`ai/llm/llm.go:188-216`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L188-L216)).
 
 Key operational invariants enforced by the hand-written clients:
 
-- **Strict byte and timeout bounds**: `HTTPBounds` ([`ai/llm/llm.go:106`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go#L106)) default to 120s timeout, 4 MiB response limit, 64 KiB error body limit, and 1 MiB stream frame limit, rejecting unbounded configurations and sentinel overflow with `httpx/client.ReadAllBounded`.
-- **Strict stream termination**: Streams must terminate cleanly with provider sentinels (`[DONE]` for OpenAI, `message_stop` for Anthropic, `done: true` for Ollama). Truncated connections or premature EOF before the sentinel produce explicit `ErrStreamTruncated` errors rather than silent partial success, validated by regression suites ([`ai/llm/http_boundary_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/http_boundary_test.go), [`ai/llm/runstream_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/runstream_test.go)).
+- **Strict byte and timeout bounds**: `HTTPBounds` ([`ai/llm/llm.go:106`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go#L106)) default to 120s timeout, 4 MiB response limit, 64 KiB error body limit, and 1 MiB stream frame limit, rejecting unbounded configurations and sentinel overflow with `httpx/client.ReadAllBounded`.
+- **Strict stream termination**: Streams must terminate cleanly with provider sentinels (`[DONE]` for OpenAI, `message_stop` for Anthropic, `done: true` for Ollama). Truncated connections or premature EOF before the sentinel produce explicit `ErrStreamTruncated` errors rather than silent partial success, validated by regression suites ([`ai/llm/http_boundary_test.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/http_boundary_test.go), [`ai/llm/runstream_test.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/runstream_test.go)).
 - **Close-error preservation**: Body closure errors are captured via `core/errors.CloseInto` and returned to callers.
 - **Single-attempt execution**: No uncoordinated SDK-level retry loops or uncontrolled exponential backoffs; callers and pipeline policies control retries.
 - **Governance alignment**: Adheres to root invariants: zero `init()` side effects (AGENTS.md rule 4), `core/clock` for time operations (AGENTS.md rule 6), no global logger (AGENTS.md rule 7; the clients emit no logs), and HISS-14 append-only public ABI stability.
@@ -90,7 +90,7 @@ Decline third-party provider SDKs for now; retain the hand-written LLM provider 
 - **Positive**: Complies fully with AGENTS.md rule 4 by avoiding 431 generated `func init()` registrations across OpenAI (319) and Anthropic (112) packages.
 - **Positive**: Complies with AGENTS.md rules 6 and 7 by avoiding ambient filesystem auth reads, stdlib `time.Now()` calls, and global logger invocations present in the Ollama and Anthropic sources.
 - **Positive**: Avoids inheriting 9 module-level OSV advisories associated with the Ollama server module.
-- **Positive**: Preserves rigorous HTTP bounds enforcement (120s timeout, 4 MiB response, 64 KiB error body, 1 MiB stream frame) and verified stream truncation detection (`ErrStreamTruncated` on premature EOF), backed by regression tests in [`ai/llm/http_boundary_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/http_boundary_test.go).
+- **Positive**: Preserves rigorous HTTP bounds enforcement (120s timeout, 4 MiB response, 64 KiB error body, 1 MiB stream frame) and verified stream truncation detection (`ErrStreamTruncated` on premature EOF), backed by regression tests in [`ai/llm/http_boundary_test.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/http_boundary_test.go).
 - **Positive**: Needs no public API change (HISS-14) and no adapter layer.
 - **Negative**: Maintainers own ongoing protocol adjustments and JSON schema parsing as provider wire APIs evolve.
 - **Negative**: Provider-specific advanced capabilities (tool-calling schemas, structured blocks, multimodal inputs) are not natively marshaled by the text-only `Client` contract.
@@ -102,11 +102,11 @@ Decline third-party provider SDKs for now; retain the hand-written LLM provider 
 ## References
 
 - Issue #1182: LLM Provider SDK Evaluation.
-- [`ai/llm/llm.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/llm.go) (OpenAI client, core types, stream runner).
-- [`ai/llm/anthropic/anthropic.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/anthropic/anthropic.go) (Anthropic client).
-- [`ai/llm/ollama/ollama.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/ollama/ollama.go) (Ollama client).
-- [`ai/llm/http_boundary_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/http_boundary_test.go) (HTTP bounds and stream truncation tests).
-- [`ai/llm/runstream_test.go`](https://github.com/golusoris/golusoris/blob/main/ai/llm/runstream_test.go) (Stream cancellation tests).
+- [`ai/llm/llm.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/llm.go) (OpenAI client, core types, stream runner).
+- [`ai/llm/anthropic/anthropic.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/anthropic/anthropic.go) (Anthropic client).
+- [`ai/llm/ollama/ollama.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/ollama/ollama.go) (Ollama client).
+- [`ai/llm/http_boundary_test.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/http_boundary_test.go) (HTTP bounds and stream truncation tests).
+- [`ai/llm/runstream_test.go`](https://github.com/plurano/golusoris/blob/main/ai/llm/runstream_test.go) (Stream cancellation tests).
 - OpenAI Go SDK repository: [`openai/openai-go`](https://github.com/openai/openai-go/tree/v3.90.0) (v3.90.0).
 - Anthropic Go SDK repository: [`anthropics/anthropic-sdk-go`](https://github.com/anthropics/anthropic-sdk-go/tree/v2.4.0) (v2.4.0).
 - Ollama repository: [`ollama/ollama`](https://github.com/ollama/ollama/tree/v0.40.13) (v0.40.13).

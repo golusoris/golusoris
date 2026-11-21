@@ -7,7 +7,7 @@
   "publish": false,
   "remote": "origin",
   "base": "main",
-  "repository": "golusoris/golusoris",
+  "repository": "plurano/golusoris",
   "branch_prefixes": [
     "checkpoint/",
     "audit/",

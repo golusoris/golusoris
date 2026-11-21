@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Ported from golusoris/goenvoy tools/release-pr-ci.sh (commit 7b77e31).
+# Ported from plurano/goenvoy tools/release-pr-ci.sh (commit 7b77e31).
 # Approve waiting CI runs on every release pull request head; notice late runs and continue successfully.
 # The runs of a pull request opened with the repository token wait for an
 # approval and report no check until then, and main requires the CI success

@@ -42,6 +42,15 @@ TEARDOWN_BUDGET_SECONDS = (
 )
 
 
+def _transient_retry_responses(compressed: bytes) -> list[object]:
+    """Keep the scripted retry sequence identical across download checks."""
+    return [
+        TimeoutError("first timeout"),
+        TimeoutError("second timeout"),
+        io.BytesIO(compressed),
+    ]
+
+
 def _is_pure_number(node: ast.expr) -> bool:
     """Report whether an expression is built from numeric literals only."""
     leaves = [n for n in ast.walk(node) if isinstance(n, (ast.Name, ast.Attribute, ast.Call, ast.Constant))]
@@ -900,11 +909,7 @@ class PactFFIInstallerTests(TestCase):
         payload, compressed, asset = retry_fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            responses: list[object] = [
-                TimeoutError("first timeout"),
-                TimeoutError("second timeout"),
-                io.BytesIO(compressed),
-            ]
+            responses = _transient_retry_responses(compressed)
             calls, sleeps, _stderr, outcome = self._retry_download(
                 responses, directory=root, asset=asset
             )
@@ -1051,11 +1056,7 @@ class PactFFIInstallerTests(TestCase):
         _, compressed, asset = retry_fixture()
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            responses: list[object] = [
-                TimeoutError("first timeout"),
-                TimeoutError("second timeout"),
-                io.BytesIO(compressed),
-            ]
+            responses = _transient_retry_responses(compressed)
             calls, sleeps, stderr_text, outcome = self._retry_download(
                 responses, directory=root, asset=asset
             )

@@ -410,12 +410,12 @@ check_verifier() {
 
 check_downstream_signer_contract() {
 	local path="$1"
-	grep -Eq 'uses: golusoris/golusoris/\.github/workflows/release-go\.yml@[0-9a-f]{40}$' \
+	grep -Eq 'uses: plurano/golusoris/\.github/workflows/release-go\.yml@[0-9a-f]{40}$' \
 		"$path" || {
 		printf 'downstream release example does not pin the signer commit\n' >&2
 		return 1
 	}
-	grep -Eq 'uses: golusoris/golusoris/\.github/workflows/verify-provenance\.yml@[0-9a-f]{40}$' \
+	grep -Eq 'uses: plurano/golusoris/\.github/workflows/verify-provenance\.yml@[0-9a-f]{40}$' \
 		"$path" || {
 		printf 'downstream verifier example is not commit-pinned\n' >&2
 		return 1

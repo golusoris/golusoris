@@ -14,7 +14,7 @@ from pathlib import Path
 import stop_on_draft_jobs
 
 SHA = "e601567f4e1acb72525f361f80dac6d89cbad553"
-GATE = f"golusoris/golusoris/.github/actions/stop-on-draft@{SHA}"
+GATE = f"plurano/golusoris/.github/actions/stop-on-draft@{SHA}"
 
 
 def workflow(

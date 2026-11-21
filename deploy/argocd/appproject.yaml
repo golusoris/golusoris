@@ -11,9 +11,9 @@ metadata:
 spec:
   description: golusoris-family apps
   sourceRepos:
-    - https://github.com/golusoris/*
+    - https://github.com/plurano/*
     - https://github.com/lusoris/*
-    - ghcr.io/golusoris/charts
+    - ghcr.io/plurano/charts
   destinations:
     - namespace: "apps"
       server: https://kubernetes.default.svc
