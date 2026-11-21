@@ -106,10 +106,10 @@ issue #429 and its per-area tasks #432–#434.
    SBOMs succeeded, while its separate source-tree workflow failed during
    Rekor publication. Later tags proved the retry path: `sbom.yml` succeeded
    for every tag from `v0.16.1` through `v0.17.0`
-   ([v0.17.0 run](https://github.com/golusoris/golusoris/actions/runs/38862386567)).
+   ([v0.17.0 run](https://github.com/plurano/golusoris/actions/runs/38862386567)).
 7. **`template/` pins the reusable workflows at a tagged commit, not a
    floating ref.** `template/.github/workflows/{ci,release}.yml` reference
-   `golusoris/golusoris/.github/workflows/{ci-go,release-go,scorecard}.yml`
+   `plurano/golusoris/.github/workflows/{ci-go,release-go,scorecard}.yml`
    by full commit SHA with a trailing `# vX.Y.Z` comment
    (`380b26797a8552c8b8aba03d53209b8997f2b1be # v0.10.1`), corrected onto the
    current tagged release after an earlier automated dependency bump had

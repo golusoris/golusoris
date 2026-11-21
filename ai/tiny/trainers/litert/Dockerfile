@@ -7,7 +7,7 @@ ARG PYTHON_IMAGE="python:3.11.16-slim-bookworm@sha256:4b4c524dc3dce996864e030c7b
 FROM ${PYTHON_IMAGE}
 
 ARG VCS_REF="unknown"
-LABEL org.opencontainers.image.source="https://github.com/golusoris/golusoris" \
+LABEL org.opencontainers.image.source="https://github.com/plurano/golusoris" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.title="Golusoris LiteRT trainer"
 

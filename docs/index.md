@@ -32,16 +32,16 @@ configuration expose constructors or options directly.
 
 ## Documentation map
 
-- **[Contributing](https://github.com/golusoris/golusoris/blob/main/CONTRIBUTING.md)** — Conventional Commits, DCO sign-off, CI gates, local dev commands, git hooks, and the release process.
+- **[Contributing](https://github.com/plurano/golusoris/blob/main/CONTRIBUTING.md)** — Conventional Commits, DCO sign-off, CI gates, local dev commands, git hooks, and the release process.
 - **[Principles](principles.md)** — coding and assurance contract (Power-of-10, SEI CERT, Google Go Style, RFC 9457, and evidence-backed supply-chain controls).
 - **[Architecture Decisions](adr/README.md)** — Nygard-format ADRs, one per decision.
 - **[Architecture](architecture/README.md)** — C4 diagrams for the system.
 - **[Migration Guides](migrations/v0.13.0.md)** — current constructor, atomic-store, secure-default, lifecycle, and resource-bound upgrades; older guides remain in navigation.
-- **[Capability contract](https://github.com/golusoris/golusoris/blob/main/capabilities.yaml)** — every package → capability keys → replaced modules; what praetor `needs` resolves against.
-- **[Licensing](https://github.com/golusoris/golusoris/blob/main/LICENSING.md)** — EUPL-1.2 code, CC-BY-SA-4.0 prose, REUSE, DCO.
-- **[Governance](https://github.com/golusoris/golusoris/blob/main/GOVERNANCE.md)** — project scope, decision process, and maintainer roles.
-- **[Security](https://github.com/golusoris/golusoris/blob/main/SECURITY.md)** — supported versions and how to report a vulnerability.
+- **[Capability contract](https://github.com/plurano/golusoris/blob/main/capabilities.yaml)** — every package → capability keys → replaced modules; what praetor `needs` resolves against.
+- **[Licensing](https://github.com/plurano/golusoris/blob/main/LICENSING.md)** — EUPL-1.2 code, CC-BY-SA-4.0 prose, REUSE, DCO.
+- **[Governance](https://github.com/plurano/golusoris/blob/main/GOVERNANCE.md)** — project scope, decision process, and maintainer roles.
+- **[Security](https://github.com/plurano/golusoris/blob/main/SECURITY.md)** — supported versions and how to report a vulnerability.
 - **[Upstream Snapshots](upstream/README.md)** — version-pinned API references for the framework's dependencies.
 - **[CI / Downstream Consumption](ci-downstream.md)** — how apps consume `tools/Makefile.shared` and the reusable GitHub Actions workflows.
 
-The source lives on [GitHub](https://github.com/golusoris/golusoris).
+The source lives on [GitHub](https://github.com/plurano/golusoris).

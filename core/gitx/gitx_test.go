@@ -36,7 +36,7 @@ func initRepo(t *testing.T) string {
 		{"config", "user.email", "t@example.invalid"},
 		{"config", "user.name", "t"},
 		{"config", "commit.gpgsign", "false"},
-		{"remote", "add", "origin", "https://github.com/golusoris/golusoris.git"},
+		{"remote", "add", "origin", "https://github.com/plurano/golusoris.git"},
 	}
 	for _, s := range steps {
 		if _, err := r.Run(ctx, s...); err != nil {
@@ -67,7 +67,7 @@ func checkRepoIdentity(t *testing.T, r *gitx.Runner) {
 		t.Fatalf("Branch: %q %v", br, err)
 	}
 	url, err := r.RemoteURL(ctx, "origin")
-	if err != nil || url != "https://github.com/golusoris/golusoris.git" {
+	if err != nil || url != "https://github.com/plurano/golusoris.git" {
 		t.Fatalf("RemoteURL: %q %v", url, err)
 	}
 	top, err := r.TopLevel(ctx)
@@ -142,7 +142,7 @@ func TestParseRemote(t *testing.T) {
 		owner, repo string
 		ok          bool
 	}{
-		{"https://github.com/golusoris/golusoris.git", "golusoris", "golusoris", true},
+		{"https://github.com/plurano/golusoris.git", "plurano", "golusoris", true},
 		{"https://github.com/cordanallm/praetor", "cordanallm", "praetor", true},
 		{"git@github.com:lusoris/arca.git", "lusoris", "arca", true},
 		{"ssh://git@gitea.cauda.dev:2222/golusoris/goenvoy.git", "golusoris", "goenvoy", true},

@@ -9,7 +9,7 @@
 version = 1
 SPDX-PackageName = "golusoris"
 SPDX-PackageSupplier = "lusoris <lusoris@pm.me>"
-SPDX-PackageDownloadLocation = "https://github.com/golusoris/golusoris"
+SPDX-PackageDownloadLocation = "https://github.com/plurano/golusoris"
 
 # ── First-party code, configuration, tooling, deploy manifests ──────────────
 [[annotations]]

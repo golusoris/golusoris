@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: EUPL-1.2
 
-# Per-app release — delegates to the reusable workflow in golusoris/golusoris.
+# Per-app release — delegates to the reusable workflow in plurano/golusoris.
 name: Release
 
 on:
@@ -19,6 +19,6 @@ permissions:
 
 jobs:
   release:
-    uses: golusoris/golusoris/.github/workflows/release-go.yml@7c3fabe83c1bfa77120f7efa6bcef29448a9170e # v0.22.2
+    uses: plurano/golusoris/.github/workflows/release-go.yml@7c3fabe83c1bfa77120f7efa6bcef29448a9170e # v0.22.2
     with:
       image-name: ghcr.io/${{ github.repository }}

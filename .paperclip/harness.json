@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "platform": "golusoris/golusoris",
+  "platform": "plurano/golusoris",
   "operating_contract": [
     "Branch push != shipping. Require open PR; work ships only after merge.",
     "Rebase immediately before proposal: `git fetch origin \u0026\u0026 git rebase origin/main`.",

@@ -7,7 +7,7 @@
 # Apps call it with:
 #   jobs:
 #     rebuild:
-#       uses: golusoris/golusoris/.github/workflows/rebuild-on-base.yml@<full-framework-commit-sha>
+#       uses: plurano/golusoris/.github/workflows/rebuild-on-base.yml@<full-framework-commit-sha>
 #       with:
 #         image-name: ghcr.io/myorg/myapp
 #

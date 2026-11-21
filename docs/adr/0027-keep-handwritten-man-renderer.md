@@ -13,7 +13,7 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
 ## Context
 
-`core/clikit` renders roff man pages for every documented command of a cobra tree ([`core/clikit/man.go`](https://github.com/golusoris/golusoris/blob/main/core/clikit/man.go)). `ManPages` walks the command tree, and `renderMan` writes the header, NAME, SYNOPSIS, DESCRIPTION, OPTIONS, inherited OPTIONS and SEE ALSO sections. Golden files under [`core/clikit/testdata/golden/man/`](https://github.com/golusoris/golusoris/tree/main/core/clikit/testdata/golden/man) pin the output. The file is 215 lines, of which the renderer and its roff helpers (`renderMan` through `roffBlock`) are about 120.
+`core/clikit` renders roff man pages for every documented command of a cobra tree ([`core/clikit/man.go`](https://github.com/plurano/golusoris/blob/main/core/clikit/man.go)). `ManPages` walks the command tree, and `renderMan` writes the header, NAME, SYNOPSIS, DESCRIPTION, OPTIONS, inherited OPTIONS and SEE ALSO sections. Golden files under [`core/clikit/testdata/golden/man/`](https://github.com/plurano/golusoris/tree/main/core/clikit/testdata/golden/man) pin the output. The file is 215 lines, of which the renderer and its roff helpers (`renderMan` through `roffBlock`) are about 120.
 
 Issue #1191 proposed replacing the renderer with `doc.GenMan` from `github.com/spf13/cobra/doc`. Cobra v1.10.2 is already a direct dependency of the `core` module.
 
