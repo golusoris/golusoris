@@ -248,7 +248,14 @@ jobs:
       signer-digest: fedcba9876543210fedcba9876543210fedcba98
 ```
 
-Framework releases up to v0.22.2 were signed while the repository lived at `golusoris/golusoris`, so their certificates name that owner; callers pinned to a framework commit from v0.22.2 or earlier must verify with `--signer-workflow golusoris/golusoris/.github/workflows/release-go.yml`.
+The certificate names the `release-go.yml` path of the run that signed the
+artifact, not the framework commit that run pinned. Artifacts signed while the
+repository lived at `golusoris/golusoris` (framework releases up to v0.22.2,
+and caller release runs from before the move) name that owner and verify with
+`--signer-workflow golusoris/golusoris/.github/workflows/release-go.yml`.
+Artifacts signed after the move through a `plurano/golusoris` call name
+`plurano/golusoris`, whatever commit the call pins. When unsure, take the owner
+from the subject alternative name of the signing certificate.
 
 `verify-provenance.yml` fails if every verification mode is disabled. By
 default it verifies the keyless signature plus the SLSA provenance and SPDX
