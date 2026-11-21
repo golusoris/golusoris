@@ -54,7 +54,7 @@ on:
         description: golang.org/x/tools version gosec is built against (Go 1.27.2 export data needs >= v0.51.0)
         type: string
         # renovate: datasource=go depName=golang.org/x/tools versioning=semver
-        default: v0.52.0
+        default: v0.53.0
       govulncheck-version:
         description: Exact govulncheck version
         type: string
