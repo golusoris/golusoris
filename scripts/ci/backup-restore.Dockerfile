@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: EUPL-1.2
 
 FROM mikefarah/yq:4.54.3@sha256:7834187596ad56fd5a81436114e0b0b9dd54c91bb43946d1f7145b2be5f9c3d2 AS yq
-FROM amazon/aws-cli:2.39.6@sha256:eccdb3ec77e159d43ca6a750a70738c546883138be7f094498294a1477ec7e42 AS aws
+FROM amazon/aws-cli:2.40.4@sha256:eaf444b45380050f920ab07492754aa76223dd90234e51c1f92c2e9391b5ee6b AS aws
 FROM postgres:18.6-trixie@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
 COPY --from=yq /usr/bin/yq /usr/local/bin/yq
 COPY --from=aws /usr/local/aws-cli /usr/local/aws-cli
