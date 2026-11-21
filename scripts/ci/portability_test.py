@@ -50,18 +50,20 @@ RELEASE_ACK_POLLS = 200
 
 
 def pipe_holding_parent(hold: Path, released: Path) -> str:
-    """The grandchild holds the pipes while hold exists, then writes released."""
+    """The grandchild holds the pipes from the system temp directory while hold exists, then renames its acknowledgement into released."""
     grandchild = (
         "import os,sys,time\n"
         f"for _ in range({PIPE_HOLD_POLLS}):\n"
         "    if not os.path.exists(sys.argv[1]):\n"
         "        break\n"
         "    time.sleep(0.05)\n"
-        'open(sys.argv[2], "w").close()'
+        'open(sys.argv[2] + ".tmp", "w").close()\n'
+        'os.replace(sys.argv[2] + ".tmp", sys.argv[2])'
     )
     return (
         "import subprocess,sys; "
-        f"subprocess.Popen([sys.executable, '-c', {grandchild!r}, {str(hold)!r}, {str(released)!r}])"
+        f"subprocess.Popen([sys.executable, '-c', {grandchild!r}, {str(hold)!r}, {str(released)!r}], "
+        f"cwd={tempfile.gettempdir()!r})"
     )
 
 
