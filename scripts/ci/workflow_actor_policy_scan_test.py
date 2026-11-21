@@ -13,9 +13,6 @@ from pathlib import Path
 
 import workflow_actor_policy as policy
 
-if not (policy.REPO_ROOT / ".github").is_dir():
-    policy.REPO_ROOT = policy.REPO_ROOT.parent
-
 
 class WorkflowActorPolicyScanTest(unittest.TestCase):
     def test_allowed_entries_are_pull_request_only(self) -> None:
