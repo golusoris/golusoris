@@ -259,6 +259,89 @@ check_release_please_tagging() {
 	check_release_please_config "$1"
 }
 
+# Scalar bodies are data, not workflow step keys.
+# shellcheck disable=SC2016 # Preserve literal AWK field references.
+readonly skip_yaml_block_scalar='
+    {
+        match($0, /^[ ]*/)
+        indentation = RLENGTH
+        if (in_block) {
+            if ($0 ~ /^[[:space:]]*$/ || indentation > block_indent) next
+            in_block = 0
+        }
+        if ($0 ~ /^[ ]*(-[ ]+)?[^:#]+:[ ]*[|>][-+1-9]*[ ]*(#.*)?$/) {
+            match($0, /^[ ]*(-[ ]+)?/)
+            block_indent = RLENGTH
+            in_block = 1
+        }
+    }
+'
+
+release_please_token_step_has_id() {
+	local workflow="$1"
+	awk "$skip_yaml_block_scalar"'
+		/^[[:space:]]*$/ || /^[ ]*#/ { next }
+		{
+			is_prop = 0
+			if ($0 ~ /^[ ]*-[ ]+/) {
+				match($0, /^[ ]*-[ ]+/)
+				prop_indent = RLENGTH
+				mint = 0
+				token_id = 0
+				is_prop = 1
+			} else if (prop_indent && indentation == prop_indent) {
+				is_prop = 1
+			}
+		}
+		is_prop && /^[ ]*(-[ ]+)?uses:[[:space:]]*actions\/create-github-app-token@/ { mint = 1 }
+		is_prop && /^[ ]*(-[ ]+)?id:[[:space:]]*app-token[[:space:]]*(#.*)?$/ { token_id = 1 }
+		mint && token_id { found = 1; exit }
+		END { exit !found }
+	' "$workflow"
+}
+
+release_please_passes_app_token() {
+	local workflow="$1"
+	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+	awk "$skip_yaml_block_scalar"'
+		/^[[:space:]]*$/ || /^[ ]*#/ { next }
+		{
+			is_prop = 0
+			if ($0 ~ /^[ ]*-[ ]+/) {
+				if (in_action && has_token) {
+					found = 1
+					exit
+				}
+				match($0, /^[ ]*-[ ]+/)
+				prop_indent = RLENGTH
+				in_action = 0
+				in_with = 0
+				has_token = 0
+				is_prop = 1
+			} else if (prop_indent && indentation < prop_indent) {
+				if (in_action && has_token) {
+					found = 1
+					exit
+				}
+				prop_indent = 0
+				in_action = 0
+				in_with = 0
+				has_token = 0
+			} else if (prop_indent && indentation == prop_indent) {
+				in_with = 0
+				is_prop = 1
+			}
+		}
+		is_prop && /^[ ]*(-[ ]+)?uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1 }
+		is_prop && /^[ ]*(-[ ]+)?with:[[:space:]]*(#.*)?$/ { in_with = 1 }
+		in_with && indentation > prop_indent && /^[[:space:]]*token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { has_token = 1 }
+		END {
+			if (in_action && has_token) found = 1
+			exit !found
+		}
+	' "$workflow"
+}
+
 check_release_please_workflow() {
 	local workflow="$1"
 	if grep -Eiq '^[[:space:]]*skip-github-release:[[:space:]]*['\''"]?true['\''"]?' "$workflow"; then
@@ -269,13 +352,11 @@ check_release_please_workflow() {
 		printf 'release-please lacks GitHub App token minting: %s\n' "$workflow" >&2
 		return 1
 	fi
-	# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
-	awk '
-		/uses:[[:space:]]*googleapis\/release-please-action/ { in_action = 1; next }
-		in_action && /^[[:space:]]*token:[[:space:]]*\${{[[:space:]]*steps\.app-token\.outputs\.token[[:space:]]*}}/ { found = 1; exit }
-		in_action && /^[[:space:]]*-[[:space:]]/ { in_action = 0 }
-		END { exit !found }
-	' "$workflow" || {
+	release_please_token_step_has_id "$workflow" || {
+		printf 'release-please App token step id is not app-token: %s\n' "$workflow" >&2
+		return 1
+	}
+	release_please_passes_app_token "$workflow" || {
 		printf 'release-please does not pass App token to release-please-action: %s\n' "$workflow" >&2
 		return 1
 	}
@@ -734,6 +815,174 @@ with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding
             dst.write(line)' \
 	"$release_please" "$negative"
 expect_failure 'release-please lacks GitHub App token minting' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - run: |\n          id: app-token\n          uses: actions/create-github-app-token@fake\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - run: |\n          uses: googleapis/release-please-action@fake\n          token: ${{ steps.app-token.outputs.token }}\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - uses: actions/create-github-app-token@fake\n      - run: |\n          echo planted\n        id: app-token\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - uses: googleapis/release-please-action@fake\n      - run: |\n          echo planted\n        env:\n          token: ${{ steps.app-token.outputs.token }}\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - uses: actions/create-github-app-token@fake\n        env:\n          id: app-token\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - id: app-token\n        env:\n          uses: actions/create-github-app-token@fake\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please App token step id is not app-token' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - uses: googleapis/release-please-action@fake\n        env:\n          token: ${{ steps.app-token.outputs.token }}\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        dst.write(line.replace("id: app-token", "id: app-token-renamed"))
+    dst.write("      - id: app-token\n        uses: actions/create-github-app-token@fake\n")' \
+	"$release_please" "$negative"
+check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" in line:
+            dst.write("        # property-indent comment inside with\n")
+        dst.write(line)' \
+	"$release_please" "$negative"
+check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" in line:
+            dst.write("\n")
+        dst.write(line)' \
+	"$release_please" "$negative"
+check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - id: release\n        with:\n          token: ${{ steps.app-token.outputs.token }}\n        uses: googleapis/release-please-action@fake\n")' \
+	"$release_please" "$negative"
+check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - uses: actions/checkout@fake\n        with:\n          token: ${{ steps.app-token.outputs.token }}\n      - uses: googleapis/release-please-action@fake\n        with:\n          config-file: release-please-config.json\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
+	check_release_please_tagging "$release_please_config" "$negative"
+# shellcheck disable=SC2016 # Match literal GitHub expression in workflow YAML.
+python3 -B -c 'import sys
+MAX_LINES = 20000
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as dst:
+    for idx, line in enumerate(src):
+        if idx >= MAX_LINES:
+            sys.exit("file exceeds MAX_LINES")
+        if "token: ${{ steps.app-token.outputs.token }}" not in line:
+            dst.write(line)
+    dst.write("      - id: release\n        with:\n          config-file: release-please-config.json\n        env:\n          token: ${{ steps.app-token.outputs.token }}\n        uses: googleapis/release-please-action@fake\n")' \
+	"$release_please" "$negative"
+expect_failure 'release-please does not pass App token to release-please-action' \
 	check_release_please_tagging "$release_please_config" "$negative"
 
 printf 'release workflow policy tests passed\n'
