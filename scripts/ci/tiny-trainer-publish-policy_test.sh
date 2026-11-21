@@ -6,24 +6,16 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-suite_root="$(mktemp -d "${TMPDIR:-/tmp}/tiny-trainer-publish-policy.XXXXXX")"
 helper="$repo_root/scripts/ci/tiny-trainer-manifest-identity.py"
-readonly repo_root suite_root helper
-trap 'find "$suite_root" -depth -delete' EXIT
+readonly repo_root helper
+
+# shellcheck source=scripts/ci/lib/policy-test.sh
+. "$repo_root/scripts/ci/lib/policy-test.sh"
+policy_suite_init "tiny-trainer-publish-policy"
 
 # Stdin SHA-256 helper so synthetic test manifests produce exact payload digests.
 sha256_digest() {
 	python3 -I -c 'import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
-}
-
-# Command failure check so negative cases and invalid inputs do not succeed silently.
-expect_failure() {
-	local status=0
-	"$@" >/dev/null 2>&1 || status=$?
-	if (( status == 0 )); then
-		printf 'expected failure: %s\n' "$*" >&2
-		return 1
-	fi
 }
 
 # Failure message check so negative tests fail for the intended reason, not an unrelated error.
@@ -71,32 +63,6 @@ check_config_json() {
 	local json="$1"
 	shift
 	python3 -B "$helper" --config "$@" <<<"$json"
-}
-
-# Literal string check so required publication controls and flags cannot be omitted.
-require_literal() {
-	local path="$1"
-	local literal="$2"
-	if ! grep -Fq -- "$literal" "$path"; then
-		printf '%s lacks required publication control: %s\n' "$path" "$literal" >&2
-		return 1
-	fi
-}
-
-# Unconditional step guard so validation and signing cannot be skipped on new or resumed runs.
-require_unconditional_step() {
-	local path="$1"
-	local step="$2"
-	local block
-	block="$(awk -v marker="      - name: $step" '
-		$0 == marker { active = 1; next }
-		active && /^      - name:/ { exit }
-		active { print }
-	' "$path")"
-	if [[ -z "$block" ]] || grep -Eq '^        if:' <<<"$block"; then
-		printf '%s must run %s on new and resumed publication\n' "$path" "$step" >&2
-		return 1
-	fi
 }
 
 # Publish job without load: true and push step without tags:, so nothing is loaded or tagged before validation.
@@ -178,7 +144,7 @@ check_workflow() {
 		printf '%s uses deprecated Cosign SBOM attachments\n' "$path" >&2
 		return 1
 	fi
-	if grep -Fq 'ghcr.io/golusoris/' "$path"; then
+	if grep -Eq 'ghcr\.io/[A-Za-z0-9]' "$path"; then
 		printf '%s must derive repository dynamically instead of hardcoding namespace\n' "$path" >&2
 		return 1
 	fi
@@ -233,17 +199,17 @@ cat >"$suite_root/bin/gh" <<'EOF'
 EOF
 chmod +x "$suite_root/bin/cosign" "$suite_root/bin/gh"
 
-image="ghcr.io/golusoris/tiny-gemma-trainer@sha256:$(printf 'a%.0s' {1..64})"
+image="ghcr.io/plurano/tiny-gemma-trainer@sha256:$(printf 'a%.0s' {1..64})"
 source_sha="$(printf 'b%.0s' {1..40})"
 source_ref='refs/tags/tiny-trainers-v1.2.3'
 call_log="$suite_root/calls"
 PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 
 require_literal "$call_log" $'cosign\tverify'
-require_literal "$call_log" $'--certificate-identity\thttps://github.com/golusoris/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
+require_literal "$call_log" $'--certificate-identity\thttps://github.com/plurano/golusoris/.github/workflows/tiny-trainer-images.yml@refs/tags/tiny-trainers-v1.2.3'
 require_literal "$call_log" $'--certificate-github-workflow-sha\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
 require_literal "$call_log" $'--bundle-from-oci'
 require_literal "$call_log" $'--source-ref\trefs/tags/tiny-trainers-v1.2.3'
@@ -310,15 +276,15 @@ fi
 
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" refs/heads/main \
+	"$image" plurano/golusoris "$source_sha" refs/heads/main \
 	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=cosign \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 expect_failure env PATH="$suite_root/bin:$PATH" CALL_LOG="$call_log" FAIL_TOOL=gh \
 	bash "$repo_root/scripts/ci/tiny-trainer-verify-image.sh" \
-	"$image" golusoris/golusoris "$source_sha" "$source_ref" \
+	"$image" plurano/golusoris "$source_sha" "$source_ref" \
 	tiny-trainer-images.yml tiny-trainers-
 
 workflow="$repo_root/.github/workflows/tiny-trainer-images.yml"
@@ -338,7 +304,7 @@ sed 's/^PIP_AUDIT_VERSION=.*/PIP_AUDIT_VERSION=9.9.9/' \
 expect_failure check_audit_toolchain "$unlocked_audit" \
 	"$repo_root/scripts/ci/tiny-trainer-pip-audit.lock"
 
-test_source="https://github.com/golusoris/golusoris"
+test_source="https://github.com/plurano/golusoris"
 test_rev="$(printf 'a%.0s' {1..40})"
 test_ver="v1.2.3"
 valid_amd64_config=$(printf '{"architecture":"amd64","os":"linux","config":{"Labels":{"org.opencontainers.image.source":"%s","org.opencontainers.image.revision":"%s","org.opencontainers.image.version":"%s"}}}' \
@@ -453,5 +419,10 @@ with_hardcoded_repo="$suite_root/with-hardcoded-repo.yml"
 sed 's/image: tiny-gemma-trainer/image: ghcr.io\/golusoris\/tiny-gemma-trainer/' \
 	"$workflow" >"$with_hardcoded_repo"
 expect_failure check_workflow "$with_hardcoded_repo"
+
+with_hardcoded_plurano_repo="$suite_root/with-hardcoded-plurano-repo.yml"
+sed 's/image: tiny-gemma-trainer/image: ghcr.io\/plurano\/tiny-gemma-trainer/' \
+	"$workflow" >"$with_hardcoded_plurano_repo"
+expect_failure check_workflow "$with_hardcoded_plurano_repo"
 
 printf 'tiny trainer publication policy tests passed\n'

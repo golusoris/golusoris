@@ -6,6 +6,8 @@ core/codec/jcs/testdata/cyberphone/** -text
 .config/hiss/testdata/** text eol=lf
 media/audio/testdata/** -text
 testutil/fixture/testdata/** text eol=lf
+# Symlinked-TMPDIR fixtures are rewritten line by line by their policy test on every OS.
+scripts/ci/testdata/** text eol=lf
 # Client caps count characters; a CRLF checkout must not push AGENTS.md past them.
 AGENTS.md text eol=lf
 

@@ -32,7 +32,7 @@ We follow [coordinated disclosure](https://en.wikipedia.org/wiki/Coordinated_vul
 
 ## Scope
 
-This app is built on [golusoris/golusoris](https://github.com/golusoris/golusoris).
+This app is built on [plurano/golusoris](https://github.com/plurano/golusoris).
 Vulnerabilities in the framework itself should also be reported to that repository.
 
 ## Compliance

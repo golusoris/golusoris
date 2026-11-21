@@ -38,7 +38,7 @@ Install the [argocd-image-updater](https://argocd-image-updater.readthedocs.io/)
 ```yaml
 metadata:
   annotations:
-    argocd-image-updater.argoproj.io/image-list: app=ghcr.io/golusoris/app-myapp
+    argocd-image-updater.argoproj.io/image-list: app=ghcr.io/plurano/app-myapp
     argocd-image-updater.argoproj.io/app.update-strategy: semver
     argocd-image-updater.argoproj.io/app.allow-tags: regexp:^v[0-9]+\.[0-9]+\.[0-9]+$
 ```

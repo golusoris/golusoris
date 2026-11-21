@@ -57,7 +57,7 @@ jobs:
           export GIT_ASKPASS="$askpass" GIT_TERMINAL_PROMPT=0
 
           git fetch --no-tags origin main
-          git remote add public https://github.com/golusoris/golusoris.git
+          git remote add public https://github.com/plurano/golusoris.git
           git fetch --no-tags public main
 
           test -n "$VALIDATED_SHA"

@@ -11,16 +11,16 @@ SPDX-License-Identifier: CC-BY-SA-4.0
 
   <!-- README-STANDARD badge block: one group, fixed order -->
   <!-- 1 release/version -->
-  [![Release](https://img.shields.io/static/v1?label=release&message=v0.22.2&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/golusoris/golusoris/releases) <!-- x-release-please-version -->
+  [![Release](https://img.shields.io/static/v1?label=release&message=v0.22.3&style=for-the-badge&color=3b82f6&labelColor=111a35)](https://github.com/plurano/golusoris/releases) <!-- x-release-please-version -->
   <!-- 2 CI/build -->
-  [![CI](https://github.com/golusoris/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/ci.yml)
-  [![Release Build](https://github.com/golusoris/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/release.yml)
-  [![Platform Neutrality](https://github.com/golusoris/golusoris/actions/workflows/portability.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/portability.yml)
-  [![Docs](https://github.com/golusoris/golusoris/actions/workflows/docs.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/docs.yml)
-  [![SBOM](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml/badge.svg?event=push)](https://github.com/golusoris/golusoris/actions/workflows/sbom.yml)
+  [![CI](https://github.com/plurano/golusoris/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/plurano/golusoris/actions/workflows/ci.yml)
+  [![Release Build](https://github.com/plurano/golusoris/actions/workflows/release.yml/badge.svg?event=push)](https://github.com/plurano/golusoris/actions/workflows/release.yml)
+  [![Platform Neutrality](https://github.com/plurano/golusoris/actions/workflows/portability.yml/badge.svg?branch=main&event=push)](https://github.com/plurano/golusoris/actions/workflows/portability.yml)
+  [![Docs](https://github.com/plurano/golusoris/actions/workflows/docs.yml/badge.svg?branch=main&event=push)](https://github.com/plurano/golusoris/actions/workflows/docs.yml)
+  [![SBOM](https://github.com/plurano/golusoris/actions/workflows/sbom.yml/badge.svg?event=push)](https://github.com/plurano/golusoris/actions/workflows/sbom.yml)
   <!-- 3 security/scorecard -->
-  [![Security](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml/badge.svg?branch=main&event=push)](https://github.com/golusoris/golusoris/actions/workflows/security-scan.yml)
-  [![CodeQL](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/golusoris/golusoris/actions/workflows/github-code-scanning/codeql)
+  [![Security](https://github.com/plurano/golusoris/actions/workflows/security-scan.yml/badge.svg?branch=main&event=push)](https://github.com/plurano/golusoris/actions/workflows/security-scan.yml)
+  [![CodeQL](https://github.com/plurano/golusoris/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/plurano/golusoris/actions/workflows/github-code-scanning/codeql)
   [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/golusoris/golusoris?style=for-the-badge&label=OpenSSF&labelColor=111a35)](https://scorecard.dev/viewer/?uri=github.com/golusoris/golusoris)
   [![Codacy](https://app.codacy.com/project/badge/Grade/f7f576f9fd1b48f586f00771ec041871)](https://app.codacy.com/gh/golusoris/golusoris/dashboard)
   [![CodeRabbit](https://img.shields.io/badge/Reviews-CodeRabbit-8b5cf6?style=for-the-badge&logo=coderabbit&logoColor=white&labelColor=111a35)](https://coderabbit.ai)
@@ -48,7 +48,7 @@ Pick the modules your app needs — nothing else ships. Every module follows the
 Google Go Style, RFC 9457 error bodies, OTel SemConv v1.26, and evidence-backed
 supply-chain controls.
 
-**[📖 Full documentation](https://golusoris.github.io/golusoris/)** · [Documentation source](docs/index.md)
+**[📖 Full documentation](https://plurano.github.io/golusoris/)** · [Documentation source](docs/index.md)
 
 The MkDocs site is built from [`docs/`](docs/index.md) by
 [`.github/workflows/docs.yml`](.github/workflows/docs.yml) on pushes to `main` that
@@ -118,14 +118,14 @@ Prerequisites: [GitHub CLI (`gh`)](https://cli.github.com/) authenticated with
 and `shasum` (ships with Perl; Alpine Linux: `apk add perl-utils`).
 
 ```sh
-v=0.22.2 # x-release-please-version
+v=0.22.3 # x-release-please-version
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 a="golusoris_${v}_${os}_${arch}.tar.gz"
 (tmpdir=$(mktemp -d) && cd "$tmpdir" &&
-  gh release download "v$v" -R golusoris/golusoris -p "$a" -p checksums.txt -p checksums.txt.sigstore.json &&
+  gh release download "v$v" -R plurano/golusoris -p "$a" -p checksums.txt -p checksums.txt.sigstore.json &&
   cosign verify-blob --bundle checksums.txt.sigstore.json \
-    --certificate-identity-regexp '^https://github.com/golusoris/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
+    --certificate-identity-regexp '^https://github.com/(golusoris|plurano)/golusoris/.github/workflows/release-build.yml@refs/tags/.*$' \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com checksums.txt &&
   awk -v f="$a" '$2 == f' checksums.txt | shasum -a 256 -c - &&
   tar -xzf "$a" golusoris golusoris-mcp &&
@@ -146,11 +146,34 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 
 ## Architecture at a glance
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/golusoris/golusoris.svg)](https://pkg.go.dev/github.com/golusoris/golusoris)
-[![Go Report Card](https://goreportcard.com/badge/github.com/golusoris/golusoris)](https://goreportcard.com/report/github.com/golusoris/golusoris)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/golusoris/golusoris)](go.mod)
-[![Uber Fx](https://img.shields.io/badge/built_on-Uber_Fx-3b82f6?style=flat-square&labelColor=111a35)](https://github.com/uber-go/fx)
-[![C4 Architecture](https://img.shields.io/badge/Architecture-C4_Model-8b5cf6?style=flat-square&labelColor=111a35)](docs/architecture/README.md)
+[![Go Reference](https://img.shields.io/badge/Go-Reference-06b6d4?style=for-the-badge&labelColor=111a35)](https://pkg.go.dev/github.com/golusoris/golusoris)
+[![Go Report Card](https://img.shields.io/badge/Go-Report_Card-3b82f6?style=for-the-badge&labelColor=111a35)](https://goreportcard.com/report/github.com/golusoris/golusoris)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/plurano/golusoris?style=for-the-badge&labelColor=111a35&color=06b6d4)](go.mod)
+[![Uber Fx](https://img.shields.io/badge/built_on-Uber_Fx-3b82f6?style=for-the-badge&labelColor=111a35)](https://github.com/uber-go/fx)
+[![C4 Architecture](https://img.shields.io/badge/Architecture-C4_Model-8b5cf6?style=for-the-badge&labelColor=111a35)](docs/architecture/README.md)
+
+An application's main calls fx.New with only the modules it opts into; these examples show root-module families above the lean core and separate specialty sub-modules.
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': {'fontFamily': 'ui-sans-serif, Segoe UI, Helvetica, Arial, sans-serif', 'fontSize': '15px', 'primaryColor': '#111a35', 'primaryTextColor': '#e2e8f0', 'primaryBorderColor': '#3b82f6', 'lineColor': '#3b82f6', 'edgeLabelBackground': '#111a35', 'tertiaryColor': '#0b1020'}}}%%
+flowchart TD
+main["main"]:::input --> compose["fx.New"]:::decide
+subgraph root["github.com/golusoris/golusoris"]
+db["Database & data<br/>db/pgx/<br/>db/migrate/"]:::step
+http["HTTP / API<br/>httpx/router/<br/>httpx/server/"]:::step
+jobs["Background work<br/>jobs/<br/>jobs/cron/"]:::step
+end
+compose --> db
+compose --> http
+compose --> jobs
+compose --> specialty["Specialty sub-modules<br/>own go.mod<br/>storage/gcs/<br/>storage/azblob/"]:::step
+db --> core["core/<br/>own go.mod<br/>ADR-0017"]:::step
+http --> core
+jobs --> core
+classDef input fill:#0b1020,stroke:#06b6d4,stroke-width:2px,color:#e2e8f0
+classDef step fill:#111a35,stroke:#3b82f6,stroke-width:2px,color:#e2e8f0
+classDef decide fill:#111a35,stroke:#8b5cf6,stroke-width:2px,color:#e2e8f0
+```
 
 ### Core
 
@@ -382,7 +405,7 @@ golusoris bump v0.9.0              # go get + go mod tidy to that version; the c
 | `ai/vector/` | pgvector schema helpers, embedding store, similarity search, hybrid search | pgvector/pgvector-go |
 | `ai/tiny/` | bounded trainer/predictor contracts, registries, and container runner | custom + pgx |
 | `ai/tiny/gemma/` `ai/tiny/litert/` | digest-pinned Gemma LoRA and MobileNet V2 classifier trainer orchestration | containerized KerasHub / TensorFlow |
-| `ai/tiny/serve/` | Ollama + distributed fleet adapters; LiteRT sidecar client/protocol ([runtime #564](https://github.com/golusoris/golusoris/issues/564)) | HTTP + river |
+| `ai/tiny/serve/` | Ollama + distributed fleet adapters; LiteRT sidecar client/protocol ([runtime #564](https://github.com/plurano/golusoris/issues/564)) | HTTP + river |
 | `ai/tiny/serve/onnx/` | ONNX forward-pass predictor via vmafx-ort-runner subprocess protocol | os/exec (no cgo) |
 | `ai/tpe/` | Tree-structured Parzen Estimator for hyperparameter search | custom |
 
@@ -553,7 +576,7 @@ DCO sign-off, and pull-request expectations. The
 standards; the [architecture guide](docs/architecture/README.md) explains the
 system layout.
 
-- [Report an issue or request a feature](https://github.com/golusoris/golusoris/issues)
+- [Report an issue or request a feature](https://github.com/plurano/golusoris/issues)
 - [Contributing guide](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security policy](SECURITY.md)
@@ -579,17 +602,17 @@ Also on [Ko-fi](https://ko-fi.com/lusoris).
 
 Pre-1.0, actively developed. The root module and the `core/` sub-module are
 versioned separately; `.release-please-manifest.json` holds both current
-versions, and the [releases page](https://github.com/golusoris/golusoris/releases)
+versions, and the [releases page](https://github.com/plurano/golusoris/releases)
 lists every root release. Code has been
 licensed under the [European Union Public Licence 1.2](LICENSE)
 (`EUPL-1.2`) since the v0.9.0 relicense (ADR-0018) — v0.8.0 and earlier were
 MIT; documentation is `CC-BY-SA-4.0`. GitHub immutable releases are enabled,
-starting with [v0.10.1](https://github.com/golusoris/golusoris/releases/tag/v0.10.1):
+starting with [v0.10.1](https://github.com/plurano/golusoris/releases/tag/v0.10.1):
 `release.yml` runs goreleaser to publish archives, checksums, per-archive
 SPDX SBOMs, cosign keyless signatures and build-provenance attestations.
 `sbom.yml` separately attempts
 source-tree SPDX and CycloneDX attestations for each root tag; its
-[v0.12.0 run](https://github.com/golusoris/golusoris/actions/runs/35001126102)
+[v0.12.0 run](https://github.com/plurano/golusoris/actions/runs/35001126102)
 failed while writing to Rekor, so source-tree attestations are not claimed for
 every tag. Governance runs on the
 [praetor](https://github.com/cordanaLLM/praetor) HISS-21 lattice
@@ -656,6 +679,6 @@ private scratch-link policy.
 **Debt Baseline**: `.standards-baseline.json` anchors the debt ratchet at
 0 recorded infractions; audit forbids growth.
 
-[praetor-docs-badge]: https://github.com/golusoris/golusoris/actions/workflows/praetor-docs.yml/badge.svg
-[praetor-docs-runs]: https://github.com/golusoris/golusoris/actions/workflows/praetor-docs.yml
+[praetor-docs-badge]: https://github.com/plurano/golusoris/actions/workflows/praetor-docs.yml/badge.svg
+[praetor-docs-runs]: https://github.com/plurano/golusoris/actions/workflows/praetor-docs.yml
 <!-- praetor:readme-governance:end -->

@@ -15,6 +15,19 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.22.3](https://github.com/plurano/golusoris/compare/v0.22.2...v0.22.3) (2026-11-21)
+
+
+### Bug Fixes
+
+* **ci:** ignore the parser binary and fail on new build output ([#1470](https://github.com/plurano/golusoris/issues/1470)) ([220cc46](https://github.com/plurano/golusoris/commit/220cc463e9126582c7105d57d3b18cea2088291b)), closes [#1456](https://github.com/plurano/golusoris/issues/1456)
+* **ci:** let a late release pull request run pass with a notice ([#1562](https://github.com/plurano/golusoris/issues/1562)) ([604bda3](https://github.com/plurano/golusoris/commit/604bda3a2997f9347f3be7f58359109bbd7fb57f))
+
+
+### Code Refactoring
+
+* **ci:** fold seven scripts/ci clone groups ([#1567](https://github.com/plurano/golusoris/issues/1567)) ([3439985](https://github.com/plurano/golusoris/commit/343998550b3de39b0b00685723138f611495024b))
+
 ## [0.22.2](https://github.com/golusoris/golusoris/compare/v0.22.1...v0.22.2) (2026-11-17)
 
 

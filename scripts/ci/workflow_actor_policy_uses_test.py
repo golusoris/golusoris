@@ -423,7 +423,7 @@ class WorkflowActorUsesPolicyTest(unittest.TestCase):
             "on:\n  push:\njobs:\n  build:\n    steps:\n"
             "      - uses: actions/checkout@"
             "3d3c42e5aac5ba805825da76410c181273ba90b1 # v7\n"
-            "      - uses: golusoris/golusoris/.github/actions/"
+            "      - uses: plurano/golusoris/.github/actions/"
             "stop-on-draft@e601567f4e1acb72525f361f80dac6d89cbad553 # #1212\n"
             "      - uses: 'actions/cache/save@v5'\n"
             "      - uses: docker://alpine:3.22\n"

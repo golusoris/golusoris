@@ -17,10 +17,12 @@ trap 'find "$suite_root" -depth -delete' EXIT
 new_repo() {
 	local name="$1"
 	local root="$suite_root/$name"
-	mkdir -p "$root/scripts/ci" "$root/tools" "$root/.github/workflows" \
+	mkdir -p "$root/scripts/ci/lib" "$root/tools" "$root/.github/workflows" \
 		"$root/.gitea/workflows"
 	install -m 0755 "$repo_root/scripts/ci/actionlint.sh" \
 		"$root/scripts/ci/actionlint.sh"
+	install -m 0644 "$repo_root/scripts/ci/lib/lint-tools.sh" \
+		"$root/scripts/ci/lib/lint-tools.sh"
 	install -m 0644 "$repo_root/tools/tool-versions.env" \
 		"$root/tools/tool-versions.env"
 	install -m 0644 "$repo_root/.github/actionlint.yaml" \
@@ -156,10 +158,9 @@ if missing:
 PY
 }
 
-check_go_cache_writer_contract() {
-	local workflow="$1"
-	local action="${2:-$repo_root/.github/actions/setup-go/action.yml}"
-	python3 - "$workflow" "$action" <<'PY'
+# Cache contracts need identical workflow job boundaries.
+workflow_jobs_prelude() {
+	cat <<'PY'
 import pathlib
 import re
 import sys
@@ -172,6 +173,15 @@ jobs = {}
 for position, start in enumerate(starts):
     end = starts[position + 1] if position + 1 < len(starts) else len(lines)
     jobs[job_pattern.match(lines[start]).group(1)] = lines[start:end]
+PY
+}
+
+check_go_cache_writer_contract() {
+	local workflow="$1"
+	local action="${2:-$repo_root/.github/actions/setup-go/action.yml}"
+	{
+		workflow_jobs_prelude
+		cat <<'PY'
 
 action = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
 if "        cache-dependency-path: '**/go.sum'" not in action.splitlines():
@@ -211,6 +221,7 @@ if timeout < 60:
 if "        run: scripts/ci/go-modules.sh verify" not in build:
     raise SystemExit("cache writer build does not verify every module before saving")
 PY
+	} | python3 - "$workflow" "$action"
 }
 
 check_reusable_go_cache_writer_contract() {
@@ -223,19 +234,9 @@ check_reusable_go_cache_writer_contract() {
 # only after the build job wrote it.
 check_reusable_go_cache_users() {
 	local workflow="$1"
-	python3 - "$workflow" <<'PY'
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-job_pattern = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
-starts = [index for index, line in enumerate(lines) if job_pattern.match(line)]
-jobs = {}
-for position, start in enumerate(starts):
-    end = starts[position + 1] if position + 1 < len(starts) else len(lines)
-    jobs[job_pattern.match(lines[start]).group(1)] = lines[start:end]
+	{
+		workflow_jobs_prelude
+		cat <<'PY'
 
 cache_jobs = {}
 for name, block in jobs.items():
@@ -273,23 +274,14 @@ for name in sorted(expected - {"build"}):
     if "    needs: build" not in jobs[name]:
         raise SystemExit(f"reusable cache reader {name} does not depend on build")
 PY
+	} | python3 - "$workflow"
 }
 
 check_reusable_go_cache_writer_timeout() {
 	local workflow="$1"
-	python3 - "$workflow" <<'PY'
-import pathlib
-import re
-import sys
-
-path = pathlib.Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-job_pattern = re.compile(r"^  ([A-Za-z0-9_-]+):\s*$")
-starts = [index for index, line in enumerate(lines) if job_pattern.match(line)]
-jobs = {}
-for position, start in enumerate(starts):
-    end = starts[position + 1] if position + 1 < len(starts) else len(lines)
-    jobs[job_pattern.match(lines[start]).group(1)] = lines[start:end]
+	{
+		workflow_jobs_prelude
+		cat <<'PY'
 
 build = jobs["build"]
 timeout = next(
@@ -303,6 +295,7 @@ timeout = next(
 if timeout < 60:
     raise SystemExit("reusable cache writer build timeout must cover cache upload")
 PY
+	} | python3 - "$workflow"
 }
 
 ryuk_module_default() {

@@ -3,8 +3,8 @@
 # SPDX-FileCopyrightText: 2026 lusoris <lusoris@pm.me>
 # SPDX-License-Identifier: EUPL-1.2
 
-# Ported from golusoris/goenvoy tools/release-pr-ci.sh (commit 7b77e31).
-# Approve the CI runs that wait on the head of every open release pull request.
+# Ported from plurano/goenvoy tools/release-pr-ci.sh (commit 7b77e31).
+# Approve waiting CI runs on every release pull request head; notice late runs and continue successfully.
 # The runs of a pull request opened with the repository token wait for an
 # approval and report no check until then, and main requires the CI success
 # check.
@@ -117,8 +117,8 @@ while read -r branch sha; do
 		fi
 	done
 	if [ -z "$runs" ]; then
-		echo "error: no pull request run on $branch at $sha after $TRIES tries" >&2
-		exit 1
+		echo "::notice title=release-pr-ci late run::no pull request run on $branch at $sha after $TRIES tries; none approved here, the next release-please run approves one still waiting"
+		continue
 	fi
 	while read -r id conclusion run_branch run_repo; do
 		if [[ ! "$id" =~ ^[0-9]+$ ]]; then
