@@ -39,7 +39,7 @@ _JOB_SEQUENCE = re.compile(r"^    -(?:[ \t]|$)")
 _ALWAYS = re.compile(r"\balways\s*\(\s*\)", re.IGNORECASE)
 _EXPRESSION_STRING = re.compile(r"'(?:[^']|'')*'", re.DOTALL)
 _DOUBLE_QUOTED_SCALAR = re.compile(r'"(?:[^"\\]|\\["\\])*"', re.DOTALL)
-_BLOCK_SCALAR_HEADER = re.compile(r"[|>](?:[-+][1-9]?|[1-9][-+]?)?[ \t]*")
+_BLOCK_SCALAR_HEADER = re.compile(r"[|>][-+]?[ \t]*")
 _PLAIN_SCALAR_START = re.compile(r"[A-Za-z0-9$(]")
 _QUOTED_EXPRESSION_START = re.compile(r"[A-Za-z0-9$(!']")
 _YAML_COMMENT = re.compile(
@@ -119,12 +119,38 @@ def _exception_findings(name: str, today: datetime.date) -> list[str] | None:
     return []
 
 
+def _append_block_line(
+    fields: dict[str, str], key: str, block_indent: int, line: str
+) -> tuple[str, int]:
+    if not line.strip():
+        return key, block_indent
+    indent = len(line) - len(line.lstrip(" "))
+    if indent < (block_indent or 3):
+        return "", 0
+    fields[key] = f"{fields[key]} {line.strip()}".strip()
+    return key, block_indent or indent
+
+
 def _concurrency_fields(lines: list[str]) -> dict[str, str]:
     fields: dict[str, str] = {}
+    block_key = ""
+    block_indent = 0
     for line in lines:
         match = _CHILD_KEY.match(line)
         if match:
-            fields[match.group("key")] = match.group("rest").strip()
+            key = match.group("key")
+            value = match.group("rest").strip()
+            if _BLOCK_SCALAR_HEADER.fullmatch(value):
+                fields[key] = ""
+                block_key = key
+                block_indent = 0
+            else:
+                fields[key] = value
+                block_key = ""
+        elif block_key:
+            block_key, block_indent = _append_block_line(
+                fields, block_key, block_indent, line
+            )
     return fields
 
 
@@ -1010,6 +1036,116 @@ class WorkflowConcurrencyPolicyTest(unittest.TestCase):
             "on:\n  pull_request:\n"
             "concurrency:\n"
             "  group: ${{ github.workflow }}-${{ github.event.number || github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_folded_engine_group_passes(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-\n"
+            "    ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+            "    github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+        unscoped_sibling = text.replace(
+            "${{ github.event_name == 'pull_request' }}", "true"
+        )
+        self.assertIn(
+            "cancel-in-progress must be scoped to pull-request events, got true",
+            " ".join(check("w.yml", unscoped_sibling, _TODAY)),
+        )
+
+    def test_folded_run_id_only_group_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-\n"
+            "    ${{ github.workflow }}-${{ github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn("not keyed", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_literal_block_group_passes(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: |-\n"
+            "    ${{ github.workflow }}-${{ github.event.number ||\n"
+            "    github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertEqual(check("w.yml", text, _TODAY), [])
+
+    def test_folded_cancel_in_progress_without_event_name_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: ${{ github.workflow }}-${{ github.event.number || github.run_id }}\n"
+            "  cancel-in-progress: >-\n"
+            "    ${{ true }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn(
+            "cancel-in-progress must be scoped to pull-request events, got ${{ true }}",
+            " ".join(check("w.yml", text, _TODAY)),
+        )
+        scoped = text.replace(
+            "${{ true }}", "${{ github.event_name == 'pull_request' }}"
+        )
+        self.assertEqual(check("w.yml", scoped, _TODAY), [])
+
+    def test_folded_group_without_workflow_prefix_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-\n"
+            "    ${{ github.event.pull_request.number || github.ref }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn(
+            "neither github.workflow nor a literal prefix",
+            " ".join(check("w.yml", text, _TODAY)),
+        )
+
+    def test_folded_group_less_indented_comment_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-\n"
+            "    ${{ github.workflow }}-${{ github.run_id }}\n"
+            "   # ${{ github.event.pull_request.number }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn("not keyed", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_folded_group_explicit_indent_indicator_fails(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-2\n"
+            "    ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+            "    github.run_id }}\n"
+            "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
+            "jobs: {}\n"
+        )
+        self.assertIn("not keyed", " ".join(check("w.yml", text, _TODAY)))
+
+    def test_folded_group_one_space_deeper_than_key_passes(self) -> None:
+        text = (
+            "on:\n  pull_request:\n"
+            "concurrency:\n"
+            "  group: >-\n"
+            "   ${{ github.workflow }}-${{ github.event.pull_request.number ||\n"
+            "   github.run_id }}\n"
             "  cancel-in-progress: ${{ github.event_name == 'pull_request' }}\n"
             "jobs: {}\n"
         )
