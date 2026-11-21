@@ -160,6 +160,7 @@ ci-policy-test: lefthook-validate go-apidiff-test tiny-trainer-publish-policy-te
 	@bash scripts/ci/verify-upstream-pins_test.sh
 	@bash scripts/ci/python-lint-policy_test.sh
 	@bash scripts/ci/python-tests-policy_test.sh
+	@bash scripts/ci/python-symlink-tmpdir_test.sh
 	@bash scripts/hooks/python-tests_test.sh
 	@bash scripts/ci/c-quality-policy_test.sh
 	@bash scripts/ci/tiny-trainer-smoke_test.sh
@@ -226,9 +227,12 @@ tiny-litert-sidecar-publish-policy-test: ## verify fail-closed sidecar publicati
 	@bash scripts/ci/tiny-litert-sidecar-publish-policy_test.sh
 	@python3 -B scripts/ci/tiny-litert-sidecar-docs-policy_test.py
 
-.PHONY: python-test python-tests
+.PHONY: python-test python-tests python-symlink-tmpdir-test
 python-test: tiny-trainer-test tiny-litert-sidecar-test ## execute the required Python regression suites
 	@bash scripts/ci/python-tests.sh
+
+python-symlink-tmpdir-test: ## replay every CI Python suite with a symlinked TMPDIR
+	@bash scripts/ci/python-symlink-tmpdir.sh
 
 python-tests: python-test ## alias for the Python regression gate
 
@@ -409,7 +413,7 @@ endif
 endif
 
 .PHONY: verify-all
-verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check release-depth-check go-modules-test portability-test build-all ci-all python-lint python-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
+verify-all: fmt-check-all gci-hook-test tidy-check-all fix-check-all ci-policy-test release-notes-check release-depth-check go-modules-test portability-test build-all ci-all python-lint python-test python-symlink-tmpdir-test c-quality allocation-budget core-skew fault-recovery trivy-scan capabilities-check caveman-context context-size text-register-policy mkdocs-build semgrep-scan shellcheck actionlint template-workflows terraform-validate kubeconform buf-lint compile-context-verify audit dedupe-scan hiss-fixtures hiss-coverage docs-upstream-verify reuse-lint ## the universal verification gate
 	@echo "All verification gates passed cleanly."
 
 # BEGIN praetor documentation gate
