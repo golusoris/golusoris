@@ -15,6 +15,15 @@ Release Please generates this file from Conventional Commits. User-visible
 changes and migration notes therefore belong in release-visible commit
 messages; the release pull request remains the single changelog authority.
 
+## [0.22.4](https://github.com/plurano/golusoris/compare/v0.22.3...v0.22.4) (2026-11-21)
+
+
+### Bug Fixes
+
+* **ci:** hold the pipe test's grandchild until the test releases it ([#1574](https://github.com/plurano/golusoris/issues/1574)) ([4a1a87e](https://github.com/plurano/golusoris/commit/4a1a87e7aa87daf86c1529d4e29865f3ba309657))
+* **deps:** update golang.org/x/exp digest to b15d094 ([#1468](https://github.com/plurano/golusoris/issues/1468)) ([fff3dec](https://github.com/plurano/golusoris/commit/fff3decc7f08129df5c0534e03005e191aa91851))
+* **renovate:** tidy every module that replaces the root after a Go update ([#1576](https://github.com/plurano/golusoris/issues/1576)) ([c3f998b](https://github.com/plurano/golusoris/commit/c3f998ba51a41ab4ef6d1ab592a4d1d0ad584b2a))
+
 ## [0.22.3](https://github.com/plurano/golusoris/compare/v0.22.2...v0.22.3) (2026-11-21)
 
 
