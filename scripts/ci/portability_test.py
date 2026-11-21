@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 import urllib.error
+from collections.abc import Iterator
 from pathlib import Path
 from unittest import TestCase, main, mock, skipUnless
 
@@ -40,6 +41,54 @@ TEARDOWN_BUDGET_SECONDS = (
     + portability.PROCESS_KILL_WAIT_SECONDS
     + 3
 )
+
+# 3600 s cap at 0.05 s polls; hold deletion ends the loop.
+PIPE_HOLD_POLLS = 72000
+
+# 10 s cap at 0.05 s polls for the grandchild acknowledgement; ends at the first acknowledgement.
+RELEASE_ACK_POLLS = 200
+
+
+def pipe_holding_parent(hold: Path, released: Path) -> str:
+    """The grandchild holds the pipes from the system temp directory while hold exists, then renames its acknowledgement into released."""
+    grandchild = (
+        "import os,sys,time\n"
+        f"for _ in range({PIPE_HOLD_POLLS}):\n"
+        "    if not os.path.exists(sys.argv[1]):\n"
+        "        break\n"
+        "    time.sleep(0.05)\n"
+        'open(sys.argv[2] + ".tmp", "w").close()\n'
+        'os.replace(sys.argv[2] + ".tmp", sys.argv[2])'
+    )
+    return (
+        "import subprocess,sys; "
+        f"subprocess.Popen([sys.executable, '-c', {grandchild!r}, {str(hold)!r}, {str(released)!r}], "
+        f"cwd={tempfile.gettempdir()!r})"
+    )
+
+
+def await_release(released: Path) -> bool:
+    """Return True once released exists or after the acknowledgement poll cap."""
+    for _ in range(RELEASE_ACK_POLLS):
+        if released.exists():
+            return True
+        time.sleep(0.05)
+    return released.exists()
+
+
+@contextlib.contextmanager
+def held_pipes(directory: Path) -> Iterator[str]:
+    """Yield a direct-child script that keeps pipes open until hold is removed."""
+    hold = directory / "hold"
+    released = directory / "released"
+    hold.touch()
+    try:
+        yield pipe_holding_parent(hold, released)
+    except BaseException:
+        hold.unlink(missing_ok=True)
+        await_release(released)
+        raise
+    hold.unlink(missing_ok=True)
 
 
 def _transient_retry_responses(compressed: bytes) -> list[object]:
@@ -260,24 +309,60 @@ class PortabilityDriverTest(TestCase):
 
     def test_process_output_bounds_pipe_inheriting_descendant(self) -> None:
         runner = portability.ProcessRunner()
-        grandchild = "import time; time.sleep(60)"
-        parent = (
-            "import subprocess,sys; "
-            f"subprocess.Popen([sys.executable, '-c', {grandchild!r}]); "
-        )
         started = time.monotonic()
         with tempfile.TemporaryDirectory() as directory:
-            with self.assertRaisesRegex(
-                portability.PortabilityError, "output pipes remained open"
-            ):
-                runner.output(
-                    (sys.executable, "-c", parent),
-                    cwd=Path(directory),
-                    environment=dict(os.environ),
-                    timeout=30,
-                    max_output_bytes=4,
-                )
+            with held_pipes(Path(directory)) as script:
+                with self.assertRaisesRegex(portability.PortabilityError, "output pipes remained open"):
+                    runner.output(
+                        (sys.executable, "-c", script),
+                        cwd=Path(directory), environment=dict(os.environ), timeout=30, max_output_bytes=4,
+                    )
         self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS)
+
+    def test_process_output_pipe_detection_survives_runner_stall(self) -> None:
+        # Exceeds PROCESS_PIPE_JOIN_SECONDS (1.0 s) so a 1 s timer-bounded hold would already exit.
+        STALL = 1.5
+        original = portability._join_threads
+        first_call = [True]
+
+        def stalled_join(threads: list[portability.threading.Thread], timeout: float) -> bool:
+            if first_call[0]:
+                first_call[0] = False
+                time.sleep(STALL)
+            return original(threads, timeout)
+
+        runner = portability.ProcessRunner()
+        started = time.monotonic()
+        with tempfile.TemporaryDirectory() as directory:
+            with held_pipes(Path(directory)) as script:
+                with (
+                    mock.patch.object(portability, "_join_threads", side_effect=stalled_join),
+                    self.assertRaisesRegex(portability.PortabilityError, "output pipes remained open"),
+                ):
+                    runner.output(
+                        (sys.executable, "-c", script),
+                        cwd=Path(directory), environment=dict(os.environ), timeout=30, max_output_bytes=4,
+                    )
+        self.assertLess(time.monotonic() - started, TEARDOWN_BUDGET_SECONDS + STALL)
+
+    def test_pipe_holder_exits_when_directory_vanishes_before_release(self) -> None:
+        with tempfile.TemporaryDirectory() as witness:
+            held = tempfile.mkdtemp()
+            self.addCleanup(shutil.rmtree, held, ignore_errors=True)
+            hold = Path(held) / "hold"
+            hold.touch()
+            released = Path(witness) / "released"
+            subprocess.run(  # noqa: S603 - fixed interpreter runs a test-built script. # nosec B603
+                (sys.executable, "-c", pipe_holding_parent(hold, released)),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=30,
+                check=True,
+            )
+            # Stand in for TemporaryDirectory cleanup winning the race before an explicit release.
+            shutil.rmtree(held)
+            self.assertTrue(await_release(released), "grandchild kept holding after its directory vanished")
 
     @skipUnless(os.name == "posix", "process groups are POSIX")
     def test_boundary_process_group_signal_refuses_unbounded_targets(self) -> None:
