@@ -45,32 +45,6 @@ check_step_order() {
 	done
 }
 
-# Literal string check so required publication controls and flags cannot be omitted.
-require_literal() {
-	local path="$1"
-	local literal="$2"
-	if ! grep -Fq -- "$literal" "$path"; then
-		printf '%s lacks required publication control: %s\n' "$path" "$literal" >&2
-		return 1
-	fi
-}
-
-# Unconditional step guard so validation and signing cannot be skipped on new or resumed runs.
-require_unconditional_step() {
-	local path="$1"
-	local step="$2"
-	local block
-	block="$(awk -v marker="      - name: $step" '
-		$0 == marker { active = 1; next }
-		active && /^      - name:/ { exit }
-		active { print }
-	' "$path")"
-	if [[ -z "$block" ]] || grep -Eq '^        if:' <<<"$block"; then
-		printf '%s must run %s on new and resumed publication\n' "$path" "$step" >&2
-		return 1
-	fi
-}
-
 # Smoke skip-build check so tests validate the exact pulled candidate without rebuilding.
 check_smoke_skips_build() {
 	local path="$1"

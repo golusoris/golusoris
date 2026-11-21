@@ -31,50 +31,6 @@ resolve_root() {
 	(cd "$2" && pwd)
 }
 
-# locate_tool prints the override path, else the PATH match; it prints nothing when the tool is absent.
-locate_tool() {
-	local override="$1"
-	local name="$2"
-	local found
-	if [[ -n "$override" ]]; then
-		printf '%s\n' "$override"
-	elif found="$(command -v "$name")"; then
-		printf '%s\n' "$found"
-	fi
-}
-
-check_actionlint() {
-	local actionlint_bin="$1"
-	if [[ -z "$actionlint_bin" || ! -x "$actionlint_bin" ]]; then
-		printf 'actionlint %s is required; executable is unavailable\n' \
-			"$ACTIONLINT_VERSION" >&2
-		return 1
-	fi
-	local actual_actionlint_version
-	actual_actionlint_version="$("$actionlint_bin" -version | awk 'NR == 1 { print $1; exit }')"
-	if [[ "$actual_actionlint_version" != "$ACTIONLINT_VERSION" ]]; then
-		printf 'actionlint version is %s, want %s\n' \
-			"${actual_actionlint_version:-unknown}" "$ACTIONLINT_VERSION" >&2
-		return 1
-	fi
-}
-
-check_shellcheck() {
-	local shellcheck_bin="$1"
-	if [[ -z "$shellcheck_bin" || ! -x "$shellcheck_bin" ]]; then
-		printf 'ShellCheck %s is required by actionlint; executable is unavailable\n' \
-			"$SHELLCHECK_VERSION" >&2
-		return 1
-	fi
-	local actual_shellcheck_version
-	actual_shellcheck_version="$("$shellcheck_bin" --version | awk '$1 == "version:" { print $2; exit }')"
-	if [[ "$actual_shellcheck_version" != "$SHELLCHECK_VERSION" ]]; then
-		printf 'actionlint ShellCheck version is %s, want %s\n' \
-			"${actual_shellcheck_version:-unknown}" "$SHELLCHECK_VERSION" >&2
-		return 1
-	fi
-}
-
 collect_template_files() {
 	local root="$1"
 	local path
@@ -251,6 +207,10 @@ check_template_file() {
 }
 
 main() {
+	local script_root
+	script_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+	# shellcheck source=scripts/ci/lib/lint-tools.sh
+	. "$script_root/scripts/ci/lib/lint-tools.sh"
 	local root
 	root="$(resolve_root "$@")"
 	readonly root

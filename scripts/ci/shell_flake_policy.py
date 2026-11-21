@@ -104,14 +104,20 @@ class QuoteState:
         if len(self.stack) < self.max_depth:
             self.stack.append(context)
 
-    def _step_code(self, char: str) -> None:
-        """Handle unquoted shell code, subshell parens, and command substitution."""
+    def _consume_escape(self, char: str) -> bool:
+        """Consume escaped characters without changing the surrounding quote context."""
         if self.escaped:
             self.escaped = False
-            return
+            return True
         if char == "\\":
             self.escaped = True
             self.saw_dollar = False
+            return True
+        return False
+
+    def _step_code(self, char: str) -> None:
+        """Handle unquoted shell code, subshell parens, and command substitution."""
+        if self._consume_escape(char):
             return
         if self.saw_dollar:
             self.saw_dollar = False
@@ -138,12 +144,7 @@ class QuoteState:
 
     def _step_double(self, char: str) -> None:
         """Handle double-quote context tracking escapes, closing quote, and command substitution."""
-        if self.escaped:
-            self.escaped = False
-            return
-        if char == "\\":
-            self.escaped = True
-            self.saw_dollar = False
+        if self._consume_escape(char):
             return
         if self.saw_dollar:
             self.saw_dollar = False
