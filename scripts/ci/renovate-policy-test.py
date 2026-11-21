@@ -1038,7 +1038,7 @@ def core_indirect_rule_valid(config: dict[str, object], core_gomod: str) -> bool
     ]
     if len(rules) != 1 or rules[0].get("enabled") is not True:
         return False
-    if "gomodTidy" not in config.get("postUpdateOptions", []):
+    if "gomodTidyAll" not in config.get("postUpdateOptions", []):
         return False
     return sorted(rules[0].get("matchPackageNames", [])) == sorted(core_direct_requires(core_gomod))
 
@@ -1047,7 +1047,7 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     """Report drift between the core-indirect rule and core/go.mod, with negative controls."""
     if not core_indirect_rule_valid(config, core_gomod):
         print("renovate core-indirect rule differs from core/go.mod direct requirements "
-              "or gomodTidy is missing", file=sys.stderr)
+              "or gomodTidyAll is missing", file=sys.stderr)
         return False
     added_dependency = core_gomod.replace("require (\n", "require (\n\texample.com/new v1.0.0\n", 1)
     if core_indirect_rule_valid(config, added_dependency):
@@ -1056,7 +1056,12 @@ def test_core_indirect_rule(config: dict[str, object], core_gomod: str) -> bool:
     without_tidy = json.loads(json.dumps(config))
     without_tidy["postUpdateOptions"] = []
     if core_indirect_rule_valid(without_tidy, core_gomod):
-        print("negative control accepted the rule without gomodTidy", file=sys.stderr)
+        print("negative control accepted the rule without gomodTidyAll", file=sys.stderr)
+        return False
+    gomod_tidy_only = json.loads(json.dumps(config))
+    gomod_tidy_only["postUpdateOptions"] = ["gomodTidy"]
+    if core_indirect_rule_valid(gomod_tidy_only, core_gomod):
+        print("negative control accepted the rule with gomodTidy only", file=sys.stderr)
         return False
     return True
 
