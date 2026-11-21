@@ -1,11 +1,11 @@
 ---
 version: 1
 repository:
-  owner: golusoris
+  owner: plurano
   name: golusoris
   visibility: public
   description: "Composable Go framework — opt-in fx modules for everything a production backend needs (config, log, db, http, otel, jobs, cache, auth, k8s, ...)."
-  homepage: "https://golusoris.github.io/golusoris/"
+  homepage: "https://plurano.github.io/golusoris/"
   topics:
     - backend
     - framework

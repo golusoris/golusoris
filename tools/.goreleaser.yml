@@ -96,7 +96,7 @@ signs:
 
 release:
   github:
-    owner: golusoris
+    owner: plurano
     name: golusoris
   # Release workflow publishes this draft only after signature and provenance
   # verification. Re-runs resume a failed draft and replace partial assets.

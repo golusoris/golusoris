@@ -15,14 +15,14 @@
 # image. Example:
 #   jobs:
 #     verify:
-#       uses: golusoris/golusoris/.github/workflows/verify-provenance.yml@<full-framework-commit-sha>
+#       uses: plurano/golusoris/.github/workflows/verify-provenance.yml@<full-framework-commit-sha>
 #       with:
 #         image: ghcr.io/myorg/myapp
 #         digest: sha256:abcd...            # the exact pushed digest
 #         repository: myorg/myapp           # repo whose OIDC identity signed it
 #         source-ref: refs/tags/v1.2.3
 #         source-digest: 012345...            # exact source commit SHA
-#         signer-workflow: golusoris/golusoris/.github/workflows/release-go.yml
+#         signer-workflow: plurano/golusoris/.github/workflows/release-go.yml
 #         signer-digest: fedcba...            # release-go workflow commit SHA
 name: verify-provenance (reusable)
 

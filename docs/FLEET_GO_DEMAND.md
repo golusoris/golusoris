@@ -47,13 +47,13 @@ usable migration input yet.
 | `cordanaLLM/imago` | 2 | 4 | 3 | 75% |
 | `cordanaLLM/praetor` | 1 | 1 | 1 | 100% |
 | `lusoris/praetor` | 1 | 1 | 1 | 100% |
-| `golusoris/goenvoy` | 69 | 0 | 0 | n/a |
+| `plurano/goenvoy` | 69 | 0 | 0 | n/a |
 | `lusoris/watershed` | 3 | 0 | 0 | n/a |
 | `cordanaLLM/Aegis-OS` | 0 | 0 | 0 | n/a |
 
 Three entries need reading rather than scoring:
 
-- `golusoris/goenvoy` has 69 modules and zero third-party requirements. The metadata
+- `plurano/goenvoy` has 69 modules and zero third-party requirements. The metadata
   and arr clients are deliberately stdlib-only, so there is nothing to migrate.
 - `cordanaLLM/Aegis-OS` contains no Go at all (no `go.mod`, no `.go` files); it is a
   Rust workspace. golusoris has nothing to offer it, recorded here so the question is
@@ -170,7 +170,7 @@ Synthesis of 58 classified fleet-demand gaps (Task N14) against the pre-migratio
 
 ### Corrections found by re-reading the package tree
 
-Four `nearest_golusoris` values in the classified data pointed at a `core/` prefix that does not exist in the repo (`find . -maxdepth 1 -type d -name core` returns nothing): `go.uber.org/fx` → `core`, `github.com/google/uuid` → `golusoris/golusoris/core/id` (also malformed), `github.com/anchore/go-logger` / `logrusr` → `core/log`. The real paths are the repo root (fx), `id/`, and `log/` respectively — all top-level packages, verified present with `AGENTS.md` + implementation files.
+Four `nearest_golusoris` values in the classified data pointed at a `core/` prefix that does not exist in the repo (`find . -maxdepth 1 -type d -name core` returns nothing): `go.uber.org/fx` → `core`, `github.com/google/uuid` → `plurano/golusoris/core/id` (also malformed), `github.com/anchore/go-logger` / `logrusr` → `core/log`. The real paths are the repo root (fx), `id/`, and `log/` respectively — all top-level packages, verified present with `AGENTS.md` + implementation files.
 
 Two items claimed an existing wrapper that does not exist: `go-git` (claimed already used by `core/gitx`) and `go.yaml.in/yaml/v2` (claimed aliased by `core/codec/yaml` on v3) — grep of the full tree found zero `go-git` references and go-git is absent from `go.mod` entirely; `go.yaml.in/yaml` v2 and v3 are listed only as **indirect** dependencies, confirming no direct-use wrapper exists. Both are gaps to build, not aliases to document.
 

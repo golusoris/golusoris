@@ -87,7 +87,7 @@ on:
     branches: [main]
 jobs:
   test:
-    uses: golusoris/golusoris/.github/workflows/reuse.yml@${pin} # ${comment}
+    uses: plurano/golusoris/.github/workflows/reuse.yml@${pin} # ${comment}
     with:
       ${input_key}: x
 EOF
@@ -154,7 +154,7 @@ on:
     branches: [main]
 jobs:
   test:
-    uses: golusoris/golusoris/.github/workflows/reuse.yml@main
+    uses: plurano/golusoris/.github/workflows/reuse.yml@main
     with:
       level: x
 EOF
