@@ -12,7 +12,7 @@ require (
 	github.com/google/go-containerregistry v0.22.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	go.uber.org/fx v1.24.0
-	golang.org/x/oauth2 v0.37.0
+	golang.org/x/oauth2 v0.38.0
 )
 
 require (
